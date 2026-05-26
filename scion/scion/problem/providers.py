@@ -131,6 +131,19 @@ class ActiveSubjectTaxonomyProvider(Protocol):
         """Return active subject mechanism and telemetry taxonomy."""
 
 
+class ActiveSubjectCodeConstraintProvider(Protocol):
+    """Optional problem-owned active subject code/API constraints."""
+
+    def active_subject_code_constraints(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | Sequence[str] | str | None:
+        """Return provider-owned code-stage object-model/API constraints."""
+
+
 def resolve_active_solver_map_provider(
     *,
     problem_spec: Any = None,
@@ -241,6 +254,37 @@ def active_subject_taxonomy_payload(
     return {}
 
 
+def active_subject_code_constraints_payload(
+    *,
+    context: Any = None,
+    problem_spec: Any = None,
+    adapter: Any = None,
+    surface: str | None = None,
+    subject_id: str | None = None,
+) -> dict[str, Any]:
+    """Return provider-declared active subject code constraints, or ``{}``.
+
+    Generic code-generation prompts consume this as opaque provider-owned
+    facts. Concrete object models and API semantics remain in problem packages.
+    """
+
+    for provider in _active_subject_code_constraint_providers(
+        problem_spec=problem_spec,
+        adapter=adapter,
+    ):
+        method = getattr(provider, "active_subject_code_constraints", None)
+        if not callable(method):
+            continue
+        try:
+            raw = method(context, surface=surface, subject_id=subject_id)
+        except TypeError:
+            raw = method(surface=surface, subject_id=subject_id)
+        normalized = _normalize_active_subject_code_constraints(raw)
+        if normalized:
+            return normalized
+    return {}
+
+
 def active_subject_policy_matches_path(
     policy: Mapping[str, Any],
     file_path: str,
@@ -271,6 +315,54 @@ def active_subject_policy_matches_path(
             if segment_glob_match(normalized, pattern):
                 return True
     return False
+
+
+def _active_subject_code_constraint_providers(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> tuple[Any, ...]:
+    providers: list[Any] = []
+    seen: set[int] = set()
+    factory_groups = (
+        ("active_subject_code_constraints_provider",),
+        ("active_subject_policy_provider",),
+        ("solver_design_prompt_provider",),
+        ("proposal_prompt_provider",),
+        ("prompt_provider",),
+        ("active_solver_design_provider",),
+        ("active_solver_map_provider",),
+        ("contract_check_provider", "contract_checks_provider"),
+    )
+    owners = (adapter, problem_spec)
+    for owner in owners:
+        for factory_names in factory_groups:
+            provider = _provider_from_factory(owner, factory_names)
+            if provider is None:
+                continue
+            marker = id(provider)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            providers.append(provider)
+
+    adapter_import_path = _adapter_import_path(problem_spec)
+    if adapter_import_path and adapter is None:
+        try:
+            loaded_adapter = _instantiate_adapter(adapter_import_path, problem_spec)
+        except ProblemProviderError:
+            loaded_adapter = None
+        if loaded_adapter is not None:
+            for factory_names in factory_groups:
+                provider = _provider_from_factory(loaded_adapter, factory_names)
+                if provider is None:
+                    continue
+                marker = id(provider)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                providers.append(provider)
+    return tuple(providers)
 
 
 def resolve_active_solver_design_provider(
@@ -406,6 +498,62 @@ def _normalize_active_subject_taxonomy(raw: Mapping[str, Any]) -> dict[str, Any]
     return {key: value for key, value in normalized.items() if value}
 
 
+def _normalize_active_subject_code_constraints(raw: Any) -> dict[str, Any]:
+    if raw in (None, "", (), [], {}):
+        return {}
+    if isinstance(raw, str):
+        constraints = _string_tuple(raw.splitlines())
+        return {"constraints": constraints} if constraints else {}
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        constraints = _string_tuple(raw)
+        return {"constraints": constraints} if constraints else {}
+    if not isinstance(raw, Mapping):
+        return {}
+    payload = dict(raw)
+    aliases = {
+        "code_constraints": "constraints",
+        "constraint_lines": "constraints",
+        "rules": "constraints",
+        "hints": "object_model_hints",
+        "api_hints": "api_contracts",
+        "object_model": "object_model_hints",
+        "text": "constraints",
+    }
+    for source, target in aliases.items():
+        if target not in payload and source in payload:
+            payload[target] = payload[source]
+    normalized = {
+        "surface": str(payload.get("surface") or "").strip(),
+        "subject_id": str(payload.get("subject_id") or "").strip(),
+        "version": str(payload.get("version") or "").strip(),
+        "constraints": _constraint_items(payload.get("constraints")),
+        "object_model_hints": _constraint_items(payload.get("object_model_hints")),
+        "api_contracts": _constraint_items(payload.get("api_contracts")),
+        "forbidden_patterns": _constraint_items(payload.get("forbidden_patterns")),
+    }
+    return {key: value for key, value in normalized.items() if value not in ("", ())}
+
+
+def _constraint_items(value: Any) -> tuple[Any, ...]:
+    if value in (None, "", (), [], {}):
+        return ()
+    if isinstance(value, str):
+        return _string_tuple(value.splitlines())
+    if isinstance(value, Mapping):
+        return (dict(value),)
+    try:
+        items = tuple(value)
+    except TypeError:
+        return ()
+    result: list[Any] = []
+    for item in items:
+        if isinstance(item, Mapping):
+            result.append(dict(item))
+        elif str(item).strip():
+            result.append(str(item).strip())
+    return tuple(result)
+
+
 def _string_tuple(value: Any) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -474,6 +622,7 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
 
 
 __all__ = [
+    "ActiveSubjectCodeConstraintProvider",
     "ActiveSolverMapProvider",
     "ActiveSubjectPolicyProvider",
     "ActiveSubjectTaxonomyProvider",
@@ -482,6 +631,7 @@ __all__ = [
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
     "active_subject_policy_matches_path",
+    "active_subject_code_constraints_payload",
     "active_subject_policy_payload",
     "active_subject_taxonomy_payload",
     "resolve_active_solver_map_provider",

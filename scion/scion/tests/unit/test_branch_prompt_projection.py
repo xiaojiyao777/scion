@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from scion.core.branch_hygiene import record_branch_lifecycle_policy_block
+from scion.core.branch_hygiene import (
+    branch_hygiene_guidance,
+    record_branch_lifecycle_policy_block,
+)
 from scion.core.models import Branch, BranchState
 from scion.proposal.context_manager import _summarise_siblings
 from scion.proposal.engine import _split_hypothesis_context
@@ -17,7 +20,7 @@ def _branch(branch_id: str, *, branch_code_status: str = "clean") -> Branch:
 
 
 def _hypothesis_prompt_user_text(sibling_summary: str) -> str:
-    _, user_prompt = _split_hypothesis_context(
+    system_blocks, user_prompt = _split_hypothesis_context(
         {
             "problem_summary": "Test problem",
             "research_surfaces": "Research surfaces: local_search",
@@ -112,3 +115,33 @@ def test_sibling_prompt_projection_includes_lifecycle_reroute_policy() -> None:
         "next_branch_selection_policy="
         "clean_branch_or_clean_fork_for_new_mechanism"
     ) in blocked_line
+
+
+def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
+    branch = _branch("followup123", branch_code_status="active_no_effect")
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surfaces": "Research surfaces: local_search",
+            "operator_categories": "local_search",
+            "available_actions": "modify",
+            "targetable_files": "operators/local_search.py",
+            "champion_operators_code": "# champion code",
+            "champion_stats": "Champion baseline",
+            "experiment_history": "(none)",
+            "blacklist_summary": "(none)",
+            "active_hyp_summary": "(none)",
+            "sibling_summary": "(none)",
+            "branch_hygiene_guidance": branch_hygiene_guidance(branch),
+        }
+    )
+    rendered = "\n".join(str(block["text"]) for block in system_blocks) + user_prompt
+
+    assert "## Branch Code Status" in rendered
+    assert "same_mechanism_followup_only" in rendered
+    assert "bounded_probe" in rendered
+    assert "tune, integrate, or repair the same mechanism" in rendered
+    assert "clean branch or clean fork before generation" in rendered

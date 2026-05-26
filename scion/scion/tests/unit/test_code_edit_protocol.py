@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
 
+from scion.core.models import HypothesisProposal, MechanismChange
 from scion.contract.gate import ContractGate
 from scion.proposal.edit_protocol import (
+    PatchEditProtocolError,
     build_patch_edit_source_manifest,
     normalize_patch_typed_edits,
     source_digest_for_content,
 )
+from scion.proposal.agentic_session_repair import _code_edit_protocol_retry_context
 from scion.proposal.engine import ProposalValidationError, _parse_patch
 from scion.proposal.engine.code_prompts import _split_code_context
 from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA
@@ -45,6 +49,95 @@ def test_exact_replace_normalizes_to_content_after_and_patch_content() -> None:
     assert attribution[0]["edit_intent"] == "exact_replace"
     assert attribution[0]["derived_diff_ref"].startswith("typed-edit-diff:")
     assert attribution[0]["evidence_refs"] == ["obs-target"]
+
+
+def test_exact_replace_not_unique_reports_candidate_snippets() -> None:
+    before = (
+        "def first():\n"
+        "    return value\n\n"
+        "def second():\n"
+        "    return value\n"
+    )
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": "return value",
+        "new_string": "return other",
+    }
+
+    with pytest.raises(PatchEditProtocolError) as exc_info:
+        normalize_patch_typed_edits(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    payload = json.loads(str(exc_info.value))
+    assert payload["reason"] == "old_string_not_unique"
+    assert payload["match_count"] == 2
+    assert [item["line"] for item in payload["candidate_matches"]] == [2, 5]
+    assert "unique_old_string_hint" in payload["candidate_matches"][0]
+    assert "replace_all=false unless" in payload["guidance"]
+
+
+def test_old_string_not_unique_feedback_enters_code_retry_prompt() -> None:
+    before = (
+        "def first():\n"
+        "    return value\n\n"
+        "def second():\n"
+        "    return value\n"
+    )
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": "return value",
+        "new_string": "return other",
+    }
+    try:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+    except ProposalValidationError as exc:
+        failure = exc
+    else:
+        raise AssertionError("expected ProposalValidationError")
+
+    retry_context = _code_edit_protocol_retry_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surface_name": "local",
+            "research_surface_kind": "operator",
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+        HypothesisProposal(
+            hypothesis_text="Modify one return.",
+            change_locus="local",
+            action="modify",
+            target_file="policies/example.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_probe", change_type="modify"),
+            ),
+        ),
+        failure,
+    )
+
+    _, user_prompt = _split_code_context(retry_context)
+    assert "Typed Edit Retry Feedback" in user_prompt
+    assert "old_string_not_unique" in user_prompt
+    assert '"match_count": 2' in user_prompt
+    assert '"line": 2' in user_prompt
+    assert "unique_old_string_hint" in user_prompt
 
 
 def test_markdown_wrapped_target_file_code_uses_raw_source_digest() -> None:

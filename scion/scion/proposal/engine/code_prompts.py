@@ -109,6 +109,11 @@ def _split_code_context(
     solver_mechanics_section = (
         f"## Solver Execution Model\n{solver_mechanics}\n\n" if solver_mechanics else ""
     )
+    active_subject_code_constraints_section = (
+        _active_subject_code_constraints_section(
+            D["active_subject_code_constraints"]
+        )
+    )
     solver_design_api_manifest_section = (
         f"## Solver-Design Module API Manifest\n{solver_design_api_manifest}\n\n"
         if solver_design_api_manifest
@@ -159,6 +164,7 @@ def _split_code_context(
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"{problem_object_section}"
         f"{solver_mechanics_section}"
+        f"{active_subject_code_constraints_section}"
         f"## Research Surface Interface Specification\n"
         f"Active surface: {surface_label}\n"
         f"Follow this interface exactly:\n\n"
@@ -442,6 +448,75 @@ def _compact_implementation_brief(value: Dict[str, Any]) -> Dict[str, Any]:
         }.items()
         if item not in (None, "", [], {}, ())
     }
+
+
+def _active_subject_code_constraints_section(value: Any) -> str:
+    if value in (None, "", {}, [], ()):
+        return ""
+    payload = _compact_active_subject_code_constraints(value)
+    if not payload:
+        return ""
+    return (
+        "## Active Subject Code Constraints\n"
+        "These provider-owned facts are the active subject object/API contract "
+        "for code generation. Treat them as hard constraints when editing the "
+        "approved target and integration files.\n\n"
+        f"{_bounded_json(payload, 12000)}\n\n"
+    )
+
+
+def _compact_active_subject_code_constraints(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"constraints": _compact_constraint_list(value)}
+    payload: Dict[str, Any] = {}
+    for key in (
+        "surface",
+        "subject_id",
+        "version",
+        "constraints",
+        "object_model_hints",
+        "api_contracts",
+        "forbidden_patterns",
+    ):
+        item = value.get(key)
+        if item in (None, "", [], (), {}):
+            continue
+        if key in {
+            "constraints",
+            "object_model_hints",
+            "api_contracts",
+            "forbidden_patterns",
+        }:
+            payload[key] = _compact_constraint_list(item)
+        else:
+            payload[key] = item
+    return {key: item for key, item in payload.items() if item not in (None, "", [])}
+
+
+def _compact_constraint_list(value: Any) -> list[Any]:
+    if value in (None, "", [], (), {}):
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [_compact_constraint_item(value)]
+    try:
+        items = list(value)
+    except TypeError:
+        return [str(value)]
+    return [_compact_constraint_item(item) for item in items[:24]]
+
+
+def _compact_constraint_item(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _snippet_text(str(item)) if isinstance(item, str) else item
+            for key, item in value.items()
+            if item not in (None, "", [], (), {})
+        }
+    if isinstance(value, str):
+        return _snippet_text(value)
+    return value
 
 
 def _is_timeout_failure(text: str) -> bool:

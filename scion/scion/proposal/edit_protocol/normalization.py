@@ -682,12 +682,99 @@ def _apply_exact_replace(
     replace_all = _bool_value(change.get("replace_all", False))
     if occurrences > 1 and not replace_all:
         raise PatchEditProtocolError(
-            f"{change_pointer}: old_string_not_unique in {file_path}: "
-            f"{occurrences} matches; set replace_all=true or add context"
+            json.dumps(
+                _old_string_not_unique_payload(
+                    file_path=file_path,
+                    change_pointer=change_pointer,
+                    source_digest=actual_digest,
+                    before=before,
+                    old_string=old_string,
+                    occurrences=occurrences,
+                ),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
         )
     if replace_all:
         return before.replace(old_string, new_string)
     return before.replace(old_string, new_string, 1)
+
+
+def _old_string_not_unique_payload(
+    *,
+    file_path: str,
+    change_pointer: str,
+    source_digest: str,
+    before: str,
+    old_string: str,
+    occurrences: int,
+) -> dict[str, Any]:
+    candidates = _old_string_candidate_matches(before, old_string)
+    return {
+        "error": "patch_edit_protocol",
+        "reason": "old_string_not_unique",
+        "file_path": file_path,
+        "json_pointer": change_pointer,
+        "source_digest": source_digest,
+        "match_count": occurrences,
+        "candidate_matches": candidates,
+        "guidance": (
+            "Rewrite old_string so it matches exactly one intended location by "
+            "including stable surrounding context from one candidate snippet. "
+            "Keep replace_all=false unless the intended edit is truly global "
+            "across every listed match."
+        ),
+    }
+
+
+def _old_string_candidate_matches(
+    before: str,
+    old_string: str,
+    *,
+    max_candidates: int = 5,
+    context_chars: int = 120,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    start = 0
+    while len(candidates) < max_candidates:
+        index = before.find(old_string, start)
+        if index < 0:
+            break
+        line, column = _line_column_for_offset(before, index)
+        prefix_start = max(0, index - context_chars)
+        suffix_end = min(len(before), index + len(old_string) + context_chars)
+        prefix = before[prefix_start:index]
+        suffix = before[index + len(old_string) : suffix_end]
+        candidates.append(
+            {
+                "line": line,
+                "column": column,
+                "prefix": _single_line_snippet(prefix),
+                "match": _single_line_snippet(old_string),
+                "suffix": _single_line_snippet(suffix),
+                "unique_old_string_hint": _single_line_snippet(
+                    before[prefix_start:suffix_end],
+                    max_chars=320,
+                ),
+            }
+        )
+        start = index + max(1, len(old_string))
+    return candidates
+
+
+def _line_column_for_offset(text: str, offset: int) -> tuple[int, int]:
+    safe_offset = max(0, min(len(text), offset))
+    line = text.count("\n", 0, safe_offset) + 1
+    line_start = text.rfind("\n", 0, safe_offset) + 1
+    return line, safe_offset - line_start + 1
+
+
+def _single_line_snippet(value: str, *, max_chars: int = 220) -> str:
+    text = str(value or "").replace("\r", "")
+    text = text.replace("\n", "\\n")
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 3)] + "..."
 
 
 def _validate_exact_replace_granularity(

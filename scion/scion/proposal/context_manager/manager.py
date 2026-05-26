@@ -16,6 +16,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.problem.providers import (
+    active_subject_code_constraints_payload,
     active_subject_taxonomy_payload,
     resolve_solver_design_prompt_provider,
 )
@@ -516,6 +517,14 @@ class ContextManager:
         )
         if active_subject_taxonomy:
             ctx["active_subject_taxonomy"] = active_subject_taxonomy
+        active_subject_code_constraints = active_subject_code_constraints_payload(
+            context=ctx,
+            problem_spec=problem_spec,
+            adapter=self._adapter,
+            surface=hypothesis.change_locus,
+        )
+        if active_subject_code_constraints:
+            ctx["active_subject_code_constraints"] = active_subject_code_constraints
         if _is_solver_design_context_surface(hypothesis.change_locus, surface):
             solver_design_prompt_provider = resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,

@@ -156,6 +156,7 @@ class AgenticSessionRepairMixin:
         timeout_attempt = 0
         generation_attempt = 0
         shape_retry_used = False
+        edit_protocol_retry_used = False
         while True:
             generation_attempt += 1
             try:
@@ -176,6 +177,29 @@ class AgenticSessionRepairMixin:
                     source="code_generation_exception",
                     attempt=generation_attempt,
                 )
+                if (
+                    not edit_protocol_retry_used
+                    and _is_code_edit_protocol_retryable(exc)
+                    and not self._session_timeout_reached(state)
+                ):
+                    edit_protocol_retry_used = True
+                    attempt_context = _code_edit_protocol_retry_context(
+                        attempt_context,
+                        hypothesis,
+                        exc,
+                    )
+                    state.note(
+                        AgenticProposalPhase.DRAFT_PATCH,
+                        "Retrying patch generation with typed-edit protocol feedback.",
+                        metadata={
+                            "selected_surface": hypothesis.change_locus,
+                            "target_file": hypothesis.target_file,
+                            "retry_attempt": generation_attempt,
+                            "error": type(exc).__name__,
+                            "failure_code": "code_edit_protocol_retry",
+                        },
+                    )
+                    continue
                 if (
                     not shape_retry_used
                     and _is_code_schema_shape_retryable(exc)
@@ -224,6 +248,82 @@ class AgenticSessionRepairMixin:
                     },
                 )
                 continue
+
+
+def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
+    if not isinstance(exc, ProposalValidationError):
+        return False
+    feedback = _code_edit_protocol_feedback(exc)
+    return feedback.get("reason") == "old_string_not_unique"
+
+
+def _code_edit_protocol_retry_context(
+    context: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+    exc: BaseException,
+) -> dict[str, Any]:
+    retry_context = dict(context)
+    feedback = _code_edit_protocol_feedback(exc)
+    protected_ids = [
+        str(change.id)
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    match_count = feedback.get("match_count")
+    target_file = feedback.get("file_path") or hypothesis.target_file
+    retry_context["prior_code_failure"] = (
+        "Typed exact_replace edit failed: old_string_not_unique"
+        + (f" ({match_count} matches)" if match_count else "")
+        + f" in {target_file!r}. Regenerate a unique old_string by copying "
+        "stable surrounding context from one candidate snippet. Keep "
+        "replace_all=false unless this is intentionally a global replacement. "
+        f"Preserve target_file={hypothesis.target_file!r}, "
+        f"action={hypothesis.action!r}, and mechanism_changes ids={protected_ids!r}."
+    )
+    retry_context["agentic_code_edit_retry_feedback"] = _drop_empty_dict(
+        {
+            "failure_code": "code_edit_protocol_retry",
+            "reason": feedback.get("reason"),
+            "file_path": target_file,
+            "json_pointer": feedback.get("json_pointer"),
+            "match_count": feedback.get("match_count"),
+            "candidate_matches": feedback.get("candidate_matches"),
+            "source_digest": feedback.get("source_digest"),
+            "final_task": (
+                "Return the same patch intent using exact_replace with an "
+                "old_string that matches exactly one intended location. Include "
+                "nearby unchanged context from one candidate's "
+                "unique_old_string_hint."
+            ),
+            "replace_all_rule": (
+                "Use replace_all=true only when the intended edit is global "
+                "across every candidate match."
+            ),
+            "protected_identity": _drop_empty_dict(
+                {
+                    "action": hypothesis.action,
+                    "target_file": hypothesis.target_file,
+                    "mechanism_change_ids": protected_ids,
+                }
+            ),
+        }
+    )
+    return retry_context
+
+
+def _code_edit_protocol_feedback(exc: BaseException) -> dict[str, Any]:
+    text = str(exc).strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, Mapping):
+        return {}
+    if payload.get("error") != "patch_edit_protocol":
+        return {}
+    return dict(payload)
 
 
 def _is_code_schema_shape_retryable(exc: BaseException) -> bool:

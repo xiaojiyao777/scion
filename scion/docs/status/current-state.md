@@ -9,14 +9,36 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
-v0.4 has no known open P0/P1 blocker after the 2026-05-26 local `gpt-5.5`
-8-round provider-taxonomy run and the follow-up P2 accounting repair below.
-The next recommended step is longer validation with explicit evidence review,
-not a generic-core algorithm change. Scion must remain the v3 framework:
-generic layers own boundary control, protocol, lineage, audit, and
-deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
-through the problem package and adapter/provider hooks, not by hard-coding
-domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+v0.4 has no known open P0 blocker after the 2026-05-26 local `gpt-5.5`
+12-round reconcile/accounting validation. The run confirmed
+accounting/headroom/lifecycle core behavior, but exposed P1 research-validity
+weakness: all screened experiments tied, with repeated branch-lifecycle blocks,
+proposal-quality blocks, typed-edit selector failures, and code-stage object
+model/API mistakes. The next recommended step after this repair is another
+bounded validation with explicit evidence review, not a generic-core algorithm
+change. Scion must remain the v3 framework: generic layers own boundary
+control, protocol, lineage, audit, and deterministic decisions; CVRP
+objective/solver/ALNS/VNS semantics must enter through the problem package and
+adapter/provider hooks, not by hard-coding domain logic into `core`,
+`proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-26 P1 research-validity repair keeps those boundaries intact while
+making failures cheaper and more actionable. Code generation now consumes a
+generic provider hook for active subject code constraints; the CVRP provider
+declares the concrete `ObjectiveValue`, `_Solution`/`_Route`, `__slots__`,
+telemetry-helper, and public/internal solution API rules, and generic prompts
+render those facts without embedding CVRP semantics. Typed `exact_replace`
+failures for non-unique `old_string` values now return structured retry
+feedback with match counts, candidate line/column hints, nearby snippets, and
+unique-old-string guidance; `replace_all=true` is framed only as an intentional
+global replacement. Non-clean branch prompts now state that
+`same_mechanism_followup_only` branches must keep protected mechanism ids and
+only tune/integrate/repair that mechanism, while the scheduler prefers a clean
+fork when capacity exists instead of repeatedly asking a non-clean branch for a
+new mechanism. CVRP expected-telemetry preview now distinguishes
+activation/budget telemetry from effect telemetry and blocks contradictions
+where an incumbent-preserving/no-objective-changing mechanism claims positive
+effect fields.
 
 The 2026-05-25 repair pass closed the main blockers from the local
 `gpt-5.5` 8-attempt diagnostic run and the full v0.4 audit. Suspect telemetry

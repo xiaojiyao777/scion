@@ -188,6 +188,17 @@ def _agentic_research_context_block(
             "called out below.\n\n"
             f"{_bounded_json(code_shape_feedback, 3000)}"
         )
+    code_edit_feedback = context.get("agentic_code_edit_retry_feedback")
+    if code_phase and code_edit_feedback:
+        parts.append(
+            "## Typed Edit Retry Feedback\n"
+            "The previous typed edit failed host-side validation. Preserve the "
+            "approved hypothesis and patch intent, then repair only the edit "
+            "selector details below. Use candidate snippets to construct a "
+            "unique old_string; set replace_all only for a deliberate global "
+            "replacement.\n\n"
+            f"{_bounded_json(code_edit_feedback, 6000)}"
+        )
     if observations:
         full_algorithm_reads = _solver_design_full_algorithm_file_reads(observations)
         full_algorithm_read_ids = {

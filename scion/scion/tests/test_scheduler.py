@@ -168,6 +168,18 @@ def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_follow
     assert action.branch is branch
 
 
+def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "clean_fork_required_for_new_mechanism"
+
+
 def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
     b_recent = _branch(
         BranchState.EXPLORE,

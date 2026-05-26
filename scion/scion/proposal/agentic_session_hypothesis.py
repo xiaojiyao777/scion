@@ -1111,8 +1111,15 @@ def _hypothesis_preview_retry_feedback(
             "offending_fields": list(
                 problem_telemetry.get("offending_fields") or ()
             ),
+            "telemetry_category_guidance": problem_telemetry.get(
+                "telemetry_category_guidance"
+            ),
             "allowed_repair_shape": problem_telemetry.get("allowed_repair_shape"),
             "forbidden_repair_shape": problem_telemetry.get("forbidden_repair_shape"),
+            "final_task": (
+                problem_telemetry.get("allowed_repair_shape")
+                or "Repair the expected_telemetry contract for the same mechanism."
+            ),
             "allowed_expected_telemetry_template": (
                 _compact_expected_telemetry_template(allowed_template)
             ),

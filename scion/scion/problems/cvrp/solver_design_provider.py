@@ -191,6 +191,42 @@ class CvrpSolverDesignProvider:
         )
         if not effect_fields:
             return None
+        if _is_no_objective_changing_claim(hypothesis):
+            return {
+                "passed": False,
+                "status": "failed",
+                "failure_code": "C11_expected_telemetry",
+                "reason": (
+                    "Telemetry contract contradiction: the hypothesis describes "
+                    "a no-objective-changing or incumbent-preserving path, but "
+                    "expected_telemetry.effect declares objective effect fields. "
+                    "Effect telemetry must correspond to a real accepted or "
+                    "improving move; it must not fabricate improvement for an "
+                    "unchanged incumbent."
+                ),
+                "mechanism_id": mechanisms[0],
+                "offending_fields": list(effect_fields[:4]),
+                "telemetry_category_guidance": (
+                    "Activation/budget telemetry proves that the mechanism ran "
+                    "or consumed bounded work. Effect telemetry is only for "
+                    "direct objective-changing evidence such as an accepted or "
+                    "best-improving move attributed to the same mechanism."
+                ),
+                "allowed_repair_shape": (
+                    "If the mechanism only preserves the incumbent, early "
+                    "returns, gates work, or records a decision, remove the "
+                    "effect claim and use activation, budget, or decision/context "
+                    "telemetry under the same mechanism id. If the mechanism is "
+                    "intended to improve the objective, revise the mechanism "
+                    "description so it includes a real accepted objective-changing "
+                    "path and keep effect telemetry only for that path."
+                ),
+                "forbidden_repair_shape": (
+                    "Do not keep positive best_delta/improvement_counts effect "
+                    "fields for an unchanged incumbent, and do not add fake "
+                    "positive deltas merely to satisfy telemetry."
+                ),
+            }
         advisories: list[Mapping[str, Any]] = []
         for mechanism in mechanisms:
             if not _is_indirect_policy_mechanism(hypothesis, mechanism):
@@ -240,6 +276,95 @@ class CvrpSolverDesignProvider:
             "offending_fields": first.get("offending_fields"),
             "allowed_repair_shape": first.get("allowed_repair_shape"),
             "forbidden_repair_shape": first.get("forbidden_repair_shape"),
+        }
+
+    def active_subject_code_constraints(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        del context, subject_id
+        selected = str(surface or "").strip()
+        if selected not in {"", "solver_design", "solver_algorithm"}:
+            return None
+        return {
+            "surface": "solver_design",
+            "subject_id": "cvrp.solver_design.active_baseline",
+            "version": "cvrp_solver_design_code_constraints.v1",
+            "object_model_hints": (
+                {
+                    "id": "objective_value_mapping",
+                    "summary": (
+                        "`context.objective(solution)` returns an ObjectiveValue "
+                        "mapping-like object, not a numeric scalar."
+                    ),
+                    "constraint": (
+                        "Do not subtract ObjectiveValue objects or compare raw "
+                        "objective mappings. Use `context.objective_key(solution)` "
+                        "for sortable keys and `context.is_better(candidate, "
+                        "incumbent)` for improvement decisions."
+                    ),
+                },
+                {
+                    "id": "internal_solution_route_model",
+                    "summary": (
+                        "Branch-owned algorithm modules use internal `_Solution` "
+                        "and `_Route` objects, not nested customer-list routes."
+                    ),
+                    "constraint": (
+                        "`_Route` exposes `.customers`, `.load`, `.cost`, "
+                        "`.can_insert(...)`, `.cost_of_insert(...)`, "
+                        "`.cost_of_remove(...)`, `.insert(...)`, `.remove(...)`, "
+                        "and `.recalculate()`. `_Solution` exposes `.copy()`, "
+                        "`.rebuild_index()`, `.remove_empty_routes()`, "
+                        "`.is_feasible()`, and `.routes_as_tuples()`."
+                    ),
+                },
+                {
+                    "id": "slotted_state_objects",
+                    "summary": "`_Solution` and `_Route` use `__slots__`.",
+                    "constraint": (
+                        "Do not attach dynamic attributes such as "
+                        "`solution._cache`, `solution._nn_lists`, or "
+                        "`route._memo`; keep temporary state in local variables "
+                        "or explicit helper parameters."
+                    ),
+                },
+            ),
+            "api_contracts": (
+                {
+                    "id": "public_internal_solution_bridge",
+                    "summary": "Public CvrpSolution and internal `_Solution` are separate.",
+                    "constraint": (
+                        "`context.nearest_neighbor()` takes no arguments and "
+                        "returns a public CvrpSolution. Existing construction "
+                        "helpers return internal `_Solution` objects. To return "
+                        "public output from internal state, call "
+                        "`context.make_solution(solution.routes_as_tuples())`."
+                    ),
+                },
+                {
+                    "id": "telemetry_helpers",
+                    "summary": "Use exact active runtime telemetry helper signatures.",
+                    "constraint": (
+                        "`context.record_phase(name, elapsed_ms)` records a "
+                        "duration delta, not cumulative elapsed time. "
+                        "`context.record_iteration(phase, count)` populates "
+                        "`solver_algorithm_context_records.<phase>_iterations`. "
+                        "`context.record_move(phase, attempted=..., accepted=..., "
+                        "delta=..., best_improved=...)` is for direct move/effect "
+                        "evidence."
+                    ),
+                },
+            ),
+            "forbidden_patterns": (
+                "ObjectiveValue - ObjectiveValue arithmetic",
+                "dynamic attributes on `_Solution` or `_Route` slotted objects",
+                "invented `_Solution.from_routes`/`from_public`/`to_public` bridge methods",
+                "raw cumulative `context.elapsed_ms()` passed as a phase duration",
+            ),
         }
 
     def solver_design_code_rules(self, context: Any) -> Sequence[str]:
@@ -854,6 +979,47 @@ def _is_broad_loop_objective_effect_field(field: str) -> bool:
             " delta sum ",
             " objective delta ",
         ),
+    )
+
+
+def _is_no_objective_changing_claim(hypothesis: HypothesisProposal) -> bool:
+    text_parts = [
+        getattr(hypothesis, "hypothesis_text", ""),
+        getattr(hypothesis, "target_weakness", ""),
+        getattr(hypothesis, "expected_effect", ""),
+        getattr(hypothesis, "no_op_condition", ""),
+        getattr(hypothesis, "risk_to_higher_priority", ""),
+    ]
+    novelty = getattr(hypothesis, "novelty_signature", {}) or {}
+    if isinstance(novelty, Mapping):
+        text_parts.extend(str(value) for value in novelty.values())
+    text = " ".join(str(part or "").lower() for part in text_parts)
+    direct_phrases = (
+        "no-objective-changing",
+        "no objective-changing",
+        "no objective changing",
+        "does not change objective",
+        "without changing objective",
+        "without objective change",
+        "no accepted move",
+        "no improving move",
+        "no improvement path",
+        "early return",
+        "return incumbent",
+        "preserve incumbent",
+        "unchanged incumbent",
+        "retains incumbent",
+    )
+    if any(phrase in text for phrase in direct_phrases):
+        return True
+    return "incumbent" in text and any(
+        phrase in text
+        for phrase in (
+            "no effect",
+            "no objective effect",
+            "fallback",
+            "skip",
+        )
     )
 
 

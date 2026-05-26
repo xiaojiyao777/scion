@@ -266,6 +266,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "last_screening_feedback_tier": last_screening_feedback_tier,
         "last_telemetry_outcome": last_telemetry_outcome,
         "repair_focus_required": repair_focus_required,
+        "same_mechanism_followup_required": same_mechanism_followup_required,
         "repair_focus_reason": repair_focus_reason,
         "repair_policy": (
             REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK
@@ -275,6 +276,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "branch_followup_policy": followup_policy,
         "clean_fork_policy": clean_fork_policy,
         "branch_mechanism_ids": list(branch_mechanism_ids(branch)),
+        "protected_mechanism_ids": list(branch_mechanism_ids(branch)),
         "repair_mechanism_ids": list(
             getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
         )
@@ -299,6 +301,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
     tier = context.get("last_screening_feedback_tier") or "unknown"
     if context["repair_focus_required"]:
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
+        protected = _protected_mechanism_text(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; "
@@ -309,18 +312,25 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             "do not treat the existing branch workspace as a clean baseline. "
             "Continue only as a repair-focused attempt against champion code: "
             "fix declared telemetry activation/budget wiring or choose a new "
-            f"branch instead of building on suspect code.{reroute_suffix}"
+            f"branch instead of building on suspect code. Protected mechanism "
+            f"ids for this branch: {protected}; do not add, drop, or rename "
+            "them on this branch. If a different mechanism is needed, use a "
+            f"clean branch/fork before drafting it.{reroute_suffix}"
         )
     if status.startswith("active_"):
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
+        protected = _protected_mechanism_text(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
             f"{context['baseline_policy']}; branch_followup_policy="
             f"{context['branch_followup_policy']}; clean_fork_policy="
             f"{context['clean_fork_policy']}. This is an active branch outcome; "
-            "reuse the branch workspace only for the same declared mechanism. "
-            f"A different mechanism requires a clean branch or clean fork."
+            "reuse the branch workspace only for the same declared mechanism "
+            f"ids: {protected}. The next hypothesis on this branch must keep "
+            "those protected mechanism ids and may only tune, integrate, or "
+            "repair the same mechanism. A different or new mechanism requires "
+            "a clean branch or clean fork before generation."
             f"{reroute_suffix}"
         )
     return ""
@@ -353,6 +363,15 @@ def _branch_lifecycle_guidance_suffix(context: Mapping[str, Any]) -> str:
         "branch/fork for new mechanisms, or continue here only under the same "
         "declared mechanism ids."
     )
+
+
+def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
+    ids = [
+        str(item).strip()
+        for item in (context.get("protected_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    return ", ".join(ids) if ids else "unknown"
 
 
 __all__ = [

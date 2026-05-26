@@ -4,7 +4,9 @@ from typing import List, Literal, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+    CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
     branch_lifecycle_new_mechanism_ineligible,
+    branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch, BranchState
 
@@ -102,6 +104,18 @@ class Scheduler:
                         reason=BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
                     )
                 return SchedulerAction(action="at_capacity", branch=None)
+            if (
+                len(active_for_proposal_capacity) < self._max_active_branches
+                and all(
+                    branch_requires_same_mechanism_followup(branch)
+                    for branch in eligible_research
+                )
+            ):
+                return SchedulerAction(
+                    action="create_new",
+                    branch=None,
+                    reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
+                )
             if len(active_for_proposal_capacity) < self._max_active_branches and any(
                 _established_branch(branch) for branch in eligible_research
             ):
