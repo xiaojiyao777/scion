@@ -15,6 +15,7 @@ from scion.core.campaign_adapters import (
     _workspace_service_for,
 )
 from scion.core.campaign_governance import CampaignGovernanceService
+from scion.core.branch_hygiene import campaign_branch_lifecycle_reroute_status
 from scion.core.circuit_breaker import CircuitBreaker, MAX_CONSECUTIVE_LLM_FAILURES
 from scion.core.explore_step_pipeline import build_verification_detail
 from scion.core.features import BudgetState
@@ -322,6 +323,9 @@ class CampaignManager:
                         "branch_id": step.branch_id,
                     }
                 )
+        branch_lifecycle_reroute_policy = campaign_branch_lifecycle_reroute_status(
+            branches
+        )
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
@@ -369,10 +373,37 @@ class CampaignManager:
                     "telemetry_repair_attempts": dict(
                         getattr(b, "telemetry_repair_attempts", {}) or {}
                     ),
+                    "branch_lifecycle_policy_blocks": getattr(
+                        b,
+                        "branch_lifecycle_policy_blocks",
+                        0,
+                    ),
+                    "branch_lifecycle_new_mechanism_ineligible": getattr(
+                        b,
+                        "branch_lifecycle_new_mechanism_ineligible",
+                        False,
+                    ),
+                    "branch_lifecycle_reroute_reason": getattr(
+                        b,
+                        "branch_lifecycle_reroute_reason",
+                        None,
+                    ),
+                    "last_branch_lifecycle_policy_block": dict(
+                        getattr(
+                            b,
+                            "last_branch_lifecycle_policy_block",
+                            {},
+                        )
+                        or {}
+                    ),
                 }
                 for b in branches
             ],
         }
+        if branch_lifecycle_reroute_policy:
+            state["branch_lifecycle_reroute_policy"] = (
+                branch_lifecycle_reroute_policy
+            )
         weight_opt_status = self._weight_opt_coord.status_snapshot()
         if (
             weight_opt_status["pending_threads"]

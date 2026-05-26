@@ -291,6 +291,7 @@ class CampaignSummaryMixin:
                 "requested_rounds",
                 "effective_rounds_completed",
                 "telemetry_diagnostic_attempts",
+                "branch_lifecycle_policy_blocks",
                 "quality_blocks",
                 "blocked_attempts",
             ):

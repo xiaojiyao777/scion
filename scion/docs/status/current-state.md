@@ -46,6 +46,17 @@ effective screened round. Prompt/status projections now expose
 `branch_followup_policy`, `clean_fork_policy`, and `branch_mechanism_ids`.
 Full local regression after this tightening: `2241 passed, 1 skipped`.
 
+The 2026-05-26 branch-lifecycle reroute repair keeps that boundary strict while
+preventing block-only campaign loops. A
+`new_mechanism_requires_clean_fork`/branch-lifecycle policy block now marks the
+selected non-clean research branch as temporarily ineligible for new-mechanism
+proposal selection, records the last block and clean-fork reroute reason in
+status/lineage state, and lets the scheduler choose a clean branch/fork when
+the remaining research branches are only new-mechanism-ineligible follow-ups.
+Same-mechanism follow-up policy remains allowed on non-clean branches; policy
+blocks still do not consume ordinary proposal attempts or effective screened
+rounds and are not counted as LLM circuit-breaker failures.
+
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session
 boundary. Current real-cost experiments should be launched with explicit local

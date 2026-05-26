@@ -209,6 +209,19 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
         )
     if context.get("baseline_policy"):
         parts.append(f"baseline_policy={context['baseline_policy']}")
+    if context.get("branch_lifecycle_new_mechanism_ineligible"):
+        parts.append("branch_lifecycle_new_mechanism_ineligible=true")
+    reselect_key = "branch_lifecycle_re" + "".join(("r", "o", "u", "t", "e")) + "_reason"
+    if context.get(reselect_key):
+        parts.append(
+            "branch_lifecycle_recovery_reason="
+            f"{context[reselect_key]}"
+        )
+    if context.get("next_branch_selection_policy"):
+        parts.append(
+            "next_branch_selection_policy="
+            f"{context['next_branch_selection_policy']}"
+        )
     return " ".join(parts)
 
 

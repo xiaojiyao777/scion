@@ -84,9 +84,8 @@ def test_generate_hypothesis_rejects_new_mechanism_on_suspect_branch() -> None:
     assert "new_mechanism_requires_clean_fork" in detail
     assert "bounded_probe" in detail
     assert "different_mechanism" in detail
-    assert failures
-    assert "repair_first_policy_violation" in failures[-1][1].detail
-    assert circuit.failures
+    assert failures == []
+    assert circuit.failures == []
 
 
 def test_generate_hypothesis_allows_active_no_effect_same_mechanism_followup() -> None:
@@ -158,9 +157,37 @@ def test_generate_hypothesis_rejects_new_mechanism_on_active_no_effect_branch() 
     assert "new_mechanism_requires_clean_fork" in detail
     assert "bounded_probe" in detail
     assert "different_probe" in detail
-    assert failures
-    assert "branch_lifecycle_policy_violation" in failures[-1][1].detail
-    assert circuit.failures
+    assert failures == []
+    assert circuit.failures == []
+
+
+def test_repeated_lifecycle_policy_blocks_do_not_trip_circuit_breaker() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a distinct route perturbation after no-effect screening.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_probe.py",
+        mechanism_changes=(
+            MechanismChange(id="different_probe", change_type="add"),
+        ),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    for _ in range(4):
+        hypothesis, record = pipeline.generate_hypothesis(branch)
+        assert hypothesis is None
+        assert record is None
+        assert "branch_lifecycle_policy_violation" in (
+            pipeline.pop_hypothesis_failure_detail(branch.branch_id) or ""
+        )
+
+    assert failures == []
+    assert circuit.failures == []
 
 
 def test_active_no_effect_policy_uses_step_history_mechanism_ids() -> None:

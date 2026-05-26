@@ -110,6 +110,64 @@ def test_pending_retry_under_capacity_runs_existing_branch():
     assert action.branch is branch
 
 
+def test_lifecycle_blocked_research_branch_reroutes_to_clean_branch():
+    blocked = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    blocked.direction = "solver: established"
+    blocked.branch_code_status = "active_no_effect"
+    blocked.branch_lifecycle_new_mechanism_ineligible = True
+    blocked.branch_lifecycle_reroute_reason = (
+        "clean_fork_after_branch_lifecycle_policy_block"
+    )
+    clean = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=10,
+        updated_offset_s=10,
+    )
+
+    action = Scheduler(max_active_branches=3).select_next([blocked, clean])
+
+    assert action.action == "run_existing"
+    assert action.branch is clean
+
+
+def test_lifecycle_blocked_research_branches_create_clean_fork_at_capacity():
+    branches = []
+    for offset in (0, 10, 20):
+        branch = _branch(
+            BranchState.EXPLORE,
+            created_offset_s=offset,
+            updated_offset_s=offset,
+        )
+        branch.direction = "solver: established"
+        branch.branch_code_status = "active_no_effect"
+        branch.branch_lifecycle_new_mechanism_ineligible = True
+        branch.branch_lifecycle_reroute_reason = (
+            "clean_fork_after_branch_lifecycle_policy_block"
+        )
+        branches.append(branch)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "clean_fork_after_branch_lifecycle_policy_block"
+
+
+def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_followup():
+    branch = _branch(BranchState.EXPLORE)
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+
+
 def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
     b_recent = _branch(
         BranchState.EXPLORE,

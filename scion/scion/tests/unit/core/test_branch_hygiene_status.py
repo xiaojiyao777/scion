@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from scion.core.branch_hygiene import branch_hygiene_context
+from scion.core.branch_hygiene import (
+    branch_hygiene_context,
+    campaign_branch_lifecycle_reroute_status,
+    record_branch_lifecycle_policy_block,
+)
 from scion.core.explore_step.pipeline import ExploreStepPipeline
 from scion.core.models import Branch, BranchState
 
@@ -107,3 +111,40 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
     assert payload["baseline_policy"] == (
         "branch_workspace_same_mechanism_followup_only"
     )
+
+
+def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
+    branch = Branch(
+        branch_id="blocked-no-effect",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        last_telemetry_outcome="no_objective_effect",
+        branch_mechanism_ids=("bounded_probe",),
+    )
+
+    block = record_branch_lifecycle_policy_block(
+        branch,
+        (
+            "branch_lifecycle_policy_violation: "
+            "new_mechanism_requires_clean_fork; "
+            "protected_mechanism_ids=bounded_probe; "
+            "proposed_mechanism_ids=different_probe"
+        ),
+    )
+    payload = branch_hygiene_context(branch)
+    campaign_payload = campaign_branch_lifecycle_reroute_status([branch])
+
+    assert block["reason"] == "new_mechanism_requires_clean_fork"
+    assert payload["branch_lifecycle_policy_blocks"] == 1
+    assert payload["branch_lifecycle_new_mechanism_ineligible"] is True
+    assert payload["branch_lifecycle_reroute_reason"] == (
+        "clean_fork_after_branch_lifecycle_policy_block"
+    )
+    assert payload["next_branch_selection_policy"] == (
+        "clean_branch_or_clean_fork_for_new_mechanism"
+    )
+    assert campaign_payload["ineligible_branch_ids"] == [branch.branch_id]
+    assert campaign_payload["last_policy_block"]["branch_id"] == branch.branch_id

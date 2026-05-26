@@ -214,6 +214,15 @@ class TestBranchStore:
         b.branch_mechanism_ids = ("active_probe",)
         b.telemetry_repair_mechanism_ids = ("probe",)
         b.telemetry_repair_attempts = {"probe": 2}
+        b.branch_lifecycle_policy_blocks = 1
+        b.branch_lifecycle_new_mechanism_ineligible = True
+        b.branch_lifecycle_reroute_reason = (
+            "clean_fork_after_branch_lifecycle_policy_block"
+        )
+        b.last_branch_lifecycle_policy_block = {
+            "reason": "new_mechanism_requires_clean_fork",
+            "block_count": 1,
+        }
         b.pending_retry = True
         b.blocked_rounds = 2
         b.consecutive_llm_retries = 1
@@ -233,6 +242,15 @@ class TestBranchStore:
         assert loaded.branch_mechanism_ids == ("active_probe",)
         assert loaded.telemetry_repair_mechanism_ids == ("probe",)
         assert loaded.telemetry_repair_attempts == {"probe": 2}
+        assert loaded.branch_lifecycle_policy_blocks == 1
+        assert loaded.branch_lifecycle_new_mechanism_ineligible is True
+        assert loaded.branch_lifecycle_reroute_reason == (
+            "clean_fork_after_branch_lifecycle_policy_block"
+        )
+        assert loaded.last_branch_lifecycle_policy_block == {
+            "reason": "new_mechanism_requires_clean_fork",
+            "block_count": 1,
+        }
         assert loaded.pending_retry is True
         assert loaded.blocked_rounds == 2
         assert loaded.consecutive_llm_retries == 1

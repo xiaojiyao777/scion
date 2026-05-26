@@ -2,6 +2,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
+from scion.core.branch_hygiene import (
+    BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+    branch_lifecycle_new_mechanism_ineligible,
+)
 from scion.core.models import Branch, BranchState
 
 
@@ -9,6 +13,7 @@ from scion.core.models import Branch, BranchState
 class SchedulerAction:
     action: Literal["run_existing", "create_new", "at_capacity"]
     branch: Optional[Branch] = None
+    reason: str = ""
 
 
 # High-priority tiers (index 0 = highest priority).
@@ -56,6 +61,14 @@ class Scheduler:
         are broken by oldest updated_at as a last-run approximation.
         """
         active = [b for b in branches if b.state not in _TERMINAL_STATES]
+        active_for_proposal_capacity = [
+            b
+            for b in active
+            if not (
+                b.state in _RESEARCH_STATES
+                and branch_lifecycle_new_mechanism_ineligible(b)
+            )
+        ]
         # BLOCKED_INFRA branches are not schedulable, though they still count
         # toward the active-branch cap until recovery/abandon clears them.
         schedulable = [b for b in active if b.state != BranchState.BLOCKED_INFRA]
@@ -76,17 +89,30 @@ class Scheduler:
                     action="run_existing",
                     branch=_select_fair(pending_retry),
                 )
-            if len(active) < self._max_active_branches and any(
-                _established_branch(branch) for branch in research
+            eligible_research = [
+                branch
+                for branch in research
+                if not branch_lifecycle_new_mechanism_ineligible(branch)
+            ]
+            if not eligible_research:
+                if len(active_for_proposal_capacity) < self._max_active_branches:
+                    return SchedulerAction(
+                        action="create_new",
+                        branch=None,
+                        reason=BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+                    )
+                return SchedulerAction(action="at_capacity", branch=None)
+            if len(active_for_proposal_capacity) < self._max_active_branches and any(
+                _established_branch(branch) for branch in eligible_research
             ):
                 return SchedulerAction(action="create_new", branch=None)
             return SchedulerAction(
                 action="run_existing",
-                branch=_select_fair(research),
+                branch=_select_fair(eligible_research),
             )
 
         # No actionable branch: only create new if below capacity (§4.6 / §11.5)
-        if len(active) >= self._max_active_branches:
+        if len(active_for_proposal_capacity) >= self._max_active_branches:
             return SchedulerAction(action="at_capacity", branch=None)
 
         return SchedulerAction(action="create_new", branch=None)

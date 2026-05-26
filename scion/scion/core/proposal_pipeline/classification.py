@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
 from scion.proposal.agentic_session import (
     AgenticFailureCategory,
     AgenticProposalOutput,
@@ -153,6 +154,7 @@ def _agentic_detail_is_framework_boundary(detail: str | None) -> bool:
     return (
         "contractgate-approved hypothesis" in text
         or "forced_surface_constraint" in text
+        or is_branch_lifecycle_policy_block_detail(text)
     )
 
 

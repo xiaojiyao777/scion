@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.core.branch_hygiene import record_branch_lifecycle_policy_block
 from scion.core.models import Branch, BranchState
 from scion.proposal.context_manager import _summarise_siblings
 from scion.proposal.engine import _split_hypothesis_context
@@ -84,3 +85,30 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
     assert "branch_code_status=clean" not in no_effect_line
     assert "baseline_policy=clean" not in no_effect_line
+
+
+def test_sibling_prompt_projection_includes_lifecycle_reroute_policy() -> None:
+    branch = _branch("blocked123456", branch_code_status="active_no_effect")
+    branch.branch_mechanism_ids = ("bounded_probe",)
+    record_branch_lifecycle_policy_block(
+        branch,
+        (
+            "branch_lifecycle_policy_violation: "
+            "new_mechanism_requires_clean_fork"
+        ),
+    )
+
+    summary = _summarise_siblings([branch])
+    prompt = _hypothesis_prompt_user_text(summary)
+    blocked_line = next(line for line in prompt.splitlines() if "blocked" in line)
+
+    assert "branch_followup_policy=same_mechanism_followup_only" in blocked_line
+    assert "branch_lifecycle_new_mechanism_ineligible=true" in blocked_line
+    assert (
+        "branch_lifecycle_recovery_reason="
+        "clean_fork_after_branch_lifecycle_policy_block"
+    ) in blocked_line
+    assert (
+        "next_branch_selection_policy="
+        "clean_branch_or_clean_fork_for_new_mechanism"
+    ) in blocked_line

@@ -6,12 +6,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
-from scion.core.branch_hygiene import branch_hygiene_context, branch_requires_repair_focus
+from scion.core.branch_hygiene import (
+    branch_hygiene_context,
+    branch_requires_repair_focus,
+    record_branch_lifecycle_policy_block,
+)
 from scion.core.branch_repair_policy import (
-    BRANCH_LIFECYCLE_POLICY_VIOLATION,
     REPAIR_FIRST_POLICY_VIOLATION,
     branch_continuation_mechanism_ids,
     branch_repair_mechanism_ids,
+    is_branch_lifecycle_policy_block_detail,
     validate_repair_focused_patch,
 )
 from scion.core.models import (
@@ -232,6 +236,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 attempt_kind, repair_ids, repair_policy_reason = (
                     self._repair_attempt_metadata(branch, failure_detail)
                 )
+                if attempt_kind == "branch_lifecycle_policy":
+                    self._record_branch_lifecycle_policy_block(
+                        branch,
+                        failure_detail,
+                    )
                 self.record_step(
                     StepRecord(
                         round_num=rnum,
@@ -487,11 +496,17 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 bid,
                 detail,
             )
-            self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+            if not is_branch_lifecycle_policy_block_detail(detail):
+                self.handle_failure(
+                    branch,
+                    FailureEvent(category="proposal", detail=detail),
+                )
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
             attempt_kind, repair_ids, repair_policy_reason = (
                 self._repair_attempt_metadata(branch, detail)
             )
+            if attempt_kind == "branch_lifecycle_policy":
+                self._record_branch_lifecycle_policy_block(branch, detail)
             if not repair_ids:
                 repair_ids = (
                     repair_patch_check.protected_mechanism_ids
@@ -816,11 +831,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     ) -> tuple[str, tuple[str, ...], str | None]:
         if _is_schema_quality_block_detail(failure_detail):
             return "schema_quality_block", (), str(failure_detail or "")
-        if BRANCH_LIFECYCLE_POLICY_VIOLATION in str(failure_detail or ""):
+        if is_branch_lifecycle_policy_block_detail(failure_detail):
             ids = branch_continuation_mechanism_ids(
                 branch,
                 getattr(self, "step_history", ()),
             )
+            if not ids:
+                ids = branch_repair_mechanism_ids(branch)
             return "branch_lifecycle_policy", ids, str(failure_detail or "")
         if not branch_requires_repair_focus(branch):
             return "proposal_block", (), None
@@ -829,6 +846,23 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         if REPAIR_FIRST_POLICY_VIOLATION in str(failure_detail or ""):
             reason = str(failure_detail or "")
         return "telemetry_repair", repair_ids, reason
+
+    def _record_branch_lifecycle_policy_block(
+        self,
+        branch: Branch,
+        detail: str | None,
+    ) -> None:
+        if not is_branch_lifecycle_policy_block_detail(detail):
+            return
+        record_branch_lifecycle_policy_block(branch, detail)
+        try:
+            self.persist_branch_state(branch.branch_id)
+        except Exception:  # pragma: no cover - reroute persistence is best effort
+            logger.debug(
+                "Failed to persist branch lifecycle reroute marker for %s",
+                branch.branch_id,
+                exc_info=True,
+            )
 
     def _emit_status_progress(
         self,

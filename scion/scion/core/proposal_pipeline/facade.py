@@ -10,7 +10,10 @@ from scion.core.branch_hygiene import (
     branch_hygiene_guidance,
     branch_workspace_for_proposal,
 )
-from scion.core.branch_repair_policy import validate_repair_focused_hypothesis
+from scion.core.branch_repair_policy import (
+    is_branch_lifecycle_policy_block_detail,
+    validate_repair_focused_hypothesis,
+)
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -272,11 +275,18 @@ class ProposalPipeline(
         )
         if not repair_check.allowed:
             self.hypothesis_failure_details[bid] = repair_check.detail
-            self.handle_failure(
-                branch,
-                FailureEvent(category="proposal", detail=repair_check.detail),
-            )
-            self.circuit_breaker.record_failure(repair_check.detail)
+            if is_branch_lifecycle_policy_block_detail(repair_check.detail):
+                logger.info(
+                    "Branch %s: branch lifecycle policy blocked proposal: %s",
+                    bid,
+                    repair_check.detail,
+                )
+            else:
+                self.handle_failure(
+                    branch,
+                    FailureEvent(category="proposal", detail=repair_check.detail),
+                )
+                self.circuit_breaker.record_failure(repair_check.detail)
             return None, None
 
         self.circuit_breaker.record_success()

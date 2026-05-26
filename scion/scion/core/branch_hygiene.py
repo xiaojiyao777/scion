@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, MutableMapping
+from datetime import datetime
+from typing import Any, Iterable, Mapping, MutableMapping
 
 from scion.core.models import Branch
 
@@ -19,6 +20,13 @@ CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
     "clean_fork_required_for_new_mechanism"
 )
 OPEN_EXPLORATION_ALLOWED = "open_exploration_allowed"
+BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK = (
+    "clean_fork_after_branch_lifecycle_policy_block"
+)
+BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE = (
+    "new_mechanism_ineligible_after_branch_lifecycle_policy_block"
+)
+BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT = 1
 
 SUSPECT_BRANCH_CODE_STATUSES = frozenset(
     {
@@ -97,6 +105,126 @@ def branch_workspace_for_proposal(
     return branch_workspaces.get(branch.branch_id)
 
 
+def branch_lifecycle_new_mechanism_ineligible(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    return bool(
+        getattr(branch, "branch_lifecycle_new_mechanism_ineligible", False)
+    )
+
+
+def record_branch_lifecycle_policy_block(
+    branch: Branch | None,
+    detail: str | None,
+) -> dict[str, Any]:
+    """Record a generic branch-lifecycle reroute marker on the branch."""
+    if branch is None:
+        return {}
+    now = datetime.now()
+    block_count = max(
+        0,
+        int(getattr(branch, "branch_lifecycle_policy_blocks", 0) or 0),
+    ) + 1
+    reason = _branch_lifecycle_reason(detail)
+    block = {
+        "reason": reason,
+        "detail": _bounded_detail(detail),
+        "recorded_at": now.isoformat(),
+        "block_count": block_count,
+        "reroute_reason": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+        "next_selection": (
+            "clean_branch_or_clean_fork_unless_same_mechanism_followup_forced"
+        ),
+    }
+    branch.branch_lifecycle_policy_blocks = block_count
+    branch.branch_lifecycle_new_mechanism_ineligible = True
+    branch.branch_lifecycle_reroute_reason = (
+        BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK
+    )
+    branch.last_branch_lifecycle_policy_block = block
+    branch.updated_at = now
+    return block
+
+
+def branch_lifecycle_reroute_context(branch: Branch | None) -> dict[str, Any]:
+    block_count = (
+        max(
+            0,
+            int(getattr(branch, "branch_lifecycle_policy_blocks", 0) or 0),
+        )
+        if branch is not None
+        else 0
+    )
+    ineligible = branch_lifecycle_new_mechanism_ineligible(branch)
+    last_block = (
+        dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+        if branch is not None
+        and isinstance(
+            getattr(branch, "last_branch_lifecycle_policy_block", None),
+            Mapping,
+        )
+        else {}
+    )
+    reroute_reason = (
+        str(getattr(branch, "branch_lifecycle_reroute_reason", "") or "")
+        if branch is not None
+        else ""
+    )
+    return {
+        "branch_lifecycle_policy_blocks": block_count,
+        "branch_lifecycle_new_mechanism_ineligible": ineligible,
+        "branch_lifecycle_reroute_reason": reroute_reason or None,
+        "branch_lifecycle_reroute_loop_limit": (
+            BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT
+        ),
+        "last_branch_lifecycle_policy_block": last_block,
+        "next_branch_selection_policy": (
+            "clean_branch_or_clean_fork_for_new_mechanism"
+            if ineligible
+            else "normal_scheduler_policy"
+        ),
+    }
+
+
+def campaign_branch_lifecycle_reroute_status(
+    branches: Iterable[Branch],
+) -> dict[str, Any]:
+    ineligible_branches: list[dict[str, Any]] = []
+    last_blocks: list[dict[str, Any]] = []
+    for branch in branches:
+        context = branch_lifecycle_reroute_context(branch)
+        if context["branch_lifecycle_new_mechanism_ineligible"]:
+            ineligible_branches.append(
+                {
+                    "branch_id": branch.branch_id,
+                    "branch_code_status": branch_code_status(branch),
+                    "reason": context["branch_lifecycle_reroute_reason"],
+                    "policy_blocks": context["branch_lifecycle_policy_blocks"],
+                    "next_branch_selection_policy": context[
+                        "next_branch_selection_policy"
+                    ],
+                }
+            )
+        block = context.get("last_branch_lifecycle_policy_block")
+        if isinstance(block, Mapping) and block:
+            last_blocks.append({"branch_id": branch.branch_id, **dict(block)})
+    if not ineligible_branches and not last_blocks:
+        return {}
+    last_blocks.sort(key=lambda item: str(item.get("recorded_at") or ""))
+    return {
+        "policy": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+        "reroute_loop_limit": BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT,
+        "ineligible_branch_ids": [
+            item["branch_id"] for item in ineligible_branches
+        ],
+        "ineligible_branches": ineligible_branches,
+        "last_policy_block": last_blocks[-1] if last_blocks else None,
+        "next_branch_selection_policy": (
+            "skip_new_mechanism_ineligible_research_branches_and_use_clean_fork"
+        ),
+    }
+
+
 def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     """Prompt/status payload that makes branch-code provenance explicit."""
     status = branch_code_status(branch)
@@ -133,7 +261,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     else:
         baseline_policy = "clean"
         repair_focus_reason = None
-    return {
+    context = {
         "branch_code_status": status,
         "last_screening_feedback_tier": last_screening_feedback_tier,
         "last_telemetry_outcome": last_telemetry_outcome,
@@ -159,6 +287,8 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         else {},
         "baseline_policy": baseline_policy,
     }
+    context.update(branch_lifecycle_reroute_context(branch))
+    return context
 
 
 def branch_hygiene_guidance(branch: Branch | None) -> str:
@@ -168,6 +298,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
     outcome = context.get("last_telemetry_outcome") or "unknown"
     tier = context.get("last_screening_feedback_tier") or "unknown"
     if context["repair_focus_required"]:
+        reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; "
@@ -178,9 +309,10 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             "do not treat the existing branch workspace as a clean baseline. "
             "Continue only as a repair-focused attempt against champion code: "
             "fix declared telemetry activation/budget wiring or choose a new "
-            "branch instead of building on suspect code."
+            f"branch instead of building on suspect code.{reroute_suffix}"
         )
     if status.startswith("active_"):
+        reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
@@ -188,13 +320,46 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"{context['branch_followup_policy']}; clean_fork_policy="
             f"{context['clean_fork_policy']}. This is an active branch outcome; "
             "reuse the branch workspace only for the same declared mechanism. "
-            "A different mechanism requires a clean branch or clean fork."
+            f"A different mechanism requires a clean branch or clean fork."
+            f"{reroute_suffix}"
         )
     return ""
 
 
+def _branch_lifecycle_reason(detail: str | None) -> str:
+    text = str(detail or "").strip()
+    if not text:
+        return "branch_lifecycle_policy_block"
+    if ":" in text:
+        text = text.split(":", 1)[1].strip()
+    if ";" in text:
+        text = text.split(";", 1)[0].strip()
+    return text or "branch_lifecycle_policy_block"
+
+
+def _bounded_detail(detail: str | None) -> str:
+    text = str(detail or "").strip()
+    if len(text) <= 1600:
+        return text
+    return text[:1597].rstrip() + "..."
+
+
+def _branch_lifecycle_guidance_suffix(context: Mapping[str, Any]) -> str:
+    if not context.get("branch_lifecycle_new_mechanism_ineligible"):
+        return ""
+    return (
+        " Prior branch-lifecycle policy blocks marked this branch ineligible "
+        "for new-mechanism proposal selection; scheduler should use a clean "
+        "branch/fork for new mechanisms, or continue here only under the same "
+        "declared mechanism ids."
+    )
+
+
 __all__ = [
     "ACTIVATION_MISSING_OR_WIRING_SUSPECT",
+    "BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE",
+    "BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK",
+    "BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT",
     "CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM",
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
     "OPEN_EXPLORATION_ALLOWED",
@@ -206,10 +371,14 @@ __all__ = [
     "WIRING_SUSPECT_REQUIRES_REPAIR",
     "branch_allows_clean_workspace_reuse",
     "branch_code_status",
+    "branch_lifecycle_new_mechanism_ineligible",
+    "branch_lifecycle_reroute_context",
     "branch_hygiene_context",
     "branch_hygiene_guidance",
     "branch_mechanism_ids",
     "branch_requires_repair_focus",
     "branch_requires_same_mechanism_followup",
     "branch_workspace_for_proposal",
+    "campaign_branch_lifecycle_reroute_status",
+    "record_branch_lifecycle_policy_block",
 ]

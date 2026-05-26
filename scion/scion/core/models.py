@@ -405,6 +405,12 @@ class Branch:
     branch_mechanism_ids: Tuple[str, ...] = ()
     telemetry_repair_mechanism_ids: Tuple[str, ...] = ()
     telemetry_repair_attempts: Dict[str, int] = field(default_factory=dict)
+    branch_lifecycle_policy_blocks: int = 0
+    branch_lifecycle_new_mechanism_ineligible: bool = False
+    branch_lifecycle_reroute_reason: Optional[str] = None
+    last_branch_lifecycle_policy_block: Dict[str, Any] = field(
+        default_factory=dict
+    )
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3

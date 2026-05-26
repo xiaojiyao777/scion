@@ -315,6 +315,14 @@ def repair_attempt_key_label(branch_id: str | None, mechanism_ids: Iterable[str]
     return f"{branch}:{mechanism}"
 
 
+def is_branch_lifecycle_policy_block_detail(detail: str | None) -> bool:
+    text = str(detail or "").lower()
+    return (
+        BRANCH_LIFECYCLE_POLICY_VIOLATION in text
+        or NEW_MECHANISM_REQUIRES_CLEAN_FORK in text
+    )
+
+
 def _step_has_repairable_telemetry(step: StepRecord) -> bool:
     codes = {
         str(code).lower()
@@ -356,6 +364,7 @@ __all__ = [
     "branch_continuation_mechanism_ids",
     "branch_repair_mechanism_ids",
     "mechanism_ids_for_repair",
+    "is_branch_lifecycle_policy_block_detail",
     "repair_attempt_key",
     "repair_attempt_key_label",
     "validate_branch_continuation_hypothesis",

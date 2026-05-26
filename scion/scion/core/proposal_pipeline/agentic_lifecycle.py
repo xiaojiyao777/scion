@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -321,6 +322,14 @@ class AgenticLifecycleMixin:
         if output is not None and _agentic_output_is_quality_blocked(output):
             logger.info(
                 "Branch %s: agentic quality block recorded outside infra/proposal streaks: %s",
+                branch.branch_id,
+                detail,
+            )
+            return
+        if is_branch_lifecycle_policy_block_detail(detail):
+            logger.info(
+                "Branch %s: agentic branch lifecycle block recorded outside "
+                "infra/proposal streaks: %s",
                 branch.branch_id,
                 detail,
             )

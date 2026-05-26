@@ -93,9 +93,13 @@ class BranchStore:
                  branch_mechanism_ids_json,
                  telemetry_repair_mechanism_ids_json,
                  telemetry_repair_attempts_json,
+                 branch_lifecycle_policy_blocks,
+                 branch_lifecycle_new_mechanism_ineligible,
+                 branch_lifecycle_reroute_reason,
+                 last_branch_lifecycle_policy_block_json,
                  pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -118,6 +122,12 @@ class BranchStore:
                     json.dumps(list(branch.branch_mechanism_ids or ())),
                     json.dumps(list(branch.telemetry_repair_mechanism_ids or ())),
                     json.dumps(dict(branch.telemetry_repair_attempts or {})),
+                    branch.branch_lifecycle_policy_blocks,
+                    1 if branch.branch_lifecycle_new_mechanism_ineligible else 0,
+                    branch.branch_lifecycle_reroute_reason,
+                    json.dumps(
+                        dict(branch.last_branch_lifecycle_policy_block or {})
+                    ),
                     1 if branch.pending_retry else 0,
                     branch.blocked_rounds,
                     branch.consecutive_llm_retries,
@@ -175,6 +185,18 @@ class BranchStore:
             ),
             telemetry_repair_attempts=_json_mapping(
                 d.get("telemetry_repair_attempts_json")
+            ),
+            branch_lifecycle_policy_blocks=(
+                d.get("branch_lifecycle_policy_blocks") or 0
+            ),
+            branch_lifecycle_new_mechanism_ineligible=bool(
+                d.get("branch_lifecycle_new_mechanism_ineligible") or 0
+            ),
+            branch_lifecycle_reroute_reason=d.get(
+                "branch_lifecycle_reroute_reason"
+            ),
+            last_branch_lifecycle_policy_block=_json_mapping(
+                d.get("last_branch_lifecycle_policy_block_json")
             ),
             pending_retry=bool(d.get("pending_retry") or 0),
             blocked_rounds=d.get("blocked_rounds") or 0,
