@@ -1,4 +1,4 @@
-"""Problem-dispatched semantic novelty gate for proposal hypotheses."""
+"""Problem-dispatched premise gate and duplicate diagnostics for proposals."""
 
 from __future__ import annotations
 
@@ -30,14 +30,65 @@ class MechanismNoveltyResult:
     contradicted_fact_ids: tuple[str, ...] = ()
     fact_packet_digest: str | None = None
     fact_provenance: Mapping[str, Any] | None = None
+    result_kind: str | None = None
+    gate_action: str | None = None
+    diagnostic_kind: str | None = None
     variant_allowed: bool | None = None
     contradicted_span: str | None = None
     matched_span: str | None = None
     allowed_variant_guidance: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.premise_check == "contradicted" and self._has_hard_block_evidence():
+            result_kind = "premise_contradiction"
+            gate_action = "hard_block"
+            diagnostic_kind = None
+        elif self.premise_check == "contradicted":
+            result_kind = "premise_contradiction"
+            gate_action = "diagnostic"
+            diagnostic_kind = "incomplete_premise_contradiction_evidence"
+        else:
+            result_kind = "duplicate_diagnostic"
+            gate_action = "diagnostic"
+            diagnostic_kind = self.failure_category or self.premise_check
+        if self.result_kind is None:
+            object.__setattr__(self, "result_kind", result_kind)
+        if self.gate_action is None:
+            object.__setattr__(self, "gate_action", gate_action)
+        if self.diagnostic_kind is None:
+            object.__setattr__(self, "diagnostic_kind", diagnostic_kind)
+        if gate_action == "diagnostic" and self.variant_allowed is False:
+            object.__setattr__(self, "variant_allowed", None)
+
+    @property
+    def is_hard_block(self) -> bool:
+        return (
+            self.premise_check == "contradicted"
+            and self.result_kind == "premise_contradiction"
+            and self.gate_action == "hard_block"
+            and self._has_hard_block_evidence()
+        )
+
+    def _has_hard_block_evidence(self) -> bool:
+        return bool(
+            (self.contradicted_fact_ids or self.fact_ids)
+            and self.fact_packet_digest
+            and self.fact_provenance
+            and (self.contradicted_span or self.matched_span)
+        )
+
     def to_rejection(self, hypothesis: HypothesisProposal) -> dict[str, Any]:
+        if not self.is_hard_block:
+            raise ValueError(
+                "Only high-confidence premise_contradiction results with "
+                "auditable fact ids, fact provenance, fact packet digest, and "
+                "a contradicted span can be serialized as hard mechanism "
+                "novelty rejections; use to_diagnostic() otherwise."
+            )
         return {
             "artifact_kind": "agentic_mechanism_novelty_rejection",
+            "result_kind": self.result_kind,
+            "gate_action": self.gate_action,
             "premise_check": self.premise_check,
             "failure_category": self.failure_category,
             "reason": self.reason,
@@ -60,6 +111,36 @@ class MechanismNoveltyResult:
             "gate_name": "MechanismNoveltyGate",
         }
 
+    def to_diagnostic(self, hypothesis: HypothesisProposal) -> dict[str, Any]:
+        return {
+            "artifact_kind": (
+                "agentic_mechanism_premise_diagnostic"
+                if self.result_kind == "premise_contradiction"
+                else "agentic_mechanism_duplicate_diagnostic"
+            ),
+            "result_kind": self.result_kind,
+            "gate_action": self.gate_action,
+            "diagnostic_kind": self.diagnostic_kind,
+            "premise_check": self.premise_check,
+            "failure_category": self.failure_category,
+            "reason": self.reason,
+            "selected_surface": hypothesis.change_locus,
+            "target_file": hypothesis.target_file,
+            "mechanism": self.mechanism,
+            "evidence": list(self.evidence),
+            "snapshot_digest": self.snapshot_digest,
+            "fact_ids": list(self.fact_ids),
+            "fact_packet_digest": self.fact_packet_digest,
+            "fact_provenance": dict(self.fact_provenance or {}),
+            "variant_allowed": self.variant_allowed,
+            "matched_span": self.matched_span,
+            "allowed_variant_guidance": self.allowed_variant_guidance,
+            "patch_generated": None,
+            "screening_allowed": True,
+            "source": "mechanism_novelty_gate",
+            "gate_name": "MechanismNoveltyGate",
+        }
+
 
 class _MechanismNoveltyProvider(Protocol):
     def evaluate_mechanism_novelty(
@@ -74,10 +155,12 @@ class _MechanismNoveltyProvider(Protocol):
 
 
 class MechanismNoveltyGate:
-    """Dispatch semantic novelty checks to the active problem adapter.
+    """Dispatch premise checks and duplicate diagnostics to the problem adapter.
 
-    Scion core/proposal owns the auditable control point and rejection shape.
-    Problem packages own domain semantics for their algorithm mechanisms.
+    Scion core/proposal owns the auditable control point and hard-rejection
+    shape. Problem packages own domain semantics for their algorithm
+    mechanisms. Only high-confidence premise contradictions should become hard
+    blocks; duplicate/family overlap results are advisory diagnostics.
     """
 
     def evaluate(

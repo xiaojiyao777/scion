@@ -2,6 +2,21 @@
 
 from .sprint_k_test_support import *  # noqa: F401,F403
 
+
+def _assert_duplicate_diagnostic(result):
+    if hasattr(result, "checks"):
+        assert result.passed
+        assert result.failure_reason is None
+        c10 = next(check for check in result.checks if check.name == "C10_novelty")
+    else:
+        c10 = result
+    assert c10.passed
+    assert "duplicate_diagnostic" in c10.detail
+    assert c10.metadata["result_kind"] == "duplicate_diagnostic"
+    assert c10.metadata["gate_action"] == "diagnostic"
+    assert c10.metadata["diagnostic_kind"] == "semantic_identity_duplicate"
+
+
 class TestK6C10ModifyKey:
     def _make_spec(self) -> MagicMock:
         spec = MagicMock()
@@ -12,7 +27,7 @@ class TestK6C10ModifyKey:
         return spec
 
     def test_modify_different_text_passes_c10(self):
-        """Two modify hypotheses on same file with different text are blocked — file-level key (K6-fix)."""
+        """Two modify hypotheses on same file with different text produce a duplicate diagnostic."""
         gate = ContractGate(self._make_spec())
         h1 = HypothesisRecord(
             hypothesis_id="h1", branch_id="b1",
@@ -27,10 +42,10 @@ class TestK6C10ModifyKey:
             target_file="ops/foo.py",
         )
         result = gate._c10_novelty(hyp, [h1], [])
-        assert not result.passed, "Same file modify should be blocked (K6-fix: file-level key)"
+        _assert_duplicate_diagnostic(result)
 
     def test_modify_same_text_blocked_by_c10(self):
-        """Two modify hypotheses with same locus/file/text[:50] should be blocked."""
+        """Two modify hypotheses with same locus/file/text[:50] produce a duplicate diagnostic."""
         gate = ContractGate(self._make_spec())
         shared_text = "Improve the subcategory consolidation logic in foo operator"
         h1 = HypothesisRecord(
@@ -46,10 +61,10 @@ class TestK6C10ModifyKey:
             target_file="ops/foo.py",
         )
         result = gate._c10_novelty(hyp, [h1], [])
-        assert not result.passed
+        _assert_duplicate_diagnostic(result)
 
     def test_remove_action_uses_original_key_no_text(self):
-        """remove action should still use (locus, action, file) without text."""
+        """remove action should still use (locus, action, file) without text for diagnostics."""
         gate = ContractGate(self._make_spec())
         h1 = HypothesisRecord(
             hypothesis_id="h1", branch_id="b1",
@@ -65,7 +80,7 @@ class TestK6C10ModifyKey:
             target_file="ops/foo.py",
         )
         result = gate._c10_novelty(hyp, [h1], [])
-        assert not result.passed
+        _assert_duplicate_diagnostic(result)
 
     def test_create_new_still_uses_text_key(self):
         """create_new should also be keyed with text[:50]."""
@@ -194,7 +209,7 @@ class TestK8C10RejectsRejected:
             hypothesis_text=text,
         )
 
-    # K8-1: basic — rejected hypothesis with same key blocks new proposal
+    # K8-1: basic — rejected hypothesis with same key produces duplicate diagnostic
     def test_rejected_same_text_blocks_c10(self):
         gate = ContractGate(self._make_spec())
         shared_text = "same text approach for foo"
@@ -206,10 +221,9 @@ class TestK8C10RejectsRejected:
             target_file="operators/foo.py",
         )
         result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected])
-        assert not result.passed
-        assert "C10_novelty" in (result.failure_reason or "")
+        _assert_duplicate_diagnostic(result)
 
-    # K8-2: with K6-fix, same modify file is blocked regardless of text when champion version matches
+    # K8-2: with K6-fix, same modify file is diagnosed regardless of text when champion version matches
     def test_rejected_different_text_passes_c10(self):
         gate = ContractGate(self._make_spec())
         rejected = self._make_rejected(text="approach A" + "x" * 50, hid="h-rej")
@@ -223,7 +237,7 @@ class TestK8C10RejectsRejected:
         # Same champion version (both 0): modify uses file-level key → blocked
         result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected],
                                           current_champion_version=0)
-        assert not result.passed, "Same file+champion_version modify should be blocked (K6-fix)"
+        _assert_duplicate_diagnostic(result)
 
     # K8-3a: backward compat — not passing rejected_hypotheses defaults to None, same behaviour
     def test_no_rejected_arg_backward_compat(self):
@@ -249,7 +263,7 @@ class TestK8C10RejectsRejected:
         result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[])
         assert result.passed
 
-    # K8-4: blacklisted behaviour unchanged (regression)
+    # K8-4: blacklisted duplicate is a diagnostic; lifecycle policy is handled outside C10 novelty
     def test_blacklisted_still_blocked(self):
         gate = ContractGate(self._make_spec())
         shared_text = "blacklisted approach here"
@@ -269,8 +283,7 @@ class TestK8C10RejectsRejected:
             target_file="operators/foo.py",
         )
         result = gate.validate_hypothesis(hyp, [], [blacklisted])
-        assert not result.passed
-        assert "C10_novelty" in (result.failure_reason or "")
+        _assert_duplicate_diagnostic(result)
 
 
 class TestK6FixChampionVersion:
@@ -296,7 +309,7 @@ class TestK6FixChampionVersion:
         r.base_champion_version = champ_ver
         return r
 
-    # K6fix-1: modify same file, different text, same champion → blocked
+    # K6fix-1: modify same file, different text, same champion → duplicate diagnostic
     def test_modify_same_file_different_text_same_champion_blocked(self):
         gate = self._make_gate()
         existing = self._make_record("active", "operators/foo.py", "Approach A " * 5, champ_ver=0)
@@ -307,7 +320,7 @@ class TestK6FixChampionVersion:
             target_file="operators/foo.py",
         )
         result = gate._c10_novelty(hyp, [existing], [], current_champion_version=0)
-        assert not result.passed, "Same file modify should be blocked regardless of text"
+        _assert_duplicate_diagnostic(result)
 
     # K6fix-2: modify same file, different champion version → allowed (retry after promotion)
     def test_modify_same_file_different_champion_allowed(self):
@@ -349,9 +362,9 @@ class TestK6FixChampionVersion:
             target_file=None,
         )
         result = gate._c10_novelty(hyp, [existing], [], current_champion_version=0)
-        assert not result.passed
+        _assert_duplicate_diagnostic(result)
 
-    # K6fix-4: rejected + same champion_version → blocked
+    # K6fix-4: rejected + same champion_version → duplicate diagnostic
     def test_rejected_same_champion_version_blocked(self):
         gate = self._make_gate()
         rejected = self._make_record("rejected", "operators/foo.py", "text", champ_ver=2)
@@ -363,8 +376,7 @@ class TestK6FixChampionVersion:
         )
         result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected],
                                           current_champion_version=2)
-        assert not result.passed
-        assert "C10_novelty" in (result.failure_reason or "")
+        _assert_duplicate_diagnostic(result)
 
     # K6fix-5: rejected + different champion_version → allowed
     def test_rejected_different_champion_version_allowed(self):

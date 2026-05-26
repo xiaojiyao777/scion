@@ -338,9 +338,11 @@ def test_active_solver_map_is_gate_prompt_parity_source_for_non_solver_surface()
     assert result.fact_packet_digest == fact_packet["fact_packet_digest"]
     assert result.snapshot_digest == payload["snapshot_digest"]
     assert result.fact_provenance["source"] == "context.read_active_solver_map"
-    rejection = result.to_rejection(hypothesis)
-    assert rejection["fact_packet_digest"] == fact_packet["fact_packet_digest"]
-    assert rejection["fact_provenance"]["subject_id"] == "subject.primary"
+    diagnostic = result.to_diagnostic(hypothesis)
+    assert diagnostic["result_kind"] == "duplicate_diagnostic"
+    assert diagnostic["gate_action"] == "diagnostic"
+    assert diagnostic["fact_packet_digest"] == fact_packet["fact_packet_digest"]
+    assert diagnostic["fact_provenance"]["subject_id"] == "subject.primary"
 
 
 def test_operator_registry_can_fallback_to_active_solver_map() -> None:

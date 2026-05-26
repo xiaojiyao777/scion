@@ -87,6 +87,131 @@ def test_exact_replace_not_unique_reports_candidate_snippets() -> None:
     assert "replace_all=false unless" in payload["guidance"]
 
 
+def test_primary_exact_replace_missing_new_string_is_preflight_rejected() -> None:
+    before = "def value():\n    return 1\n"
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": "return 1",
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    payload = json.loads(str(excinfo.value))
+    assert payload["stage"] == "schema_preflight"
+    assert payload["reason"] == "exact_replace_missing_new_string"
+    assert payload["json_pointer"] == "/new_string"
+    assert payload["minimal_json_shape"]["action"] == "modify"
+    assert payload["minimal_json_shape"]["edit_intent"] == "exact_replace"
+    assert 'new_string: ""' in payload["guidance"]
+
+
+def test_direct_normalization_missing_new_string_uses_schema_preflight() -> None:
+    before = "def value():\n    return 1\n"
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": "return 1",
+    }
+
+    with pytest.raises(PatchEditProtocolError) as excinfo:
+        normalize_patch_typed_edits(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    payload = json.loads(str(excinfo.value))
+    assert payload["stage"] == "schema_preflight"
+    assert payload["reason"] == "exact_replace_missing_new_string"
+
+
+def test_additional_exact_replace_missing_new_string_reports_pointer() -> None:
+    helper_before = "HELPERS = []\n"
+    raw = {
+        "file_path": "policies/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": "policies/integration.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(helper_before),
+                "old_string": "HELPERS = []",
+            }
+        ],
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            raw,
+            context={
+                "patch_source_files": {
+                    "policies/integration.py": helper_before,
+                },
+            },
+        )
+
+    payload = json.loads(str(excinfo.value))
+    assert payload["reason"] == "exact_replace_missing_new_string"
+    assert payload["json_pointer"] == "/additional_changes/0/new_string"
+    assert payload["change_pointer"] == "/additional_changes/0"
+
+
+def test_exact_replace_null_new_string_rejected_but_empty_string_allowed() -> None:
+    before = "VALUE = 1\nDROP = True\n"
+    digest = source_digest_for_content(before)
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": digest,
+        "old_string": "DROP = True\n",
+        "new_string": None,
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    payload = json.loads(str(excinfo.value))
+    assert payload["reason"] == "exact_replace_null_new_string"
+    assert "empty string" in payload["detail"]
+
+    raw["new_string"] = ""
+    patch = _parse_patch(
+        raw,
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+    )
+
+    assert patch.code_content == "VALUE = 1\n"
+
+
 def test_old_string_not_unique_feedback_enters_code_retry_prompt() -> None:
     before = (
         "def first():\n"
@@ -141,6 +266,56 @@ def test_old_string_not_unique_feedback_enters_code_retry_prompt() -> None:
     assert '"match_count": 2' in user_prompt
     assert '"line": 2' in user_prompt
     assert "unique_old_string_hint" in user_prompt
+
+
+def test_exact_replace_shape_feedback_enters_code_retry_prompt() -> None:
+    before = "def value():\n    return 1\n"
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": "return 1",
+    }
+    try:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+    except ProposalValidationError as exc:
+        failure = exc
+    else:
+        raise AssertionError("expected ProposalValidationError")
+
+    assert _is_code_edit_protocol_retryable(failure)
+    retry_context = _code_edit_protocol_retry_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surface_name": "local",
+            "research_surface_kind": "operator",
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+        HypothesisProposal(
+            hypothesis_text="Modify one return.",
+            change_locus="local",
+            action="modify",
+            target_file="policies/example.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_probe", change_type="modify"),
+            ),
+        ),
+        failure,
+    )
+
+    _, user_prompt = _split_code_context(retry_context)
+    assert "Typed Edit Retry Feedback" in user_prompt
+    assert "exact_replace_missing_new_string" in user_prompt
+    assert "minimal_json_shape" in user_prompt
+    assert 'new_string: ""' in user_prompt
 
 
 def test_markdown_wrapped_target_file_code_uses_raw_source_digest() -> None:

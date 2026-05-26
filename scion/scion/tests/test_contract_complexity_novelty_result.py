@@ -303,7 +303,7 @@ class TestC10Novelty:
         c10 = next(c for c in result.checks if c.name == "C10_novelty")
         assert c10.passed
 
-    def test_duplicate_active_fails(self, gate: ContractGate):
+    def test_duplicate_active_is_diagnostic(self, gate: ContractGate):
         h = HypothesisProposal(
             hypothesis_text="New idea",
             change_locus="selection",
@@ -313,10 +313,12 @@ class TestC10Novelty:
         active = [_hyp_record("selection", "modify", "operators/sel.py")]
         result = gate.validate_hypothesis(h, active, [])
         c10 = next(c for c in result.checks if c.name == "C10_novelty")
-        assert not c10.passed
-        assert not result.passed
+        assert c10.passed
+        assert result.passed
+        assert c10.metadata["gate_action"] == "diagnostic"
+        assert c10.metadata["diagnostic_kind"] == "semantic_identity_duplicate"
 
-    def test_duplicate_blacklist_fails(self, gate: ContractGate):
+    def test_duplicate_blacklist_is_diagnostic(self, gate: ContractGate):
         h = HypothesisProposal(
             hypothesis_text="New idea",
             change_locus="selection",
@@ -326,7 +328,10 @@ class TestC10Novelty:
         blacklisted = [_hyp_record("selection", "modify", "operators/sel.py")]
         result = gate.validate_hypothesis(h, [], blacklisted)
         c10 = next(c for c in result.checks if c.name == "C10_novelty")
-        assert not c10.passed
+        assert c10.passed
+        assert result.passed
+        assert c10.metadata["gate_action"] == "diagnostic"
+        assert c10.metadata["diagnostic_kind"] == "semantic_identity_duplicate"
 
     def test_different_target_is_novel(self, gate: ContractGate):
         h = HypothesisProposal(

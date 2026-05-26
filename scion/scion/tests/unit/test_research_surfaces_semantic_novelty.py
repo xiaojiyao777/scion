@@ -206,7 +206,9 @@ def test_semantic_signature_uses_declared_structured_fields_only() -> None:
     same_result = gate._c10_novelty(same_structured, [existing], [])
     different_result = gate._c10_novelty(different_structured, [existing], [])
 
-    assert not same_result.passed
+    assert same_result.passed
+    assert same_result.metadata["result_kind"] == "duplicate_diagnostic"
+    assert same_result.metadata["gate_action"] == "diagnostic"
     assert different_result.passed
 
 
@@ -240,7 +242,9 @@ def test_semantic_signature_uses_problem_owned_novelty_signature_fields() -> Non
     same_result = gate._c10_novelty(same_structured, [existing], [])
     different_result = gate._c10_novelty(different_structured, [existing], [])
 
-    assert not same_result.passed
+    assert same_result.passed
+    assert same_result.metadata["result_kind"] == "duplicate_diagnostic"
+    assert same_result.metadata["gate_action"] == "diagnostic"
     assert different_result.passed
 
 
@@ -332,7 +336,9 @@ def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert not result.passed
+    assert result.passed
+    assert result.metadata["result_kind"] == "duplicate_diagnostic"
+    assert result.metadata["gate_action"] == "diagnostic"
 
 
 def test_unavailable_signature_field_fails_semantic_identity() -> None:
@@ -440,7 +446,9 @@ def test_operator_modify_remains_strict_by_locus_action_target_file() -> None:
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert not result.passed
+    assert result.passed
+    assert result.metadata["result_kind"] == "duplicate_diagnostic"
+    assert result.metadata["gate_action"] == "diagnostic"
 
 
 def test_dummy_singleton_config_unextractable_signature_fails_closed() -> None:

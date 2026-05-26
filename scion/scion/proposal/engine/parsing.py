@@ -14,8 +14,10 @@ from scion.core.models import (
 )
 from scion.proposal.schemas import (
     HypothesisProposalInput,
+    PatchSchemaPreflightError,
     PatchProposalInput,
     normalize_patch_output_with_repair_attribution,
+    preflight_patch_exact_replace_shape,
 )
 from scion.proposal.edit_protocol import (
     PatchEditProtocolError,
@@ -177,6 +179,10 @@ def _preflight_patch_output_shape(raw: Dict[str, Any]) -> None:
                         pointer=f"/additional_changes/{index}",
                     )
                 )
+    try:
+        preflight_patch_exact_replace_shape(raw)
+    except PatchSchemaPreflightError as exc:
+        raise ProposalValidationError(str(exc)) from exc
 
 
 def _unknown_patch_fields_message(

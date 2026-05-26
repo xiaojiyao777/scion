@@ -26,6 +26,9 @@ def test_cvrp_mechanism_novelty_provider_blocks_duplicate_baseline_capability() 
     assert result is not None
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "cross_route_or_opt_2_3"
     assert result.snapshot_digest == "snapshot-test-digest"
     assert result.fact_packet_digest == "fact-packet-test-digest"
@@ -42,10 +45,12 @@ def test_cvrp_mechanism_novelty_rejection_keeps_distinct_source_and_packet_diges
     )
 
     assert result is not None
-    rejection = result.to_rejection(hypothesis)
-    assert rejection["snapshot_digest"] == "snapshot-test-digest"
-    assert rejection["fact_packet_digest"] == "fact-packet-test-digest"
-    rendered = render_negative_fact_block(structured_rejections=(rejection,))
+    diagnostic = result.to_diagnostic(hypothesis)
+    assert diagnostic["snapshot_digest"] == "snapshot-test-digest"
+    assert diagnostic["fact_packet_digest"] == "fact-packet-test-digest"
+    assert diagnostic["result_kind"] == "duplicate_diagnostic"
+    assert diagnostic["gate_action"] == "diagnostic"
+    rendered = render_negative_fact_block(structured_rejections=(diagnostic,))
     assert "snapshot_digest=snapshot-test-digest" in rendered
     assert "fact_packet_digest=fact-packet-test-digest" in rendered
 

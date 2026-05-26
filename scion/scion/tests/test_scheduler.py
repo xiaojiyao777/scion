@@ -218,6 +218,27 @@ def test_at_capacity_prefers_clean_research_candidate_over_non_clean_followup():
     assert action.branch is clean
 
 
+def test_under_capacity_prefers_clean_candidate_over_non_clean_followup():
+    clean = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=20,
+        updated_offset_s=20,
+    )
+    followup = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    followup.direction = "solver: same-mechanism follow-up"
+    followup.branch_code_status = "active_no_effect"
+    followup.branch_mechanism_ids = ("bounded_probe",)
+
+    action = Scheduler(max_active_branches=3).select_next([followup, clean])
+
+    assert action.action == "run_existing"
+    assert action.branch is clean
+
+
 def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
     b_recent = _branch(
         BranchState.EXPLORE,

@@ -7,6 +7,16 @@ from typing import Any, Mapping
 
 from pydantic import ValidationError
 
+from scion.core.branch_hygiene import (
+    SAME_MECHANISM_ALLOWED_ACTIONS,
+    SAME_MECHANISM_FOLLOWUP_ONLY,
+    SAME_MECHANISM_ONLY_MODE,
+    branch_hygiene_context,
+    branch_requires_same_mechanism_followup,
+)
+from scion.core.branch_repair_policy import (
+    validate_branch_continuation_hypothesis,
+)
 from scion.contract.gate import ContractGate
 from scion.contract.repair_guidance import novelty_signature_missing_fields_template
 from scion.core.models import (
@@ -28,8 +38,10 @@ from scion.proposal.edit_protocol import (
 )
 from scion.proposal.schemas import (
     HypothesisProposalInput,
+    PatchSchemaPreflightError,
     PatchProposalInput,
     normalize_patch_output_with_repair_attribution,
+    preflight_patch_exact_replace_shape,
 )
 from scion.proposal.tools.base import _BaseReadOnlyTool
 from scion.proposal.tools.models import (
@@ -393,9 +405,23 @@ def _schema_preview_patch_payload(
     context: ProposalToolContext | None = None,
 ) -> dict[str, Any]:
     try:
+        preflight_patch_exact_replace_shape(raw)
         payload = _normalized_patch_payload_for_preview(raw, context)
         payload.pop("repair_attribution", None)
         validated = DraftPatchInput.model_validate(payload)
+    except PatchSchemaPreflightError as exc:
+        return {
+            "passed": False,
+            "failure_reason": exc.payload.get("detail"),
+            "errors": [
+                {
+                    "loc": ("schema_preflight",),
+                    "msg": str(exc),
+                }
+            ],
+            "edit_protocol_feedback": exc.payload,
+            "repair_template": exc.payload.get("minimal_json_shape"),
+        }
     except ValidationError as exc:
         return {
             "passed": False,
@@ -530,11 +556,17 @@ def _hypothesis_schema_preview(
     problem_telemetry_preview = _problem_expected_telemetry_preview(context, hypothesis)
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     target_action_guard = _hypothesis_target_action_guard(context, hypothesis)
+    branch_continuation_guard = _branch_continuation_schema_preview(
+        context,
+        hypothesis,
+    )
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
     if forced_violation is not None:
         passed = False
     if not target_action_guard.get("passed", True):
+        passed = False
+    if not branch_continuation_guard.get("passed", True):
         passed = False
     if (
         isinstance(problem_telemetry_preview, Mapping)
@@ -554,6 +586,8 @@ def _hypothesis_schema_preview(
         failure_reason = forced_violation
     elif not target_action_guard.get("passed", True):
         failure_reason = str(target_action_guard.get("reason") or "")
+    elif not branch_continuation_guard.get("passed", True):
+        failure_reason = str(branch_continuation_guard.get("reason") or "")
     elif problem_telemetry_failed:
         failure_reason = str(problem_telemetry_preview.get("reason") or "")
     elif (
@@ -582,8 +616,109 @@ def _hypothesis_schema_preview(
         "mechanism_binding": _mechanism_binding_preview(hypothesis, c12_check),
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "target_action_guard": target_action_guard,
+        "branch_continuation_guard": branch_continuation_guard,
         "novelty_signature_guidance": novelty_guidance,
     }
+
+
+def _branch_continuation_schema_preview(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    branch = getattr(context, "branch", None)
+    hygiene = (
+        dict(context.branch_hygiene)
+        if isinstance(context.branch_hygiene, Mapping)
+        else {}
+    )
+    if not hygiene:
+        hygiene = branch_hygiene_context(branch)
+    same_mechanism_only = (
+        hygiene.get("hypothesis_generation_mode") == SAME_MECHANISM_ONLY_MODE
+        or hygiene.get("branch_followup_policy") == SAME_MECHANISM_FOLLOWUP_ONLY
+        or branch_requires_same_mechanism_followup(branch)
+    )
+    if not same_mechanism_only:
+        return {"passed": True}
+
+    check = validate_branch_continuation_hypothesis(
+        branch,
+        hypothesis,
+        step_history=getattr(context, "step_history", ()),
+    )
+    protected = (
+        tuple(check.protected_mechanism_ids)
+        or tuple(
+            str(item).strip()
+            for item in (hygiene.get("protected_mechanism_ids") or ())
+            if str(item).strip()
+        )
+    )
+    proposed = tuple(check.proposed_mechanism_ids) or tuple(
+        dict.fromkeys(
+            str(change.id).strip()
+            for change in mechanism_changes(hypothesis)
+            if str(change.id).strip()
+        )
+    )
+    allowed = bool(check.allowed)
+    reason = "" if allowed else check.detail
+    if allowed and protected:
+        if not proposed:
+            allowed = False
+            reason = (
+                "same_mechanism_only_violation: "
+                "missing_declared_branch_mechanism; "
+                f"protected_mechanism_ids={','.join(protected)}; "
+                "proposed_mechanism_ids=none"
+            )
+        elif not set(proposed).issubset(set(protected)):
+            allowed = False
+            reason = (
+                "same_mechanism_only_violation: "
+                "new_mechanism_requires_clean_fork; "
+                f"protected_mechanism_ids={','.join(protected)}; "
+                f"proposed_mechanism_ids={','.join(proposed)}"
+            )
+    allowed_actions = tuple(
+        str(item).strip()
+        for item in (
+            hygiene.get("same_mechanism_allowed_actions")
+            or SAME_MECHANISM_ALLOWED_ACTIONS
+        )
+        if str(item).strip()
+    )
+    payload = {
+        "name": "same_mechanism_only_branch_guard",
+        "passed": allowed,
+        "failure_code": "" if allowed else "same_mechanism_only_violation",
+        "reason": reason,
+        "branch_followup_policy": SAME_MECHANISM_FOLLOWUP_ONLY,
+        "hypothesis_generation_mode": SAME_MECHANISM_ONLY_MODE,
+        "protected_mechanism_ids": list(protected),
+        "allowed_mechanism_ids": list(protected),
+        "proposed_mechanism_ids": list(proposed),
+        "allowed_actions": list(allowed_actions),
+        "forbidden_mechanism_policy": (
+            hygiene.get("forbidden_mechanism_policy")
+            or "no_unrelated_mechanism_ids"
+        ),
+        "retry_constraint": (
+            "Same-mechanism-only branch: rewrite the hypothesis so every "
+            "mechanism_changes id is one of protected_mechanism_ids. Only "
+            "tune, integrate, repair, parameterize, or wire telemetry within "
+            "the protected mechanism. If proposing a different mechanism, "
+            "request a clean branch/fork before generation."
+        ),
+        "allowed_repair_shape": {
+            "mechanism_changes": [
+                {"id": mechanism_id, "change_type": "modify"}
+                for mechanism_id in protected
+            ],
+            "allowed_actions": list(allowed_actions),
+        },
+    }
+    return _drop_empty_items(payload)
 
 def _hypothesis_target_action_guard(
     context: ProposalToolContext,
@@ -608,7 +743,10 @@ def _hypothesis_target_action_guard(
             "choose a genuinely new file path for create_new. If adding a new "
             "module also requires existing integration edits, keep the new "
             "module as create_new and use typed exact_replace for existing "
-            "integration files."
+            "integration files. Minimal existing-file patch shape: "
+            "action=modify, edit_intent=exact_replace, source_digest, "
+            "non-empty old_string, new_string, replace_all=false. For deletion "
+            "use new_string: \"\"; do not omit it or set it to null."
         ),
     }
 

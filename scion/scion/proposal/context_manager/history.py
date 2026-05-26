@@ -211,6 +211,20 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
             "branch_mechanism_ids="
             + ",".join(str(item) for item in context["branch_mechanism_ids"])
         )
+    if context.get("allowed_mechanism_ids"):
+        parts.append(
+            "allowed_mechanism_ids="
+            + ",".join(str(item) for item in context["allowed_mechanism_ids"])
+        )
+    if context.get("protected_mechanism_ids"):
+        parts.append(
+            "protected_mechanism_ids="
+            + ",".join(str(item) for item in context["protected_mechanism_ids"])
+        )
+    if context.get("forbidden_mechanism_policy"):
+        parts.append(
+            f"forbidden_mechanism_policy={context['forbidden_mechanism_policy']}"
+        )
     if context.get("baseline_policy"):
         parts.append(f"baseline_policy={context['baseline_policy']}")
     if context.get("branch_lifecycle_new_mechanism_ineligible"):

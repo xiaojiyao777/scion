@@ -86,6 +86,9 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "hypothesis_generation_mode=same_mechanism_only" in no_effect_line
     assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in no_effect_line
     assert "branch_mechanism_ids=bounded_probe" in no_effect_line
+    assert "allowed_mechanism_ids=bounded_probe" in no_effect_line
+    assert "protected_mechanism_ids=bounded_probe" in no_effect_line
+    assert "forbidden_mechanism_policy=no_unrelated_mechanism_ids" in no_effect_line
     assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
     assert "branch_code_status=clean" not in no_effect_line
     assert "baseline_policy=clean" not in no_effect_line
@@ -144,6 +147,9 @@ def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
     assert "## Branch Code Status" in rendered
     assert "same_mechanism_followup_only" in rendered
     assert "hypothesis_generation_mode=same_mechanism_only" in rendered
+    assert "allowed_mechanism_ids=bounded_probe" in rendered
+    assert "protected_mechanism_ids=bounded_probe" in rendered
+    assert "no_unrelated_mechanism_ids" in rendered
     assert "bounded_probe" in rendered
-    assert "tune, integrate, or repair the same mechanism" in rendered
+    assert "tune, integrate, repair, parameterize, or wire telemetry" in rendered
     assert "clean branch or clean fork before generation" in rendered

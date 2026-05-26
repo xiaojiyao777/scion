@@ -20,7 +20,9 @@ from .patch import (
     PatchEditIntent,
     PatchFileChangeInput,
     PatchProposalInput,
+    PatchSchemaPreflightError,
     PremiseCheck,
+    preflight_patch_exact_replace_shape,
 )
 from .shared import (
     MECHANISM_DUPLICATE_ID_CONFLICT,
@@ -59,6 +61,7 @@ __all__ = [
     "PatchEditIntent",
     "PatchFileChangeInput",
     "PatchProposalInput",
+    "PatchSchemaPreflightError",
     "PremiseCheck",
     "TOOL_SELECTION_SCHEMA",
     "TOOL_SELECTION_TOOL",
@@ -72,4 +75,5 @@ __all__ = [
     "_normalize_novelty_signature_item",
     "_validate_unique_mechanism_change_ids",
     "normalize_patch_output_with_repair_attribution",
+    "preflight_patch_exact_replace_shape",
 ]

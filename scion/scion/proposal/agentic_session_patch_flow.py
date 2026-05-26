@@ -635,6 +635,22 @@ class AgenticSessionPatchFlowMixin:
         note: str,
         repair_attempt: int | None,
     ) -> AgenticProposalOutput | None:
+        if str(getattr(patch, "premise_check", "") or "") == "duplicate":
+            state.note(
+                AgenticProposalPhase.DRAFT_PATCH,
+                "Patch premise duplicate diagnostic recorded; continuing without hard block.",
+                metadata=_drop_empty_dict(
+                    {
+                        "source": source,
+                        "premise_check": "duplicate",
+                        "result_kind": "duplicate_diagnostic",
+                        "gate_action": "diagnostic",
+                        "diagnostic_kind": "duplicate_mechanism",
+                        "reason": getattr(patch, "premise_check_reason", "") or "",
+                        "repair_attempt": repair_attempt,
+                    }
+                ),
+            )
         premise_rejection = _patch_premise_rejection(patch, hypothesis)
         if premise_rejection is None:
             return None

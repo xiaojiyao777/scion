@@ -54,6 +54,20 @@ follow-up branches, prefers clean research candidates when at capacity, and
 continues to create a clean branch/fork when all active research branches are
 same-mechanism follow-up only and proposal capacity exists.
 
+The 2026-05-26 Boyle/Laplace follow-up reworks mechanism novelty from a broad
+hard gate into an auditable diagnostic system. Duplicate, near-field, family,
+and recent-repeat findings now flow as branch/memory/routing diagnostics unless
+there is a narrow high-confidence premise contradiction backed by prompt-visible
+adapter facts, fact id, digest/provenance, and an exact contradicted span.
+Contract C10 therefore records duplicate diagnostics without blocking ordinary
+contract passage. Same-mechanism follow-up branches now expose explicit
+allowed/protected mechanism ids to the agent and schema preview rejects
+unrelated `mechanism_changes` with retry feedback inside the same session.
+Typed `exact_replace` patches are preflighted before parsing/normalization, so
+missing or null `new_string` in primary or additional changes becomes precise
+schema retry feedback instead of a late normalization failure. Full local
+regression after this repair: `2288 passed, 1 skipped`.
+
 The 2026-05-25 repair pass closed the main blockers from the local
 `gpt-5.5` 8-attempt diagnostic run and the full v0.4 audit. Suspect telemetry
 branches now use a generic repair-first lifecycle: a branch marked

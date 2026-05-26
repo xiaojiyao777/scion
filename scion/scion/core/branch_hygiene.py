@@ -22,6 +22,14 @@ CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
     "clean_fork_required_for_new_mechanism"
 )
 OPEN_EXPLORATION_ALLOWED = "open_exploration_allowed"
+NO_UNRELATED_MECHANISM_IDS = "no_unrelated_mechanism_ids"
+SAME_MECHANISM_ALLOWED_ACTIONS = (
+    "tune",
+    "integrate",
+    "repair",
+    "parameterize",
+    "telemetry_wiring",
+)
 BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK = (
     "clean_fork_after_branch_lifecycle_policy_block"
 )
@@ -259,6 +267,12 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         if same_mechanism_followup_required
         else None
     )
+    protected_mechanism_ids = list(branch_mechanism_ids(branch))
+    allowed_mechanism_ids = (
+        list(protected_mechanism_ids)
+        if same_mechanism_followup_required
+        else []
+    )
     if repair_focus_required:
         baseline_policy = "champion_required_for_repair"
         repair_focus_reason = WIRING_SUSPECT_REQUIRES_REPAIR
@@ -283,8 +297,24 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         ),
         "branch_followup_policy": followup_policy,
         "clean_fork_policy": clean_fork_policy,
-        "branch_mechanism_ids": list(branch_mechanism_ids(branch)),
-        "protected_mechanism_ids": list(branch_mechanism_ids(branch)),
+        "branch_mechanism_ids": list(protected_mechanism_ids),
+        "allowed_mechanism_ids": allowed_mechanism_ids,
+        "protected_mechanism_ids": list(protected_mechanism_ids),
+        "forbidden_mechanism_policy": (
+            NO_UNRELATED_MECHANISM_IDS
+            if same_mechanism_followup_required
+            else None
+        ),
+        "same_mechanism_allowed_actions": (
+            list(SAME_MECHANISM_ALLOWED_ACTIONS)
+            if same_mechanism_followup_required
+            else []
+        ),
+        "mechanism_change_policy": (
+            "mechanism_changes_must_use_allowed_or_protected_ids"
+            if same_mechanism_followup_required
+            else None
+        ),
         "repair_mechanism_ids": list(
             getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
         )
@@ -310,6 +340,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
     if context["repair_focus_required"]:
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         protected = _protected_mechanism_text(context)
+        allowed_actions = _allowed_actions_text(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; "
@@ -318,29 +349,44 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"hypothesis_generation_mode={context['hypothesis_generation_mode']}; "
             f"branch_followup_policy={context['branch_followup_policy']}; "
             f"clean_fork_policy={context['clean_fork_policy']}; "
+            f"allowed_mechanism_ids={protected}; "
+            f"protected_mechanism_ids={protected}; "
+            f"forbidden_mechanism_policy={context['forbidden_mechanism_policy']}; "
+            f"same_mechanism_allowed_actions={allowed_actions}; "
             "do not treat the existing branch workspace as a clean baseline. "
             "Continue only as a repair-focused attempt against champion code: "
             "fix declared telemetry activation/budget wiring or choose a new "
             f"branch instead of building on suspect code. Protected mechanism "
             f"ids for this branch: {protected}; do not add, drop, or rename "
-            "them on this branch. If a different mechanism is needed, use a "
-            f"clean branch/fork before drafting it.{reroute_suffix}"
+            "them on this branch. Do not introduce unrelated mechanism_changes "
+            "ids. Allowed actions here are only tune, integrate, repair, "
+            "parameterize, or telemetry wiring within the protected mechanism. "
+            "If a different mechanism is needed, use a clean branch/fork "
+            f"before drafting it.{reroute_suffix}"
         )
     if status.startswith("active_"):
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         protected = _protected_mechanism_text(context)
+        allowed_actions = _allowed_actions_text(context)
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
             f"{context['baseline_policy']}; branch_followup_policy="
             f"{context['branch_followup_policy']}; clean_fork_policy="
             f"{context['clean_fork_policy']}; hypothesis_generation_mode="
-            f"{context['hypothesis_generation_mode']}. This is an active branch outcome; "
+            f"{context['hypothesis_generation_mode']}; "
+            f"allowed_mechanism_ids={protected}; "
+            f"protected_mechanism_ids={protected}; "
+            f"forbidden_mechanism_policy={context['forbidden_mechanism_policy']}; "
+            f"same_mechanism_allowed_actions={allowed_actions}. "
+            "This is an active branch outcome; "
             "reuse the branch workspace only for the same declared mechanism "
             f"ids: {protected}. The next hypothesis on this branch must keep "
-            "those protected mechanism ids and may only tune, integrate, or "
-            "repair the same mechanism. A different or new mechanism requires "
-            "a clean branch or clean fork before generation."
+            "those protected mechanism ids and may only tune, integrate, "
+            "repair, parameterize, or wire telemetry for the same mechanism. "
+            "Do not introduce unrelated mechanism_changes ids. A different "
+            "or new mechanism requires a clean branch or clean fork before "
+            "generation."
             f"{reroute_suffix}"
         )
     return ""
@@ -384,6 +430,15 @@ def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
     return ", ".join(ids) if ids else "unknown"
 
 
+def _allowed_actions_text(context: Mapping[str, Any]) -> str:
+    actions = [
+        str(item).strip()
+        for item in (context.get("same_mechanism_allowed_actions") or ())
+        if str(item).strip()
+    ]
+    return ",".join(actions) if actions else "none"
+
+
 __all__ = [
     "ACTIVATION_MISSING_OR_WIRING_SUSPECT",
     "BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE",
@@ -393,7 +448,9 @@ __all__ = [
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
     "OPEN_EXPLORATION_ALLOWED",
     "REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK",
+    "NO_UNRELATED_MECHANISM_IDS",
     "OPEN_EXPLORATION_MODE",
+    "SAME_MECHANISM_ALLOWED_ACTIONS",
     "SAME_MECHANISM_FOLLOWUP_ONLY",
     "SAME_MECHANISM_ONLY_MODE",
     "SUSPECT_BRANCH_CODE_STATUSES",

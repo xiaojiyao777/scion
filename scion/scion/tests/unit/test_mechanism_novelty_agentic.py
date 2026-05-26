@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from scion.proposal.tools import ContextExposurePolicy
 from scion.tests.unit.mechanism_novelty_helpers import (
     AgenticProposalRequest,
     AgenticProposalSession,
@@ -320,10 +322,71 @@ def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(
     assert output.failure_ledger["entries"][0]["source"] == "mechanism_novelty_gate"
 
 
+def test_duplicate_mechanism_gate_diagnostic_continues_to_code(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    context = replace(context, policy=ContextExposurePolicy())
+    hypothesis = _solver_design_hypothesis(
+        "Add cross-route Or-opt 2 and 3 as new neighborhoods to local search."
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content="# material variant would be implemented here\n",
+        premise_check="supported",
+    )
+    creative = FakeCreative(hypothesis=hypothesis, patch=patch)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-mechanism",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "duplicate-diagnostic"},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    duplicate_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("result_kind") == "duplicate_diagnostic"
+    ]
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.patch is patch
+    assert creative.code_contexts
+    assert output.structured_rejection is None
+    assert not any(
+        entry.get("source") == "mechanism_novelty_gate"
+        for entry in output.failure_ledger["entries"]
+    )
+    assert duplicate_events
+    assert duplicate_events[-1].metadata["gate_action"] == "diagnostic"
+    assert duplicate_events[-1].metadata["mechanism"] == "cross_route_or_opt_2_3"
+
+
 def test_agentic_session_code_context_exposes_shaw_evidence_for_premise_check(
     tmp_path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
+    context = replace(context, policy=ContextExposurePolicy())
     hypothesis = _solver_design_hypothesis(
         "Improve Shaw relatedness weights without adding a new destroy operator."
     )
@@ -364,9 +427,21 @@ def test_agentic_session_code_context_exposes_shaw_evidence_for_premise_check(
         )
     )
 
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.failure_category == "duplicate_mechanism"
-    assert output.failure_ledger["entries"][0]["source"] == "premise_check"
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.failure_category is None
+    assert output.patch is patch
+    assert not any(
+        entry.get("source") == "premise_check"
+        for entry in output.failure_ledger["entries"]
+    )
+    duplicate_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("result_kind") == "duplicate_diagnostic"
+    ]
+    assert duplicate_events
+    assert duplicate_events[-1].metadata["source"] == "premise_check"
     assert creative.code_contexts
     rendered_context = json.dumps(creative.code_contexts[0], sort_keys=True)
     assert "agentic_active_solver_mechanisms" in rendered_context

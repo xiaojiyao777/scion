@@ -10,6 +10,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from scion.proposal.schemas.patch import (
+    PatchSchemaPreflightError,
+    preflight_patch_exact_replace_shape,
+)
+
 
 _SOURCE_FILE_RE = re.compile(
     r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
@@ -74,6 +79,10 @@ def normalize_patch_typed_edits(
     normalized = dict(raw)
     if normalized.get("premise_check") not in (None, "", "supported"):
         return normalized, ()
+    try:
+        preflight_patch_exact_replace_shape(normalized)
+    except PatchSchemaPreflightError as exc:
+        raise PatchEditProtocolError(str(exc)) from exc
 
     source_files = _source_files_from_context(context)
     reject_legacy_code_content = bool(
@@ -590,8 +599,19 @@ def _validate_existing_file_full_file_modify(
             "content_after/code_content, provide a non-empty "
             "old_string copied exactly from the current file, and "
             "provide new_string with only the replacement text. "
-            "old_string must match exactly once unless replace_all=true."
+            "Use new_string: \"\" for deletion; do not omit new_string or set "
+            "it to null. old_string must match exactly once unless "
+            "replace_all=true."
         ),
+        "minimal_json_shape": {
+            "file_path": file_path,
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": "<host-provided sha256 digest>",
+            "old_string": "<non-empty exact current text>",
+            "new_string": "<replacement text; use \"\" for deletion>",
+            "replace_all": False,
+        },
     }
     if before is not None:
         payload["source_digest"] = source_digest_for_content(before)
@@ -629,9 +649,20 @@ def _validate_existing_file_create_action(
             "edit_intent='exact_replace': set source_digest to the "
             "host-provided sha256 digest, provide a non-empty old_string "
             "copied exactly from the current file, and provide new_string "
-            "with only the replacement text. Use action='create' and "
-            "edit_intent='full_file' only when the file does not exist."
+            "with only the replacement text. Use new_string: \"\" for "
+            "deletion; do not omit new_string or set it to null. Use "
+            "action='create' and edit_intent='full_file' only when the file "
+            "does not exist."
         ),
+        "minimal_json_shape": {
+            "file_path": file_path,
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": "<host-provided sha256 digest>",
+            "old_string": "<non-empty exact current text>",
+            "new_string": "<replacement text; use \"\" for deletion>",
+            "replace_all": False,
+        },
     }
     raise PatchEditProtocolError(
         json.dumps(

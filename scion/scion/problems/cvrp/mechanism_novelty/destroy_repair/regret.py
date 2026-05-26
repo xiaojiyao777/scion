@@ -135,6 +135,10 @@ def _span_targets_variant_not_regret(span: str) -> bool:
             "candidate",
             "candidate list",
             "candidate-list",
+            "paired",
+            "paired-regret",
+            "joint",
+            "jointly",
             "filter",
             "filtered",
             "nearest",
@@ -191,8 +195,9 @@ def _span_targets_variant_not_regret(span: str) -> bool:
 def _acknowledged_regret_lacks_variant_only(text: str) -> bool:
     variant = (
         r"(?:candidate[- ]?list|candidate filter|filtered|filtering|nearest[- ]?"
-        r"neighbou?r|knn|nn|spatial|proximity|cluster|nearby|reinsertion|"
-        r"re[- ]?insertion|insertion opportunity|position[- ]?cost)"
+        r"neighbou?r|knn|nn|spatial|proximity|cluster|nearby|paired|"
+        r"paired[- ]?regret|joint|jointly|reinsertion|re[- ]?insertion|"
+        r"insertion opportunity|position[- ]?cost)"
     )
     regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
     return bool(

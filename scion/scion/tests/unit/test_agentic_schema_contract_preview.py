@@ -241,6 +241,43 @@ def test_schema_preview_rejects_existing_full_file_modify_with_exact_replace_gui
     assert "full_file_reason is not an authorization" in rendered_errors
 
 
+def test_schema_preview_rejects_exact_replace_missing_new_string(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    raw_source = (
+        tmp_path / "champion" / "policies" / "search_policy.py"
+    ).read_text(encoding="utf-8")
+
+    observation = registry.call(
+        "proposal.schema_preview",
+        {
+            "patch": {
+                "file_path": "policies/search_policy.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(raw_source),
+                "old_string": "return 0.50",
+            }
+        },
+        context,
+    )
+    patch = observation.structured_payload["patch"]
+    rendered = json.dumps(patch, sort_keys=True)
+
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert patch["passed"] is False
+    assert patch["edit_protocol_feedback"]["stage"] == "schema_preflight"
+    assert patch["edit_protocol_feedback"]["reason"] == (
+        "exact_replace_missing_new_string"
+    )
+    assert patch["edit_protocol_feedback"]["json_pointer"] == "/new_string"
+    assert "minimal_json_shape" in rendered
+    assert 'new_string: \\"\\"' in rendered
+
+
 def test_schema_preview_rejects_create_new_for_existing_target_file(
     tmp_path: Path,
 ) -> None:
@@ -273,6 +310,7 @@ def test_schema_preview_rejects_create_new_for_existing_target_file(
         guard["detail"]
     )
     assert "create_new is only for new files" in guard["detail"]
+    assert 'new_string: ""' in guard["repair_hint"]
 
     target_preview = registry.call(
         "proposal.target_permission_preview",
@@ -287,6 +325,7 @@ def test_schema_preview_rejects_create_new_for_existing_target_file(
     assert "existing_file_create_new_rejected" in json.dumps(
         target_preview.structured_payload["issues"]
     )
+    assert 'new_string: ""' in " ".join(target_preview.structured_payload["issues"])
 
 
 def test_contract_preview_patch_payload_is_compact_without_code_content(

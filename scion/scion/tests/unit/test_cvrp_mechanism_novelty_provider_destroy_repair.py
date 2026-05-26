@@ -304,6 +304,9 @@ def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precis
     assert result is not None
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "removal_savings_worst_removal"
     assert result.fact_ids == (
         "cvrp.destroy_repair.removal_savings_worst_removal",
@@ -399,6 +402,114 @@ def test_cvrp_provider_allows_zone_cluster_variant_contrasting_existing_shaw() -
     assert result is None
 
 
+def test_cvrp_provider_does_not_hard_block_shaw_near_field_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has _shaw_removal using distance, demand, "
+            "and route relatedness. Add boundary_cluster_removal as a near-field "
+            "variant that changes the seed selection and relatedness metric for "
+            "border customers; this is not a claim that Shaw or related removal "
+            "is missing."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing Shaw removal lacks a boundary-aware metric variant.",
+        expected_effect="Improve total_distance by perturbing boundary clusters.",
+        mechanism_changes=(
+            MechanismChange(id="boundary_cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.is_hard_block is False
+    assert result is None or result.result_kind == "duplicate_diagnostic"
+
+
+def test_cvrp_provider_does_not_hard_block_regret_candidate_filter_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already includes _regret2_insertion and "
+            "_regret3_insertion. Add regret_candidate_filtering that keeps the "
+            "existing regret repair semantics but filters candidate insertion "
+            "positions by nearest-neighbor lists before scoring; this does not "
+            "claim regret insertion is absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing regret repair lacks candidate filtering.",
+        expected_effect="Reduce repair time without removing regret scoring.",
+        mechanism_changes=(
+            MechanismChange(id="regret_candidate_filtering", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.is_hard_block is False
+
+
+def test_cvrp_provider_does_not_hard_block_route_removal_trigger_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has _route_removal for whole-route "
+            "destroy. Add route_removal_trigger_variant that reuses the existing "
+            "operator but changes when it is sampled after stagnation; this is "
+            "not a claim that whole-route removal is absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness="Existing route removal has no stagnation-sensitive trigger.",
+        expected_effect="Improve total_distance by scheduling whole-route removal better.",
+        mechanism_changes=(
+            MechanismChange(id="route_removal_trigger_variant", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.is_hard_block is False
+
+
+def test_cvrp_provider_does_not_hard_block_paired_regret_variant_report_case() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has _regret2_insertion and "
+            "_regret3_insertion. It lacks paired-regret repair that evaluates "
+            "two removed customers jointly before calling the existing regret "
+            "portfolio. Add paired_regret_repair as a candidate filtering and "
+            "ordering variant, not as a new missing regret insertion operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing regret repair lacks paired-customer ordering.",
+        expected_effect="Improve total_distance through better repair ordering.",
+        mechanism_changes=(
+            MechanismChange(id="paired_regret_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.is_hard_block is False
+
+
 def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -483,6 +594,9 @@ def test_cvrp_provider_rejects_repeated_worst_removal_with_precise_reason() -> N
     assert result is not None
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "removal_savings_worst_removal"
     assert "removal-savings or detour-cost destroy operator" in result.reason
     assert "_worst_removal" in " ".join([result.reason, *result.evidence])

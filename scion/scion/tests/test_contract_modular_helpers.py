@@ -157,8 +157,10 @@ def test_novelty_checker_rejects_duplicate_semantic_signature_without_gate_state
     result = checker.check(candidate, [existing], [])
 
     assert result.name == "C10_novelty"
-    assert not result.passed
-    assert "duplicate structured novelty_signature" in result.detail
+    assert result.passed
+    assert "duplicate_diagnostic" in result.detail
+    assert result.metadata["gate_action"] == "diagnostic"
+    assert result.metadata["diagnostic_kind"] == "semantic_identity_duplicate"
 
 
 def test_telemetry_helpers_extract_and_match_mechanism_declarations() -> None:

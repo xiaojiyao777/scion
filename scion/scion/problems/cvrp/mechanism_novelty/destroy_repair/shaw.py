@@ -262,12 +262,16 @@ def _is_existing_shaw_variant_with_negated_missing_claim(text: str) -> bool:
         text,
         (
             "trigger",
+            "seed selection",
             "scoring",
             "score",
+            "metric",
+            "relatedness metric",
             "schedule",
             "candidate filtering",
             "filtering",
             "adaptive",
+            "boundary",
             "weights",
         ),
     ):
@@ -276,6 +280,7 @@ def _is_existing_shaw_variant_with_negated_missing_claim(text: str) -> bool:
         text,
         (
             "not a new missing",
+            "not a claim",
             "not claiming",
             "do not claim",
             "does not claim",

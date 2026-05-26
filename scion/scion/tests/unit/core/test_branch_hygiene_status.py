@@ -109,6 +109,16 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
     assert payload["branch_followup_policy"] == "same_mechanism_followup_only"
     assert payload["clean_fork_policy"] == "clean_fork_required_for_new_mechanism"
     assert payload["branch_mechanism_ids"] == ["bounded_probe"]
+    assert payload["allowed_mechanism_ids"] == ["bounded_probe"]
+    assert payload["protected_mechanism_ids"] == ["bounded_probe"]
+    assert payload["forbidden_mechanism_policy"] == "no_unrelated_mechanism_ids"
+    assert payload["same_mechanism_allowed_actions"] == [
+        "tune",
+        "integrate",
+        "repair",
+        "parameterize",
+        "telemetry_wiring",
+    ]
     assert payload["baseline_policy"] == (
         "branch_workspace_same_mechanism_followup_only"
     )

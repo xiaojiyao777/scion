@@ -255,6 +255,15 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
         return False
     feedback = _code_edit_protocol_feedback(exc)
     return feedback.get("reason") in {
+        "exact_replace_empty_old_string",
+        "exact_replace_empty_source_digest",
+        "exact_replace_missing_new_string",
+        "exact_replace_missing_old_string",
+        "exact_replace_missing_source_digest",
+        "exact_replace_non_string_new_string",
+        "exact_replace_non_string_old_string",
+        "exact_replace_null_new_string",
+        "exact_replace_null_old_string",
         "old_string_not_unique",
         "existing_file_create_rejected",
         "existing_file_full_file_modify_rejected",
@@ -293,6 +302,26 @@ def _code_edit_protocol_retry_context(
             "nearby unchanged context from one candidate's "
             "unique_old_string_hint."
         )
+    elif reason.startswith("exact_replace_"):
+        field = str(feedback.get("field") or "typed edit field")
+        pointer = str(feedback.get("json_pointer") or "")
+        retry_context["prior_code_failure"] = (
+            "Typed exact_replace schema/preflight failed: "
+            f"{reason} at {pointer or target_file!r}. "
+            f"Rejected field={field!r} for {target_file!r}. Preserve "
+            f"target_file={hypothesis.target_file!r}, action={hypothesis.action!r}, "
+            f"and mechanism_changes ids={protected_ids!r}; repair only the "
+            "typed edit selector. Return action='modify', "
+            "edit_intent='exact_replace', source_digest, non-empty old_string, "
+            "new_string, and replace_all. For deletion use new_string: \"\"; "
+            "do not omit new_string or set it to null."
+        )
+        final_task = (
+            "Return the same patch intent with a complete exact_replace edit: "
+            "action='modify', edit_intent='exact_replace', source_digest, "
+            "non-empty old_string, new_string, and replace_all. For deletion "
+            "use new_string: \"\"; never omit new_string or use null."
+        )
     else:
         retry_context["prior_code_failure"] = (
             "Typed edit target/action failed: existing file requires modify "
@@ -322,8 +351,12 @@ def _code_edit_protocol_retry_context(
             "match_count": feedback.get("match_count"),
             "candidate_matches": feedback.get("candidate_matches"),
             "source_digest": feedback.get("source_digest"),
+            "stage": feedback.get("stage"),
+            "field": feedback.get("field"),
+            "change_pointer": feedback.get("change_pointer"),
             "detail": feedback.get("detail"),
             "guidance": feedback.get("guidance"),
+            "minimal_json_shape": feedback.get("minimal_json_shape"),
             "final_task": final_task,
             "replace_all_rule": (
                 "Use replace_all=true only when the intended edit is global "

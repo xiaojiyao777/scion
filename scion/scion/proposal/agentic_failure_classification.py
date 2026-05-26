@@ -266,15 +266,13 @@ def _patch_premise_rejection(
     hypothesis: HypothesisProposal,
 ) -> dict[str, Any] | None:
     premise_check = str(getattr(patch, "premise_check", "supported") or "supported")
-    if premise_check == "supported":
+    if premise_check in {"supported", "duplicate"}:
         return None
-    if premise_check not in {"contradicted", "duplicate", "wrong_owner"}:
+    if premise_check not in {"contradicted", "wrong_owner"}:
         premise_check = "contradicted"
     reason = str(getattr(patch, "premise_check_reason", "") or "").strip()
     category = (
-        AgenticFailureCategory.DUPLICATE_MECHANISM.value
-        if premise_check == "duplicate"
-        else AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
+        AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
         if premise_check == "wrong_owner"
         else _AGENT_GROUNDING_FAILURE
     )

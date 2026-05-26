@@ -360,6 +360,9 @@ def test_cvrp_provider_keeps_shaw_related_duplicate_block() -> None:
     assert result is not None
     assert result.mechanism == "shaw_related_removal"
     assert result.premise_check == "duplicate"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
 
 
 def test_cvrp_provider_allows_positional_arc_destroy_variant_near_shaw_terms() -> None:
@@ -771,6 +774,9 @@ def test_cvrp_provider_blocks_duplicate_random_removal_near_cluster_terms() -> N
     assert result is not None
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "random_removal_destroy"
     assert result.fact_ids == ("cvrp.destroy_repair.random_removal_destroy",)
     assert "_random_removal" in " ".join([result.reason, *result.evidence])

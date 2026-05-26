@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from scion.proposal.mechanism_novelty import MechanismNoveltyResult
 from scion.tests.unit.mechanism_novelty_helpers import (
     AgenticProposalRequest,
     AgenticProposalSession,
@@ -23,6 +24,25 @@ from scion.tests.unit.mechanism_novelty_helpers import (
     _valid_hypothesis_payload,
     build_active_solver_snapshot,
 )
+
+
+def test_mechanism_novelty_result_requires_auditable_evidence_for_hard_block() -> None:
+    result = MechanismNoveltyResult(
+        premise_check="contradicted",
+        failure_category="premise_contradicted",
+        mechanism="route_limit",
+        reason="missing fact packet and contradicted span",
+        evidence=("text match only",),
+    )
+
+    assert result.result_kind == "premise_contradiction"
+    assert result.gate_action == "diagnostic"
+    assert result.diagnostic_kind == "incomplete_premise_contradiction_evidence"
+    assert result.is_hard_block is False
+
+    with pytest.raises(ValueError):
+        result.to_rejection(_solver_design_hypothesis("Route limit is absent."))
+
 
 @pytest.mark.parametrize("case_name,text,mechanism", FALSE_PREMISES)
 def test_mechanism_novelty_gate_blocks_known_false_premises(
@@ -304,6 +324,9 @@ def test_mechanism_novelty_gate_blocks_explicit_duplicate_or_opt_addition(
     assert result is not None
     assert result.failure_category == "duplicate_mechanism"
     assert result.premise_check == "duplicate"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "cross_route_or_opt_2_3"
     assert result.fact_ids == ("cvrp.local_search.cross_route_or_opt_2_3",)
     assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
@@ -423,6 +446,9 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
     assert result is not None
     assert result.failure_category == "duplicate_mechanism"
     assert result.premise_check == "duplicate"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "shaw_related_removal"
     assert "_shaw_removal" in " ".join([result.reason, *result.evidence])
     assert result.fact_ids == ("cvrp.destroy_repair.shaw_related_removal",)
@@ -479,6 +505,9 @@ def test_mechanism_novelty_gate_blocks_explicit_existing_operator_duplicates(
     assert result is not None
     assert result.failure_category == "duplicate_mechanism"
     assert result.premise_check == "duplicate"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == mechanism
     assert result.fact_ids == (fact_id,)
     assert result.fact_packet_digest == snapshot["active_algorithm_facts"][

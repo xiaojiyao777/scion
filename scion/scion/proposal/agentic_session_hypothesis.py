@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Mapping
+from typing import Any, Mapping
 
 from scion.problem.providers import active_subject_taxonomy_payload
 from scion.proposal.agentic_session_common import *
@@ -429,6 +429,17 @@ class AgenticSessionHypothesisMixin:
                         "for that same hypothesis; do not explore, rename, or "
                         "choose a different mechanism."
                     )
+                elif _same_mechanism_preview_retry_pending(preview_rejections):
+                    hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
+                        "SAME-MECHANISM BRANCH RETRY. The selected branch is "
+                        "same_mechanism_only, so replace any unrelated "
+                        "mechanism_changes ids with one of the protected ids "
+                        "from the feedback. The only valid task is tune, "
+                        "integrate, repair, parameterize, or telemetry wiring "
+                        "inside the protected mechanism. A genuinely different "
+                        "mechanism requires a clean branch/fork before "
+                        "hypothesis generation."
+                    )
                 else:
                     hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
                         "A schema/target preview rejected the previous hypothesis. "
@@ -755,6 +766,14 @@ class AgenticSessionHypothesisMixin:
             )
             if result is None:
                 return None
+            if not result.is_hard_block:
+                _record_mechanism_novelty_diagnostic(
+                    state,
+                    hypothesis=hypothesis,
+                    result=result,
+                    attempt=attempt,
+                )
+                return None
             parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
                 result,
                 getattr(state, "_latest_hypothesis_prompt_manifest", None),
@@ -849,6 +868,14 @@ class AgenticSessionHypothesisMixin:
             )
             if result is None:
                 return None
+            if not result.is_hard_block:
+                _record_mechanism_novelty_diagnostic(
+                    state,
+                    hypothesis=hypothesis,
+                    result=result,
+                    attempt=None,
+                )
+                return None
             parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
                 result,
                 getattr(state, "_latest_hypothesis_prompt_manifest", None),
@@ -907,6 +934,35 @@ class AgenticSessionHypothesisMixin:
                 },
             )
             return self._persist(output, state)
+
+
+def _record_mechanism_novelty_diagnostic(
+    state: AgenticProposalSessionState,
+    *,
+    hypothesis: HypothesisProposal,
+    result: Any,
+    attempt: int | None,
+) -> None:
+    diagnostic = result.to_diagnostic(hypothesis)
+    state.note(
+        AgenticProposalPhase.DRAFT_HYPOTHESIS,
+        "Mechanism duplicate diagnostic recorded; continuing without hard novelty block.",
+        metadata=_drop_empty_dict(
+            {
+                "attempt": attempt,
+                "result_kind": diagnostic.get("result_kind"),
+                "gate_action": diagnostic.get("gate_action"),
+                "diagnostic_kind": diagnostic.get("diagnostic_kind"),
+                "premise_check": diagnostic.get("premise_check"),
+                "failure_category": diagnostic.get("failure_category"),
+                "mechanism": diagnostic.get("mechanism"),
+                "fact_ids": diagnostic.get("fact_ids"),
+                "fact_packet_digest": diagnostic.get("fact_packet_digest"),
+                "reason": diagnostic.get("reason"),
+                "diagnostic": diagnostic,
+            }
+        ),
+    )
 
 
 def _expected_telemetry_guidance_for_hypothesis(
@@ -1049,6 +1105,13 @@ def _hypothesis_preview_retry_feedback(
     hypothesis = payload.get("hypothesis")
     if not isinstance(hypothesis, Mapping):
         return None
+    same_mechanism_feedback = _same_mechanism_preview_retry_feedback(
+        hypothesis,
+        detail=detail,
+        attempt=attempt,
+    )
+    if same_mechanism_feedback is not None:
+        return same_mechanism_feedback
     novelty_feedback = _novelty_signature_preview_retry_feedback(
         hypothesis,
         detail=detail,
@@ -1133,6 +1196,81 @@ def _hypothesis_preview_retry_feedback(
                 "and telemetry activation mechanism refs; do not switch "
                 "mechanisms or targets for a C11/schema retry. Natural-language "
                 "hypothesis and novelty_signature wording may be clarified."
+            ),
+        }
+    )
+
+
+def _same_mechanism_preview_retry_feedback(
+    hypothesis: Mapping[str, Any],
+    *,
+    detail: str,
+    attempt: int,
+) -> dict[str, Any] | None:
+    guard = hypothesis.get("branch_continuation_guard")
+    if not isinstance(guard, Mapping):
+        return None
+    if guard.get("passed") is not False:
+        return None
+    if str(guard.get("failure_code") or "") != "same_mechanism_only_violation":
+        return None
+    protected_ids = [
+        str(item).strip()
+        for item in (guard.get("protected_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    proposed_ids = [
+        str(item).strip()
+        for item in (guard.get("proposed_mechanism_ids") or ())
+        if str(item).strip()
+    ]
+    allowed_ids = [
+        str(item).strip()
+        for item in (guard.get("allowed_mechanism_ids") or protected_ids)
+        if str(item).strip()
+    ]
+    allowed_actions = [
+        str(item).strip()
+        for item in (guard.get("allowed_actions") or ())
+        if str(item).strip()
+    ]
+    return _drop_empty_dict(
+        {
+            "attempt": attempt,
+            "source": "hypothesis_preview_gate",
+            "gate_name": "proposal.schema_preview",
+            "failure_code": "same_mechanism_only_violation",
+            "check": "same_mechanism_only_branch_guard",
+            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "reason": _limit_string(
+                str(guard.get("reason") or "") or detail,
+                1000,
+            ),
+            "branch_followup_policy": guard.get("branch_followup_policy"),
+            "hypothesis_generation_mode": guard.get("hypothesis_generation_mode"),
+            "protected_mechanism_ids": protected_ids,
+            "allowed_mechanism_ids": allowed_ids,
+            "proposed_mechanism_ids": proposed_ids,
+            "forbidden_mechanism_policy": guard.get(
+                "forbidden_mechanism_policy"
+            ),
+            "allowed_actions": allowed_actions,
+            "allowed_repair_shape": guard.get("allowed_repair_shape"),
+            "protected_identity": {
+                "protected_mechanism_ids": protected_ids,
+                "allowed_mechanism_ids": allowed_ids,
+                "allowed_actions": allowed_actions,
+            },
+            "final_task": (
+                "Rewrite the hypothesis as a same-mechanism follow-up on a "
+                "protected id. Do not introduce unrelated mechanism ids."
+            ),
+            "retry_constraint": (
+                "Use only protected_mechanism_ids in mechanism_changes and "
+                "keep the work to tune, integrate, repair, parameterize, or "
+                "telemetry wiring within that protected mechanism. If the "
+                "intended idea is a new mechanism, stop this branch attempt "
+                "and use a clean branch/fork before generation."
             ),
         }
     )
@@ -1267,6 +1405,17 @@ def _schema_retry_corrective_retry_already_used(
         str(rejection.get("failure_code") or "").strip() == "schema_retry_drift"
         for rejection in preview_rejections
         if isinstance(rejection, Mapping)
+    )
+
+
+def _same_mechanism_preview_retry_pending(
+    preview_rejections: list[Mapping[str, Any]],
+) -> bool:
+    if not preview_rejections:
+        return False
+    return (
+        str(preview_rejections[-1].get("failure_code") or "").strip()
+        == "same_mechanism_only_violation"
     )
 
 

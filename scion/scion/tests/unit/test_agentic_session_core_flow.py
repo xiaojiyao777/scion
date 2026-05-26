@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from scion.proposal.edit_protocol import source_digest_for_content
 from scion.proposal.agentic_code_context import _with_code_scope_control
+from scion.proposal.engine import _parse_patch
 from scion.tests.unit.agentic_session_test_support import *
 
 class AdditionalChangesShapeRetryCreative(FakeCreative):
@@ -15,6 +17,32 @@ class AdditionalChangesShapeRetryCreative(FakeCreative):
             raise ProposalValidationError(
                 "additional_changes must be a JSON array, not a "
                 "JSON-encoded string. Shape-only retry: preserve mechanism_changes ids."
+            )
+        return self.patch
+
+
+class ExactReplaceShapeRetryCreative(FakeCreative):
+    def __init__(self, patch: PatchProposal) -> None:
+        super().__init__(patch=patch)
+        self.calls = 0
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        self.calls += 1
+        if self.calls == 1:
+            before = "def value():\n    return 1\n"
+            _parse_patch(
+                {
+                    "file_path": "policies/example.py",
+                    "action": "modify",
+                    "edit_intent": "exact_replace",
+                    "source_digest": source_digest_for_content(before),
+                    "old_string": "return 1",
+                },
+                context={
+                    "target_file": "policies/example.py",
+                    "target_file_code": before,
+                },
             )
         return self.patch
 
@@ -197,6 +225,49 @@ def test_agentic_session_retries_code_output_shape_only_for_additional_changes(
     )
 
 
+def test_agentic_session_retries_exact_replace_schema_preflight_feedback(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = ExactReplaceShapeRetryCreative(patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == patch
+    assert len(creative.code_contexts) == 2
+    retry_context = creative.code_contexts[1]
+    feedback = retry_context["agentic_code_edit_retry_feedback"]
+    assert feedback["stage"] == "schema_preflight"
+    assert feedback["reason"] == "exact_replace_missing_new_string"
+    assert feedback["json_pointer"] == "/new_string"
+    assert feedback["minimal_json_shape"]["new_string"].endswith("for deletion>")
+    assert 'new_string: ""' in retry_context["prior_code_failure"]
+    assert any(
+        event.metadata.get("failure_code") == "code_edit_protocol_retry"
+        for event in output.transcript
+    )
+
+
 def test_creative_layer_renders_agentic_observations_and_research_diagnosis() -> None:
     client = CapturingToolClient()
     creative = CreativeLayer(client)
@@ -370,7 +441,7 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
     )
 
 
-def test_agentic_session_stops_on_duplicate_code_premise_check(
+def test_agentic_session_records_duplicate_code_premise_check_as_diagnostic(
     tmp_path: Path,
 ) -> None:
     hypothesis = HypothesisProposal(
@@ -413,16 +484,19 @@ def test_agentic_session_stops_on_duplicate_code_premise_check(
         )
     )
 
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.termination_reason == AgenticTerminationReason.DUPLICATE_MECHANISM
-    assert output.patch is None
-    assert output.failure_category == "duplicate_mechanism"
-    assert output.structured_rejection is not None
-    assert output.structured_rejection["premise_check"] == "duplicate"
-    assert output.structured_rejection["screening_allowed"] is False
-    assert output.failure_ledger["first_root_cause"] == "duplicate_mechanism"
-    assert output.failure_ledger["latest_failure"] == "duplicate_mechanism"
-    assert output.failure_ledger["entries"][0]["phase"] == "draft_patch"
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.patch is patch
+    assert output.failure_category is None
+    assert output.structured_rejection is None
+    assert output.failure_ledger["entry_count"] == 0
+    duplicate_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("result_kind") == "duplicate_diagnostic"
+    ]
+    assert duplicate_events
+    assert duplicate_events[-1].metadata["gate_action"] == "diagnostic"
     assert len(creative.code_contexts) == 1
 
 

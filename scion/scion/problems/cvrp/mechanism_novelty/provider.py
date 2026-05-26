@@ -82,7 +82,10 @@ _ROUTE_LIMIT_FACT = "cvrp.search_state.guards_route_limit"
 
 
 class CvrpMechanismNoveltyProvider:
-    """Block only explicit duplicate or contradicted CVRP solver premises."""
+    """Hard-block only explicit contradicted CVRP solver premises.
+
+    Duplicate/family overlap results are diagnostics for prompt/status/routing.
+    """
 
     def evaluate_mechanism_novelty(
         self,

@@ -91,7 +91,10 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
                 issues.append(
                     "existing_file_create_new_rejected: existing file requires "
                     "modify exact_replace with source_digest; create_new is "
-                    "only for new files"
+                    "only for new files. Minimal patch shape: action=modify, "
+                    "edit_intent=exact_replace, source_digest, non-empty "
+                    "old_string, new_string, replace_all=false. For deletion "
+                    "use new_string: \"\"; do not omit it or set it to null"
                 )
         forced_violation = _forced_action_target_violation(
             context,

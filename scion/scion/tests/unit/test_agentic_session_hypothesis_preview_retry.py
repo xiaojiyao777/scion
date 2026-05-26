@@ -209,6 +209,167 @@ def _good_vns_mechanism_telemetry() -> dict:
     }
 
 
+def _same_mechanism_context(tmp_path: Path) -> ProposalToolContext:
+    context = _cvrp_context_with_champion(tmp_path)
+    assert context.branch is not None
+    context.branch.branch_code_status = "active_no_effect"
+    context.branch.last_screening_feedback_tier = "no_effect"
+    context.branch.last_telemetry_outcome = "no_objective_effect"
+    context.branch.branch_mechanism_ids = ("adaptive_vns_operator_weights",)
+    return context
+
+
+def test_same_mechanism_schema_preview_retries_unrelated_mechanism_id(
+    tmp_path: Path,
+) -> None:
+    context = _same_mechanism_context(tmp_path)
+    bad = replace(
+        _vns_hypothesis(_good_vns_mechanism_telemetry()),
+        hypothesis_text=(
+            "Add an unrelated restart mechanism on a same-mechanism follow-up "
+            "branch."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="unrelated_restart", change_type="add"),
+        ),
+    )
+    registry = ProposalToolRegistry.default_read_only()
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _json_ready(bad)},
+        context,
+    )
+    feedback = _hypothesis_preview_retry_feedback(
+        [preview],
+        detail="schema or target preview did not pass",
+        attempt=1,
+        previous_hypothesis=bad,
+    )
+
+    payload = preview.structured_payload["hypothesis"]
+    guard = payload["branch_continuation_guard"]
+    assert preview.structured_payload["passed"] is False
+    assert guard["failure_code"] == "same_mechanism_only_violation"
+    assert guard["hypothesis_generation_mode"] == "same_mechanism_only"
+    assert guard["protected_mechanism_ids"] == ["adaptive_vns_operator_weights"]
+    assert guard["proposed_mechanism_ids"] == ["unrelated_restart"]
+    assert feedback is not None
+    assert feedback["failure_code"] == "same_mechanism_only_violation"
+    assert feedback["protected_mechanism_ids"] == [
+        "adaptive_vns_operator_weights"
+    ]
+    assert "clean branch/fork" in feedback["retry_constraint"]
+    assert "unrelated_restart" in feedback["reason"]
+
+
+def test_same_mechanism_schema_preview_allows_protected_tune_or_repair(
+    tmp_path: Path,
+) -> None:
+    context = _same_mechanism_context(tmp_path)
+    protected = replace(
+        _vns_hypothesis(_good_vns_mechanism_telemetry()),
+        hypothesis_text=(
+            "Tune and repair adaptive_vns_operator_weights without adding a "
+            "new mechanism."
+        ),
+        mechanism_changes=(
+            MechanismChange(
+                id="adaptive_vns_operator_weights",
+                change_type="modify",
+            ),
+        ),
+    )
+    registry = ProposalToolRegistry.default_read_only()
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _json_ready(protected)},
+        context,
+    )
+
+    guard = preview.structured_payload["hypothesis"]["branch_continuation_guard"]
+    assert preview.structured_payload["passed"] is True
+    assert guard["passed"] is True
+    assert guard["protected_mechanism_ids"] == ["adaptive_vns_operator_weights"]
+
+
+def test_same_mechanism_preview_retry_happens_inside_proposal_session(
+    tmp_path: Path,
+) -> None:
+    bad = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            hypothesis_text=(
+                "Add an unrelated restart mechanism on a non-clean follow-up "
+                "branch."
+            ),
+            target_weakness="The budget policy needs a different mechanism.",
+            expected_effect="Improve distance through unrelated restart logic.",
+        ),
+        mechanism_changes=(
+            MechanismChange(id="unrelated_restart", change_type="add"),
+        ),
+    )
+    good = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            hypothesis_text=(
+                "Tune protected_budget_policy on the same non-clean branch."
+            ),
+            target_weakness="The protected budget policy needs parameter tuning.",
+            expected_effect=(
+                "Improve runtime tradeoff by tuning the same protected policy."
+            ),
+        ),
+        mechanism_changes=(
+            MechanismChange(id="protected_budget_policy", change_type="modify"),
+        ),
+    )
+    creative = SequentialHypothesisCreative([bad, good])
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    assert context.branch is not None
+    context.branch.branch_code_status = "active_no_effect"
+    context.branch.last_screening_feedback_tier = "no_effect"
+    context.branch.last_telemetry_outcome = "no_objective_effect"
+    context.branch.branch_mechanism_ids = ("protected_budget_policy",)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-same-mechanism-preview-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "same-mechanism-preview-retry"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == good
+    assert len(creative.hypothesis_contexts) == 2
+    retry_feedback = creative.hypothesis_contexts[1][
+        "agentic_hypothesis_preview_rejections"
+    ][0]
+    assert retry_feedback["failure_code"] == "same_mechanism_only_violation"
+    assert retry_feedback["hypothesis_generation_mode"] == "same_mechanism_only"
+    assert retry_feedback["protected_mechanism_ids"] == [
+        "protected_budget_policy"
+    ]
+    assert "SAME-MECHANISM BRANCH RETRY" in creative.hypothesis_contexts[1][
+        "agentic_hypothesis_preview_retry_rule"
+    ]
+    assert not any(
+        event.metadata.get("failure_code") == "new_mechanism_requires_clean_fork"
+        for event in output.transcript
+    )
+
+
 def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     tmp_path: Path,
 ) -> None:
@@ -739,7 +900,7 @@ def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
     )
 
 
-def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
+def test_repeated_mechanism_enters_transcript_as_duplicate_diagnostic(
     tmp_path: Path,
 ) -> None:
     repeat = _targeted_multi_relocate_hypothesis()
@@ -748,6 +909,7 @@ def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
     context = _cvrp_context_with_champion(tmp_path)
     context = replace(
         context,
+        policy=ContextExposurePolicy(),
         step_history=(_failed_screening_step(repeat),),
     )
     session = AgenticProposalSession(
@@ -770,14 +932,21 @@ def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
     )
 
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.hypothesis == good
-    assert len(creative.hypothesis_contexts) == 3
-    retry_feedback = creative.hypothesis_contexts[2][
-        "agentic_hypothesis_semantic_rejections"
-    ][0]
-    assert retry_feedback["failure_category"] == "repeated_mechanism"
-    assert retry_feedback["mechanism"] == "targeted_multi_relocate"
-    assert "SCREENING_FAIL_WIN_RATE" in retry_feedback["reason"]
+    assert output.hypothesis == repeat
+    assert len(creative.hypothesis_contexts) == 2
+    assert all(
+        "agentic_hypothesis_semantic_rejections" not in context
+        for context in creative.hypothesis_contexts
+    )
+    duplicate_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("result_kind") == "duplicate_diagnostic"
+    ]
+    assert duplicate_events
+    assert duplicate_events[-1].metadata["failure_category"] == "repeated_mechanism"
+    assert duplicate_events[-1].metadata["mechanism"] == "targeted_multi_relocate"
+    assert "SCREENING_FAIL_WIN_RATE" in duplicate_events[-1].metadata["reason"]
 
 
 def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(

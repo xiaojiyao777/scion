@@ -116,15 +116,25 @@ class Scheduler:
                     branch=None,
                     reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
                 )
-            if len(active_for_proposal_capacity) < self._max_active_branches and any(
-                _established_branch(branch) for branch in eligible_research
-            ):
-                return SchedulerAction(action="create_new", branch=None)
             clean_research = [
                 branch
                 for branch in eligible_research
                 if not branch_requires_same_mechanism_followup(branch)
             ]
+            clean_candidates = [
+                branch
+                for branch in clean_research
+                if not _established_branch(branch)
+            ]
+            if clean_candidates:
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=_select_fair(clean_candidates),
+                )
+            if len(active_for_proposal_capacity) < self._max_active_branches and any(
+                _established_branch(branch) for branch in eligible_research
+            ):
+                return SchedulerAction(action="create_new", branch=None)
             selection_pool = clean_research or eligible_research
             return SchedulerAction(
                 action="run_existing",

@@ -60,12 +60,19 @@ class NoveltyChecker:
                 candidate_key=key,
             )
             if duplicate_key is not None:
+                detail = self._duplicate_novelty_detail(h, existing, duplicate_key)
                 return check_result(
                     "C10_novelty",
-                    False,
+                    True,
                     "light",
-                    self._duplicate_novelty_detail(h, existing, duplicate_key),
+                    f"duplicate_diagnostic: {detail}",
                     t0,
+                    metadata={
+                        "result_kind": "duplicate_diagnostic",
+                        "gate_action": "diagnostic",
+                        "diagnostic_kind": "semantic_identity_duplicate",
+                        "duplicate_key": duplicate_key,
+                    },
                 )
         return check_result("C10_novelty", True, "light", "novel", t0)
 

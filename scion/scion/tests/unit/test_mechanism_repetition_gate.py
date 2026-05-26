@@ -83,7 +83,7 @@ def _context(*steps: StepRecord, adapter=None) -> ProposalToolContext:
     )
 
 
-def test_repeated_mechanism_id_is_blocked_before_code_generation() -> None:
+def test_repeated_mechanism_id_is_duplicate_diagnostic_not_hard_block() -> None:
     previous = _hypothesis("targeted_multi_relocate")
     candidate = _hypothesis("targeted_multi_relocate")
 
@@ -95,6 +95,9 @@ def test_repeated_mechanism_id_is_blocked_before_code_generation() -> None:
     assert result is not None
     assert result.premise_check == "duplicate"
     assert result.failure_category == "repeated_mechanism"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
     assert result.mechanism == "targeted_multi_relocate"
     assert "SCREENING_FAIL_WIN_RATE" in result.reason
 
@@ -237,4 +240,7 @@ def test_broad_algorithm_family_is_provider_declared_not_generic_default() -> No
 
     assert without_provider is not None
     assert without_provider.failure_category == "repeated_mechanism"
+    assert without_provider.result_kind == "duplicate_diagnostic"
+    assert without_provider.gate_action == "diagnostic"
+    assert without_provider.is_hard_block is False
     assert with_provider is None

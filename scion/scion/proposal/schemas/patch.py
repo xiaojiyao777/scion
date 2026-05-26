@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+import json
+from typing import Any, Dict, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -15,6 +16,212 @@ from .shared import (
 
 PatchEditIntent = Literal["exact_replace", "full_file"]
 PremiseCheck = Literal["supported", "contradicted", "duplicate", "wrong_owner"]
+
+
+class PatchSchemaPreflightError(ValueError):
+    """Raised when patch JSON shape fails before typed-edit normalization."""
+
+    def __init__(self, payload: Mapping[str, Any]) -> None:
+        self.payload = dict(payload)
+        super().__init__(
+            json.dumps(self.payload, sort_keys=True, separators=(",", ":"))
+        )
+
+
+def preflight_patch_exact_replace_shape(raw: Mapping[str, Any]) -> None:
+    """Reject malformed exact_replace edit selectors before normalization."""
+
+    if raw.get("premise_check") not in (None, "", "supported"):
+        return
+    for change_pointer, change in _patch_change_slots(raw):
+        if str(change.get("edit_intent") or "").strip() != "exact_replace":
+            continue
+        file_path = str(change.get("file_path") or "").strip()
+        _require_source_digest(change, file_path, change_pointer)
+        _require_old_string(change, file_path, change_pointer)
+        _require_new_string(change, file_path, change_pointer)
+
+
+def _patch_change_slots(
+    raw: Mapping[str, Any],
+) -> list[tuple[str, Mapping[str, Any]]]:
+    slots: list[tuple[str, Mapping[str, Any]]] = [("/", raw)]
+    additional = raw.get("additional_changes")
+    if not isinstance(additional, list):
+        return slots
+    for index, item in enumerate(additional):
+        if isinstance(item, Mapping):
+            slots.append((f"/additional_changes/{index}", item))
+    return slots
+
+
+def _require_source_digest(
+    change: Mapping[str, Any],
+    file_path: str,
+    change_pointer: str,
+) -> None:
+    if _source_digest_text(change.get("source_digest")):
+        return
+    reason = (
+        "exact_replace_missing_source_digest"
+        if "source_digest" not in change
+        else "exact_replace_empty_source_digest"
+    )
+    _raise_exact_replace_shape_error(
+        reason=reason,
+        field="source_digest",
+        file_path=file_path,
+        change_pointer=change_pointer,
+        detail=(
+            "exact_replace requires source_digest for the existing file. "
+            "Use the host-provided sha256 digest for that file."
+        ),
+    )
+
+
+def _require_old_string(
+    change: Mapping[str, Any],
+    file_path: str,
+    change_pointer: str,
+) -> None:
+    if "old_string" not in change:
+        _raise_exact_replace_shape_error(
+            reason="exact_replace_missing_old_string",
+            field="old_string",
+            file_path=file_path,
+            change_pointer=change_pointer,
+            detail=(
+                "exact_replace requires old_string to be present as a "
+                "non-empty string copied exactly from the current file."
+            ),
+        )
+    old_string = change.get("old_string")
+    if isinstance(old_string, str) and old_string != "":
+        return
+    if old_string is None:
+        reason = "exact_replace_null_old_string"
+        detail = (
+            "exact_replace old_string must be a non-empty string, not null."
+        )
+    elif isinstance(old_string, str):
+        reason = "exact_replace_empty_old_string"
+        detail = (
+            "exact_replace old_string must be a non-empty string copied "
+            "exactly from the current file."
+        )
+    else:
+        reason = "exact_replace_non_string_old_string"
+        detail = (
+            "exact_replace old_string must be a string copied exactly from "
+            "the current file."
+        )
+    _raise_exact_replace_shape_error(
+        reason=reason,
+        field="old_string",
+        file_path=file_path,
+        change_pointer=change_pointer,
+        detail=detail,
+    )
+
+
+def _require_new_string(
+    change: Mapping[str, Any],
+    file_path: str,
+    change_pointer: str,
+) -> None:
+    if "new_string" not in change:
+        _raise_exact_replace_shape_error(
+            reason="exact_replace_missing_new_string",
+            field="new_string",
+            file_path=file_path,
+            change_pointer=change_pointer,
+            detail=(
+                "exact_replace requires new_string to be present as a string. "
+                "For deletion, set new_string to the empty string \"\"; do "
+                "not omit the field."
+            ),
+        )
+    new_string = change.get("new_string")
+    if isinstance(new_string, str):
+        return
+    if new_string is None:
+        reason = "exact_replace_null_new_string"
+        detail = (
+            "exact_replace new_string must be a string, not null. For "
+            "deletion, set new_string to the empty string \"\"."
+        )
+    else:
+        reason = "exact_replace_non_string_new_string"
+        detail = (
+            "exact_replace new_string must be a string. For deletion, set "
+            "new_string to the empty string \"\"."
+        )
+    _raise_exact_replace_shape_error(
+        reason=reason,
+        field="new_string",
+        file_path=file_path,
+        change_pointer=change_pointer,
+        detail=detail,
+    )
+
+
+def _raise_exact_replace_shape_error(
+    *,
+    reason: str,
+    field: str,
+    file_path: str,
+    change_pointer: str,
+    detail: str,
+) -> None:
+    field_pointer = (
+        f"/{field}" if change_pointer == "/" else f"{change_pointer}/{field}"
+    )
+    minimal_shape = {
+        "file_path": file_path or "<same relative path>",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": "<host-provided sha256 digest>",
+        "old_string": "<non-empty exact current text>",
+        "new_string": "<replacement text; use \"\" for deletion>",
+        "replace_all": False,
+    }
+    payload = {
+        "error": "patch_edit_protocol",
+        "stage": "schema_preflight",
+        "reason": reason,
+        "field": field,
+        "file_path": file_path,
+        "json_pointer": field_pointer,
+        "change_pointer": change_pointer,
+        "edit_intent": "exact_replace",
+        "detail": detail,
+        "guidance": (
+            "Retry with a complete typed exact_replace object. Minimal JSON "
+            "shape: action='modify', edit_intent='exact_replace', "
+            "source_digest='<host-provided sha256 digest>', "
+            "old_string='<non-empty exact current text>', "
+            "new_string='<replacement text>', replace_all=false. For deletion "
+            "use new_string: \"\"; never omit new_string or set it to null."
+        ),
+        "minimal_json_shape": minimal_shape,
+    }
+    raise PatchSchemaPreflightError(payload)
+
+
+def _source_digest_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        for key in ("sha256", "digest", "source_digest"):
+            text = str(value.get(key) or "").strip()
+            if text:
+                return _strip_digest_prefix(text)
+        return ""
+    if value is None:
+        return ""
+    return _strip_digest_prefix(str(value).strip())
+
+
+def _strip_digest_prefix(value: str) -> str:
+    return value[7:] if value.startswith("sha256:") else value
 
 
 class PatchFileChangeInput(BaseModel):
@@ -166,18 +373,25 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": ["string", "object", "null"],
             "description": (
                 "sha256 digest of the file content used for this edit. Required "
-                "for exact_replace on existing files; null for create."
+                "and non-empty for exact_replace on existing files; null only "
+                "for create/full_file edits to new files."
             ),
             "additionalProperties": True,
         },
         "old_string": {
-            "type": ["string", "null"],
-            "description": "Exact text to replace when edit_intent=exact_replace.",
+            "type": "string",
+            "description": (
+                "Exact non-empty text to replace when "
+                "edit_intent=exact_replace. Omit or use an empty string for "
+                "full_file/create; never use null."
+            ),
         },
         "new_string": {
-            "type": ["string", "null"],
+            "type": "string",
             "description": (
-                "Replacement text when edit_intent=exact_replace. May be empty."
+                "Replacement text when edit_intent=exact_replace. Must be "
+                "present as a string; use an empty string for deletion, never "
+                "null or a missing field."
             ),
         },
         "replace_all": {
@@ -251,8 +465,8 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                         "type": ["string", "object", "null"],
                         "additionalProperties": True,
                     },
-                    "old_string": {"type": ["string", "null"]},
-                    "new_string": {"type": ["string", "null"]},
+                    "old_string": {"type": "string"},
+                    "new_string": {"type": "string"},
                     "replace_all": {"type": "boolean"},
                     "content_after": {"type": ["string", "null"]},
                     "full_file_reason": {"type": ["string", "null"]},
@@ -315,6 +529,7 @@ Produce a typed edit set that implements the hypothesis.
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
+- For `exact_replace`, `old_string` must be a non-empty string and `new_string` must be present as a string. To delete text, set `new_string` to `""`; do not omit it or set it to null.
 - Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization.
 - Existing files must never be changed through `action="create"`, `create_new`, or `full_file`; existing file requires `action="modify"` with `edit_intent="exact_replace"` and `source_digest`. Create/full content is only for genuinely new files.
 - Legacy `code_content` full-file output is rejected for model-facing existing-file modifies; it is only accepted for creates/deletes or host-internal compatibility.
@@ -329,6 +544,10 @@ Produce a typed edit set that implements the hypothesis.
   emit conflicting `full_file` entries for the same file.
 - Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
   drop mechanism ids in the patch response.
+- `premise_check="duplicate"` is diagnostic only. Use it to disclose close
+  overlap with visible code, but still provide the typed edit when the approved
+  hypothesis is a material variant. Only `contradicted` and `wrong_owner` are
+  hard no-patch premise outcomes.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
@@ -370,6 +589,8 @@ You are a software engineer fixing an optimisation research-surface file that fa
 Correct the code so it passes, while preserving the intended logic. Prefer a
 small typed exact_replace edit when possible; use full_file only for creates or
 deletes. full_file_reason is not authorization for existing-file modify.
+For exact_replace, include source_digest, non-empty old_string, and new_string
+as a string. Use new_string "" for deletion; never omit it or set it to null.
 
 ## Problem Summary
 {problem_summary}
@@ -420,8 +641,10 @@ __all__ = [
     "CODE_PROMPT_TEMPLATE",
     "FIX_PROMPT_TEMPLATE",
     "PATCH_PROPOSAL_SCHEMA",
+    "PatchSchemaPreflightError",
     "PatchEditIntent",
     "PatchFileChangeInput",
     "PatchProposalInput",
     "PremiseCheck",
+    "preflight_patch_exact_replace_shape",
 ]
