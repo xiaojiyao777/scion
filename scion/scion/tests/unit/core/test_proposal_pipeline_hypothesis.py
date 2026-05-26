@@ -1,7 +1,15 @@
 """Focused tests split from test_proposal_pipeline.py."""
 
+from types import SimpleNamespace
+from typing import Any
+
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
-from scion.core.models import MechanismChange
+from scion.core.branch_hygiene import branch_hygiene_context
+from scion.core.campaign_loop import CampaignLoop
+from scion.core.explore_step.pipeline import ExploreStepPipeline
+from scion.core.models import Branch, BranchState, MechanismChange
+from scion.core.scheduler import Scheduler
+from scion.core.step_result import StepResult
 
 def test_generate_hypothesis_builds_context_and_record() -> None:
     pipeline, branch, runtime, circuit, failures, _ = _pipeline()
@@ -159,6 +167,157 @@ def test_generate_hypothesis_rejects_new_mechanism_on_active_no_effect_branch() 
     assert "different_probe" in detail
     assert failures == []
     assert circuit.failures == []
+
+
+def test_lifecycle_policy_block_fixture_marks_branch_and_reroutes_without_round_cost() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a distinct route perturbation after no-effect screening.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_probe.py",
+        mechanism_changes=(
+            MechanismChange(id="different_probe", change_type="add"),
+        ),
+    )
+    proposal, branch, _, circuit, failures, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+    clean_branch = Branch(
+        branch_id="clean-branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+    )
+    recorded_steps: list[StepRecord] = []
+    loop_statuses: list[dict[str, Any]] = []
+    last_results: list[StepResult] = []
+    stopped_reasons: list[str | None] = []
+    calls = 0
+
+    explore = ExploreStepPipeline(
+        branch_controller=SimpleNamespace(next_stage=lambda _branch_id: None),
+        contract_gate=None,
+        verification_gate=None,
+        hypothesis_store=SimpleNamespace(
+            mark_status=lambda *_args, **_kwargs: None,
+            save=lambda *_args, **_kwargs: None,
+        ),
+        registry=SimpleNamespace(
+            record_event=lambda *_args, **_kwargs: None,
+            record_contract_failure=lambda *_args, **_kwargs: None,
+        ),
+        campaign_id="camp-1",
+        get_champion=lambda: _champion(),
+        pending_hypotheses={},
+        branch_hypotheses={},
+        branch_patches={},
+        branch_current_hypothesis={},
+        branch_workspaces={},
+        failure_streak=proposal.failure_streak,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=proposal.generate_hypothesis,
+        generate_code=lambda *_args, **_kwargs: None,
+        attempt_fix=lambda *_args, **_kwargs: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_step=recorded_steps.append,
+        setup_workspace=lambda _branch: None,
+        apply_patch=lambda *_args, **_kwargs: None,
+        record_verification_pass=lambda *_args, **_kwargs: None,
+        archive_failed_workspace=lambda *_args, **_kwargs: None,
+        evaluate=lambda *_args, **_kwargs: (None, None, None),
+        apply_decision_and_finalize=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args, **_kwargs: None,
+        proposal_failure_detail_for=proposal.pop_hypothesis_failure_detail,
+        proposal_session_ref_for=lambda _branch_id: None,
+        update_status_progress=lambda _payload: None,
+    )
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return explore.run(branch)
+        selected = Scheduler(max_active_branches=2).select_next(
+            [branch, clean_branch]
+        )
+        assert selected.action == "run_existing"
+        assert selected.branch is clean_branch
+        return StepResult(
+            action="explore",
+            branch_id=clean_branch.branch_id,
+            reason="screening complete",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=bool(circuit.failures),
+            last_failure_detail=(circuit.failures[-1] if circuit.failures else None),
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 2
+    assert recorded_steps[0].attempt_kind == "branch_lifecycle_policy"
+    assert recorded_steps[0].counts_toward_max_rounds is False
+    assert "new_mechanism_requires_clean_fork" in (
+        recorded_steps[0].failure_detail or ""
+    )
+    assert last_results[0].attempt_kind == "branch_lifecycle_policy"
+    assert last_results[0].counts_toward_max_rounds is False
+    block_status = next(
+        status
+        for status in loop_statuses
+        if status["branch_lifecycle_policy_blocks"] == 1
+        and status["effective_rounds_completed"] == 0
+    )
+    assert block_status["proposal_attempts_consumed"] == 0
+    assert block_status["quality_blocks"] == 0
+    assert loop_statuses[-1]["branch_lifecycle_policy_blocks"] == 1
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 1
+    assert loop_statuses[-1]["effective_rounds_completed"] == 1
+    assert loop_statuses[-1]["quality_blocks"] == 0
+    assert failures == []
+    assert circuit.failures == []
+    assert proposal.failure_streak == {"proposal": 1}
+    assert branch.pending_retry is False
+    assert branch.failure_codes == []
+    hygiene = branch_hygiene_context(branch)
+    assert hygiene["branch_lifecycle_new_mechanism_ineligible"] is True
+    assert hygiene["branch_lifecycle_reroute_reason"] == (
+        "clean_fork_after_branch_lifecycle_policy_block"
+    )
+    assert hygiene["branch_followup_policy"] == "same_mechanism_followup_only"
+    assert hygiene["next_branch_selection_policy"] == (
+        "clean_branch_or_clean_fork_for_new_mechanism"
+    )
+    assert "max_rounds_exhausted" in stopped_reasons
 
 
 def test_repeated_lifecycle_policy_blocks_do_not_trip_circuit_breaker() -> None:
