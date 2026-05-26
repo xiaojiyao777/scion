@@ -34,6 +34,18 @@ with source digests; full-file content remains allowed for creates and explicit
 host-internal compatibility only. Full local regression after these changes:
 `2237 passed, 1 skipped`.
 
+The follow-up 4-round local `gpt-5.5` validation showed the repair-first path
+working for telemetry, but exposed a broader branch-lifecycle policy gap:
+`active_no_effect` branches could still accumulate unrelated new mechanisms.
+The 2026-05-26 follow-up makes non-clean branches generic
+same-mechanism-follow-up branches. Existing no-effect/runtime-regression or
+telemetry-suspect branches may be tuned, repaired, or integrated further only
+for their recorded mechanism ids; a different new mechanism now requires a
+clean fork and is reported as a branch-lifecycle policy block rather than an
+effective screened round. Prompt/status projections now expose
+`branch_followup_policy`, `clean_fork_policy`, and `branch_mechanism_ids`.
+Full local regression after this tightening: `2241 passed, 1 skipped`.
+
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session
 boundary. Current real-cost experiments should be launched with explicit local

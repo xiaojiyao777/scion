@@ -8,7 +8,9 @@ from typing import Any, Callable, MutableMapping, Optional, Tuple
 
 from scion.core.branch_hygiene import branch_hygiene_context, branch_requires_repair_focus
 from scion.core.branch_repair_policy import (
+    BRANCH_LIFECYCLE_POLICY_VIOLATION,
     REPAIR_FIRST_POLICY_VIOLATION,
+    branch_continuation_mechanism_ids,
     branch_repair_mechanism_ids,
     validate_repair_focused_patch,
 )
@@ -476,17 +478,25 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             branch,
             hypothesis,
             patch,
-            step_history=(),
+            step_history=getattr(self, "step_history", ()),
         )
         if not repair_patch_check.allowed:
             detail = repair_patch_check.detail
-            logger.info("Branch %s: repair-first patch policy failed: %s", bid, detail)
+            logger.info(
+                "Branch %s: branch continuation patch policy failed: %s",
+                bid,
+                detail,
+            )
             self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-            repair_ids = (
-                repair_patch_check.protected_mechanism_ids
-                or repair_patch_check.proposed_mechanism_ids
+            attempt_kind, repair_ids, repair_policy_reason = (
+                self._repair_attempt_metadata(branch, detail)
             )
+            if not repair_ids:
+                repair_ids = (
+                    repair_patch_check.protected_mechanism_ids
+                    or repair_patch_check.proposed_mechanism_ids
+                )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -506,8 +516,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         prior_failure=prior_failure,
                     ),
                     counts_toward_max_rounds=False,
-                    attempt_kind="telemetry_repair",
-                    repair_policy_reason=repair_patch_check.reason,
+                    attempt_kind=attempt_kind,
+                    repair_policy_reason=(
+                        repair_policy_reason or repair_patch_check.reason
+                    ),
                     repair_mechanism_ids=repair_ids,
                 )
             )
@@ -517,9 +529,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     branch_id=bid,
                     reason=detail,
                     counts_toward_max_rounds=False,
-                    attempt_kind="telemetry_repair",
+                    attempt_kind=attempt_kind,  # type: ignore[arg-type]
                     repair_mechanism_ids=repair_ids,
-                    repair_policy_reason=repair_patch_check.reason,
+                    repair_policy_reason=(
+                        repair_policy_reason or repair_patch_check.reason
+                    ),
                 )
             )
 
@@ -795,13 +809,19 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             result.counts_toward_max_rounds = False
         return self._finish_status_progress(result)
 
-    @staticmethod
     def _repair_attempt_metadata(
+        self,
         branch: Branch,
         failure_detail: str | None,
     ) -> tuple[str, tuple[str, ...], str | None]:
         if _is_schema_quality_block_detail(failure_detail):
             return "schema_quality_block", (), str(failure_detail or "")
+        if BRANCH_LIFECYCLE_POLICY_VIOLATION in str(failure_detail or ""):
+            ids = branch_continuation_mechanism_ids(
+                branch,
+                getattr(self, "step_history", ()),
+            )
+            return "branch_lifecycle_policy", ids, str(failure_detail or "")
         if not branch_requires_repair_focus(branch):
             return "proposal_block", (), None
         repair_ids = branch_repair_mechanism_ids(branch)

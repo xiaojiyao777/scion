@@ -89,14 +89,26 @@ def test_generate_hypothesis_rejects_new_mechanism_on_suspect_branch() -> None:
     assert circuit.failures
 
 
-def test_generate_hypothesis_allows_active_no_effect_branch_with_marker() -> None:
+def test_generate_hypothesis_allows_active_no_effect_same_mechanism_followup() -> None:
     creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Tune bounded route-pair search after no-effect screening.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/bounded.py",
+        target_weakness="The existing bounded probe had no objective effect.",
+        expected_effect="Tune the same mechanism without adding a new one.",
+        mechanism_changes=(
+            MechanismChange(id="bounded_probe", change_type="modify"),
+        ),
+    )
     pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)
     branch.current_code_hash = "candidate-hash"
     branch.last_clean_code_hash = "candidate-hash"
     branch.branch_code_status = "active_no_effect"
     branch.last_screening_feedback_tier = "no_effect"
     branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
 
     hypothesis, record = pipeline.generate_hypothesis(branch)
 
@@ -106,10 +118,98 @@ def test_generate_hypothesis_allows_active_no_effect_branch_with_marker() -> Non
     hygiene = creative.hypothesis_context["branch_hygiene"]
     assert hygiene["branch_code_status"] == "active_no_effect"
     assert hygiene["repair_focus_required"] is False
-    assert hygiene["baseline_policy"] == "branch_workspace_allowed_with_marker"
+    assert hygiene["branch_followup_policy"] == "same_mechanism_followup_only"
+    assert hygiene["clean_fork_policy"] == "clean_fork_required_for_new_mechanism"
+    assert hygiene["branch_mechanism_ids"] == ["bounded_probe"]
+    assert hygiene["baseline_policy"] == (
+        "branch_workspace_same_mechanism_followup_only"
+    )
     assert "active_no_effect" in creative.hypothesis_context[
         "branch_hygiene_guidance"
     ]
+    assert "clean_fork_required_for_new_mechanism" in creative.hypothesis_context[
+        "branch_hygiene_guidance"
+    ]
+
+
+def test_generate_hypothesis_rejects_new_mechanism_on_active_no_effect_branch() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a distinct route perturbation after no-effect screening.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_probe.py",
+        mechanism_changes=(
+            MechanismChange(id="different_probe", change_type="add"),
+        ),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert "branch_lifecycle_policy_violation" in detail
+    assert "new_mechanism_requires_clean_fork" in detail
+    assert "bounded_probe" in detail
+    assert "different_probe" in detail
+    assert failures
+    assert "branch_lifecycle_policy_violation" in failures[-1][1].detail
+    assert circuit.failures
+
+
+def test_active_no_effect_policy_uses_step_history_mechanism_ids() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a distinct route perturbation after no-effect screening.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_probe.py",
+        mechanism_changes=(
+            MechanismChange(id="different_probe", change_type="add"),
+        ),
+    )
+    previous = HypothesisProposal(
+        hypothesis_text="Initial bounded probe.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/bounded.py",
+        mechanism_changes=(
+            MechanismChange(id="bounded_probe", change_type="add"),
+        ),
+    )
+    pipeline, branch, _, _, _, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+    pipeline.step_history = [
+        StepRecord(
+            round_num=1,
+            branch_id=branch.branch_id,
+            hypothesis=previous,
+            patch=None,
+            contract_passed=True,
+            verification_passed=True,
+            protocol_result=object(),
+            decision=None,
+            failure_stage=None,
+            failure_detail=None,
+        )
+    ]
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert "branch_lifecycle_policy_violation" in detail
+    assert "bounded_probe" in detail
+    assert "different_probe" in detail
 
 
 def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> None:

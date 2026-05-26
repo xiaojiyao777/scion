@@ -47,6 +47,7 @@ class CampaignLoop:
         telemetry_repair_attempts = 0
         telemetry_repair_attempt_counts: dict[str, int] = {}
         same_family_retry_attempts = 0
+        branch_lifecycle_policy_blocks = 0
         requested_rounds = max(1, int(max_rounds))
         proposal_quality_loop_limit = _proposal_quality_loop_limit(
             requested_rounds,
@@ -63,6 +64,7 @@ class CampaignLoop:
         telemetry_repairable_limit = requested_rounds * 2 + 4
         validation_repair_required_limit = requested_rounds + 2
         same_family_retry_limit = requested_rounds + 4
+        branch_lifecycle_policy_block_limit = requested_rounds + 4
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  Ordinary
         # proposal attempts have a hard cap; telemetry repair/diagnostic
@@ -75,6 +77,7 @@ class CampaignLoop:
             + telemetry_repairable_limit
             + validation_repair_required_limit
             + same_family_retry_limit
+            + branch_lifecycle_policy_block_limit
         )
 
         proposal_attempts_consumed_count = _initial_proposal_attempts(
@@ -125,6 +128,10 @@ class CampaignLoop:
                 telemetry_repair_attempts=telemetry_repair_attempts,
                 telemetry_repair_attempt_limit=telemetry_repair_attempt_limit,
                 telemetry_repair_attempt_counts=telemetry_repair_attempt_counts,
+                branch_lifecycle_policy_blocks=branch_lifecycle_policy_blocks,
+                branch_lifecycle_policy_block_limit=(
+                    branch_lifecycle_policy_block_limit
+                ),
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
@@ -201,6 +208,13 @@ class CampaignLoop:
                     repair_count = record_repair_attempt(result)
                     if repair_count >= telemetry_repair_attempt_limit:
                         final_reason = "telemetry_repair_attempt_budget_exhausted"
+                elif kind == "branch_lifecycle_policy":
+                    branch_lifecycle_policy_blocks += 1
+                    if (
+                        branch_lifecycle_policy_blocks
+                        >= branch_lifecycle_policy_block_limit
+                    ):
+                        final_reason = "branch_lifecycle_policy_loop"
                 elif kind == "same_family_retry":
                     consume_proposal_attempt()
                     same_family_retry_attempts += 1
@@ -274,6 +288,8 @@ def _attempt_kind(result: StepResult) -> str:
     if kind and kind != "screening":
         return kind
     reason = str(getattr(result, "reason", "") or "").lower()
+    if "branch_lifecycle_policy_violation" in reason:
+        return "branch_lifecycle_policy"
     if "repair_first_policy_violation" in reason:
         return "telemetry_repair"
     if (
@@ -385,6 +401,8 @@ def _campaign_loop_status(
     telemetry_repair_attempts: int,
     telemetry_repair_attempt_limit: int,
     telemetry_repair_attempt_counts: dict[str, int],
+    branch_lifecycle_policy_blocks: int,
+    branch_lifecycle_policy_block_limit: int,
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
@@ -424,6 +442,14 @@ def _campaign_loop_status(
         ),
         "telemetry_repair_attempts_by_branch_mechanism": dict(
             telemetry_repair_attempt_counts
+        ),
+        "branch_lifecycle_policy_blocks": max(
+            0,
+            int(branch_lifecycle_policy_blocks),
+        ),
+        "branch_lifecycle_policy_block_limit": max(
+            1,
+            int(branch_lifecycle_policy_block_limit),
         ),
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),

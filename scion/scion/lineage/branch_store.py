@@ -90,11 +90,12 @@ class BranchStore:
                  failure_codes, created_at, updated_at, direction,
                  weight_revision, branch_code_status,
                  last_screening_feedback_tier, last_telemetry_outcome,
+                 branch_mechanism_ids_json,
                  telemetry_repair_mechanism_ids_json,
                  telemetry_repair_attempts_json,
                  pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -114,6 +115,7 @@ class BranchStore:
                     branch.branch_code_status,
                     branch.last_screening_feedback_tier,
                     branch.last_telemetry_outcome,
+                    json.dumps(list(branch.branch_mechanism_ids or ())),
                     json.dumps(list(branch.telemetry_repair_mechanism_ids or ())),
                     json.dumps(dict(branch.telemetry_repair_attempts or {})),
                     1 if branch.pending_retry else 0,
@@ -165,6 +167,9 @@ class BranchStore:
             branch_code_status=d.get("branch_code_status") or "clean",
             last_screening_feedback_tier=d.get("last_screening_feedback_tier"),
             last_telemetry_outcome=d.get("last_telemetry_outcome"),
+            branch_mechanism_ids=_json_string_tuple(
+                d.get("branch_mechanism_ids_json")
+            ),
             telemetry_repair_mechanism_ids=_json_string_tuple(
                 d.get("telemetry_repair_mechanism_ids_json")
             ),

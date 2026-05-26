@@ -1,13 +1,17 @@
-"""Generic repair-first policy for telemetry-suspect branches."""
+"""Generic branch continuation policy for non-clean branches."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 from scion.core.branch_hygiene import (
+    CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
+    SAME_MECHANISM_FOLLOWUP_ONLY,
     WIRING_SUSPECT_REQUIRES_REPAIR,
+    branch_mechanism_ids,
     branch_requires_repair_focus,
+    branch_requires_same_mechanism_followup,
 )
 from scion.core.models import (
     Branch,
@@ -19,9 +23,11 @@ from scion.core.models import (
 
 
 REPAIR_FIRST_POLICY_VIOLATION = "repair_first_policy_violation"
+BRANCH_LIFECYCLE_POLICY_VIOLATION = "branch_lifecycle_policy_violation"
 REPAIR_INTENT_REQUIRED = "telemetry_wiring_trigger_repair_intent_required"
 NEW_MECHANISM_REQUIRES_CLEAN_FORK = "new_mechanism_requires_clean_fork"
 MISSING_DECLARED_REPAIR_MECHANISM = "missing_declared_repair_mechanism"
+MISSING_DECLARED_BRANCH_MECHANISM = "missing_declared_branch_mechanism"
 
 _TELEMETRY_REPAIR_TERMS = frozenset(
     {
@@ -45,6 +51,8 @@ class RepairPolicyCheck:
     reason: str = ""
     protected_mechanism_ids: tuple[str, ...] = ()
     proposed_mechanism_ids: tuple[str, ...] = ()
+    violation_code: str = REPAIR_FIRST_POLICY_VIOLATION
+    branch_followup_policy: str = SAME_MECHANISM_FOLLOWUP_ONLY
 
     @property
     def detail(self) -> str:
@@ -52,13 +60,23 @@ class RepairPolicyCheck:
             return ""
         protected = ",".join(self.protected_mechanism_ids) or "unknown"
         proposed = ",".join(self.proposed_mechanism_ids) or "none"
-        return (
-            f"{REPAIR_FIRST_POLICY_VIOLATION}: {self.reason}; "
-            f"repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}; "
-            f"repair_policy={REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK}; "
-            f"protected_mechanism_ids={protected}; "
-            f"proposed_mechanism_ids={proposed}"
+        parts = [f"{self.violation_code}: {self.reason}"]
+        if self.violation_code == REPAIR_FIRST_POLICY_VIOLATION:
+            parts.append(f"repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}")
+            parts.append(
+                f"repair_policy={REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK}"
+            )
+        else:
+            parts.append("repair_focus_required=false")
+        parts.extend(
+            [
+                f"branch_followup_policy={self.branch_followup_policy}",
+                f"clean_fork_policy={CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM}",
+                f"protected_mechanism_ids={protected}",
+                f"proposed_mechanism_ids={proposed}",
+            ]
         )
+        return "; ".join(parts)
 
 
 def mechanism_ids_for_repair(proposal: Any | None) -> tuple[str, ...]:
@@ -100,15 +118,105 @@ def branch_repair_mechanism_ids(
     return ()
 
 
+def branch_continuation_mechanism_ids(
+    branch: Branch | None,
+    step_history: Sequence[StepRecord] | None = None,
+) -> tuple[str, ...]:
+    """Return mechanism ids already attributed to a non-clean branch."""
+    if branch is None:
+        return ()
+    stored = branch_mechanism_ids(branch)
+    if stored:
+        return stored
+    repair_ids = branch_repair_mechanism_ids(branch, step_history)
+    if repair_ids:
+        return repair_ids
+    if not step_history:
+        return ()
+    ids: list[str] = []
+    for step in tuple(step_history):
+        if getattr(step, "branch_id", None) != branch.branch_id:
+            continue
+        if getattr(step, "protocol_result", None) is None:
+            continue
+        for mechanism_id in mechanism_ids_for_repair(
+            getattr(step, "hypothesis", None)
+        ):
+            ids.append(mechanism_id)
+    return tuple(dict.fromkeys(ids))
+
+
+def validate_branch_continuation_hypothesis(
+    branch: Branch | None,
+    hypothesis: HypothesisProposal | None,
+    *,
+    step_history: Sequence[StepRecord] | None = None,
+) -> RepairPolicyCheck:
+    """Enforce same-mechanism continuation on non-clean branches."""
+    if branch_requires_repair_focus(branch):
+        return _validate_repair_focused_hypothesis(
+            branch,
+            hypothesis,
+            step_history=step_history,
+        )
+    if not branch_requires_same_mechanism_followup(branch):
+        return RepairPolicyCheck(allowed=True)
+
+    protected = branch_continuation_mechanism_ids(branch, step_history)
+    proposed = mechanism_ids_for_repair(hypothesis)
+    if not protected:
+        return RepairPolicyCheck(
+            allowed=False,
+            reason=MISSING_DECLARED_BRANCH_MECHANISM,
+            protected_mechanism_ids=protected,
+            proposed_mechanism_ids=proposed,
+            violation_code=BRANCH_LIFECYCLE_POLICY_VIOLATION,
+        )
+    if not proposed:
+        return RepairPolicyCheck(
+            allowed=False,
+            reason=MISSING_DECLARED_BRANCH_MECHANISM,
+            protected_mechanism_ids=protected,
+            proposed_mechanism_ids=proposed,
+            violation_code=BRANCH_LIFECYCLE_POLICY_VIOLATION,
+        )
+    if not set(proposed).issubset(set(protected)):
+        return RepairPolicyCheck(
+            allowed=False,
+            reason=NEW_MECHANISM_REQUIRES_CLEAN_FORK,
+            protected_mechanism_ids=protected,
+            proposed_mechanism_ids=proposed,
+            violation_code=BRANCH_LIFECYCLE_POLICY_VIOLATION,
+        )
+    return RepairPolicyCheck(
+        allowed=True,
+        protected_mechanism_ids=protected,
+        proposed_mechanism_ids=proposed,
+        violation_code=BRANCH_LIFECYCLE_POLICY_VIOLATION,
+    )
+
+
 def validate_repair_focused_hypothesis(
     branch: Branch | None,
     hypothesis: HypothesisProposal | None,
     *,
     step_history: Sequence[StepRecord] | None = None,
 ) -> RepairPolicyCheck:
+    """Backward-compatible wrapper for branch continuation hypothesis policy."""
+    return validate_branch_continuation_hypothesis(
+        branch,
+        hypothesis,
+        step_history=step_history,
+    )
+
+
+def _validate_repair_focused_hypothesis(
+    branch: Branch | None,
+    hypothesis: HypothesisProposal | None,
+    *,
+    step_history: Sequence[StepRecord] | None = None,
+) -> RepairPolicyCheck:
     """Enforce repair-only hypothesis generation on telemetry-suspect branches."""
-    if not branch_requires_repair_focus(branch):
-        return RepairPolicyCheck(allowed=True)
     protected = branch_repair_mechanism_ids(branch, step_history)
     proposed = mechanism_ids_for_repair(hypothesis)
     if not protected:
@@ -146,20 +254,23 @@ def validate_repair_focused_hypothesis(
     )
 
 
-def validate_repair_focused_patch(
+def validate_branch_continuation_patch(
     branch: Branch | None,
     hypothesis: HypothesisProposal | None,
     patch: PatchProposal | None,
     *,
     step_history: Sequence[StepRecord] | None = None,
 ) -> RepairPolicyCheck:
-    """Enforce repair-only code output on telemetry-suspect branches."""
-    hypothesis_check = validate_repair_focused_hypothesis(
+    """Enforce branch-continuation code output on non-clean branches."""
+    hypothesis_check = validate_branch_continuation_hypothesis(
         branch,
         hypothesis,
         step_history=step_history,
     )
-    if not hypothesis_check.allowed or not branch_requires_repair_focus(branch):
+    if (
+        not hypothesis_check.allowed
+        or not branch_requires_same_mechanism_followup(branch)
+    ):
         return hypothesis_check
     protected = hypothesis_check.protected_mechanism_ids
     patch_ids = mechanism_ids_for_repair(patch)
@@ -169,8 +280,25 @@ def validate_repair_focused_patch(
             reason=NEW_MECHANISM_REQUIRES_CLEAN_FORK,
             protected_mechanism_ids=protected,
             proposed_mechanism_ids=patch_ids,
+            violation_code=hypothesis_check.violation_code,
         )
     return hypothesis_check
+
+
+def validate_repair_focused_patch(
+    branch: Branch | None,
+    hypothesis: HypothesisProposal | None,
+    patch: PatchProposal | None,
+    *,
+    step_history: Sequence[StepRecord] | None = None,
+) -> RepairPolicyCheck:
+    """Backward-compatible wrapper for branch continuation patch policy."""
+    return validate_branch_continuation_patch(
+        branch,
+        hypothesis,
+        patch,
+        step_history=step_history,
+    )
 
 
 def repair_attempt_key(
@@ -219,14 +347,19 @@ def _has_repair_intent(hypothesis: HypothesisProposal | None) -> bool:
 
 __all__ = [
     "MISSING_DECLARED_REPAIR_MECHANISM",
+    "MISSING_DECLARED_BRANCH_MECHANISM",
     "NEW_MECHANISM_REQUIRES_CLEAN_FORK",
+    "BRANCH_LIFECYCLE_POLICY_VIOLATION",
     "REPAIR_FIRST_POLICY_VIOLATION",
     "REPAIR_INTENT_REQUIRED",
     "RepairPolicyCheck",
+    "branch_continuation_mechanism_ids",
     "branch_repair_mechanism_ids",
     "mechanism_ids_for_repair",
     "repair_attempt_key",
     "repair_attempt_key_label",
+    "validate_branch_continuation_hypothesis",
+    "validate_branch_continuation_patch",
     "validate_repair_focused_hypothesis",
     "validate_repair_focused_patch",
 ]

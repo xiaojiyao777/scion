@@ -61,6 +61,7 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     clean = _branch("clean123456", branch_code_status="clean")
     no_effect = _branch("noeffect123", branch_code_status="active_no_effect")
     no_effect.last_telemetry_outcome = "no_objective_effect"
+    no_effect.branch_mechanism_ids = ("bounded_probe",)
 
     summary = _summarise_siblings([clean, no_effect])
     prompt = _hypothesis_prompt_user_text(summary)
@@ -77,6 +78,9 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "branch_code_status=active_no_effect" in no_effect_line
     assert "last_telemetry_outcome=no_objective_effect" in no_effect_line
     assert "repair_focus_required=false" in no_effect_line
-    assert "baseline_policy=branch_workspace_allowed_with_marker" in no_effect_line
+    assert "branch_followup_policy=same_mechanism_followup_only" in no_effect_line
+    assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in no_effect_line
+    assert "branch_mechanism_ids=bounded_probe" in no_effect_line
+    assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
     assert "branch_code_status=clean" not in no_effect_line
     assert "baseline_policy=clean" not in no_effect_line

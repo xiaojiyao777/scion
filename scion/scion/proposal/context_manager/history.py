@@ -198,6 +198,15 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
         parts.append(f"repair_focus={context['repair_focus_reason']}")
     if repair_focus_required and context.get("repair_policy"):
         parts.append(f"repair_policy={context['repair_policy']}")
+    if context.get("branch_followup_policy"):
+        parts.append(f"branch_followup_policy={context['branch_followup_policy']}")
+    if context.get("clean_fork_policy"):
+        parts.append(f"clean_fork_policy={context['clean_fork_policy']}")
+    if context.get("branch_mechanism_ids"):
+        parts.append(
+            "branch_mechanism_ids="
+            + ",".join(str(item) for item in context["branch_mechanism_ids"])
+        )
     if context.get("baseline_policy"):
         parts.append(f"baseline_policy={context['baseline_policy']}")
     return " ".join(parts)

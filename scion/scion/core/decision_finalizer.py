@@ -331,6 +331,10 @@ class DecisionFinalizer:
             repair_mechanism_ids = mechanism_ids_for_repair(hypothesis)
             branch.branch_code_status = "telemetry_wiring_suspect"
             branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+            branch.branch_mechanism_ids = _merge_mechanism_ids(
+                getattr(branch, "branch_mechanism_ids", ()) or (),
+                repair_mechanism_ids,
+            )
             branch.telemetry_repair_mechanism_ids = repair_mechanism_ids
             attempts = dict(getattr(branch, "telemetry_repair_attempts", {}) or {})
             for mechanism_id in repair_mechanism_ids or ("unknown",):
@@ -339,9 +343,14 @@ class DecisionFinalizer:
         elif preserve_low_signal_branch and screening_feedback is not None:
             branch.branch_code_status = f"active_{screening_feedback.tier}"
             branch.last_telemetry_outcome = screening_feedback.effect_status
+            branch.branch_mechanism_ids = _merge_mechanism_ids(
+                getattr(branch, "branch_mechanism_ids", ()) or (),
+                mechanism_ids_for_repair(hypothesis),
+            )
             branch.telemetry_repair_mechanism_ids = ()
         elif not preserve_low_signal_branch:
             branch.branch_code_status = "discarded"
+            branch.branch_mechanism_ids = ()
             branch.telemetry_repair_mechanism_ids = ()
         preserve_workspace = verification_passed and preserve_low_signal_branch
 
@@ -553,6 +562,18 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _merge_mechanism_ids(
+    existing: tuple[str, ...],
+    proposed: tuple[str, ...],
+) -> tuple[str, ...]:
+    ids = [
+        str(item).strip()
+        for item in (*tuple(existing or ()), *tuple(proposed or ()))
+        if str(item).strip()
+    ]
+    return tuple(dict.fromkeys(ids))
 
 
 def _telemetry_repair_stage(

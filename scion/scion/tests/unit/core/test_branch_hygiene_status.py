@@ -84,3 +84,26 @@ def test_activation_missing_outcome_requires_repair_even_if_status_is_clean() ->
 
     assert payload["repair_focus_required"] is True
     assert payload["baseline_policy"] == "champion_required_for_repair"
+
+
+def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> None:
+    branch = Branch(
+        branch_id="active-no-effect",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        last_telemetry_outcome="no_objective_effect",
+        branch_mechanism_ids=("bounded_probe",),
+    )
+
+    payload = branch_hygiene_context(branch)
+
+    assert payload["repair_focus_required"] is False
+    assert payload["branch_followup_policy"] == "same_mechanism_followup_only"
+    assert payload["clean_fork_policy"] == "clean_fork_required_for_new_mechanism"
+    assert payload["branch_mechanism_ids"] == ["bounded_probe"]
+    assert payload["baseline_policy"] == (
+        "branch_workspace_same_mechanism_followup_only"
+    )

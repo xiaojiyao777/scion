@@ -105,6 +105,9 @@ class LineageRecorderMixin:
                 None,
             ),
             "last_telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
+            "branch_mechanism_ids": list(
+                getattr(branch, "branch_mechanism_ids", ()) or ()
+            ),
             "telemetry_repair_mechanism_ids": list(
                 getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
             ),
@@ -227,6 +230,9 @@ class LineageRecorderMixin:
                     branch,
                     "last_telemetry_outcome",
                     None,
+                ),
+                "branch_mechanism_ids": list(
+                    getattr(branch, "branch_mechanism_ids", ()) or ()
                 ),
                 "telemetry_repair_mechanism_ids": list(
                     getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()

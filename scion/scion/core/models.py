@@ -402,6 +402,7 @@ class Branch:
     branch_code_status: str = "clean"
     last_screening_feedback_tier: Optional[str] = None
     last_telemetry_outcome: Optional[str] = None
+    branch_mechanism_ids: Tuple[str, ...] = ()
     telemetry_repair_mechanism_ids: Tuple[str, ...] = ()
     telemetry_repair_attempts: Dict[str, int] = field(default_factory=dict)
     # FailureRouter recovery fields

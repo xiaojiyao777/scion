@@ -14,11 +14,23 @@ WIRING_SUSPECT_REQUIRES_REPAIR = "wiring_suspect_requires_repair"
 REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK = (
     "repair_first_same_mechanism_or_clean_fork"
 )
+SAME_MECHANISM_FOLLOWUP_ONLY = "same_mechanism_followup_only"
+CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
+    "clean_fork_required_for_new_mechanism"
+)
+OPEN_EXPLORATION_ALLOWED = "open_exploration_allowed"
 
 SUSPECT_BRANCH_CODE_STATUSES = frozenset(
     {
         TELEMETRY_WIRING_SUSPECT,
         TELEMETRY_INVALID,
+    }
+)
+FOLLOWUP_ONLY_BRANCH_CODE_STATUSES = frozenset(
+    {
+        *SUSPECT_BRANCH_CODE_STATUSES,
+        "active_no_effect",
+        "active_runtime_regression",
     }
 )
 
@@ -39,6 +51,36 @@ def branch_requires_repair_focus(branch: Branch | None) -> bool:
         branch_code_status(branch) in SUSPECT_BRANCH_CODE_STATUSES
         or telemetry_outcome == ACTIVATION_MISSING_OR_WIRING_SUSPECT
     )
+
+
+def branch_requires_same_mechanism_followup(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    status = branch_code_status(branch)
+    return (
+        status in FOLLOWUP_ONLY_BRANCH_CODE_STATUSES
+        or status.startswith("active_")
+        or branch_requires_repair_focus(branch)
+    )
+
+
+def branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:
+    if branch is None:
+        return ()
+    ids = [
+        str(item).strip()
+        for item in (getattr(branch, "branch_mechanism_ids", ()) or ())
+        if str(item).strip()
+    ]
+    if not ids:
+        ids = [
+            str(item).strip()
+            for item in (
+                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+            )
+            if str(item).strip()
+        ]
+    return tuple(dict.fromkeys(ids))
 
 
 def branch_allows_clean_workspace_reuse(branch: Branch | None) -> bool:
@@ -69,11 +111,24 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         else None
     )
     repair_focus_required = branch_requires_repair_focus(branch)
+    same_mechanism_followup_required = branch_requires_same_mechanism_followup(
+        branch
+    )
+    followup_policy = (
+        SAME_MECHANISM_FOLLOWUP_ONLY
+        if same_mechanism_followup_required
+        else OPEN_EXPLORATION_ALLOWED
+    )
+    clean_fork_policy = (
+        CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM
+        if same_mechanism_followup_required
+        else None
+    )
     if repair_focus_required:
         baseline_policy = "champion_required_for_repair"
         repair_focus_reason = WIRING_SUSPECT_REQUIRES_REPAIR
     elif status.startswith("active_"):
-        baseline_policy = "branch_workspace_allowed_with_marker"
+        baseline_policy = "branch_workspace_same_mechanism_followup_only"
         repair_focus_reason = None
     else:
         baseline_policy = "clean"
@@ -89,6 +144,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             if repair_focus_required
             else None
         ),
+        "branch_followup_policy": followup_policy,
+        "clean_fork_policy": clean_fork_policy,
+        "branch_mechanism_ids": list(branch_mechanism_ids(branch)),
         "repair_mechanism_ids": list(
             getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
         )
@@ -115,6 +173,8 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"screening_tier={tier}; "
             f"repair_focus={context['repair_focus_reason']}; "
             f"repair_policy={context['repair_policy']}; "
+            f"branch_followup_policy={context['branch_followup_policy']}; "
+            f"clean_fork_policy={context['clean_fork_policy']}; "
             "do not treat the existing branch workspace as a clean baseline. "
             "Continue only as a repair-focused attempt against champion code: "
             "fix declared telemetry activation/budget wiring or choose a new "
@@ -124,16 +184,22 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
-            f"{context['baseline_policy']}. This is an active branch outcome, "
-            "not telemetry wiring failure; branch workspace may be reused with "
-            "the marker visible."
+            f"{context['baseline_policy']}; branch_followup_policy="
+            f"{context['branch_followup_policy']}; clean_fork_policy="
+            f"{context['clean_fork_policy']}. This is an active branch outcome; "
+            "reuse the branch workspace only for the same declared mechanism. "
+            "A different mechanism requires a clean branch or clean fork."
         )
     return ""
 
 
 __all__ = [
     "ACTIVATION_MISSING_OR_WIRING_SUSPECT",
+    "CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM",
+    "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
+    "OPEN_EXPLORATION_ALLOWED",
     "REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK",
+    "SAME_MECHANISM_FOLLOWUP_ONLY",
     "SUSPECT_BRANCH_CODE_STATUSES",
     "TELEMETRY_INVALID",
     "TELEMETRY_WIRING_SUSPECT",
@@ -142,6 +208,8 @@ __all__ = [
     "branch_code_status",
     "branch_hygiene_context",
     "branch_hygiene_guidance",
+    "branch_mechanism_ids",
     "branch_requires_repair_focus",
+    "branch_requires_same_mechanism_followup",
     "branch_workspace_for_proposal",
 ]

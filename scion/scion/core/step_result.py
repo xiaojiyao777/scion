@@ -29,6 +29,7 @@ class StepResult:
         "proposal_block",
         "proposal_retry",
         "schema_quality_block",
+        "branch_lifecycle_policy",
         "telemetry_repair",
         "telemetry_repairable",
         "validation_repair_required",
