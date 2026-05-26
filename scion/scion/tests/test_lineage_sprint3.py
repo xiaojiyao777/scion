@@ -211,6 +211,8 @@ class TestBranchStore:
         b.branch_code_status = "active_no_effect"
         b.last_screening_feedback_tier = "no_effect"
         b.last_telemetry_outcome = "no_objective_effect"
+        b.telemetry_repair_mechanism_ids = ("probe",)
+        b.telemetry_repair_attempts = {"probe": 2}
         b.pending_retry = True
         b.blocked_rounds = 2
         b.consecutive_llm_retries = 1
@@ -227,6 +229,8 @@ class TestBranchStore:
         assert loaded.branch_code_status == "active_no_effect"
         assert loaded.last_screening_feedback_tier == "no_effect"
         assert loaded.last_telemetry_outcome == "no_objective_effect"
+        assert loaded.telemetry_repair_mechanism_ids == ("probe",)
+        assert loaded.telemetry_repair_attempts == {"probe": 2}
         assert loaded.pending_retry is True
         assert loaded.blocked_rounds == 2
         assert loaded.consecutive_llm_retries == 1

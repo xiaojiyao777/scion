@@ -62,6 +62,11 @@ class CvrpAdapter:
 
         return CvrpContractCheckProvider()
 
+    def active_subject_policy_provider(self) -> Any:
+        from scion.problems.cvrp.contract_checks import CvrpContractCheckProvider
+
+        return CvrpContractCheckProvider()
+
     def solver_design_prompt_provider(self) -> Any:
         from scion.problems.cvrp.solver_design_provider import (
             CvrpSolverDesignProvider,

@@ -53,6 +53,10 @@ from scion.contract.schema import (
 )
 from scion.contract.surface_access import SurfaceAccess
 from scion.contract.surface_interface import check_surface_interface
+from scion.problem.providers import (
+    active_subject_policy_matches_path,
+    active_subject_policy_payload,
+)
 
 # Legacy fallback for pre-research_surfaces-v2 problem specs.  New v2 surfaces
 # should declare bounds.complexity_scale_terms instead of relying on these names.
@@ -240,7 +244,12 @@ class ContractGate:
             )
         )
         checks.append(self._c8_import_whitelist(patch, patch_graph=patch_graph))
-        checks.append(self._c9_sensitive_api(patch))
+        checks.append(
+            self._c9_sensitive_api(
+                patch,
+                selected_surface=selected_surface,
+            )
+        )
         checks.append(
             self._c9d_surface_instance_identity(
                 patch,
@@ -412,8 +421,18 @@ class ContractGate:
     # C9: Sensitive API detection
     # ------------------------------------------------------------------
 
-    def _c9_sensitive_api(self, patch: PatchProposal) -> CheckResult:
-        return check_sensitive_api(patch)
+    def _c9_sensitive_api(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> CheckResult:
+        return check_sensitive_api(
+            patch,
+            forbidden_entrypoint_calls=self._forbidden_entrypoint_calls(
+                selected_surface=selected_surface,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # C9d: Surface policy/config code must not branch on case identity.
@@ -589,14 +608,8 @@ class ContractGate:
 
     def _is_solver_design_patch_path(self, file_rel: str) -> bool:
         normalized = str(file_rel or "").replace("\\", "/").lstrip("/")
-        if normalized in {
-            "policies/baseline_algorithm.py",
-            "policies/solver_algorithm.py",
-        }:
-            return True
-        if normalized.startswith("policies/baseline_modules/") and normalized.endswith(
-            ".py"
-        ):
+        policy = self._active_subject_policy()
+        if active_subject_policy_matches_path(policy, normalized):
             return True
         surface = self._surface_access.surface_for_patch_path(normalized)
         if surface is None:
@@ -609,6 +622,27 @@ class ContractGate:
             "solver_design",
             "solver_algorithm",
         }
+
+    def _active_subject_policy(
+        self,
+        *,
+        selected_surface: str | None = None,
+    ) -> dict[str, Any]:
+        return active_subject_policy_payload(
+            problem_spec=self._spec,
+            surface=selected_surface,
+        )
+
+    def _forbidden_entrypoint_calls(
+        self,
+        *,
+        selected_surface: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        policy = self._active_subject_policy(selected_surface=selected_surface)
+        calls = policy.get("forbidden_entrypoint_calls")
+        if not isinstance(calls, tuple):
+            return ()
+        return tuple(item for item in calls if isinstance(item, dict))
 
     def _surface_disallows_instance_name(self, surface: Any | None) -> bool:
         if surface is None:

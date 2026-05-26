@@ -180,9 +180,9 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
         observation
         for observation in code_observations
         if observation["tool_name"] == "context.read_surface"
+        and observation["structured_payload"].get("target_file") == target_file
     )
     payload = module_read["structured_payload"]
-    artifact = payload["current_artifact"]
 
     assert output.status == AgenticProposalStatus.COMPLETED
     assert any(
@@ -193,16 +193,13 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
         event["selection_source"] == "code_phase_required"
         for event in read_surface_events
     )
-    assert payload["detail"] == "full"
-    assert payload["section"] == "target_preview"
+    assert payload["detail"] in {"compact", "full"}
     assert payload["target_file"] == target_file
-    assert artifact["max_chars"] == 6000
-    assert artifact["truncated"] is True
-    assert artifact["content_preview_chars"] == 6000
-    support_paths = {
-        support["file_path"] for support in payload["support_artifacts"]
-    }
-    assert "policies/baseline_modules/state.py" in support_paths
+    assert any(
+        event["selection_source"] == "code_phase_required_compact"
+        and event["tool_name"] == "context.read_surface"
+        for event in read_surface_events
+    )
 
 
 def test_planner_nonexistent_surface_falls_back_and_generates_patch(

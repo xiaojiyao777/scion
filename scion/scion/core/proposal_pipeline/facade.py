@@ -10,6 +10,7 @@ from scion.core.branch_hygiene import (
     branch_hygiene_guidance,
     branch_workspace_for_proposal,
 )
+from scion.core.branch_repair_policy import validate_repair_focused_hypothesis
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -263,6 +264,19 @@ class ProposalPipeline(
                 FailureEvent(category="proposal", detail=boundary_detail),
             )
             self.circuit_breaker.record_failure(boundary_detail)
+            return None, None
+        repair_check = validate_repair_focused_hypothesis(
+            branch,
+            hypothesis,
+            step_history=self.step_history,
+        )
+        if not repair_check.allowed:
+            self.hypothesis_failure_details[bid] = repair_check.detail
+            self.handle_failure(
+                branch,
+                FailureEvent(category="proposal", detail=repair_check.detail),
+            )
+            self.circuit_breaker.record_failure(repair_check.detail)
             return None, None
 
         self.circuit_breaker.record_success()

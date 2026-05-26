@@ -109,6 +109,46 @@ def test_hypothesis_mechanism_changes_parse_and_format():
     assert "search_seed" in formatted
 
 
+def test_hypothesis_mechanism_changes_deduplicate_exact_duplicates():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "modify"},
+            {"id": "search_seed", "change_type": "modify"},
+        ],
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", "modify")
+    ]
+
+
+def test_hypothesis_mechanism_changes_conflicting_duplicate_is_schema_quality_block():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "add"},
+            {"id": "search_seed", "change_type": "modify"},
+        ],
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_hypothesis(raw)
+
+    message = str(excinfo.value)
+    assert "schema_quality_block" in message
+    assert "mechanism_changes_duplicate_id_conflict" in message
+    assert "Schema-only retry" in message
+
+
 def test_hypothesis_mechanism_changes_reject_bad_id_and_type():
     raw = {
         "hypothesis_text": "Modify a declared generic mechanism.",
@@ -262,14 +302,14 @@ def test_patch_validation_whitespace_code():
 def test_valid_patch_passes_validation():
     """Valid patch dict should return a PatchProposal."""
     raw = {
-        "file_path": "operators/local_search.py",
-        "action": "modify",
+        "file_path": "operators/new_local_search.py",
+        "action": "create",
         "code_content": "class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
         "test_hint": None,
     }
     result = _parse_patch(raw)
-    assert result.file_path == "operators/local_search.py"
-    assert result.action == "modify"
+    assert result.file_path == "operators/new_local_search.py"
+    assert result.action == "create"
     assert "LocalSearch" in result.code_content
 
 
@@ -295,7 +335,10 @@ def test_patch_mechanism_changes_parse_and_schema_is_optional():
         ],
     }
 
-    result = _parse_patch(raw)
+    result = _parse_patch(
+        raw,
+        context={"allow_host_internal_full_file_modify": True},
+    )
 
     assert result.mechanism_changes[0].id == "search_seed"
     assert result.mechanism_changes[0].change_type == "integrate"
@@ -314,7 +357,7 @@ def test_patch_mechanism_changes_reject_bad_id():
     }
 
     with pytest.raises(ProposalValidationError, match="mechanism id"):
-        _parse_patch(raw)
+        _parse_patch(raw, context={"allow_host_internal_full_file_modify": True})
 
 
 def test_patch_rejects_additional_changes_json_string_for_shape_retry():

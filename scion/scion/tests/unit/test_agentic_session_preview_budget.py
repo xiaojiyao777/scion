@@ -453,7 +453,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
         ],
         hypothesis=hypothesis,
     )
-    config = AgenticToolLoopConfig(max_observation_chars=96000)
+    config = AgenticToolLoopConfig(max_observation_chars=160000)
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),

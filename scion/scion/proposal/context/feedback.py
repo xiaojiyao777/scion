@@ -334,7 +334,7 @@ def _build_experiment_history(
                 )
             if tier_summary.why_not_promoted:
                 line += (
-                    "\n    why_not_promoted: "
+                    "\n    screening_gate_reason: "
                     + tier_summary.why_not_promoted
                 )
             pair_split = _screening_pair_case_split(pr)

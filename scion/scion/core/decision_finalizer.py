@@ -7,7 +7,11 @@ from dataclasses import dataclass, replace
 from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
-from scion.core.branch_hygiene import WIRING_SUSPECT_REQUIRES_REPAIR
+from scion.core.branch_hygiene import (
+    REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
+    WIRING_SUSPECT_REQUIRES_REPAIR,
+)
+from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_WEAK_SIGNAL_CONTINUE,
@@ -324,13 +328,21 @@ class DecisionFinalizer:
         if screening_feedback is not None and screening_feedback.case_total:
             branch.last_screening_feedback_tier = screening_feedback.tier
         if telemetry_repairable:
+            repair_mechanism_ids = mechanism_ids_for_repair(hypothesis)
             branch.branch_code_status = "telemetry_wiring_suspect"
             branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+            branch.telemetry_repair_mechanism_ids = repair_mechanism_ids
+            attempts = dict(getattr(branch, "telemetry_repair_attempts", {}) or {})
+            for mechanism_id in repair_mechanism_ids or ("unknown",):
+                attempts[mechanism_id] = int(attempts.get(mechanism_id, 0)) + 1
+            branch.telemetry_repair_attempts = attempts
         elif preserve_low_signal_branch and screening_feedback is not None:
             branch.branch_code_status = f"active_{screening_feedback.tier}"
             branch.last_telemetry_outcome = screening_feedback.effect_status
+            branch.telemetry_repair_mechanism_ids = ()
         elif not preserve_low_signal_branch:
             branch.branch_code_status = "discarded"
+            branch.telemetry_repair_mechanism_ids = ()
         preserve_workspace = verification_passed and preserve_low_signal_branch
 
         if not preserve_workspace:
@@ -354,9 +366,25 @@ class DecisionFinalizer:
 
         if not telemetry_repairable:
             self.branch_hypotheses.pop(bid, None)
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                (
+                    "screening_no_effect"
+                    if preserve_low_signal_branch
+                    and screening_feedback is not None
+                    and screening_feedback.tier == "no_effect"
+                    else "rejected"
+                ),
+            )
         else:
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
+            self.hypothesis_store.mark_status(
+                h_record.hypothesis_id,
+                (
+                    "validation_telemetry_failed"
+                    if telemetry_repair_stage == "validation"
+                    else "screening_telemetry_failed"
+                ),
+            )
         if branch.state not in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE):
             try:
                 self.branch_controller.apply_decision(bid, decision)
@@ -379,6 +407,8 @@ class DecisionFinalizer:
             reason = (
                 f"{reason_code}: repair declared mechanism telemetry on the "
                 f"same branch; repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}; "
+                f"repair_policy={REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK}; "
+                f"repair_mechanism_ids={','.join(repair_mechanism_ids) or 'unknown'}; "
                 f"branch_code_status={branch.branch_code_status}; "
                 f"telemetry_outcome={branch.last_telemetry_outcome}"
             )
@@ -394,6 +424,7 @@ class DecisionFinalizer:
                 else "CONTINUE_EXPLORE: re-propose next step"
             )
             attempt_kind = "screening"
+            repair_mechanism_ids = ()
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
             branch_id=bid,
@@ -401,6 +432,10 @@ class DecisionFinalizer:
             reason=reason,
             counts_toward_max_rounds=not telemetry_repairable,
             attempt_kind=attempt_kind,  # type: ignore[arg-type]
+            repair_mechanism_ids=repair_mechanism_ids,
+            repair_policy_reason=(
+                WIRING_SUSPECT_REQUIRES_REPAIR if telemetry_repairable else ""
+            ),
         )
 
     def _promote(

@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 _MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _MECHANISM_CHANGE_TYPES = ("add", "modify", "replace", "remove", "integrate")
+MECHANISM_SCHEMA_QUALITY_BLOCK = "schema_quality_block"
+MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
 _EXPECTED_TELEMETRY_CATEGORIES = ("activity", "activation", "effect", "budget")
 _EXPECTED_TELEMETRY_CATEGORY_TEXT = ", ".join(_EXPECTED_TELEMETRY_CATEGORIES)
 _EXPECTED_TELEMETRY_DESCRIPTION = (
@@ -84,6 +86,61 @@ def _empty_mechanism_changes_to_list(value: Any) -> Any:
     return [] if value in (None, "") else value
 
 
+def _normalize_mechanism_changes_preflight(value: Any) -> Any:
+    """Deduplicate safely repairable mechanism rows before schema validation."""
+
+    value = _empty_mechanism_changes_to_list(value)
+    if not isinstance(value, list):
+        return value
+
+    normalized: list[Any] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    change_types_by_id: dict[str, set[str]] = {}
+    for item in value:
+        mechanism_id, change_type = _mechanism_change_identity(item)
+        if not mechanism_id or not change_type:
+            normalized.append(item)
+            continue
+        change_types_by_id.setdefault(mechanism_id, set()).add(change_type)
+        pair = (mechanism_id, change_type)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        normalized.append(item)
+
+    conflicts = {
+        mechanism_id: sorted(change_types)
+        for mechanism_id, change_types in change_types_by_id.items()
+        if len(change_types) > 1
+    }
+    if conflicts:
+        rendered = "; ".join(
+            f"{mechanism_id}={','.join(change_types)}"
+            for mechanism_id, change_types in sorted(conflicts.items())
+        )
+        raise ValueError(
+            f"{MECHANISM_SCHEMA_QUALITY_BLOCK}: "
+            f"{MECHANISM_DUPLICATE_ID_CONFLICT}: "
+            "mechanism_changes repeats id values with conflicting "
+            f"change_type values: {rendered}. Schema-only retry: preserve the "
+            "same hypothesis, target_file, and mechanism id; emit exactly one "
+            "mechanism_changes object per id with the intended change_type."
+        )
+    return normalized
+
+
+def _mechanism_change_identity(item: Any) -> tuple[str, str]:
+    if isinstance(item, dict):
+        return (
+            str(item.get("id") or "").strip(),
+            str(item.get("change_type") or "").strip(),
+        )
+    return (
+        str(getattr(item, "id", "") or "").strip(),
+        str(getattr(item, "change_type", "") or "").strip(),
+    )
+
+
 def _validate_unique_mechanism_change_ids(
     changes: list[MechanismChangeInput],
 ) -> None:
@@ -102,6 +159,9 @@ __all__ = [
     "MechanismChangeType",
     "_EXPECTED_TELEMETRY_DESCRIPTION",
     "_empty_mechanism_changes_to_list",
+    "_normalize_mechanism_changes_preflight",
     "_mechanism_changes_json_schema",
     "_validate_unique_mechanism_change_ids",
+    "MECHANISM_DUPLICATE_ID_CONFLICT",
+    "MECHANISM_SCHEMA_QUALITY_BLOCK",
 ]

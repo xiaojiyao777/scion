@@ -165,14 +165,13 @@ def _entry_matches_args(
     normalized_args: Mapping[str, Any],
 ) -> bool:
     if tool_name in ACTIVE_SOLVER_METADATA_TOOLS:
-        surface = str(normalized_args.get("surface") or "solver_design")
+        surface = str(normalized_args.get("surface") or "").strip()
+        subject_id = str(normalized_args.get("subject_id") or "").strip()
         observed = entry.get("normalized_args")
-        observed_surface = (
-            str(observed.get("surface") or "solver_design")
-            if isinstance(observed, Mapping)
-            else "solver_design"
-        )
-        return surface == observed_surface
+        observed_args = observed if isinstance(observed, Mapping) else {}
+        observed_surface = str(observed_args.get("surface") or "").strip()
+        observed_subject_id = str(observed_args.get("subject_id") or "").strip()
+        return surface == observed_surface and subject_id == observed_subject_id
     if tool_name == "context.read_algorithm_file":
         return normalize_path(entry.get("file_path")) == normalize_path(
             normalized_args.get("file_path")

@@ -54,6 +54,7 @@ def test_sibling_prompt_projection_includes_suspect_repair_focus() -> None:
     )
     assert "repair_focus_required=true" in prompt
     assert "repair_focus=wiring_suspect_requires_repair" in prompt
+    assert "repair_policy=repair_first_same_mechanism_or_clean_fork" in prompt
 
 
 def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:

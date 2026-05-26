@@ -6,6 +6,7 @@ from scion.core.models import (
     Branch,
     BranchState,
     CheckResult,
+    ContractResult,
     Decision,
     HypothesisProposal,
     HypothesisRecord,
@@ -329,6 +330,107 @@ def test_duplicate_mechanism_pre_screen_block_is_not_code_generation_failure() -
     assert steps[0].failure_detail == detail
     assert "duplicate_mechanism" in steps[0].failure_detail
     assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
+
+
+def test_schema_quality_block_does_not_create_pending_code_retry() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "schema_quality_block: mechanism_changes_duplicate_id_conflict: "
+        "mechanism_changes repeats id values"
+    )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (None, None),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "agent_quality_blocked"
+    assert result.attempt_kind == "schema_quality_block"
+    assert result.counts_toward_max_rounds is False
+    assert pending == {}
+    assert steps[0].failure_stage == "agent_quality_blocked"
+    assert steps[0].attempt_kind == "schema_quality_block"
+    assert "mechanism_changes_duplicate_id_conflict" in (steps[0].failure_detail or "")
+
+
+def test_patch_contract_failure_marks_contract_failed_status() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    patch = PatchProposal(
+        file_path="operators/local_search.py",
+        action="modify",
+        code_content="def solve():\n    return None\n",
+    )
+    steps: list[StepRecord] = []
+
+    class FailingPatchContractGate:
+        def validate_hypothesis(self, *args, **kwargs) -> ContractResult:
+            return ContractResult(
+                passed=True,
+                checks=(CheckResult("C", True, "light", "ok", 0),),
+            )
+
+        def validate_patch(self, *args, **kwargs) -> ContractResult:
+            return ContractResult(
+                passed=False,
+                checks=(CheckResult("P", False, "light", "bad", 0),),
+                failure_reason="C9_security failed",
+            )
+
+    pipeline = _pipeline(
+        pending={},
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: patch,
+        record_step=steps.append,
+    )
+    pipeline.contract_gate = FailingPatchContractGate()
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "patch contract failed"
+    assert pipeline._test_store.statuses == [("hyp-1", "contract_failed")]
+    assert steps[0].failure_stage == "patch_contract"
+
+
+def test_algorithm_smoke_quality_block_marks_smoke_failed_status() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "agentic_proposal:code_generation_failed: agent_quality_blocked:"
+        "algorithm_smoke_failure:algorithm_smoke_failure: "
+        "algorithm smoke did not pass"
+    )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "agent_quality_blocked"
+    assert pipeline._test_store.statuses == [("hyp-1", "smoke_failed")]
+    assert steps[0].failure_stage == "agent_quality_blocked"
 
 
 def test_agentic_session_timeout_hypothesis_failure_does_not_stop_campaign() -> None:

@@ -146,8 +146,9 @@ def _mechanism_telemetry_static_preview(
                 "Declared mechanism "
                 f"{mechanism!r} requires direct activation instrumentation via "
                 f"context.record_iteration('{mechanism}', positive_count) or "
-                f"context.record_phase('{mechanism}', positive_elapsed_ms); "
-                "context.record_move alone is effect telemetry, not activation."
+                f"context.record_phase('{mechanism}', measured_elapsed_ms_delta) "
+                "on the natural mechanism path; context.record_move alone is "
+                "effect telemetry, not activation."
             )
             _add_required_call(
                 required_calls,
@@ -157,7 +158,7 @@ def _mechanism_telemetry_static_preview(
             _add_required_call(
                 required_calls,
                 mechanism,
-                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+                f"context.record_phase('{mechanism}', measured_elapsed_ms_delta)",
             )
         if calls.get("record_phase_zero_literal") and not calls.get(
             "record_phase_runtime_evidence"
@@ -167,24 +168,26 @@ def _mechanism_telemetry_static_preview(
                 "Declared mechanism "
                 f"{mechanism!r} records context.record_phase with a literal "
                 "zero/non-positive elapsed_ms value; phase/runtime evidence must "
-                "use the measured positive duration of the mechanism path."
+                "use the measured duration delta of the mechanism path and must "
+                "not be made positive artificially."
             )
             _add_required_call(
                 required_calls,
                 mechanism,
-                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+                f"context.record_phase('{mechanism}', measured_elapsed_ms_delta)",
             )
         if mechanism_budget_fields and not calls.get("record_phase_runtime_evidence"):
             issue_codes.append(_ISSUE_MISSING_RUNTIME)
             issues.append(
                 "Declared mechanism "
                 f"{mechanism!r} requires context.record_phase('{mechanism}', "
-                "positive_elapsed_ms) as budget/runtime evidence."
+                "measured_elapsed_ms_delta) as supporting budget/runtime "
+                "evidence on the natural path; do not fake positive runtime."
             )
             _add_required_call(
                 required_calls,
                 mechanism,
-                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+                f"context.record_phase('{mechanism}', measured_elapsed_ms_delta)",
             )
         if mechanism_effect_fields and not calls.get("record_move"):
             issue_codes.append(_ISSUE_MISSING_EFFECT)

@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from scion.core.branch_repair_policy import repair_attempt_key_label
 from scion.core.step_result import StepResult
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class CampaignLoop:
     wait_weight_opt_all: Callable[[float], None]
     proposal_quality_loop_limit: int | None = None
     proposal_attempt_limit: int | None = None
+    telemetry_repair_attempt_limit: int | None = None
     get_proposal_attempts: Callable[[], int] | None = None
 
     def run(self, max_rounds: int = 1000) -> None:
@@ -42,6 +44,8 @@ class CampaignLoop:
         proposal_quality_blocked_attempts = 0
         telemetry_repairable_attempts = 0
         validation_repair_required_attempts = 0
+        telemetry_repair_attempts = 0
+        telemetry_repair_attempt_counts: dict[str, int] = {}
         same_family_retry_attempts = 0
         requested_rounds = max(1, int(max_rounds))
         proposal_quality_loop_limit = _proposal_quality_loop_limit(
@@ -52,14 +56,18 @@ class CampaignLoop:
             requested_rounds,
             configured=self.proposal_attempt_limit,
         )
+        telemetry_repair_attempt_limit = _telemetry_repair_attempt_limit(
+            configured=self.telemetry_repair_attempt_limit,
+        )
         bad_proposal_limit = requested_rounds * 5 + 10
         telemetry_repairable_limit = requested_rounds * 2 + 4
         validation_repair_required_limit = requested_rounds + 2
         same_family_retry_limit = requested_rounds + 4
         # Non-round steps such as proposal blocks and telemetry-repairable
-        # formal runs do not consume the screened-round budget.  Proposal
-        # attempts still spend user-visible LLM budget, so they have a hard
-        # cap independent of category-specific loop limits.
+        # formal runs do not consume the screened-round budget.  Ordinary
+        # proposal attempts have a hard cap; telemetry repair/diagnostic
+        # attempts instead use a separate per-branch/per-mechanism cap so they
+        # cannot exhaust requested effective rounds.
         loop_step_limit = (
             requested_rounds
             + proposal_quality_loop_limit
@@ -69,7 +77,31 @@ class CampaignLoop:
             + same_family_retry_limit
         )
 
+        proposal_attempts_consumed_count = _initial_proposal_attempts(
+            self.get_proposal_attempts,
+            fallback=0,
+        )
+
         def proposal_attempts_consumed() -> int:
+            return max(0, int(proposal_attempts_consumed_count))
+
+        def consume_proposal_attempt() -> None:
+            nonlocal proposal_attempts_consumed_count
+            proposal_attempts_consumed_count += 1
+
+        def record_repair_attempt(result: StepResult) -> int:
+            nonlocal telemetry_repair_attempts
+            telemetry_repair_attempts += 1
+            key = repair_attempt_key_label(
+                getattr(result, "branch_id", None),
+                getattr(result, "repair_mechanism_ids", ()) or (),
+            )
+            telemetry_repair_attempt_counts[key] = (
+                telemetry_repair_attempt_counts.get(key, 0) + 1
+            )
+            return telemetry_repair_attempt_counts[key]
+
+        def legacy_external_attempts() -> int:
             if self.get_proposal_attempts is None:
                 return max(0, int(loop_steps))
             try:
@@ -90,8 +122,12 @@ class CampaignLoop:
                 validation_repair_required_attempts=(
                     validation_repair_required_attempts
                 ),
+                telemetry_repair_attempts=telemetry_repair_attempts,
+                telemetry_repair_attempt_limit=telemetry_repair_attempt_limit,
+                telemetry_repair_attempt_counts=telemetry_repair_attempt_counts,
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
+                legacy_total_rounds=legacy_external_attempts(),
             )
 
         self.write_status(loop_status=loop_status())
@@ -139,26 +175,46 @@ class CampaignLoop:
 
             self.write_status(loop_status=loop_status())
             result = self.run_one_step()
+            kind = _attempt_kind(result)
             if getattr(result, "counts_toward_max_rounds", True):
                 counted_rounds += 1
+                consume_proposal_attempt()
             else:
-                kind = _attempt_kind(result)
                 if kind == "validation_repair_required":
                     validation_repair_required_attempts += 1
+                    repair_count = record_repair_attempt(result)
                     if (
                         validation_repair_required_attempts
                         >= validation_repair_required_limit
                     ):
                         final_reason = "validation_repair_required_budget_exhausted"
+                    elif repair_count >= telemetry_repair_attempt_limit:
+                        final_reason = "telemetry_repair_attempt_budget_exhausted"
                 elif kind == "telemetry_repairable":
                     telemetry_repairable_attempts += 1
+                    repair_count = record_repair_attempt(result)
                     if telemetry_repairable_attempts >= telemetry_repairable_limit:
                         final_reason = "telemetry_repairable_budget_exhausted"
+                    elif repair_count >= telemetry_repair_attempt_limit:
+                        final_reason = "telemetry_repair_attempt_budget_exhausted"
+                elif kind == "telemetry_repair":
+                    repair_count = record_repair_attempt(result)
+                    if repair_count >= telemetry_repair_attempt_limit:
+                        final_reason = "telemetry_repair_attempt_budget_exhausted"
                 elif kind == "same_family_retry":
+                    consume_proposal_attempt()
                     same_family_retry_attempts += 1
                     if same_family_retry_attempts >= same_family_retry_limit:
                         final_reason = "same_family_retry_budget_exhausted"
                 elif kind == "proposal_block":
+                    consume_proposal_attempt()
+                    proposal_quality_blocked_attempts += 1
+                    if (
+                        proposal_quality_blocked_attempts
+                        >= proposal_quality_loop_limit
+                    ):
+                        final_reason = "proposal_quality_loop"
+                elif kind == "schema_quality_block":
                     proposal_quality_blocked_attempts += 1
                     if (
                         proposal_quality_blocked_attempts
@@ -166,6 +222,7 @@ class CampaignLoop:
                     ):
                         final_reason = "proposal_quality_loop"
                 else:
+                    consume_proposal_attempt()
                     bad_proposal_attempts += 1
                     if bad_proposal_attempts >= bad_proposal_limit:
                         final_reason = "bad_proposal_budget_exhausted"
@@ -217,6 +274,8 @@ def _attempt_kind(result: StepResult) -> str:
     if kind and kind != "screening":
         return kind
     reason = str(getattr(result, "reason", "") or "").lower()
+    if "repair_first_policy_violation" in reason:
+        return "telemetry_repair"
     if (
         "telemetry_validation_repairable" in reason
         or "validation_telemetry_repairable" in reason
@@ -226,6 +285,11 @@ def _attempt_kind(result: StepResult) -> str:
         return "telemetry_repairable"
     if "same_family" in reason or "semantic retry" in reason:
         return "same_family_retry"
+    if (
+        "schema_quality_block" in reason
+        or "mechanism_changes_duplicate_id_conflict" in reason
+    ):
+        return "schema_quality_block"
     return "proposal_block"
 
 
@@ -275,6 +339,39 @@ def _proposal_attempt_limit(
     return max(1, int(requested_rounds))
 
 
+def _telemetry_repair_attempt_limit(
+    *,
+    configured: int | None,
+) -> int:
+    """Return the per-branch/per-mechanism telemetry repair cap."""
+    if configured is not None:
+        return max(1, int(configured))
+    raw = os.environ.get("SCION_TELEMETRY_REPAIR_ATTEMPT_LIMIT")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_TELEMETRY_REPAIR_ATTEMPT_LIMIT=%r",
+                raw,
+            )
+    return 2
+
+
+def _initial_proposal_attempts(
+    getter: Callable[[], int] | None,
+    *,
+    fallback: int,
+) -> int:
+    if getter is None:
+        return max(0, int(fallback))
+    try:
+        return max(0, int(getter()))
+    except Exception as exc:  # pragma: no cover - defensive status path
+        logger.debug("Failed to read initial proposal attempt count: %s", exc)
+        return max(0, int(fallback))
+
+
 def _campaign_loop_status(
     *,
     requested_rounds: int,
@@ -285,8 +382,12 @@ def _campaign_loop_status(
     counted_rounds: int,
     telemetry_repairable_attempts: int,
     validation_repair_required_attempts: int,
+    telemetry_repair_attempts: int,
+    telemetry_repair_attempt_limit: int,
+    telemetry_repair_attempt_counts: dict[str, int],
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
+    legacy_total_rounds: int,
 ) -> dict[str, int]:
     attempts_value = max(0, int(attempts))
     effective_rounds = max(0, int(counted_rounds))
@@ -301,7 +402,7 @@ def _campaign_loop_status(
         "attempt_limit": max(0, int(attempt_limit)),
         "proposal_attempt_limit": max(0, int(attempt_limit)),
         "attempts": attempts_value,
-        "total_rounds": attempts_value,
+        "total_rounds": max(0, int(legacy_total_rounds)),
         "proposal_attempts": attempts_value,
         "proposal_attempts_consumed": attempts_value,
         "loop_steps": max(0, int(loop_steps)),
@@ -316,6 +417,14 @@ def _campaign_loop_status(
             int(validation_repair_required_attempts),
         ),
         "telemetry_diagnostic_attempts": telemetry_diagnostic_attempts,
+        "telemetry_repair_attempts": max(0, int(telemetry_repair_attempts)),
+        "telemetry_repair_attempt_limit": max(
+            1,
+            int(telemetry_repair_attempt_limit),
+        ),
+        "telemetry_repair_attempts_by_branch_mechanism": dict(
+            telemetry_repair_attempt_counts
+        ),
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_blocks_consumed": quality_blocks,

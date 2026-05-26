@@ -143,7 +143,10 @@ def active_fact_anchor_from_entries(
     entries: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]],
 ) -> dict[str, Any]:
     for entry in reversed(tuple(entries)):
-        if entry.get("tool_name") != "context.read_active_solver_design":
+        if entry.get("tool_name") not in {
+            "context.read_active_solver_design",
+            "context.read_active_solver_map",
+        }:
             continue
         fact_packet_digest = entry.get("fact_packet_digest")
         if not fact_packet_digest:
@@ -151,6 +154,7 @@ def active_fact_anchor_from_entries(
         return _drop_empty_dict(
             {
                 "source_observation_id": entry.get("observation_id"),
+                "source_tool_name": entry.get("tool_name"),
                 "snapshot_digest": entry.get("snapshot_digest"),
                 "fact_packet_digest": fact_packet_digest,
                 "fact_ids": entry.get("fact_ids"),

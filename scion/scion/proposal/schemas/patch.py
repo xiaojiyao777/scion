@@ -7,8 +7,8 @@ from typing import Any, Dict, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .shared import (
-    _empty_mechanism_changes_to_list,
     _mechanism_changes_json_schema,
+    _normalize_mechanism_changes_preflight,
     _validate_unique_mechanism_change_ids,
     MechanismChangeInput,
 )
@@ -83,7 +83,7 @@ class PatchProposalInput(BaseModel):
     @field_validator("mechanism_changes", mode="before")
     @classmethod
     def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
-        return _empty_mechanism_changes_to_list(value)
+        return _normalize_mechanism_changes_preflight(value)
 
     @field_validator("additional_changes", mode="before")
     @classmethod
@@ -158,8 +158,7 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "Default to exact_replace for action=modify on an existing "
                 "file. Use full_file only for creates or deletes; "
                 "host-visible existing-file modifies with full_file/content_after "
-                "are rejected by default. Omit for legacy full-file code_content "
-                "responses."
+                "are rejected by default."
             ),
         },
         "source_digest": {
@@ -206,8 +205,8 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "description": (
                 "Legacy complete file content. Supported for compatibility, "
-                "but new responses should use typed exact_replace for modify "
-                "actions or content_after only for create/delete full_file changes."
+                "but model-facing modify responses must use typed exact_replace; "
+                "only creates/deletes may provide full content."
             ),
         },
         "derived_diff_ref": {
@@ -315,7 +314,8 @@ Produce a typed edit set that implements the hypothesis.
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
-- Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization. Legacy `code_content` full-file output is still accepted only as a compatibility fallback.
+- Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization.
+- Legacy `code_content` full-file output is rejected for model-facing existing-file modifies; it is only accepted for creates/deletes or host-internal compatibility.
 - Do not emit unified diffs; Scion derives audit diffs from host before/after content.
 - If action is "delete", use `edit_intent="full_file"` and set `content_after` to an empty string ""
 - If the approved algorithm change requires extra files to be executable, put

@@ -16,6 +16,7 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     HypothesisRecord,
+    MechanismChange,
     PatchProposal,
     ProtocolResult,
     VerificationResult,
@@ -147,7 +148,7 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert controller.get_branch(branch.branch_id).last_telemetry_outcome == (
         "no_objective_effect"
     )
-    assert hyp_store.statuses == [("h-1", "rejected")]
+    assert hyp_store.statuses == [("h-1", "screening_no_effect")]
 
 
 def test_continue_explore_discards_candidate_failed_screening_workspace() -> None:
@@ -270,6 +271,9 @@ def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_wo
         hypothesis_text="Add missing activation telemetry.",
         change_locus="solver_design",
         action="modify",
+        mechanism_changes=(
+            MechanismChange(id="activation_probe", change_type="add"),
+        ),
     )
     h_record = HypothesisRecord(
         hypothesis_id="h-3",
@@ -354,6 +358,9 @@ def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_wo
     assert result.counts_toward_max_rounds is False
     assert result.attempt_kind == "validation_repair_required"
     assert result.reason.startswith("VALIDATION_TELEMETRY_REPAIRABLE")
+    assert "repair_policy=repair_first_same_mechanism_or_clean_fork" in result.reason
+    assert "repair_mechanism_ids=activation_probe" in result.reason
+    assert result.repair_mechanism_ids == ("activation_probe",)
     assert discarded == [branch.branch_id]
     assert branch.branch_id not in patches
     assert workspaces[branch.branch_id] == "/tmp/workspace"
@@ -363,5 +370,104 @@ def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_wo
     assert controller.get_branch(branch.branch_id).last_telemetry_outcome == (
         "activation_missing_or_wiring_suspect"
     )
-    assert hyp_store.statuses == [("h-3", "code_failed")]
+    assert controller.get_branch(branch.branch_id).telemetry_repair_mechanism_ids == (
+        "activation_probe",
+    )
+    assert controller.get_branch(branch.branch_id).telemetry_repair_attempts == {
+        "activation_probe": 1
+    }
+    assert hyp_store.statuses == [("h-3", "validation_telemetry_failed")]
     assert controller.get_branch(branch.branch_id).state == BranchState.EXPLORE
+
+
+def test_screening_telemetry_repairable_marks_telemetry_failed_not_code_failed() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add missing activation telemetry.",
+        change_locus="solver_design",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="activation_probe", change_type="add"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-4",
+        branch_id=branch.branch_id,
+        change_locus="solver_design",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    hyp_store = _HypothesisStore()
+    discarded: list[str] = []
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces={branch.branch_id: "/tmp/workspace"},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: patch},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=8,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=(TELEMETRY_VALIDATION_REPAIRABLE,),
+        exposed_summary="screening telemetry repairable",
+        raw_metrics_ref="/tmp/metrics.json",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(TELEMETRY_VALIDATION_REPAIRABLE,),
+    )
+
+    assert result.attempt_kind == "telemetry_repairable"
+    assert result.counts_toward_max_rounds is False
+    assert hyp_store.statuses == [("h-4", "screening_telemetry_failed")]
+    assert discarded == [branch.branch_id]

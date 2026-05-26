@@ -70,9 +70,17 @@ class AgenticSessionCodeGuidanceMixin:
             }
             if hypothesis.target_file:
                 read_surface_args["target_file"] = hypothesis.target_file
-            if _is_solver_design_algorithm_target(hypothesis.target_file):
+            if _is_solver_design_algorithm_target(
+                hypothesis.target_file,
+                context=context,
+                surface=hypothesis.change_locus,
+            ):
                 read_surface_args["section"] = "target_preview"
-            if _is_solver_design_support_module_target(hypothesis.target_file):
+            if _is_solver_design_support_module_target(
+                hypothesis.target_file,
+                context=context,
+                surface=hypothesis.change_locus,
+            ):
                 read_surface_args["max_code_chars"] = (
                     _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
                 )

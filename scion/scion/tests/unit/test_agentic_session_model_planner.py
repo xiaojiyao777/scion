@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_session_test_support import *
 
+
+def _policy_code_context(_hypothesis):
+    return {
+        "kind": "code",
+        "target_file": "policies/search_policy.py",
+        "target_file_code": _SEARCH_POLICY_SOURCE,
+    }
+
+
 def test_model_side_tool_selection_adapter_executes_allowed_tool(
     tmp_path: Path,
 ) -> None:
@@ -25,7 +34,7 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -75,7 +84,7 @@ def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -133,7 +142,7 @@ def test_solver_design_tool_selection_context_carries_active_fact_anchor(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -435,7 +444,7 @@ def test_code_phase_targeted_read_context_carries_active_fact_anchor(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -570,7 +579,7 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -650,7 +659,7 @@ def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,

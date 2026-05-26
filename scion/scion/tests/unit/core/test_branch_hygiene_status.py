@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.core.branch_hygiene import branch_hygiene_context
 from scion.core.explore_step.pipeline import ExploreStepPipeline
 from scion.core.models import Branch, BranchState
 
@@ -15,6 +16,8 @@ def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
         branch_code_status="telemetry_wiring_suspect",
         last_screening_feedback_tier="inactive",
         last_telemetry_outcome="activation_missing_or_wiring_suspect",
+        telemetry_repair_mechanism_ids=("probe",),
+        telemetry_repair_attempts={"probe": 1},
     )
     updates: list[dict] = []
     pipeline = ExploreStepPipeline(
@@ -62,3 +65,22 @@ def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
     )
     assert payload["repair_focus_required"] is True
     assert payload["repair_focus_reason"] == "wiring_suspect_requires_repair"
+    assert payload["repair_policy"] == "repair_first_same_mechanism_or_clean_fork"
+    assert payload["repair_mechanism_ids"] == ["probe"]
+    assert payload["telemetry_repair_attempts"] == {"probe": 1}
+
+
+def test_activation_missing_outcome_requires_repair_even_if_status_is_clean() -> None:
+    branch = Branch(
+        branch_id="suspect-by-outcome",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="clean",
+        last_telemetry_outcome="activation_missing_or_wiring_suspect",
+    )
+
+    payload = branch_hygiene_context(branch)
+
+    assert payload["repair_focus_required"] is True
+    assert payload["baseline_policy"] == "champion_required_for_repair"

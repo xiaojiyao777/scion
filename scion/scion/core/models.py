@@ -402,6 +402,8 @@ class Branch:
     branch_code_status: str = "clean"
     last_screening_feedback_tier: Optional[str] = None
     last_telemetry_outcome: Optional[str] = None
+    telemetry_repair_mechanism_ids: Tuple[str, ...] = ()
+    telemetry_repair_attempts: Dict[str, int] = field(default_factory=dict)
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
@@ -529,6 +531,10 @@ class StepRecord:
     hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
     decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
+    counts_toward_max_rounds: bool = True
+    attempt_kind: str = "screening"
+    repair_policy_reason: Optional[str] = None
+    repair_mechanism_ids: Tuple[str, ...] = ()
     candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
     candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
     candidate_operator_attempts: int = 0

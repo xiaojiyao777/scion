@@ -16,6 +16,10 @@ from scion.proposal.agentic_utils import (
     _sanitize_agentic_value,
 )
 from scion.proposal.tools import ProposalObservation, ProposalToolContext
+from scion.problem.providers import (
+    active_subject_policy_matches_path,
+    active_subject_policy_payload,
+)
 
 _HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
 _PLANNER_HIDDEN_PREVIEW_TOOLS = frozenset(
@@ -111,6 +115,7 @@ def _budgeted_tool_args(
     args: Mapping[str, Any],
     *,
     selection_source: str,
+    context: ProposalToolContext | None = None,
 ) -> Mapping[str, Any]:
     if name != "context.read_surface":
         return args
@@ -132,9 +137,18 @@ def _budgeted_tool_args(
         return budgeted
     if selection_source.startswith("code_phase"):
         target_file = str(budgeted.get("target_file") or "").strip()
-        if _is_solver_design_algorithm_target(target_file):
+        surface = str(budgeted.get("surface") or "").strip()
+        if _is_solver_design_algorithm_target(
+            target_file,
+            context=context,
+            surface=surface,
+        ):
             budgeted["section"] = "target_preview"
-        if _is_solver_design_support_module_target(target_file):
+        if _is_solver_design_support_module_target(
+            target_file,
+            context=context,
+            surface=surface,
+        ):
             budgeted["max_code_chars"] = min(
                 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
                 _coerce_positive_int(
@@ -331,7 +345,7 @@ def _active_solver_map_followup_calls(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
     *,
     target_file: Any = None,
-    surface: Any = "solver_design",
+    surface: Any = None,
     require_registry: bool = True,
     require_slice: bool = True,
 ) -> list[tuple[str, Mapping[str, Any]]]:
@@ -343,43 +357,50 @@ def _active_solver_map_followup_calls(
     )
     if not map_context.get("available"):
         return []
+    effective_surface = str(surface or map_context.get("surface") or "").strip()
     calls: list[tuple[str, Mapping[str, Any]]] = []
     registry_id = str(map_context.get("recommended_registry_id") or "").strip()
+    registry_args = _drop_empty_dict(
+        {"surface": effective_surface, "registry_id": registry_id}
+    )
     if (
         require_registry
         and registry_id
         and not _has_successful_reusable_observation(
             observations,
             "context.read_operator_registry",
-            {"surface": surface, "registry_id": registry_id},
-            forced_surface=str(surface or "solver_design"),
+            registry_args,
+            forced_surface=effective_surface,
         )
     ):
         calls.append(
             (
                 "context.read_operator_registry",
-                {"surface": surface or "solver_design", "registry_id": registry_id},
+                registry_args,
             )
         )
     slice_id = str(map_context.get("recommended_slice_id") or "").strip()
+    slice_args = _drop_empty_dict(
+        {
+            "surface": effective_surface,
+            "slice_id": slice_id,
+            "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+        }
+    )
     if (
         require_slice
         and slice_id
         and not _has_successful_reusable_observation(
             observations,
             "context.read_algorithm_slice",
-            {"surface": surface, "slice_id": slice_id, "max_chars": 6000},
-            forced_surface=str(surface or "solver_design"),
+            slice_args,
+            forced_surface=effective_surface,
         )
     ):
         calls.append(
             (
                 "context.read_algorithm_slice",
-                {
-                    "surface": surface or "solver_design",
-                    "slice_id": slice_id,
-                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
-                },
+                slice_args,
             )
         )
     return calls
@@ -389,7 +410,7 @@ def _missing_active_solver_map_followups(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
     *,
     target_file: Any = None,
-    surface: Any = "solver_design",
+    surface: Any = None,
 ) -> tuple[str, ...]:
     return tuple(
         name
@@ -1148,27 +1169,61 @@ def _has_code_phase_surface_read(
             max_chars = int(artifact.get("max_chars") or 0)
         except (TypeError, ValueError):
             max_chars = 0
-        required_chars = (
-            _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
-            if _is_solver_design_support_module_target(expected_target)
-            else _APS_CODE_SURFACE_READ_CODE_CHARS
-        )
+        required_chars = _APS_CODE_SURFACE_READ_CODE_CHARS
         if max_chars >= required_chars or not artifact.get("truncated"):
             return True
     return False
 
 
-def _is_solver_design_support_module_target(target_file: Any) -> bool:
-    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
-    return normalized.startswith("policies/baseline_modules/") and normalized.endswith(
-        ".py"
+def _is_solver_design_support_module_target(
+    target_file: Any,
+    *,
+    context: ProposalToolContext | None = None,
+    surface: str | None = None,
+) -> bool:
+    policy = _active_subject_policy_for_context(context, surface=surface)
+    return active_subject_policy_matches_path(
+        policy,
+        str(target_file or ""),
+        include_entrypoints=False,
+        include_support=True,
+        include_compatibility=False,
     )
 
 
-def _is_solver_design_algorithm_target(target_file: Any) -> bool:
-    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
-    return normalized == "policies/baseline_algorithm.py" or (
-        _is_solver_design_support_module_target(normalized)
+def _is_solver_design_algorithm_target(
+    target_file: Any,
+    *,
+    context: ProposalToolContext | None = None,
+    surface: str | None = None,
+) -> bool:
+    policy = _active_subject_policy_for_context(context, surface=surface)
+    return active_subject_policy_matches_path(
+        policy,
+        str(target_file or ""),
+        include_entrypoints=True,
+        include_support=True,
+        include_compatibility=True,
+    )
+
+
+def _active_subject_policy_for_context(
+    context: ProposalToolContext | None,
+    *,
+    surface: str | None = None,
+) -> dict[str, Any]:
+    if context is None:
+        return {}
+    selected_surface = (
+        str(surface or "").strip()
+        or str(context.forced_surface or "").strip()
+        or None
+    )
+    return active_subject_policy_payload(
+        context=context,
+        problem_spec=context.problem_spec,
+        adapter=context.adapter,
+        surface=selected_surface,
     )
 
 

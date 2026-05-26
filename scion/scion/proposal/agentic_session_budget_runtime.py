@@ -107,8 +107,14 @@ class AgenticSessionBudgetRuntimeMixin:
             args: Mapping[str, Any],
             *,
             selection_source: str,
+            context: ProposalToolContext | None = None,
         ) -> Mapping[str, Any]:
-            return _budgeted_tool_args(name, args, selection_source=selection_source)
+            return _budgeted_tool_args(
+                name,
+                args,
+                selection_source=selection_source,
+                context=context,
+            )
 
     def _session_timeout_reached(self, state: AgenticProposalSessionState) -> bool:
             return (

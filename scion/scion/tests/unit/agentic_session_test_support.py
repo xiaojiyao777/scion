@@ -50,6 +50,7 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     ToolSelectionClient,
     UnsafeMemory,
     _COMPACT_FEEDBACK_TOOL_NAMES,
+    _SEARCH_POLICY_SOURCE,
     _compact_feedback_observation_for_budget,
     _context,
     _cvrp_context_with_champion,

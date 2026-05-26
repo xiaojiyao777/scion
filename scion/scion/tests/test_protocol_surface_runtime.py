@@ -243,7 +243,7 @@ def test_run_experiment_fails_closed_on_declared_zero_activity_probe(tmp_path):
     assert "telemetry_guard=" in result.exposed_summary
 
 
-def test_run_experiment_fails_closed_on_declared_zero_activation_probe(tmp_path):
+def test_run_experiment_does_not_fail_activation_when_effect_is_observed(tmp_path):
     runner = MagicMock()
     candidate_runtime = {
         "generic_solver_loaded": True,
@@ -297,11 +297,12 @@ def test_run_experiment_fails_closed_on_declared_zero_activation_probe(tmp_path)
         ),
     )
 
-    assert result.gate_outcome == "fail"
-    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in result.reason_codes
+    assert result.gate_outcome == "pass"
+    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" not in result.reason_codes
     guard = result.candidate_surface_runtime_summary["telemetry_guard"]
-    assert guard["passed"] is False
-    assert guard["failures"][0]["mechanism"] == "target_probe"
+    assert guard["passed"] is True
+    assert guard["failures"] == []
+    assert guard["warnings"] == []
     assert (
         guard["mechanisms"]["target_probe"]["fields"]["mechanism_activation"][
             "candidate_positive"

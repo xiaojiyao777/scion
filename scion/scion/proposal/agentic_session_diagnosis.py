@@ -303,6 +303,30 @@ class AgenticSessionDiagnosisMixin:
                 target_file=target_file,
                 surface="solver_design",
             )
+            if (
+                selection_source == "planner_map_followup_required"
+                and calls
+                and (
+                    self._remaining_tool_calls(state)
+                    <= self._self_check_tool_call_reserve() + len(calls)
+                    or self._remaining_observation_chars(state)
+                    <= (
+                        self._self_check_observation_reserve_chars()
+                        + self._minimum_budgeted_observation_chars()
+                    )
+                )
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Skipped active solver map follow-up observations to preserve planner tool slots.",
+                    metadata={
+                        "tool_names": [name for name, _args in calls],
+                        "selection_source": selection_source,
+                        "skip_reason": "planner_tool_slot_reserved",
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                    },
+                )
+                return []
             for name, args in calls:
                 current = [*observations, *followup_observations]
                 if _has_successful_reusable_observation(

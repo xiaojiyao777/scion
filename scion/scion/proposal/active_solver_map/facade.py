@@ -92,6 +92,18 @@ def read_active_solver_map_payload(
         )
     result = model_payload(solver_map)
     result["available"] = True
+    fact_packet = _fact_packet_from_active_map(result)
+    if fact_packet:
+        result["active_algorithm_facts"] = fact_packet
+        result["fact_packet_digest"] = fact_packet.get("fact_packet_digest")
+        result["source_digest"] = _drop_empty(
+            {
+                "digest": fact_packet.get("fact_packet_digest"),
+                "snapshot_digest": result.get("snapshot_digest"),
+                "source": _MAP_TOOL_NAME,
+            }
+        )
+        result["provenance"] = _active_map_provenance(result)
     result["read_receipt"] = _read_receipt(
         tool_name=_MAP_TOOL_NAME,
         payload=result,
@@ -490,8 +502,99 @@ def _active_solver_map_schema_payload(payload: Mapping[str, Any]) -> dict[str, A
     return {
         key: value
         for key, value in payload.items()
-        if key not in {"available", "read_receipt", "unavailable"}
+        if key
+        not in {
+            "available",
+            "read_receipt",
+            "unavailable",
+            "active_algorithm_facts",
+            "fact_packet_digest",
+            "source_digest",
+            "provenance",
+        }
     }
+
+
+def _fact_packet_from_active_map(payload: Mapping[str, Any]) -> dict[str, Any]:
+    raw_facts = payload.get("known_mechanism_facts")
+    if not isinstance(raw_facts, (list, tuple)):
+        return {}
+    facts: list[dict[str, Any]] = []
+    for item in raw_facts:
+        if not isinstance(item, Mapping):
+            continue
+        fact_id = _clean(item.get("fact_id"))
+        claim = _clean(item.get("claim"))
+        if not fact_id or not claim:
+            continue
+        facts.append(
+            {
+                "fact_id": fact_id,
+                "claim": _limit_text(claim, 220),
+                "evidence": _limited_strings(item.get("evidence"), limit=1, max_chars=80),
+            }
+        )
+    if not facts:
+        return {}
+    packet: dict[str, Any] = {
+        "packet_id": "active_solver_map_known_mechanism_facts.v1",
+        "surface": _clean(payload.get("surface")),
+        "subject_id": _clean(payload.get("subject_id")),
+        "snapshot_digest": _clean(payload.get("snapshot_digest")),
+        "fact_ids": [fact["fact_id"] for fact in facts],
+        "facts": facts,
+    }
+    packet["fact_packet_digest"] = _digest_payload(packet)
+    return packet
+
+
+def _active_map_provenance(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "source": _MAP_TOOL_NAME,
+            "provider": "active_solver_map_provider",
+            "surface": payload.get("surface"),
+            "subject_id": payload.get("subject_id"),
+            "snapshot_digest": payload.get("snapshot_digest"),
+        }
+    )
+
+
+def _drop_empty(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value
+        for key, value in payload.items()
+        if value not in (None, "", (), [], {})
+    }
+
+
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        values = (value,)
+    else:
+        try:
+            values = tuple(value)
+        except TypeError:
+            values = ()
+    return tuple(str(item) for item in values if str(item or "").strip())
+
+
+def _limited_strings(
+    value: Any,
+    *,
+    limit: int,
+    max_chars: int,
+) -> tuple[str, ...]:
+    return tuple(_limit_text(item, max_chars) for item in _string_tuple(value)[:limit])
+
+
+def _limit_text(value: Any, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 3)] + "..."
 
 
 def _read_receipt(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Tuple
 
 from scion.core.models import Decision
 
@@ -28,8 +28,12 @@ class StepResult:
         "screening",
         "proposal_block",
         "proposal_retry",
+        "schema_quality_block",
+        "telemetry_repair",
         "telemetry_repairable",
         "validation_repair_required",
         "same_family_retry",
         "other",
     ] = "screening"
+    repair_mechanism_ids: Tuple[str, ...] = ()
+    repair_policy_reason: str = ""

@@ -209,7 +209,7 @@ def test_experiment_history_renders_tier_pair_and_case_feedback() -> None:
     assert "screening_feedback.tier=weak_positive" in rendered
     assert "pair_wins=5" in rendered
     assert "case_wins=2" in rendered
-    assert "why_not_promoted:" in rendered
+    assert "screening_gate_reason:" in rendered
     assert "weak_positive is not promotable" in rendered
     assert "allowed_followup_variants: trigger, schedule, threshold, composition" in rendered
     assert "SECRET" not in rendered
@@ -247,7 +247,7 @@ def test_branch_local_memory_blocks_unchanged_weak_positive_repeat() -> None:
         "composition",
     )
     assert "Near-Field Mechanism Memory" in rendered
-    assert "why_not_promoted=" in rendered
+    assert "screening_gate_reason=" in rendered
     assert "repeat_unchanged_allowed=false" in rendered
     assert "allowed_followup_variants=trigger,schedule,threshold,composition" in rendered
     assert "raw_metrics" not in rendered

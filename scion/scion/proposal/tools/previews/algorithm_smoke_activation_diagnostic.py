@@ -621,8 +621,13 @@ def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
         ]
     if subtype == "instrumentation_missing":
         return [
-            f"Add context.record_iteration('{mech}', positive_count) or context.record_phase('{mech}', positive_elapsed_ms) on the active mechanism path.",
-            "Preserve effect telemetry separately with context.record_move when moves are attempted.",
+            f"Add context.record_iteration('{mech}', positive_count) on the "
+            "active mechanism path; use "
+            f"context.record_phase('{mech}', measured_elapsed_ms_delta) only "
+            "from a measured duration delta.",
+            "Preserve effect telemetry separately with context.record_move "
+            "when moves are attempted, and do not fake positive runtime or "
+            "activation.",
         ]
     if subtype == "expected_telemetry_mismatch":
         return [

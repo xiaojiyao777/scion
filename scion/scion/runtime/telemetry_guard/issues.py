@@ -14,6 +14,8 @@ def _guard_issue(
     summary: Mapping[str, Any],
     mechanism: str | None = None,
     diagnostic_type: str | None = None,
+    diagnostic_kind: str | None = None,
+    branch_repair_signal: str | None = None,
     telemetry_outcome: str | None = None,
     repairable: bool | None = None,
 ) -> dict[str, Any]:
@@ -24,6 +26,7 @@ def _guard_issue(
         "field": field,
         "candidate_positive": summary.get("candidate_positive", 0),
         "candidate_present": summary.get("candidate_present", 0),
+        "candidate_zero": summary.get("candidate_zero", 0),
         "candidate_missing": summary.get("candidate_missing", 0),
         "champion_positive": summary.get("champion_positive", 0),
     }
@@ -31,6 +34,10 @@ def _guard_issue(
         issue["mechanism"] = mechanism
     if diagnostic_type:
         issue["diagnostic_type"] = diagnostic_type
+    if diagnostic_kind:
+        issue["diagnostic_kind"] = diagnostic_kind
+    if branch_repair_signal:
+        issue["branch_repair_signal"] = branch_repair_signal
     if telemetry_outcome:
         issue["telemetry_outcome"] = telemetry_outcome
     if repairable is not None:

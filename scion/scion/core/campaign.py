@@ -360,6 +360,12 @@ class CampaignManager:
                         "last_telemetry_outcome",
                         None,
                     ),
+                    "telemetry_repair_mechanism_ids": list(
+                        getattr(b, "telemetry_repair_mechanism_ids", ()) or ()
+                    ),
+                    "telemetry_repair_attempts": dict(
+                        getattr(b, "telemetry_repair_attempts", {}) or {}
+                    ),
                 }
                 for b in branches
             ],

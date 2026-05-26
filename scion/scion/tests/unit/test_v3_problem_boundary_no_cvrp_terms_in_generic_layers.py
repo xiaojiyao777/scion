@@ -43,6 +43,9 @@ FORBIDDEN_PATTERNS = {
     "baseline_candidate_route_fields": re.compile(
         r"baseline_route_|candidate_route_"
     ),
+    "cvrp_active_entrypoint_path": re.compile(r"policies/baseline_algorithm\.py"),
+    "cvrp_active_support_package": re.compile(r"policies/baseline_modules"),
+    "cvrp_legacy_solver_path": re.compile(r"policies/solver_algorithm\.py"),
 }
 
 # Keep this list intentionally small. Each entry is either non-domain wording

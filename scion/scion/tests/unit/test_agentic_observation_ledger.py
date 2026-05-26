@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+from scion.proposal.agentic_observation_ledger.reuse import (
+    already_observed_from_inherited_ledger,
+)
 from scion.tests.unit.agentic_session_test_support import *
+from scion.tests.unit.test_active_solver_map import _FullProvider, _context as _map_context
 
 
 def test_code_phase_reuses_hypothesis_algorithm_file_ledger_receipt(
@@ -122,3 +128,36 @@ def test_code_phase_reuses_hypothesis_algorithm_file_ledger_receipt(
     assert receipt_payloads
     assert receipt_payloads[0]["file_path"] == target_file
     assert '"content_preview":' not in json.dumps(receipt_payloads, sort_keys=True)
+
+
+def test_active_map_inherited_receipt_with_stale_digest_forces_reread() -> None:
+    state = SimpleNamespace(
+        _agentic_logical_phase="code",
+        _inherited_observation_ledger=[
+            {
+                "observation_id": "obs-old-map",
+                "tool_name": "context.read_active_solver_map",
+                "normalized_args": {"surface": "policy_bundle"},
+                "digest": "old-digest",
+                "source_digest": {
+                    "digest": "old-digest",
+                    "snapshot_digest": "old-snapshot",
+                    "source": "context.read_active_solver_map",
+                },
+                "snapshot_digest": "old-snapshot",
+                "reusable_by_phases": ["code"],
+                "coverage": {"coverage_status": "metadata_only"},
+            }
+        ],
+    )
+    context = _map_context(_FullProvider())
+
+    reused = already_observed_from_inherited_ledger(
+        state,
+        context,
+        tool_name="context.read_active_solver_map",
+        args={"surface": "policy_bundle"},
+        tool_call_id="tool-call-new",
+    )
+
+    assert reused is None

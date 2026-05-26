@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
-from scion.core.branch_hygiene import branch_hygiene_context
+from scion.core.branch_hygiene import branch_hygiene_context, branch_requires_repair_focus
+from scion.core.branch_repair_policy import (
+    REPAIR_FIRST_POLICY_VIOLATION,
+    branch_repair_mechanism_ids,
+    validate_repair_focused_patch,
+)
 from scion.core.models import (
     Branch,
     BranchState,
@@ -29,8 +34,10 @@ from .common import (
     _AGENTIC_SESSION_TIMEOUT,
     _AGENT_QUALITY_BLOCKED,
     _agent_quality_failure_detail,
+    _is_algorithm_smoke_failure_detail,
     _is_agent_quality_blocked_detail,
     _is_agentic_control_timeout_detail,
+    _is_schema_quality_block_detail,
     _proposal_failure_hypothesis,
     _proposal_failure_reason,
     _proposal_failure_stage,
@@ -162,7 +169,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         branch,
                         FailureEvent(category=category, detail=reason),
                     )
-                self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+                self.hypothesis_store.mark_status(
+                    h_record.hypothesis_id,
+                    "rejected" if quality_blocked else "contract_failed",
+                )
                 self.record_step(
                     StepRecord(
                         round_num=rnum,
@@ -217,6 +227,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         session_ref,
                     )
                 self._record_proposal_fail_event(bid, failure_detail)
+                attempt_kind, repair_ids, repair_policy_reason = (
+                    self._repair_attempt_metadata(branch, failure_detail)
+                )
                 self.record_step(
                     StepRecord(
                         round_num=rnum,
@@ -230,6 +243,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         failure_stage=failure_stage,
                         failure_detail=failure_detail,
                         proposal_session_ref=session_ref,
+                        counts_toward_max_rounds=False,
+                        attempt_kind=attempt_kind,
+                        repair_policy_reason=repair_policy_reason,
+                        repair_mechanism_ids=repair_ids,
                     )
                 )
                 return self._finish_status_progress(
@@ -241,6 +258,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                             "hypothesis generation failed",
                         ),
                         counts_toward_max_rounds=False,
+                        attempt_kind=attempt_kind,  # type: ignore[arg-type]
+                        repair_mechanism_ids=repair_ids,
+                        repair_policy_reason=repair_policy_reason or "",
                     ),
                 )
             if h_record is None:
@@ -302,6 +322,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         bid,
                         hypothesis,
                         c_result.failure_reason or "",
+                    )
+                    self.hypothesis_store.mark_status(
+                        h_record.hypothesis_id,
+                        "contract_failed",
                     )
                 self.record_step(
                     StepRecord(
@@ -369,7 +393,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             elif quality_blocked:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
-                self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+                self.hypothesis_store.mark_status(
+                    h_record.hypothesis_id,
+                    (
+                        "smoke_failed"
+                        if _is_algorithm_smoke_failure_detail(detailed_failure)
+                        else "rejected"
+                    ),
+                )
                 failure_detail = detailed_failure or _AGENT_QUALITY_BLOCKED
             elif prior_failure is not None:
                 branch.pending_retry = False
@@ -403,6 +434,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail,
                     session_ref,
                 )
+            attempt_kind, repair_ids, repair_policy_reason = (
+                self._repair_attempt_metadata(branch, failure_detail)
+            )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -417,6 +451,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    counts_toward_max_rounds=False,
+                    attempt_kind=attempt_kind,
+                    repair_policy_reason=repair_policy_reason,
+                    repair_mechanism_ids=repair_ids,
                 )
             )
             return self._finish_status_progress(
@@ -428,7 +466,61 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         "code generation failed",
                     ),
                     counts_toward_max_rounds=False,
+                    attempt_kind=attempt_kind,  # type: ignore[arg-type]
+                    repair_mechanism_ids=repair_ids,
+                    repair_policy_reason=repair_policy_reason or "",
                 ),
+            )
+
+        repair_patch_check = validate_repair_focused_patch(
+            branch,
+            hypothesis,
+            patch,
+            step_history=(),
+        )
+        if not repair_patch_check.allowed:
+            detail = repair_patch_check.detail
+            logger.info("Branch %s: repair-first patch policy failed: %s", bid, detail)
+            self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+            repair_ids = (
+                repair_patch_check.protected_mechanism_ids
+                or repair_patch_check.proposed_mechanism_ids
+            )
+            self.record_step(
+                StepRecord(
+                    round_num=rnum,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    contract_passed=False,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="repair_policy",
+                    failure_detail=detail,
+                    hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=self._proposal_session_ref(
+                        bid,
+                        retry_attempt=retry_attempt,
+                        prior_failure=prior_failure,
+                    ),
+                    counts_toward_max_rounds=False,
+                    attempt_kind="telemetry_repair",
+                    repair_policy_reason=repair_patch_check.reason,
+                    repair_mechanism_ids=repair_ids,
+                )
+            )
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason=detail,
+                    counts_toward_max_rounds=False,
+                    attempt_kind="telemetry_repair",
+                    repair_mechanism_ids=repair_ids,
+                    repair_policy_reason=repair_patch_check.reason,
+                )
             )
 
         self._emit_status_progress(
@@ -454,7 +546,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 branch,
                 FailureEvent(category="contract", detail=p_result.failure_reason or ""),
             )
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "contract_failed")
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -693,11 +785,30 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     retry_attempt=retry_attempt,
                     prior_failure=prior_failure,
                 ),
+                counts_toward_max_rounds=result.counts_toward_max_rounds,
+                attempt_kind=result.attempt_kind,
+                repair_policy_reason=result.repair_policy_reason or None,
+                repair_mechanism_ids=result.repair_mechanism_ids,
             )
         )
         if retry_attempt:
             result.counts_toward_max_rounds = False
         return self._finish_status_progress(result)
+
+    @staticmethod
+    def _repair_attempt_metadata(
+        branch: Branch,
+        failure_detail: str | None,
+    ) -> tuple[str, tuple[str, ...], str | None]:
+        if _is_schema_quality_block_detail(failure_detail):
+            return "schema_quality_block", (), str(failure_detail or "")
+        if not branch_requires_repair_focus(branch):
+            return "proposal_block", (), None
+        repair_ids = branch_repair_mechanism_ids(branch)
+        reason = None
+        if REPAIR_FIRST_POLICY_VIOLATION in str(failure_detail or ""):
+            reason = str(failure_detail or "")
+        return "telemetry_repair", repair_ids, reason
 
     def _emit_status_progress(
         self,

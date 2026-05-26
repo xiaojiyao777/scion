@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scion.core.models import MechanismChange
+from scion.core.models import (
+    EvalStats,
+    ExperimentStage,
+    MechanismChange,
+    ProtocolResult,
+)
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    telemetry_decision_details,
+)
 from scion.runtime.telemetry_guard import build_telemetry_guard_summary
 
 
@@ -47,6 +56,7 @@ def test_auto_declared_mechanism_effect_probe_warns_when_activation_present() ->
     assert summary["warnings"][0]["diagnostic_type"] == (
         "mechanism_executed_no_improvement"
     )
+    assert summary["warnings"][0]["diagnostic_kind"] == "evaluated_no_effect"
     assert summary["mechanism_diagnostics"][0]["telemetry_outcome"] == "no_effect"
 
 
@@ -95,12 +105,16 @@ def test_mechanism_diagnostics_separate_activation_runtime_and_zero_effect() -> 
     assert diagnostic["activation_status"] == "observed"
     assert diagnostic["runtime_status"] == "zero"
     assert diagnostic["effect_status"] == "zero"
+    assert diagnostic["diagnostic_signals"] == [
+        "runtime_budget_zero_or_subms",
+        "evaluated_no_effect",
+    ]
     assert diagnostic["activation"]["candidate_positive"] == 1
     assert diagnostic["runtime"]["candidate_zero"] == 1
     assert diagnostic["effect"]["candidate_zero"] == 2
 
 
-def test_mechanism_diagnostics_report_move_only_as_activation_missing() -> None:
+def test_mechanism_diagnostics_report_move_only_as_evaluated_no_effect() -> None:
     spec = SimpleNamespace(
         research_surfaces=[
             SimpleNamespace(
@@ -137,15 +151,18 @@ def test_mechanism_diagnostics_report_move_only_as_activation_missing() -> None:
         ],
     )
 
-    assert summary["passed"] is False
-    assert summary["failures"][0]["code"] == (
-        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
-    )
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    assert {
+        warning["diagnostic_kind"] for warning in summary["warnings"]
+    } == {"evaluated_no_effect"}
     diagnostic = summary["mechanism_diagnostics"][0]
-    assert diagnostic["passed"] is False
+    assert diagnostic["passed"] is True
     assert diagnostic["activation_status"] == "missing"
     assert diagnostic["runtime_status"] == "missing"
     assert diagnostic["effect_status"] == "zero"
+    assert diagnostic["diagnostic_kind"] == "evaluated_no_effect"
+    assert diagnostic["telemetry_outcome"] == "no_effect"
     assert "direct activation telemetry" in diagnostic["repair_guidance"][0]
 
 
@@ -292,11 +309,12 @@ def test_missing_effect_attribution_with_activation_is_repairable_warning() -> N
     assert diagnostic["activation_status"] == "observed"
     assert diagnostic["effect_status"] == "missing"
     assert diagnostic["diagnostic_type"] == "effect_attribution_missing"
+    assert diagnostic["diagnostic_kind"] == "activated_no_positive_effect"
     assert diagnostic["telemetry_outcome"] == "effect_attribution_missing"
     assert "Activation was observed" in diagnostic["repair_guidance"][-1]
 
 
-def test_activation_missing_still_blocks_when_effect_is_advisory() -> None:
+def test_activation_missing_with_evaluation_is_advisory_when_effect_is_advisory() -> None:
     summary = build_telemetry_guard_summary(
         candidate_runtimes=[
             {
@@ -312,10 +330,170 @@ def test_activation_missing_still_blocks_when_effect_is_advisory() -> None:
         effect_observation_required=False,
     )
 
-    assert summary["passed"] is False
-    assert [failure["code"] for failure in summary["failures"]] == [
-        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
-    ]
+    assert summary["passed"] is True
+    assert summary["failures"] == []
     assert [warning["code"] for warning in summary["warnings"]] == [
-        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED"
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
     ]
+    assert {
+        warning["diagnostic_kind"] for warning in summary["warnings"]
+    } == {"evaluated_no_effect"}
+
+
+def test_zero_ms_runtime_with_positive_evaluation_is_runtime_budget_warning() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_context.{mechanism}_iterations",
+                            "mechanism_phase_runtime_ms.{mechanism}",
+                        ]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_evaluations.{mechanism}"]
+                    },
+                    mechanism_budget_runtime_fields={
+                        "{mechanism}": ["mechanism_phase_runtime_ms.{mechanism}"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_context": {"target_probe_iterations": 1},
+                "mechanism_phase_runtime_ms": {"target_probe": 0},
+                "mechanism_evaluations": {"target_probe": 1},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        expected_telemetry={
+            "activation": ["mechanism_phase_runtime_ms.target_probe"],
+            "budget": ["mechanism_phase_runtime_ms.target_probe"],
+        },
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    assert {
+        warning["diagnostic_kind"] for warning in summary["warnings"]
+    } == {"runtime_budget_zero_or_subms"}
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["activation_status"] == "observed"
+    assert diagnostic["runtime_status"] == "zero"
+    assert diagnostic["effect_status"] == "positive"
+    assert diagnostic["diagnostic_kind"] == "runtime_budget_zero_or_subms"
+    assert "zero/sub-ms timer granularity" in " ".join(
+        diagnostic["repair_guidance"]
+    )
+
+
+def test_conditional_not_triggered_is_advisory_without_evaluation_requirement() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{}],
+        problem_spec=_mechanism_probe_spec(),
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="rare_probe", change_type="modify")
+        ],
+        effect_observation_required=False,
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    assert {
+        warning["diagnostic_kind"] for warning in summary["warnings"]
+    } == {"not_evaluated/not_triggered"}
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["diagnostic_kind"] == "not_evaluated/not_triggered"
+    assert "Do not fake activation" in " ".join(diagnostic["repair_guidance"])
+
+
+def test_missing_context_record_with_zero_runtime_is_wiring_suspect() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_context.{mechanism}_iterations",
+                            "mechanism_phase_runtime_ms.{mechanism}",
+                        ]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_evaluations.{mechanism}"]
+                    },
+                    mechanism_budget_runtime_fields={
+                        "{mechanism}": ["mechanism_phase_runtime_ms.{mechanism}"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {"mechanism_phase_runtime_ms": {"target_probe": 0}}
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is False
+    assert summary["failures"][0]["diagnostic_kind"] == "wiring_suspect"
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["diagnostic_kind"] == "wiring_suspect"
+    assert "No mechanism-local context/evaluation evidence" in " ".join(
+        diagnostic["repair_guidance"]
+    )
+
+
+def test_wiring_suspect_flows_into_formal_decision_details() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{}],
+        problem_spec=_mechanism_probe_spec(),
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=1,
+            wins=0,
+            losses=0,
+            ties=1,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("TELEMETRY_GUARD_FAILED",),
+        exposed_summary="telemetry failed",
+        raw_metrics_ref="/tmp/metrics.json",
+        candidate_surface_runtime_summary={"telemetry_guard": summary},
+    )
+
+    assert formal_telemetry_guard_failed(protocol) is True
+    details = telemetry_decision_details(protocol)
+    assert details
+    assert {detail["diagnostic_kind"] for detail in details} == {"wiring_suspect"}
+    assert {detail["branch_repair_signal"] for detail in details} == {
+        "wiring_suspect"
+    }

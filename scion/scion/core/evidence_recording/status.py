@@ -83,7 +83,9 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "requested_rounds": "requested_rounds",
         "total_rounds": "total_rounds",
         "proposal_attempts": "proposal_attempts",
+        "proposal_attempts_consumed": "proposal_attempts_consumed",
         "effective_rounds_completed": "effective_rounds_completed",
+        "telemetry_repair_attempts": "telemetry_repair_attempts",
         "telemetry_diagnostic_attempts": "telemetry_diagnostic_attempts",
         "quality_blocks": "quality_blocks",
         "blocked_attempts": "blocked_attempts",
@@ -92,8 +94,7 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         value = loop.get(loop_key)
         if value is None:
             continue
-        if payload.get(top_key) is None:
-            payload[top_key] = value
+        payload[top_key] = value
 
     if payload.get("quality_blocks") is None:
         value = loop.get("proposal_quality_blocks_consumed")
@@ -139,6 +140,14 @@ class StatusWriterMixin:
                     True,
                 ),
                 "attempt_kind": getattr(last_result, "attempt_kind", "screening"),
+                "repair_mechanism_ids": list(
+                    getattr(last_result, "repair_mechanism_ids", ()) or ()
+                ),
+                "repair_policy_reason": getattr(
+                    last_result,
+                    "repair_policy_reason",
+                    "",
+                ),
             }
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result

@@ -23,6 +23,7 @@ _REPAIRABLE_TELEMETRY_CODES = frozenset(
         "TELEMETRY_ACTIVITY_ZERO",
         "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
         "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_BUDGET_STARVED",
         "TELEMETRY_BUDGET_STARVED",
     }
 )
@@ -136,6 +137,11 @@ def telemetry_decision_details(
             "code": code,
             "category": _normal_failure_category(item),
             "mechanism_id": mechanism_id,
+            "diagnostic_type": _clean_optional_str(item.get("diagnostic_type")),
+            "diagnostic_kind": _clean_optional_str(item.get("diagnostic_kind")),
+            "branch_repair_signal": _clean_optional_str(
+                item.get("branch_repair_signal")
+            ),
             "surface_field_id": field_ids[0] if field_ids else None,
             "surface_field_ids": field_ids,
             "runtime_role": _clean_optional_str(
@@ -332,6 +338,14 @@ def _is_hard_formal_failure(
         "effect_attribution_missing",
     }:
         return False
+    diagnostic_kind = str(item.get("diagnostic_kind") or "").strip()
+    if diagnostic_kind in {
+        "activated_no_positive_effect",
+        "evaluated_no_effect",
+        "not_evaluated/not_triggered",
+        "runtime_budget_zero_or_subms",
+    }:
+        return False
     if _normal_failure_category(item) != "effect":
         return True
     code = str(item.get("code") or "").strip().upper()
@@ -409,6 +423,7 @@ def _issue_counters(issue: Mapping[str, Any]) -> dict[str, int]:
         "candidate_missing",
         "candidate_present",
         "candidate_positive",
+        "candidate_zero",
         "champion_positive",
     ):
         try:
@@ -518,8 +533,10 @@ def _repair_guidance_for_issue(
         ]
     if category == "budget":
         return [
-            "Add positive runtime/budget telemetry on the declared mechanism "
-            "path before treating runtime evidence as validated."
+            "Runtime/budget telemetry was missing or zero. Prefer natural "
+            "mechanism-local context/evaluation evidence first; record phase "
+            "duration only from a measured elapsed delta, and do not add fake "
+            "positive runtime to satisfy the guard."
         ]
     if category == "activity":
         return [

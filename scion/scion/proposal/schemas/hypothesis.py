@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .normalization import _normalize_novelty_signature
 from .shared import (
     _EXPECTED_TELEMETRY_DESCRIPTION,
-    _empty_mechanism_changes_to_list,
     _mechanism_changes_json_schema,
+    _normalize_mechanism_changes_preflight,
     _validate_unique_mechanism_change_ids,
     MechanismChangeInput,
 )
@@ -43,7 +43,7 @@ class HypothesisProposalInput(BaseModel):
     @field_validator("mechanism_changes", mode="before")
     @classmethod
     def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
-        return _empty_mechanism_changes_to_list(value)
+        return _normalize_mechanism_changes_preflight(value)
 
     @field_validator("novelty_signature", mode="before")
     @classmethod

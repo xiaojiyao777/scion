@@ -756,7 +756,7 @@ def test_creative_trace_records_llm_request_policy(tmp_path):
         def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
             return {
                 "file_path": "policies/baseline_algorithm.py",
-                "action": "modify",
+                "action": "create",
                 "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
             }
 

@@ -18,6 +18,15 @@ from scion.core.models import (
 if TYPE_CHECKING:
     from scion.lineage.registry import LineageRegistry
 
+_REJECTED_STATUS_ALIASES = (
+    "rejected",
+    "contract_failed",
+    "smoke_failed",
+    "screening_no_effect",
+    "screening_telemetry_failed",
+    "validation_telemetry_failed",
+)
+
 
 def _json_mapping(raw: object) -> dict:
     if not raw:
@@ -27,6 +36,22 @@ def _json_mapping(raw: object) -> dict:
     except (TypeError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _json_string_tuple(raw: object) -> tuple[str, ...]:
+    if not raw:
+        return ()
+    try:
+        value = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return ()
+    if not isinstance(value, list):
+        return ()
+    return tuple(
+        str(item).strip()
+        for item in value
+        if str(item).strip()
+    )
 
 
 def _json_mechanism_changes(raw: object) -> tuple[MechanismChange, ...]:
@@ -65,9 +90,11 @@ class BranchStore:
                  failure_codes, created_at, updated_at, direction,
                  weight_revision, branch_code_status,
                  last_screening_feedback_tier, last_telemetry_outcome,
+                 telemetry_repair_mechanism_ids_json,
+                 telemetry_repair_attempts_json,
                  pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -87,6 +114,8 @@ class BranchStore:
                     branch.branch_code_status,
                     branch.last_screening_feedback_tier,
                     branch.last_telemetry_outcome,
+                    json.dumps(list(branch.telemetry_repair_mechanism_ids or ())),
+                    json.dumps(dict(branch.telemetry_repair_attempts or {})),
                     1 if branch.pending_retry else 0,
                     branch.blocked_rounds,
                     branch.consecutive_llm_retries,
@@ -136,6 +165,12 @@ class BranchStore:
             branch_code_status=d.get("branch_code_status") or "clean",
             last_screening_feedback_tier=d.get("last_screening_feedback_tier"),
             last_telemetry_outcome=d.get("last_telemetry_outcome"),
+            telemetry_repair_mechanism_ids=_json_string_tuple(
+                d.get("telemetry_repair_mechanism_ids_json")
+            ),
+            telemetry_repair_attempts=_json_mapping(
+                d.get("telemetry_repair_attempts_json")
+            ),
             pending_retry=bool(d.get("pending_retry") or 0),
             blocked_rounds=d.get("blocked_rounds") or 0,
             consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,
@@ -196,10 +231,20 @@ class HypothesisStore:
         """Return all hypotheses with the given status."""
         with sqlite3.connect(self.registry.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT * FROM hypotheses WHERE status = ? ORDER BY created_at ASC",
-                (status,),
-            ).fetchall()
+            if status == "rejected":
+                placeholders = ",".join("?" for _ in _REJECTED_STATUS_ALIASES)
+                rows = conn.execute(
+                    "SELECT * FROM hypotheses "
+                    f"WHERE status IN ({placeholders}) "
+                    "ORDER BY created_at ASC",
+                    _REJECTED_STATUS_ALIASES,
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM hypotheses WHERE status = ? "
+                    "ORDER BY created_at ASC",
+                    (status,),
+                ).fetchall()
         return [self._row_to_record(r) for r in rows]
 
     def get_by_branch(self, branch_id: str) -> List[HypothesisRecord]:
@@ -299,7 +344,7 @@ class HypothesisStore:
                     family_id,
                     COUNT(*) as total,
                     SUM(CASE WHEN status = 'promoted' THEN 1 ELSE 0 END) as promoted,
-                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted') THEN 1 ELSE 0 END) as rejected,
+                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted', 'contract_failed', 'smoke_failed', 'screening_no_effect', 'screening_telemetry_failed', 'validation_telemetry_failed') THEN 1 ELSE 0 END) as rejected,
                     SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
                 FROM hypotheses
                 WHERE family_id IS NOT NULL

@@ -37,16 +37,16 @@ def normalize_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, An
         "context.read_algorithm_file",
         "context.read_algorithm_symbol",
     }:
-        raw.setdefault("surface", "solver_design")
+        if raw.get("surface") in (None, ""):
+            raw.pop("surface", None)
     if tool_name == "context.read_active_solver_design":
         raw.setdefault("include_file_previews", False)
         raw.setdefault("max_file_chars", 6000)
     elif tool_name == "context.read_active_solver_map":
-        raw.setdefault("surface", "solver_design")
+        pass
     elif tool_name == "context.read_operator_registry":
-        raw.setdefault("surface", "solver_design")
+        pass
     elif tool_name == "context.read_algorithm_slice":
-        raw.setdefault("surface", "solver_design")
         raw.setdefault("max_chars", 12000)
     elif tool_name == "context.list_algorithm_files":
         raw.setdefault("include_inactive", True)

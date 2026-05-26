@@ -1,6 +1,7 @@
 """Focused tests split from test_proposal_pipeline.py."""
 
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
+from scion.core.models import MechanismChange
 
 def test_generate_hypothesis_builds_context_and_record() -> None:
     pipeline, branch, runtime, circuit, failures, _ = _pipeline()
@@ -25,12 +26,24 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
 
 def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:
     creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Repair activation telemetry wiring for bounded_probe.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/bounded.py",
+        target_weakness="The declared mechanism telemetry did not activate.",
+        expected_effect="Fix activation/runtime telemetry without adding a new mechanism.",
+        mechanism_changes=(
+            MechanismChange(id="bounded_probe", change_type="add"),
+        ),
+    )
     pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)
     branch.current_code_hash = "candidate-hash"
     branch.last_clean_code_hash = "candidate-hash"
     branch.branch_code_status = "telemetry_wiring_suspect"
     branch.last_screening_feedback_tier = "inactive"
     branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+    branch.telemetry_repair_mechanism_ids = ("bounded_probe",)
 
     hypothesis, record = pipeline.generate_hypothesis(branch)
 
@@ -44,6 +57,36 @@ def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:
     assert "wiring_suspect_requires_repair" in (
         creative.hypothesis_context["branch_hygiene_guidance"]
     )
+
+
+def test_generate_hypothesis_rejects_new_mechanism_on_suspect_branch() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Add a different local-search mechanism.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/different.py",
+        mechanism_changes=(
+            MechanismChange(id="different_mechanism", change_type="add"),
+        ),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+    branch.telemetry_repair_mechanism_ids = ("bounded_probe",)
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert "repair_first_policy_violation" in detail
+    assert "new_mechanism_requires_clean_fork" in detail
+    assert "bounded_probe" in detail
+    assert "different_mechanism" in detail
+    assert failures
+    assert "repair_first_policy_violation" in failures[-1][1].detail
+    assert circuit.failures
 
 
 def test_generate_hypothesis_allows_active_no_effect_branch_with_marker() -> None:

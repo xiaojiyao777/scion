@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_session_test_support import *
 
+
+def _policy_code_context(_hypothesis):
+    return {
+        "kind": "code",
+        "target_file": "policies/search_policy.py",
+        "target_file_code": _SEARCH_POLICY_SOURCE,
+    }
+
+
 def test_code_phase_planner_can_query_memory_and_get_full_surface(
     tmp_path: Path,
 ) -> None:
@@ -32,7 +41,7 @@ def test_code_phase_planner_can_query_memory_and_get_full_surface(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -92,7 +101,7 @@ def test_agentic_session_bounded_planner_rejects_forbidden_tool(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -146,7 +155,7 @@ def test_model_side_forbidden_tool_selection_is_rejected_before_execution(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -206,7 +215,7 @@ def test_model_side_malformed_tool_selection_falls_back_without_raw_refs(
                 "raw_metrics_ref": "/SECRET/raw.json",
                 "note": "safe line\nvalidation SECRET_HOLDOUT_SIGNAL",
             },
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -254,7 +263,7 @@ def test_agentic_session_fallback_does_not_repeat_successful_required_tools(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -311,7 +320,7 @@ def test_agentic_session_fallback_does_not_repeat_successful_feedback_tools(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,
@@ -384,7 +393,7 @@ def test_agentic_session_retries_empty_branch_scoped_feedback_campaign_wide(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
+                build_code_context=_policy_code_context,
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
                 failure_reason=None,

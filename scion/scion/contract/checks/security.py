@@ -4,8 +4,10 @@ from __future__ import annotations
 import ast
 import time
 from collections.abc import Callable
+from typing import Any, Mapping, Sequence
 
 from scion.config.problem import ProblemSpec
+from scion.core.path_match import segment_glob_match
 from scion.contract.patch_graph import PatchSetGraph
 from scion.contract.result_payload import check_result
 from scion.core.models import CheckResult, PatchProposal
@@ -85,7 +87,11 @@ def check_import_whitelist(
     return check_result("C8_import_whitelist", passed, "heavy", detail, t0)
 
 
-def check_sensitive_api(patch: PatchProposal) -> CheckResult:
+def check_sensitive_api(
+    patch: PatchProposal,
+    *,
+    forbidden_entrypoint_calls: Sequence[Mapping[str, Any]] = (),
+) -> CheckResult:
     t0 = time.monotonic_ns()
     if patch.action == "delete":
         return check_result(
@@ -115,9 +121,10 @@ def check_sensitive_api(patch: PatchProposal) -> CheckResult:
     )
     violations: list[str] = []
     violations.extend(
-        _context_baseline_call_violations_in_baseline_algorithm(
+        _forbidden_entrypoint_call_violations(
             patch.file_path,
             tree,
+            forbidden_entrypoint_calls,
         )
     )
     for node in ast.walk(tree):
@@ -565,20 +572,61 @@ def _is_os_environ_attr(
     return module_aliases.get(node.value.id, node.value.id) == "os"
 
 
-def _context_baseline_call_violations_in_baseline_algorithm(
+def _forbidden_entrypoint_call_violations(
     file_path: str,
     tree: ast.AST,
+    forbidden_calls: Sequence[Mapping[str, Any]],
 ) -> list[str]:
     try:
         normalized = normalize_relative_patch_path(file_path)
     except ValueError:
         normalized = str(file_path or "").replace("\\", "/").lstrip("/")
-    if normalized != "policies/baseline_algorithm.py":
-        return []
+    violations: list[str] = []
+    for spec in forbidden_calls:
+        if not _forbidden_call_applies_to_path(spec, normalized):
+            continue
+        receiver_name = str(spec.get("receiver_name") or "").strip()
+        attribute_name = str(spec.get("attribute_name") or "").strip()
+        if not receiver_name or not attribute_name:
+            continue
+        findings = _forbidden_receiver_attribute_call_findings(
+            tree,
+            receiver_name=receiver_name,
+            attribute_name=attribute_name,
+        )
+        if not findings:
+            continue
+        message = str(spec.get("message") or "").strip()
+        if message:
+            violations.append(f"{message}: " + ", ".join(sorted(set(findings))))
+        else:
+            violations.append(
+                f"forbidden entrypoint call {receiver_name}.{attribute_name}(...): "
+                + ", ".join(sorted(set(findings)))
+            )
+    return violations
 
-    context_aliases = {"context"}
+
+def _forbidden_call_applies_to_path(
+    spec: Mapping[str, Any],
+    normalized_path: str,
+) -> bool:
+    exact = str(spec.get("file_path") or "").replace("\\", "/").lstrip("/").strip()
+    if exact and normalized_path == exact:
+        return True
+    pattern = str(spec.get("path_glob") or "").replace("\\", "/").lstrip("/").strip()
+    return bool(pattern and segment_glob_match(normalized_path, pattern))
+
+
+def _forbidden_receiver_attribute_call_findings(
+    tree: ast.AST,
+    *,
+    receiver_name: str,
+    attribute_name: str,
+) -> list[str]:
+    receiver_aliases = {receiver_name}
     getattr_aliases = {"getattr"}
-    baseline_aliases: set[str] = set()
+    call_aliases: set[str] = set()
     assignments: list[tuple[set[str], ast.AST]] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -586,7 +634,7 @@ def _context_baseline_call_violations_in_baseline_algorithm(
             if value is None:
                 continue
             targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
-            target_names = _assigned_name_targets_for_contract_baseline(targets)
+            target_names = _assigned_name_targets_for_forbidden_call(targets)
             if target_names:
                 assignments.append((target_names, value))
 
@@ -594,55 +642,59 @@ def _context_baseline_call_violations_in_baseline_algorithm(
     while changed:
         changed = False
         for target_names, value in assignments:
-            if isinstance(value, ast.Name) and value.id in context_aliases:
-                before = len(context_aliases)
-                context_aliases.update(target_names)
-                changed = changed or len(context_aliases) != before
+            if isinstance(value, ast.Name) and value.id in receiver_aliases:
+                before = len(receiver_aliases)
+                receiver_aliases.update(target_names)
+                changed = changed or len(receiver_aliases) != before
             elif isinstance(value, ast.Name) and value.id in getattr_aliases:
                 before = len(getattr_aliases)
                 getattr_aliases.update(target_names)
                 changed = changed or len(getattr_aliases) != before
-            elif isinstance(value, ast.Name) and value.id in baseline_aliases:
-                before = len(baseline_aliases)
-                baseline_aliases.update(target_names)
-                changed = changed or len(baseline_aliases) != before
-            elif _is_context_baseline_attribute(value, context_aliases) or (
+            elif isinstance(value, ast.Name) and value.id in call_aliases:
+                before = len(call_aliases)
+                call_aliases.update(target_names)
+                changed = changed or len(call_aliases) != before
+            elif _is_forbidden_receiver_attribute(
+                value,
+                receiver_aliases,
+                attribute_name,
+            ) or (
                 isinstance(value, ast.Call)
-                and _is_context_baseline_getattr(
+                and _is_forbidden_receiver_attribute_getattr(
                     value,
-                    context_aliases,
+                    receiver_aliases,
                     getattr_aliases,
+                    attribute_name,
                 )
             ):
-                before = len(baseline_aliases)
-                baseline_aliases.update(target_names)
-                changed = changed or len(baseline_aliases) != before
+                before = len(call_aliases)
+                call_aliases.update(target_names)
+                changed = changed or len(call_aliases) != before
 
     findings: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if _is_context_baseline_attribute(func, context_aliases):
-            findings.append("context.baseline(...)")
-        elif isinstance(func, ast.Call) and _is_context_baseline_getattr(
+        if _is_forbidden_receiver_attribute(
             func,
-            context_aliases,
-            getattr_aliases,
+            receiver_aliases,
+            attribute_name,
         ):
-            findings.append("getattr(context, 'baseline')(...)")
-        elif isinstance(func, ast.Name) and func.id in baseline_aliases:
-            findings.append(f"context.baseline alias {func.id}(...)")
+            findings.append(f"{receiver_name}.{attribute_name}(...)")
+        elif isinstance(func, ast.Call) and _is_forbidden_receiver_attribute_getattr(
+            func,
+            receiver_aliases,
+            getattr_aliases,
+            attribute_name,
+        ):
+            findings.append(f"getattr({receiver_name}, '{attribute_name}')(...)" )
+        elif isinstance(func, ast.Name) and func.id in call_aliases:
+            findings.append(f"{receiver_name}.{attribute_name} alias {func.id}(...)")
+    return findings
 
-    if not findings:
-        return []
-    return [
-        "policies/baseline_algorithm.py must not call context.baseline(...): "
-        + ", ".join(sorted(set(findings)))
-    ]
 
-
-def _assigned_name_targets_for_contract_baseline(
+def _assigned_name_targets_for_forbidden_call(
     targets: list[ast.AST],
 ) -> set[str]:
     names: set[str] = set()
@@ -650,33 +702,35 @@ def _assigned_name_targets_for_contract_baseline(
         if isinstance(target, ast.Name):
             names.add(target.id)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            names.update(_assigned_name_targets_for_contract_baseline(list(target.elts)))
+            names.update(_assigned_name_targets_for_forbidden_call(list(target.elts)))
     return names
 
 
-def _is_context_baseline_attribute(
+def _is_forbidden_receiver_attribute(
     node: ast.AST,
-    context_aliases: set[str],
+    receiver_aliases: set[str],
+    attribute_name: str,
 ) -> bool:
     return (
         isinstance(node, ast.Attribute)
-        and node.attr == "baseline"
+        and node.attr == attribute_name
         and isinstance(node.value, ast.Name)
-        and node.value.id in context_aliases
+        and node.value.id in receiver_aliases
     )
 
 
-def _is_context_baseline_getattr(
+def _is_forbidden_receiver_attribute_getattr(
     node: ast.Call,
-    context_aliases: set[str],
+    receiver_aliases: set[str],
     getattr_aliases: set[str],
+    attribute_name: str,
 ) -> bool:
     return (
         isinstance(node.func, ast.Name)
         and node.func.id in getattr_aliases
         and len(node.args) >= 2
         and isinstance(node.args[0], ast.Name)
-        and node.args[0].id in context_aliases
+        and node.args[0].id in receiver_aliases
         and is_string_literal_node(node.args[1])
-        and node.args[1].value == "baseline"
+        and node.args[1].value == attribute_name
     )

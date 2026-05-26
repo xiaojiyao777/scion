@@ -29,6 +29,36 @@ from scion.problems.cvrp.contract_checks.state_bridge import (
 class CvrpContractCheckProvider:
     """CVRP problem-owned contract integration checks."""
 
+    def active_subject_policy(
+        self,
+        context=None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> dict[str, object] | None:
+        del context, subject_id
+        selected = str(surface or "").strip()
+        if selected not in {"", "solver_design", "solver_algorithm"}:
+            return None
+        return {
+            "surface": "solver_design",
+            "subject_id": "cvrp.solver_design.active_baseline",
+            "entrypoint_paths": ("policies/baseline_algorithm.py",),
+            "support_module_globs": ("policies/baseline_modules/*.py",),
+            "compatibility_paths": ("policies/solver_algorithm.py",),
+            "forbidden_entrypoint_calls": (
+                {
+                    "file_path": "policies/baseline_algorithm.py",
+                    "receiver_name": "context",
+                    "attribute_name": "baseline",
+                    "message": (
+                        "policies/baseline_algorithm.py must not call "
+                        "context.baseline(...)"
+                    ),
+                },
+            ),
+        }
+
     def check_solver_design_integration(
         self,
         request,

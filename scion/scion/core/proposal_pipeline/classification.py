@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.proposal.agentic_session import (
+    AgenticFailureCategory,
     AgenticProposalOutput,
     AgenticProposalStatus,
 )
@@ -69,6 +70,15 @@ def _agentic_quality_block_classification(
     failure_code = str(structured.get("failure_code") or "")
     premise_check = str(structured.get("premise_check") or "")
     detail = str(output.failure_detail or "").lower()
+    if (
+        "schema_quality_block" in detail
+        or "mechanism_changes_duplicate_id_conflict" in detail
+    ):
+        return {
+            "failure_class": AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE.value,
+            "failure_code": "mechanism_changes_duplicate_id_conflict",
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
     if (
         failure_category == ACTIVATION_NOT_OBSERVED_DIAGNOSTIC
         or failure_code == ACTIVATION_NOT_OBSERVED_DIAGNOSTIC

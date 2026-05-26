@@ -400,7 +400,10 @@ def test_duplicate_additional_exact_replace_changes_are_composed() -> None:
 
     patch = _parse_patch(
         raw,
-        context={"patch_source_files": {scheduler_path: scheduler_before}},
+        context={
+            "patch_source_files": {scheduler_path: scheduler_before},
+            "allow_host_internal_full_file_modify": True,
+        },
     )
 
     assert len(patch.additional_changes) == 1
@@ -440,7 +443,7 @@ def test_duplicate_full_file_conflict_is_rejected_before_schema_loop() -> None:
     }
 
     with pytest.raises(ProposalValidationError) as excinfo:
-        _parse_patch(raw)
+        _parse_patch(raw, context={"allow_host_internal_full_file_modify": True})
 
     message = str(excinfo.value)
     assert "patch_edit_protocol" in message
@@ -491,13 +494,41 @@ def test_primary_and_additional_same_file_exact_replace_are_composed() -> None:
     )
 
 
-def test_full_file_fallback_remains_compatible() -> None:
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "code_content": "VALUE = 3\n",
+        },
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "full_file",
+            "content_after": "VALUE = 4\n",
+        },
+    ],
+    ids=["legacy-code-content", "typed-full-file"],
+)
+def test_no_source_full_file_modify_is_rejected(raw: dict[str, str]) -> None:
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "existing_file_full_file_modify_source_required" in message
+    assert "exact_replace" in message
+    assert "source_digest" in message
+
+
+def test_host_internal_full_file_modify_compatibility_requires_flag() -> None:
     legacy = _parse_patch(
         {
             "file_path": "policies/example.py",
             "action": "modify",
             "code_content": "VALUE = 3\n",
-        }
+        },
+        context={"allow_host_internal_full_file_modify": True},
     )
     typed = _parse_patch(
         {
@@ -505,7 +536,8 @@ def test_full_file_fallback_remains_compatible() -> None:
             "action": "modify",
             "edit_intent": "full_file",
             "content_after": "VALUE = 4\n",
-        }
+        },
+        context={"allow_host_internal_full_file_modify": True},
     )
 
     assert legacy.code_content == "VALUE = 3\n"
@@ -620,5 +652,5 @@ def test_patch_schema_keeps_legacy_code_content_supported_without_encouraging_it
     )
 
     assert '"code_content":' not in prompt
-    assert "compatibility fallback" in prompt
+    assert "rejected for model-facing existing-file modifies" in prompt
     assert '"full_file_reason"' in prompt

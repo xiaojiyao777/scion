@@ -1,5 +1,7 @@
 """Focused tests split from test_contract.py."""
 
+from scion.contract.checks.security import check_sensitive_api
+
 from .contract_test_support import *  # noqa: F401,F403
 
 class TestC8ImportWhitelist:
@@ -222,9 +224,6 @@ class TestC9SensitiveApi:
         assert "os.environ" in c9.detail
 
     def test_context_baseline_getattr_alias_is_blocked(self, gate: ContractGate):
-        gate = ContractGate(
-            make_spec(editable=("operators/*.py", "policies/baseline_algorithm.py"))
-        )
         code = (
             "def solve(context):\n"
             "    get = getattr\n"
@@ -232,11 +231,20 @@ class TestC9SensitiveApi:
             "    return run_baseline(time_limit_sec=0.1)\n"
         )
         patch = PatchProposal(
-            file_path="policies/baseline_algorithm.py",
+            file_path="solver/main.py",
             action="modify",
             code_content=code,
         )
-        result = gate.validate_patch(patch)
-        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        c9 = check_sensitive_api(
+            patch,
+            forbidden_entrypoint_calls=(
+                {
+                    "file_path": "solver/main.py",
+                    "receiver_name": "context",
+                    "attribute_name": "baseline",
+                    "message": "solver/main.py must not call context.baseline(...)",
+                },
+            ),
+        )
         assert not c9.passed
         assert "context.baseline alias" in c9.detail

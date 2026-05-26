@@ -291,7 +291,7 @@ class TestT1BlacklistDoubleWrite:
             rows = conn.execute(
                 "SELECT change_locus, status FROM hypotheses"
             ).fetchall()
-        assert rows == [("solver_design", "rejected")]
+        assert rows == [("solver_design", "contract_failed")]
 
     def test_hypothesis_already_recorded_prevents_duplicate(self, tmp_path):
         """Direct _handle_failure calls: flag=True skips write, flag=False writes."""

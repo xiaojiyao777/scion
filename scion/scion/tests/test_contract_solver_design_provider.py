@@ -3,9 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from scion.contract.gate import ContractGate
 from scion.contract.checks import solver_design_integration as generic_c9e
 from scion.contract.checks.problem_integration import resolve_contract_check_provider
 from scion.core.models import PatchProposal
+from scion.problem.providers import (
+    active_subject_policy_matches_path,
+    active_subject_policy_payload,
+)
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
@@ -111,6 +116,52 @@ def test_cvrp_adapter_exposes_problem_owned_contract_provider(tmp_path: Path) ->
     assert not result.passed
     assert "new solver_design helper functions are not integrated" in result.detail
     assert "_unused_cvrp_contract_probe" in result.detail
+
+
+def test_cvrp_active_subject_policy_owns_current_solver_design_paths() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    problem_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    policy = active_subject_policy_payload(
+        problem_spec=problem_spec,
+        surface="solver_design",
+    )
+
+    assert active_subject_policy_matches_path(
+        policy,
+        "policies/baseline_algorithm.py",
+    )
+    assert active_subject_policy_matches_path(
+        policy,
+        "policies/baseline_modules/local_search.py",
+    )
+    assert active_subject_policy_matches_path(
+        policy,
+        "policies/solver_algorithm.py",
+    )
+    assert policy["forbidden_entrypoint_calls"][0]["receiver_name"] == "context"
+    assert policy["forbidden_entrypoint_calls"][0]["attribute_name"] == "baseline"
+
+
+def test_cvrp_provider_forbidden_entrypoint_call_reaches_contract_gate() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    problem_spec = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(problem_spec)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    run = context.baseline\n"
+            "    return run(time_limit_sec=time_limit_sec)\n"
+        ),
+    )
+
+    result = gate.validate_patch(patch, selected_surface="solver_design")
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "context.baseline alias" in c9.detail
 
 
 def test_cvrp_provider_entrypoint_delegates_to_focused_modules() -> None:

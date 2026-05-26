@@ -60,6 +60,7 @@ from scion.proposal.agentic_session import (
     _self_check_from_previews,
 )
 from scion.proposal.engine import CreativeLayer
+from scion.proposal.edit_protocol import source_digest_for_content
 from scion.proposal.llm_client import LLMRetryExhaustedError
 from scion.proposal.tools import (
     ContextExposurePolicy,
@@ -82,6 +83,21 @@ _COMPACT_FEEDBACK_TOOL_NAMES = {
 }
 _SCION_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 _CVRP_ROOT = _SCION_PACKAGE_ROOT / "problems" / "cvrp"
+_SEARCH_POLICY_SOURCE = (
+    "def baseline_time_fraction(instance, time_limit_sec):\n    return 0.50\n"
+    "def max_operator_rounds(instance, time_limit_sec):\n    return 12\n"
+)
+
+
+def _valid_policy_exact_replace_payload() -> dict:
+    return {
+        "file_path": "policies/search_policy.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(_SEARCH_POLICY_SOURCE),
+        "old_string": "return 0.50",
+        "new_string": "return 0.35",
+    }
 
 
 def _solver_design_low_effort_issue(**kwargs):
@@ -167,7 +183,7 @@ class ToolSelectionClient:
         if tool["name"] == "generate_hypothesis":
             return _valid_hypothesis_payload()
         if tool["name"] == "generate_patch":
-            return _valid_policy_patch_payload()
+            return _valid_policy_exact_replace_payload()
         raise AssertionError(f"unexpected tool request: {tool['name']}")
 
 
@@ -184,7 +200,7 @@ class CapturingToolClient:
         if tool["name"] == "generate_hypothesis":
             return _valid_hypothesis_payload()
         if tool["name"] == "generate_patch":
-            return _valid_policy_patch_payload()
+            return _valid_policy_patch_payload(action="create")
         raise AssertionError(f"unexpected tool request: {tool['name']}")
 
 

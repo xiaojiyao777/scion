@@ -6,8 +6,17 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from scion.core.models import HypothesisProposal
+from scion.proposal.mechanism_novelty import (
+    MechanismNoveltyGate,
+    MechanismNoveltyResult,
+)
 from scion.proposal.active_solver_map import ActiveSolverMap
-from scion.proposal.tools import ProposalToolContext, ProposalToolRegistry
+from scion.proposal.tools import (
+    ProposalObservation,
+    ProposalToolContext,
+    ProposalToolRegistry,
+)
 
 
 def _map_payload(surface: str = "generic_solver") -> dict:
@@ -188,12 +197,50 @@ class _Adapter:
         return self._provider
 
 
+class _NoveltyAdapter(_Adapter):
+    def mechanism_novelty_provider(self):
+        return _RejectingNoveltyProvider()
+
+
+class _RejectingNoveltyProvider:
+    def evaluate_mechanism_novelty(
+        self,
+        hypothesis,
+        *,
+        active_solver_snapshot=None,
+        observations=(),
+        context=None,
+    ):
+        del observations, context
+        packet = active_solver_snapshot["active_algorithm_facts"]
+        fact_id = packet["fact_ids"][0]
+        return MechanismNoveltyResult(
+            premise_check="duplicate",
+            failure_category="duplicate_mechanism",
+            mechanism="alpha",
+            reason="The active map already declares this mechanism fact.",
+            evidence=("active-map fact packet",),
+            snapshot_digest=packet["snapshot_digest"],
+            fact_ids=(fact_id,),
+            fact_packet_digest=packet["fact_packet_digest"],
+            fact_provenance=active_solver_snapshot.get("provenance"),
+        )
+
+
 def _context(provider=None) -> ProposalToolContext:
     adapter = _Adapter(provider) if provider is not None else None
     return ProposalToolContext(
         session_id="session-active-map",
         campaign_id="campaign-active-map",
         adapter=adapter,
+    )
+
+
+def _novelty_context(provider=None) -> ProposalToolContext:
+    return ProposalToolContext(
+        session_id="session-active-map",
+        campaign_id="campaign-active-map",
+        adapter=_NoveltyAdapter(provider),
     )
 
 
@@ -261,6 +308,39 @@ def test_active_solver_map_tools_are_registered_and_return_receipts() -> None:
     assert slice_payload["read_receipt"]["content_digest"] == (
         slice_payload["content_digest"]
     )
+
+
+def test_active_solver_map_is_gate_prompt_parity_source_for_non_solver_surface() -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _novelty_context(_FullProvider())
+    observation = registry.call(
+        "context.read_active_solver_map",
+        {"surface": "policy_bundle"},
+        context,
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add another alpha operator even though alpha is wired.",
+        change_locus="policy_bundle",
+        action="modify",
+        target_file="solver/operators.py",
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        hypothesis,
+        context=context,
+        observations=(observation,),
+    )
+
+    assert result is not None
+    payload = observation.structured_payload
+    fact_packet = payload["active_algorithm_facts"]
+    assert fact_packet["surface"] == "policy_bundle"
+    assert result.fact_packet_digest == fact_packet["fact_packet_digest"]
+    assert result.snapshot_digest == payload["snapshot_digest"]
+    assert result.fact_provenance["source"] == "context.read_active_solver_map"
+    rejection = result.to_rejection(hypothesis)
+    assert rejection["fact_packet_digest"] == fact_packet["fact_packet_digest"]
+    assert rejection["fact_provenance"]["subject_id"] == "subject.primary"
 
 
 def test_operator_registry_can_fallback_to_active_solver_map() -> None:

@@ -1,6 +1,7 @@
 """Focused tests split from test_proposal_pipeline.py."""
 
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
+from scion.core.models import MechanismChange
 
 def test_agentic_approved_continuation_can_build_code_context_and_patch() -> None:
     creative = FakeCreative()
@@ -61,6 +62,25 @@ def test_agentic_approved_continuation_can_build_code_context_and_patch() -> Non
 
 def test_agentic_repair_continuation_hides_suspect_workspace_and_includes_status() -> None:
     creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Repair telemetry activation wiring for bounded_probe.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/bounded.py",
+        target_weakness="The declared mechanism telemetry did not activate.",
+        expected_effect="Fix runtime telemetry wiring without adding a new mechanism.",
+        mechanism_changes=(
+            MechanismChange(id="bounded_probe", change_type="add"),
+        ),
+    )
+    creative.patch = PatchProposal(
+        file_path="operators/bounded.py",
+        action="modify",
+        code_content="class Bounded: pass\n",
+        mechanism_changes=(
+            MechanismChange(id="bounded_probe", change_type="add"),
+        ),
+    )
     events: list[str] = []
 
     class RepairContinuationSession:
@@ -117,6 +137,7 @@ def test_agentic_repair_continuation_hides_suspect_workspace_and_includes_status
     branch.branch_code_status = "telemetry_wiring_suspect"
     branch.last_screening_feedback_tier = "inactive"
     branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+    branch.telemetry_repair_mechanism_ids = ("bounded_probe",)
 
     hypothesis, record = pipeline.generate_hypothesis(branch)
     patch = pipeline.generate_code(branch, hypothesis)

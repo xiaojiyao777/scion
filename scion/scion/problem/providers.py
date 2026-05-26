@@ -7,7 +7,7 @@ without importing a concrete problem package.
 from __future__ import annotations
 
 import importlib
-from typing import Any, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 
 class ProblemProviderError(RuntimeError):
@@ -105,6 +105,19 @@ class ActiveSolverMapProvider(Protocol):
         """Return a bounded problem-generic algorithm slice payload."""
 
 
+class ActiveSubjectPolicyProvider(Protocol):
+    """Optional problem-owned active algorithm subject policy."""
+
+    def active_subject_policy(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        """Return active subject paths, support globs, and call restrictions."""
+
+
 def resolve_active_solver_map_provider(
     *,
     problem_spec: Any = None,
@@ -117,6 +130,90 @@ def resolve_active_solver_map_provider(
         adapter=adapter,
         factory_names=("active_solver_map_provider",),
     )
+
+
+def resolve_active_subject_policy_provider(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> Any | None:
+    """Return an optional problem-owned active subject policy provider."""
+
+    return _resolve_provider(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        factory_names=(
+            "active_subject_policy_provider",
+            "contract_check_provider",
+            "contract_checks_provider",
+            "active_solver_map_provider",
+            "active_solver_design_provider",
+            "solver_design_provider",
+        ),
+    )
+
+
+def active_subject_policy_payload(
+    *,
+    context: Any = None,
+    problem_spec: Any = None,
+    adapter: Any = None,
+    surface: str | None = None,
+    subject_id: str | None = None,
+) -> dict[str, Any]:
+    """Return a normalized active subject policy payload, or ``{}``."""
+
+    try:
+        provider = resolve_active_subject_policy_provider(
+            problem_spec=problem_spec,
+            adapter=adapter,
+        )
+    except ProblemProviderError:
+        return {}
+    if provider is None:
+        return {}
+    method = getattr(provider, "active_subject_policy", None)
+    if not callable(method):
+        return {}
+    try:
+        raw = method(context, surface=surface, subject_id=subject_id)
+    except TypeError:
+        raw = method(surface=surface, subject_id=subject_id)
+    if not isinstance(raw, Mapping):
+        return {}
+    return _normalize_active_subject_policy(raw)
+
+
+def active_subject_policy_matches_path(
+    policy: Mapping[str, Any],
+    file_path: str,
+    *,
+    include_entrypoints: bool = True,
+    include_support: bool = True,
+    include_compatibility: bool = True,
+) -> bool:
+    """Return whether a provider policy declares ``file_path`` active."""
+
+    from scion.core.path_match import segment_glob_match
+    from scion.core.paths import normalize_relative_patch_path
+
+    try:
+        normalized = normalize_relative_patch_path(file_path)
+    except ValueError:
+        normalized = str(file_path or "").replace("\\", "/").lstrip("/")
+    exact_paths: set[str] = set()
+    if include_entrypoints:
+        exact_paths.update(_string_tuple(policy.get("entrypoint_paths")))
+    if include_compatibility:
+        exact_paths.update(_string_tuple(policy.get("compatibility_paths")))
+    exact_paths.update(_string_tuple(policy.get("algorithm_paths")))
+    if normalized in exact_paths:
+        return True
+    if include_support:
+        for pattern in _string_tuple(policy.get("support_module_globs")):
+            if segment_glob_match(normalized, pattern):
+                return True
+    return False
 
 
 def resolve_active_solver_design_provider(
@@ -192,6 +289,49 @@ def _resolve_provider(
     return _provider_from_factory(loaded_adapter, factory_names)
 
 
+def _normalize_active_subject_policy(raw: Mapping[str, Any]) -> dict[str, Any]:
+    policy = dict(raw)
+    aliases = {
+        "entrypoints": "entrypoint_paths",
+        "entrypoint_files": "entrypoint_paths",
+        "support_globs": "support_module_globs",
+        "support_files": "support_module_globs",
+        "legacy_paths": "compatibility_paths",
+    }
+    for source, target in aliases.items():
+        if target not in policy and source in policy:
+            policy[target] = policy[source]
+    normalized = {
+        "surface": str(policy.get("surface") or "").strip(),
+        "subject_id": str(policy.get("subject_id") or "").strip(),
+        "entrypoint_paths": _string_tuple(policy.get("entrypoint_paths")),
+        "algorithm_paths": _string_tuple(policy.get("algorithm_paths")),
+        "support_module_globs": _string_tuple(policy.get("support_module_globs")),
+        "compatibility_paths": _string_tuple(policy.get("compatibility_paths")),
+        "forbidden_entrypoint_calls": tuple(
+            dict(item)
+            for item in policy.get("forbidden_entrypoint_calls", ()) or ()
+            if isinstance(item, Mapping)
+        ),
+    }
+    return {key: value for key, value in normalized.items() if value not in ("", ())}
+
+
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        items = (value,)
+    else:
+        try:
+            items = tuple(value)
+        except TypeError:
+            items = ()
+    return tuple(
+        dict.fromkeys(str(item).replace("\\", "/").lstrip("/").strip() for item in items)
+    )
+
+
 def _provider_from_factory(owner: Any, factory_names: Sequence[str]) -> Any | None:
     if owner is None:
         return None
@@ -246,11 +386,15 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
 
 __all__ = [
     "ActiveSolverMapProvider",
+    "ActiveSubjectPolicyProvider",
     "ActiveSolverDesignProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
+    "active_subject_policy_matches_path",
+    "active_subject_policy_payload",
     "resolve_active_solver_map_provider",
+    "resolve_active_subject_policy_provider",
     "resolve_active_solver_design_provider",
     "resolve_solver_design_prompt_provider",
     "resolve_solver_design_smoke_provider",

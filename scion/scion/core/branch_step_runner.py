@@ -214,6 +214,10 @@ class BranchStepRunner:
                     bid,
                     protocol_result,
                 ),
+                counts_toward_max_rounds=result.counts_toward_max_rounds,
+                attempt_kind=result.attempt_kind,
+                repair_policy_reason=result.repair_policy_reason or None,
+                repair_mechanism_ids=result.repair_mechanism_ids,
             )
         )
         return result
@@ -362,6 +366,10 @@ class BranchStepRunner:
                     bid,
                     protocol_result,
                 ),
+                counts_toward_max_rounds=result.counts_toward_max_rounds,
+                attempt_kind=result.attempt_kind,
+                repair_policy_reason=result.repair_policy_reason or None,
+                repair_mechanism_ids=result.repair_mechanism_ids,
             )
         )
         return result

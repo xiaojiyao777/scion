@@ -463,6 +463,67 @@ def test_campaign_loop_default_attempt_limit_caps_quality_blocks_at_rounds() -> 
     assert loop_statuses[-1]["quality_blocks"] == 3
 
 
+def test_campaign_loop_schema_quality_block_does_not_consume_proposal_attempt() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason=(
+                "schema_quality_block: "
+                "mechanism_changes_duplicate_id_conflict"
+            ),
+            counts_toward_max_rounds=False,
+            attempt_kind="schema_quality_block",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        StepResult(action="explore", branch_id="b1", reason="screening 2"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
+    )
+
+    loop.run(max_rounds=2)
+
+    assert calls == 3
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 2
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 1
+    assert loop_statuses[-1]["effective_rounds_completed"] == 2
+
+
 def test_campaign_loop_does_not_start_step_when_proposal_attempts_are_exhausted() -> None:
     stopped_reasons: list[str | None] = []
     loop_statuses: list[dict[str, Any]] = []
@@ -522,6 +583,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
             reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
             counts_toward_max_rounds=False,
             attempt_kind="telemetry_repairable",
+            repair_mechanism_ids=("screening_probe",),
         ),
         StepResult(
             action="validate",
@@ -530,6 +592,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
             reason="VALIDATION_TELEMETRY_REPAIRABLE: repair declared telemetry",
             counts_toward_max_rounds=False,
             attempt_kind="validation_repair_required",
+            repair_mechanism_ids=("validation_probe",),
         ),
         StepResult(action="explore", branch_id="b1", reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
@@ -582,7 +645,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
     assert "max_rounds_exhausted" in stopped_reasons
 
 
-def test_campaign_loop_default_rounds_bound_telemetry_repairable_attempts() -> None:
+def test_campaign_loop_caps_repeated_telemetry_repair_by_branch_mechanism() -> None:
     results = [
         StepResult(
             action="explore",
@@ -591,6 +654,7 @@ def test_campaign_loop_default_rounds_bound_telemetry_repairable_attempts() -> N
             reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
             counts_toward_max_rounds=False,
             attempt_kind="telemetry_repairable",
+            repair_mechanism_ids=("probe",),
         )
         for _ in range(5)
     ]
@@ -632,12 +696,85 @@ def test_campaign_loop_default_rounds_bound_telemetry_repairable_attempts() -> N
 
     loop.run(max_rounds=4)
 
-    assert calls == 4
-    assert "proposal_attempt_limit_exhausted" in stopped_reasons
+    assert calls == 2
+    assert "telemetry_repair_attempt_budget_exhausted" in stopped_reasons
     assert loop_statuses[-1]["requested_rounds"] == 4
-    assert loop_statuses[-1]["proposal_attempts"] == 4
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 0
     assert loop_statuses[-1]["effective_rounds_completed"] == 0
-    assert loop_statuses[-1]["telemetry_diagnostic_attempts"] == 4
+    assert loop_statuses[-1]["telemetry_diagnostic_attempts"] == 2
+    assert loop_statuses[-1]["telemetry_repair_attempts"] == 2
+    assert loop_statuses[-1]["telemetry_repair_attempts_by_branch_mechanism"] == {
+        "b1:probe": 2
+    }
+
+
+def test_campaign_loop_telemetry_repairable_does_not_consume_proposal_attempts() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
+            counts_toward_max_rounds=False,
+            attempt_kind="telemetry_repairable",
+            repair_mechanism_ids=("probe",),
+        ),
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
+            counts_toward_max_rounds=False,
+            attempt_kind="telemetry_repairable",
+            repair_mechanism_ids=("other_probe",),
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        StepResult(action="explore", branch_id="b1", reason="screening 2"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
+    )
+
+    loop.run(max_rounds=2)
+
+    assert calls == 4
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 2
+    assert loop_statuses[-1]["telemetry_repair_attempts"] == 2
+    assert loop_statuses[-1]["effective_rounds_completed"] == 2
 
 
 def test_campaign_loop_writes_status_heartbeat_before_step_execution() -> None:

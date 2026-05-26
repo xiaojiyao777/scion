@@ -256,7 +256,7 @@ def _weak_positive_mechanism_lines(
             f"case_win_rate={protocol.stats.win_rate:.2f}",
         ]
         if tier_summary.why_not_promoted:
-            pieces.append(f"why_not_promoted={tier_summary.why_not_promoted}")
+            pieces.append(f"screening_gate_reason={tier_summary.why_not_promoted}")
         pieces.append(
             "allowed_follow_up=adjust trigger/schedule/composition; "
             "do not repeat unchanged mechanism"

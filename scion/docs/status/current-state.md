@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-24*
+*Last updated: 2026-05-25*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -15,6 +15,24 @@ framework: generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-25 repair pass closed the main blockers from the local
+`gpt-5.5` 8-attempt diagnostic run and the full v0.4 audit. Suspect telemetry
+branches now use a generic repair-first lifecycle: a branch marked
+`telemetry_wiring_suspect` must repair the same declared mechanism's
+telemetry/wiring/trigger path, or the next new mechanism must fork from a clean
+baseline branch. Telemetry repair/diagnostic attempts are counted separately
+from ordinary proposal attempts and effective screened rounds, with a bounded
+per-branch/per-mechanism repair cap. Telemetry guard semantics now distinguish
+activation/evaluation/runtime/effect outcomes, so zero-millisecond runtime is
+not by itself treated as missing activation. Generic `contract`/`proposal`
+layers now ask provider hooks for active algorithm package paths and entrypoint
+rules instead of hard-coding CVRP `baseline_algorithm`/`baseline_modules`
+layout, and active solver map facts carry shared digest/provenance for
+gate-prompt parity. Model-facing existing-file edits are strict typed edits
+with source digests; full-file content remains allowed for creates and explicit
+host-internal compatibility only. Full local regression after these changes:
+`2237 passed, 1 skipped`.
 
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session

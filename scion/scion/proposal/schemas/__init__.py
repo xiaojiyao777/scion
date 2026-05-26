@@ -23,11 +23,14 @@ from .patch import (
     PremiseCheck,
 )
 from .shared import (
+    MECHANISM_DUPLICATE_ID_CONFLICT,
+    MECHANISM_SCHEMA_QUALITY_BLOCK,
     MechanismChangeInput,
     MechanismChangeType,
     _EXPECTED_TELEMETRY_DESCRIPTION,
     _empty_mechanism_changes_to_list,
     _mechanism_changes_json_schema,
+    _normalize_mechanism_changes_preflight,
     _validate_unique_mechanism_change_ids,
 )
 from .tools import (
@@ -49,6 +52,8 @@ __all__ = [
     "HypothesisProposalInput",
     "MechanismChangeInput",
     "MechanismChangeType",
+    "MECHANISM_DUPLICATE_ID_CONFLICT",
+    "MECHANISM_SCHEMA_QUALITY_BLOCK",
     "PATCH_PROPOSAL_SCHEMA",
     "PATCH_TOOL",
     "PatchEditIntent",
@@ -62,6 +67,7 @@ __all__ = [
     "_compact_novelty_scalar",
     "_empty_mechanism_changes_to_list",
     "_mechanism_changes_json_schema",
+    "_normalize_mechanism_changes_preflight",
     "_normalize_novelty_signature",
     "_normalize_novelty_signature_item",
     "_validate_unique_mechanism_change_ids",

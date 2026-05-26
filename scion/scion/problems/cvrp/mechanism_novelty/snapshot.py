@@ -60,8 +60,6 @@ def _active_solver_snapshot_from_observations(
     for observation in reversed(tuple(observations)):
         if observation.is_error:
             continue
-        if observation.tool_name != "context.read_active_solver_design":
-            continue
         payload = observation.structured_payload
         if not isinstance(payload, Mapping):
             continue

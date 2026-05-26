@@ -570,13 +570,15 @@ def test_telemetry_guard_scopes_map_paths_to_current_mechanism() -> None:
         ],
     )
 
-    assert summary["passed"] is False
-    assert [failure["code"] for failure in summary["failures"]] == [
-        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
-    ]
+    assert summary["passed"] is True
+    assert summary["failures"] == []
     assert [warning["code"] for warning in summary["warnings"]] == [
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
         "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
     ]
+    assert {warning["diagnostic_kind"] for warning in summary["warnings"]} == {
+        "evaluated_no_effect"
+    }
     assert (
         summary["mechanisms"]["target_probe"]["fields"]["mechanism_activation"][
             "candidate_positive"

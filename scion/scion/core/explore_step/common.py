@@ -21,6 +21,8 @@ _PROPOSAL_ACTIVATION_DIAGNOSTIC = "proposal_activation_diagnostic"
 _ACTIVATION_NOT_OBSERVED_DIAGNOSTIC = "activation_not_observed_diagnostic"
 _DUPLICATE_MECHANISM = "duplicate_mechanism"
 _MECHANISM_NOVELTY_REJECTED = "mechanism_novelty_rejected"
+_SCHEMA_QUALITY_BLOCK = "schema_quality_block"
+_MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
 _AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
 _AGENTIC_SESSION_TIMEOUT = "agentic_session_timeout"
 
@@ -50,10 +52,28 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or _PROPOSAL_ACTIVATION_DIAGNOSTIC in text
         or _DUPLICATE_MECHANISM in text
         or _MECHANISM_NOVELTY_REJECTED in text
+        or _SCHEMA_QUALITY_BLOCK in text
+        or _MECHANISM_DUPLICATE_ID_CONFLICT in text
         or "premise_check=duplicate" in text
         or "premise_check=contradicted" in text
         or "algorithm smoke did not pass" in text_lower
         or "runtime_smoke.telemetry_guard" in text_lower
+    )
+
+
+def _is_schema_quality_block_detail(detail: str | None) -> bool:
+    text = str(detail or "").lower()
+    return (
+        _SCHEMA_QUALITY_BLOCK in text
+        or _MECHANISM_DUPLICATE_ID_CONFLICT in text
+    )
+
+
+def _is_algorithm_smoke_failure_detail(detail: str | None) -> bool:
+    text = str(detail or "").lower()
+    return (
+        _ALGORITHM_SMOKE_FAILURE in text
+        or "algorithm smoke did not pass" in text
     )
 
 

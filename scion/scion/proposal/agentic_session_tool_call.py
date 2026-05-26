@@ -17,7 +17,12 @@ class AgenticSessionToolCallMixin:
             preserve_observation_chars: int = 0,
         ) -> ProposalObservation:
             assert self.tool_registry is not None
-            args = self._budgeted_tool_args(name, args, selection_source=selection_source)
+            args = self._budgeted_tool_args(
+                name,
+                args,
+                selection_source=selection_source,
+                context=context,
+            )
             authoritative_preview = _is_authoritative_self_check_preview_call(
                 name,
                 phase,

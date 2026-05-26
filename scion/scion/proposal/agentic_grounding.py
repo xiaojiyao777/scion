@@ -137,7 +137,11 @@ def _solver_design_target_file_read_args(
     if hypothesis is None:
         return None
     target_file = _normalize_solver_design_target_file(hypothesis.target_file)
-    if not _is_solver_design_algorithm_target(target_file):
+    if not _is_solver_design_algorithm_target(
+        target_file,
+        context=context,
+        surface=hypothesis.change_locus,
+    ):
         return None
     existing_paths = _existing_algorithm_file_paths(
         context=context,
@@ -165,7 +169,11 @@ def _forced_solver_design_target_file_read_args(
     if context is None or not _context_requires_solver_design_grounding(context):
         return None
     target_file = _normalize_solver_design_target_file(context.forced_target_file)
-    if not _is_solver_design_algorithm_target(target_file):
+    if not _is_solver_design_algorithm_target(
+        target_file,
+        context=context,
+        surface=context.forced_surface,
+    ):
         return None
     existing_paths = _existing_algorithm_file_paths(
         context=context,
@@ -936,8 +944,6 @@ def _active_algorithm_facts_for_prompt_context(
     for observation in reversed(tuple(observations)):
         if observation.is_error:
             continue
-        if observation.tool_name != "context.read_active_solver_design":
-            continue
         payload = observation.structured_payload
         if not isinstance(payload, Mapping):
             continue
@@ -948,7 +954,7 @@ def _active_algorithm_facts_for_prompt_context(
             continue
         return _drop_empty_dict(
             {
-                "source": "context.read_active_solver_design",
+                "source": observation.tool_name,
                 "source_observation_id": observation.observation_id,
                 "source_tool_call_id": observation.tool_call_id,
                 "provenance": payload.get("provenance"),
@@ -983,8 +989,6 @@ def _active_solver_mechanism_evidence_for_code_context(
     for observation in reversed(tuple(observations)):
         if observation.is_error:
             continue
-        if observation.tool_name != "context.read_active_solver_design":
-            continue
         payload = observation.structured_payload
         if not isinstance(payload, Mapping):
             continue
@@ -992,7 +996,7 @@ def _active_solver_mechanism_evidence_for_code_context(
         if active_facts:
             return _drop_empty_dict(
                 {
-                    "source": "context.read_active_solver_design",
+                    "source": observation.tool_name,
                     "snapshot_digest": active_facts.get("snapshot_digest"),
                     "fact_packet_digest": active_facts.get("fact_packet_digest"),
                     "active_algorithm_facts": active_facts.get(

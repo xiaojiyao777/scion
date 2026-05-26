@@ -307,7 +307,7 @@ def _split_code_context(
         f"creates or deletes. Host-visible existing-file modifies that emit "
         f"`full_file`/`content_after` are rejected by default; "
         f"`full_file_reason` is not an authorization. Legacy `code_content` "
-        f"full-file output remains accepted only as a compatibility fallback.\n"
+        f"full-file output is rejected for model-facing existing-file modifies.\n"
         f"- Do not use `full_file` just because the current target source is "
         f"shown in the prompt.\n"
         f"- When one file needs multiple small edits, prefer one file change or "

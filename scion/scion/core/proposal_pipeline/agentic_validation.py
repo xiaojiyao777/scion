@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from scion.core.branch_repair_policy import validate_repair_focused_hypothesis
 from scion.core.models import Branch, ChampionState, HypothesisProposal
 from scion.proposal.agentic_session import (
     AgenticProposalOutput,
@@ -98,6 +99,13 @@ class AgenticValidationMixin:
             )
             if boundary_violation is not None:
                 failures.append(boundary_violation)
+            repair_check = validate_repair_focused_hypothesis(
+                branch,
+                output.hypothesis,
+                step_history=self.step_history,
+            )
+            if not repair_check.allowed:
+                failures.append(repair_check.detail)
 
         if output.status != AgenticProposalStatus.FAILED:
             self_check_failure = _agentic_self_check_failure_detail(output)

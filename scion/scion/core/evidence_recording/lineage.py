@@ -105,6 +105,12 @@ class LineageRecorderMixin:
                 None,
             ),
             "last_telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
+            "telemetry_repair_mechanism_ids": list(
+                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+            ),
+            "telemetry_repair_attempts": dict(
+                getattr(branch, "telemetry_repair_attempts", {}) or {}
+            ),
             "current_champion_version": champion.version,
             "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
             "protocol_raw_metrics_ref": raw_metrics_public_ref,
@@ -221,6 +227,12 @@ class LineageRecorderMixin:
                     branch,
                     "last_telemetry_outcome",
                     None,
+                ),
+                "telemetry_repair_mechanism_ids": list(
+                    getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+                ),
+                "telemetry_repair_attempts": dict(
+                    getattr(branch, "telemetry_repair_attempts", {}) or {}
                 ),
                 "runtime_guard": _extract_runtime_guard_evidence(verification_result),
                 "runtime_stats": runtime_stats,

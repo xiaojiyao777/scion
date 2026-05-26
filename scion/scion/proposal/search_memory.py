@@ -482,7 +482,7 @@ class CampaignSearchMemory:
             "### Near-Field Mechanism Memory (screening only)",
             (
                 "These branch-local summaries guide proposals only. They do not "
-                "change promotion gates or DecisionFeatures."
+                "change decision gates or DecisionFeatures."
             ),
         ]
         for entry in entries[-6:]:
@@ -499,7 +499,7 @@ class CampaignSearchMemory:
                 f"runtime_summary={_format_runtime_summary(entry.runtime_summary)}; "
                 f"activation={entry.activation_status}; "
                 f"effect={entry.effect_status}; "
-                f"why_not_promoted={entry.why_not_promoted}; "
+                f"screening_gate_reason={entry.why_not_promoted}; "
                 f"allowed_followup_variants="
                 f"{','.join(entry.allowed_followup_variants) or 'none'}; "
                 f"repeat_unchanged_allowed="

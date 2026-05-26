@@ -169,12 +169,61 @@ class CampaignSummaryMixin:
                 logger.debug("state snapshot for campaign_summary counts failed: %s", exc)
         if state_screened_experiments is not None:
             screened_experiments = int(state_screened_experiments)
+        loop_status = getattr(self, "campaign_loop_status", None)
+        loop_proposal_attempts = None
+        loop_total_rounds = None
+        loop_telemetry_repair_attempts = None
+        loop_telemetry_repair_counts = None
+        if isinstance(loop_status, Mapping):
+            loop_proposal_attempts = loop_status.get("proposal_attempts_consumed")
+            loop_total_rounds = loop_status.get("total_rounds")
+            loop_effective_rounds = loop_status.get("effective_rounds_completed")
+            loop_telemetry_repair_attempts = loop_status.get(
+                "telemetry_repair_attempts"
+            )
+            loop_telemetry_repair_counts = loop_status.get(
+                "telemetry_repair_attempts_by_branch_mechanism"
+            )
+            if loop_effective_rounds is not None:
+                effective_rounds_completed = int(loop_effective_rounds)
 
         summary: Dict[str, Any] = {
             "campaign_id": self.campaign_id,
-            "total_rounds": round_num,
-            "proposal_attempts": round_num,
+            "total_rounds": (
+                int(loop_total_rounds)
+                if loop_total_rounds is not None
+                else round_num
+            ),
+            "proposal_attempts": (
+                int(loop_proposal_attempts)
+                if loop_proposal_attempts is not None
+                else round_num
+            ),
+            "proposal_attempts_consumed": (
+                int(loop_proposal_attempts)
+                if loop_proposal_attempts is not None
+                else round_num
+            ),
             "effective_rounds_completed": effective_rounds_completed,
+            "telemetry_repair_attempts": (
+                int(loop_telemetry_repair_attempts)
+                if loop_telemetry_repair_attempts is not None
+                else sum(
+                    1
+                    for step in steps
+                    if str(getattr(step, "attempt_kind", ""))
+                    in {
+                        "telemetry_repair",
+                        "telemetry_repairable",
+                        "validation_repair_required",
+                    }
+                )
+            ),
+            "telemetry_repair_attempts_by_branch_mechanism": (
+                dict(loop_telemetry_repair_counts)
+                if isinstance(loop_telemetry_repair_counts, Mapping)
+                else {}
+            ),
             "screened_experiments": screened_experiments,
             "telemetry_failed_experiments": telemetry_failed_experiments,
             "telemetry_failed_experiments_by_category": (
@@ -309,6 +358,16 @@ class CampaignSummaryMixin:
             "verification_passed": step.verification_passed,
             "failure_stage": step.failure_stage,
             "failure_detail": step.failure_detail,
+            "counts_toward_max_rounds": getattr(
+                step,
+                "counts_toward_max_rounds",
+                True,
+            ),
+            "attempt_kind": getattr(step, "attempt_kind", "screening"),
+            "repair_policy_reason": getattr(step, "repair_policy_reason", None),
+            "repair_mechanism_ids": list(
+                getattr(step, "repair_mechanism_ids", ()) or ()
+            ),
             "verification_detail": step.verification_detail,
             "code_archive_ref": code_archive_ref,
             "cache_stats": step.cache_stats,

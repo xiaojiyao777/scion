@@ -79,10 +79,14 @@ def normalize_patch_typed_edits(
     reject_legacy_code_content = bool(
         (context or {}).get("reject_legacy_code_content_full_file_modify")
     )
+    allow_host_internal_full_file_modify = bool(
+        (context or {}).get("allow_host_internal_full_file_modify")
+    )
     normalized, metadata = _normalize_patch_set_changes(
         normalized,
         source_files=source_files,
         reject_legacy_code_content=reject_legacy_code_content,
+        allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
     )
 
     return normalized, tuple(metadata)
@@ -122,6 +126,7 @@ def _normalize_change(
     prior_change_pointers: tuple[str, ...] = (),
     has_source_context: bool | None = None,
     reject_legacy_code_content: bool = False,
+    allow_host_internal_full_file_modify: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     change = dict(raw_change)
     explicit_intent = _edit_intent(change)
@@ -135,15 +140,26 @@ def _normalize_change(
     source_context_available = (
         bool(source_files) if has_source_context is None else has_source_context
     )
+    file_path = _normalize_path(change.get("file_path"))
+    action = str(change.get("action") or "modify").strip()
     if not explicit_intent and not has_content_after and not source_context_available:
+        _validate_existing_file_full_file_modify(
+            file_path=file_path,
+            action=action,
+            before=None,
+            explicit_intent=explicit_intent,
+            has_content_after=has_content_after,
+            has_code_content=has_code_content,
+            reject_legacy_code_content=reject_legacy_code_content,
+            allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
+            change_pointer=change_pointer,
+        )
         return change, []
     if edit_intent not in {"exact_replace", "full_file"}:
         raise PatchEditProtocolError(
             f"{change_pointer}: unsupported edit_intent {edit_intent!r}"
         )
 
-    file_path = _normalize_path(change.get("file_path"))
-    action = str(change.get("action") or "modify").strip()
     before = source_files.get(file_path)
     original_before = (
         original_source_files.get(file_path) if original_source_files else None
@@ -169,6 +185,7 @@ def _normalize_change(
             has_content_after=has_content_after,
             has_code_content=has_code_content,
             reject_legacy_code_content=reject_legacy_code_content,
+            allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
             change_pointer=change_pointer,
         )
         content_after = _full_file_content_after(change)
@@ -206,6 +223,7 @@ def _normalize_patch_set_changes(
     *,
     source_files: Mapping[str, str],
     reject_legacy_code_content: bool = False,
+    allow_host_internal_full_file_modify: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     slots = _patch_set_slots(normalized)
     path_counts = Counter(
@@ -247,6 +265,7 @@ def _normalize_patch_set_changes(
             prior_change_pointers=tuple(prior.json_pointers) if prior else (),
             has_source_context=bool(source_files),
             reject_legacy_code_content=reject_legacy_code_content,
+            allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
         )
         slot_results[slot.pointer] = change
         metadata.extend(change_metadata)
@@ -517,9 +536,10 @@ def _validate_existing_file_full_file_modify(
     has_content_after: bool,
     has_code_content: bool,
     reject_legacy_code_content: bool,
+    allow_host_internal_full_file_modify: bool,
     change_pointer: str,
 ) -> None:
-    if action != "modify" or before is None:
+    if action != "modify" or allow_host_internal_full_file_modify:
         return
     if (
         explicit_intent != "full_file"
@@ -528,31 +548,45 @@ def _validate_existing_file_full_file_modify(
     ):
         return
     content_field = "content_after" if has_content_after else "code_content"
+    reason = (
+        "existing_file_full_file_modify_rejected"
+        if before is not None
+        else "existing_file_full_file_modify_source_required"
+    )
+    detail = (
+        "action=modify targets an existing host-visible file; "
+        "model-supplied full_file/content_after is disabled by "
+        "default. full_file_reason is not an authorization."
+        if before is not None
+        else "action=modify declares an existing-file change, but no "
+        "host-visible source was provided. Model-facing existing-file "
+        "modifies must use exact_replace with source_digest; "
+        "full_file/content_after/code_content is allowed only for "
+        "creates or for host-internal compatibility."
+    )
+    payload = {
+        "error": "patch_edit_protocol",
+        "reason": reason,
+        "file_path": file_path,
+        "json_pointer": change_pointer,
+        "action": action,
+        "edit_intent": "full_file",
+        "content_field": content_field,
+        "detail": detail,
+        "guidance": (
+            "Rewrite this change as edit_intent='exact_replace': set "
+            "source_digest to the host-provided sha256 digest, omit "
+            "content_after/code_content, provide a non-empty "
+            "old_string copied exactly from the current file, and "
+            "provide new_string with only the replacement text. "
+            "old_string must match exactly once unless replace_all=true."
+        ),
+    }
+    if before is not None:
+        payload["source_digest"] = source_digest_for_content(before)
     raise PatchEditProtocolError(
         json.dumps(
-            {
-                "error": "patch_edit_protocol",
-                "reason": "existing_file_full_file_modify_rejected",
-                "file_path": file_path,
-                "json_pointer": change_pointer,
-                "action": action,
-                "edit_intent": "full_file",
-                "content_field": content_field,
-                "source_digest": source_digest_for_content(before),
-                "detail": (
-                    "action=modify targets an existing host-visible file; "
-                    "model-supplied full_file/content_after is disabled by "
-                    "default. full_file_reason is not an authorization."
-                ),
-                "guidance": (
-                    "Rewrite this change as edit_intent='exact_replace': set "
-                    "source_digest to the shown sha256 digest, omit "
-                    "content_after/code_content, provide a non-empty "
-                    "old_string copied exactly from the current file, and "
-                    "provide new_string with only the replacement text. "
-                    "old_string must match exactly once unless replace_all=true."
-                ),
-            },
+            payload,
             sort_keys=True,
             separators=(",", ":"),
         )

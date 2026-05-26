@@ -14,6 +14,10 @@ from scion.core.models import CheckResult, PatchProposal
 from scion.core.operator_interface import parse_execute_signature
 from scion.core.path_match import normalize_relative_glob_pattern, segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
+from scion.problem.providers import (
+    active_subject_policy_matches_path,
+    active_subject_policy_payload,
+)
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
 
 _STATIC_UNKNOWN = object()
@@ -79,7 +83,11 @@ def check_surface_interface(
         return _cr(check_name, False, severity, kind_error, t0)
 
     kind = str(_field(surface, "kind", "operator") or "operator")
-    if kind == "solver_design" and _is_solver_design_support_module(file_rel):
+    if kind == "solver_design" and _is_active_subject_support_module(
+        problem_spec,
+        file_rel,
+        selected_surface=selected_surface,
+    ):
         return _cr(
             check_name,
             True,
@@ -253,10 +261,22 @@ def surface_return_values(surface: Any | None) -> dict[str, Any]:
     return dict(values) if isinstance(values, Mapping) else {}
 
 
-def _is_solver_design_support_module(file_rel: str) -> bool:
-    return (
-        file_rel.startswith("policies/baseline_modules/")
-        and file_rel.endswith(".py")
+def _is_active_subject_support_module(
+    problem_spec: Any | None,
+    file_rel: str,
+    *,
+    selected_surface: str | None,
+) -> bool:
+    policy = active_subject_policy_payload(
+        problem_spec=problem_spec,
+        surface=selected_surface,
+    )
+    return active_subject_policy_matches_path(
+        policy,
+        file_rel,
+        include_entrypoints=False,
+        include_support=True,
+        include_compatibility=False,
     )
 
 
