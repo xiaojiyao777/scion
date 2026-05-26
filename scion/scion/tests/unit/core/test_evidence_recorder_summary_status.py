@@ -35,6 +35,7 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary["total_rounds"] == 3
     assert summary["proposal_attempts"] == 3
     assert summary["screened_experiments"] == 1
+    assert summary["counted_experiment_steps"] == 1
     assert summary["champion_version"] == 7
     assert summary["champion_weight_revision"] == 2
     assert summary["n_active_branches"] == 0
@@ -424,6 +425,9 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
         "total_rounds": 2,
         "effective_rounds_completed": 0,
         "telemetry_diagnostic_attempts": 1,
+        "branch_lifecycle_policy_blocks": 1,
+        "reconcile_lifecycle_steps": 1,
+        "non_counted_lifecycle_steps": 2,
         "proposal_quality_limit": 6,
         "proposal_quality_loop_limit": 6,
         "proposal_quality_blocks_consumed": 4,
@@ -445,6 +449,9 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["proposal_attempts"] == 2
     assert status["effective_rounds_completed"] == 0
     assert status["telemetry_diagnostic_attempts"] == 1
+    assert status["branch_lifecycle_policy_blocks"] == 1
+    assert status["reconcile_lifecycle_steps"] == 1
+    assert status["non_counted_lifecycle_steps"] == 2
     assert status["quality_blocks"] == 4
     assert status["blocked_attempts"] == 4
     assert status["campaign_loop"]["attempt_limit"] == 3
@@ -453,6 +460,10 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["campaign_loop"]["proposal_quality_blocks_consumed"] == 4
     assert summary["requested_rounds"] == 3
     assert summary["telemetry_diagnostic_attempts"] == 1
+    assert summary["branch_lifecycle_policy_blocks"] == 1
+    assert summary["reconcile_lifecycle_steps"] == 1
+    assert summary["non_counted_lifecycle_steps"] == 2
+    assert summary["counted_experiment_steps"] == 0
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
 
 

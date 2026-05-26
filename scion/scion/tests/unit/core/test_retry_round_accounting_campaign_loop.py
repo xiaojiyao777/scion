@@ -841,7 +841,69 @@ def test_campaign_loop_branch_lifecycle_policy_block_does_not_consume_proposal_a
     assert loop_statuses[-1]["proposal_attempts_consumed"] == 1
     assert loop_statuses[-1]["effective_rounds_completed"] == 1
     assert loop_statuses[-1]["branch_lifecycle_policy_blocks"] == 1
+    assert loop_statuses[-1]["reconcile_lifecycle_steps"] == 0
+    assert loop_statuses[-1]["non_counted_lifecycle_steps"] == 1
     assert loop_statuses[-1]["quality_blocks"] == 0
+
+
+def test_campaign_loop_reconcile_lifecycle_step_does_not_count_effective_round() -> None:
+    results = [
+        StepResult(
+            action="reconcile",
+            branch_id="stale-1",
+            reason="missing hypothesis metadata for reconcile",
+            counts_toward_max_rounds=False,
+            attempt_kind="reconcile_lifecycle",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        StepResult(action="explore", branch_id="b2", reason="screening 2"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
+    )
+
+    loop.run(max_rounds=2)
+
+    assert calls == 3
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["effective_rounds_completed"] == 2
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 2
+    assert loop_statuses[-1]["reconcile_lifecycle_steps"] == 1
+    assert loop_statuses[-1]["non_counted_lifecycle_steps"] == 1
+    assert loop_statuses[-1]["branch_lifecycle_policy_blocks"] == 0
 
 
 def test_campaign_loop_repeated_lifecycle_blocks_do_not_stop_before_effective_rounds() -> None:
@@ -914,6 +976,8 @@ def test_campaign_loop_repeated_lifecycle_blocks_do_not_stop_before_effective_ro
     assert "circuit_breaker" not in stopped_reasons
     assert "max_rounds_exhausted" in stopped_reasons
     assert loop_statuses[-1]["branch_lifecycle_policy_blocks"] == 2
+    assert loop_statuses[-1]["reconcile_lifecycle_steps"] == 0
+    assert loop_statuses[-1]["non_counted_lifecycle_steps"] == 2
     assert loop_statuses[-1]["proposal_attempts_consumed"] == 2
     assert loop_statuses[-1]["effective_rounds_completed"] == 2
 

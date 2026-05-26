@@ -88,6 +88,8 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "telemetry_repair_attempts": "telemetry_repair_attempts",
         "telemetry_diagnostic_attempts": "telemetry_diagnostic_attempts",
         "branch_lifecycle_policy_blocks": "branch_lifecycle_policy_blocks",
+        "reconcile_lifecycle_steps": "reconcile_lifecycle_steps",
+        "non_counted_lifecycle_steps": "non_counted_lifecycle_steps",
         "quality_blocks": "quality_blocks",
         "blocked_attempts": "blocked_attempts",
     }

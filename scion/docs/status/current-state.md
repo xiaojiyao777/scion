@@ -9,10 +9,11 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
-v0.4 is not ready for long unattended CVRP solver-quality validation. Current
-priority is closing remaining P1 architecture debt before more experiments.
-Scion must remain the v3
-framework: generic layers own boundary control, protocol, lineage, audit, and
+v0.4 has no known open P0/P1 blocker after the 2026-05-26 local `gpt-5.5`
+8-round provider-taxonomy run and the follow-up P2 accounting repair below.
+The next recommended step is longer validation with explicit evidence review,
+not a generic-core algorithm change. Scion must remain the v3 framework:
+generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
@@ -69,6 +70,20 @@ module, or counter names for telemetry identity, retry activation refs,
 mechanism-family broadness, plateau target examples, or runtime audit
 classification. Those names are declared by the active CVRP provider/subject
 taxonomy and consumed as provider facts by generic Scion.
+
+The subsequent local `gpt-5.5` 8-round provider-taxonomy run completed with
+`max_rounds_exhausted`, no P0/P1 findings, provider taxonomy and branch
+lifecycle reroute behavior intact, and proposal-attempt headroom remaining.
+It exposed one P2 accounting/reporting issue: a stale `reconcile` abort with
+`missing hypothesis metadata for reconcile` was status-counted as an effective
+round even though no formal protocol result or DB experiment row existed. The
+repair classifies reconcile lifecycle aborts as non-counted
+`reconcile_lifecycle` steps, keeps them out of proposal-attempt and effective
+round counters, and mirrors `reconcile_lifecycle_steps` plus
+`non_counted_lifecycle_steps` in status/summary. Summary now also exposes
+`counted_experiment_steps` so report consumers can compare formal counted rows
+against loop counters directly. Full local regression after this repair:
+`2255 passed, 1 skipped`.
 
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session

@@ -245,7 +245,13 @@ class BranchStepRunner:
             )
             self.persist_branch_state(bid)
             self.record_hard_abandon(bid, reason)
-            return StepResult(action="reconcile", branch_id=bid, reason=reason)
+            return StepResult(
+                action="reconcile",
+                branch_id=bid,
+                reason=reason,
+                counts_toward_max_rounds=False,
+                attempt_kind="reconcile_lifecycle",
+            )
 
         if patch is None:
             logger.info("Branch %s: no patch to reconcile - abandoning stale branch", bid)
@@ -329,6 +335,8 @@ class BranchStepRunner:
                 action="reconcile",
                 branch_id=bid,
                 reason="branch disappeared after reconcile",
+                counts_toward_max_rounds=False,
+                attempt_kind="reconcile_lifecycle",
             )
 
         round_num = self.increment_round()

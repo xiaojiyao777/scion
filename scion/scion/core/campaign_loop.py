@@ -48,6 +48,7 @@ class CampaignLoop:
         telemetry_repair_attempt_counts: dict[str, int] = {}
         same_family_retry_attempts = 0
         branch_lifecycle_policy_blocks = 0
+        reconcile_lifecycle_steps = 0
         requested_rounds = max(1, int(max_rounds))
         proposal_quality_loop_limit = _proposal_quality_loop_limit(
             requested_rounds,
@@ -65,6 +66,7 @@ class CampaignLoop:
         validation_repair_required_limit = requested_rounds + 2
         same_family_retry_limit = requested_rounds + 4
         branch_lifecycle_policy_block_limit = requested_rounds + 4
+        reconcile_lifecycle_step_limit = requested_rounds + 4
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  Ordinary
         # proposal attempts have a hard cap; telemetry repair/diagnostic
@@ -78,6 +80,7 @@ class CampaignLoop:
             + validation_repair_required_limit
             + same_family_retry_limit
             + branch_lifecycle_policy_block_limit
+            + reconcile_lifecycle_step_limit
         )
 
         proposal_attempts_consumed_count = _initial_proposal_attempts(
@@ -132,6 +135,8 @@ class CampaignLoop:
                 branch_lifecycle_policy_block_limit=(
                     branch_lifecycle_policy_block_limit
                 ),
+                reconcile_lifecycle_steps=reconcile_lifecycle_steps,
+                reconcile_lifecycle_step_limit=reconcile_lifecycle_step_limit,
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
@@ -215,6 +220,10 @@ class CampaignLoop:
                         >= branch_lifecycle_policy_block_limit
                     ):
                         final_reason = "branch_lifecycle_policy_loop"
+                elif kind == "reconcile_lifecycle":
+                    reconcile_lifecycle_steps += 1
+                    if reconcile_lifecycle_steps >= reconcile_lifecycle_step_limit:
+                        final_reason = "reconcile_lifecycle_loop"
                 elif kind == "same_family_retry":
                     consume_proposal_attempt()
                     same_family_retry_attempts += 1
@@ -287,6 +296,8 @@ def _attempt_kind(result: StepResult) -> str:
     kind = str(getattr(result, "attempt_kind", "") or "")
     if kind and kind != "screening":
         return kind
+    if getattr(result, "action", None) == "reconcile":
+        return "reconcile_lifecycle"
     reason = str(getattr(result, "reason", "") or "").lower()
     if "branch_lifecycle_policy_violation" in reason:
         return "branch_lifecycle_policy"
@@ -405,6 +416,8 @@ def _campaign_loop_status(
     telemetry_repair_attempt_counts: dict[str, int],
     branch_lifecycle_policy_blocks: int,
     branch_lifecycle_policy_block_limit: int,
+    reconcile_lifecycle_steps: int,
+    reconcile_lifecycle_step_limit: int,
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
@@ -417,6 +430,8 @@ def _campaign_loop_status(
         + int(validation_repair_required_attempts),
     )
     quality_blocks = max(0, int(proposal_quality_blocked_attempts))
+    branch_lifecycle_blocks = max(0, int(branch_lifecycle_policy_blocks))
+    reconcile_steps = max(0, int(reconcile_lifecycle_steps))
     return {
         "requested_rounds": max(1, int(requested_rounds)),
         "attempt_limit": max(0, int(attempt_limit)),
@@ -445,14 +460,17 @@ def _campaign_loop_status(
         "telemetry_repair_attempts_by_branch_mechanism": dict(
             telemetry_repair_attempt_counts
         ),
-        "branch_lifecycle_policy_blocks": max(
-            0,
-            int(branch_lifecycle_policy_blocks),
-        ),
+        "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
         "branch_lifecycle_policy_block_limit": max(
             1,
             int(branch_lifecycle_policy_block_limit),
         ),
+        "reconcile_lifecycle_steps": reconcile_steps,
+        "reconcile_lifecycle_step_limit": max(
+            1,
+            int(reconcile_lifecycle_step_limit),
+        ),
+        "non_counted_lifecycle_steps": branch_lifecycle_blocks + reconcile_steps,
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_blocks_consumed": quality_blocks,

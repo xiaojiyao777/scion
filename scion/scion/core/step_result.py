@@ -34,6 +34,7 @@ class StepResult:
         "telemetry_repairable",
         "validation_repair_required",
         "same_family_retry",
+        "reconcile_lifecycle",
         "other",
     ] = "screening"
     repair_mechanism_ids: Tuple[str, ...] = ()

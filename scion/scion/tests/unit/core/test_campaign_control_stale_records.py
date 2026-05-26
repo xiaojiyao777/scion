@@ -141,6 +141,33 @@ class TestStaleReconcile:
             "reconcile must call run_experiment for re-screening"
         )
 
+    def test_reconcile_missing_hypothesis_metadata_is_lifecycle_not_experiment(self, tmp_path):
+        """Missing reconcile metadata is a lifecycle abort, not a counted round."""
+        protocol = _MockProtocol(results=[
+            _make_protocol_result("pass"),  # initial screening
+            _make_protocol_result("pass"),  # would run only if metadata existed
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        r = cm.run_one_step()
+        assert r.branch_id is not None
+        bid = r.branch_id
+
+        branch = cm._branch_ctrl.get_branch(bid)
+        branch.state = BranchState.STALE
+        cm._branch_current_hypothesis.pop(bid, None)
+
+        result = cm.run_one_step()
+
+        assert result.action == "reconcile"
+        assert result.reason == "missing hypothesis metadata for reconcile"
+        assert result.counts_toward_max_rounds is False
+        assert result.attempt_kind == "reconcile_lifecycle"
+        assert cm._branch_ctrl.get_branch(bid).state == BranchState.ABANDONED
+        assert len(protocol.experiment_calls) == 1, (
+            "missing metadata must not be reported as a formal re-screening"
+        )
+
     def test_reconcile_action_mismatch_fails_closed(self, tmp_path):
         """A stale patch whose action no longer matches its hypothesis is abandoned."""
         protocol = _MockProtocol(results=[

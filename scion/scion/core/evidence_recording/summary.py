@@ -120,9 +120,10 @@ class CampaignSummaryMixin:
         screened_experiments = sum(
             1 for step in steps if formal_screening_attempted(step.protocol_result)
         )
-        effective_rounds_completed = sum(
+        counted_experiment_steps = sum(
             1 for step in steps if screened_experiment_effective(step.protocol_result)
         )
+        effective_rounds_completed = counted_experiment_steps
         state_screened_experiments: Any | None = None
         if self.state_provider is not None:
             try:
@@ -205,6 +206,7 @@ class CampaignSummaryMixin:
                 else round_num
             ),
             "effective_rounds_completed": effective_rounds_completed,
+            "counted_experiment_steps": counted_experiment_steps,
             "telemetry_repair_attempts": (
                 int(loop_telemetry_repair_attempts)
                 if loop_telemetry_repair_attempts is not None
@@ -292,6 +294,8 @@ class CampaignSummaryMixin:
                 "effective_rounds_completed",
                 "telemetry_diagnostic_attempts",
                 "branch_lifecycle_policy_blocks",
+                "reconcile_lifecycle_steps",
+                "non_counted_lifecycle_steps",
                 "quality_blocks",
                 "blocked_attempts",
             ):
