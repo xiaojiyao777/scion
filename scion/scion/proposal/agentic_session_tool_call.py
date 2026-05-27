@@ -261,24 +261,26 @@ class AgenticSessionToolCallMixin:
                 prompt_visible_chars=prompt_payload_chars,
                 selection_source=selection_source,
             )
+            metadata = {
+                "step_id": step_id,
+                "tool_name": observation.tool_name,
+                "status": "error" if observation.is_error else "ok",
+                "taint": _enum_value(observation.taint),
+                "evidence_ref": observation.observation_id,
+                "result_summary": observation.summary,
+                "error_code": _enum_value(observation.failure_code),
+                "observation_id": observation.observation_id,
+                "observation_type": observation.observation_type,
+                "exposure_level": _enum_value(observation.exposure_level),
+                "is_error": observation.is_error,
+                "failure_code": _enum_value(observation.failure_code),
+                "selection_source": selection_source,
+            }
+            metadata.update(_tool_observation_transcript_metadata(observation))
             state.note(
                 phase,
                 f"Proposal tool observation: {name}",
-                metadata={
-                    "step_id": step_id,
-                    "tool_name": observation.tool_name,
-                    "status": "error" if observation.is_error else "ok",
-                    "taint": _enum_value(observation.taint),
-                    "evidence_ref": observation.observation_id,
-                    "result_summary": observation.summary,
-                    "error_code": _enum_value(observation.failure_code),
-                    "observation_id": observation.observation_id,
-                    "observation_type": observation.observation_type,
-                    "exposure_level": _enum_value(observation.exposure_level),
-                    "is_error": observation.is_error,
-                    "failure_code": _enum_value(observation.failure_code),
-                    "selection_source": selection_source,
-                },
+                metadata=metadata,
             )
             return observation
 
@@ -387,3 +389,46 @@ class AgenticSessionToolCallMixin:
             finally:
                 signal.setitimer(signal.ITIMER_REAL, *previous_timer)
                 signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _tool_observation_transcript_metadata(
+    observation: ProposalObservation,
+) -> dict[str, Any]:
+    if observation.tool_name != "proposal.algorithm_smoke":
+        return {}
+    payload = (
+        observation.structured_payload
+        if isinstance(observation.structured_payload, Mapping)
+        else {}
+    )
+    runtime_smoke = (
+        payload.get("runtime_smoke")
+        if isinstance(payload.get("runtime_smoke"), Mapping)
+        else {}
+    )
+    ledger = runtime_smoke.get("case_execution_ledger")
+    if not isinstance(ledger, (list, tuple)):
+        ledger = ()
+    return _drop_empty_dict(
+        {
+            "algorithm_smoke_status": payload.get("status"),
+            "algorithm_smoke_failure_code": payload.get("failure_code"),
+            "runtime_smoke_case_execution_ledger": [
+                _sanitize_agentic_value(item)
+                for item in ledger
+                if isinstance(item, Mapping)
+            ][:8],
+            "runtime_smoke_provider_hook_used": runtime_smoke.get(
+                "provider_hook_used"
+            ),
+            "runtime_smoke_provider_case_count": runtime_smoke.get(
+                "provider_case_count"
+            ),
+            "runtime_smoke_provider_case_attempted_count": runtime_smoke.get(
+                "provider_case_attempted_count"
+            ),
+            "runtime_budget_diagnostic": runtime_smoke.get(
+                "runtime_budget_diagnostic"
+            ),
+        }
+    )

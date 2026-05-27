@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -172,6 +174,7 @@ def _runtime_algorithm_smoke_preview(
             champion_elapsed_samples_ms: list[float] = []
             telemetry_guard_summary: dict[str, Any] = {}
             runtime_budget_diagnostic_summary: dict[str, Any] | None = None
+            case_execution_ledger: list[dict[str, Any]] = []
             representative: dict[str, Any] | None = None
             issue: str | None = None
             audit_failure: Mapping[str, Any] | None = None
@@ -310,6 +313,33 @@ def _runtime_algorithm_smoke_preview(
                 champion_elapsed_ms=champion_elapsed_samples_ms,
                 total_pairs=len(runs),
             )
+            case_execution_ledger = _runtime_smoke_case_execution_ledger(
+                smoke_cases,
+                runs,
+                selected_surface=surface_name,
+            )
+            provider_case_count = sum(
+                1 for item in case_execution_ledger if item.get("provider_hook_used")
+            )
+            provider_case_attempted_count = sum(
+                1
+                for item in case_execution_ledger
+                if item.get("provider_hook_used") and item.get("attempted")
+            )
+            provider_missing_cases = _provider_case_missing_issues(missing_cases)
+            if issue is None and provider_missing_cases:
+                issue = "; ".join(provider_missing_cases[:3])
+            if (
+                issue is None
+                and provider_case_count > 0
+                and provider_case_attempted_count < provider_case_count
+            ):
+                issue = (
+                    "provider representative smoke cases were selected but not all "
+                    "executed before algorithm smoke completion; "
+                    f"attempted={provider_case_attempted_count}/"
+                    f"{provider_case_count}"
+                )
         except Exception as exc:
             return {
                 "passed": False,
@@ -337,21 +367,23 @@ def _runtime_algorithm_smoke_preview(
         "provenance": _runtime_smoke_payload_provenance(representative),
         "seed": representative.get("seed") or _ALGORITHM_SMOKE_DEFAULT_SEED,
         "case_count": len(runs),
-        "cases": [
-            {
-                "label": run.get("label"),
-                "case": run.get("case"),
-                "resolved_case_path": run.get("resolved_case_path"),
-                "case_path_ref": run.get("case_path_ref"),
-                "data_root": run.get("data_root"),
-                "data_root_source": run.get("data_root_source"),
-                "data_root_status": run.get("data_root_status"),
-                "provenance": run.get("provenance"),
-                "seed": run.get("seed"),
-                "passed": run.get("passed"),
-            }
-            for run in runs
-        ],
+        "selected_case_count": len(case_execution_ledger),
+        "attempted_case_count": sum(
+            1 for item in case_execution_ledger if item.get("attempted")
+        ),
+        "provider_hook_used": any(
+            bool(item.get("provider_hook_used")) for item in case_execution_ledger
+        ),
+        "provider_case_count": sum(
+            1 for item in case_execution_ledger if item.get("provider_hook_used")
+        ),
+        "provider_case_attempted_count": sum(
+            1
+            for item in case_execution_ledger
+            if item.get("provider_hook_used") and item.get("attempted")
+        ),
+        "cases": case_execution_ledger,
+        "case_execution_ledger": case_execution_ledger,
         "time_limit_sec": _ALGORITHM_SMOKE_TIME_LIMIT_SEC,
         "objective": representative.get("objective"),
         "feasible": representative.get("feasible"),
@@ -382,6 +414,211 @@ def _runtime_algorithm_smoke_preview(
         if repair_guidance:
             payload["repair_guidance"] = repair_guidance
     return payload
+
+
+def _provider_case_missing_issues(missing_cases: list[str]) -> list[str]:
+    issues: list[str] = []
+    for item in missing_cases:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if "provider" not in text.lower():
+            continue
+        issues.append(f"provider representative smoke case missing: {text}")
+    return issues
+
+
+def _runtime_smoke_case_execution_ledger(
+    smoke_cases: list[Any],
+    runs: list[dict[str, Any]],
+    *,
+    selected_surface: str,
+) -> list[dict[str, Any]]:
+    runs_by_digest: dict[str, Mapping[str, Any]] = {}
+    for run in runs:
+        digest = str(run.get("case_digest") or run.get("case_metadata_hash") or "")
+        if digest:
+            runs_by_digest.setdefault(digest, run)
+    ledger: list[dict[str, Any]] = []
+    seen_run_ids: set[int] = set()
+    for smoke_case in smoke_cases:
+        case_payload = _runtime_smoke_case_public_payload(smoke_case)
+        digest = str(case_payload.get("case_digest") or "")
+        run = runs_by_digest.get(digest)
+        if run is not None:
+            seen_run_ids.add(id(run))
+            ledger.append(
+                _runtime_smoke_case_execution_record(
+                    run,
+                    selected_surface=selected_surface,
+                    attempted=True,
+                )
+            )
+        else:
+            ledger.append(
+                _runtime_smoke_case_execution_record(
+                    {
+                        **case_payload,
+                        "label": smoke_case.label,
+                        "seed": smoke_case.seed,
+                    },
+                    selected_surface=selected_surface,
+                    attempted=False,
+                )
+            )
+    for run in runs:
+        if id(run) in seen_run_ids:
+            continue
+        ledger.append(
+            _runtime_smoke_case_execution_record(
+                run,
+                selected_surface=selected_surface,
+                attempted=True,
+            )
+        )
+    return ledger
+
+
+def _runtime_smoke_case_execution_record(
+    run: Mapping[str, Any],
+    *,
+    selected_surface: str,
+    attempted: bool,
+) -> dict[str, Any]:
+    runtime = run.get("runtime") if isinstance(run.get("runtime"), Mapping) else {}
+    run_payload = run.get("run") if isinstance(run.get("run"), Mapping) else {}
+    audit = (
+        run.get("runtime_audit_failure")
+        if isinstance(run.get("runtime_audit_failure"), Mapping)
+        else {}
+    )
+    failure = _runtime_smoke_case_failure(run, run_payload, audit, attempted=attempted)
+    surface_summary = _selected_surface_runtime_summary(runtime, audit)
+    elapsed_ms = run_payload.get("elapsed_ms")
+    record = {
+        "label": run.get("label"),
+        "case": run.get("case"),
+        "resolved_case_path": run.get("resolved_case_path"),
+        "case_path_ref": run.get("case_path_ref"),
+        "case_source": run.get("case_source"),
+        "data_root": run.get("data_root"),
+        "data_root_source": run.get("data_root_source"),
+        "data_root_status": run.get("data_root_status"),
+        "provider_hook_used": bool(run.get("provider_hook_used")),
+        "provider_hook_name": run.get("provider_hook_name"),
+        "seed": run.get("seed"),
+        "attempted": attempted,
+        "success": run_payload.get("success") if attempted else None,
+        "passed": run.get("passed") if attempted else None,
+        "failure": failure,
+        "selected_surface": selected_surface,
+        "selected_surface_runtime": surface_summary,
+        "selected_surface_active": surface_summary.get("active"),
+        "selected_surface_errors": surface_summary.get("errors"),
+        "selected_surface_fallback": surface_summary.get("fallback_emitted"),
+        "runtime_audit_summary": _runtime_audit_summary(audit),
+        "runtime_audit_hash": (
+            _runtime_smoke_ledger_digest(audit) if audit else ""
+        ),
+        "elapsed_ms": elapsed_ms,
+        "duration_ms": elapsed_ms,
+        "case_digest": run.get("case_digest") or run.get("case_metadata_hash"),
+        "case_metadata_hash": run.get("case_metadata_hash") or run.get("case_digest"),
+        "run_digest": run_payload.get("run_digest")
+        or _runtime_smoke_ledger_digest(run_payload),
+    }
+    return {key: value for key, value in record.items() if value not in ("", {}, [])}
+
+
+def _runtime_smoke_case_failure(
+    run: Mapping[str, Any],
+    run_payload: Mapping[str, Any],
+    audit: Mapping[str, Any],
+    *,
+    attempted: bool,
+) -> str:
+    if not attempted:
+        return "not_attempted"
+    if audit:
+        return str(audit.get("detail") or audit.get("error_category") or "runtime_audit_failure")
+    if run_payload.get("success") is False:
+        return str(run_payload.get("detail") or "solver run failed")
+    if run.get("passed") is False:
+        return "runtime smoke case failed"
+    return ""
+
+
+def _runtime_audit_summary(audit: Mapping[str, Any]) -> dict[str, Any]:
+    if not audit:
+        return {}
+    return {
+        key: audit.get(key)
+        for key in (
+            "error_category",
+            "detail",
+            "failed_runtime_fields",
+            "runtime_error_field",
+            "runtime_error_count",
+            "runtime_events",
+        )
+        if audit.get(key) not in (None, "", [], {})
+    }
+
+
+def _selected_surface_runtime_summary(
+    runtime: Mapping[str, Any],
+    audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    active_field, active = _first_runtime_suffix_value(runtime, ("active",))
+    error_field, errors = _first_runtime_suffix_value(
+        runtime,
+        ("errors", "error_count", "invalid_outputs"),
+    )
+    fallback = _runtime_mentions_fallback(runtime) or _runtime_mentions_fallback(audit)
+    return {
+        key: value
+        for key, value in {
+            "active_field": active_field,
+            "active": active,
+            "errors_field": error_field,
+            "errors": errors,
+            "fallback_emitted": fallback,
+        }.items()
+        if value not in (None, "", {}, [])
+    }
+
+
+def _first_runtime_suffix_value(
+    runtime: Mapping[str, Any],
+    suffixes: tuple[str, ...],
+) -> tuple[str, Any]:
+    suffix_tokens = tuple(suffix.replace(".", "_").strip("_") for suffix in suffixes)
+    for key, value in sorted(runtime.items()):
+        normalized = str(key).replace(".", "_").strip("_")
+        if normalized in suffix_tokens or any(
+            normalized.endswith("_" + suffix) for suffix in suffix_tokens
+        ):
+            return str(key), value
+    return "", None
+
+
+def _runtime_mentions_fallback(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            text = str(key).lower()
+            if "fallback" in text and item not in (None, "", False, 0, [], {}):
+                return True
+            if _runtime_mentions_fallback(item):
+                return True
+        return False
+    if isinstance(value, (list, tuple)):
+        return any(_runtime_mentions_fallback(item) for item in value)
+    return "fallback" in str(value or "").lower()
+
+
+def _runtime_smoke_ledger_digest(value: Any) -> str:
+    rendered = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
 
 
 def _append_smoke_elapsed(samples: list[float], run_payload: Mapping[str, Any]) -> None:

@@ -584,6 +584,80 @@ def test_prompt_manifest_marks_algorithm_slice_content_visible() -> None:
     )
 
 
+def test_prompt_manifest_records_per_tool_result_visibility_hashes() -> None:
+    file_observation = _algorithm_read_observation(
+        "context.read_algorithm_file",
+        {
+            "file_path": "policies/baseline_modules/local_search.py",
+            "readable": True,
+            "content_preview": "def read_algorithm_file_visible():\n    return 1\n",
+            "truncated": False,
+            "size_chars": 47,
+            "max_chars": 47,
+        },
+    )
+    slice_observation = _algorithm_read_observation(
+        "context.read_algorithm_slice",
+        {
+            "available": True,
+            "slice_id": "slice.local_search.visible",
+            "file_path": "policies/baseline_modules/local_search.py",
+            "content": "def read_algorithm_slice_visible():\n    return 2\n",
+            "truncated": False,
+            "max_chars": 48,
+        },
+    )
+    surface_observation = _algorithm_read_observation(
+        "context.read_surface",
+        {
+            "surface": {"name": "solver_design", "kind": "solver_design"},
+            "target_file": "policies/baseline_modules/local_search.py",
+            "current_artifact": {
+                "file_path": "policies/baseline_modules/local_search.py",
+                "content_preview": "def read_surface_visible():\n    return 3\n",
+                "readable": True,
+                "truncated": False,
+                "size_chars": 39,
+                "max_chars": 39,
+            },
+        },
+    )
+    observations = [file_observation, slice_observation, surface_observation]
+    user_prompt = (
+        "## Agentic Proposal Tool Observations\n"
+        + json.dumps([_observation_prompt_payload(item) for item in observations])
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="tool-result-visibility-ledger",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=observations,
+        call_index=1,
+        system_blocks=[],
+        user_prompt=user_prompt,
+    )
+
+    ledger = manifest["tool_result_visibility_ledger"]
+    by_tool = {item["tool_name"]: item for item in ledger}
+    assert set(by_tool) == {
+        "context.read_algorithm_file",
+        "context.read_algorithm_slice",
+        "context.read_surface",
+    }
+    for observation in observations:
+        record = by_tool[observation.tool_name]
+        assert record["stable_observation_id"] == observation.observation_id
+        assert record["stable_name"] == observation.tool_name
+        assert record["status"] == "ok"
+        assert record["payload_hash"]
+        assert record["visible_text_chars"] > 0
+        assert record["visible_text_hash"]
+        assert record["rendered_visibility_flag"] is True
+        assert record["omitted"] is False
+
+
 def test_code_prompt_manifest_audits_target_and_integration_file_visibility() -> None:
     target_source = (
         "def solve(instance, rng, time_limit_sec, context):\n"

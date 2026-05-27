@@ -264,6 +264,9 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             context,
             observation_type="algorithm_smoke",
             summary=(
+                "Algorithm smoke emitted diagnostic guidance on tainted runtime preview."
+                if payload.get("status") == "diagnostic"
+                else
                 (
                     "Algorithm smoke passed on tainted runtime preview."
                     if payload.get("runtime_smoke")

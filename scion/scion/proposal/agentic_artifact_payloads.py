@@ -97,6 +97,13 @@ def _compact_transcript(
         "tool_steps",
         "tool_calls",
         "observation_chars_used",
+        "algorithm_smoke_status",
+        "algorithm_smoke_failure_code",
+        "runtime_smoke_case_execution_ledger",
+        "runtime_smoke_provider_hook_used",
+        "runtime_smoke_provider_case_count",
+        "runtime_smoke_provider_case_attempted_count",
+        "runtime_budget_diagnostic",
     }
     for event in transcript:
         metadata = {

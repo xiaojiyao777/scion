@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Mapping
@@ -38,7 +39,15 @@ def _runtime_smoke_cases(
     missing: list[str] = []
     seen: set[tuple[str, int]] = set()
 
-    def add_case(label: str, rel_path: Any, seed: Any, case_source: str) -> None:
+    def add_case(
+        label: str,
+        rel_path: Any,
+        seed: Any,
+        case_source: str,
+        *,
+        provider_hook_used: bool = False,
+        provider_hook_name: str = "",
+    ) -> None:
         rel = str(rel_path or "").strip()
         if not rel:
             return
@@ -70,6 +79,8 @@ def _runtime_smoke_cases(
                 data_root_source=resolution["data_root_source"],
                 data_root_status=resolution["data_root_status"],
                 case_source=case_source,
+                provider_hook_used=provider_hook_used,
+                provider_hook_name=provider_hook_name,
             )
         )
 
@@ -118,6 +129,8 @@ def _runtime_smoke_cases(
             rel,
             request.get("seed", screening_seed),
             str(request.get("case_source") or "provider_runtime_smoke_cases"),
+            provider_hook_used=True,
+            provider_hook_name=str(request.get("provider_hook_name") or ""),
         )
         if len(cases) > before:
             screening_added += 1
@@ -158,7 +171,10 @@ def _provider_runtime_smoke_case_requests(
             split_manifest=split_manifest,
             seed_ledger=seed_ledger,
         )
-        return _normalize_provider_smoke_case_requests(raw)
+        requests = [dict(item) for item in _normalize_provider_smoke_case_requests(raw)]
+        for request in requests:
+            request.setdefault("provider_hook_name", name)
+        return tuple(requests)
     return ()
 
 
@@ -476,22 +492,48 @@ def _runtime_smoke_case_public_payload(
     smoke_case: _RuntimeSmokeCase,
 ) -> dict[str, Any]:
     case_ref = f"{smoke_case.data_root_source}:{smoke_case.rel_path}"
+    case_digest = _runtime_smoke_case_digest(smoke_case)
     provenance = {
         "source": smoke_case.case_source,
         "case_path_ref": case_ref,
         "data_root_source": smoke_case.data_root_source,
         "data_root_status": smoke_case.data_root_status,
+        "provider_hook_used": smoke_case.provider_hook_used,
+        "provider_hook_name": smoke_case.provider_hook_name,
         "absolute_paths_exposed": False,
     }
     return {
         "case": smoke_case.rel_path,
         "resolved_case_path": smoke_case.rel_path,
         "case_path_ref": case_ref,
+        "case_digest": case_digest,
+        "case_metadata_hash": case_digest,
         "data_root": smoke_case.data_root,
         "data_root_source": smoke_case.data_root_source,
         "data_root_status": smoke_case.data_root_status,
+        "case_source": smoke_case.case_source,
+        "provider_hook_used": smoke_case.provider_hook_used,
+        "provider_hook_name": smoke_case.provider_hook_name,
         "provenance": provenance,
     }
+
+
+def _runtime_smoke_case_digest(smoke_case: _RuntimeSmokeCase) -> str:
+    rendered = json.dumps(
+        {
+            "label": smoke_case.label,
+            "case": smoke_case.rel_path,
+            "seed": smoke_case.seed,
+            "case_source": smoke_case.case_source,
+            "data_root_source": smoke_case.data_root_source,
+            "data_root_status": smoke_case.data_root_status,
+            "provider_hook_used": smoke_case.provider_hook_used,
+            "provider_hook_name": smoke_case.provider_hook_name,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
 
 
 def _runtime_smoke_payload_provenance(

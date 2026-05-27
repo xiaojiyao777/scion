@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -59,14 +60,17 @@ def _run_solver_design_smoke(
             smoke_case.path,
         )
         run_payload["detail"] = detail
+        run_payload["run_digest"] = _runtime_smoke_run_digest(run_payload)
         return None, run_payload
     try:
         with open(result.output_path, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception as exc:
         run_payload["detail"] = f"could not read solver output: {exc}"
+        run_payload["run_digest"] = _runtime_smoke_run_digest(run_payload)
         return None, run_payload
     run_payload["detail"] = "solver smoke completed"
+    run_payload["run_digest"] = _runtime_smoke_run_digest(run_payload)
     return raw, run_payload
 
 
@@ -101,3 +105,13 @@ def _redact_runtime_smoke_paths(text: str, *paths: Path) -> str:
         if raw:
             redacted = redacted.replace(raw, marker)
     return redacted
+
+
+def _runtime_smoke_run_digest(run_payload: Mapping[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in run_payload.items()
+        if key not in {"stdout", "stderr", "detail", "run_digest"}
+    }
+    rendered = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]

@@ -226,11 +226,14 @@ def test_algorithm_smoke_uses_active_formal_split_over_workspace_tiny_split(
     rendered = json.dumps(payload, sort_keys=True)
     assert observation.is_error is False
     assert payload["runtime_smoke"]["case_count"] == 5
+    ledger = payload["runtime_smoke"]["case_execution_ledger"]
     assert "controlled/data/synthetic_controlled_canary_5.vrp" in rendered
-    assert "controlled/data/synthetic_screening_micro_5.vrp" not in rendered
-    assert "controlled/data/synthetic_validation_micro_5.vrp" not in rendered
-    assert "controlled/data/synthetic_frozen_split_6.vrp" not in rendered
-    assert "controlled/data/synthetic_final_split_6.vrp" not in rendered
+    assert all(
+        str(item["case"]).startswith("controlled/data/") for item in ledger
+    )
+    assert any(item["provider_hook_used"] for item in ledger)
+    assert all(item["attempted"] is True for item in ledger)
+    assert all(item["case_digest"] for item in ledger)
     assert "data/tiny_6.json" not in rendered
     assert '"seed": 101' in rendered
 

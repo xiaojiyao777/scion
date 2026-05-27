@@ -100,6 +100,16 @@ def build_agentic_ledger_observation(
     coverage = coverage_payload(observation.tool_name, payload, normalized_args)
     source_digest = source_digest_payload(observation.tool_name, payload)
     digest = primary_digest(payload, source_digest)
+    payload_hash = stable_digest(payload, length=16)
+    prompt_payload_hash = stable_digest(
+        {
+            "observation_id": observation.observation_id,
+            "tool_name": observation.tool_name,
+            "tool_call_id": observation.tool_call_id,
+            "structured_payload": payload,
+        },
+        length=16,
+    )
     active_facts = compact_active_algorithm_facts(
         payload.get("active_algorithm_facts")
     )
@@ -124,6 +134,7 @@ def build_agentic_ledger_observation(
             "file_path": file_path_from_observation(payload, normalized_args),
             "symbol": symbol_from_observation(payload, normalized_args),
             "digest": digest,
+            "payload_hash": payload_hash,
             "source_digest": source_digest,
             "source_digest_hash": stable_digest(source_digest or digest, length=16),
             "fact_packet_digest": active_facts.get("fact_packet_digest"),
@@ -148,6 +159,16 @@ def build_agentic_ledger_observation(
             "is_error": observation.is_error,
             "failure_code": _enum_value(observation.failure_code),
             "prompt_visible_chars": prompt_visible_chars,
+            "visible_text_chars": prompt_visible_chars,
+            "visible_text_hash": (
+                prompt_payload_hash
+                if prompt_visible_chars is not None and prompt_visible_chars > 0
+                else None
+            ),
+            "rendered_visibility_flag": (
+                None if prompt_visible_chars is None else prompt_visible_chars > 0
+            ),
+            "omitted": None if prompt_visible_chars is None else prompt_visible_chars <= 0,
             "active_algorithm_facts": active_facts,
             "provenance": compact_provenance(payload.get("provenance")),
             "stale_if": _drop_empty_dict(

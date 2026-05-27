@@ -75,13 +75,18 @@ def compact_algorithm_smoke_observation_for_agent(
     if not isinstance(observation.structured_payload, Mapping):
         return None
     payload = _algorithm_smoke_agent_payload(observation.structured_payload)
-    return replace(
-        observation,
-        summary=(
+    summary = (
+        "Algorithm smoke emitted diagnostic guidance on compact tainted preview."
+        if payload.get("status") == "diagnostic"
+        else (
             "Algorithm smoke passed on compact tainted preview."
             if payload.get("passed")
             else "Algorithm smoke found issues in compact tainted preview."
-        ),
+        )
+    )
+    return replace(
+        observation,
+        summary=summary,
         structured_payload=payload,
         repair_hint=None,
     )
@@ -163,6 +168,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     static_diagnostic_passed = (
         non_blocking_static_diagnostic and not hard_smoke_failure
     )
+    runtime_budget_diagnostic_passed = (
+        _runtime_budget_diagnostic_passed(runtime_smoke)
+        and not hard_smoke_failure
+    )
     if activation_diagnostic_passed:
         passed = True
         status = "diagnostic"
@@ -175,6 +184,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         passed = True
         status = "diagnostic"
         failure_class = "telemetry_static_diagnostic"
+    elif runtime_budget_diagnostic_passed:
+        passed = True
+        status = "diagnostic"
+        failure_class = "runtime_smoke_budget_diagnostic"
     failure_code = _algorithm_smoke_failure_code(
         failure_class=failure_class,
         runtime_smoke=runtime_smoke,
@@ -198,6 +211,9 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
                 ]
             )
         )[:8]
+    budget_hints = _runtime_budget_diagnostic_repair_hints(runtime_smoke)
+    if budget_hints:
+        repair_hints = list(dict.fromkeys([*repair_hints, *budget_hints]))[:8]
     failed_checks = _algorithm_smoke_failed_checks(
         raw_payload,
         runtime_smoke=runtime_smoke,
@@ -237,6 +253,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
                 activation_diagnostic_passed
                 or telemetry_diagnostic_passed
                 or static_diagnostic_passed
+                or runtime_budget_diagnostic_passed
                 or None
             ),
             "primary_issue": primary_issue,
@@ -330,9 +347,43 @@ def _algorithm_smoke_failure_code(
         "activation_not_observed_diagnostic",
         "telemetry_not_observed_diagnostic",
         "telemetry_static_diagnostic",
+        "runtime_smoke_budget_diagnostic",
     }:
         return failure_class
     return failure_class or "algorithm_smoke_failure"
+
+
+def _runtime_budget_diagnostic_passed(
+    runtime_smoke: Mapping[str, Any] | None,
+) -> bool:
+    if runtime_smoke is None:
+        return False
+    diagnostic = _mapping_or_none(runtime_smoke.get("runtime_budget_diagnostic"))
+    if diagnostic is None:
+        return False
+    code = str(diagnostic.get("code") or "").strip()
+    if not code:
+        return False
+    return bool(diagnostic.get("repairable", True))
+
+
+def _runtime_budget_diagnostic_repair_hints(
+    runtime_smoke: Mapping[str, Any] | None,
+) -> list[str]:
+    if runtime_smoke is None:
+        return []
+    diagnostic = _mapping_or_none(runtime_smoke.get("runtime_budget_diagnostic"))
+    if diagnostic is None:
+        return []
+    guidance = _limit_text(
+        str(diagnostic.get("guidance") or "").strip(),
+        _ALGORITHM_SMOKE_AGENT_TEXT_CHARS,
+    )
+    code = str(diagnostic.get("code") or "").strip()
+    if not guidance and not code:
+        return []
+    prefix = f"{code}: " if code else ""
+    return [prefix + guidance] if guidance else [code]
 
 
 def _hard_smoke_failure_present(

@@ -16,3 +16,5 @@ class _RuntimeSmokeCase:
     data_root_source: str = "unknown"
     data_root_status: str = "unresolved"
     case_source: str = "runtime_smoke_manifest"
+    provider_hook_used: bool = False
+    provider_hook_name: str = ""

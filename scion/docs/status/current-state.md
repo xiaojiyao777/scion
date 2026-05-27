@@ -9,6 +9,20 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
+The 2026-05-27 smoke-runtime evidence follow-up makes algorithm-smoke
+representative execution auditable. Runtime smoke now records a per-case
+execution ledger for canary, provider-selected representative, and screening
+cases, including provider hook metadata, attempted/success/failure state,
+runtime audit summary, selected-surface active/error/fallback signals,
+elapsed time, and digest hashes. Provider representative cases that are
+selected but not executed can no longer silently look like a clean smoke pass.
+Prompt manifests now include a tool-result visibility ledger with
+observation ids, tool names, payload hashes, visible text char/hash evidence,
+and rendered/truncated/omitted flags for context observations. Runtime budget
+saturation in proposal smoke remains non-blocking but is surfaced as diagnostic
+repair guidance, and same-mechanism branch follow-up policy has direct test
+coverage for blocking unrelated mechanism ids.
+
 The 2026-05-27 Rawls premise/runtime follow-up strengthens solver-design
 pre-screening. `proposal.algorithm_smoke` now asks the problem-owned smoke
 provider for representative cases, so the generic smoke runner can cover both

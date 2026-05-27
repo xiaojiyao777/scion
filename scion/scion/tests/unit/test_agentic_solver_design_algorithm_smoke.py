@@ -3,7 +3,12 @@ from __future__ import annotations
 from scion.proposal.tools.previews.algorithm_smoke_feedback import (
     _algorithm_smoke_agent_payload,
 )
-from scion.proposal.solver_design_smoke import _runtime_smoke_cases
+from scion.proposal.solver_design_smoke import (
+    _runtime_smoke_case_public_payload,
+    _runtime_smoke_cases,
+)
+from scion.proposal.agentic_artifact_payloads import _compact_transcript
+from scion.proposal.agentic_models import AgenticTranscriptEvent
 from scion.proposal.edit_protocol import source_digest_for_content
 from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
 from scion.tests.unit.agentic_solver_design_test_support import *
@@ -141,11 +146,266 @@ def test_runtime_smoke_cases_include_provider_representative_cases(
 
     labels = [case.label for case in smoke_cases]
     seeds_by_label = {case.label: case.seed for case in smoke_cases}
+    provider_payload = _runtime_smoke_case_public_payload(smoke_cases[1])
     assert missing == []
     assert provider.seen_split_manifest is not None
     assert labels[:3] == ["canary", "provider_small", "provider_medium"]
     assert seeds_by_label["provider_small"] == 5
     assert seeds_by_label["provider_medium"] == 7
+    assert smoke_cases[1].provider_hook_used is True
+    assert smoke_cases[1].provider_hook_name == "solver_design_smoke_cases"
+    assert provider_payload["provider_hook_used"] is True
+    assert provider_payload["provider_hook_name"] == "solver_design_smoke_cases"
+    assert provider_payload["case_digest"]
+
+
+def test_algorithm_smoke_records_representative_case_execution_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.make_solution(context.nearest_neighbor())\n"
+            "    context.record_iteration('seed', 1)\n"
+            "    context.record_move('seed', attempted=1, accepted=1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    def fake_run(*, workspace, smoke_case, registry_path, selected_surface):
+        del workspace, registry_path, selected_surface
+        runtime = _valid_runtime()
+        run_payload = {
+            "success": True,
+            "exit_code": 0,
+            "elapsed_ms": 125,
+            "error_category": None,
+            "detail": "solver smoke completed",
+            "run_digest": f"run-{smoke_case.label}",
+        }
+        return {"objective": {"distance": 1}, "feasible": True, "runtime": runtime}, run_payload
+
+    monkeypatch.setattr(
+        "scion.proposal.solver_design_smoke.preview._run_solver_design_smoke",
+        fake_run,
+    )
+
+    payload = _runtime_algorithm_smoke_preview(context, patch, "solver_design")
+
+    assert payload is not None
+    assert payload["passed"] is True
+    assert payload["provider_hook_used"] is True
+    assert payload["provider_case_count"] >= 2
+    assert payload["provider_case_attempted_count"] >= 2
+    ledger = payload["case_execution_ledger"]
+    provider_records = [item for item in ledger if item["provider_hook_used"]]
+    assert {item["label"] for item in provider_records} >= {
+        "provider_small",
+        "provider_medium",
+    }
+    assert all(item["attempted"] is True for item in provider_records)
+    assert all(item["success"] is True for item in provider_records)
+    assert all(item["case_digest"] for item in ledger)
+    assert all(item["run_digest"] for item in ledger if item["attempted"])
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "runtime_update", "expected_fragment"),
+    [
+        (
+            "exception",
+            {
+                "solver_algorithm_active": False,
+                "solver_algorithm_errors": 1,
+                "solver_algorithm_events": [
+                    {
+                        "status": "error",
+                        "detail": (
+                            "solve failed: '<' not supported between "
+                            "instances of 'NoneType' and 'int'"
+                        ),
+                    }
+                ],
+            },
+            "solver_algorithm_errors",
+        ),
+        (
+            "inactive",
+            {"solver_algorithm_active": False, "solver_algorithm_errors": 0},
+            "failed runtime evidence contract",
+        ),
+        (
+            "fallback",
+            {
+                "solver_algorithm_active": True,
+                "solver_algorithm_errors": 0,
+                "solver_algorithm_events": [
+                    {"status": "fallback", "detail": "fallback emitted"}
+                ],
+            },
+            "fallback",
+        ),
+    ],
+)
+def test_algorithm_smoke_representative_runtime_failure_blocks_prescreen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_kind: str,
+    runtime_update: dict[str, object],
+    expected_fragment: str,
+) -> None:
+    del failure_kind
+    context = _cvrp_context(tmp_path)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.make_solution(context.nearest_neighbor())\n"
+            "    context.record_iteration('seed', 1)\n"
+            "    context.record_move('seed', attempted=1, accepted=1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    def fake_run(*, workspace, smoke_case, registry_path, selected_surface):
+        del workspace, registry_path, selected_surface
+        runtime = _valid_runtime()
+        if smoke_case.label == "provider_medium":
+            runtime.update(runtime_update)
+        run_payload = {
+            "success": True,
+            "exit_code": 0,
+            "elapsed_ms": 100,
+            "error_category": None,
+            "detail": "solver smoke completed",
+            "run_digest": f"run-{smoke_case.label}",
+        }
+        return {"objective": {"distance": 1}, "feasible": True, "runtime": runtime}, run_payload
+
+    monkeypatch.setattr(
+        "scion.proposal.solver_design_smoke.preview._run_solver_design_smoke",
+        fake_run,
+    )
+
+    raw = _runtime_algorithm_smoke_preview(context, patch, "solver_design")
+    payload = _algorithm_smoke_agent_payload({"passed": False, "runtime_smoke": raw})
+    rendered = json.dumps(payload, sort_keys=True)
+
+    assert raw is not None
+    assert raw["passed"] is False
+    assert raw["runtime_audit_failure"]
+    assert payload["failure_code"] == "algorithm_smoke_runtime_failure"
+    assert payload["passed"] is False
+    assert expected_fragment in rendered
+    failed = [
+        item
+        for item in payload["runtime_smoke"]["case_execution_ledger"]
+        if item["label"] == "provider_medium"
+    ][0]
+    assert failed["attempted"] is True
+    assert failed["provider_hook_used"] is True
+    assert failed["runtime_audit_summary"]
+
+
+def test_algorithm_smoke_budget_saturation_is_visible_diagnostic() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": True,
+            "runtime_smoke": {
+                "passed": True,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "runtime_budget_diagnostic": {
+                    "code": "TINY_RUNTIME_BUDGET_SATURATION",
+                    "severity": "warn",
+                    "repairable": True,
+                    "total_pairs": 2,
+                    "time_limit_ms": 2000,
+                    "saturation_ratio": 0.95,
+                    "candidate": {"max_budget_ratio": 0.95},
+                    "guidance": "Reduce per-case work before formal screening.",
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_code"] == "runtime_smoke_budget_diagnostic"
+    assert payload["diagnostic_passed"] is True
+    assert payload["runtime_smoke"]["runtime_budget_diagnostic"]["code"] == (
+        "TINY_RUNTIME_BUDGET_SATURATION"
+    )
+    assert any("Reduce per-case work" in hint for hint in payload["repair_hints"])
+
+
+def test_algorithm_smoke_case_ledger_survives_compact_session_output() -> None:
+    compact = _compact_transcript(
+        [
+            AgenticTranscriptEvent(
+                phase="self_check",
+                message="Proposal tool observation: proposal.algorithm_smoke",
+                metadata={
+                    "tool_name": "proposal.algorithm_smoke",
+                    "status": "ok",
+                    "runtime_smoke_case_execution_ledger": [
+                        {
+                            "label": "provider_medium",
+                            "case": "cases/medium.dat",
+                            "provider_hook_used": True,
+                            "attempted": True,
+                            "success": False,
+                            "case_digest": "case-hash",
+                        }
+                    ],
+                    "runtime_smoke_provider_hook_used": True,
+                    "runtime_smoke_provider_case_count": 2,
+                    "runtime_smoke_provider_case_attempted_count": 2,
+                },
+            )
+        ]
+    )
+
+    metadata = compact[0]["metadata"]
+    ledger = metadata["runtime_smoke_case_execution_ledger"]
+    assert metadata["runtime_smoke_provider_hook_used"] is True
+    assert metadata["runtime_smoke_provider_case_count"] == 2
+    assert ledger[0]["label"] == "provider_medium"
+    assert ledger[0]["case_digest"] == "case-hash"
+
+
+def _valid_runtime() -> dict[str, object]:
+    return {
+        "solver_algorithm_path": "policies/baseline_algorithm.py",
+        "solver_algorithm_loaded": True,
+        "solver_algorithm_active": True,
+        "solver_algorithm_errors": 0,
+        "solver_algorithm_elapsed_ms": 100,
+        "solver_algorithm_phase_runtime_ms": {"seed": 1},
+        "solver_algorithm_solution_valid": True,
+        "solver_algorithm_solution_routes": 1,
+        "solver_algorithm_objective": {"total_distance": 1.0},
+        "solver_algorithm_total_distance": 1.0,
+        "solver_algorithm_fleet_violation": 0,
+        "solver_algorithm_search_iterations": 12,
+        "solver_algorithm_move_attempts": 48,
+        "solver_algorithm_accepted_moves": 1,
+        "solver_algorithm_improving_moves": 1,
+        "solver_algorithm_neutral_accepted_moves": 0,
+        "solver_algorithm_best_improving_moves": 1,
+        "solver_algorithm_best_delta": 1.0,
+        "solver_algorithm_phase_delta_sum": {"seed": 1.0},
+        "solver_algorithm_phase_best_delta": {"seed": 1.0},
+        "solver_algorithm_phase_improvement_counts": {"seed": 1},
+        "solver_algorithm_stop_reason": "done",
+        "solver_algorithm_events": [],
+    }
 
 
 def test_cvrp_smoke_provider_selects_small_and_medium_representative_cases() -> None:

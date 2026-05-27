@@ -5,8 +5,9 @@ from scion.core.branch_hygiene import (
     campaign_branch_lifecycle_reroute_status,
     record_branch_lifecycle_policy_block,
 )
+from scion.core.branch_repair_policy import validate_branch_continuation_patch
 from scion.core.explore_step.pipeline import ExploreStepPipeline
-from scion.core.models import Branch, BranchState
+from scion.core.models import Branch, BranchState, HypothesisProposal, PatchProposal
 
 
 def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
@@ -159,3 +160,46 @@ def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
     )
     assert campaign_payload["ineligible_branch_ids"] == [branch.branch_id]
     assert campaign_payload["last_policy_block"]["branch_id"] == branch.branch_id
+
+
+def test_same_mechanism_followup_patch_blocks_unrelated_mechanism_ids() -> None:
+    branch = Branch(
+        branch_id="active-no-effect-followup",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        last_telemetry_outcome="no_objective_effect",
+        branch_mechanism_ids=("bounded_probe",),
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Tune bounded_probe on the same branch.",
+        target_weakness="The existing bounded_probe needs tuning.",
+        expected_effect="Improve objective by tuning bounded_probe.",
+        change_locus="solver_design",
+        target_file="policies/baseline_algorithm.py",
+        action="modify",
+        mechanism_changes=({"id": "bounded_probe", "change_type": "modify"},),
+    )
+    protected_patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content="",
+        mechanism_changes=({"id": "bounded_probe", "change_type": "modify"},),
+    )
+    unrelated_patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content="",
+        mechanism_changes=({"id": "new_restart", "change_type": "add"},),
+    )
+
+    allowed = validate_branch_continuation_patch(branch, hypothesis, protected_patch)
+    blocked = validate_branch_continuation_patch(branch, hypothesis, unrelated_patch)
+
+    assert allowed.allowed is True
+    assert blocked.allowed is False
+    assert blocked.reason == "new_mechanism_requires_clean_fork"
+    assert blocked.protected_mechanism_ids == ("bounded_probe",)
+    assert blocked.proposed_mechanism_ids == ("new_restart",)

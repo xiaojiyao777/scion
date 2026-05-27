@@ -42,6 +42,17 @@ def _algorithm_smoke_runtime_agent_section(
             "provenance": _compact_runtime_provenance(runtime_smoke.get("provenance")),
             "seed": runtime_smoke.get("seed"),
             "case_count": runtime_smoke.get("case_count"),
+            "selected_case_count": runtime_smoke.get("selected_case_count"),
+            "attempted_case_count": runtime_smoke.get("attempted_case_count"),
+            "provider_hook_used": runtime_smoke.get("provider_hook_used"),
+            "provider_case_count": runtime_smoke.get("provider_case_count"),
+            "provider_case_attempted_count": runtime_smoke.get(
+                "provider_case_attempted_count"
+            ),
+            "case_execution_ledger": _compact_case_execution_ledger(
+                runtime_smoke.get("case_execution_ledger")
+                or runtime_smoke.get("cases")
+            ),
             "issues": _compact_agent_text_list(runtime_smoke.get("issues")),
             "repair_guidance": repair_hints,
             "runtime_audit_failure": _compact_runtime_audit_failure_for_agent(
@@ -57,6 +68,67 @@ def _algorithm_smoke_runtime_agent_section(
         }
     )
     return compact or None
+
+
+def _compact_case_execution_ledger(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    records: list[dict[str, Any]] = []
+    for item in value:
+        run = _mapping_or_none(item)
+        if run is None:
+            continue
+        surface = _mapping_or_none(run.get("selected_surface_runtime")) or {}
+        audit = _mapping_or_none(run.get("runtime_audit_summary")) or {}
+        records.append(
+            _drop_empty_items(
+                {
+                    "label": run.get("label"),
+                    "case": run.get("case"),
+                    "case_path_ref": run.get("case_path_ref"),
+                    "case_source": run.get("case_source"),
+                    "seed": run.get("seed"),
+                    "provider_hook_used": run.get("provider_hook_used"),
+                    "provider_hook_name": run.get("provider_hook_name"),
+                    "attempted": run.get("attempted"),
+                    "success": run.get("success"),
+                    "passed": run.get("passed"),
+                    "failure": _compact_agent_text(run.get("failure")),
+                    "selected_surface_active": run.get("selected_surface_active"),
+                    "selected_surface_errors": run.get("selected_surface_errors"),
+                    "selected_surface_fallback": run.get(
+                        "selected_surface_fallback"
+                    ),
+                    "selected_surface_runtime": _drop_empty_items(
+                        {
+                            "active_field": surface.get("active_field"),
+                            "errors_field": surface.get("errors_field"),
+                            "fallback_emitted": surface.get("fallback_emitted"),
+                        }
+                    ),
+                    "runtime_audit_summary": _drop_empty_items(
+                        {
+                            "error_category": audit.get("error_category"),
+                            "detail": _compact_agent_text(audit.get("detail")),
+                            "runtime_error_field": audit.get(
+                                "runtime_error_field"
+                            ),
+                            "runtime_error_count": audit.get(
+                                "runtime_error_count"
+                            ),
+                        }
+                    ),
+                    "elapsed_ms": run.get("elapsed_ms"),
+                    "duration_ms": run.get("duration_ms"),
+                    "case_digest": run.get("case_digest"),
+                    "case_metadata_hash": run.get("case_metadata_hash"),
+                    "run_digest": run.get("run_digest"),
+                }
+            )
+        )
+        if len(records) >= 8:
+            break
+    return records
 
 
 def _compact_runtime_provenance(value: Any) -> dict[str, Any] | None:

@@ -177,6 +177,9 @@ def build_api_visible_prompt_manifest(
         "sections": section_records,
         "section_statuses": section_statuses,
         "included_observations": included_observations,
+        "tool_result_visibility_ledger": _tool_result_visibility_ledger(
+            included_observations
+        ),
         "included_observation_ids": [
             item["observation_id"]
             for item in included_observations
@@ -451,12 +454,16 @@ def _observation_manifest_item(
     tool_name_visible = _rendered_contains_literal(provider_prompt_text, tool_name)
     item = {
         "observation_id": observation_id,
+        "stable_observation_id": observation_id,
         "tool_name": tool_name,
+        "stable_name": tool_name,
         "tool_call_id": getattr(observation, "tool_call_id", ""),
         "observation_type": getattr(observation, "observation_type", ""),
         "payload_digest": payload_digest,
+        "payload_hash": payload_digest,
         "source_hash": stable_digest(provenance or payload, length=16),
         "source": provenance.get("source"),
+        "status": "error" if bool(getattr(observation, "is_error", False)) else "ok",
         "artifact_ref_present": bool(getattr(observation, "artifact_ref", None)),
         "is_error": bool(getattr(observation, "is_error", False)),
         "failure_code": _enum_value(getattr(observation, "failure_code", None)),
@@ -467,7 +474,19 @@ def _observation_manifest_item(
         ),
         "observation_id_visible_in_rendered_prompt": observation_id_visible,
         "tool_name_visible_in_rendered_prompt": tool_name_visible,
+        "payload_truncated": (
+            payload.get("truncated") if isinstance(payload, Mapping) else None
+        ),
     }
+    item.update(
+        _observation_visible_text_audit(
+            observation_id=observation_id,
+            tool_name=tool_name,
+            payload_digest=payload_digest,
+            provider_prompt_text=provider_prompt_text,
+            observation_prompt_text=observation_prompt_text,
+        )
+    )
     item.update(
         _observation_prompt_inclusion_fields(
             payload,
@@ -476,7 +495,53 @@ def _observation_manifest_item(
             dedicated_source_prompt_text=dedicated_source_prompt_text,
         )
     )
+    item["rendered_visibility_flag"] = bool(
+        item.get("included_in_prompt_for_call")
+        or item.get("visible_text_chars", 0)
+        or item.get("content_preview_visible_in_rendered_prompt")
+        or item.get("full_content_visible_in_rendered_prompt")
+    )
+    item["omitted_from_rendered_prompt"] = not bool(item["rendered_visibility_flag"])
+    if item["omitted_from_rendered_prompt"]:
+        item["omitted_reason"] = "observation_id_tool_name_and_content_not_rendered"
     return item
+
+
+def _tool_result_visibility_ledger(
+    included_observations: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    ledger: list[dict[str, Any]] = []
+    for item in included_observations:
+        ledger.append(
+            {
+                "observation_id": item.get("observation_id"),
+                "stable_observation_id": item.get("stable_observation_id")
+                or item.get("observation_id"),
+                "tool_name": item.get("tool_name"),
+                "stable_name": item.get("stable_name") or item.get("tool_name"),
+                "status": item.get("status"),
+                "payload_hash": item.get("payload_hash")
+                or item.get("payload_digest"),
+                "visible_text_chars": item.get("visible_text_chars", 0),
+                "visible_text_hash": item.get("visible_text_hash", ""),
+                "rendered_visibility_flag": bool(
+                    item.get("rendered_visibility_flag")
+                ),
+                "rendered_visibility_source": item.get(
+                    "rendered_visibility_source", ""
+                ),
+                "truncated": item.get("truncated")
+                if item.get("truncated") is not None
+                else item.get("payload_truncated"),
+                "omitted": bool(item.get("omitted_from_rendered_prompt")),
+                "omitted_reason": item.get("omitted_reason", ""),
+                "content_projection_count": item.get("content_projection_count", 0),
+                "visible_content_projection_count": item.get(
+                    "visible_content_projection_count", 0
+                ),
+            }
+        )
+    return ledger
 
 
 def _observation_prompt_inclusion_fields(
@@ -777,6 +842,52 @@ def _rendered_contains_text(rendered_prompt: str, value: Any) -> bool:
     if len(encoded) >= 2 and encoded[1:-1] in rendered_prompt:
         return True
     return False
+
+
+def _observation_visible_text_audit(
+    *,
+    observation_id: str,
+    tool_name: str,
+    payload_digest: str,
+    provider_prompt_text: str,
+    observation_prompt_text: str,
+) -> dict[str, Any]:
+    anchors = tuple(
+        item
+        for item in (observation_id, payload_digest, tool_name)
+        if str(item or "").strip()
+    )
+    for source_name, text in (
+        ("agentic_proposal_tool_observations", observation_prompt_text),
+        ("provider_visible_prompt", provider_prompt_text),
+    ):
+        source_text = str(text or "")
+        if not source_text:
+            continue
+        if not any(anchor in source_text for anchor in anchors):
+            continue
+        visible_text = _visible_observation_window(source_text, anchors)
+        return {
+            "visible_text_chars": len(visible_text),
+            "visible_text_hash": _text_digest(visible_text, length=16),
+            "rendered_visibility_source": source_name,
+            "visible_text_windowed": len(visible_text) < len(source_text),
+        }
+    return {
+        "visible_text_chars": 0,
+        "visible_text_hash": "",
+        "rendered_visibility_source": "",
+        "visible_text_windowed": False,
+    }
+
+
+def _visible_observation_window(text: str, anchors: tuple[str, ...]) -> str:
+    indexes = [text.find(anchor) for anchor in anchors if anchor and anchor in text]
+    if not indexes:
+        return ""
+    start = max(0, min(indexes) - 1600)
+    end = min(len(text), max(indexes) + 2400)
+    return text[start:end]
 
 
 def _observation_prompt_visibility_status(
