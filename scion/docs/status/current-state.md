@@ -9,6 +9,21 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
+The 2026-05-27 smoke-evidence stopped-run follow-up closes three audit gaps.
+CVRP-owned premise gates now ignore negated route-removal missing claims such
+as "does not claim whole-route destroy is missing" and do not treat
+cross-incumbent route reuse/recombination absence as a claim that route
+removal or regret repair is absent; direct claims like "baseline lacks route
+removal" still hard-block. Agentic sessions now persist a dedicated
+`algorithm_smoke_execution_evidence` artifact and compact transcript reference
+for `proposal.algorithm_smoke` case ledgers, while legacy V8 run metric files
+carry a versioned runtime case ledger instead of only top-level objective
+fields. Stopped runs that complete useful evidence but not the requested round
+count remain scientifically valid partial evidence, with
+`requested_rounds`, `effective_rounds_completed`, `completed_requested_rounds`,
+`interrupted`, `partial_in_flight`, and completeness status exposed in
+status/summary `run_validity`.
+
 The 2026-05-27 smoke-runtime evidence follow-up makes algorithm-smoke
 representative execution auditable. Runtime smoke now records a per-case
 execution ledger for canary, provider-selected representative, and screening

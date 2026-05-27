@@ -277,6 +277,14 @@ class AgenticSessionToolCallMixin:
                 "selection_source": selection_source,
             }
             metadata.update(_tool_observation_transcript_metadata(observation))
+            smoke_artifact_ref = _write_algorithm_smoke_execution_evidence_artifact(
+                self._artifact_store,
+                state,
+                observation,
+            )
+            if smoke_artifact_ref:
+                state.scratch_artifact_refs.append(smoke_artifact_ref)
+                metadata["algorithm_smoke_execution_evidence_ref"] = smoke_artifact_ref
             state.note(
                 phase,
                 f"Proposal tool observation: {name}",
@@ -389,6 +397,93 @@ class AgenticSessionToolCallMixin:
             finally:
                 signal.setitimer(signal.ITIMER_REAL, *previous_timer)
                 signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _write_algorithm_smoke_execution_evidence_artifact(
+    artifact_store: AgenticSessionArtifactStore | None,
+    state: AgenticProposalSessionState,
+    observation: ProposalObservation,
+) -> str:
+    if artifact_store is None or observation.tool_name != "proposal.algorithm_smoke":
+        return ""
+    payload = _algorithm_smoke_execution_evidence_payload(state, observation)
+    if not payload:
+        return ""
+    index = int(getattr(state, "_algorithm_smoke_evidence_artifact_index", 0)) + 1
+    setattr(state, "_algorithm_smoke_evidence_artifact_index", index)
+    return artifact_store.write_scratch(
+        state.session_id,
+        f"algorithm_smoke_execution_evidence_{index:04d}.json",
+        payload,
+    )
+
+
+def _algorithm_smoke_execution_evidence_payload(
+    state: AgenticProposalSessionState,
+    observation: ProposalObservation,
+) -> dict[str, Any]:
+    payload = (
+        observation.structured_payload
+        if isinstance(observation.structured_payload, Mapping)
+        else {}
+    )
+    runtime_smoke = (
+        payload.get("runtime_smoke")
+        if isinstance(payload.get("runtime_smoke"), Mapping)
+        else {}
+    )
+    ledger = runtime_smoke.get("case_execution_ledger")
+    if not isinstance(ledger, (list, tuple)):
+        ledger = ()
+    if not ledger and runtime_smoke in ({}, None):
+        return {}
+    compact_runtime_smoke = {
+        key: runtime_smoke.get(key)
+        for key in (
+            "passed",
+            "runtime_smoke_run",
+            "selected_surface",
+            "case_count",
+            "selected_case_count",
+            "attempted_case_count",
+            "provider_hook_used",
+            "provider_case_count",
+            "provider_case_attempted_count",
+            "runtime_budget_diagnostic",
+            "runtime_audit_failure",
+        )
+        if runtime_smoke.get(key) not in (None, "", [], {})
+    }
+    return _drop_empty_dict(
+        {
+            "schema_version": "algorithm-smoke-execution-evidence.v1",
+            "artifact_kind": "algorithm_smoke_execution_evidence",
+            "session_id": state.session_id,
+            "campaign_id": state.campaign_id,
+            "branch_id": state.branch_id,
+            "observation_id": observation.observation_id,
+            "tool_name": observation.tool_name,
+            "status": payload.get("status"),
+            "passed": payload.get("passed"),
+            "failure_code": payload.get("failure_code"),
+            "failure_class": payload.get("failure_class"),
+            "primary_issue": payload.get("primary_issue"),
+            "provider_hook_used": runtime_smoke.get("provider_hook_used"),
+            "provider_case_count": runtime_smoke.get("provider_case_count"),
+            "provider_case_attempted_count": runtime_smoke.get(
+                "provider_case_attempted_count"
+            ),
+            "case_execution_ledger": [
+                _sanitize_agentic_value(item)
+                for item in ledger
+                if isinstance(item, Mapping)
+            ],
+            "runtime_smoke": _sanitize_agentic_value(compact_runtime_smoke),
+            "payload_hash": stable_digest(payload, length=16),
+            "raw_payload_omitted": True,
+            "tainted": True,
+        }
+    )
 
 
 def _tool_observation_transcript_metadata(

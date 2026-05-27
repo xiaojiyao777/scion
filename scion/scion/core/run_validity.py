@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 RUN_VALIDITY_VALID = "valid"
+RUN_VALIDITY_VALID_BUT_INCOMPLETE = "valid_but_incomplete"
+RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED = "valid_partial_interrupted"
 RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS = "invalid_no_effective_rounds"
 RUN_VALIDITY_INVALID_INFRA_ONLY = "invalid_infra_only"
 RUN_VALIDITY_INVALID_NO_EXPERIMENTS = "invalid_no_experiments"
@@ -121,6 +123,7 @@ def build_run_validity(
     stopped_reason: Any = None,
     failure_categories: Mapping[str, Any] | None = None,
     stopped: bool = True,
+    partial_in_flight: Any = None,
 ) -> dict[str, Any]:
     """Build a stable validity record for wrapper/report consumers.
 
@@ -143,13 +146,36 @@ def build_run_validity(
     )
     total_failures = sum(counts.values())
     noninfra_failures = max(0, total_failures - infra_failures)
+    completed_requested = bool(requested <= 0 or effective >= requested)
+    stopped_reason_text = str(stopped_reason or "")
+    interrupted = bool(
+        stopped
+        and stopped_reason_text
+        and stopped_reason_text
+        not in {
+            "max_rounds",
+            "max_rounds_exhausted",
+            "run_complete",
+            "completed",
+            "complete",
+        }
+    )
+    partial = _coerce_bool(
+        partial_in_flight,
+        default=bool(not completed_requested and interrupted),
+    )
 
     if not stopped:
         reason = "running"
         status = "pending"
         valid = None
     elif effective > 0 or experiments > 0:
-        reason = RUN_VALIDITY_VALID
+        if completed_requested:
+            reason = RUN_VALIDITY_VALID
+        elif interrupted:
+            reason = RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+        else:
+            reason = RUN_VALIDITY_VALID_BUT_INCOMPLETE
         status = "valid"
         valid = True
     elif requested <= 0:
@@ -178,6 +204,16 @@ def build_run_validity(
         "valid": valid,
         "requested_rounds": requested,
         "effective_rounds_completed": effective,
+        "completed_requested_rounds": completed_requested,
+        "interrupted": interrupted,
+        "partial_in_flight": partial,
+        "completeness_status": _completeness_status(
+            stopped=stopped,
+            completed_requested=completed_requested,
+            interrupted=interrupted,
+            partial_in_flight=partial,
+        ),
+        "complete": completed_requested,
         "n_experiments": experiments,
         "proposal_attempts": attempts,
         "stopped_reason": str(stopped_reason or ""),
@@ -197,6 +233,15 @@ def build_run_validity(
         record["operator_action"] = (
             "Do not treat this invocation as scientific evidence until at least "
             "one effective screening round completes."
+        )
+    elif reason in {
+        RUN_VALIDITY_VALID_BUT_INCOMPLETE,
+        RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
+    }:
+        record["operator_action"] = (
+            "Treat this as scientifically useful partial evidence, not a "
+            "complete requested-round validation; resume or rerun to complete "
+            "the requested campaign length."
         )
     return record
 
@@ -246,11 +291,44 @@ def _coerce_int(value: Any, *, default: int) -> int:
         return default
 
 
+def _coerce_bool(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return True
+    if text in {"0", "false", "no", "n"}:
+        return False
+    return default
+
+
+def _completeness_status(
+    *,
+    stopped: bool,
+    completed_requested: bool,
+    interrupted: bool,
+    partial_in_flight: bool,
+) -> str:
+    if not stopped:
+        return "running"
+    if completed_requested:
+        return "complete"
+    if interrupted and partial_in_flight:
+        return "partial_interrupted"
+    if interrupted:
+        return "interrupted_incomplete"
+    return "incomplete"
+
+
 __all__ = [
     "RUN_VALIDITY_INVALID_INFRA_ONLY",
     "RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS",
     "RUN_VALIDITY_INVALID_NO_EXPERIMENTS",
     "RUN_VALIDITY_VALID",
+    "RUN_VALIDITY_VALID_BUT_INCOMPLETE",
+    "RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED",
     "build_run_validity",
     "failure_category_for_run_validity",
     "step_failure_categories",

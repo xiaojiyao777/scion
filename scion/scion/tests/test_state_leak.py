@@ -146,6 +146,28 @@ class TestStateleakDiagnostics:
         assert r.passed is False
         run_files = list(metrics_dir.glob("v8_run*.json"))
         assert len(run_files) == 2
+        payloads = [
+            json.loads(path.read_text(encoding="utf-8")) for path in run_files
+        ]
+        assert {payload["schema_version"] for payload in payloads} == {
+            "scion.v8-run-metric.v2"
+        }
+        for payload in payloads:
+            assert payload["artifact_kind"] == "v8_nondeterminism_run_metric"
+            assert payload["provider_hook_used"] is False
+            assert payload["provider_case_count"] == 0
+            assert payload["provider_case_attempted_count"] == 0
+            assert payload["feasible"] is True
+            ledger = payload["case_execution_ledger"]
+            assert len(ledger) == 1
+            assert ledger[0]["case_path_ref"] == canary
+            assert ledger[0]["case_source"] == "v8_nondeterminism_canary"
+            assert ledger[0]["seed"] == 77
+            assert ledger[0]["attempted"] is True
+            assert ledger[0]["success"] is True
+            assert ledger[0]["provider_hook_used"] is False
+            assert ledger[0]["case_digest"]
+            assert payload["runtime_case_ledger"] == ledger
 
     def test_v5_failure_archives_candidate_code(self, tmp_path: Path):
         """On failure, operators/ from workspace are archived to metrics_dir."""

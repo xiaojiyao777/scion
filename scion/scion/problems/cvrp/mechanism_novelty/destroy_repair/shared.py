@@ -698,6 +698,8 @@ def _span_acknowledges_existing_route_removal(span: str) -> bool:
         r"(?:_route_removal|route removal|whole route removal|"
         r"entire route removal|route level removal|route destroy)"
     )
+    if _span_negates_missing_route_removal_claim(span):
+        return True
     if re.search(
         r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
         r"doesn t have|doesn t include)\b.{0,60}\b"
@@ -724,6 +726,8 @@ def _span_acknowledges_existing_route_removal(span: str) -> bool:
     )
 
 def _span_is_whole_route_contrast_not_claim(span: str) -> bool:
+    if _span_negates_missing_route_removal_claim(span):
+        return True
     return _has_any(
         span,
         (
@@ -736,6 +740,53 @@ def _span_is_whole_route_contrast_not_claim(span: str) -> bool:
             " existing whole route removal does not ",
             " existing route removal does not ",
         ),
+    )
+
+
+def _span_negates_missing_route_removal_claim(span: str) -> bool:
+    """Return true for text that denies making a route-removal absence claim."""
+
+    text = str(span or "").replace("-", " ").lower()
+    route_family = (
+        r"(?:_route_removal|route removal|whole route removal|whole route "
+        r"destroy|entire route removal|route level removal|route destroy)"
+    )
+    absence = r"(?:missing|absent|lack(?:s|ing)?|without|not present)"
+    return bool(
+        re.search(
+            r"\b(?:does not|do not|did not|doesn t|don t|not)\s+"
+            r"(?:claim|claiming|say|saying|assert|asserting|state|stating|"
+            r"argue|arguing|treat|treating)\b.{0,120}\b"
+            + route_family
+            + r"\b.{0,80}\b"
+            + absence
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\bnot\s+(?:a\s+)?claim\b.{0,120}\b"
+            + route_family
+            + r"\b.{0,80}\b"
+            + absence
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\bnot\s+about\b.{0,80}\b"
+            + route_family
+            + r"\b.{0,80}\b"
+            + absence
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\b"
+            + route_family
+            + r"\b.{0,80}\b(?:is|are|was|were|being)?\s*not\s+"
+            + absence
+            + r"\b",
+            text,
+        )
     )
 
 def _targets_worst_removal_savings_not_shaw(text: str) -> bool:

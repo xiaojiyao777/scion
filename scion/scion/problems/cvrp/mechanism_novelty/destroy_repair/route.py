@@ -6,6 +6,7 @@ from scion.problems.cvrp.mechanism_novelty.text import _has_any
 from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
     _mentions_route_removal,
     _span_acknowledges_existing_route_removal,
+    _span_negates_missing_route_removal_claim,
     _targets_contiguous_segment_destroy_not_whole_route_removal,
     _targets_perturbation_or_restart_not_removal_family,
 )
@@ -120,17 +121,31 @@ def _acknowledges_existing_route_removal_variant(text: str) -> bool:
             "bounded",
             "sampling",
             "scoring",
+            "reuse",
+            "route reuse",
+            "route pool",
+            "route-pool",
+            "recombination",
+            "recombine",
+            "cross incumbent",
+            "cross-incumbent",
+            "elite route",
             "but",
             "however",
             "while",
             "distinct from",
             "different from",
             "without claiming route removal is missing",
+            "does not claim whole route destroy is missing",
         ),
     ):
         return False
     span = _missing_route_removal_span_without_variant_allowance(text)
     if not span:
+        return True
+    if _span_negates_missing_route_removal_claim(span):
+        return True
+    if _span_absence_referent_is_route_reuse_variant(span):
         return True
     return _has_any(
         span,
@@ -150,6 +165,13 @@ def _acknowledges_existing_route_removal_variant(text: str) -> bool:
             "trigger",
             "parameter",
             "bounded",
+            "reuse",
+            "route pool",
+            "route-pool",
+            "recombination",
+            "cross incumbent",
+            "cross-incumbent",
+            "elite route",
         ),
     )
 
@@ -236,9 +258,47 @@ def _first_missing_route_removal_claim_span(
     for pattern in patterns:
         for match in re.finditer(pattern, text):
             span = text[match.start() : match.end()].strip()[:220]
+            if _span_negates_missing_route_removal_claim(span):
+                continue
+            if _span_absence_referent_is_route_reuse_variant(span):
+                continue
             if allow_existing_acknowledgement and _span_acknowledges_existing_route_removal(
                 span
             ):
                 continue
             return span
     return ""
+
+
+def _span_absence_referent_is_route_reuse_variant(span: str) -> bool:
+    text = str(span or "").replace("-", " ").lower()
+    if not _has_any(
+        text,
+        (
+            "cross incumbent route reuse",
+            "cross incumbent",
+            "route reuse",
+            "route pool",
+            "elite route",
+            "route fragment",
+            "recombination",
+            "recombine",
+        ),
+    ):
+        return False
+    if not _has_any(text, ("absent", "missing", "lacks", "lack ")):
+        return False
+    return bool(
+        _has_any(
+            text,
+            (
+                "already has route removal",
+                "has route removal",
+                "route removal premise",
+                "existing route removal",
+                "current route removal",
+                "_route_removal",
+            ),
+        )
+        or _span_negates_missing_route_removal_claim(span)
+    )

@@ -483,6 +483,90 @@ def test_cvrp_provider_does_not_hard_block_route_removal_trigger_variant() -> No
     assert result is None or result.is_hard_block is False
 
 
+def test_cvrp_provider_allows_negated_route_removal_missing_plus_route_reuse_absent() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has diverse feasible seeds, route removal, "
+            "Shaw/worst/random removal, regret repair, and VNS "
+            "relocate/swap/Or-opt/tail exchange. This is materially different "
+            "from the rejected route-removal premise because it does not claim "
+            "whole-route destroy is missing; it adds cross-incumbent route reuse, "
+            "a capability absent from single-solution ALNS neighborhoods."
+        ),
+        change_locus="solver_design",
+        action="create_new",
+        target_file="policies/baseline_modules/route_pool_recombination.py",
+        target_weakness=(
+            "Search lacks cross-incumbent route-pool recombination, not route "
+            "removal."
+        ),
+        expected_effect="Improve total_distance via elite route reuse.",
+        mechanism_changes=(
+            MechanismChange(id="route_pool_recombination", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_provider_allows_route_recombination_absence_referent_not_route_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has route removal and regret repair. "
+            "What is absent is cross incumbent route-pool recombination that "
+            "reuses elite complete routes across incumbents, so add a bounded "
+            "route reuse module without claiming route removal is missing."
+        ),
+        change_locus="solver_design",
+        action="create_new",
+        target_file="policies/baseline_modules/route_pool_recombination.py",
+        target_weakness="Cross-incumbent route reuse is absent.",
+        expected_effect="Improve total_distance through route-pool recombination.",
+        mechanism_changes=(
+            MechanismChange(id="route_pool_recombination", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_provider_still_blocks_true_missing_route_removal_claim() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The baseline lacks route removal, so add a whole-route destroy "
+            "operator to remove entire routes."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Route removal is missing.",
+        expected_effect="Improve search by adding route removal.",
+        mechanism_changes=(
+            MechanismChange(id="whole_route_removal_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "route_removal"
+    assert "lacks route removal" in result.contradicted_span
+
+
 def test_cvrp_provider_does_not_hard_block_paired_regret_variant_report_case() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

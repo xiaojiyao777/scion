@@ -228,6 +228,7 @@ class StatusWriterMixin:
                 stopped_reason=payload.get("stopped_reason"),
                 failure_categories=failure_categories,
                 stopped=True,
+                partial_in_flight=bool(payload.get("in_flight_protocol")),
             )
             payload["run_validity_status"] = payload["run_validity"]["reason"]
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)

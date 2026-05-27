@@ -3,7 +3,10 @@
 from dataclasses import replace
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
-from scion.core.run_validity import RUN_VALIDITY_INVALID_INFRA_ONLY
+from scion.core.run_validity import (
+    RUN_VALIDITY_INVALID_INFRA_ONLY,
+    RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
+)
 from scion.core.step_result import StepResult
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
@@ -530,6 +533,120 @@ def test_campaign_summary_reports_infra_only_run_validity(tmp_path: Path) -> Non
     assert summary["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
     assert summary["failure_categories"] == {"infra": 12}
     assert summary["stopped_reason"] == "proposal_attempt_limit_exhausted"
+
+
+def test_status_reports_valid_partial_interrupted_run_completeness(
+    tmp_path: Path,
+) -> None:
+    metrics_dir = tmp_path / "metrics"
+    metrics_dir.mkdir()
+    metrics_path = metrics_dir / "partial-screening.json"
+    metrics_path.write_text(
+        json.dumps(
+            {
+                "stage": "screening",
+                "complete": False,
+                "total_pairs": 16,
+                "attempted_pairs": 6,
+                "valid_pairs": 6,
+                "failed_pairs": 0,
+                "candidate_failed_pairs": 0,
+                "champion_failed_pairs": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-partial",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-partial",
+            "n_experiments": 3,
+            "screened_experiments": 3,
+        },
+    )
+    recorder.record_protocol_progress(
+        branch_id="branch-4",
+        stage="screening",
+        raw_metrics_ref=str(metrics_path),
+        case="/tmp/private/current.vrp",
+        seed=77,
+    )
+
+    status = recorder.write_status(
+        stopped_reason="signal:SIGTERM",
+        loop_status={
+            "requested_rounds": 4,
+            "total_rounds": 4,
+            "proposal_attempts": 4,
+            "proposal_attempts_consumed": 4,
+            "effective_rounds_completed": 3,
+        },
+    )
+
+    validity = status["run_validity"]
+    assert validity["status"] == "valid"
+    assert validity["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+    assert validity["valid"] is True
+    assert validity["requested_rounds"] == 4
+    assert validity["effective_rounds_completed"] == 3
+    assert validity["completed_requested_rounds"] is False
+    assert validity["complete"] is False
+    assert validity["interrupted"] is True
+    assert validity["partial_in_flight"] is True
+    assert validity["completeness_status"] == "partial_interrupted"
+    assert validity["stopped_reason"] == "signal:SIGTERM"
+    assert "partial evidence" in validity["operator_action"]
+    assert status["run_validity_status"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+
+
+def test_campaign_summary_reports_valid_but_incomplete_sigterm_run(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-partial",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-partial",
+            "n_experiments": 3,
+            "screened_experiments": 3,
+        },
+    )
+    recorder.write_status(
+        loop_status={
+            "requested_rounds": 4,
+            "total_rounds": 4,
+            "proposal_attempts": 4,
+            "proposal_attempts_consumed": 4,
+            "effective_rounds_completed": 3,
+        },
+    )
+    steps = [
+        replace(_step(f"/tmp/metrics-round-{idx}.json"), round_num=idx)
+        for idx in (1, 2, 3)
+    ]
+
+    summary = recorder.write_campaign_summary(
+        step_history=steps,
+        round_num=4,
+        champion=_champion(),
+        stopped_reason="signal:SIGTERM",
+    )
+
+    validity = summary["run_validity"]
+    assert summary["effective_rounds_completed"] == 3
+    assert summary["requested_rounds"] == 4
+    assert validity["status"] == "valid"
+    assert validity["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+    assert validity["valid"] is True
+    assert validity["requested_rounds"] == 4
+    assert validity["effective_rounds_completed"] == 3
+    assert validity["completed_requested_rounds"] is False
+    assert validity["complete"] is False
+    assert validity["interrupted"] is True
+    assert validity["partial_in_flight"] is True
+    assert validity["completeness_status"] == "partial_interrupted"
+    assert summary["run_validity_status"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
 
 
 def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:

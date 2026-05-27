@@ -104,6 +104,7 @@ def _compact_transcript(
         "runtime_smoke_provider_case_count",
         "runtime_smoke_provider_case_attempted_count",
         "runtime_budget_diagnostic",
+        "algorithm_smoke_execution_evidence_ref",
     }
     for event in transcript:
         metadata = {

@@ -16,6 +16,7 @@ V8 if it uses uuid or non-deterministic iteration patterns.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -143,9 +144,27 @@ def check_nondeterminism(
         run2_path = os.path.join(metrics_dir, f"v8_run2_{short_id}.json")
         try:
             with open(run1_path, "w", encoding="utf-8") as f:
-                json.dump(raw1, f, indent=2)
+                json.dump(
+                    _run_metric_payload(
+                        raw1,
+                        run_label="v8_run1",
+                        canary=canary,
+                        selected_surface=selected_surface,
+                    ),
+                    f,
+                    indent=2,
+                )
             with open(run2_path, "w", encoding="utf-8") as f:
-                json.dump(raw2, f, indent=2)
+                json.dump(
+                    _run_metric_payload(
+                        raw2,
+                        run_label="v8_run2",
+                        canary=canary,
+                        selected_surface=selected_surface,
+                    ),
+                    f,
+                    indent=2,
+                )
         except OSError:
             run1_path = None
             run2_path = None
@@ -335,6 +354,57 @@ def _failure_detail(
         },
         sort_keys=True,
     )
+
+
+def _run_metric_payload(
+    raw: Mapping[str, Any],
+    *,
+    run_label: str,
+    canary: str,
+    selected_surface: str | None,
+) -> dict[str, Any]:
+    payload = dict(raw)
+    case_ref = Path(canary).name
+    if canary:
+        case_ref = str(canary)
+    ledger = [
+        {
+            "label": run_label,
+            "case": case_ref,
+            "case_path_ref": case_ref,
+            "case_source": "v8_nondeterminism_canary",
+            "seed": _CANARY_SEED,
+            "provider_hook_used": False,
+            "attempted": True,
+            "success": True,
+            "passed": True,
+            "selected_surface": selected_surface,
+            "case_digest": _metric_digest(
+                {
+                    "case": case_ref,
+                    "seed": _CANARY_SEED,
+                    "run_label": run_label,
+                    "selected_surface": selected_surface,
+                }
+            )[:16],
+        }
+    ]
+    payload.update(
+        {
+            "schema_version": "scion.v8-run-metric.v2",
+            "artifact_kind": "v8_nondeterminism_run_metric",
+            "runtime_case_ledger": ledger,
+            "case_execution_ledger": ledger,
+            "provider_hook_used": False,
+            "provider_case_count": 0,
+            "provider_case_attempted_count": 0,
+        }
+    )
+    return payload
+
+
+def _metric_digest(value: Any) -> str:
+    return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()[:16]
 
 
 def _objective_for_signature(

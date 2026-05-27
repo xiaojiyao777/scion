@@ -2,6 +2,96 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_session_test_support import *
 
+
+class _LedgerAlgorithmSmokeTool:
+    name = "proposal.algorithm_smoke"
+    input_schema = AlgorithmSmokeInput
+    permission = ProposalToolPermission.CONTRACT_PREVIEW
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 60000
+
+    def call(self, args, context: ProposalToolContext) -> ProposalObservation:
+        del args
+        return ProposalObservation(
+            observation_id="algorithm-smoke-representative-ledger",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="",
+            observation_type="algorithm_smoke",
+            summary="Algorithm smoke passed with provider representative cases.",
+            structured_payload={
+                "passed": True,
+                "status": "passed",
+                "failure_code": "",
+                "runtime_smoke": {
+                    "passed": True,
+                    "runtime_smoke_run": True,
+                    "selected_surface": "solver_design",
+                    "case_count": 2,
+                    "selected_case_count": 2,
+                    "attempted_case_count": 2,
+                    "provider_hook_used": True,
+                    "provider_hook_name": "solver_design_smoke_cases",
+                    "provider_case_count": 2,
+                    "provider_case_attempted_count": 2,
+                    "case_execution_ledger": [
+                        {
+                            "label": "provider_small",
+                            "case": "cases/small.vrp",
+                            "case_path_ref": "provider:cases/small.vrp",
+                            "seed": 11,
+                            "case_source": "provider_representative",
+                            "provider_hook_used": True,
+                            "provider_hook_name": "solver_design_smoke_cases",
+                            "attempted": True,
+                            "success": True,
+                            "failure": False,
+                            "runtime_audit": {
+                                "solver_algorithm_active": True,
+                                "solver_algorithm_errors": 0,
+                                "fallback_emitted": False,
+                            },
+                            "selected_surface": {
+                                "active": True,
+                                "errors": 0,
+                                "fallback": False,
+                            },
+                            "duration_ms": 12,
+                            "case_digest": "case-small-digest",
+                            "run_digest": "run-small-digest",
+                        },
+                        {
+                            "label": "provider_medium",
+                            "case": "cases/medium.vrp",
+                            "case_path_ref": "provider:cases/medium.vrp",
+                            "seed": 13,
+                            "case_source": "provider_representative",
+                            "provider_hook_used": True,
+                            "provider_hook_name": "solver_design_smoke_cases",
+                            "attempted": True,
+                            "success": True,
+                            "failure": False,
+                            "runtime_audit": {
+                                "solver_algorithm_active": True,
+                                "solver_algorithm_errors": 0,
+                                "fallback_emitted": False,
+                            },
+                            "selected_surface": {
+                                "active": True,
+                                "errors": 0,
+                                "fallback": False,
+                            },
+                            "duration_ms": 24,
+                            "case_digest": "case-medium-digest",
+                            "run_digest": "run-medium-digest",
+                        },
+                    ],
+                },
+            },
+        )
+
+
 def test_agentic_session_contract_preview_failure_fails_closed(
     tmp_path: Path,
 ) -> None:
@@ -109,6 +199,87 @@ def test_agentic_session_writes_api_visible_prompt_manifest_artifacts(
     assert '"raw_prompt":' not in rendered
     assert "def baseline_time_fraction" not in rendered
     assert "code_content" not in rendered
+
+
+def test_agentic_session_persists_algorithm_smoke_case_execution_evidence(
+    tmp_path: Path,
+) -> None:
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    registry = ProposalToolRegistry.default_read_only()
+    registry._tools["proposal.algorithm_smoke"] = _LedgerAlgorithmSmokeTool()
+    creative = FakeCreative()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=registry,
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed_context": "smoke-ledger-test"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    smoke_refs = [
+        Path(ref)
+        for ref in output.tainted_artifact_refs
+        if "algorithm_smoke_execution_evidence" in ref
+    ]
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert len(smoke_refs) == 1
+
+    evidence = json.loads(smoke_refs[0].read_text(encoding="utf-8"))
+    ledger = evidence["case_execution_ledger"]
+    assert evidence["artifact_kind"] == "algorithm_smoke_execution_evidence"
+    assert evidence["provider_hook_used"] is True
+    assert evidence["provider_case_count"] == 2
+    assert evidence["provider_case_attempted_count"] == 2
+    assert [item["label"] for item in ledger] == [
+        "provider_small",
+        "provider_medium",
+    ]
+    assert all(item["attempted"] is True for item in ledger)
+    assert all(item["success"] is True for item in ledger)
+    assert all(item["case_path_ref"].startswith("provider:") for item in ledger)
+    assert {item["case_digest"] for item in ledger} == {
+        "case-small-digest",
+        "case-medium-digest",
+    }
+    assert evidence["payload_hash"]
+    assert evidence["raw_payload_omitted"] is True
+
+    output_artifacts = [
+        Path(ref) for ref in output.tainted_artifact_refs if Path(ref).name == "output.json"
+    ]
+    assert output_artifacts
+    output_artifact = json.loads(output_artifacts[0].read_text(encoding="utf-8"))
+    compact_metadata = [
+        event.get("metadata", {})
+        for event in output_artifact["compact_transcript"]
+        if event.get("metadata", {}).get("tool_name") == "proposal.algorithm_smoke"
+    ]
+    assert compact_metadata
+    smoke_metadata = compact_metadata[-1]
+    assert smoke_metadata["algorithm_smoke_execution_evidence_ref"] == str(smoke_refs[0])
+    assert smoke_metadata["runtime_smoke_provider_hook_used"] is True
+    assert smoke_metadata["runtime_smoke_provider_case_count"] == 2
+    assert smoke_metadata["runtime_smoke_provider_case_attempted_count"] == 2
+    assert [item["label"] for item in smoke_metadata["runtime_smoke_case_execution_ledger"]] == [
+        "provider_small",
+        "provider_medium",
+    ]
 
 
 def test_prompt_manifest_counts_rendered_provider_prompt_not_raw_context(

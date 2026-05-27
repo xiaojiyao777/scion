@@ -66,6 +66,11 @@ def _missing_regret_insertion_repair_span(text: str) -> str:
         span
     ):
         return ""
+    if span and _acknowledges_existing_regret_repair(text) and _absence_referent_targets_variant_not_regret(
+        text,
+        span,
+    ):
+        return ""
     if span and _acknowledges_existing_regret_repair(text):
         if re.search(r"\bbut\b.{0,25}\blacks?\b", span):
             return ""
@@ -78,6 +83,30 @@ def _missing_regret_insertion_repair_span(text: str) -> str:
         if _describes_route_merge_compaction_variant(text):
             return ""
     return span
+
+
+def _absence_referent_targets_variant_not_regret(text: str, span: str) -> bool:
+    """Handle short regex spans where the absence word precedes its referent."""
+
+    normalized = text.lower()
+    span_start = normalized.find(span.lower())
+    if span_start < 0:
+        return False
+    window = normalized[span_start : span_start + 260]
+    absence_match = re.search(
+        r"\b(?:what\s+is\s+)?(?:absent|missing)\s+(?:is|are)\b|\blacks?\b",
+        window,
+    )
+    if absence_match is None:
+        return False
+    referent = window[absence_match.end() : absence_match.end() + 160]
+    regret_referent = re.search(
+        r"^\W{0,20}(?:the\s+)?(?:regret[- ]?[23k]?|regret insertion|regret repair)\b",
+        referent,
+    )
+    if regret_referent:
+        return False
+    return _span_targets_variant_not_regret(referent)
 
 
 def _negates_regret_absence_claim(text: str) -> bool:
