@@ -32,6 +32,7 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
@@ -441,6 +442,11 @@ class DecisionFinalizer:
                 if preserve_low_signal_branch
                 else "CONTINUE_EXPLORE: re-propose next step"
             )
+            runtime_budget_code = runtime_budget_diagnostic_code(protocol_result)
+            if runtime_budget_code:
+                reason = (
+                    f"{reason}; runtime_budget_diagnostic={runtime_budget_code}"
+                )
             attempt_kind = "screening"
             repair_mechanism_ids = ()
         return StepResult(

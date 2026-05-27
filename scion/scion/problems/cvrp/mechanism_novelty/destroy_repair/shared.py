@@ -634,8 +634,11 @@ def _targets_perturbation_or_restart_not_removal_family(text: str) -> bool:
 def _explicitly_adds_or_claims_missing_whole_route_removal(text: str) -> bool:
     route_family = r"(?:whole route|entire route|route level|route removal|route destroy)"
     patterns = (
-        r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+        r"\b(?:missing|lacks?|absent|without|does not have|does not include|"
         r"doesn t have|doesn t include)\b.{0,80}\b"
+        + route_family
+        + r"\b",
+        r"\bno\b.{0,30}\b"
         + route_family
         + r"\b",
         r"\b(?:add|introduce|implement|enable|create|build|register)\b"
@@ -648,6 +651,8 @@ def _explicitly_adds_or_claims_missing_whole_route_removal(text: str) -> bool:
         if not match:
             continue
         if _span_lists_existing_operator_family(match.group(0)):
+            continue
+        if _span_acknowledges_existing_route_removal(match.group(0)):
             continue
         if _span_is_whole_route_contrast_not_claim(match.group(0)):
             continue
@@ -684,6 +689,36 @@ def _span_lists_existing_operator_family(span: str) -> bool:
     return bool(
         re.search(
             r"\bexisting\b.{0,50}\b(?:destroy|removal|repair)?\s*operators\b",
+            span,
+        )
+    )
+
+def _span_acknowledges_existing_route_removal(span: str) -> bool:
+    route_family = (
+        r"(?:_route_removal|route removal|whole route removal|"
+        r"entire route removal|route level removal|route destroy)"
+    )
+    if re.search(
+        r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+        r"doesn t have|doesn t include)\b.{0,60}\b"
+        + route_family
+        + r"\b",
+        span,
+    ):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:existing|current|active|already|uses?|includes?|contains?|has)\b"
+            r".{0,100}\b"
+            + route_family
+            + r"\b",
+            span,
+        )
+        or re.search(
+            r"\b"
+            + route_family
+            + r"\b.{0,80}\b(?:exists?|existing|current|active|already|"
+            r"present|included|wired|available)\b",
             span,
         )
     )

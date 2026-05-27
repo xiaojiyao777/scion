@@ -21,6 +21,7 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
 from scion.core.telemetry_validation import (
     TELEMETRY_VALIDATION_REPAIRABLE,
     VALIDATION_TELEMETRY_REPAIRABLE,
@@ -112,6 +113,15 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
         reason_codes=("SCREENING_FAIL_WIN_RATE",),
         exposed_summary="all ties",
         raw_metrics_ref="/tmp/metrics.json",
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "schema": "scion.runtime_budget_diagnostic.v1",
+                "code": SCREENING_RUNTIME_BUDGET_SATURATION,
+                "stage": "screening",
+                "severity": "warn",
+                "repairable": True,
+            },
+        },
     )
 
     result = finalizer.apply(
@@ -126,6 +136,7 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
         action_label="screening",
         decision_reason_codes=(
             "SCREENING_FAIL_WIN_RATE",
+            SCREENING_RUNTIME_BUDGET_SATURATION,
             SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         ),
     )
@@ -134,6 +145,9 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert result.counts_toward_max_rounds is True
     assert result.attempt_kind == "screening"
     assert "weak screening signal" in result.reason
+    assert "runtime_budget_diagnostic=SCREENING_RUNTIME_BUDGET_SATURATION" in (
+        result.reason
+    )
     assert workspaces[branch.branch_id] == "/tmp/workspace"
     assert patches[branch.branch_id] is patch
     assert discarded == []

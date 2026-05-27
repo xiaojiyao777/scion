@@ -116,6 +116,24 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         payload["failure_categories"] = dict(loop["failure_categories"])
 
 
+def _merge_runtime_budget_status(
+    payload: Dict[str, Any],
+    progress: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(progress, Mapping):
+        return
+    diagnostic = progress.get("runtime_budget_diagnostic")
+    if isinstance(diagnostic, Mapping):
+        payload["runtime_budget_diagnostic"] = dict(diagnostic)
+        code = str(
+            progress.get("runtime_budget_diagnostic_code")
+            or diagnostic.get("code")
+            or ""
+        ).strip()
+        if code:
+            payload["runtime_budget_diagnostic_code"] = code
+
+
 class StatusWriterMixin:
     def write_status(
         self,
@@ -178,6 +196,7 @@ class StatusWriterMixin:
             )
         if self.current_status_progress is not None:
             payload["current_progress"] = self.current_status_progress
+            _merge_runtime_budget_status(payload, self.current_status_progress)
         if self.in_flight_protocol is not None:
             payload["in_flight_protocol"] = self.in_flight_protocol
             if self.last_status_result is not None:
@@ -243,6 +262,8 @@ class StatusWriterMixin:
             "failed_pairs",
             "candidate_failed_pairs",
             "champion_failed_pairs",
+            "runtime_budget_diagnostic",
+            "runtime_budget_diagnostic_code",
         ):
             if key not in payload and key in metrics_snapshot:
                 progress[key] = metrics_snapshot[key]

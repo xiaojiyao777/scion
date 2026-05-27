@@ -280,6 +280,44 @@ def test_cvrp_provider_allows_contiguous_segment_destroy_after_route_removal_lis
     assert result is None
 
 
+def test_cvrp_provider_allows_acknowledged_edge_guided_repair_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add an edge-guided bounded repair operator that, after any existing "
+            "destroy operator removes customers, reinserts customers in an order "
+            "biased by proximity to current route boundary edges and evaluates "
+            "only top-k nearest-edge feasible insertion positions before falling "
+            "back to existing regret insertion if a customer has no bounded "
+            "feasible slot. The active destroy portfolio already has random, "
+            "worst, Shaw related, and whole-route removal, and destroy_repair.py "
+            "shows greedy/regret repairs scan insertions by delta/regret but do "
+            "not exploit broken predecessor-successor edges; this targets a "
+            "repair variant without claiming route removal is missing."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing repair scans insertion positions without edge-boundary "
+            "guidance after destroy."
+        ),
+        expected_effect=(
+            "Improve total_distance by preserving short boundary edges during "
+            "repair."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="edge_guided_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_provider_allows_scheduler_perturbation_not_shaw_related_removal() -> None:
     cases = [
         HypothesisProposal(

@@ -134,6 +134,65 @@ def test_campaign_summary_promotes_runtime_budget_diagnostics(tmp_path: Path) ->
     assert protocol_summary["runtime_budget_diagnostic"]["saturation_ratio"] == 0.97
 
 
+def test_status_promotes_runtime_budget_diagnostic_top_level(tmp_path: Path) -> None:
+    diagnostic = {
+        "schema": "scion.runtime_budget_diagnostic.v1",
+        "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+        "stage": "screening",
+        "severity": "warn",
+        "repairable": True,
+        "total_pairs": 16,
+        "threshold_ratio": 0.9,
+        "saturation_ratio": 0.97,
+    }
+    metrics_dir = tmp_path / "metrics"
+    metrics_dir.mkdir()
+    metrics_path = metrics_dir / "runtime-budget.json"
+    metrics_path.write_text(
+        json.dumps(
+            {
+                "stage": "screening",
+                "complete": True,
+                "total_pairs": 16,
+                "attempted_pairs": 16,
+                "valid_pairs": 16,
+                "failed_pairs": 0,
+                "candidate_failed_pairs": 0,
+                "champion_failed_pairs": 0,
+                "candidate_surface_runtime_summary": {
+                    "runtime_budget_diagnostic": diagnostic,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {"campaign_id": "camp-1", "screened_experiments": 1},
+    )
+
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        raw_metrics_ref=str(metrics_path),
+    )
+
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["runtime_budget_diagnostic"]["code"] == (
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    )
+    assert status["runtime_budget_diagnostic_code"] == (
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    )
+    assert status["current_progress"]["runtime_budget_diagnostic"]["saturation_ratio"] == (
+        0.97
+    )
+    assert status["in_flight_protocol"]["runtime_budget_diagnostic_code"] == (
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    )
+
+
 def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     tmp_path: Path,
 ) -> None:

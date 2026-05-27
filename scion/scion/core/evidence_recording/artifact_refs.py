@@ -25,7 +25,7 @@ def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
         return {}
     if not isinstance(data, Mapping):
         return {}
-    return {
+    snapshot = {
         key: data[key]
         for key in (
             "stage",
@@ -39,6 +39,15 @@ def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
         )
         if key in data
     }
+    surface_summary = data.get("candidate_surface_runtime_summary")
+    if isinstance(surface_summary, Mapping):
+        diagnostic = surface_summary.get("runtime_budget_diagnostic")
+        if isinstance(diagnostic, Mapping):
+            snapshot["runtime_budget_diagnostic"] = dict(diagnostic)
+            code = str(diagnostic.get("code") or "").strip()
+            if code:
+                snapshot["runtime_budget_diagnostic_code"] = code
+    return snapshot
 
 
 def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
@@ -89,6 +98,14 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
         "child_exit_code": _optional_int(progress.get("child_exit_code")),
         "child_elapsed_ms": _optional_int(progress.get("child_elapsed_ms")),
         "child_phase": progress.get("child_phase"),
+        "runtime_budget_diagnostic": (
+            dict(progress["runtime_budget_diagnostic"])
+            if isinstance(progress.get("runtime_budget_diagnostic"), Mapping)
+            else None
+        ),
+        "runtime_budget_diagnostic_code": progress.get(
+            "runtime_budget_diagnostic_code"
+        ),
         "last_case": progress.get("case"),
         "last_seed": progress.get("seed"),
         "step_started_at": progress.get("step_started_at"),

@@ -26,6 +26,7 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
 from scion.core.telemetry_validation import (
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     formal_telemetry_guard_failed,
@@ -162,6 +163,12 @@ class EvaluationOrchestrator:
             self.decision_reason_codes[bid] = _merge_reason_codes(
                 self.decision_reason_codes[bid],
                 (TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,),
+            )
+        runtime_budget_code = runtime_budget_diagnostic_code(protocol_result)
+        if runtime_budget_code:
+            self.decision_reason_codes[bid] = _merge_reason_codes(
+                self.decision_reason_codes[bid],
+                (runtime_budget_code,),
             )
         base_reason_codes = self.decision_reason_codes[bid]
         logger.info(

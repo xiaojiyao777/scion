@@ -9,6 +9,19 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
+The later 2026-05-27 grounding/telemetry follow-up fixes two remaining
+observability and search-guidance gaps from the local 4-round `gpt-5.5`
+analysis. CVRP mechanism novelty still stays in the problem provider, but its
+route-removal/regret checks now require a clear missing/absent/lacks/no
+existing-mechanism claim before a hard `premise_contradicted` block; hypotheses
+that explicitly acknowledge existing whole-route removal or regret repair and
+then propose an edge-guided/route-edge-aware repair variant are allowed or
+diagnosed instead of hard-blocked. Runtime budget saturation remains
+non-blocking, but its diagnostic code is now propagated through protocol
+reason codes, decision reason codes, finalizer detail, top-level `status.json`,
+in-flight protocol status, metrics, and campaign summary so monitors do not
+need to inspect raw metrics.
+
 The 2026-05-27 P1/P2 repair strengthens the v0.4 proposal/evaluation audit
 path without adding research-object semantics to the generic core. Hypothesis
 acceptance now requires sufficiently complete, API-visible provider-declared

@@ -103,6 +103,15 @@ def _absence_word_does_not_target_regret(span: str) -> bool:
 
     normalized = span.lower()
     regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
+    if re.search(r"\bno\b.{0,40}\b(?:bounded\s+)?feasible slot\b", normalized):
+        return True
+    if re.search(
+        regret
+        + r".{0,80}\b(?:if|when)\b.{0,40}\b(?:customer|insertion|slot)\b"
+        r".{0,40}\bno\b",
+        normalized,
+    ):
+        return True
     if "without" in normalized and not re.search(
         r"\bwithout\b\s+(?:any\s+)?(?:(?:a|an)\s+)?(?:new\s+)?"
         r"(?:regret[- ]?[23k]?|regret insertion|regret repair)",

@@ -347,6 +347,7 @@ class DecisionFeatures:
     telemetry_validation_repairable: bool = False
     telemetry_guard_failed: bool = False
     telemetry_effect_zero_diagnostic: bool = False
+    runtime_budget_saturation_diagnostic: bool = False
     # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
     # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
     # hypothesis is generated for this branch.

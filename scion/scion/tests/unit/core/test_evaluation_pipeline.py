@@ -19,6 +19,7 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
@@ -57,6 +58,7 @@ def _protocol_result(
     case_feedback: tuple[CaseAggregateFeedback, ...] = (),
     case_ids: tuple[str, ...] = (),
     seed_set: tuple[int, ...] = (),
+    reason_codes: tuple[str, ...] | None = None,
     exposed_summary: str = "aggregate summary",
     candidate_surface_runtime_summary: dict | None = None,
 ) -> ProtocolResult:
@@ -75,7 +77,7 @@ def _protocol_result(
             statistical_metric="total_cost",
         ),
         gate_outcome="pass",
-        reason_codes=(f"{stage.value.upper()}_PASS",),
+        reason_codes=reason_codes or (f"{stage.value.upper()}_PASS",),
         exposed_summary=exposed_summary,
         raw_metrics_ref=raw_metrics_ref,
         case_ids=case_ids,
@@ -604,6 +606,43 @@ def test_effect_zero_with_observed_activation_is_not_repairable_failure() -> Non
     assert TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in outcome.protocol_result.reason_codes
     assert "telemetry_effect_zero=diagnostic" in (
         outcome.protocol_result.exposed_summary
+    )
+
+
+def test_runtime_budget_saturation_is_decision_feature_and_reason_code() -> None:
+    diagnostic = {
+        "schema": "scion.runtime_budget_diagnostic.v1",
+        "code": SCREENING_RUNTIME_BUDGET_SATURATION,
+        "stage": "screening",
+        "severity": "warn",
+        "repairable": True,
+        "total_pairs": 16,
+        "threshold_ratio": 0.9,
+        "saturation_ratio": 0.97,
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.SCREENING,
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening runtime saturated",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "runtime_budget_diagnostic": diagnostic,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.runtime_budget_saturation_diagnostic is True
+    assert SCREENING_RUNTIME_BUDGET_SATURATION in (
+        outcome.protocol_result.reason_codes
+    )
+    assert (
+        "runtime_budget_diagnostic=SCREENING_RUNTIME_BUDGET_SATURATION"
+        in outcome.protocol_result.exposed_summary
     )
 
 

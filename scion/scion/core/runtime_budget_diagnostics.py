@@ -113,6 +113,34 @@ def format_runtime_budget_diagnostic(summary: Mapping[str, Any] | None) -> str:
     return " " + " ".join(parts)
 
 
+def protocol_runtime_budget_diagnostic(
+    protocol_result: Any,
+) -> dict[str, Any] | None:
+    surface_summary = getattr(
+        protocol_result,
+        "candidate_surface_runtime_summary",
+        None,
+    )
+    if not isinstance(surface_summary, Mapping):
+        return None
+    diagnostic = surface_summary.get("runtime_budget_diagnostic")
+    return dict(diagnostic) if isinstance(diagnostic, Mapping) else None
+
+
+def runtime_budget_diagnostic_code(protocol_result: Any) -> str:
+    diagnostic = protocol_runtime_budget_diagnostic(protocol_result)
+    if not diagnostic:
+        return ""
+    code = str(diagnostic.get("code") or "").strip()
+    if code in {TINY_RUNTIME_BUDGET_SATURATION, SCREENING_RUNTIME_BUDGET_SATURATION}:
+        return code
+    return ""
+
+
+def runtime_budget_diagnostic_detected(protocol_result: Any) -> bool:
+    return bool(runtime_budget_diagnostic_code(protocol_result))
+
+
 def _elapsed_samples(values: Sequence[Any]) -> list[float]:
     samples: list[float] = []
     for value in values:
@@ -151,5 +179,8 @@ __all__ = [
     "SCREENING_RUNTIME_BUDGET_SATURATION",
     "TINY_RUNTIME_BUDGET_SATURATION",
     "format_runtime_budget_diagnostic",
+    "protocol_runtime_budget_diagnostic",
     "runtime_budget_diagnostic",
+    "runtime_budget_diagnostic_code",
+    "runtime_budget_diagnostic_detected",
 ]

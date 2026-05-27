@@ -27,6 +27,7 @@ from scion.core.models import (
     OperatorConfig,
     ProtocolResult,
 )
+from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
 from scion.core.telemetry_validation import TELEMETRY_EFFECT_ZERO_DIAGNOSTIC
 
 
@@ -347,6 +348,26 @@ class _WeakPositiveProtocol:
                 "selected_surface": "solver_design",
                 "telemetry_guard": {"passed": True, "candidate_runs": 8},
             },
+        )
+
+
+class _RuntimeBudgetSaturationProtocol(_WeakPositiveProtocol):
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        result = super().run_experiment(**_kwargs)
+        surface_summary = dict(result.candidate_surface_runtime_summary or {})
+        surface_summary["runtime_budget_diagnostic"] = {
+            "schema": "scion.runtime_budget_diagnostic.v1",
+            "code": SCREENING_RUNTIME_BUDGET_SATURATION,
+            "stage": "screening",
+            "severity": "warn",
+            "repairable": True,
+            "total_pairs": 8,
+            "threshold_ratio": 0.9,
+            "saturation_ratio": 0.96,
+        }
+        return replace(
+            result,
+            candidate_surface_runtime_summary=surface_summary,
         )
 
 
@@ -940,6 +961,71 @@ def test_weak_positive_low_win_screening_continues_without_soft_abandon() -> Non
         "SCREENING_FAIL_WIN_RATE",
         "SCREENING_WEAK_SIGNAL_CONTINUE",
     )
+
+
+def test_runtime_budget_saturation_reaches_decision_reason_codes() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    experiment_count = 0
+    budget_used = 0
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    def increment_experiment_count() -> None:
+        nonlocal experiment_count
+        experiment_count += 1
+
+    def increment_budget_used() -> None:
+        nonlocal budget_used
+        budget_used += 1
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_RuntimeBudgetSaturationProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=increment_experiment_count,
+        increment_budget_used=increment_budget_used,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+        branch_zero_win_streaks={},
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.CONTINUE_EXPLORE
+    assert protocol_result is not None
+    assert SCREENING_RUNTIME_BUDGET_SATURATION in protocol_result.reason_codes
+    assert decision_reason_codes[branch.branch_id] == (
+        "SCREENING_FAIL_WIN_RATE",
+        SCREENING_RUNTIME_BUDGET_SATURATION,
+        "SCREENING_WEAK_SIGNAL_CONTINUE",
+    )
+    assert branch_controller.soft_abandoned is False
+    assert experiment_count == 1
+    assert budget_used == 1
 
 
 def test_low_mid_regressive_screening_soft_abandons_and_discards_workspace() -> None:

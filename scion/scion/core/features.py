@@ -8,6 +8,7 @@ from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
 )
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_detected
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
     is_repairable_telemetry_validation_failure,
@@ -192,6 +193,9 @@ class SafeFeatureExtractor:
             ),
             telemetry_guard_failed=formal_telemetry_guard_failed(protocol),
             telemetry_effect_zero_diagnostic=telemetry_effect_zero_detected(protocol),
+            runtime_budget_saturation_diagnostic=(
+                runtime_budget_diagnostic_detected(protocol)
+            ),
         )
 
         _validate_no_free_text(features)

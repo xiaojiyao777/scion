@@ -17,6 +17,11 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.runtime_budget_diagnostics import (
+    format_runtime_budget_diagnostic,
+    protocol_runtime_budget_diagnostic,
+    runtime_budget_diagnostic_code,
+)
 from scion.core.telemetry_validation import (
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     telemetry_effect_zero_detected,
@@ -157,6 +162,9 @@ class EvaluationPipeline:
                     protocol_result = _annotate_telemetry_effect_zero_diagnostic(
                         protocol_result
                     )
+                    protocol_result = _annotate_runtime_budget_diagnostic(
+                        protocol_result
+                    )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
                 canary_result = CanaryResult(passed=True, reason="no protocol - auto-pass")
@@ -230,6 +238,9 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         if telemetry_effect_zero_detected(result)
         else ""
     )
+    runtime_budget_suffix = format_runtime_budget_diagnostic(
+        protocol_runtime_budget_diagnostic(result)
+    )
     exposed_summary = (
         f"stage={result.stage.value} outcome={result.gate_outcome} "
         f"stat={stats.statistical_status or 'legacy'} "
@@ -246,6 +257,7 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"{telemetry_guard}"
         f"{telemetry_feedback_suffix}"
         f"{telemetry_effect_zero_suffix}"
+        f"{runtime_budget_suffix}"
     )
     return replace(
         result,
@@ -285,6 +297,26 @@ def _annotate_telemetry_effect_zero_diagnostic(
     exposed_summary = result.exposed_summary or ""
     suffix = "telemetry_effect_zero=diagnostic"
     if suffix not in exposed_summary:
+        exposed_summary = (exposed_summary + " " + suffix).strip()
+    return replace(
+        result,
+        reason_codes=reason_codes,
+        exposed_summary=exposed_summary,
+    )
+
+
+def _annotate_runtime_budget_diagnostic(
+    result: ProtocolResult,
+) -> ProtocolResult:
+    code = runtime_budget_diagnostic_code(result)
+    if not code:
+        return result
+    reason_codes = tuple(dict.fromkeys((*tuple(result.reason_codes), code)))
+    exposed_summary = result.exposed_summary or ""
+    suffix = format_runtime_budget_diagnostic(
+        protocol_runtime_budget_diagnostic(result)
+    ).strip()
+    if suffix and suffix not in exposed_summary:
         exposed_summary = (exposed_summary + " " + suffix).strip()
     return replace(
         result,
