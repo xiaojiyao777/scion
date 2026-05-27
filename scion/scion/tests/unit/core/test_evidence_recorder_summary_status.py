@@ -1,5 +1,7 @@
 """Focused tests split from test_evidence_recorder.py."""
 
+from dataclasses import replace
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 from scion.core.run_validity import RUN_VALIDITY_INVALID_INFRA_ONLY
 from scion.core.step_result import StepResult
@@ -84,6 +86,52 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_delta_median_ms"] == 24.0
     assert summary_step["protocol_result"]["runtime_regression_rate"] == 0.5
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
+
+
+def test_campaign_summary_promotes_runtime_budget_diagnostics(tmp_path: Path) -> None:
+    diagnostic = {
+        "schema": "scion.runtime_budget_diagnostic.v1",
+        "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+        "stage": "screening",
+        "severity": "warn",
+        "repairable": True,
+        "total_pairs": 16,
+        "threshold_ratio": 0.9,
+        "saturation_ratio": 0.97,
+    }
+    step = _step("/tmp/metrics-runtime-budget.json")
+    protocol = replace(
+        step.protocol_result,
+        candidate_surface_runtime_summary={
+            "selected_surface": "solver_design",
+            "runtime_budget_diagnostic": diagnostic,
+        },
+    )
+    step = replace(step, protocol_result=protocol)
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_experiments": 1,
+            "proposal_attempts": 1,
+            "screened_experiments": 1,
+            "branches": [],
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    assert summary["runtime_budget_diagnostic_count"] == 1
+    assert summary["runtime_budget_diagnostics"][0]["code"] == (
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    )
+    protocol_summary = summary["steps"][0]["protocol_result"]
+    assert protocol_summary["runtime_budget_diagnostic"]["saturation_ratio"] == 0.97
 
 
 def test_campaign_summary_uses_llm_trace_cache_stats_when_present(

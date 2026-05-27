@@ -557,7 +557,7 @@ def test_planner_schema_preview_error_does_not_pollute_authoritative_self_check(
     assert self_check.contract_preview_passed is True
 
 
-def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_read(
+def test_planner_stop_after_problem_context_completes_required_feedback_and_surface_read(
     tmp_path: Path,
 ) -> None:
     creative = PlanningCreative(
@@ -608,10 +608,16 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
     )
     assert any(
         event.metadata.get("error_code") == "planner_stopped_before_required_context"
+        and event.metadata.get("status") == "framework_required_completion"
         for event in output.transcript
     )
     for feedback_tool in _COMPACT_FEEDBACK_TOOL_NAMES:
         assert feedback_tool in tool_names
+        assert any(
+            event["tool_name"] == feedback_tool
+            and event["selection_source"] == "framework_required_completion"
+            for event in tool_events
+        )
     assert any(
         event["tool_name"] == "context.read_surface"
         and event["selection_source"] == "selected_surface_required"
@@ -636,7 +642,7 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
     assert _COMPACT_FEEDBACK_TOOL_NAMES.issubset(hypothesis_observation_names)
 
 
-def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback(
+def test_planner_memory_only_uses_framework_completion_for_screening_and_runtime_feedback(
     tmp_path: Path,
 ) -> None:
     creative = PlanningCreative(
@@ -679,6 +685,7 @@ def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback
     assert output.status == AgenticProposalStatus.COMPLETED
     assert any(
         event.metadata.get("error_code") == "planner_stopped_before_required_context"
+        and event.metadata.get("status") == "framework_required_completion"
         and "feedback.query_screening" in event.metadata.get("detail", "")
         and "feedback.query_runtime" in event.metadata.get("detail", "")
         for event in output.transcript
@@ -686,3 +693,8 @@ def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback
     assert "memory.query" in tool_names
     assert "feedback.query_screening" in tool_names
     assert "feedback.query_runtime" in tool_names
+    assert any(
+        event.metadata.get("selection_source") == "framework_required_completion"
+        and event.metadata.get("tool_name") == "feedback.query_screening"
+        for event in output.transcript
+    )

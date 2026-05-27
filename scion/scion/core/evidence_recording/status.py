@@ -32,6 +32,8 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "case",
     "seed",
     "selected_surface",
+    "runtime_budget_diagnostic",
+    "runtime_budget_diagnostic_code",
 )
 
 

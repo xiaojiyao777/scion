@@ -34,6 +34,8 @@ from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
+    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
     TELEMETRY_VALIDATION_REPAIRABLE,
     VALIDATION_TELEMETRY_REPAIRABLE,
     screened_experiment_effective,
@@ -307,6 +309,9 @@ class DecisionFinalizer:
             decision_reason_codes,
         )
         telemetry_repairable = telemetry_repair_stage is not None
+        telemetry_effect_zero = TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in set(
+            decision_reason_codes or ()
+        )
         verification_passed = verification_result.passed
         has_positive_signal = (
             protocol_result is not None
@@ -342,7 +347,11 @@ class DecisionFinalizer:
             branch.telemetry_repair_attempts = attempts
         elif preserve_low_signal_branch and screening_feedback is not None:
             branch.branch_code_status = f"active_{screening_feedback.tier}"
-            branch.last_telemetry_outcome = screening_feedback.effect_status
+            branch.last_telemetry_outcome = (
+                TELEMETRY_EFFECT_ZERO_OUTCOME
+                if telemetry_effect_zero
+                else screening_feedback.effect_status
+            )
             branch.branch_mechanism_ids = _merge_mechanism_ids(
                 getattr(branch, "branch_mechanism_ids", ()) or (),
                 mechanism_ids_for_repair(hypothesis),

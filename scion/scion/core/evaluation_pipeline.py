@@ -18,6 +18,8 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.telemetry_validation import (
+    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    telemetry_effect_zero_detected,
     telemetry_validation_failure_codes,
     telemetry_validation_feedback,
 )
@@ -152,6 +154,9 @@ class EvaluationPipeline:
                     protocol_result = _annotate_telemetry_validation_failure(
                         protocol_result
                     )
+                    protocol_result = _annotate_telemetry_effect_zero_diagnostic(
+                        protocol_result
+                    )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
                 canary_result = CanaryResult(passed=True, reason="no protocol - auto-pass")
@@ -220,6 +225,11 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
             )
     telemetry_feedback = telemetry_validation_feedback(result)
     telemetry_feedback_suffix = f" {telemetry_feedback}" if telemetry_feedback else ""
+    telemetry_effect_zero_suffix = (
+        " telemetry_effect_zero=diagnostic"
+        if telemetry_effect_zero_detected(result)
+        else ""
+    )
     exposed_summary = (
         f"stage={result.stage.value} outcome={result.gate_outcome} "
         f"stat={stats.statistical_status or 'legacy'} "
@@ -235,6 +245,7 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"candidate_operator_accepted={result.candidate_operator_accepted}"
         f"{telemetry_guard}"
         f"{telemetry_feedback_suffix}"
+        f"{telemetry_effect_zero_suffix}"
     )
     return replace(
         result,
@@ -256,6 +267,25 @@ def _annotate_telemetry_validation_failure(
     exposed_summary = result.exposed_summary or ""
     if feedback and feedback not in exposed_summary:
         exposed_summary = (exposed_summary + " " + feedback).strip()
+    return replace(
+        result,
+        reason_codes=reason_codes,
+        exposed_summary=exposed_summary,
+    )
+
+
+def _annotate_telemetry_effect_zero_diagnostic(
+    result: ProtocolResult,
+) -> ProtocolResult:
+    if not telemetry_effect_zero_detected(result):
+        return result
+    reason_codes = tuple(
+        dict.fromkeys((*tuple(result.reason_codes), TELEMETRY_EFFECT_ZERO_DIAGNOSTIC))
+    )
+    exposed_summary = result.exposed_summary or ""
+    suffix = "telemetry_effect_zero=diagnostic"
+    if suffix not in exposed_summary:
+        exposed_summary = (exposed_summary + " " + suffix).strip()
     return replace(
         result,
         reason_codes=reason_codes,

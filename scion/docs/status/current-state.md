@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-26*
+*Last updated: 2026-05-27*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -8,6 +8,22 @@ handoff. Historical repair and experiment notes were moved to
 [`../experiments/v0.4/`](../experiments/v0.4/).
 
 ## Status
+
+The 2026-05-27 P1/P2 repair strengthens the v0.4 proposal/evaluation audit
+path without adding research-object semantics to the generic core. Hypothesis
+acceptance now requires sufficiently complete, API-visible provider-declared
+active target-file context before accepting proposals against active algorithm
+files, with explicit digest/line-coverage/truncation evidence when the file
+cannot be fully shown. Required compact context that the planner omits is now
+completed deterministically as `framework_required_completion` before
+hypothesis finalization and is distinguished from planner-selected tools and
+true fallback paths in traces. Existing-file edit protocol remains strict:
+new files may use full-file/create, while existing files must use `modify` with
+typed `exact_replace` and `source_digest`. Zero-effect telemetry is exposed as
+a non-blocking `telemetry_effect_zero` diagnostic in branch lifecycle/status
+signals, and runtime budget saturation is promoted into structured
+status/summary diagnostics instead of being visible only as scattered log
+warnings.
 
 The 2026-05-26 P0 validity/manifest repair closes an infra-only false-success
 gap found in a local `gpt-5.5` 4-round codex-proxy diagnostic. Campaign

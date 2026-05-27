@@ -27,6 +27,7 @@ from scion.core.models import (
     OperatorConfig,
     ProtocolResult,
 )
+from scion.core.telemetry_validation import TELEMETRY_EFFECT_ZERO_DIAGNOSTIC
 
 
 def _champion() -> ChampionState:
@@ -728,9 +729,13 @@ def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_re
 
     assert decision == Decision.CONTINUE_EXPLORE
     assert protocol_result is not None
-    assert protocol_result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+    assert protocol_result.reason_codes == (
+        "SCREENING_FAIL_WIN_RATE",
+        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    )
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
+        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     )
     assert branch_controller.soft_abandoned is False

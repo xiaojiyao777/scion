@@ -21,6 +21,7 @@ from scion.core.models import (
 )
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
+    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     TELEMETRY_VALIDATION_REPAIRABLE,
     VALIDATION_TELEMETRY_REPAIRABLE,
 )
@@ -597,8 +598,13 @@ def test_effect_zero_with_observed_activation_is_not_repairable_failure() -> Non
     assert outcome.protocol_result is not None
     assert outcome.decision_features.telemetry_validation_repairable is False
     assert outcome.decision_features.telemetry_guard_failed is False
+    assert outcome.decision_features.telemetry_effect_zero_diagnostic is True
     assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
     assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
+    assert TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in outcome.protocol_result.reason_codes
+    assert "telemetry_effect_zero=diagnostic" in (
+        outcome.protocol_result.exposed_summary
+    )
 
 
 def test_mixed_activity_and_protected_telemetry_failure_is_not_repairable() -> None:

@@ -46,12 +46,20 @@ class AgenticSessionDiagnosisMixin:
                 if name in skip_successful_required_tools:
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
-                        "Skipped fallback proposal tool already completed successfully.",
+                        (
+                            "Skipped fallback proposal tool already completed successfully."
+                            if selection_source == "fallback_selected"
+                            else "Skipped framework-required proposal tool already completed successfully."
+                        ),
                         metadata={
                             "tool_name": name,
                             "status": "skipped",
                             "selection_source": selection_source,
-                            "fallback": "fixed_tool_plan",
+                            **(
+                                {"fallback": "fixed_tool_plan"}
+                                if selection_source == "fallback_selected"
+                                else {}
+                            ),
                             "skip_reason": "already_succeeded",
                         },
                     )
@@ -66,12 +74,20 @@ class AgenticSessionDiagnosisMixin:
                 ):
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
-                        "Stopped fixed proposal tool plan to reserve self-check budget.",
+                        (
+                            "Stopped fixed proposal tool plan to reserve self-check budget."
+                            if selection_source == "fallback_selected"
+                            else "Stopped framework-required proposal context completion to reserve self-check budget."
+                        ),
                         metadata={
                             "tool_name": name,
                             "status": "skipped",
                             "selection_source": selection_source,
-                            "fallback": "fixed_tool_plan",
+                            **(
+                                {"fallback": "fixed_tool_plan"}
+                                if selection_source == "fallback_selected"
+                                else {}
+                            ),
                             "skip_reason": "self_check_budget_reserved",
                             "remaining_tool_calls": self._remaining_tool_calls(state),
                             "remaining_steps": self._remaining_tool_steps(state),
@@ -92,12 +108,20 @@ class AgenticSessionDiagnosisMixin:
                 ):
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
-                        "Stopped fixed proposal feedback plan to preserve self-check budget.",
+                        (
+                            "Stopped fixed proposal feedback plan to preserve self-check budget."
+                            if selection_source == "fallback_selected"
+                            else "Stopped framework-required feedback completion to preserve self-check budget."
+                        ),
                         metadata={
                             "tool_name": name,
                             "status": "skipped",
                             "selection_source": selection_source,
-                            "fallback": "fixed_tool_plan",
+                            **(
+                                {"fallback": "fixed_tool_plan"}
+                                if selection_source == "fallback_selected"
+                                else {}
+                            ),
                             "skip_reason": "feedback_budget_reserved",
                             "remaining_observation_chars": self._remaining_observation_chars(
                                 state
@@ -257,6 +281,59 @@ class AgenticSessionDiagnosisMixin:
                     context=context,
                 ),
             )
+
+    def _complete_required_context_after_planner_gap(
+            self,
+            context: ProposalToolContext,
+            state: AgenticProposalSessionState,
+            observations: list[ProposalObservation],
+            *,
+            error_code: str,
+            tool_name: str | None,
+            detail: str | None = None,
+        ) -> list[ProposalObservation]:
+            state.note(
+                AgenticProposalPhase.DIAGNOSE,
+                "Completing framework-required proposal context after planner stopped before required compact context.",
+                metadata={
+                    "status": "framework_required_completion",
+                    "error_code": error_code,
+                    "tool_name": tool_name,
+                    "detail": detail,
+                    "selection_source": "framework_required_completion",
+                },
+            )
+            observations.extend(
+                self._run_active_solver_map_followup_tools(
+                    context,
+                    state,
+                    observations,
+                    selection_source="framework_required_completion",
+                    target_file=context.forced_target_file,
+                )
+            )
+            completed = self._run_hypothesis_observation_tools(
+                context,
+                state,
+                selection_source="framework_required_completion",
+                skip_successful_required_tools=self._successful_tool_names(
+                    observations,
+                    context=context,
+                ),
+            )
+            observations.extend(completed)
+            missing = self._missing_planner_context_error(context, observations)
+            state.note(
+                AgenticProposalPhase.DIAGNOSE,
+                "Framework-required proposal context completion finished.",
+                metadata={
+                    "status": "completed" if missing is None else "partial",
+                    "selection_source": "framework_required_completion",
+                    "error_code": error_code,
+                    "detail": missing,
+                },
+            )
+            return observations
 
     def _required_context_satisfied(
             self,

@@ -11,6 +11,7 @@ from scion.core.models import (
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
     is_repairable_telemetry_validation_failure,
+    telemetry_effect_zero_detected,
 )
 
 
@@ -190,6 +191,7 @@ class SafeFeatureExtractor:
                 is_repairable_telemetry_validation_failure(protocol)
             ),
             telemetry_guard_failed=formal_telemetry_guard_failed(protocol),
+            telemetry_effect_zero_diagnostic=telemetry_effect_zero_detected(protocol),
         )
 
         _validate_no_free_text(features)

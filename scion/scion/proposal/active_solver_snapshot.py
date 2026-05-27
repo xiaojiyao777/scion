@@ -135,6 +135,11 @@ def read_algorithm_file_payload(
         source_kind=source_kind,
     )
     text = _file_text(inputs["source_root"], source_kind, rel_path)
+    line_coverage = _line_coverage_payload(
+        content_preview=str(artifact.get("content_preview") or ""),
+        source=text,
+        truncated=bool(artifact.get("truncated")),
+    )
     artifact.update(
         {
             "active": _is_active_algorithm_file(rel_path, inputs["manifest"]),
@@ -142,6 +147,8 @@ def read_algorithm_file_payload(
             "module": _module_name(rel_path),
             "sha256": _sha256(text) if text else None,
             "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
+            "content_digest": _sha256(text) if text else None,
+            **line_coverage,
             "provenance": inputs["provenance"],
         }
     )
@@ -526,6 +533,33 @@ def _file_text(
     if not artifact.get("readable"):
         return ""
     return str(artifact.get("content_preview") or "")
+
+
+def _line_coverage_payload(
+    *,
+    content_preview: str,
+    source: str,
+    truncated: bool,
+) -> dict[str, Any]:
+    total_lines = len(source.splitlines()) if source else 0
+    covered_lines = len(content_preview.splitlines()) if content_preview else 0
+    if total_lines and content_preview.endswith("\n"):
+        covered_lines = max(covered_lines, 1)
+    if total_lines == 0:
+        return {
+            "coverage_status": "unreadable_or_empty",
+            "line_start": None,
+            "line_end": None,
+            "covered_line_count": 0,
+            "total_line_count": 0,
+        }
+    return {
+        "coverage_status": "truncated" if truncated else "full",
+        "line_start": 1 if covered_lines else None,
+        "line_end": covered_lines if covered_lines else None,
+        "covered_line_count": covered_lines,
+        "total_line_count": total_lines,
+    }
 
 
 def _python_symbols(source: str) -> list[str]:

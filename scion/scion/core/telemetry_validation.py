@@ -14,6 +14,8 @@ SCREENING_TELEMETRY_FAILED = "SCREENING_TELEMETRY_FAILED"
 VALIDATION_TELEMETRY_FAILED = "VALIDATION_TELEMETRY_FAILED"
 FROZEN_TELEMETRY_FAILED = "FROZEN_TELEMETRY_FAILED"
 TELEMETRY_DECISION_DETAIL_SCHEMA = "scion.telemetry_decision_detail.v1"
+TELEMETRY_EFFECT_ZERO_DIAGNOSTIC = "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"
+TELEMETRY_EFFECT_ZERO_OUTCOME = "telemetry_effect_zero"
 
 _REPAIRABLE_TELEMETRY_CODES = frozenset(
     {
@@ -164,6 +166,116 @@ def telemetry_decision_details(
     return tuple(details)
 
 
+def telemetry_effect_zero_diagnostics(
+    protocol_result: ProtocolResult | None,
+) -> tuple[dict[str, Any], ...]:
+    """Return non-blocking diagnostics for activated mechanisms with zero effect."""
+    guard = telemetry_guard_summary(protocol_result)
+    if guard is None:
+        return ()
+    stage = _stage_value(protocol_result.stage) if protocol_result is not None else ""
+    details: list[dict[str, Any]] = []
+    seen: set[tuple[str | None, str | None, str | None]] = set()
+
+    for item in (*_failure_items(guard), *_warning_items(guard)):
+        if _normal_failure_category(item) != "effect":
+            continue
+        counters = _issue_counters(item)
+        if counters.get("candidate_present", 0) <= 0:
+            continue
+        if counters.get("candidate_positive", 0) != 0:
+            continue
+        diagnostic_type = _clean_optional_str(item.get("diagnostic_type"))
+        telemetry_outcome = _clean_optional_str(item.get("telemetry_outcome"))
+        if diagnostic_type not in {
+            "mechanism_executed_no_improvement",
+            "effect_attribution_missing",
+        } and telemetry_outcome not in {"no_effect", TELEMETRY_EFFECT_ZERO_OUTCOME}:
+            if not _effect_issue_has_observed_activation(guard, item):
+                continue
+        mechanism_id = _issue_mechanism_id(guard, item)
+        field_ids = _field_ids(
+            item.get("surface_field_ids")
+            or item.get("surface_field_id")
+            or item.get("field")
+            or item.get("fields")
+        )
+        key = (
+            mechanism_id,
+            str(item.get("code") or ""),
+            field_ids[0] if field_ids else None,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        details.append(
+            _drop_empty_detail(
+                {
+                    "schema": TELEMETRY_DECISION_DETAIL_SCHEMA,
+                    "stage": stage or None,
+                    "code": TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+                    "source_code": str(
+                        item.get("code") or "TELEMETRY_EFFECT_NOT_OBSERVED"
+                    ),
+                    "diagnostic_type": TELEMETRY_EFFECT_ZERO_OUTCOME,
+                    "mechanism_id": mechanism_id,
+                    "surface_field_id": field_ids[0] if field_ids else None,
+                    "surface_field_ids": field_ids,
+                    "candidate_present": counters.get("candidate_present", 0),
+                    "candidate_positive": counters.get("candidate_positive", 0),
+                    "candidate_zero": counters.get("candidate_zero", 0),
+                    "severity": "diagnostic",
+                    "repairable": False,
+                }
+            )
+        )
+
+    diagnostics = guard.get("mechanism_diagnostics")
+    if isinstance(diagnostics, Sequence) and not isinstance(
+        diagnostics,
+        (str, bytes, bytearray),
+    ):
+        for diagnostic in diagnostics:
+            if not isinstance(diagnostic, Mapping):
+                continue
+            effect_status = str(diagnostic.get("effect_status") or "").strip()
+            if effect_status not in {"zero", "declared_field_warning"}:
+                continue
+            if not (
+                bool(diagnostic.get("activation_observed"))
+                or str(diagnostic.get("activation_status") or "") == "observed"
+            ):
+                continue
+            mechanism_id = _clean_optional_str(diagnostic.get("mechanism"))
+            key = (mechanism_id, TELEMETRY_EFFECT_ZERO_DIAGNOSTIC, None)
+            if key in seen:
+                continue
+            seen.add(key)
+            details.append(
+                _drop_empty_detail(
+                    {
+                        "schema": TELEMETRY_DECISION_DETAIL_SCHEMA,
+                        "stage": stage or None,
+                        "code": TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+                        "diagnostic_type": TELEMETRY_EFFECT_ZERO_OUTCOME,
+                        "mechanism_id": mechanism_id,
+                        "effect_status": effect_status,
+                        "activation_status": diagnostic.get("activation_status"),
+                        "runtime_status": diagnostic.get("runtime_status"),
+                        "severity": "diagnostic",
+                        "repairable": False,
+                    }
+                )
+            )
+    return tuple(details)
+
+
+def telemetry_effect_zero_detected(
+    protocol_result: ProtocolResult | None,
+) -> bool:
+    return bool(telemetry_effect_zero_diagnostics(protocol_result))
+
+
 def is_repairable_telemetry_validation_failure(
     protocol_result: ProtocolResult | None,
 ) -> bool:
@@ -307,6 +419,26 @@ def _failure_items(guard: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], 
     ):
         return ()
     return tuple(item for item in failures if isinstance(item, Mapping))
+
+
+def _warning_items(guard: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:
+    if guard is None:
+        return ()
+    warnings = guard.get("warnings")
+    if not isinstance(warnings, Sequence) or isinstance(
+        warnings,
+        (str, bytes, bytearray),
+    ):
+        return ()
+    return tuple(item for item in warnings if isinstance(item, Mapping))
+
+
+def _drop_empty_detail(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): item
+        for key, item in value.items()
+        if item not in (None, "", [], {}, ())
+    }
 
 
 def _normal_failure_category(item: Mapping[str, Any]) -> str:
@@ -608,6 +740,8 @@ __all__ = [
     "SCREENING_TELEMETRY_REPAIRABLE",
     "TELEMETRY_VALIDATION_REPAIRABLE",
     "TELEMETRY_DECISION_DETAIL_SCHEMA",
+    "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+    "TELEMETRY_EFFECT_ZERO_OUTCOME",
     "VALIDATION_TELEMETRY_FAILED",
     "VALIDATION_TELEMETRY_REPAIRABLE",
     "formal_screening_attempted",
@@ -615,6 +749,8 @@ __all__ = [
     "is_repairable_telemetry_validation_failure",
     "screened_experiment_effective",
     "telemetry_decision_details",
+    "telemetry_effect_zero_detected",
+    "telemetry_effect_zero_diagnostics",
     "telemetry_failure_categories",
     "telemetry_guard_summary",
     "telemetry_repairable_stage",

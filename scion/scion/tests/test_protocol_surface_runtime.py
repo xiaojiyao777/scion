@@ -484,6 +484,8 @@ def test_champion_failure_branches_emit_progress_callback(
     )
 
     assert result.stats.champion_failed_pairs == 4
-    assert len(progress_events) == 9
+    assert len(progress_events) == 10
     assert progress_events[-1]["attempted_pairs"] == 4
     assert progress_events[-1]["completed_pairs"] == 0
+    assert progress_events[-1]["complete"] is True
+    assert "runtime_budget_diagnostic" in progress_events[-1]

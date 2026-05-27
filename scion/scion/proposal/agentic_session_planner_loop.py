@@ -42,19 +42,23 @@ class AgenticSessionPlannerLoopMixin:
                         AgenticProposalPhase.DIAGNOSE,
                         "Planner proposal tool loop exceeded the selection decision budget.",
                         metadata={
-                            "status": "error" if missing else "skipped",
+                            "status": (
+                                "framework_required_completion"
+                                if missing
+                                else "skipped"
+                            ),
                             "error_code": "planner_selection_limit",
-                            "fallback": "fixed_tool_plan" if missing else None,
                             "detail": missing,
                         },
                     )
                     if missing is not None:
-                        return self._fallback_after_planner_error(
+                        return self._complete_required_context_after_planner_gap(
                             context,
                             state,
                             observations,
                             error_code="planner_selection_limit",
                             tool_name=None,
+                            detail=missing,
                         )
                     self._record_loop_stop(
                         state,
@@ -144,20 +148,20 @@ class AgenticSessionPlannerLoopMixin:
                     if missing is not None:
                         state.note(
                             AgenticProposalPhase.DIAGNOSE,
-                            "Planner stopped before required compact context; using fixed APS-0 tool plan.",
+                            "Planner stopped before required compact context; completing framework-required context.",
                             metadata={
-                                "status": "error",
+                                "status": "framework_required_completion",
                                 "error_code": "planner_stopped_before_required_context",
-                                "fallback": "fixed_tool_plan",
                                 "detail": missing,
                             },
                         )
-                        return self._fallback_after_planner_error(
+                        return self._complete_required_context_after_planner_gap(
                             context,
                             state,
                             observations,
                             error_code="planner_stopped_before_required_context",
                             tool_name=None,
+                            detail=missing,
                         )
                     self._record_loop_stop(state, "planner_stop")
                     break
@@ -166,20 +170,20 @@ class AgenticSessionPlannerLoopMixin:
                     if missing is not None:
                         state.note(
                             AgenticProposalPhase.DIAGNOSE,
-                            "Planner stopped before required compact context; using fixed APS-0 tool plan.",
+                            "Planner stopped before required compact context; completing framework-required context.",
                             metadata={
-                                "status": "error",
+                                "status": "framework_required_completion",
                                 "error_code": "planner_stopped_before_required_context",
-                                "fallback": "fixed_tool_plan",
                                 "detail": missing,
                             },
                         )
-                        return self._fallback_after_planner_error(
+                        return self._complete_required_context_after_planner_gap(
                             context,
                             state,
                             observations,
                             error_code="planner_stopped_before_required_context",
                             tool_name=None,
+                            detail=missing,
                         )
                     self._record_loop_stop(state, "planner_stop")
                     break
@@ -301,34 +305,39 @@ class AgenticSessionPlannerLoopMixin:
                                 tool_name=name,
                             )
                             break
-                        return self._fallback_after_planner_error(
+                        return self._complete_required_context_after_planner_gap(
                             context,
                             state,
                             observations,
                             error_code="already_succeeded",
                             tool_name=name,
+                            detail=missing,
                         )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         (
                             "Planner selected a proposal tool already completed "
-                            "successfully; using fallback for missing context only."
+                            "successfully; completing framework-required missing "
+                            "context only."
                         ),
                         metadata={
                             "status": "skipped",
                             "tool_name": name,
                             "error_code": "already_succeeded",
-                            "fallback": "fixed_tool_plan",
                             "selection_source": "planner_selected",
                             "skip_reason": "already_succeeded",
                         },
                     )
-                    return self._fallback_after_planner_error(
+                    return self._complete_required_context_after_planner_gap(
                         context,
                         state,
                         observations,
                         error_code="already_succeeded",
                         tool_name=name,
+                        detail=self._missing_planner_context_error(
+                            context,
+                            observations,
+                        ),
                     )
                 if _should_defer_diagnosis_tool_to_code_phase(context, name, args):
                     _push_deferred_code_phase_tool_call(state, name, args)
@@ -409,12 +418,16 @@ class AgenticSessionPlannerLoopMixin:
                             "skip_reason": "solver_design_algorithm_file_read_budget_reserved",
                         },
                     )
-                    return self._fallback_after_planner_error(
+                    return self._complete_required_context_after_planner_gap(
                         context,
                         state,
                         observations,
                         error_code="solver_design_algorithm_file_read_budget_reserved",
                         tool_name=name,
+                        detail=self._missing_planner_context_error(
+                            context,
+                            observations,
+                        ),
                     )
                 observation = self._call_tool(
                     context,
@@ -458,20 +471,20 @@ class AgenticSessionPlannerLoopMixin:
             if missing is not None and state.loop_stop_reason == "tool_loop_limit":
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
-                    "Planner exhausted bounded tool loop before useful compact feedback; using fixed APS-0 tool plan.",
+                    "Planner exhausted bounded tool loop before useful compact feedback; completing framework-required context.",
                     metadata={
-                        "status": "error",
+                        "status": "framework_required_completion",
                         "error_code": "planner_tool_loop_limit_before_feedback",
-                        "fallback": "fixed_tool_plan",
                         "detail": missing,
                     },
                 )
-                return self._fallback_after_planner_error(
+                return self._complete_required_context_after_planner_gap(
                     context,
                     state,
                     observations,
                     error_code="planner_tool_loop_limit_before_feedback",
                     tool_name=None,
+                    detail=missing,
                 )
             return observations
 

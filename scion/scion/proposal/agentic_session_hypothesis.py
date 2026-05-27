@@ -535,12 +535,9 @@ class AgenticSessionHypothesisMixin:
             )
             if target_read_args is None:
                 return None
-            if _prompt_observations_include_full_target_file(
+            if _prompt_observations_include_sufficient_target_context(
                 prompt_observations,
                 target_read_args,
-            ) or _has_relevant_algorithm_slice_read(
-                prompt_observations,
-                target_file=target_read_args.get("file_path"),
             ):
                 return None
 
@@ -558,17 +555,14 @@ class AgenticSessionHypothesisMixin:
                 hypothesis=hypothesis,
                 context=tool_context,
             )
+            target_context = _target_context_summary_from_observations(
+                observations,
+                target_read_args,
+            )
             if (
-                grounding_error is None
-                and (
-                    _observations_include_full_target_file(
-                        observations,
-                        target_read_args,
-                    )
-                    or _has_relevant_algorithm_slice_read(
-                        observations,
-                        target_file=target_read_args.get("file_path"),
-                    )
+                _observations_include_sufficient_target_context(
+                    observations,
+                    target_read_args,
                 )
                 and len(grounding_rejections) < _MAX_HYPOTHESIS_GROUNDING_RETRIES
             ):
@@ -577,6 +571,7 @@ class AgenticSessionHypothesisMixin:
                         hypothesis,
                         target_read_args,
                         attempt=attempt,
+                        target_context=target_context,
                     )
                 )
                 state.note(
@@ -597,9 +592,9 @@ class AgenticSessionHypothesisMixin:
                     "solver_design target-file grounding invariant failed: "
                     "hypothesis selected existing target_file "
                     f"{target_read_args.get('file_path')!r}, but the API-visible "
-                    "hypothesis prompt did not include a full context.read_algorithm_file "
-                    "observation for that file and Scion could not collect one before "
-                    "retry."
+                    "hypothesis prompt did not include a sufficiently complete "
+                    "provider-declared target-file context observation for that "
+                    "file and Scion could not collect one before retry."
                 )
             output = self._failed_output(
                 request=request,
@@ -1743,8 +1738,25 @@ def _solver_design_target_prompt_grounding_feedback(
     target_read_args: Mapping[str, Any],
     *,
     attempt: int,
+    target_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     target_file = str(target_read_args.get("file_path") or "").strip()
+    target_context = dict(target_context or {})
+    coverage_status = str(target_context.get("coverage_status") or "").strip()
+    retry_constraint = (
+        "Use the newly visible full context.read_algorithm_file content "
+        f"for {target_file}. Redraft the same target/mechanism only after "
+        "checking that file; do not proceed from a read receipt or "
+        "post-hoc grounding observation."
+    )
+    if coverage_status == "truncated":
+        retry_constraint = (
+            "Use the newly visible truncated context.read_algorithm_file "
+            f"context for {target_file}, including its digest and line coverage. "
+            "Acknowledge the visible line range and avoid claims that require "
+            "unseen source; request a narrower symbol/slice later only if the "
+            "visible target context is insufficient."
+        )
     return _drop_empty_dict(
         {
             "attempt": attempt,
@@ -1754,25 +1766,41 @@ def _solver_design_target_prompt_grounding_feedback(
             "target_file": target_file,
             "reason": (
                 "The previous solver_design hypothesis selected an existing "
-                "target_file, but the full target-file read observation was not "
-                "included in the API-visible prompt that generated it."
+                "target_file, but sufficiently complete target-file context was "
+                "not included in the API-visible prompt that generated it."
             ),
+            "target_context": target_context,
             "preserve_hypothesis": _hypothesis_retry_anchor(hypothesis),
-            "retry_constraint": (
-                "Use the newly visible full context.read_algorithm_file content "
-                f"for {target_file}. Redraft the same target/mechanism only after "
-                "checking that file; do not proceed from a read receipt or "
-                "post-hoc grounding observation."
-            ),
+            "retry_constraint": retry_constraint,
         }
     )
 
 
-def _prompt_observations_include_full_target_file(
+def _prompt_observations_include_sufficient_target_context(
     prompt_observations: list[ProposalObservation],
     target_read_args: Mapping[str, Any],
 ) -> bool:
-    return _observations_include_full_target_file(prompt_observations, target_read_args)
+    return _observations_include_sufficient_target_context(
+        prompt_observations,
+        target_read_args,
+    )
+
+
+def _observations_include_sufficient_target_context(
+    observations: list[ProposalObservation],
+    target_read_args: Mapping[str, Any],
+) -> bool:
+    return (
+        _observations_include_full_target_file(observations, target_read_args)
+        or _observations_include_bounded_target_file_context(
+            observations,
+            target_read_args,
+        )
+        or _observations_include_full_target_slice_context(
+            observations,
+            target_file=target_read_args.get("file_path"),
+        )
+    )
 
 
 def _observations_include_full_target_file(
@@ -1830,6 +1858,110 @@ def _algorithm_file_payload_full_content_visible(
     if max_chars is not None:
         return preview_chars >= min(max_chars, requested_max_chars)
     return not bool(payload.get("compacted_for_agentic_budget"))
+
+
+def _observations_include_bounded_target_file_context(
+    observations: list[ProposalObservation],
+    target_read_args: Mapping[str, Any],
+) -> bool:
+    target_context = _target_context_summary_from_observations(
+        observations,
+        target_read_args,
+    )
+    if not target_context:
+        return False
+    if target_context.get("coverage_status") == "full":
+        return True
+    if target_context.get("coverage_status") != "truncated":
+        return False
+    return bool(
+        target_context.get("content_digest")
+        and target_context.get("line_start") == 1
+        and target_context.get("line_end")
+        and target_context.get("covered_line_count")
+        and target_context.get("total_line_count")
+    )
+
+
+def _observations_include_full_target_slice_context(
+    observations: list[ProposalObservation],
+    *,
+    target_file: Any,
+) -> bool:
+    target_path = _normalize_prompt_grounding_path(target_file)
+    if not target_path:
+        return False
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_algorithm_slice":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if not payload.get("available", True):
+            continue
+        if _normalize_prompt_grounding_path(payload.get("file_path")) != target_path:
+            continue
+        coverage_status = str(
+            payload.get("coverage_status") or payload.get("coverage") or ""
+        ).strip()
+        if coverage_status == "full" and str(payload.get("content") or "").strip():
+            return True
+    return False
+
+
+def _target_context_summary_from_observations(
+    observations: list[ProposalObservation],
+    target_read_args: Mapping[str, Any],
+) -> dict[str, Any]:
+    target_path = _normalize_prompt_grounding_path(target_read_args.get("file_path"))
+    if not target_path:
+        return {}
+    for observation in reversed(observations):
+        if observation.is_error or observation.tool_name != "context.read_algorithm_file":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if _normalize_prompt_grounding_path(payload.get("file_path")) != target_path:
+            continue
+        content_preview = str(payload.get("content_preview") or "")
+        if not bool(payload.get("readable")) or not content_preview:
+            return {}
+        truncated = bool(payload.get("truncated"))
+        total_line_count = _coerce_nonnegative_int(payload.get("total_line_count"))
+        covered_line_count = _coerce_nonnegative_int(payload.get("covered_line_count"))
+        if total_line_count is None:
+            total_line_count = len(content_preview.splitlines())
+        if covered_line_count is None:
+            covered_line_count = len(content_preview.splitlines())
+        line_end = _coerce_nonnegative_int(payload.get("line_end"))
+        if line_end is None and covered_line_count:
+            line_end = covered_line_count
+        content_digest = str(
+            payload.get("content_digest")
+            or payload.get("sha256")
+            or payload.get("digest")
+            or ""
+        ).strip()
+        return _drop_empty_dict(
+            {
+                "tool_name": observation.tool_name,
+                "observation_id": observation.observation_id,
+                "file_path": target_path,
+                "coverage_status": "truncated" if truncated else "full",
+                "truncated": truncated,
+                "size_chars": payload.get("size_chars"),
+                "max_chars": payload.get("max_chars"),
+                "line_start": payload.get("line_start") or 1,
+                "line_end": line_end,
+                "covered_line_count": covered_line_count,
+                "total_line_count": total_line_count,
+                "content_digest": content_digest,
+                "digest": payload.get("digest"),
+                "source": payload.get("source"),
+            }
+        )
+    return {}
 
 
 def _normalize_prompt_grounding_path(value: Any) -> str:

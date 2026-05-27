@@ -683,6 +683,25 @@ def run_experiment(
 
     # Persist final raw metrics snapshot.
     _write_metrics_snapshot(complete=True)
+    protocol._emit_progress(
+        stage=stage.value,
+        complete=True,
+        attempted_pairs=attempted_pairs,
+        completed_pairs=valid_pairs,
+        valid_pairs=valid_pairs,
+        failed_pairs=failed_pairs,
+        candidate_failed_pairs=candidate_failed_pairs,
+        champion_failed_pairs=champion_failed_pairs,
+        total_pairs=total_pairs,
+        selected_surface=normalized_selected_surface,
+        raw_metrics_ref=raw_ref,
+        runtime_budget_diagnostic=runtime_budget_diagnostic_summary,
+        runtime_budget_diagnostic_code=(
+            runtime_budget_diagnostic_summary.get("code")
+            if runtime_budget_diagnostic_summary
+            else None
+        ),
+    )
     pair_counts = _pair_feedback_counts(all_pair_feedback)
     runtime_summary = _format_runtime_summary(stats)
     failure_category_summary = _format_runtime_failure_categories(

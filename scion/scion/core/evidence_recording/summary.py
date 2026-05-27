@@ -19,6 +19,7 @@ from scion.core.telemetry_validation import (
     formal_screening_attempted,
     screened_experiment_effective,
     telemetry_decision_details,
+    telemetry_effect_zero_diagnostics,
     telemetry_failure_categories,
     telemetry_validation_feedback,
 )
@@ -118,6 +119,8 @@ class CampaignSummaryMixin:
             )
         )
         telemetry_failure_details = _telemetry_failed_experiment_details(steps)
+        telemetry_effect_zero_details = _telemetry_effect_zero_details(steps)
+        runtime_budget_diagnostics = _runtime_budget_diagnostic_details(steps)
         screened_experiments = sum(
             1 for step in steps if formal_screening_attempted(step.protocol_result)
         )
@@ -245,6 +248,9 @@ class CampaignSummaryMixin:
                 telemetry_failed_experiments_by_category
             ),
             "telemetry_failure_details": telemetry_failure_details,
+            "telemetry_effect_zero_diagnostics": telemetry_effect_zero_details,
+            "runtime_budget_diagnostics": runtime_budget_diagnostics,
+            "runtime_budget_diagnostic_count": len(runtime_budget_diagnostics),
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
@@ -539,7 +545,11 @@ class CampaignSummaryMixin:
                 "candidate_surface_runtime_summary": dict(
                     pr.candidate_surface_runtime_summary or {}
                 ),
+                "runtime_budget_diagnostic": _runtime_budget_diagnostic(pr),
                 "telemetry_guard_failed": formal_telemetry_guard_failed(pr),
+                "telemetry_effect_zero_diagnostics": list(
+                    telemetry_effect_zero_diagnostics(pr)
+                ),
                 "telemetry_failure_categories": list(
                     telemetry_failure_categories(pr)
                 ),
@@ -615,6 +625,61 @@ class CampaignSummaryMixin:
                     for cf in pr.case_feedback[:20]
                 ]
         return step_data
+
+
+def _runtime_budget_diagnostic(protocol_result: Any) -> dict[str, Any] | None:
+    surface_summary = getattr(protocol_result, "candidate_surface_runtime_summary", None)
+    if not isinstance(surface_summary, Mapping):
+        return None
+    diagnostic = surface_summary.get("runtime_budget_diagnostic")
+    return dict(diagnostic) if isinstance(diagnostic, Mapping) else None
+
+
+def _runtime_budget_diagnostic_details(
+    steps: Iterable[StepRecord],
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    for step in steps:
+        pr = step.protocol_result
+        if pr is None:
+            continue
+        diagnostic = _runtime_budget_diagnostic(pr)
+        if not diagnostic:
+            continue
+        details.append(
+            {
+                "branch_id": step.branch_id,
+                "action": step.hypothesis.action,
+                "target_file": step.hypothesis.target_file,
+                "stage": _stage_value(pr.stage),
+                "code": diagnostic.get("code"),
+                "severity": diagnostic.get("severity"),
+                "saturation_ratio": diagnostic.get("saturation_ratio"),
+                "threshold_ratio": diagnostic.get("threshold_ratio"),
+                "total_pairs": diagnostic.get("total_pairs"),
+            }
+        )
+    return details
+
+
+def _telemetry_effect_zero_details(
+    steps: Iterable[StepRecord],
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    for step in steps:
+        pr = step.protocol_result
+        if pr is None:
+            continue
+        for diagnostic in telemetry_effect_zero_diagnostics(pr):
+            details.append(
+                {
+                    "branch_id": step.branch_id,
+                    "action": step.hypothesis.action,
+                    "target_file": step.hypothesis.target_file,
+                    **dict(diagnostic),
+                }
+            )
+    return details
 
 
 def _campaign_cache_stats(

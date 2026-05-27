@@ -27,6 +27,7 @@ from scion.core.models import (
     ProtocolResult,
 )
 from scion.core.telemetry_validation import (
+    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     formal_telemetry_guard_failed,
     screened_experiment_effective,
 )
@@ -157,6 +158,12 @@ class EvaluationOrchestrator:
         features = evaluation.decision_features
         coordinated = self.decision_coordinator.decide(features)
         self.decision_reason_codes[bid] = coordinated.reason_codes
+        if features.telemetry_effect_zero_diagnostic:
+            self.decision_reason_codes[bid] = _merge_reason_codes(
+                self.decision_reason_codes[bid],
+                (TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,),
+            )
+        base_reason_codes = self.decision_reason_codes[bid]
         logger.info(
             "Branch %s: features wr=%s md=%s stage=%s -> decision=%s rule=%s reasons=%s",
             bid,
@@ -181,7 +188,7 @@ class EvaluationOrchestrator:
             )
             if lifecycle.reason_codes:
                 self.decision_reason_codes[bid] = _merge_reason_codes(
-                    coordinated.reason_codes,
+                    base_reason_codes,
                     lifecycle.reason_codes,
                 )
             self.branch_telemetry_diagnostic_streaks[bid] = (
@@ -219,7 +226,7 @@ class EvaluationOrchestrator:
             )
             if lifecycle.reason_codes:
                 self.decision_reason_codes[bid] = _merge_reason_codes(
-                    coordinated.reason_codes,
+                    base_reason_codes,
                     lifecycle.reason_codes,
                 )
             if lifecycle.soft_abandon:

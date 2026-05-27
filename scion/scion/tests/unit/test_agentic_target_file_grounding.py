@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.agentic_session_hypothesis import (
+    _observations_include_sufficient_target_context,
+)
 from scion.proposal.agentic_observation_ledger.payloads import read_receipt_from_entry
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
@@ -168,6 +171,69 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     assert scheduler_receipts[0]["included_in_prompt_for_call"] is False
     assert scheduler_receipts[0]["prompt_inclusion_status"] == (
         "not_asserted_by_read_receipt"
+    )
+
+
+def test_algorithm_slice_receipt_is_not_sufficient_target_file_grounding() -> None:
+    target_args = {
+        "surface": "solver_design",
+        "file_path": "policies/baseline_modules/local_search.py",
+        "max_chars": 24000,
+    }
+    slice_observation = ProposalObservation(
+        observation_id="slice-1",
+        session_id="session",
+        tool_name="context.read_algorithm_slice",
+        tool_call_id="tool-1",
+        observation_type="algorithm_slice",
+        summary="slice",
+        structured_payload={
+            "file_path": "policies/baseline_modules/local_search.py",
+            "slice_id": "local_search.two_opt_star",
+            "content": "def _two_opt_star(...): ...",
+            "content_digest": "digest",
+            "line_start": 10,
+            "line_end": 80,
+        },
+    )
+
+    assert not _observations_include_sufficient_target_context(
+        [slice_observation],
+        target_args,
+    )
+
+
+def test_truncated_algorithm_file_grounding_carries_digest_and_line_coverage() -> None:
+    target_args = {
+        "surface": "solver_design",
+        "file_path": "policies/baseline_modules/large.py",
+        "max_chars": 24000,
+    }
+    file_observation = ProposalObservation(
+        observation_id="file-1",
+        session_id="session",
+        tool_name="context.read_algorithm_file",
+        tool_call_id="tool-1",
+        observation_type="solver_algorithm_file",
+        summary="large file",
+        structured_payload={
+            "file_path": "policies/baseline_modules/large.py",
+            "readable": True,
+            "content_preview": "A = 1\nB = 2\n",
+            "truncated": True,
+            "size_chars": 50000,
+            "max_chars": 24000,
+            "line_start": 1,
+            "line_end": 2,
+            "covered_line_count": 2,
+            "total_line_count": 1000,
+            "content_digest": "sha256:large",
+        },
+    )
+
+    assert _observations_include_sufficient_target_context(
+        [file_observation],
+        target_args,
     )
 
 
