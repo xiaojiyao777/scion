@@ -866,6 +866,29 @@ class CvrpSolverDesignProvider:
             run_payload=run_payload,
         )
 
+    def solver_design_smoke_cases(
+        self,
+        *,
+        context: Any = None,
+        split_manifest: Any = None,
+        seed_ledger: Any = None,
+    ) -> Sequence[Mapping[str, Any]]:
+        del context
+        screening_cases = _string_list(_stage_value(split_manifest, "screening"))
+        if not screening_cases:
+            return ()
+        seed = _first_int(_stage_value(seed_ledger, "screening"))
+        selected = _select_representative_smoke_cases(screening_cases)
+        return tuple(
+            {
+                "label": label,
+                "case": case,
+                "seed": seed,
+                "case_source": "cvrp_solver_design_smoke_provider",
+            }
+            for label, case in selected
+        )
+
 
 def _mechanism_ids(hypothesis: HypothesisProposal | None) -> tuple[str, ...]:
     if hypothesis is None:
@@ -1032,6 +1055,92 @@ def _normalize_text(value: Any) -> str:
     text = re.sub(r"[-./]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return f" {text} "
+
+
+def _select_representative_smoke_cases(
+    cases: Sequence[str],
+) -> tuple[tuple[str, str], ...]:
+    indexed = [
+        (case, _customer_count_hint(case), index)
+        for index, case in enumerate(cases)
+        if str(case or "").strip()
+    ]
+    if not indexed:
+        return ()
+    selected: list[tuple[str, str]] = []
+    small = min(indexed, key=lambda item: (item[1] is None, item[1] or 10**9, item[2]))
+    selected.append(("provider_small", small[0]))
+
+    medium_candidates = [
+        item for item in indexed if item[1] is not None and 41 <= item[1] <= 80
+    ]
+    if medium_candidates:
+        medium = min(medium_candidates, key=lambda item: (abs((item[1] or 0) - 55), item[2]))
+    else:
+        remaining = [item for item in indexed if item[0] != small[0]]
+        if not remaining:
+            return tuple(selected)
+        medium = max(remaining, key=lambda item: (-1 if item[1] is None else item[1], -item[2]))
+    if medium[0] != small[0]:
+        selected.append(("provider_medium", medium[0]))
+    return tuple(selected)
+
+
+def _customer_count_hint(case_path: str) -> int | None:
+    text = str(case_path or "").replace("\\", "/")
+    filename = text.rsplit("/", 1)[-1]
+    match = re.search(r"(?:^|[^0-9])n(\d{1,4})(?:[^0-9]|$)", filename, re.I)
+    if match:
+        return int(match.group(1))
+    numbers = [int(item) for item in re.findall(r"(?<!\d)(\d{1,4})(?!\d)", filename)]
+    return numbers[0] if numbers else None
+
+
+def _stage_value(source: Any, stage: str) -> Any:
+    if source is None:
+        return None
+    if isinstance(source, Mapping):
+        return source.get(stage)
+    getter = getattr(source, "get_cases", None)
+    if callable(getter):
+        for argument in (stage, stage.upper()):
+            try:
+                value = getter(argument)
+            except Exception:
+                continue
+            if value not in (None, "", [], ()):
+                return value
+    seed_getter = getattr(source, "get_seeds", None)
+    if callable(seed_getter):
+        for argument in (stage, stage.upper()):
+            try:
+                value = seed_getter(argument)
+            except Exception:
+                continue
+            if value not in (None, "", [], ()):
+                return value
+    return getattr(source, stage, None)
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item).strip() for item in value if str(item or "").strip()]
+
+
+def _first_int(value: Any) -> int | None:
+    values = value if isinstance(value, (list, tuple)) else (value,)
+    for item in values:
+        if isinstance(item, bool):
+            continue
+        try:
+            return int(item)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 __all__ = ["CvrpSolverDesignProvider"]

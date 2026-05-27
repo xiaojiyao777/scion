@@ -212,6 +212,118 @@ def test_algorithm_smoke_preview_repair_feedback_is_short_and_actionable() -> No
     assert len(rendered) < 2600
 
 
+def test_algorithm_smoke_repair_feedback_includes_runtime_failure_summary() -> None:
+    smoke_payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "issues": ["solver runtime audit reported solver_algorithm_errors=1"],
+                "runtime": {
+                    "solver_algorithm_loaded": True,
+                    "solver_algorithm_active": False,
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_stop_reason": "exception",
+                    "solver_algorithm_events": [
+                        {
+                            "status": "error",
+                            "detail": (
+                                "solve failed: '<' not supported between "
+                                "instances of 'NoneType' and 'int'"
+                            ),
+                        }
+                    ],
+                },
+                "runtime_audit_failure": {
+                    "error_category": "solver_algorithm_runtime_error",
+                    "detail": "solver runtime audit reported solver_algorithm_errors=1",
+                    "runtime_error_field": "solver_algorithm_errors",
+                    "runtime_error_count": 1,
+                    "runtime_events": [
+                        {
+                            "status": "error",
+                            "detail": (
+                                "solve failed: '<' not supported between "
+                                "instances of 'NoneType' and 'int'"
+                            ),
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    observation = ProposalObservation(
+        observation_id="obs-smoke-runtime",
+        session_id="session",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="call",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload=smoke_payload,
+    )
+
+    feedback = _preview_repair_feedback_prompt_payload(observation)
+    structured = feedback["structured_payload"]
+    rendered = json.dumps(structured, sort_keys=True)
+
+    assert smoke_payload["failure_code"] == "algorithm_smoke_runtime_failure"
+    assert structured["failure_code"] == "algorithm_smoke_runtime_failure"
+    assert structured["runtime_failure"]["runtime_error_field"] == (
+        "solver_algorithm_errors"
+    )
+    assert "NoneType" in rendered
+    assert "solver_algorithm_active" in rendered
+
+
+def test_algorithm_smoke_rare_activation_miss_remains_diagnostic() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "runtime": {
+                    "solver_algorithm_search_iterations": 3,
+                    "solver_algorithm_move_attempts": 12,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "champion_runs": 2,
+                    "expected_telemetry_present": True,
+                    "declared_mechanisms": ["rare_probe"],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "rare_probe",
+                            "category": "activation",
+                            "field": (
+                                "solver_algorithm_context_records."
+                                "rare_probe_iterations"
+                            ),
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["diagnostic_passed"] is True
+    assert payload["failure_code"] == "activation_not_observed_diagnostic"
+    assert payload["failure_class"] == "activation_not_observed_diagnostic"
+
+
 def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
     payload = _algorithm_smoke_agent_payload(
         {

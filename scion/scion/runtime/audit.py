@@ -121,10 +121,23 @@ def runtime_audit_failure_from_runtime(
             selected_surface=selected_surface,
             require_declared_surface=require_declared_surface,
         )
+    fallback_issue = None
+    if (
+        baseline_issue is None
+        and surface_error_issue is None
+        and surface_contract_issue is None
+    ):
+        fallback_issue = _surface_runtime_fallback_failure(
+            runtime,
+            problem_spec=problem_spec,
+            surface=surface,
+            selected_surface=selected_surface,
+        )
     if (
         baseline_issue is None
         and surface_error_issue is None
         and not runtime_error_counts
+        and fallback_issue is None
     ):
         telemetry_issue = (
             _declared_telemetry_consistency_failure(
@@ -156,6 +169,8 @@ def runtime_audit_failure_from_runtime(
         return surface_error_issue
     if surface_contract_issue is not None:
         return surface_contract_issue
+    if fallback_issue is not None:
+        return fallback_issue
 
     return _runtime_error_issue(runtime, runtime_error_counts)
 
@@ -310,6 +325,79 @@ def _runtime_error_issue(
     for event_field in event_fields:
         issue[event_field] = runtime_path_value(runtime, event_field)
     return issue
+
+
+def _surface_runtime_fallback_failure(
+    runtime: Mapping[str, Any],
+    *,
+    problem_spec: Any | None,
+    surface: Any | None,
+    selected_surface: str | None,
+) -> dict[str, Any] | None:
+    if surface is None:
+        return None
+    event_fields = _surface_event_fields(runtime, problem_spec=problem_spec, surface=surface)
+    for field in event_fields:
+        events = _first_list_runtime_value(runtime, (field,))
+        event = _first_fallback_event(events)
+        if event is None:
+            continue
+        return {
+            "error_category": "surface_runtime_fallback",
+            "selected_surface": normalize_surface_name(selected_surface),
+            "runtime_event_field": field,
+            "runtime_event_fields": (field,),
+            "runtime_events": events[:5],
+            field: events,
+            "detail": (
+                f"solver runtime audit reported fallback event in {field}: "
+                f"{_fallback_event_detail(event)}"
+            ),
+        }
+    return None
+
+
+def _surface_event_fields(
+    runtime: Mapping[str, Any],
+    *,
+    problem_spec: Any | None,
+    surface: Any | None,
+) -> tuple[str, ...]:
+    fields: list[str] = []
+    for telemetry_field in declared_surface_telemetry_fields(
+        surface,
+        problem_spec=problem_spec,
+    ):
+        fields.extend(declared_event_fields_for(runtime, telemetry_field))
+    fields.extend(
+        str(key)
+        for key, value in runtime.items()
+        if str(key).replace(".", "_").endswith("events") and isinstance(value, list)
+    )
+    return tuple(dict.fromkeys(field for field in fields if field))
+
+
+def _first_fallback_event(events: Any) -> Mapping[str, Any] | None:
+    if not isinstance(events, (list, tuple)):
+        return None
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        text = " ".join(
+            str(event.get(key) or "")
+            for key in ("status", "detail", "message", "reason", "mode")
+        ).lower()
+        if "fallback" in text:
+            return event
+    return None
+
+
+def _fallback_event_detail(event: Mapping[str, Any]) -> str:
+    for key in ("detail", "message", "reason", "status", "mode"):
+        text = str(event.get(key) or "").strip()
+        if text:
+            return text
+    return "fallback emitted"
 
 
 def _best_elapsed_reference(

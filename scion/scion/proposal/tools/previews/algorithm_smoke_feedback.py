@@ -175,6 +175,11 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         passed = True
         status = "diagnostic"
         failure_class = "telemetry_static_diagnostic"
+    failure_code = _algorithm_smoke_failure_code(
+        failure_class=failure_class,
+        runtime_smoke=runtime_smoke,
+        subprocess_tail=subprocess_tail,
+    )
     repair_hints = _algorithm_smoke_repair_hints(
         raw_payload,
         runtime_smoke=runtime_smoke,
@@ -210,6 +215,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     agent_summary = _agent_summary(
         passed=passed,
         status=status,
+        failure_code=failure_code,
         failure_class=failure_class,
         primary_issue=primary_issue,
         selected_surface=selected_surface,
@@ -225,6 +231,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "actionable_telemetry_feedback": actionable_telemetry_feedback,
             "passed": passed,
             "status": status,
+            "failure_code": failure_code,
             "failure_class": failure_class,
             "diagnostic_passed": (
                 activation_diagnostic_passed
@@ -300,6 +307,32 @@ def _primary_telemetry_diagnostic_kind(
         if kind:
             return kind
     return None
+
+
+def _algorithm_smoke_failure_code(
+    *,
+    failure_class: str,
+    runtime_smoke: Mapping[str, Any] | None,
+    subprocess_tail: Mapping[str, Any] | None,
+) -> str:
+    if failure_class == "passed":
+        return ""
+    if runtime_smoke is not None and runtime_smoke.get(
+        "runtime_audit_failure"
+    ) not in (None, "", {}, []):
+        return "algorithm_smoke_runtime_failure"
+    run = _mapping_or_none(runtime_smoke.get("run")) if runtime_smoke else None
+    if run is not None and run.get("success") is False:
+        return "algorithm_smoke_runtime_failure"
+    if subprocess_tail is not None and subprocess_tail.get("error_category"):
+        return "algorithm_smoke_runtime_failure"
+    if failure_class in {
+        "activation_not_observed_diagnostic",
+        "telemetry_not_observed_diagnostic",
+        "telemetry_static_diagnostic",
+    }:
+        return failure_class
+    return failure_class or "algorithm_smoke_failure"
 
 
 def _hard_smoke_failure_present(

@@ -9,6 +9,16 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
+The 2026-05-27 Rawls premise/runtime follow-up strengthens solver-design
+pre-screening. `proposal.algorithm_smoke` now asks the problem-owned smoke
+provider for representative cases, so the generic smoke runner can cover both
+small and medium/problem-representative inputs without hard-coding CVRP case
+semantics. Candidate runtime audit failures such as selected-surface runtime
+errors, inactive solver evidence, or fallback-emitted events are surfaced as
+`algorithm_smoke_runtime_failure` repair signals before full screening. Missing
+activation/effect on rare or conditional mechanisms remains diagnostic rather
+than a hard failure.
+
 The later 2026-05-27 grounding/telemetry follow-up fixes two remaining
 observability and search-guidance gaps from the local 4-round `gpt-5.5`
 analysis. CVRP mechanism novelty still stays in the problem provider, but its

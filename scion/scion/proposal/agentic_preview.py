@@ -556,6 +556,10 @@ def _preview_codes(payload: Mapping[str, Any]) -> tuple[str, ...]:
 
     def visit(value: Any) -> None:
         if isinstance(value, Mapping):
+            if value.get("failure_code"):
+                add(value.get("failure_code"))
+            if value.get("failure_class") and not value.get("passed"):
+                add(value.get("failure_class"))
             if value.get("issue_summary"):
                 add(value.get("issue_summary"))
             if value.get("failure_reason"):

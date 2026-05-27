@@ -31,6 +31,8 @@ def _runtime_smoke_cases(
     split_manifest: Any = None,
     seed_ledger: Any = None,
     safe_data_roots: Any = None,
+    provider: Any = None,
+    context: ProposalToolContext | None = None,
 ) -> tuple[list[_RuntimeSmokeCase], list[str]]:
     cases: list[_RuntimeSmokeCase] = []
     missing: list[str] = []
@@ -101,13 +103,117 @@ def _runtime_smoke_cases(
         _runtime_smoke_stage_value(seed_ledger, "screening"),
         _ALGORITHM_SMOKE_DEFAULT_SEED,
     )
+    screening_target = _ALGORITHM_SMOKE_MAX_SCREENING_CASES
+    screening_added = 0
+    for request in _provider_runtime_smoke_case_requests(
+        provider,
+        context=context,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+    ):
+        rel = request.get("case") or request.get("rel_path") or request.get("path")
+        before = len(cases)
+        add_case(
+            str(request.get("label") or "provider_representative"),
+            rel,
+            request.get("seed", screening_seed),
+            str(request.get("case_source") or "provider_runtime_smoke_cases"),
+        )
+        if len(cases) > before:
+            screening_added += 1
     screening_cases = _select_runtime_smoke_screening_cases(
         _string_list(_runtime_smoke_stage_value(split_manifest, "screening")),
-        _ALGORITHM_SMOKE_MAX_SCREENING_CASES,
+        len(_string_list(_runtime_smoke_stage_value(split_manifest, "screening"))),
     )
     for rel in screening_cases:
+        if screening_added >= screening_target:
+            break
+        before = len(cases)
         add_case("screening", rel, screening_seed, case_source)
+        if len(cases) > before:
+            screening_added += 1
     return cases, missing
+
+
+def _provider_runtime_smoke_case_requests(
+    provider: Any,
+    *,
+    context: ProposalToolContext | None,
+    split_manifest: Any,
+    seed_ledger: Any,
+) -> tuple[dict[str, Any], ...]:
+    if provider is None:
+        return ()
+    for name in (
+        "solver_design_smoke_cases",
+        "algorithm_smoke_cases",
+        "runtime_smoke_cases",
+    ):
+        hook = getattr(provider, name, None)
+        if not callable(hook):
+            continue
+        raw = _call_provider_smoke_cases(
+            hook,
+            context=context,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+        )
+        return _normalize_provider_smoke_case_requests(raw)
+    return ()
+
+
+def _call_provider_smoke_cases(
+    hook: Any,
+    *,
+    context: ProposalToolContext | None,
+    split_manifest: Any,
+    seed_ledger: Any,
+) -> Any:
+    attempts = (
+        {
+            "context": context,
+            "split_manifest": split_manifest,
+            "seed_ledger": seed_ledger,
+        },
+        {"split_manifest": split_manifest, "seed_ledger": seed_ledger},
+        {"context": context},
+        {},
+    )
+    for kwargs in attempts:
+        try:
+            return hook(**kwargs)
+        except TypeError:
+            continue
+    return None
+
+
+def _normalize_provider_smoke_case_requests(raw: Any) -> tuple[dict[str, Any], ...]:
+    if raw in (None, "", [], (), {}):
+        return ()
+    if isinstance(raw, Mapping):
+        for key in ("cases", "smoke_cases", "representative_cases"):
+            value = raw.get(key)
+            if value not in (None, "", [], (), {}):
+                raw = value
+                break
+        else:
+            raw = (raw,)
+    elif isinstance(raw, (str, bytes)):
+        raw = (raw,)
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    requests: list[dict[str, Any]] = []
+    for index, item in enumerate(raw):
+        if isinstance(item, Mapping):
+            request = dict(item)
+        else:
+            request = {"case": str(item)}
+        rel = request.get("case") or request.get("rel_path") or request.get("path")
+        if not str(rel or "").strip():
+            continue
+        request.setdefault("label", f"provider_representative_{index + 1}")
+        requests.append(request)
+    return tuple(requests)
 
 
 def _runtime_smoke_stage_value(source: Any, stage: str) -> Any:

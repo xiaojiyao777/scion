@@ -448,6 +448,7 @@ def test_code_prompt_observation_payload_preserves_algorithm_smoke_runtime_detai
         summary="Algorithm smoke found issues.",
         structured_payload={
             "passed": False,
+            "failure_code": "algorithm_smoke_runtime_failure",
             "runtime_smoke": {
                 "passed": False,
                 "runtime_smoke_run": True,
@@ -489,6 +490,7 @@ def test_code_prompt_observation_payload_preserves_algorithm_smoke_runtime_detai
     assert selected == [observation]
     assert "DESTROY_RATIO_LOW" in rendered
     assert detail is not None
+    assert "algorithm_smoke_runtime_failure" in detail
     assert "DESTROY_RATIO_LOW" in detail
 
 

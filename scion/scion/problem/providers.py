@@ -60,6 +60,15 @@ class SolverDesignSmokeProvider(Protocol):
     def is_runtime_patch_path(self, path: str | None) -> bool:
         """Return whether a patch path can be smoke-run by this provider."""
 
+    def solver_design_smoke_cases(
+        self,
+        *,
+        context: Any = None,
+        split_manifest: Any = None,
+        seed_ledger: Any = None,
+    ) -> Sequence[Any]:
+        """Return problem-owned representative cases for algorithm smoke."""
+
     def requires_smoke_effect_observation(self, hypothesis: Any = None) -> bool:
         """Return true when smoke must see positive effect, not just activation."""
 

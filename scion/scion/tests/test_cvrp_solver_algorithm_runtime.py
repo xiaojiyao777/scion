@@ -90,6 +90,84 @@ def test_solver_design_baseline_algorithm_exception_fails_selected_surface(
     assert "baseline body failed" in format_runtime_audit_failure(issue)
 
 
+def test_solver_design_runtime_audit_rejects_inactive_surface_without_error_counter() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_runtime(
+        {
+            "solver_algorithm_loaded": True,
+            "solver_algorithm_active": False,
+            "solver_algorithm_errors": 0,
+            "solver_algorithm_elapsed_ms": 20,
+            "solver_algorithm_phase_runtime_ms": {"construction": 3},
+            "solver_algorithm_solution_valid": True,
+            "solver_algorithm_solution_routes": 1,
+            "solver_algorithm_objective": {"total_distance": 1.0},
+            "solver_algorithm_total_distance": 1.0,
+            "solver_algorithm_fleet_violation": 0,
+            "solver_algorithm_search_iterations": 1,
+            "solver_algorithm_move_attempts": 1,
+            "solver_algorithm_accepted_moves": 0,
+            "solver_algorithm_improving_moves": 0,
+            "solver_algorithm_neutral_accepted_moves": 0,
+            "solver_algorithm_best_improving_moves": 0,
+            "solver_algorithm_best_delta": 0,
+            "solver_algorithm_phase_delta_sum": {"construction": 0},
+            "solver_algorithm_phase_best_delta": {"construction": 0},
+            "solver_algorithm_phase_improvement_counts": {"construction": 0},
+            "solver_algorithm_stop_reason": "inactive",
+        },
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    )
+
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "solver_algorithm_active" in issue["failed_runtime_fields"]
+
+
+def test_solver_design_runtime_audit_rejects_surface_fallback_event() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_runtime(
+        {
+            "solver_algorithm_loaded": True,
+            "solver_algorithm_active": True,
+            "solver_algorithm_errors": 0,
+            "solver_algorithm_elapsed_ms": 20,
+            "solver_algorithm_phase_runtime_ms": {"construction": 3},
+            "solver_algorithm_solution_valid": True,
+            "solver_algorithm_solution_routes": 1,
+            "solver_algorithm_objective": {"total_distance": 1.0},
+            "solver_algorithm_total_distance": 1.0,
+            "solver_algorithm_fleet_violation": 0,
+            "solver_algorithm_search_iterations": 1,
+            "solver_algorithm_move_attempts": 1,
+            "solver_algorithm_accepted_moves": 0,
+            "solver_algorithm_improving_moves": 0,
+            "solver_algorithm_neutral_accepted_moves": 0,
+            "solver_algorithm_best_improving_moves": 0,
+            "solver_algorithm_best_delta": 0,
+            "solver_algorithm_phase_delta_sum": {"construction": 0},
+            "solver_algorithm_phase_best_delta": {"construction": 0},
+            "solver_algorithm_phase_improvement_counts": {"construction": 0},
+            "solver_algorithm_stop_reason": "completed",
+            "solver_algorithm_events": [
+                {
+                    "status": "warning",
+                    "detail": "active algorithm failed; emitted fallback",
+                }
+            ],
+        },
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    )
+
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_fallback"
+    assert "fallback" in format_runtime_audit_failure(issue)
+
+
 def test_solver_design_runtime_audit_rejects_inconsistent_phase_runtime() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
     legacy_spec = legacy_problem_spec_from_v1(spec_v1)

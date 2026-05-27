@@ -3,7 +3,9 @@ from __future__ import annotations
 from scion.proposal.tools.previews.algorithm_smoke_feedback import (
     _algorithm_smoke_agent_payload,
 )
+from scion.proposal.solver_design_smoke import _runtime_smoke_cases
 from scion.proposal.edit_protocol import source_digest_for_content
+from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
 from scion.tests.unit.agentic_solver_design_test_support import *
 
 
@@ -93,6 +95,115 @@ def test_algorithm_smoke_normalizes_solver_algorithm_surface_alias(
     assert payload["selected_surface"] == "solver_design"
     assert payload["runtime_smoke_run"] is True
     assert payload["resolved_case_path"]
+
+
+def test_runtime_smoke_cases_include_provider_representative_cases(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    base_workspace = tmp_path / "base"
+    (workspace / "cases").mkdir(parents=True)
+    base_workspace.mkdir()
+    for name in ("canary.dat", "small.dat", "medium.dat", "screening.dat"):
+        (workspace / "cases" / name).write_text("{}", encoding="utf-8")
+
+    class Provider:
+        def __init__(self) -> None:
+            self.seen_split_manifest = None
+
+        def solver_design_smoke_cases(
+            self,
+            *,
+            context=None,
+            split_manifest=None,
+            seed_ledger=None,
+        ):
+            del context, seed_ledger
+            self.seen_split_manifest = split_manifest
+            return [
+                {"label": "provider_small", "case": "cases/small.dat", "seed": 5},
+                {"label": "provider_medium", "case": "cases/medium.dat", "seed": 7},
+            ]
+
+    provider = Provider()
+    smoke_cases, missing = _runtime_smoke_cases(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        canary_rel="cases/canary.dat",
+        split_manifest={
+            "canary": ["cases/canary.dat"],
+            "screening": ["cases/screening.dat"],
+        },
+        seed_ledger={"canary": [1], "screening": [2]},
+        provider=provider,
+        context=SimpleNamespace(problem="generic"),
+    )
+
+    labels = [case.label for case in smoke_cases]
+    seeds_by_label = {case.label: case.seed for case in smoke_cases}
+    assert missing == []
+    assert provider.seen_split_manifest is not None
+    assert labels[:3] == ["canary", "provider_small", "provider_medium"]
+    assert seeds_by_label["provider_small"] == 5
+    assert seeds_by_label["provider_medium"] == 7
+
+
+def test_cvrp_smoke_provider_selects_small_and_medium_representative_cases() -> None:
+    provider = CvrpSolverDesignProvider()
+
+    cases = provider.solver_design_smoke_cases(
+        split_manifest={
+            "screening": [
+                "cvrplib/A/A-n32-k5.vrp",
+                "cvrplib/A/A-n54-k7.vrp",
+                "cvrplib/E/E-n101-k8.vrp",
+            ]
+        },
+        seed_ledger={"screening": [11, 29]},
+    )
+
+    assert cases == (
+        {
+            "label": "provider_small",
+            "case": "cvrplib/A/A-n32-k5.vrp",
+            "seed": 11,
+            "case_source": "cvrp_solver_design_smoke_provider",
+        },
+        {
+            "label": "provider_medium",
+            "case": "cvrplib/A/A-n54-k7.vrp",
+            "seed": 11,
+            "case_source": "cvrp_solver_design_smoke_provider",
+        },
+    )
+
+
+def test_algorithm_smoke_runtime_audit_failure_overrides_pass_signal() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": True,
+            "runtime_smoke": {
+                "passed": True,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 1,
+                "runtime": {
+                    "solver_algorithm_active": False,
+                    "solver_algorithm_errors": 1,
+                },
+                "runtime_audit_failure": {
+                    "error_category": "solver_algorithm_runtime_error",
+                    "detail": "solver runtime audit reported solver_algorithm_errors=1",
+                    "runtime_error_field": "solver_algorithm_errors",
+                    "runtime_error_count": 1,
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
+    assert payload["failure_code"] == "algorithm_smoke_runtime_failure"
 
 
 def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(

@@ -90,6 +90,7 @@ def _preview_repair_feedback_prompt_payload(
 def _compact_algorithm_smoke_repair_feedback(
     payload: Mapping[str, Any],
 ) -> dict[str, Any]:
+    runtime_failure = _compact_algorithm_smoke_runtime_failure_feedback(payload)
     actionable = _first_mapping_item(payload.get("actionable_telemetry_feedback"))
     static_preview = payload.get("telemetry_static_preview")
     static = static_preview if isinstance(static_preview, Mapping) else {}
@@ -117,11 +118,13 @@ def _compact_algorithm_smoke_repair_feedback(
         or static.get("checked_fields")
     )
     failure_code = str(
-        (actionable or {}).get("failure_code")
+        runtime_failure.get("failure_code")
+        or (actionable or {}).get("failure_code")
         or activation_diagnostic.get("failure_code")
         or activation_diagnostic.get("code")
         or (failure or {}).get("code")
         or _first_text(static.get("issue_codes"))
+        or payload.get("failure_code")
         or payload.get("failure_class")
         or "algorithm_smoke_failure"
     ).strip()
@@ -139,9 +142,11 @@ def _compact_algorithm_smoke_repair_feedback(
                     "primary_issue": _compact_failure_text(
                         payload.get("primary_issue"), 420
                     ),
+                    "failure_code": payload.get("failure_code"),
                     "failure_class": payload.get("failure_class"),
                 }
             ),
+            "runtime_failure": runtime_failure,
             "offending_fields": offending_fields,
             "required_calls": required_calls,
             "allowed_repair_shape": _allowed_repair_shape(actionable, required_calls),
@@ -164,6 +169,70 @@ def _compact_algorithm_smoke_repair_feedback(
             "telemetry_diagnostics": telemetry_diagnostics,
         }
     )
+
+
+def _compact_algorithm_smoke_runtime_failure_feedback(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    runtime_smoke = payload.get("runtime_smoke")
+    if not isinstance(runtime_smoke, Mapping):
+        return {}
+    audit = runtime_smoke.get("runtime_audit_failure")
+    audit_payload = audit if isinstance(audit, Mapping) else {}
+    subprocess = payload.get("subprocess")
+    if not isinstance(subprocess, Mapping):
+        subprocess = runtime_smoke.get("subprocess")
+    if not isinstance(subprocess, Mapping):
+        subprocess = {}
+    counters = runtime_smoke.get("runtime_counters")
+    counters_payload = counters if isinstance(counters, Mapping) else {}
+    if not audit_payload and not subprocess.get("error_category"):
+        return {}
+    return _drop_empty_dict(
+        {
+            "failure_code": "algorithm_smoke_runtime_failure",
+            "error_category": audit_payload.get("error_category")
+            or subprocess.get("error_category"),
+            "detail": _compact_failure_text(
+                audit_payload.get("detail")
+                or subprocess.get("detail")
+                or payload.get("primary_issue"),
+                420,
+            ),
+            "runtime_error_field": audit_payload.get("runtime_error_field"),
+            "runtime_error_count": audit_payload.get("runtime_error_count"),
+            "failed_runtime_fields": _compact_string_list(
+                audit_payload.get("failed_runtime_fields")
+            ),
+            "event_tail": _compact_failure_text(
+                audit_payload.get("event_tail")
+                or subprocess.get("stderr_tail")
+                or subprocess.get("stdout_tail"),
+                360,
+            ),
+            "runtime_counters": _compact_runtime_failure_counters(counters_payload),
+        }
+    )
+
+
+def _compact_runtime_failure_counters(
+    counters: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    if not counters:
+        return None
+    result: dict[str, Any] = {}
+    for key, value in counters.items():
+        normalized = str(key).replace(".", "_")
+        if (
+            normalized.endswith("_errors")
+            or normalized.endswith("_active")
+            or normalized.endswith("_loaded")
+            or normalized.endswith("_stop_reason")
+        ):
+            result[str(key)] = _compact_code_prompt_value(value, depth=0)
+        if len(result) >= 8:
+            break
+    return result or None
 
 
 def _compact_activation_diagnostic(

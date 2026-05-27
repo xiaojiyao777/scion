@@ -146,6 +146,8 @@ def _runtime_algorithm_smoke_preview(
                 split_manifest=context.split_manifest,
                 seed_ledger=context.seed_ledger,
                 safe_data_roots=_runtime_smoke_safe_data_roots(context),
+                provider=provider,
+                context=context,
             )
             if not smoke_cases:
                 return {
