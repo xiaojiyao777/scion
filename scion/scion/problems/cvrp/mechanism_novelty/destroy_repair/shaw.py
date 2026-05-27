@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_any
+from scion.problems.cvrp.mechanism_novelty.text import _has_any
 from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
     _is_positional_or_arc_destroy_variant,
     _is_pure_geographic_cluster_variant_acknowledging_shaw,
@@ -37,10 +37,15 @@ def _missing_shaw_related_removal_span(text: str) -> str:
         or _is_existing_shaw_variant_with_negated_missing_claim(text)
     ):
         return ""
-    span = _first_regex_span(text, _MISSING_SHAW_RELATED_REMOVAL_PATTERNS)
-    if _span_is_shaw_contrast_not_missing_claim(span):
-        return ""
-    return span
+    for pattern in _MISSING_SHAW_RELATED_REMOVAL_PATTERNS:
+        for match in re.finditer(pattern, text):
+            span = text[match.start() : match.end()].strip()[:220]
+            if _shaw_absence_span_is_negated(text, match.start(), match.end()):
+                continue
+            if _span_is_shaw_contrast_not_missing_claim(span):
+                continue
+            return span
+    return ""
 
 _MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
         r"\b(?:missing|lacks?|absent|without|no)\b.{0,80}"
@@ -109,6 +114,43 @@ def _span_is_shaw_contrast_not_missing_claim(span: str) -> bool:
             " not a proximity cluster ",
             " not proximity cluster ",
         ),
+    )
+
+
+def _shaw_absence_span_is_negated(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 120)
+    window_end = min(len(text), end + 180)
+    window = text[window_start:window_end]
+    shaw_family = (
+        r"(?:shaw|shaw related|related removal|relatedness removal|"
+        r"proximity removal|proximity cluster|cluster removal|clustered removal)"
+    )
+    absence = r"(?:missing|absent|lacking|lacks?|without|no)"
+    return bool(
+        re.search(
+            r"\b(?:this\s+is\s+)?(?:not|is not|isn't)\s+"
+            r"(?:a\s+)?"
+            + absence
+            + r"\b.{0,160}\b"
+            + shaw_family
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\b(?:does not|doesn't|do not|don't)\s+"
+            r"(?:claim|assert|premise)\b.{0,140}\b"
+            + shaw_family
+            + r"\b.{0,80}\b(?:is|are)?\s*"
+            + absence
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\bnot\s+adding\b.{0,120}\b"
+            + shaw_family
+            + r"\b.{0,80}\b(?:itself|as\s+(?:a\s+)?new|newly)\b",
+            window,
+        )
     )
 
 

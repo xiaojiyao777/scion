@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from scion.tests.unit.cvrp_mechanism_novelty_provider_helpers import (
     CvrpMechanismNoveltyProvider,
     DirectCvrpMechanismNoveltyProvider,
@@ -250,6 +252,207 @@ def test_cvrp_regret_gate_allows_post_repair_merge_compaction_variant() -> None:
     )
 
     assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_regret_gate_allows_reported_compact_repair_negation_fixture() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Recent feedback shows the active bottleneck is total_distance win "
+            "rate, while the prior local-search expansion saturated runtime and "
+            "the current fleet_violation dimension is stable. The full "
+            "destroy_repair.py shows existing repairs choose lowest-cost "
+            "feasible insertions or regret-2/3 insertions, but none explicitly "
+            "preserves geographically compact route envelopes during repair; "
+            "add a compactness-biased repair variant that scores each feasible "
+            "insertion by insertion delta plus a small penalty for increasing "
+            "the route's customer-to-customer/depot radius or angular spread, "
+            "and wire it as an additional bounded ALNS repair option. This is "
+            "not a missing-regret claim: it is a materially different repair "
+            "objective that should avoid rebuilding elongated routes after "
+            "random/worst/Shaw/route removal, producing shorter final routes "
+            "with the existing SA/adaptive-weight acceptance and feasibility "
+            "guards."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing repairs do not score compactness of route envelopes."
+        ),
+        expected_effect="Improve total_distance through compact route repair.",
+        mechanism_changes=(
+            MechanismChange(id="compact_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_regret_gate_allows_missing_regret_negation_variants() -> None:
+    phrases = [
+        "This is not a missing-regret claim.",
+        "This is not a missing regret claim.",
+        "It does not claim regret insertion is missing.",
+        (
+            "Existing repairs include regret-2/3 insertions, but none explicitly "
+            "preserves compact route envelopes."
+        ),
+        (
+            "This is not adding regret insertion itself; adding a "
+            "compactness-biased scored bounded variant."
+        ),
+    ]
+
+    for phrase in phrases:
+        hypothesis = HypothesisProposal(
+            hypothesis_text=(
+                "The current solver already includes regret-2 and regret-3 "
+                "repair insertions. "
+                f"{phrase} Add compact_repair as a bounded repair-scoring "
+                "variant that changes compactness preference, not the existence "
+                "of regret repair."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            target_weakness="Existing repair scoring ignores compactness.",
+            expected_effect="Improve total_distance through compact repairs.",
+            mechanism_changes=(
+                MechanismChange(id="compact_repair", change_type="add"),
+            ),
+        )
+
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is None or result.failure_category != "premise_contradicted", phrase
+
+
+def test_cvrp_regret_gate_allows_reported_route_compaction_no_new_route_fixture() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Screening shows the current distance improvements are tie-dominated "
+            "and the failed local-search expansion saturated runtime, while "
+            "fleet_violation is already stable because scheduler.py rejects "
+            "infeasible and over-route-limit candidates. Add a bounded "
+            "route-compaction intensification phase owned by scheduler.py after "
+            "initial construction and again only when ALNS has not "
+            "best-improved for a short segment: select at most three sparsest "
+            "nonempty routes, try to absorb each route's customers into "
+            "existing routes using best feasible regret-ordered insertions "
+            "without creating routes, and keep the compaction only if route "
+            "count is nonincreasing and total_distance strictly improves. This "
+            "differs from existing route_removal plus regret repair because it "
+            "is not a random destroy/repair operator that can recreate removed "
+            "routes; it is a deterministic no-new-route absorption pass "
+            "targeting low-load route fragmentation and avoiding the prior "
+            "cross-route edge-bridge mechanism. It no-ops when all selected "
+            "sparse routes cannot be fully absorbed within capacity, when it "
+            "would increase route count or distance, or when remaining-time "
+            "reserve is breached."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness="Route fragmentation leaves low-load routes unabsorbed.",
+        expected_effect="Improve total_distance via route compaction.",
+        mechanism_changes=(
+            MechanismChange(id="route_compaction", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+    assert result is None or result.mechanism != "regret_insertion_repair"
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    (
+        (
+            "Existing route_removal plus regret repair is available, but the "
+            "new route compaction pass absorbs sparse routes with no additional "
+            "routes."
+        ),
+        (
+            "This differs from existing route_removal plus regret repair because "
+            "the absorption variant avoids creating routes and only reuses "
+            "existing feasible regret-ordered insertion positions."
+        ),
+        (
+            "Unlike existing regret repair, this route-compaction variant is a "
+            "no-new-route absorption pass for low-load route fragmentation."
+        ),
+        (
+            "Use existing regret repair ordering inside a route compaction pass "
+            "without creating new routes; do not add regret repair itself."
+        ),
+    ),
+)
+def test_cvrp_regret_gate_allows_route_creation_negation_variants(
+    phrase: str,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            f"{phrase} Keep the change bounded and accept it only when route "
+            "count is nonincreasing and total_distance improves."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness="Sparse route fragmentation remains after repair.",
+        expected_effect="Improve total_distance by absorbing sparse routes.",
+        mechanism_changes=(
+            MechanismChange(id="route_compaction", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted", phrase
+    assert result is None or result.mechanism != "regret_insertion_repair", phrase
+
+
+def test_cvrp_regret_gate_blocks_current_no_regret_positive_premise() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current solver has no regret repair, so add the first regret "
+            "insertion repair operator after destroy removal."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Regret repair is missing from current repair.",
+        expected_effect="Improve total_distance through first regret repair.",
+        mechanism_changes=(
+            MechanismChange(id="regret_insertion_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "regret_insertion_repair"
+    assert result.contradicted_span
 
 
 def test_cvrp_regret_gate_allows_stagnation_restart_using_existing_regret() -> None:

@@ -45,9 +45,13 @@ def _algorithm_smoke_runtime_agent_section(
             "selected_case_count": runtime_smoke.get("selected_case_count"),
             "attempted_case_count": runtime_smoke.get("attempted_case_count"),
             "provider_hook_used": runtime_smoke.get("provider_hook_used"),
+            "provider_unavailable": runtime_smoke.get("provider_unavailable"),
             "provider_case_count": runtime_smoke.get("provider_case_count"),
             "provider_case_attempted_count": runtime_smoke.get(
                 "provider_case_attempted_count"
+            ),
+            "evidence_diagnostics": _compact_evidence_diagnostics(
+                runtime_smoke.get("evidence_diagnostics")
             ),
             "case_execution_ledger": _compact_case_execution_ledger(
                 runtime_smoke.get("case_execution_ledger")
@@ -68,6 +72,34 @@ def _algorithm_smoke_runtime_agent_section(
         }
     )
     return compact or None
+
+
+def _compact_evidence_diagnostics(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    diagnostics: list[dict[str, Any]] = []
+    for item in value[:6]:
+        diagnostic = _mapping_or_none(item)
+        if diagnostic is None:
+            continue
+        diagnostics.append(
+            _drop_empty_items(
+                {
+                    "code": diagnostic.get("code"),
+                    "severity": diagnostic.get("severity"),
+                    "detail": _compact_agent_text(diagnostic.get("detail")),
+                    "provider_case_count": diagnostic.get("provider_case_count"),
+                    "provider_case_attempted_count": diagnostic.get(
+                        "provider_case_attempted_count"
+                    ),
+                    "case_count": diagnostic.get("case_count"),
+                    "missing_fields": _compact_agent_text_list(
+                        diagnostic.get("missing_fields")
+                    ),
+                }
+            )
+        )
+    return [item for item in diagnostics if item]
 
 
 def _compact_case_execution_ledger(value: Any) -> list[dict[str, Any]]:

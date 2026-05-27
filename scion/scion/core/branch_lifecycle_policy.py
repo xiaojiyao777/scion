@@ -29,6 +29,16 @@ SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE = (
 )
 SCREENING_STALE_RESCREEN_FAIL = "SCREENING_STALE_RESCREEN_FAIL"
 SCREENING_TELEMETRY_DIAGNOSTIC_RETRY = "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY"
+SCREENING_RUNTIME_SATURATION_DIAGNOSTIC = (
+    "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC"
+)
+SCREENING_RUNTIME_SATURATION_REROUTE = "SCREENING_RUNTIME_SATURATION_REROUTE"
+SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC = (
+    "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"
+)
+SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE = (
+    "SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE"
+)
 VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY = "VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY"
 TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED = (
     "TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED"
@@ -66,6 +76,7 @@ class BranchLifecyclePolicy:
     soft_runtime_ratio_threshold: float = 1.10
     high_runtime_regression_rate: float = 0.90
     telemetry_diagnostic_streak_limit: int = 3
+    diagnostic_zero_win_streak_limit: int = 2
 
     def decide(
         self,
@@ -113,6 +124,22 @@ class BranchLifecyclePolicy:
                 next_telemetry_diagnostic_streak=0,
             )
 
+        diagnostic_reasons = self._low_signal_diagnostic_reasons(features)
+        diagnostic_reroute_reasons = self._low_signal_diagnostic_reroute_reasons(
+            features
+        )
+        if (
+            wins == 0
+            and diagnostic_reroute_reasons
+            and next_zero_win_streak >= self.diagnostic_zero_win_streak_limit
+        ):
+            return BranchLifecycleDecision(
+                action="soft_abandon",
+                reason_codes=diagnostic_reroute_reasons,
+                next_zero_win_streak=next_zero_win_streak,
+                next_telemetry_diagnostic_streak=0,
+            )
+
         if wins == 0 and next_zero_win_streak >= self.zero_win_streak_limit:
             return BranchLifecycleDecision(
                 action="soft_abandon",
@@ -132,8 +159,13 @@ class BranchLifecyclePolicy:
         if pair_wins > 0:
             return BranchLifecycleDecision(
                 action="keep_exploring",
-                reason_codes=(SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,),
-                next_zero_win_streak=0,
+                reason_codes=(
+                    SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+                    *diagnostic_reasons,
+                ),
+                next_zero_win_streak=(
+                    next_zero_win_streak if diagnostic_reasons else 0
+                ),
                 next_telemetry_diagnostic_streak=0,
             )
 
@@ -144,7 +176,7 @@ class BranchLifecyclePolicy:
         )
         return BranchLifecycleDecision(
             action="keep_exploring",
-            reason_codes=(reason,),
+            reason_codes=(reason, *diagnostic_reasons),
             next_zero_win_streak=next_zero_win_streak,
             next_telemetry_diagnostic_streak=0,
         )
@@ -227,6 +259,28 @@ class BranchLifecyclePolicy:
         return tuple(dict.fromkeys(reasons))
 
     @staticmethod
+    def _low_signal_diagnostic_reasons(
+        features: DecisionFeatures,
+    ) -> tuple[str, ...]:
+        reasons: list[str] = []
+        if features.runtime_budget_saturation_diagnostic:
+            reasons.append(SCREENING_RUNTIME_SATURATION_DIAGNOSTIC)
+        if features.telemetry_effect_zero_diagnostic:
+            reasons.append(SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC)
+        return tuple(reasons)
+
+    @staticmethod
+    def _low_signal_diagnostic_reroute_reasons(
+        features: DecisionFeatures,
+    ) -> tuple[str, ...]:
+        reasons: list[str] = []
+        if features.runtime_budget_saturation_diagnostic:
+            reasons.append(SCREENING_RUNTIME_SATURATION_REROUTE)
+        if features.telemetry_effect_zero_diagnostic:
+            reasons.append(SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE)
+        return tuple(reasons)
+
+    @staticmethod
     def _mostly_ties(
         features: DecisionFeatures,
         *,
@@ -252,6 +306,10 @@ __all__ = [
     "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",
     "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN",
     "SCREENING_STALE_RESCREEN_FAIL",
+    "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
+    "SCREENING_RUNTIME_SATURATION_REROUTE",
+    "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+    "SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE",
     "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY",
     "SCREENING_WEAK_SIGNAL_CONTINUE",
     "SCREENING_ZERO_WIN_STREAK_CONTINUE",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_any
+from scion.problems.cvrp.mechanism_novelty.text import _has_any
 from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
     _mentions_random_removal_destroy,
 )
@@ -17,14 +17,19 @@ def _missing_random_removal_destroy_span(text: str) -> str:
         return ""
     if _describes_existing_random_removal_contrast_variant(text):
         return ""
-    span = _first_regex_span(text, _MISSING_RANDOM_REMOVAL_DESTROY_PATTERNS)
-    if _span_is_random_removal_contrast_not_missing(span):
-        return ""
-    if _span_is_random_exploration_weakness_not_missing_removal(span):
-        return ""
-    if _span_is_noop_condition_not_missing_random_removal(span):
-        return ""
-    return span
+    for pattern in _MISSING_RANDOM_REMOVAL_DESTROY_PATTERNS:
+        for match in re.finditer(pattern, text):
+            span = text[match.start() : match.end()].strip()[:220]
+            if _random_removal_absence_span_is_negated(text, match.start(), match.end()):
+                continue
+            if _span_is_random_removal_contrast_not_missing(span):
+                continue
+            if _span_is_random_exploration_weakness_not_missing_removal(span):
+                continue
+            if _span_is_noop_condition_not_missing_random_removal(span):
+                continue
+            return span
+    return ""
 
 _MISSING_RANDOM_REMOVAL_DESTROY_PATTERNS = (
     r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
@@ -92,26 +97,49 @@ def _span_is_random_removal_contrast_not_missing(span: str) -> bool:
         ),
     )
 
+
+def _random_removal_absence_span_is_negated(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 120)
+    window_end = min(len(text), end + 180)
+    window = text[window_start:window_end]
+    random_family = (
+        r"(?:random(?: customer)? removal|random customer destroy|random destroy|"
+        r"randomized removal|randomized destroy|uniform random removal)"
+    )
+    absence = r"(?:missing|absent|lacking|lacks?|without|no)"
+    return bool(
+        re.search(
+            r"\b(?:this\s+is\s+)?(?:not|is not|isn't)\s+"
+            r"(?:a\s+)?"
+            + absence
+            + r"\b.{0,140}\b"
+            + random_family
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\b(?:does not|doesn't|do not|don't)\s+"
+            r"(?:claim|assert|premise)\b.{0,120}\b"
+            + random_family
+            + r"\b.{0,60}\b(?:is|are)?\s*"
+            + absence
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\bnot\s+adding\b.{0,100}\b"
+            + random_family
+            + r"\b.{0,80}\b(?:itself|as\s+(?:a\s+)?new|newly)\b",
+            window,
+        )
+    )
+
 def _describes_existing_random_removal_variant(text: str) -> bool:
     if not _mentions_random_removal_destroy(text):
         return False
     if not _acknowledges_existing_random_removal_destroy(text):
         return False
-    if _has_any(
-        text,
-        (
-            "missing random removal",
-            "lacks random removal",
-            "lack random removal",
-            "absent random removal",
-            "no random removal",
-            "without random removal",
-            "missing random customer removal",
-            "lacks random customer removal",
-            "new random removal capability",
-            "new random removal operator",
-        ),
-    ):
+    if _has_positive_random_removal_absence_phrase(text):
         return False
     return _has_any(
         text,
@@ -139,6 +167,28 @@ def _describes_existing_random_removal_variant(text: str) -> bool:
             "instrumentation",
         ),
     )
+
+def _has_positive_random_removal_absence_phrase(text: str) -> bool:
+    phrases = (
+        "missing random removal",
+        "lacks random removal",
+        "lack random removal",
+        "absent random removal",
+        "no random removal",
+        "without random removal",
+        "missing random customer removal",
+        "lacks random customer removal",
+        "new random removal capability",
+        "new random removal operator",
+    )
+    for phrase in phrases:
+        start = text.find(phrase)
+        while start >= 0:
+            end = start + len(phrase)
+            if not _random_removal_absence_span_is_negated(text, start, end):
+                return True
+            start = text.find(phrase, start + 1)
+    return False
 
 def _describes_existing_random_removal_contrast_variant(text: str) -> bool:
     if not _mentions_random_removal_destroy(text):

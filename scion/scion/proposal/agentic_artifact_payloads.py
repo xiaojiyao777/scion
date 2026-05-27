@@ -101,8 +101,10 @@ def _compact_transcript(
         "algorithm_smoke_failure_code",
         "runtime_smoke_case_execution_ledger",
         "runtime_smoke_provider_hook_used",
+        "runtime_smoke_provider_unavailable",
         "runtime_smoke_provider_case_count",
         "runtime_smoke_provider_case_attempted_count",
+        "runtime_smoke_evidence_diagnostics",
         "runtime_budget_diagnostic",
         "algorithm_smoke_execution_evidence_ref",
     }

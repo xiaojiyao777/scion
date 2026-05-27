@@ -11,9 +11,9 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
 def _claims_missing_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
         return False
-    if _negates_regret_absence_claim(text):
-        return False
     if _acknowledges_existing_regret_repair_variant(text):
+        return False
+    if _compares_against_existing_regret_repair_variant(text):
         return False
     if _is_non_regret_repair_variant(text) and not _missing_regret_insertion_repair_span(
         text
@@ -44,45 +44,54 @@ def _duplicates_regret_insertion_repair(text: str) -> bool:
     return bool(_duplicate_regret_insertion_repair_span(text))
 
 def _missing_regret_insertion_repair_span(text: str) -> str:
-    span = _first_regex_span(
-        text,
-        (
-            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
-            r"doesn't have|doesn't include)\b.{0,120}\b(?:regret[- ]?[23k]?|"
-            r"regret insertion|regret repair)\b",
-            r"\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b"
-            r".{0,120}\b(?:missing|lacks?|absent|without|no|does not have|"
-            r"does not include|doesn't have|doesn't include)\b",
-        ),
+    patterns = (
+        r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+        r"doesn't have|doesn't include)\b.{0,120}\b(?:regret[- ]?[23k]?|"
+        r"regret insertion|regret repair)\b",
+        r"\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b"
+        r".{0,120}\b(?:missing|lacks?|absent|without|no|does not have|"
+        r"does not include|doesn't have|doesn't include)\b",
     )
-    if span and _absence_word_does_not_target_regret(span):
-        return ""
-    if span and re.search(
-        r"\bwithout\b.{0,80}\b(?:add|adding|introduce|introducing|create|creating|new)\b",
-        span,
-    ):
-        return ""
-    if span and _acknowledges_existing_regret_repair(text) and _span_targets_variant_not_regret(
-        span
-    ):
-        return ""
-    if span and _acknowledges_existing_regret_repair(text) and _absence_referent_targets_variant_not_regret(
-        text,
-        span,
-    ):
-        return ""
-    if span and _acknowledges_existing_regret_repair(text):
-        if re.search(r"\bbut\b.{0,25}\blacks?\b", span):
-            return ""
-        if re.search(r"\bnot\b.{0,30}\b(?:claim|premise|assert)", span):
-            return ""
-        if _uses_regret_after_stagnation_escape_variant(text):
-            return ""
-        if _acknowledged_regret_lacks_variant_only(text):
-            return ""
-        if _describes_route_merge_compaction_variant(text):
-            return ""
-    return span
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            span = text[match.start() : match.end()].strip()
+            if _regret_absence_span_is_negated(text, match.start(), match.end()):
+                continue
+            if _regret_absence_window_targets_route_creation_not_regret(
+                text,
+                match.start(),
+                match.end(),
+            ):
+                continue
+            if _absence_word_does_not_target_regret(span):
+                continue
+            if re.search(
+                r"\bwithout\b.{0,80}\b(?:add|adding|introduce|introducing|create|creating|new)\b",
+                span,
+            ):
+                continue
+            if _acknowledges_existing_regret_repair(text) and _span_targets_variant_not_regret(
+                span
+            ):
+                continue
+            if _acknowledges_existing_regret_repair(text) and _absence_referent_targets_variant_not_regret(
+                text,
+                span,
+            ):
+                continue
+            if _acknowledges_existing_regret_repair(text):
+                if re.search(r"\bbut\b.{0,25}\blacks?\b", span):
+                    continue
+                if re.search(r"\bnot\b.{0,30}\b(?:claim|premise|assert)", span):
+                    continue
+                if _uses_regret_after_stagnation_escape_variant(text):
+                    continue
+                if _acknowledged_regret_lacks_variant_only(text):
+                    continue
+                if _describes_route_merge_compaction_variant(text):
+                    continue
+            return span
+    return ""
 
 
 def _absence_referent_targets_variant_not_regret(text: str, span: str) -> bool:
@@ -109,9 +118,45 @@ def _absence_referent_targets_variant_not_regret(text: str, span: str) -> bool:
     return _span_targets_variant_not_regret(referent)
 
 
+def _regret_absence_window_targets_route_creation_not_regret(
+    text: str,
+    start: int,
+    end: int,
+) -> bool:
+    window_start = max(0, start - 80)
+    window_end = min(len(text), end + 220)
+    window = text[window_start:window_end].replace("-", " ")
+    regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
+    route_creation_negation = (
+        r"(?:no\s+(?:new|additional)?\s*routes?|without\s+(?:creating|opening|"
+        r"adding)\s+(?:new\s+)?routes?|avoid(?:s|ing)?\s+(?:creating|opening|"
+        r"adding)\s+(?:new\s+)?routes?|prevent(?:s|ing)?\s+(?:creating|opening|"
+        r"adding)\s+(?:new\s+)?routes?|route count\s+(?:is\s+)?"
+        r"(?:nonincreasing|non increasing)|nonincreasing route count|"
+        r"non increasing route count)"
+    )
+    route_compaction_terms = (
+        r"(?:route compaction|route absorption|absorption pass|absorb(?:s|ing)?"
+        r"\s+routes?|sparse(?:st)?\s+nonempty routes?|low load route "
+        r"fragmentation|route fragmentation)"
+    )
+    return bool(
+        re.search(regret + r".{0,220}\b" + route_creation_negation, window)
+        or re.search(
+            route_creation_negation + r".{0,220}\b" + regret,
+            window,
+        )
+        or (
+            re.search(regret + r".{0,220}\b" + route_compaction_terms, window)
+            and re.search(route_creation_negation, window)
+        )
+    )
+
+
 def _negates_regret_absence_claim(text: str) -> bool:
     regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
     absence = r"(?:absent|missing|lacks?|does not have|doesn't have)"
+    missing_regret = r"(?:missing\s+regret|missing\s+regret insertion|missing\s+regret repair)"
     return bool(
         re.search(
             r"\b(?:without|not|does not|doesn't)\s+"
@@ -120,11 +165,44 @@ def _negates_regret_absence_claim(text: str) -> bool:
             text,
         )
         or re.search(
+            r"\b(?:this\s+is\s+)?(?:not|is not|isn't)\s+"
+            r"(?:a\s+)?(?:missing|absent|lacking|lack(?:s|ing)?|without|no)\b"
+            r".{0,120}\b"
+            + regret
+            + r"\b",
+            text,
+        )
+        or re.search(
             r"\b(?:is not|isn't|not)\b.{0,40}\b(?:a\s+)?claim\b"
             r".{0,120}\b" + regret + r"\b.{0,100}\b" + absence + r"\b",
             text,
         )
+        or re.search(
+            r"\b(?:this\s+is\s+)?(?:not|is not|isn't)\s+"
+            r"(?:a\s+)?"
+            + missing_regret
+            + r"\s+(?:claim|premise|assertion)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:does not|doesn't|do not|don't)\s+claim\b"
+            r".{0,100}\b" + regret + r"\b.{0,50}\b(?:is|are)?\s*"
+            r"(?:missing|absent|lacking)\b",
+            text,
+        )
+        or re.search(
+            r"\bnot\s+adding\b.{0,100}\b"
+            + regret
+            + r"\b.{0,80}\b(?:itself|as\s+(?:a\s+)?new|as\s+the\s+new|newly)\b",
+            text,
+        )
     )
+
+
+def _regret_absence_span_is_negated(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 120)
+    window_end = min(len(text), end + 160)
+    return _negates_regret_absence_claim(text[window_start:window_end])
 
 
 def _absence_word_does_not_target_regret(span: str) -> bool:
@@ -133,6 +211,19 @@ def _absence_word_does_not_target_regret(span: str) -> bool:
     normalized = span.lower()
     regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
     if re.search(r"\bno\b.{0,40}\b(?:bounded\s+)?feasible slot\b", normalized):
+        return True
+    if re.search(
+        r"\b(?:no\s+(?:new|additional)?\s*routes?|without\s+(?:creating|"
+        r"opening|adding)\s+(?:new\s+)?routes?|avoid(?:s|ing)?\s+"
+        r"(?:creating|opening|adding)\s+(?:new\s+)?routes?)\b",
+        normalized,
+    ):
+        return True
+    if re.search(
+        r"\b(?:route compaction|route absorption|absorption pass|"
+        r"route fragmentation|low load route fragmentation)\b",
+        normalized,
+    ) and re.search(r"\b(?:no|without|avoid(?:s|ing)?)\b", normalized):
         return True
     if re.search(
         regret
@@ -204,6 +295,20 @@ def _span_targets_variant_not_regret(span: str) -> bool:
             "small route",
             "near-empty route",
             "short route",
+            "sparse route",
+            "sparsest",
+            "nonempty route",
+            "low load",
+            "low-load",
+            "fragmentation",
+            "route fragmentation",
+            "absorb",
+            "absorbs",
+            "absorption",
+            "no new route",
+            "no additional route",
+            "route count nonincreasing",
+            "nonincreasing route count",
             "stagnation escape",
             "escape",
             "restart",
@@ -257,6 +362,15 @@ def _describes_route_merge_compaction_variant(text: str) -> bool:
             "compact",
             "route shaping",
             "route-shaping",
+            "absorb",
+            "absorbs",
+            "absorption",
+            "no new route",
+            "no additional route",
+            "without creating route",
+            "without creating routes",
+            "avoid creating route",
+            "avoid creating routes",
         ),
     ):
         return False
@@ -267,11 +381,51 @@ def _describes_route_merge_compaction_variant(text: str) -> bool:
             "near empty route",
             "near-empty route",
             "short route",
+            "sparse route",
+            "sparsest",
+            "nonempty route",
+            "nonempty routes",
+            "low load",
+            "low-load",
+            "fragmentation",
+            "route fragmentation",
+            "absorption pass",
+            "route count nonincreasing",
+            "nonincreasing route count",
+            "without creating routes",
+            "no new route",
+            "no additional route",
             "post repair",
             "post-repair",
             "alns merge",
             "merge small routes",
         ),
+    )
+
+
+def _compares_against_existing_regret_repair_variant(text: str) -> bool:
+    if not _acknowledges_existing_regret_repair(text):
+        return False
+    regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
+    comparison = bool(
+        re.search(
+            r"\b(?:differs? from|unlike|distinct from|different from)\b"
+            r".{0,120}\b(?:existing|current|baseline|already)\b.{0,120}\b"
+            + regret
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:existing|current|baseline|already)\b.{0,120}\b"
+            + regret
+            + r"\b.{0,120}\b(?:but|while|whereas|because|however)\b",
+            text,
+        )
+    )
+    if not comparison:
+        return False
+    return _span_targets_variant_not_regret(text) or _describes_route_merge_compaction_variant(
+        text
     )
 
 

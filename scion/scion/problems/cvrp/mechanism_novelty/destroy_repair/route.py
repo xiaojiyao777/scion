@@ -258,6 +258,8 @@ def _first_missing_route_removal_claim_span(
     for pattern in patterns:
         for match in re.finditer(pattern, text):
             span = text[match.start() : match.end()].strip()[:220]
+            if _route_absence_window_is_negated(text, match.start(), match.end()):
+                continue
             if _span_negates_missing_route_removal_claim(span):
                 continue
             if _span_absence_referent_is_route_reuse_variant(span):
@@ -268,6 +270,43 @@ def _first_missing_route_removal_claim_span(
                 continue
             return span
     return ""
+
+
+def _route_absence_window_is_negated(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 120)
+    window_end = min(len(text), end + 180)
+    window = text[window_start:window_end].replace("-", " ")
+    route_family = (
+        r"(?:_route_removal|route removal|whole route removal|whole route "
+        r"destroy|entire route removal|route level removal|route destroy)"
+    )
+    absence = r"(?:missing|absent|lacking|lacks?|without|no)"
+    return bool(
+        re.search(
+            r"\b(?:this\s+is\s+)?(?:not|is not|isn't)\s+"
+            r"(?:a\s+)?"
+            + absence
+            + r"\b.{0,160}\b"
+            + route_family
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\b(?:does not|doesn't|do not|don't)\s+"
+            r"(?:claim|assert|premise)\b.{0,140}\b"
+            + route_family
+            + r"\b.{0,80}\b(?:is|are)?\s*"
+            + absence
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\bnot\s+adding\b.{0,120}\b"
+            + route_family
+            + r"\b.{0,80}\b(?:itself|as\s+(?:a\s+)?new|newly)\b",
+            window,
+        )
+    )
 
 
 def _span_absence_referent_is_route_reuse_variant(span: str) -> bool:

@@ -94,6 +94,12 @@ def compact_algorithm_smoke_observation_for_agent(
 
 def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     runtime_smoke = _mapping_or_none(raw_payload.get("runtime_smoke"))
+    evidence_diagnostics = _algorithm_smoke_evidence_diagnostics(runtime_smoke)
+    if runtime_smoke is not None and evidence_diagnostics:
+        runtime_smoke = {
+            **runtime_smoke,
+            "evidence_diagnostics": evidence_diagnostics,
+        }
     runtime = runtime_smoke.get("runtime") if runtime_smoke else None
     run = runtime_smoke.get("run") if runtime_smoke else None
     telemetry_guard = _compact_algorithm_smoke_telemetry_guard(
@@ -172,6 +178,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         _runtime_budget_diagnostic_passed(runtime_smoke)
         and not hard_smoke_failure
     )
+    evidence_diagnostic_passed = (
+        _provider_unavailable_evidence_diagnostic(evidence_diagnostics)
+        and not hard_smoke_failure
+    )
     if activation_diagnostic_passed:
         passed = True
         status = "diagnostic"
@@ -188,6 +198,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         passed = True
         status = "diagnostic"
         failure_class = "runtime_smoke_budget_diagnostic"
+    elif evidence_diagnostic_passed:
+        passed = True
+        status = "diagnostic"
+        failure_class = "provider_smoke_coverage_diagnostic"
     failure_code = _algorithm_smoke_failure_code(
         failure_class=failure_class,
         runtime_smoke=runtime_smoke,
@@ -254,6 +268,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
                 or telemetry_diagnostic_passed
                 or static_diagnostic_passed
                 or runtime_budget_diagnostic_passed
+                or evidence_diagnostic_passed
                 or None
             ),
             "primary_issue": primary_issue,
@@ -268,6 +283,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "agent_summary": agent_summary,
             "repair_hints": repair_hints,
             "failed_checks": failed_checks,
+            "evidence_diagnostics": evidence_diagnostics,
             "activation_diagnostic": activation_diagnostic,
             "telemetry_diagnostics": telemetry_diagnostics,
             "smoke_telemetry_diagnostic_kind": _primary_telemetry_diagnostic_kind(
@@ -316,6 +332,130 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     return compact_payload
 
 
+def _algorithm_smoke_evidence_diagnostics(
+    runtime_smoke: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if runtime_smoke is None:
+        return []
+    diagnostics: list[dict[str, Any]] = []
+    for item in runtime_smoke.get("evidence_diagnostics", []) or []:
+        if isinstance(item, Mapping):
+            diagnostics.append(dict(item))
+    provider_unavailable = bool(runtime_smoke.get("provider_unavailable"))
+    if provider_unavailable and not any(
+        item.get("code") == "solver_design_smoke_provider_unavailable"
+        for item in diagnostics
+    ):
+        diagnostics.append(
+            {
+                "code": "solver_design_smoke_provider_unavailable",
+                "severity": "warning",
+                "detail": (
+                    "No problem-owned solver-design smoke provider is registered, "
+                    "so algorithm smoke cannot run provider representative cases."
+                ),
+                "provider_case_count": 0,
+                "provider_case_attempted_count": 0,
+                "case_count": runtime_smoke.get("case_count"),
+            }
+        )
+    missing_fields = [
+        field
+        for field in (
+            "provider_case_count",
+            "provider_case_attempted_count",
+            "case_execution_ledger",
+        )
+        if field not in runtime_smoke
+        and not (field == "case_execution_ledger" and "cases" in runtime_smoke)
+    ]
+    if missing_fields and not provider_unavailable:
+        diagnostics.append(
+            {
+                "code": "algorithm_smoke_provider_ledger_fields_missing",
+                "severity": "warning",
+                "detail": (
+                    "Runtime smoke payload omitted provider case ledger/count "
+                    "fields; persisted evidence may otherwise be canary-only."
+                ),
+                "missing_fields": missing_fields,
+            }
+        )
+    provider_count = _int_or_none(runtime_smoke.get("provider_case_count"))
+    provider_attempted = _int_or_none(
+        runtime_smoke.get("provider_case_attempted_count")
+    )
+    selected_surface = str(runtime_smoke.get("selected_surface") or "").strip()
+    if (
+        runtime_smoke.get("runtime_smoke_run")
+        and selected_surface == "solver_design"
+        and (provider_count is None or provider_count <= 0)
+        and not provider_unavailable
+    ):
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_evidence_missing",
+                "severity": "warning",
+                "detail": (
+                    "Algorithm smoke did not report provider representative "
+                    "case execution; compact evidence may only show the canary."
+                ),
+                "provider_case_count": provider_count,
+                "provider_case_attempted_count": provider_attempted,
+                "case_count": runtime_smoke.get("case_count"),
+            }
+        )
+    if (
+        provider_count is not None
+        and provider_attempted is not None
+        and provider_count > 0
+        and provider_attempted < provider_count
+    ):
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_cases_not_fully_attempted",
+                "severity": "warning",
+                "detail": (
+                    "Provider representative smoke cases were selected but not "
+                    "all were attempted."
+                ),
+                "provider_case_count": provider_count,
+                "provider_case_attempted_count": provider_attempted,
+            }
+        )
+    return _dedupe_evidence_diagnostics(diagnostics)
+
+
+def _dedupe_evidence_diagnostics(
+    diagnostics: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in diagnostics:
+        code = str(item.get("code") or item.get("detail") or item)
+        if code in seen:
+            continue
+        seen.add(code)
+        deduped.append(item)
+    return deduped[:8]
+
+
+def _provider_unavailable_evidence_diagnostic(
+    diagnostics: list[dict[str, Any]],
+) -> bool:
+    return any(
+        item.get("code") == "solver_design_smoke_provider_unavailable"
+        for item in diagnostics
+    )
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _primary_telemetry_diagnostic_kind(
     diagnostics: list[dict[str, Any]],
 ) -> str | None:
@@ -348,6 +488,7 @@ def _algorithm_smoke_failure_code(
         "telemetry_not_observed_diagnostic",
         "telemetry_static_diagnostic",
         "runtime_smoke_budget_diagnostic",
+        "provider_smoke_coverage_diagnostic",
     }:
         return failure_class
     return failure_class or "algorithm_smoke_failure"

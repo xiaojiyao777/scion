@@ -71,7 +71,41 @@ def _runtime_algorithm_smoke_preview(
         return None
     provider = _solver_design_smoke_provider(context)
     if provider is None:
-        return None
+        return {
+            "passed": True,
+            "skipped": True,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "selected_surface": surface_name,
+            "provider_unavailable": True,
+            "provider_hook_used": False,
+            "provider_case_count": 0,
+            "provider_case_attempted_count": 0,
+            "case_count": 0,
+            "selected_case_count": 0,
+            "attempted_case_count": 0,
+            "case_execution_ledger": [],
+            "issues": [
+                (
+                    "No problem-owned solver-design smoke provider is registered; "
+                    "provider representative smoke cases cannot be selected."
+                )
+            ],
+            "evidence_diagnostics": [
+                {
+                    "code": "solver_design_smoke_provider_unavailable",
+                    "severity": "warning",
+                    "detail": (
+                        "No problem-owned solver-design smoke provider is "
+                        "registered, so algorithm smoke cannot run provider "
+                        "representative cases."
+                    ),
+                    "provider_case_count": 0,
+                    "provider_case_attempted_count": 0,
+                    "case_count": 0,
+                }
+            ],
+        }
     patch_paths = [
         _normalize_rel_path(change.file_path) for change in patch_file_changes(patch)
     ]

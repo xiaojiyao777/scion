@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Mapping
 
@@ -368,6 +369,9 @@ def _runtime_smoke_safe_data_roots(context: ProposalToolContext) -> tuple[Path, 
         _attr(getattr(context, "adapter", None), "spec"),
     ):
         roots.extend(_runtime_smoke_safe_data_roots_from_manifest(source))
+    env_root = os.environ.get("SCION_PROBLEM_DATA_ROOT", "").strip()
+    if env_root:
+        roots.append(env_root)
     return _normalize_runtime_smoke_safe_roots(roots)
 
 

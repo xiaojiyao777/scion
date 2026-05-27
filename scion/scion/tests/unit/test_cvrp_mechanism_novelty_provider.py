@@ -362,6 +362,141 @@ def test_cvrp_route_limit_gate_ignores_risk_mitigation_text() -> None:
     assert result is None
 
 
+def test_cvrp_route_limit_gate_allows_rejected_route_limit_excess_clause() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a giant-tour split construction seed that remains capacity "
+            "feasible and route-limit aware; it starts and remains feasible "
+            "rather than accepting route-limit excess."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness=(
+            "Seed construction leaves avoidable total_distance while already "
+            "guarding route count feasibility."
+        ),
+        expected_effect=(
+            "Reduce total_distance by changing construction ordering without "
+            "changing route-limit guards."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="giant_tour_split_seed", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_route_limit_gate_allows_route_limit_rejection_variants() -> None:
+    variants = [
+        "instead of accepting route-limit excess",
+        "avoids accepting route-limit excess",
+        "avoid route-limit excess",
+        "prevent route-limit excess",
+        "reject route-limit excess",
+        "skip route-limit excess",
+        "disallow route-limit excess",
+    ]
+
+    for phrase in variants:
+        hypothesis = HypothesisProposal(
+            hypothesis_text=(
+                "Add a feasible construction ordering variant that targets "
+                f"total_distance and will {phrase} while preserving the "
+                "route-limit guard."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/construction.py",
+            target_weakness="Feasible seed quality leaves avoidable distance.",
+            expected_effect="Improve total_distance without allowing fleet excess.",
+            mechanism_changes=(
+                MechanismChange(id="feasible_route_ordering", change_type="add"),
+            ),
+        )
+
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is None, phrase
+
+
+def test_cvrp_route_limit_gate_allows_exact_protective_premise_fixtures() -> None:
+    phrases = [
+        "rather than accepting route-limit excess",
+        "instead of accepting route-limit excess",
+        "avoid accepting fleet violation",
+        "instead of allowing infeasible states",
+        "candidate routes exceed route_limit should fail before promotion",
+    ]
+
+    for phrase in phrases:
+        hypothesis = HypothesisProposal(
+            hypothesis_text=(
+                "Add a capacity-compatible construction ordering variant that "
+                f"{phrase}; it only targets total_distance and preserves the "
+                "existing route-limit guard."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/construction.py",
+            target_weakness="Feasible seed ordering leaves avoidable distance.",
+            expected_effect="Improve total_distance while preserving feasibility.",
+            mechanism_changes=(
+                MechanismChange(id="distance_ordering_fixture", change_type="add"),
+            ),
+        )
+
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is None, phrase
+
+
+def test_cvrp_route_limit_gate_blocks_exact_positive_state_premises() -> None:
+    phrases = [
+        "The baseline accepts route-limit excess as the construction state.",
+        "The current solver uses positive fleet_violation as a search state.",
+        "The default path permits infeasible current states before repair.",
+    ]
+
+    for phrase in phrases:
+        hypothesis = HypothesisProposal(
+            hypothesis_text=(
+                f"{phrase} Add a route repair phase that converts that state "
+                "into a feasible incumbent."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+            target_weakness="Route feasibility is assumed to be repaired later.",
+            expected_effect="Repair route feasibility before distance search.",
+            mechanism_changes=(
+                MechanismChange(id="positive_route_state_fixture", change_type="add"),
+            ),
+        )
+
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is not None, phrase
+        assert result.failure_category == "premise_contradicted"
+        assert result.mechanism == "route_limit_fleet_repair"
+        assert result.gate_action == "hard_block"
+
+
 def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

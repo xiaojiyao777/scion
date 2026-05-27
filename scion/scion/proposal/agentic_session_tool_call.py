@@ -1,6 +1,8 @@
 """AgenticSessionToolCall mixin."""
 from __future__ import annotations
 
+from typing import Sequence
+
 from scion.proposal.agentic_session_common import *
 
 
@@ -201,6 +203,7 @@ class AgenticSessionToolCallMixin:
                 phase=phase,
                 args_hash=fingerprint,
             )
+            artifact_observation = observation
             if authoritative_preview:
                 observation = self._enforce_self_check_preview_budget(observation)
             else:
@@ -280,7 +283,7 @@ class AgenticSessionToolCallMixin:
             smoke_artifact_ref = _write_algorithm_smoke_execution_evidence_artifact(
                 self._artifact_store,
                 state,
-                observation,
+                artifact_observation,
             )
             if smoke_artifact_ref:
                 state.scratch_artifact_refs.append(smoke_artifact_ref)
@@ -432,11 +435,27 @@ def _algorithm_smoke_execution_evidence_payload(
         if isinstance(payload.get("runtime_smoke"), Mapping)
         else {}
     )
-    ledger = runtime_smoke.get("case_execution_ledger")
-    if not isinstance(ledger, (list, tuple)):
-        ledger = ()
+    ledger = _runtime_smoke_evidence_ledger(runtime_smoke)
     if not ledger and runtime_smoke in ({}, None):
         return {}
+    provider_case_count = _runtime_smoke_provider_count(
+        runtime_smoke,
+        ledger,
+        key="provider_case_count",
+    )
+    provider_case_attempted_count = _runtime_smoke_provider_count(
+        runtime_smoke,
+        ledger,
+        key="provider_case_attempted_count",
+        attempted_only=True,
+    )
+    evidence_diagnostics = _runtime_smoke_evidence_diagnostics(
+        runtime_smoke,
+        ledger=ledger,
+        provider_case_count=provider_case_count,
+        provider_case_attempted_count=provider_case_attempted_count,
+        payload_diagnostics=payload.get("evidence_diagnostics"),
+    )
     compact_runtime_smoke = {
         key: runtime_smoke.get(key)
         for key in (
@@ -447,6 +466,7 @@ def _algorithm_smoke_execution_evidence_payload(
             "selected_case_count",
             "attempted_case_count",
             "provider_hook_used",
+            "provider_unavailable",
             "provider_case_count",
             "provider_case_attempted_count",
             "runtime_budget_diagnostic",
@@ -454,6 +474,12 @@ def _algorithm_smoke_execution_evidence_payload(
         )
         if runtime_smoke.get(key) not in (None, "", [], {})
     }
+    compact_runtime_smoke["provider_case_count"] = provider_case_count
+    compact_runtime_smoke["provider_case_attempted_count"] = (
+        provider_case_attempted_count
+    )
+    if evidence_diagnostics:
+        compact_runtime_smoke["evidence_diagnostics"] = evidence_diagnostics
     return _drop_empty_dict(
         {
             "schema_version": "algorithm-smoke-execution-evidence.v1",
@@ -469,15 +495,15 @@ def _algorithm_smoke_execution_evidence_payload(
             "failure_class": payload.get("failure_class"),
             "primary_issue": payload.get("primary_issue"),
             "provider_hook_used": runtime_smoke.get("provider_hook_used"),
-            "provider_case_count": runtime_smoke.get("provider_case_count"),
-            "provider_case_attempted_count": runtime_smoke.get(
-                "provider_case_attempted_count"
-            ),
+            "provider_unavailable": runtime_smoke.get("provider_unavailable"),
+            "provider_case_count": provider_case_count,
+            "provider_case_attempted_count": provider_case_attempted_count,
             "case_execution_ledger": [
                 _sanitize_agentic_value(item)
                 for item in ledger
                 if isinstance(item, Mapping)
             ],
+            "evidence_diagnostics": evidence_diagnostics,
             "runtime_smoke": _sanitize_agentic_value(compact_runtime_smoke),
             "payload_hash": stable_digest(payload, length=16),
             "raw_payload_omitted": True,
@@ -501,9 +527,25 @@ def _tool_observation_transcript_metadata(
         if isinstance(payload.get("runtime_smoke"), Mapping)
         else {}
     )
-    ledger = runtime_smoke.get("case_execution_ledger")
-    if not isinstance(ledger, (list, tuple)):
-        ledger = ()
+    ledger = _runtime_smoke_evidence_ledger(runtime_smoke)
+    provider_case_count = _runtime_smoke_provider_count(
+        runtime_smoke,
+        ledger,
+        key="provider_case_count",
+    )
+    provider_case_attempted_count = _runtime_smoke_provider_count(
+        runtime_smoke,
+        ledger,
+        key="provider_case_attempted_count",
+        attempted_only=True,
+    )
+    evidence_diagnostics = _runtime_smoke_evidence_diagnostics(
+        runtime_smoke,
+        ledger=ledger,
+        provider_case_count=provider_case_count,
+        provider_case_attempted_count=provider_case_attempted_count,
+        payload_diagnostics=payload.get("evidence_diagnostics"),
+    )
     return _drop_empty_dict(
         {
             "algorithm_smoke_status": payload.get("status"),
@@ -516,14 +558,187 @@ def _tool_observation_transcript_metadata(
             "runtime_smoke_provider_hook_used": runtime_smoke.get(
                 "provider_hook_used"
             ),
-            "runtime_smoke_provider_case_count": runtime_smoke.get(
-                "provider_case_count"
+            "runtime_smoke_provider_unavailable": runtime_smoke.get(
+                "provider_unavailable"
             ),
-            "runtime_smoke_provider_case_attempted_count": runtime_smoke.get(
-                "provider_case_attempted_count"
+            "runtime_smoke_provider_case_count": provider_case_count,
+            "runtime_smoke_provider_case_attempted_count": (
+                provider_case_attempted_count
             ),
+            "runtime_smoke_evidence_diagnostics": evidence_diagnostics,
             "runtime_budget_diagnostic": runtime_smoke.get(
                 "runtime_budget_diagnostic"
             ),
         }
     )
+
+
+def _runtime_smoke_evidence_ledger(
+    runtime_smoke: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    ledger = runtime_smoke.get("case_execution_ledger")
+    if not isinstance(ledger, (list, tuple)):
+        ledger = runtime_smoke.get("cases")
+    if isinstance(ledger, (list, tuple)):
+        records = [item for item in ledger if isinstance(item, Mapping)]
+        if records:
+            return records
+    case = runtime_smoke.get("case")
+    case_count = _int_or_none(runtime_smoke.get("case_count"))
+    if not case and not case_count:
+        return []
+    run = (
+        runtime_smoke.get("run")
+        if isinstance(runtime_smoke.get("run"), Mapping)
+        else {}
+    )
+    return [
+        _drop_empty_dict(
+            {
+                "label": "runtime_smoke_case",
+                "case": case,
+                "case_path_ref": runtime_smoke.get("case_path_ref"),
+                "seed": runtime_smoke.get("seed"),
+                "provider_hook_used": False,
+                "attempted": bool(runtime_smoke.get("runtime_smoke_run")),
+                "success": run.get("success"),
+                "passed": runtime_smoke.get("passed"),
+                "failure": "case_execution_ledger_missing",
+                "case_digest": runtime_smoke.get("case_digest")
+                or runtime_smoke.get("case_metadata_hash"),
+                "run_digest": run.get("run_digest"),
+            }
+        )
+    ]
+
+
+def _runtime_smoke_provider_count(
+    runtime_smoke: Mapping[str, Any],
+    ledger: Sequence[Mapping[str, Any]],
+    *,
+    key: str,
+    attempted_only: bool = False,
+) -> int:
+    value = _int_or_none(runtime_smoke.get(key))
+    if value is not None:
+        return value
+    count = 0
+    for item in ledger:
+        if not item.get("provider_hook_used"):
+            continue
+        if attempted_only and not item.get("attempted"):
+            continue
+        count += 1
+    return count
+
+
+def _runtime_smoke_evidence_diagnostics(
+    runtime_smoke: Mapping[str, Any],
+    *,
+    ledger: Sequence[Mapping[str, Any]],
+    provider_case_count: int,
+    provider_case_attempted_count: int,
+    payload_diagnostics: Any = None,
+) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for item in _diagnostic_list(payload_diagnostics):
+        diagnostics.append(item)
+    for item in _diagnostic_list(runtime_smoke.get("evidence_diagnostics")):
+        diagnostics.append(item)
+    provider_unavailable = bool(runtime_smoke.get("provider_unavailable"))
+    if provider_unavailable and not any(
+        item.get("code") == "solver_design_smoke_provider_unavailable"
+        for item in diagnostics
+    ):
+        diagnostics.append(
+            {
+                "code": "solver_design_smoke_provider_unavailable",
+                "severity": "warning",
+                "detail": (
+                    "No problem-owned solver-design smoke provider is registered; "
+                    "provider representative smoke cases cannot be selected."
+                ),
+                "provider_case_count": provider_case_count,
+                "provider_case_attempted_count": provider_case_attempted_count,
+                "case_count": runtime_smoke.get("case_count"),
+            }
+        )
+    missing_fields = [
+        field
+        for field in (
+            "provider_case_count",
+            "provider_case_attempted_count",
+            "case_execution_ledger",
+        )
+        if field not in runtime_smoke
+        and not (field == "case_execution_ledger" and "cases" in runtime_smoke)
+    ]
+    if missing_fields and not provider_unavailable:
+        diagnostics.append(
+            {
+                "code": "algorithm_smoke_provider_ledger_fields_missing",
+                "severity": "warning",
+                "detail": (
+                    "Algorithm smoke payload lacked provider representative "
+                    "case ledger/count fields; scratch evidence synthesized a "
+                    "minimal ledger from compact runtime_smoke."
+                ),
+                "missing_fields": missing_fields,
+            }
+        )
+    selected_surface = str(runtime_smoke.get("selected_surface") or "").strip()
+    if (
+        runtime_smoke.get("runtime_smoke_run")
+        and selected_surface == "solver_design"
+        and provider_case_count <= 0
+        and not provider_unavailable
+    ):
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_evidence_missing",
+                "severity": "warning",
+                "detail": (
+                    "Algorithm smoke evidence does not show provider "
+                    "representative cases; it may only prove canary or compact "
+                    "runtime smoke execution."
+                ),
+                "provider_case_count": provider_case_count,
+                "provider_case_attempted_count": provider_case_attempted_count,
+                "case_count": runtime_smoke.get("case_count"),
+            }
+        )
+    if provider_case_count > 0 and provider_case_attempted_count < provider_case_count:
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_cases_not_fully_attempted",
+                "severity": "warning",
+                "detail": (
+                    "Provider representative smoke cases were selected but not "
+                    "all were attempted before smoke completion."
+                ),
+                "provider_case_count": provider_case_count,
+                "provider_case_attempted_count": provider_case_attempted_count,
+            }
+        )
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in diagnostics:
+        code = str(item.get("code") or item.get("detail") or item)
+        if code in seen:
+            continue
+        seen.add(code)
+        deduped.append(item)
+    return deduped[:8]
+
+
+def _diagnostic_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

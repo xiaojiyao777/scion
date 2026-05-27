@@ -156,7 +156,12 @@ def _runtime_fields(
             selected_surface=selected_surface,
             required_runtime_fields=candidate_required_runtime_fields,
         ),
-        "champion_runtime": _runtime_audit_summary(champ_r),
+        "champion_runtime": _runtime_audit_summary(
+            champ_r,
+            problem_spec=problem_spec,
+            selected_surface=selected_surface,
+            required_runtime_fields=candidate_required_runtime_fields,
+        ),
     }
     if candidate_elapsed is None or champion_elapsed is None:
         return fields

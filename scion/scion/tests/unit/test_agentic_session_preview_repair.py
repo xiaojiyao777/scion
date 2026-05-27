@@ -92,6 +92,41 @@ class _LedgerAlgorithmSmokeTool:
         )
 
 
+class _RepairPathLedgerAlgorithmSmokeTool(_LedgerAlgorithmSmokeTool):
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def call(self, args, context: ProposalToolContext) -> ProposalObservation:
+        observation = super().call(args, context)
+        self.call_count += 1
+        payload = json.loads(json.dumps(observation.structured_payload))
+        runtime_smoke = payload["runtime_smoke"]
+        if self.call_count == 1:
+            payload["passed"] = False
+            payload["status"] = "failed"
+            payload["failure_code"] = "algorithm_smoke_runtime_failure"
+            payload["primary_issue"] = "synthetic repair-path smoke failure"
+            runtime_smoke["passed"] = False
+            runtime_smoke["runtime_audit_failure"] = {
+                "category": "synthetic_repair_path_failure",
+                "detail": "first smoke call failed to exercise repair retry",
+            }
+        return ProposalObservation(
+            observation_id=f"algorithm-smoke-repair-ledger-{self.call_count}",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="",
+            observation_type="algorithm_smoke",
+            summary=(
+                "Algorithm smoke failed before repair with provider cases."
+                if self.call_count == 1
+                else "Algorithm smoke passed after repair with provider cases."
+            ),
+            structured_payload=payload,
+            is_error=False,
+        )
+
+
 def test_agentic_session_contract_preview_failure_fails_closed(
     tmp_path: Path,
 ) -> None:
@@ -280,6 +315,97 @@ def test_agentic_session_persists_algorithm_smoke_case_execution_evidence(
         "provider_small",
         "provider_medium",
     ]
+
+
+def test_agentic_session_repair_retry_preserves_algorithm_smoke_provider_evidence(
+    tmp_path: Path,
+) -> None:
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    registry = ProposalToolRegistry.default_read_only()
+    smoke_tool = _RepairPathLedgerAlgorithmSmokeTool()
+    registry._tools["proposal.algorithm_smoke"] = smoke_tool
+    first_patch = PatchProposal(**_valid_policy_patch_payload())
+    repaired_patch = PatchProposal(
+        **_valid_policy_patch_payload(
+            code_content=_valid_policy_patch_payload()["code_content"].replace(
+                "return 0.35",
+                "return 0.36",
+            )
+        )
+    )
+    creative = SequentialPatchCreative([first_patch, repaired_patch])
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=registry,
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed_context": "smoke-repair-ledger-test"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    smoke_refs = [
+        Path(ref)
+        for ref in output.tainted_artifact_refs
+        if "algorithm_smoke_execution_evidence" in ref
+    ]
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == repaired_patch
+    assert smoke_tool.call_count == 2
+    assert len(smoke_refs) == 2
+
+    evidences = [json.loads(ref.read_text(encoding="utf-8")) for ref in smoke_refs]
+    assert [evidence["passed"] for evidence in evidences] == [False, True]
+    for evidence in evidences:
+        ledger = evidence["case_execution_ledger"]
+        assert evidence["provider_hook_used"] is True
+        assert evidence["provider_case_count"] == 2
+        assert evidence["provider_case_attempted_count"] == 2
+        assert [item["label"] for item in ledger] == [
+            "provider_small",
+            "provider_medium",
+        ]
+        assert all(item["provider_hook_used"] is True for item in ledger)
+        assert all(item["attempted"] is True for item in ledger)
+        assert all(item["case_digest"] for item in ledger)
+
+    output_artifacts = [
+        Path(ref) for ref in output.tainted_artifact_refs if Path(ref).name == "output.json"
+    ]
+    assert output_artifacts
+    output_artifact = json.loads(output_artifacts[0].read_text(encoding="utf-8"))
+    smoke_metadata = [
+        event.get("metadata", {})
+        for event in output_artifact["compact_transcript"]
+        if event.get("metadata", {}).get("tool_name") == "proposal.algorithm_smoke"
+    ]
+    assert len(smoke_metadata) == 2
+    assert [item["algorithm_smoke_execution_evidence_ref"] for item in smoke_metadata] == [
+        str(smoke_refs[0]),
+        str(smoke_refs[1]),
+    ]
+    for metadata in smoke_metadata:
+        assert metadata["runtime_smoke_provider_hook_used"] is True
+        assert metadata["runtime_smoke_provider_case_count"] == 2
+        assert metadata["runtime_smoke_provider_case_attempted_count"] == 2
+        assert [
+            item["label"]
+            for item in metadata["runtime_smoke_case_execution_ledger"]
+        ] == ["provider_small", "provider_medium"]
 
 
 def test_prompt_manifest_counts_rendered_provider_prompt_not_raw_context(

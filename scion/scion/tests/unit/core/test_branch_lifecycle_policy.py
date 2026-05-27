@@ -12,6 +12,10 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
     SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
     SCREENING_STALE_RESCREEN_FAIL,
+    SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
+    SCREENING_RUNTIME_SATURATION_REROUTE,
+    SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     SCREENING_WEAK_SIGNAL_CONTINUE,
     SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
@@ -87,6 +91,30 @@ def test_pair_level_wins_without_case_gate_keep_branch_as_weak_positive() -> Non
     assert decision.next_zero_win_streak == 0
 
 
+def test_pair_level_wins_with_runtime_saturation_preserve_reroute_streak() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            pair_wins=5,
+            pair_losses=3,
+            pair_ties=8,
+            valid_pairs=16,
+            runtime_budget_saturation_diagnostic=True,
+        ),
+        current_zero_win_streak=0,
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (
+        SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+        SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
+    )
+    assert decision.next_zero_win_streak == 1
+
+
 def test_negative_delta_and_runtime_slowdown_soft_abandon() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(
@@ -126,6 +154,76 @@ def test_neutral_all_tie_branch_survives_until_zero_win_streak_limit() -> None:
     assert keep.next_zero_win_streak == 1
     assert exhausted.action == "soft_abandon"
     assert exhausted.reason_codes == (SCREENING_ZERO_WIN_STREAK_EXHAUSTED,)
+
+
+def test_runtime_saturation_diagnostic_reroutes_before_generic_zero_win_limit() -> None:
+    policy = BranchLifecyclePolicy()
+
+    keep = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            runtime_budget_saturation_diagnostic=True,
+        ),
+        current_zero_win_streak=0,
+    )
+    reroute = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            runtime_budget_saturation_diagnostic=True,
+        ),
+        current_zero_win_streak=1,
+    )
+
+    assert keep.action == "keep_exploring"
+    assert keep.reason_codes == (
+        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
+    )
+    assert keep.next_zero_win_streak == 1
+    assert reroute.action == "soft_abandon"
+    assert reroute.reason_codes == (SCREENING_RUNTIME_SATURATION_REROUTE,)
+    assert reroute.next_zero_win_streak == 2
+
+
+def test_effect_zero_diagnostic_reroutes_without_hard_validation_failure() -> None:
+    policy = BranchLifecyclePolicy()
+
+    keep = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            telemetry_effect_zero_diagnostic=True,
+            telemetry_validation_repairable=False,
+        ),
+        current_zero_win_streak=0,
+    )
+    reroute = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            telemetry_effect_zero_diagnostic=True,
+            telemetry_validation_repairable=False,
+        ),
+        current_zero_win_streak=1,
+    )
+
+    assert keep.action == "keep_exploring"
+    assert keep.reason_codes == (
+        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    )
+    assert reroute.action == "soft_abandon"
+    assert reroute.reason_codes == (SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,)
 
 
 def test_stale_rescreen_low_win_remains_abandon_for_reconcile() -> None:

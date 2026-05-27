@@ -12,7 +12,9 @@ Verifies:
 """
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import List
 from unittest.mock import MagicMock
 
@@ -28,6 +30,10 @@ from scion.protocol.stats import compute_eval_stats, bootstrap_ci
 from scion.protocol.experiment import (
     ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
     _select_evenly_spaced_cases,
+)
+from scion.problem.bridge import (
+    legacy_problem_spec_from_v1,
+    load_problem_spec_v1_from_yaml,
 )
 
 
@@ -108,6 +114,48 @@ def _champ_result() -> RunResult:
             vehicles={}, assignment={},
             objective={"subcategory_splits": 2, "total_cost": 1000},
             feasible=True,
+        ),
+    )
+
+
+def _solver_design_result(*, distance: float, elapsed_ms: int) -> RunResult:
+    return RunResult(
+        success=True,
+        exit_code=0,
+        stdout="",
+        stderr="",
+        elapsed_ms=elapsed_ms,
+        output=SolverOutput(
+            vehicles={},
+            assignment={},
+            objective={"fleet_violation": 0, "total_distance": distance},
+            feasible=True,
+            runtime={
+                "solver_algorithm_loaded": True,
+                "solver_algorithm_active": True,
+                "solver_algorithm_errors": 0,
+                "solver_algorithm_elapsed_ms": elapsed_ms,
+                "solver_algorithm_phase_runtime_ms": {"main": elapsed_ms},
+                "solver_algorithm_solution_valid": True,
+                "solver_algorithm_solution_routes": 3,
+                "solver_algorithm_objective": {
+                    "fleet_violation": 0,
+                    "total_distance": distance,
+                },
+                "solver_algorithm_total_distance": distance,
+                "solver_algorithm_fleet_violation": 0,
+                "solver_algorithm_search_iterations": 4,
+                "solver_algorithm_move_attempts": 8,
+                "solver_algorithm_accepted_moves": 1,
+                "solver_algorithm_improving_moves": 1,
+                "solver_algorithm_neutral_accepted_moves": 0,
+                "solver_algorithm_best_improving_moves": 1,
+                "solver_algorithm_best_delta": 2.0,
+                "solver_algorithm_phase_delta_sum": {"main": 2.0},
+                "solver_algorithm_phase_best_delta": {"main": 2.0},
+                "solver_algorithm_phase_improvement_counts": {"main": 1},
+                "solver_algorithm_stop_reason": "done",
+            },
         ),
     )
 
@@ -423,6 +471,52 @@ def test_screening_selects_modify_case_count(
     assert result.stats.n_cases == expected, (
         f"screening modify: expected n_cases={expected}, got {result.stats.n_cases}"
     )
+
+
+def test_screening_pair_ledger_persists_candidate_and_champion_runtime(
+    minimal_config, minimal_manifest, minimal_ledger, tmp_path
+):
+    runner = MagicMock()
+
+    def run_solver(**kwargs):
+        if kwargs["workdir"] == "/champ":
+            return _solver_design_result(distance=1000.0, elapsed_ms=10)
+        return _solver_design_result(distance=990.0, elapsed_ms=12)
+
+    runner.run_solver.side_effect = run_solver
+    spec_path = (
+        Path(__file__).resolve().parents[3]
+        / "problems"
+        / "cvrp"
+        / "problem-v1.yaml"
+    )
+    problem_spec = legacy_problem_spec_from_v1(load_problem_spec_v1_from_yaml(spec_path))
+    proto = ExperimentProtocol(
+        protocol_config=minimal_config,
+        split_manager=SplitManager(minimal_manifest),
+        seed_ledger=SeedLedger(minimal_ledger),
+        runner=runner,
+        time_limit_sec=10,
+        metrics_dir=str(tmp_path / "metrics"),
+        problem_spec=problem_spec,
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_design",
+    )
+    metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
+    pair = metrics["pairs"][0]
+
+    assert pair["candidate_runtime"]["solver_algorithm_loaded"] is True
+    assert pair["candidate_runtime"]["solver_algorithm_elapsed_ms"] == 12
+    assert pair["candidate_runtime"]["solver_algorithm_total_distance"] == 990.0
+    assert pair["champion_runtime"]["solver_algorithm_loaded"] is True
+    assert pair["champion_runtime"]["solver_algorithm_elapsed_ms"] == 10
+    assert pair["champion_runtime"]["solver_algorithm_total_distance"] == 1000.0
 
 
 def test_screening_selects_create_case_count(

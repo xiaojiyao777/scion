@@ -940,6 +940,77 @@ def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:
     assert "scheduler" in result.reason
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    (
+        (
+            "This is not missing regret repair, random removal, Shaw related "
+            "removal, worst removal, or whole-route removal."
+        ),
+        (
+            "This is not missing random removal; the existing random removal "
+            "operator remains available."
+        ),
+        (
+            "It does not claim random removal is missing; random removal "
+            "already exists in the destroy portfolio."
+        ),
+        (
+            "This is not adding random removal itself; adding a bounded "
+            "slack-outlier removal variant."
+        ),
+        (
+            "The baseline already has random removal, regret repair, and route "
+            "removal; add a parameterized trigger variant instead."
+        ),
+    ),
+)
+def test_cvrp_random_gate_allows_negated_missing_random_removal_claims(
+    phrase: str,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            f"{phrase} Add compact_repair as a bounded scored variant that "
+            "changes selection pressure without treating existing destroy or "
+            "repair operators as absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing repair scoring can ignore compactness and slack outliers."
+        ),
+        expected_effect="Improve total_distance through a bounded scoring variant.",
+        mechanism_changes=(
+            MechanismChange(id="compact_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted", phrase
+    assert result is None or result.mechanism != "random_removal_destroy", phrase
+
+
+def test_cvrp_random_gate_blocks_current_no_random_removal_positive_premise() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "The current solver has no random removal destroy operator, so add "
+            "the first random removal mechanism to diversify customer removal."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "random_removal_destroy"
+    assert result.contradicted_span
+
+
 def test_cvrp_provider_regret_semantic_contradiction_uses_precise_reason() -> None:
     result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
         _hypothesis(

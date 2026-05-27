@@ -116,6 +116,22 @@ def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
             ),
             "case": value.get("case"),
             "case_count": value.get("case_count"),
+            "selected_case_count": value.get("selected_case_count"),
+            "attempted_case_count": value.get("attempted_case_count"),
+            "provider_hook_used": value.get("provider_hook_used"),
+            "provider_unavailable": value.get("provider_unavailable"),
+            "provider_case_count": value.get("provider_case_count"),
+            "provider_case_attempted_count": value.get(
+                "provider_case_attempted_count"
+            ),
+            "evidence_diagnostics": _compact_smoke_evidence_diagnostics(
+                value.get("evidence_diagnostics"),
+                limit=3,
+            ),
+            "case_execution_ledger": _compact_smoke_case_execution_ledger(
+                value.get("case_execution_ledger") or value.get("cases"),
+                limit=4,
+            ),
             "issues": _bounded_string_list(value.get("issues"), limit=2),
             "repair_guidance": _bounded_string_list(
                 value.get("repair_guidance"),
@@ -143,6 +159,20 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
             "case": value.get("case"),
             "seed": value.get("seed"),
             "case_count": value.get("case_count"),
+            "selected_case_count": value.get("selected_case_count"),
+            "attempted_case_count": value.get("attempted_case_count"),
+            "provider_hook_used": value.get("provider_hook_used"),
+            "provider_unavailable": value.get("provider_unavailable"),
+            "provider_case_count": value.get("provider_case_count"),
+            "provider_case_attempted_count": value.get(
+                "provider_case_attempted_count"
+            ),
+            "evidence_diagnostics": _compact_smoke_evidence_diagnostics(
+                value.get("evidence_diagnostics")
+            ),
+            "case_execution_ledger": _compact_smoke_case_execution_ledger(
+                value.get("case_execution_ledger") or value.get("cases")
+            ),
             "issues": _bounded_string_list(value.get("issues"), limit=4),
             "repair_guidance": _bounded_string_list(
                 value.get("repair_guidance"),
@@ -160,6 +190,72 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
         }
     )
     return compact or None
+
+
+def _compact_smoke_evidence_diagnostics(
+    value: Any,
+    *,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    diagnostics: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        diagnostics.append(
+            _drop_empty_mapping(
+                {
+                    "code": item.get("code"),
+                    "severity": item.get("severity"),
+                    "detail": _limit_string(item.get("detail"), 180),
+                    "provider_case_count": item.get("provider_case_count"),
+                    "provider_case_attempted_count": item.get(
+                        "provider_case_attempted_count"
+                    ),
+                    "case_count": item.get("case_count"),
+                    "missing_fields": _bounded_string_list(
+                        item.get("missing_fields"),
+                        limit=4,
+                    ),
+                }
+            )
+        )
+    return [diagnostic for diagnostic in diagnostics if diagnostic]
+
+
+def _compact_smoke_case_execution_ledger(
+    value: Any,
+    *,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    records: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        records.append(
+            _drop_empty_mapping(
+                {
+                    "label": item.get("label"),
+                    "case": item.get("case"),
+                    "case_source": item.get("case_source"),
+                    "case_path_ref": item.get("case_path_ref"),
+                    "seed": item.get("seed"),
+                    "provider_hook_used": item.get("provider_hook_used"),
+                    "provider_hook_name": item.get("provider_hook_name"),
+                    "attempted": item.get("attempted"),
+                    "success": item.get("success"),
+                    "passed": item.get("passed"),
+                    "failure": _limit_string(item.get("failure"), 160),
+                    "case_digest": item.get("case_digest"),
+                    "case_metadata_hash": item.get("case_metadata_hash"),
+                    "run_digest": item.get("run_digest"),
+                }
+            )
+        )
+    return [record for record in records if record]
 
 def _compact_actionable_telemetry_feedback(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, (list, tuple)):
