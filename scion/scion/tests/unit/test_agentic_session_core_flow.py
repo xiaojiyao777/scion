@@ -82,6 +82,49 @@ def _raise_near_whole_exact_replace() -> None:
     )
 
 
+class NotSerializableExactReplaceRetryCreative(FakeCreative):
+    def __init__(self, patch: PatchProposal, *, fail_times: int = 1) -> None:
+        super().__init__(patch=patch)
+        self.calls = 0
+        self.fail_times = fail_times
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            _raise_not_serializable_exact_replace()
+        return self.patch
+
+
+def _raise_not_serializable_exact_replace() -> None:
+    before = "def target():\n    value = 1\n\ndef other():\n    value = 1\n"
+    digest = source_digest_for_content(before)
+    _parse_patch(
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": digest,
+            "old_string": "def target():\n    value = 1\n",
+            "new_string": "def target():\n    value = 2\n",
+            "additional_changes": [
+                {
+                    "file_path": "policies/example.py",
+                    "action": "modify",
+                    "edit_intent": "exact_replace",
+                    "source_digest": digest,
+                    "old_string": before,
+                    "new_string": before.replace("value = 1", "value = 3", 1),
+                }
+            ],
+        },
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+    )
+
+
 def test_solver_design_telemetry_repair_rule_forbids_fake_activation() -> None:
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
@@ -351,6 +394,52 @@ def test_agentic_session_retries_near_whole_exact_replace_feedback(
     )
 
 
+def test_agentic_session_retries_not_serializable_exact_replace_feedback(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = NotSerializableExactReplaceRetryCreative(patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == patch
+    assert len(creative.code_contexts) == 2
+    retry_context = creative.code_contexts[1]
+    feedback = retry_context["agentic_code_edit_retry_feedback"]
+    assert feedback["reason"] == "exact_replace_not_serializable"
+    assert feedback["json_pointer"] == "/additional_changes/0"
+    assert feedback["prior_json_pointers"] == ["/"]
+    assert "Use one file change for this file" in feedback["guidance"]
+    assert "no-op exact_replace" in feedback["guidance"]
+    assert "Prefer one change per file" in retry_context["prior_code_failure"]
+    assert "old_string == new_string" in retry_context["prior_code_failure"]
+    assert "no-op EOF/trailing newline" in feedback["final_task"]
+    assert any(
+        event.metadata.get("failure_code") == "code_edit_protocol_retry"
+        for event in output.transcript
+    )
+
+
 def test_agentic_session_blocks_after_repeated_near_whole_exact_replace(
     tmp_path: Path,
 ) -> None:
@@ -383,6 +472,46 @@ def test_agentic_session_blocks_after_repeated_near_whole_exact_replace(
     assert output.failure_category == "schema_output_failure"
     assert output.failure_detail is not None
     assert "existing_file_near_whole_file_exact_replace_rejected" in output.failure_detail
+    assert len(creative.code_contexts) == 2
+    assert sum(
+        1
+        for event in output.transcript
+        if event.metadata.get("failure_code") == "code_edit_protocol_retry"
+    ) == 1
+
+
+def test_agentic_session_blocks_after_repeated_not_serializable_exact_replace(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = NotSerializableExactReplaceRetryCreative(patch, fail_times=2)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.patch is None
+    assert output.failure_category == "schema_output_failure"
+    assert output.failure_detail is not None
+    assert "exact_replace_not_serializable" in output.failure_detail
     assert len(creative.code_contexts) == 2
     assert sum(
         1

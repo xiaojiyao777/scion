@@ -413,6 +413,8 @@ def test_prompt_manifest_digest_matches_displayed_target_raw_content() -> None:
     assert "hard limit 85% of files over 2000 chars" in prompt
     assert "under 35% of the file" in prompt
     assert "full_file_reason` is not an authorization or replace policy" in prompt
+    assert "old_string == new_string" in prompt
+    assert "EOF/trailing newline edits" in prompt
 
 
 def test_exact_replace_rejects_stale_source_digest() -> None:
@@ -1074,6 +1076,144 @@ def test_duplicate_additional_exact_replace_changes_are_composed() -> None:
         and item.get("source_json_pointers")
         == ["/additional_changes/0", "/additional_changes/1"]
         for item in patch.repair_attribution
+    )
+
+
+def test_not_serializable_exact_replace_enters_code_retry_feedback() -> None:
+    before = "def target():\n    value = 1\n\ndef other():\n    value = 1\n"
+    digest = source_digest_for_content(before)
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": digest,
+        "old_string": "def target():\n    value = 1\n",
+        "new_string": "def target():\n    value = 2\n",
+        "additional_changes": [
+            {
+                "file_path": "policies/example.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": before,
+                "new_string": before.replace("value = 1", "value = 3", 1),
+            }
+        ],
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "exact_replace_not_serializable" in message
+    assert "prior_json_pointers" in message
+    assert "no-op exact_replace" in message
+    assert _is_code_edit_protocol_retryable(excinfo.value)
+
+    retry_context = _code_edit_protocol_retry_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surface_name": "local",
+            "research_surface_kind": "operator",
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+        HypothesisProposal(
+            hypothesis_text="Modify same file twice.",
+            change_locus="local",
+            action="modify",
+            target_file="policies/example.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_probe", change_type="modify"),
+            ),
+        ),
+        excinfo.value,
+    )
+    _, user_prompt = _split_code_context(retry_context)
+    feedback = retry_context["agentic_code_edit_retry_feedback"]
+    assert feedback["reason"] == "exact_replace_not_serializable"
+    assert feedback["json_pointer"] == "/additional_changes/0"
+    assert feedback["prior_json_pointers"] == ["/"]
+    assert "Use one file change for this file" in user_prompt
+    assert "old_string == new_string" in user_prompt
+    assert "no-op EOF/trailing newline" in user_prompt
+
+
+def test_noop_eof_exact_replace_additional_change_is_dropped_with_audit() -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    scheduler_before = "A = 1\nB = 1"
+    digest = source_digest_for_content(scheduler_before)
+    raw = {
+        "file_path": "policies/baseline_modules/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "A = 1",
+                "new_string": "A = 2",
+            },
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "B = 1\n",
+                "new_string": "B = 1",
+            },
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "B = 1",
+                "new_string": "B = 1",
+            },
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={
+            "patch_source_files": {
+                scheduler_path: scheduler_before,
+            },
+        },
+    )
+
+    assert len(patch.additional_changes) == 1
+    assert patch.additional_changes[0].file_path == scheduler_path
+    assert patch.additional_changes[0].code_content == "A = 2\nB = 1"
+    noop_audits = [
+        item
+        for item in patch.repair_attribution
+        if item.get("repair_kind") == "typed_edit_noop_dropped"
+    ]
+    assert [item["json_pointer"] for item in noop_audits] == [
+        "/additional_changes/1",
+        "/additional_changes/2",
+    ]
+    assert {item["noop_kind"] for item in noop_audits} == {
+        "identical_old_and_new",
+        "trailing_whitespace_only",
+    }
+    assert all(item["reason"] == "exact_replace_noop" for item in noop_audits)
+    assert all(item["source_digest"] == digest for item in noop_audits)
+    assert all(
+        "EOF/trailing-whitespace-only edits" in item["guidance"]
+        for item in noop_audits
     )
 
 

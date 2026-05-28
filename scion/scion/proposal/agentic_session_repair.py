@@ -260,6 +260,7 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
         "exact_replace_missing_new_string",
         "exact_replace_missing_old_string",
         "exact_replace_missing_source_digest",
+        "exact_replace_not_serializable",
         "exact_replace_non_string_new_string",
         "exact_replace_non_string_old_string",
         "exact_replace_null_new_string",
@@ -303,6 +304,28 @@ def _code_edit_protocol_retry_context(
             "old_string that matches exactly one intended location. Include "
             "nearby unchanged context from one candidate's "
             "unique_old_string_hint."
+        )
+    elif reason == "exact_replace_not_serializable":
+        prior_pointers = feedback.get("prior_json_pointers")
+        retry_context["prior_code_failure"] = (
+            "Typed same-file exact_replace edits were not serializable: "
+            f"{reason} in {target_file!r} at "
+            f"{feedback.get('json_pointer')!r}. Prior same-file edit pointers: "
+            f"{prior_pointers!r}. "
+            f"{feedback.get('guidance') or ''} Preserve "
+            f"target_file={hypothesis.target_file!r}, action={hypothesis.action!r}, "
+            f"and mechanism_changes ids={protected_ids!r}; repair only the "
+            "same-file edit ordering/granularity. Prefer one change per file. "
+            "If multiple exact_replace edits remain, each later old_string must "
+            "match the content after earlier edits. Remove no-op EOF/trailing "
+            "newline edits and any old_string == new_string entries."
+        )
+        final_task = (
+            "Return the same patch intent with one serializable change for the "
+            "failing file when possible. Otherwise return multiple same-file "
+            "exact_replace edits ordered so each old_string matches the content "
+            "after earlier edits. Do not generate no-op EOF/trailing newline "
+            "edits or old_string == new_string entries."
         )
     elif reason.startswith("exact_replace_"):
         field = str(feedback.get("field") or "typed edit field")
@@ -378,6 +401,7 @@ def _code_edit_protocol_retry_context(
             "reason": reason,
             "file_path": target_file,
             "json_pointer": feedback.get("json_pointer"),
+            "prior_json_pointers": feedback.get("prior_json_pointers"),
             "action": feedback.get("action"),
             "match_count": feedback.get("match_count"),
             "candidate_matches": feedback.get("candidate_matches"),

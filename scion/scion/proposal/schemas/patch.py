@@ -545,7 +545,9 @@ Produce a typed edit set that implements the hypothesis.
 - When one file needs multiple small edits, prefer a single file change or
   serializable `exact_replace` edits for the same `file_path`; each later
   `old_string` must match the content after earlier same-file edits. Do not
-  emit conflicting `full_file` entries for the same file.
+  emit no-op `exact_replace` entries such as `old_string == new_string` or
+  EOF/trailing newline edits. Do not emit conflicting `full_file` entries for
+  the same file.
 - Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
   drop mechanism ids in the patch response.
 - `premise_check="duplicate"` is diagnostic only. Use it to disclose close

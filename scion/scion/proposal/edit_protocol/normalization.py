@@ -283,10 +283,21 @@ def _normalize_patch_set_changes(
     source_state = dict(source_files)
     slot_results: dict[str, dict[str, Any]] = {}
     composed_by_path: dict[str, _ComposedChange] = {}
+    dropped_pointers: set[str] = set()
     metadata: list[dict[str, Any]] = []
 
     for slot in slots:
         path = _normalize_path(slot.raw.get("file_path"))
+        if path and _is_droppable_noop_exact_replace(slot):
+            dropped_pointers.add(slot.pointer)
+            metadata.append(
+                _noop_exact_replace_metadata(
+                    slot.raw,
+                    file_path=path,
+                    change_pointer=slot.pointer,
+                )
+            )
+            continue
         repeated_path = bool(path and path_counts[path] > 1)
         prior = composed_by_path.get(path) if repeated_path else None
         if prior is not None:
@@ -355,6 +366,7 @@ def _normalize_patch_set_changes(
             normalized,
             slot_results=slot_results,
             composed_by_path=composed_by_path,
+            dropped_pointers=dropped_pointers,
         ),
         metadata,
     )
@@ -383,8 +395,10 @@ def _rebuild_normalized_patch_set(
     *,
     slot_results: Mapping[str, dict[str, Any]],
     composed_by_path: Mapping[str, _ComposedChange],
+    dropped_pointers: set[str] | None = None,
 ) -> dict[str, Any]:
     rebuilt = dict(normalized)
+    dropped = dropped_pointers or set()
     primary_path = _normalize_path(normalized.get("file_path"))
     primary_record = composed_by_path.get(primary_path)
     if primary_record is not None and primary_record.canonical_slot.is_primary:
@@ -402,6 +416,8 @@ def _rebuild_normalized_patch_set(
             rebuilt_additional.append(item)
             continue
         pointer = f"/additional_changes/{index}"
+        if pointer in dropped:
+            continue
         path = _normalize_path(item.get("file_path"))
         record = composed_by_path.get(path)
         if record is not None:
@@ -544,6 +560,59 @@ def _change_content_after(change: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _is_droppable_noop_exact_replace(slot: _ChangeSlot) -> bool:
+    if slot.is_primary:
+        return False
+    if _effective_edit_intent(slot.raw) != "exact_replace":
+        return False
+    action = str(slot.raw.get("action") or "modify").strip()
+    if action != "modify":
+        return False
+    old_string = slot.raw.get("old_string")
+    new_string = slot.raw.get("new_string")
+    return _noop_exact_replace_kind(old_string, new_string) != ""
+
+
+def _noop_exact_replace_kind(old_string: Any, new_string: Any) -> str:
+    if not isinstance(old_string, str) or not isinstance(new_string, str):
+        return ""
+    if old_string == new_string:
+        return "identical_old_and_new"
+    if old_string.rstrip() == new_string.rstrip():
+        return "trailing_whitespace_only"
+    return ""
+
+
+def _noop_exact_replace_metadata(
+    change: Mapping[str, Any],
+    *,
+    file_path: str,
+    change_pointer: str,
+) -> dict[str, Any]:
+    old_string = change.get("old_string")
+    new_string = change.get("new_string")
+    return {
+        "field": "patch_set_change",
+        "repair_kind": "typed_edit_noop_dropped",
+        "action": "dropped_noop_exact_replace",
+        "reason": "exact_replace_noop",
+        "noop_kind": _noop_exact_replace_kind(old_string, new_string),
+        "json_pointer": change_pointer,
+        "file_path": file_path,
+        "patch_action": str(change.get("action") or "modify").strip(),
+        "edit_intent": "exact_replace",
+        "source_digest": _digest_text(change.get("source_digest")),
+        "old_string_chars": len(old_string) if isinstance(old_string, str) else None,
+        "new_string_chars": len(new_string) if isinstance(new_string, str) else None,
+        "guidance": (
+            "Dropped a no-op exact_replace additional change. Do not emit "
+            "old_string == new_string or EOF/trailing-whitespace-only edits; "
+            "remove the entry or merge meaningful same-file edits into one "
+            "serializable file change."
+        ),
+    }
+
+
 def _effective_edit_intent(change: Mapping[str, Any]) -> str:
     edit_intent = _edit_intent(change)
     if edit_intent:
@@ -571,7 +640,9 @@ def _raise_duplicate_file_error(
                 "guidance": (
                     "Use one file change for this file or serializable "
                     "exact_replace edits whose old_string values match the "
-                    "content after earlier same-file edits."
+                    "content after earlier same-file edits. Do not emit no-op "
+                    "exact_replace entries such as old_string == new_string or "
+                    "EOF/trailing newline edits."
                 ),
             },
             sort_keys=True,
