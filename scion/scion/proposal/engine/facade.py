@@ -146,6 +146,7 @@ class CreativeLayer:
                 ok=False,
                 error=str(exc),
                 llm_usage=_client_usage_metadata(self._client),
+                llm_retry_events=_client_retry_events(self._client),
             )
             raise
         trace.write_finish(
@@ -153,6 +154,7 @@ class CreativeLayer:
             ok=True,
             response=raw,
             llm_usage=_client_usage_metadata(self._client),
+            llm_retry_events=_client_retry_events(self._client),
         )
         return raw
 
@@ -166,3 +168,16 @@ def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:
     except Exception:
         return None
     return dict(usage) if isinstance(usage, dict) else None
+
+
+def _client_retry_events(client: Any) -> list[dict[str, Any]]:
+    getter = getattr(client, "get_last_retry_events", None)
+    if getter is None:
+        return []
+    try:
+        events = getter()
+    except Exception:
+        return []
+    if not isinstance(events, list):
+        return []
+    return [dict(item) for item in events if isinstance(item, dict)]

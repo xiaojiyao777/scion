@@ -282,6 +282,53 @@ def test_prompt_manifest_marks_actual_section_truncation_only() -> None:
     assert "x" * 200000 not in user_prompt
 
 
+def test_prompt_manifest_keeps_truncated_receipt_section_auditable() -> None:
+    receipt_payload = {
+        "projection_kind": "active_solver_map_receipts.v1",
+        "map_reads": [
+            {
+                "observation_id": "obs-map-1",
+                "snapshot_digest": "snapshot-digest-1",
+                "read_receipt": {
+                    "tool_name": "context.read_active_solver_map",
+                    "subject_id": "subject-1",
+                    "digest": "receipt-digest-1",
+                    "snapshot_digest": "snapshot-digest-1",
+                },
+                "source_policy": {"provider": "adapter-owned"},
+            }
+        ],
+        "receipt_rule": "receipts identify provider-approved source handles",
+        "truncated": True,
+    }
+    user_prompt = (
+        "## Active Solver Map Receipts\n"
+        f"{json.dumps(receipt_payload, sort_keys=True)}\n"
+        "<truncated for compact prompt budget>\n"
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="receipt-truncation",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[],
+        call_index=1,
+        system_blocks=[],
+        user_prompt=user_prompt,
+    )
+
+    status = manifest["section_statuses"]["active_solver_map_receipts"]
+    assert "active_solver_map_receipts" in manifest["truncated_sections"]
+    assert status["status"] == "truncated"
+    assert status["content_hash"]
+    assert status["observation_id_count"] == 1
+    assert status["observation_digest_count"] >= 1
+    assert status["receipt_count"] >= 2
+    assert status["digest_reference_count"] >= 2
+    assert status["provenance_reference_count"] >= 2
+
+
 def test_tool_observations_render_bounded_projection_not_raw_append_only() -> None:
     observations = [
         {

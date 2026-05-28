@@ -70,6 +70,7 @@ class _TraceWriter:
         response: Dict[str, Any] | None = None,
         error: str | None = None,
         llm_usage: Dict[str, Any] | None = None,
+        llm_retry_events: list[dict[str, Any]] | None = None,
     ) -> None:
         if not path:
             return
@@ -90,6 +91,9 @@ class _TraceWriter:
             payload["error"] = error
         if llm_usage is not None:
             payload["llm_usage"] = llm_usage
+        if llm_retry_events:
+            payload["llm_retry_events"] = llm_retry_events
+            payload["llm_retry_summary"] = _retry_summary(llm_retry_events)
         _write_json(path, payload)
 
 
@@ -162,6 +166,22 @@ def _short_hash(text: str) -> str:
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False, default=str)
+
+
+def _retry_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    categories: dict[str, int] = {}
+    recovered = 0
+    for event in events:
+        category = str(event.get("error_category") or "unknown")
+        categories[category] = categories.get(category, 0) + 1
+        if event.get("recovered_success") is True:
+            recovered += 1
+    return {
+        "event_count": len(events),
+        "recovered_event_count": recovered,
+        "error_categories": categories,
+        "recovered_success": bool(events and recovered == len(events)),
+    }
 
 
 def _client_request_policy(

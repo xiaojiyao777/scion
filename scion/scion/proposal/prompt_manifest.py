@@ -407,6 +407,11 @@ def _section_record(
         "fact_packet_digest": _section_fact_packet_digest_from_text(text),
         "observation_ids": _section_observation_ids_from_text(text),
         "observation_digests": _section_observation_digests_from_text(text),
+        "receipt_count": _section_receipt_count_from_text(text),
+        "digest_reference_count": _section_digest_reference_count_from_text(text),
+        "provenance_reference_count": _section_provenance_reference_count_from_text(
+            text
+        ),
         "omitted": _text_has_marker(text, "omitted"),
         "truncated": _text_has_marker(text, "truncated"),
     }
@@ -432,6 +437,12 @@ def _section_status_record(section: Mapping[str, Any]) -> dict[str, Any]:
         "fact_packet_digest": section.get("fact_packet_digest", ""),
         "observation_id_count": len(section.get("observation_ids") or ()),
         "observation_digest_count": len(section.get("observation_digests") or ()),
+        "receipt_count": section.get("receipt_count", 0),
+        "digest_reference_count": section.get("digest_reference_count", 0),
+        "provenance_reference_count": section.get(
+            "provenance_reference_count",
+            0,
+        ),
     }
 
 
@@ -1019,6 +1030,33 @@ def _section_observation_digests_from_text(text: str) -> list[str]:
                 r'"(?:digest|payload_digest)"\s*:\s*"([^"]+)"',
                 text,
             )
+        )
+    )
+
+
+def _section_receipt_count_from_text(text: str) -> int:
+    return len(
+        re.findall(
+            r"\b(?:read_receipt|source_policy_receipt|receipt_rule)\b",
+            text,
+        )
+    )
+
+
+def _section_digest_reference_count_from_text(text: str) -> int:
+    return len(
+        re.findall(
+            r"\b(?:digest|content_digest|snapshot_digest|payload_digest)\b",
+            text,
+        )
+    )
+
+
+def _section_provenance_reference_count_from_text(text: str) -> int:
+    return len(
+        re.findall(
+            r"\b(?:provenance|source_policy|subject_id|tool_name|snapshot_digest)\b",
+            text,
         )
     )
 

@@ -5,6 +5,7 @@ import re
 from typing import Any, List
 
 from scion.core.models import ExperimentStage, StepRecord
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
 from scion.proposal.context.feedback import (
     _filter_hypothesis_prompt_steps,
     _first_line,
@@ -29,6 +30,7 @@ def _build_runtime_feedback(
     failure_cases: list[str] = []
     failure_causes: list[str] = []
     contract_failures: list[str] = []
+    runtime_budget_saturation_rounds: list[str] = []
     for step in reversed(steps):
         detail = step.verification_detail or step.failure_detail or ""
         target = (
@@ -53,6 +55,13 @@ def _build_runtime_feedback(
             step.protocol_result is not None
             and step.protocol_result.stage == ExperimentStage.SCREENING
         ):
+            runtime_budget_code = runtime_budget_diagnostic_code(
+                step.protocol_result
+            )
+            if runtime_budget_code and len(runtime_budget_saturation_rounds) < max_items:
+                runtime_budget_saturation_rounds.append(
+                    f"R{step.round_num}:{runtime_budget_code}"
+                )
             if step.protocol_result.stats.runtime_pairs > 0 and len(summaries) < max_items:
                 st = step.protocol_result.stats
                 summaries.append(
@@ -86,6 +95,7 @@ def _build_runtime_feedback(
             and len(summaries) >= max_items
             and len(failure_causes) >= max_items
             and len(contract_failures) >= max_items
+            and len(runtime_budget_saturation_rounds) >= max_items
             and len(slow_cases) >= max_items
             and len(failure_cases) >= max_items
         ):
@@ -97,6 +107,7 @@ def _build_runtime_feedback(
         and not slow_cases
         and not failure_causes
         and not contract_failures
+        and not runtime_budget_saturation_rounds
     ):
         return ""
     sections: list[str] = []
@@ -112,6 +123,17 @@ def _build_runtime_feedback(
     if summaries:
         sections.append(
             "Recent screening runtime summary:\n" + "\n".join(reversed(summaries))
+        )
+    if runtime_budget_saturation_rounds:
+        sections.append(
+            "Recent runtime budget saturation diagnostics:\n"
+            + "- "
+            + ", ".join(reversed(runtime_budget_saturation_rounds))
+            + "\n"
+            + "Avoid stacking another homogeneous high-cost variant on the "
+            "same path. Prefer changing mechanism family, trigger condition, "
+            "budget allocation, or evaluation observability, and make the "
+            "hypothesis explain how it reduces or redirects runtime pressure."
         )
     if failure_cases:
         sections.append(

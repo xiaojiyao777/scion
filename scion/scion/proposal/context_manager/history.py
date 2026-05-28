@@ -227,6 +227,16 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
         )
     if context.get("baseline_policy"):
         parts.append(f"baseline_policy={context['baseline_policy']}")
+    diversity_guidance = context.get("diversity_reroute_guidance")
+    if isinstance(diversity_guidance, dict) and diversity_guidance.get("policy"):
+        parts.append(
+            "diversity_reroute_guidance="
+            f"{diversity_guidance['policy']}"
+        )
+        parts.append(
+            "diversity_action="
+            "change_mechanism_family_or_trigger_or_observability"
+        )
     if context.get("branch_lifecycle_new_mechanism_ineligible"):
         parts.append("branch_lifecycle_new_mechanism_ineligible=true")
     reselect_key = "branch_lifecycle_re" + "".join(("r", "o", "u", "t", "e")) + "_reason"

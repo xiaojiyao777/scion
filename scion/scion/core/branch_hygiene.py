@@ -37,6 +37,9 @@ BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE = (
     "new_mechanism_ineligible_after_branch_lifecycle_policy_block"
 )
 BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT = 1
+RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE = (
+    "runtime_saturated_diversity_reroute"
+)
 
 SUSPECT_BRANCH_CODE_STATUSES = frozenset(
     {
@@ -328,6 +331,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "baseline_policy": baseline_policy,
     }
     context.update(branch_lifecycle_reroute_context(branch))
+    diversity_guidance = _runtime_saturated_diversity_guidance(context)
+    if diversity_guidance:
+        context["diversity_reroute_guidance"] = diversity_guidance
     return context
 
 
@@ -384,6 +390,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"ids: {protected}. The next hypothesis on this branch must keep "
             "those protected mechanism ids and may only tune, integrate, "
             "repair, parameterize, or wire telemetry for the same mechanism. "
+            f"{_diversity_guidance_sentence(context)}"
             "Do not introduce unrelated mechanism_changes ids. A different "
             "or new mechanism requires a clean branch or clean fork before "
             "generation."
@@ -421,6 +428,79 @@ def _branch_lifecycle_guidance_suffix(context: Mapping[str, Any]) -> str:
     )
 
 
+def _runtime_saturated_diversity_guidance(
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    reason_text = " ".join(
+        str(value or "")
+        for value in (
+            context.get("branch_code_status"),
+            context.get("last_screening_feedback_tier"),
+            context.get("last_telemetry_outcome"),
+            context.get("branch_lifecycle_reroute_reason"),
+            (
+                (context.get("last_branch_lifecycle_policy_block") or {}).get(
+                    "reason"
+                )
+                if isinstance(
+                    context.get("last_branch_lifecycle_policy_block"),
+                    Mapping,
+                )
+                else ""
+            ),
+            (
+                (context.get("last_branch_lifecycle_policy_block") or {}).get(
+                    "detail"
+                )
+                if isinstance(
+                    context.get("last_branch_lifecycle_policy_block"),
+                    Mapping,
+                )
+                else ""
+            ),
+        )
+    ).lower()
+    if not any(
+        token in reason_text
+        for token in (
+            "runtime_saturation",
+            "runtime saturation",
+            "runtime_budget",
+            "no_effect",
+            "no effect",
+            "zero_effect",
+            "zero effect",
+        )
+    ):
+        return {}
+    return {
+        "policy": RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE,
+        "guidance": (
+            "Recent branch feedback is low-effect or runtime-saturated. Avoid "
+            "continuing with another homogeneous high-cost variant on the same "
+            "branch. Prefer a clean branch/fork or a materially different "
+            "research direction that changes the mechanism family, trigger "
+            "condition, budget allocation, or evaluation observability."
+        ),
+        "allowed_same_branch_followup": (
+            "Only continue this branch when the follow-up reduces/redirects "
+            "work or improves observability for the protected mechanism."
+        ),
+    }
+
+
+def _diversity_guidance_sentence(context: Mapping[str, Any]) -> str:
+    guidance = context.get("diversity_reroute_guidance")
+    if not isinstance(guidance, Mapping) or not guidance:
+        return ""
+    return (
+        "Runtime/no-effect lifecycle feedback is active: avoid another "
+        "homogeneous high-cost variant here; prefer changing mechanism family, "
+        "trigger condition, budget allocation, or evaluation observability, "
+        "or use a clean branch/fork for a new direction. "
+    )
+
+
 def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
     ids = [
         str(item).strip()
@@ -454,6 +534,7 @@ __all__ = [
     "SAME_MECHANISM_FOLLOWUP_ONLY",
     "SAME_MECHANISM_ONLY_MODE",
     "SUSPECT_BRANCH_CODE_STATUSES",
+    "RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE",
     "TELEMETRY_INVALID",
     "TELEMETRY_WIRING_SUSPECT",
     "WIRING_SUSPECT_REQUIRES_REPAIR",

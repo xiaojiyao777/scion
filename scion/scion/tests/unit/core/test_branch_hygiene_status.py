@@ -120,6 +120,10 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
         "parameterize",
         "telemetry_wiring",
     ]
+    assert payload["diversity_reroute_guidance"]["policy"] == (
+        "runtime_saturated_diversity_reroute"
+    )
+    assert "mechanism family" in payload["diversity_reroute_guidance"]["guidance"]
     assert payload["baseline_policy"] == (
         "branch_workspace_same_mechanism_followup_only"
     )
