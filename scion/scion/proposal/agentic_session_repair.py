@@ -107,7 +107,11 @@ class AgenticSessionRepairMixin:
                 "test_hint": patch.test_hint,
             }
             self_check_feedback.update(
-                _code_self_check_structured_feedback(issue_detail, hypothesis)
+                _code_self_check_structured_feedback(
+                    issue_detail,
+                    hypothesis,
+                    code_context=code_context,
+                )
             )
             repair_context["agentic_code_self_check_feedback"] = (
                 self_check_feedback
@@ -286,6 +290,8 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
 def _code_self_check_structured_feedback(
     issue_detail: str,
     hypothesis: HypothesisProposal,
+    *,
+    code_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if "code_stage_telemetry_identity_mismatch" not in str(issue_detail or ""):
         return {}
@@ -300,11 +306,18 @@ def _code_self_check_structured_feedback(
             "failure_code": "code_stage_telemetry_identity_mismatch",
             "current_blocker": "telemetry_identity",
             "offending_telemetry_ids": offending_ids,
+            "offending_generated_telemetry_ids": offending_ids,
             "protected_mechanism_ids": protected_ids,
+            "allowed_structural_telemetry_ids": (
+                _code_context_telemetry_identity_allowlist(code_context)
+            ),
+            "telemetry_preservation_policy": "protected_mechanism_ids_only",
             "repair_instruction": (
                 "Remove newly added/changed telemetry under offending ids, "
                 "or rename those calls to the protected mechanism id. Do not "
-                "preserve an offending telemetry id from the previous patch."
+                "preserve any telemetry id outside protected_mechanism_ids "
+                "from the previous patch; baseline phase ids are diagnostic "
+                "context only unless unchanged."
             ),
         }
     )
@@ -328,6 +341,21 @@ def _parse_telemetry_identity_ids(issue_detail: str) -> list[str]:
             )
     fallback = re.findall(r"['\"]([A-Za-z][A-Za-z0-9_]{1,63})['\"]", str(issue_detail))
     return sorted(dict.fromkeys(fallback))
+
+
+def _code_context_telemetry_identity_allowlist(
+    code_context: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(code_context, Mapping):
+        return []
+    taxonomy = code_context.get("active_subject_taxonomy")
+    if not isinstance(taxonomy, Mapping):
+        return []
+    return sorted(
+        str(item).strip()
+        for item in taxonomy.get("telemetry_identity_allowlist", ()) or ()
+        if str(item).strip()
+    )
 
 
 def _code_edit_protocol_retry_context(

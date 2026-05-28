@@ -844,10 +844,14 @@ def _code_stage_identity_issue(
     )
     if expected_ids and unexpected_telemetry_ids:
         return (
-            "code_stage_telemetry_identity_mismatch: patch records telemetry "
-            "for mechanism id(s) not declared by the approved hypothesis: "
-            f"{unexpected_telemetry_ids!r}. Use the protected mechanism id(s) "
-            f"{sorted(expected_ids)!r} or remove unrelated telemetry."
+            "code_stage_telemetry_identity_mismatch: patch introduces or "
+            "increases generated telemetry for mechanism id(s) not declared "
+            "by the approved hypothesis: "
+            f"{unexpected_telemetry_ids!r}. Use only protected mechanism "
+            f"id(s) {sorted(expected_ids)!r} for new mechanism evidence, or "
+            "remove unrelated telemetry. Baseline or structural telemetry ids "
+            "visible in source context may remain only when unchanged; do not "
+            "introduce or increase them as mechanism evidence."
         )
     return None
 

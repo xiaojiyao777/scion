@@ -12,8 +12,9 @@ import pytest
 import yaml
 
 from scion.core.models import (
-    HypothesisProposal, OperatorConfig, PatchProposal,
+    HypothesisProposal, MechanismChange, OperatorConfig, PatchProposal,
 )
+from scion.proposal.agentic_code_context import _with_code_scope_control
 from scion.proposal.engine import _split_hypothesis_context, _split_code_context
 from scion.runtime.pool_manager import PoolManager, read_registry
 
@@ -199,21 +200,23 @@ def test_code_prompt_summarizes_previous_patch_telemetry_records():
     assert "mechanism-specific calls only when they are not the current blocker" in user_prompt
 
 
-def test_code_prompt_telemetry_identity_retry_does_not_preserve_offending_id():
+def test_code_prompt_telemetry_identity_retry_preserves_only_protected_ids():
     ctx = _base_context(
         prior_code_failure=(
             "code_stage_telemetry_identity_mismatch: patch records telemetry "
             "for mechanism id(s) not declared by the approved hypothesis: "
-            "['alns']. Use the protected mechanism id(s) "
-            "['route_shape_polish'] or remove unrelated telemetry."
+            "['vns_compaction']. Use the protected mechanism id(s) "
+            "['compaction_trigger', 'route_compaction'] or remove unrelated telemetry."
         ),
         previous_patch={
             "file_path": "policies/baseline_modules/local_search.py",
             "action": "modify",
             "code_content": (
-                "def apply(context):\n"
-                "    context.record_iteration('alns', 1)\n"
-                "    context.record_move('route_shape_polish', attempted=1, accepted=1)\n"
+                "def apply(self):\n"
+                "    self.context.record_phase('vns_compaction', 1)\n"
+                "    self.context.record_phase('vns_initial', 1)\n"
+                "    self.context.record_iteration('route_compaction', 1)\n"
+                "    self.context.record_phase('compaction_trigger', 1)\n"
             ),
         },
         agentic_code_self_check_feedback={
@@ -222,35 +225,55 @@ def test_code_prompt_telemetry_identity_retry_does_not_preserve_offending_id():
             "issue": (
                 "code_stage_telemetry_identity_mismatch: patch records "
                 "telemetry for mechanism id(s) not declared by the approved "
-                "hypothesis: ['alns']."
+                "hypothesis: ['vns_compaction']."
             ),
-            "offending_telemetry_ids": ["alns"],
-            "protected_mechanism_ids": ["route_shape_polish"],
+            "offending_telemetry_ids": ["vns_compaction"],
+            "protected_mechanism_ids": ["compaction_trigger", "route_compaction"],
+            "telemetry_preservation_policy": "protected_mechanism_ids_only",
         },
     )
 
     _system_blocks, user_prompt = _split_code_context(ctx)
 
     assert "Current blocker is telemetry identity" in user_prompt
+    assert "outside protected_mechanism_ids" in user_prompt
     assert "delete them or rename newly added/changed calls" in user_prompt
-    assert "alns" in user_prompt
-    assert "route_shape_polish" in user_prompt
-    assert "context.record_move('route_shape_polish', ...)" in user_prompt
-    assert "context.record_iteration('alns', ...)" not in user_prompt
+    assert "vns_compaction" in user_prompt
+    assert "route_compaction" in user_prompt
+    assert "compaction_trigger" in user_prompt
+    assert "context.record_iteration('route_compaction', ...)" in user_prompt
+    assert "context.record_phase('compaction_trigger', ...)" in user_prompt
+    assert "context.record_phase('vns_compaction', ...)" not in user_prompt
+    assert "context.record_phase('vns_initial', ...)" not in user_prompt
+    assert "vns_initial" not in user_prompt
 
 
 def test_code_prompt_includes_solver_design_mechanism_telemetry_obligation():
+    scoped_context = _with_code_scope_control(
+        _base_context(
+            research_surface_name="solver_design",
+            research_surface_kind="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+        ),
+        HypothesisProposal(
+            hypothesis_text="Add route pair proximity index.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            mechanism_changes=(
+                MechanismChange(
+                    id="route_pair_proximity_index",
+                    change_type="add",
+                ),
+            ),
+        ),
+        timeout_retry=False,
+    )
     ctx = _base_context(
         research_surface_name="solver_design",
         research_surface_kind="solver_design",
         target_file="policies/baseline_modules/local_search.py",
-        agentic_code_scope_control={
-            "telemetry_obligation_rule": (
-                "Declared mechanism telemetry obligations: every "
-                "mechanism_changes id (`route_pair_proximity_index`) must have "
-                "active-path evidence using that exact id."
-            )
-        },
+        agentic_code_scope_control=scoped_context["agentic_code_scope_control"],
     )
 
     system_blocks, user_prompt = _split_code_context(ctx)
@@ -258,6 +281,8 @@ def test_code_prompt_includes_solver_design_mechanism_telemetry_obligation():
 
     assert "Declared mechanism telemetry obligations" in all_text
     assert "route_pair_proximity_index" in all_text
+    assert "outside this set are diagnostic context only" in all_text
+    assert "do not introduce or increase them as evidence" in all_text
 
 
 def test_code_prompt_classifies_hypothesis_generation_prior_failure():

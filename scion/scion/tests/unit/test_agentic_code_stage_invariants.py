@@ -146,6 +146,8 @@ def test_code_stage_identity_rejects_new_off_brief_telemetry_id() -> None:
 
     assert issue is not None
     assert "code_stage_telemetry_identity_mismatch" in issue
+    assert "introduces or increases generated telemetry" in issue
+    assert "may remain only when unchanged" in issue
     assert "or_opt1_nn" in issue
     assert "vns_initial" not in issue
 

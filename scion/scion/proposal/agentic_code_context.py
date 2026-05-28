@@ -530,8 +530,11 @@ def _solver_design_code_scope_control(
                 "mechanism_changes. Activation should be recorded at the real "
                 "branch point where the mechanism is attempted or selected; "
                 "effect should be recorded from real objective/runtime deltas "
-                "when they exist. Do not force rare branches to run, fabricate "
-                "positive counters, wrap counters with max(..., 1), or add "
+                "when they exist. Baseline or structural telemetry ids outside "
+                "mechanism_changes are diagnostic context only; do not "
+                "introduce or increase them as mechanism evidence. Do not "
+                "force rare branches to run, fabricate positive counters, "
+                "wrap counters with max(..., 1), or add "
                 "fallback behavior whose only purpose is satisfying telemetry."
             ),
             "telemetry_obligation_rule": _solver_design_telemetry_obligation_rule(
@@ -560,7 +563,10 @@ def _solver_design_telemetry_obligation_rule(mechanism_ids: list[str]) -> str:
         "the selected surface's declared activity, activation, effect, or "
         "budget records for each declared id unless premise_check is "
         "duplicate/contradicted/wrong_owner. Do not only record a parent "
-        "mechanism while leaving a helper mechanism id without evidence."
+        "mechanism while leaving a helper mechanism id without evidence. "
+        "Baseline, structural, or broad phase telemetry ids outside this set "
+        "are diagnostic context only: preserve them only when unchanged, and "
+        "do not introduce or increase them as evidence for this hypothesis."
     )
 
 

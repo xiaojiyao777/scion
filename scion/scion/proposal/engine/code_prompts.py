@@ -557,13 +557,24 @@ def _previous_patch_prompt_section(
     telemetry_summary = _previous_patch_telemetry_summary(
         value,
         exclude_ids=telemetry_policy["offending_ids"],
+        include_ids=(
+            telemetry_policy["protected_ids"]
+            if telemetry_policy["protected_id_only"]
+            else None
+        ),
     )
     telemetry_blocker_section = ""
-    if telemetry_policy["offending_ids"]:
+    if telemetry_policy["protected_id_only"]:
+        forbidden_ids = sorted(telemetry_policy["offending_ids"])
         telemetry_blocker_section = (
             "Current blocker is telemetry identity. Do not preserve telemetry "
-            "records for offending mechanism id(s) "
-            f"{sorted(telemetry_policy['offending_ids'])!r}; delete them or "
+            "records for any id outside protected_mechanism_ids "
+            f"{sorted(telemetry_policy['protected_ids'])!r}. "
+            "Do not introduce or increase telemetry calls for baseline, "
+            "structural, or broad phase ids outside that protected set; such "
+            "ids are diagnostic context only and must not be used as mechanism "
+            "evidence. "
+            f"Current offending id(s): {forbidden_ids!r}; delete them or "
             "rename newly added/changed calls to the protected mechanism id(s) "
             f"{sorted(telemetry_policy['protected_ids'])!r}.\n\n"
         )
@@ -667,10 +678,12 @@ def _previous_patch_telemetry_summary(
     value: Any,
     *,
     exclude_ids: set[str] | None = None,
+    include_ids: set[str] | None = None,
 ) -> str:
     calls = _extract_previous_patch_telemetry_calls(
         value,
         exclude_ids=exclude_ids or set(),
+        include_ids=include_ids,
     )
     if not calls:
         return ""
@@ -681,11 +694,13 @@ def _extract_previous_patch_telemetry_calls(
     value: Any,
     *,
     exclude_ids: set[str] | None = None,
+    include_ids: set[str] | None = None,
 ) -> list[str]:
     text = _previous_patch_text(value)
     if not text:
         return []
     excluded = exclude_ids or set()
+    included = include_ids
     pattern = re.compile(
         r"context\.(record_phase|record_iteration|record_move)\("
         r"\s*(['\"])([a-z][a-z0-9_]{0,63})\2",
@@ -695,25 +710,36 @@ def _extract_previous_patch_telemetry_calls(
         mechanism_id = match.group(3)
         if mechanism_id in excluded:
             continue
+        if included is not None and mechanism_id not in included:
+            continue
         call = f"context.{match.group(1)}('{mechanism_id}', ...)"
         if call not in calls:
             calls.append(call)
     return calls
 
 
-def _telemetry_identity_preservation_policy(feedback: Any) -> dict[str, set[str]]:
+def _telemetry_identity_preservation_policy(feedback: Any) -> dict[str, Any]:
     if not isinstance(feedback, dict):
-        return {"offending_ids": set(), "protected_ids": set()}
+        return {
+            "offending_ids": set(),
+            "protected_ids": set(),
+            "protected_id_only": False,
+        }
     failure_code = str(feedback.get("failure_code") or "")
     issue = str(feedback.get("issue") or "")
     if (
         failure_code != "code_stage_telemetry_identity_mismatch"
         and "code_stage_telemetry_identity_mismatch" not in issue
     ):
-        return {"offending_ids": set(), "protected_ids": set()}
+        return {
+            "offending_ids": set(),
+            "protected_ids": set(),
+            "protected_id_only": False,
+        }
     return {
         "offending_ids": _string_set(feedback.get("offending_telemetry_ids")),
         "protected_ids": _string_set(feedback.get("protected_mechanism_ids")),
+        "protected_id_only": True,
     }
 
 
@@ -790,6 +816,20 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "unless absolutely necessary.\n\n"
         )
     if _is_algorithm_smoke_or_telemetry_failure(lowered):
+        if "code_stage_telemetry_identity_mismatch" in lowered:
+            return (
+                "## Previous Attempt Failed\n"
+                "The previous code generation introduced or increased "
+                "telemetry for an id outside the approved protected mechanism "
+                "ids:\n"
+                f"{prior_failure}\n"
+                "Repair only the telemetry identity issue: delete those "
+                "newly added calls or rename them to the protected mechanism "
+                "ids named in the failure. Baseline or structural phase ids "
+                "visible in source context are diagnostic/budget context only; "
+                "do not introduce, increase, or use them as mechanism evidence "
+                "for this hypothesis.\n\n"
+            )
         return (
             "## Previous Attempt Failed\n"
             "The previous code generation failed algorithm smoke or runtime "
@@ -807,9 +847,10 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "drop wiring while repairing API/schema/telemetry shape. If the feedback "
             "contains telemetry_static_preview.required_calls, the corrected "
             "code must include those mechanism-specific helper calls on the "
-            "path where the mechanism actually runs. Preserve any previously "
+            "path where the mechanism actually runs. Preserve previously "
             "passing record_phase, record_iteration, or record_move calls "
-            "while adding the missing category. For delta-valued effect "
+            "only for the protected mechanism ids while adding the missing "
+            "category. For delta-valued effect "
             "failures, follow actionable_telemetry_feedback."
             "expected_call_pattern exactly: "
             "context.record_move('<mechanism>', attempted=1, accepted=1, "
@@ -841,9 +882,10 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
                 "drop wiring while repairing API/schema/telemetry shape. If the feedback "
                 "contains telemetry_static_preview.required_calls, the corrected "
                 "code must include those mechanism-specific helper calls on the "
-                "path where the mechanism actually runs. Preserve any previously "
+                "path where the mechanism actually runs. Preserve previously "
                 "passing record_phase, record_iteration, or record_move calls "
-                "while adding the missing category. For delta-valued effect "
+                "only for the protected mechanism ids while adding the missing "
+                "category. For delta-valued effect "
                 "failures, follow actionable_telemetry_feedback."
                 "expected_call_pattern exactly: "
                 "context.record_move('<mechanism>', attempted=1, accepted=1, "
