@@ -463,6 +463,50 @@ def test_cvrp_route_limit_gate_allows_exact_protective_premise_fixtures() -> Non
         assert result is None, phrase
 
 
+def test_cvrp_route_limit_gate_allows_noop_more_routes_than_incumbent_guard() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Recent screening shows late-stage local-search, destroy, "
+            "compaction, and tabu variants either saturated the full runtime "
+            "or produced no decisive wins, while fleet_violation is already "
+            "stable under the active route-limit guards; the missing capability "
+            "is a stronger but bounded feasible starting basin rather than "
+            "another expensive post-construction neighborhood. Modify "
+            "construction.py to add multi_start_insertion_seed: build up to "
+            "four deterministic/randomized sector starts from the existing "
+            "customer set, then complete each route set with capacity-feasible "
+            "cheapest insertion scored by insertion delta plus a mild "
+            "load-balance penalty, and select the lexicographically best seed "
+            "before the existing VNS/ALNS pipeline. It no-ops to the current "
+            "construction result when route-limit-feasible insertion cannot "
+            "place every customer, the constructed seed has more routes than "
+            "the incumbent seed, remaining construction budget is below "
+            "reserve, or no candidate seed has a better objective key, "
+            "preserving hard capacity feasibility and fleet_violation."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness="Feasible seed construction quality leaves avoidable distance.",
+        expected_effect="Improve total_distance without changing route-limit guards.",
+        no_op_condition=(
+            "No-op when the candidate cannot place every customer or has more "
+            "routes than the incumbent seed."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="multi_start_insertion_seed", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.mechanism != "route_limit_fleet_repair"
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_route_limit_gate_blocks_exact_positive_state_premises() -> None:
     phrases = [
         "The baseline accepts route-limit excess as the construction state.",

@@ -67,6 +67,30 @@ _CURRENT_FORBIDDEN_STATE_PATTERNS = (
     r"\b(?:current|baseline|default|active|existing)\b",
 )
 
+_POSITIVE_ROUTE_LIMIT_STATE_PATTERNS = (
+    rf"\b(?:current|baseline|default|active|existing)\b.{{0,60}}"
+    rf"\b(?:construction|alns|search|solver|path|state)\b.{{0,100}}"
+    rf"\b(?:accepts?|allows?|permits?|uses|starts?\s+(?:with|from)|"
+    rf"produces?|can\s+produce|leav(?:e|es|ing))\b.{{0,100}}"
+    rf"\b{_FORBIDDEN_ROUTE_LIMIT_PHRASE}\b",
+    rf"\b(?:construction|alns|search|solver)\b.{{0,80}}"
+    rf"\b(?:accepts?|allows?|permits?|uses|starts?\s+(?:with|from)|"
+    rf"produces?|can\s+produce|leav(?:e|es|ing))\b.{{0,100}}"
+    rf"\b{_FORBIDDEN_ROUTE_LIMIT_PHRASE}\b",
+    rf"\b(?:current|baseline|default|active|existing)\b.{{0,80}}"
+    rf"\b(?:route[- ]?limit[- ]?excess|excess\s+routes?|"
+    rf"positive\s+fleet\s+violation|nonzero\s+fleet\s+violation|"
+    rf"non\s+zero\s+fleet\s+violation|fleet\s+violation\s*(?:=|:|>)\s*[1-9])\b",
+    rf"\b{_FORBIDDEN_ROUTE_LIMIT_PHRASE}\b.{{0,100}}"
+    rf"\b(?:current|baseline|default|active|existing)\b.{{0,80}}"
+    rf"\b(?:construction|alns|search|solver|path|state)\b",
+    rf"\b(?:current|baseline|default|active|existing)\b.{{0,100}}"
+    rf"\b(?:accepts?|allows?|permits?|uses)\b.{{0,80}}"
+    rf"\binfeasible(?:\s+current)?\s+states?\b",
+    rf"\binfeasible(?:\s+current)?\s+states?\b.{{0,100}}"
+    rf"\b(?:current|baseline|default|active|existing)\b",
+)
+
 
 def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
     if _route_limit_or_feasibility_guard_variant(text):
@@ -76,11 +100,15 @@ def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
         and not _has_explicit_positive_route_limit_premise(text)
     ):
         return False
-    return bool(_route_limit_or_fleet_repair_span(text))
+    return bool(_explicit_positive_route_limit_premise_span(text))
 
 
 def _route_limit_or_fleet_repair_span(text: str) -> str:
-    return _first_unprotected_regex_span(text, _ROUTE_LIMIT_CONTRADICTION_PATTERNS)
+    return _explicit_positive_route_limit_premise_span(text)
+
+
+def _explicit_positive_route_limit_premise_span(text: str) -> str:
+    return _first_unprotected_regex_span(text, _POSITIVE_ROUTE_LIMIT_STATE_PATTERNS)
 
 
 def _protects_route_limit_as_constraint(text: str) -> bool:
@@ -104,6 +132,14 @@ def _protects_route_limit_as_constraint(text: str) -> bool:
         r"\bcandidate routes?\b.{0,40}\bexceeds?\b.{0,40}"
         r"\b(?:route limit|allowed routes|max routes)\b.{0,40}"
         r"\b(?:fail|fails|reject|rejects|skip|skips|disallow|disallows)\b",
+        rf"\b(?:no[- ]?ops?|fallback|fall\s+back|falls\s+back)\b.{{0,140}}"
+        rf"\b(?:when|if)\b.{{0,140}}\b{_FORBIDDEN_ROUTE_LIMIT_PHRASE}\b",
+        rf"\b(?:return|returns|keep|keeps|preserve|preserves)\b.{{0,80}}"
+        rf"\b(?:existing|current|incumbent)\b.{{0,100}}\b(?:when|if)\b"
+        rf".{{0,140}}\b{_FORBIDDEN_ROUTE_LIMIT_PHRASE}\b",
+        rf"\bdoes\s+not\s+assume\b.{{0,100}}"
+        rf"\b(?:violation|fleet violation|route[- ]?limit excess|"
+        rf"infeasible states?)\b",
     )
     return any(re.search(pattern, text) for pattern in protective_patterns)
 
@@ -124,6 +160,12 @@ def _route_limit_or_feasibility_guard_variant(text: str) -> bool:
         r"\bcandidate routes?\b.{0,40}\bexceeds?\b.{0,40}"
         r"\b(?:route limit|allowed routes|max routes)\b.{0,40}"
         r"\b(?:fail|fails|reject|rejects|skip|skips|disallow|disallows)\b",
+        rf"\b(?:no[- ]?ops?|fallback|fall\s+back|falls\s+back)\b.{{0,140}}"
+        rf"\b(?:when|if)\b.{{0,140}}"
+        r"\b(?:more routes than|route limit excess|excess routes|route[- ]?cap violating|positive fleet violation|nonzero fleet violation|infeasible(?: current)? states?)\b",
+        rf"\b(?:return|returns|keep|keeps|preserve|preserves)\b.{{0,80}}"
+        rf"\b(?:existing|current|incumbent)\b.{{0,100}}\b(?:when|if)\b"
+        r".{0,140}\b(?:more routes than|route limit excess|excess routes|route[- ]?cap violating|positive fleet violation|nonzero fleet violation|infeasible(?: current)? states?)\b",
         r"\b(?:feasible|feasibility|capacity-compatible|route[- ]?limit[- ]?aware)\b.{0,120}"
         r"\b(?:variant|filter|guard|check|merge|repair|destroy|operator)\b",
     )
@@ -133,19 +175,7 @@ def _route_limit_or_feasibility_guard_variant(text: str) -> bool:
 
 
 def _has_explicit_positive_route_limit_premise(text: str) -> bool:
-    positive_patterns = (
-        r"\b(?:positive|nonzero|non zero)\s+fleet violation\b",
-        r"\bfleet violation\s*(?:=|:|>)\s*[1-9]",
-        r"\b(?:more routes than|route limit excess|excess routes)\b",
-        r"\broutes?\b.{0,40}\bexceeds?\b.{0,40}\b(?:route limit|allowed routes|max routes)\b",
-        r"\binfeasible(?: current)? states?\b",
-        r"\blen\s*\(\s*routes\s*\)\s*>\s*(?:route limit|allowed routes|max routes)",
-    )
-    for pattern in positive_patterns:
-        for match in re.finditer(pattern, text):
-            if not _span_is_explicitly_rejected_premise(text, match.start(), match.end()):
-                return True
-    return False
+    return bool(_explicit_positive_route_limit_premise_span(text))
 
 
 def _first_unprotected_regex_span(
@@ -191,6 +221,16 @@ def _span_is_explicitly_rejected_premise(text: str, start: int, end: int) -> boo
         rf"\b(?:rejected|skipped|disallowed|prevented|avoided|filtered out)\b",
         rf"\bno\s+(?:accepted|allowed|produced|created)?\b"
         rf".{{0,60}}\b{phrase}\b",
+        rf"\b(?:no[- ]?ops?|fallback|fall\s+back|falls\s+back)\b.{{0,140}}"
+        rf"\b(?:when|if)\b.{{0,140}}\b{phrase}\b",
+        rf"\b(?:return|returns|keep|keeps|preserve|preserves)\b.{{0,80}}"
+        rf"\b(?:existing|current|incumbent)\b.{{0,100}}\b(?:when|if)\b"
+        rf".{{0,140}}\b{phrase}\b",
+        rf"\bif\b.{{0,80}}\bcandidates?\b.{{0,80}}"
+        rf"\b(?:would\s+exceed|exceeds?|has\s+more\s+routes\s+than)\b",
+        rf"\bdoes\s+not\s+assume\b.{{0,100}}"
+        rf"\b(?:violation|fleet violation|route[- ]?limit excess|"
+        rf"infeasible states?)\b",
     )
     return any(re.search(pattern, window) for pattern in rejected_patterns)
 
