@@ -388,6 +388,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
             + savings
             + r"\b.{0,140}\b(?:existing|current|active|baseline|already)?"
             r".{0,80}\b(?:_worst_removal|worst removal|savings worst)\b",
+            text,
         )
         or re.search(
             r"\b(?:existing|current|active|baseline|already|portfolio|"

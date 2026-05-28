@@ -12,6 +12,9 @@ from scion.tests.unit.cvrp_mechanism_novelty_provider_helpers import (
     _hypothesis,
     render_negative_fact_block,
 )
+from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
+    _acknowledges_existing_removal_savings_destroy,
+)
 
 def test_cvrp_shaw_gate_allows_contrast_text_for_non_shaw_repair() -> None:
     hypothesis = HypothesisProposal(
@@ -905,6 +908,16 @@ def test_cvrp_provider_allows_removal_savings_negated_premise_variants(
     )
 
     assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_removal_savings_acknowledgement_helper_does_not_type_error() -> None:
+    text = (
+        "Removal savings from removal is already represented by the existing "
+        "_worst_removal operator, so this proposes a route-pair slack variant "
+        "rather than claiming removal-savings ranking is missing."
+    )
+
+    assert _acknowledges_existing_removal_savings_destroy(text)
 
 
 def test_cvrp_provider_allows_existing_worst_removal_distinct_variant_claim() -> None:
