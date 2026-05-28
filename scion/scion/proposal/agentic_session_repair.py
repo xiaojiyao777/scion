@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 
 from scion.core.models import mechanism_changes
@@ -301,23 +302,27 @@ def _code_self_check_structured_feedback(
         if str(change.id).strip()
     ]
     offending_ids = _parse_telemetry_identity_ids(issue_detail)
+    offending_usages = _parse_telemetry_identity_usages(issue_detail)
     return _drop_empty_dict(
         {
             "failure_code": "code_stage_telemetry_identity_mismatch",
             "current_blocker": "telemetry_identity",
             "offending_telemetry_ids": offending_ids,
             "offending_generated_telemetry_ids": offending_ids,
+            "offending_telemetry_usages": offending_usages,
             "protected_mechanism_ids": protected_ids,
             "allowed_structural_telemetry_ids": (
                 _code_context_telemetry_identity_allowlist(code_context)
             ),
             "telemetry_preservation_policy": "protected_mechanism_ids_only",
             "repair_instruction": (
-                "Remove newly added/changed telemetry under offending ids, "
-                "or rename those calls to the protected mechanism id. Do not "
-                "preserve any telemetry id outside protected_mechanism_ids "
-                "from the previous patch; baseline phase ids are diagnostic "
-                "context only unless unchanged."
+                "Repair each offending_telemetry_usage in the named file_path "
+                "and json_pointer: replace that telemetry mechanism id with "
+                "one of protected_mechanism_ids, or remove the newly added "
+                "mechanism-evidence call. Do not preserve any telemetry id "
+                "outside protected_mechanism_ids from the previous patch; "
+                "baseline phase ids are diagnostic context only unless "
+                "unchanged."
             ),
         }
     )
@@ -341,6 +346,44 @@ def _parse_telemetry_identity_ids(issue_detail: str) -> list[str]:
             )
     fallback = re.findall(r"['\"]([A-Za-z][A-Za-z0-9_]{1,63})['\"]", str(issue_detail))
     return sorted(dict.fromkeys(fallback))
+
+
+def _parse_telemetry_identity_usages(issue_detail: str) -> list[dict[str, Any]]:
+    text = str(issue_detail or "")
+    marker = "Offending generated telemetry usages:"
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        return []
+    payload_start = text.find("[", marker_index)
+    if payload_start < 0:
+        return []
+    try:
+        parsed, _end = json.JSONDecoder().raw_decode(text[payload_start:])
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    usages: list[dict[str, Any]] = []
+    for item in parsed[:12]:
+        if not isinstance(item, Mapping):
+            continue
+        usage = _drop_empty_dict(
+            {
+                "mechanism_id": item.get("mechanism_id"),
+                "file_path": item.get("file_path"),
+                "json_pointer": item.get("json_pointer"),
+                "line": item.get("line"),
+                "column": item.get("column"),
+                "helper": item.get("helper"),
+                "receiver": item.get("receiver"),
+                "line_text": item.get("line_text"),
+                "usage_kind": item.get("usage_kind"),
+                "repair_guidance": item.get("repair_guidance"),
+            }
+        )
+        if usage:
+            usages.append(usage)
+    return usages
 
 
 def _code_context_telemetry_identity_allowlist(

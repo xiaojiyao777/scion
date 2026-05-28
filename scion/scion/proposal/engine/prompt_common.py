@@ -26,6 +26,7 @@ _AGENTIC_CODE_FULL_ALGORITHM_FILE_READS_CHARS = 400_000
 _AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 16000
 _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 48000
 _AGENTIC_CODE_PREVIEW_FEEDBACK_CHARS = 16000
+_AGENTIC_CODE_SELF_CHECK_FEEDBACK_CHARS = 12000
 _AGENTIC_SCHEMA_RETRY_FEEDBACK_CHARS = 12000
 _PREVIEW_TOOL_NAMES = frozenset(
     {
@@ -198,6 +199,19 @@ def _agentic_research_context_block(
             "unique old_string; set replace_all only for a deliberate global "
             "replacement.\n\n"
             f"{_bounded_json(code_edit_feedback, 6000)}"
+        )
+    code_self_check_feedback = context.get("agentic_code_self_check_feedback")
+    if code_phase and code_self_check_feedback:
+        parts.append(
+            "## Code Self-Check Retry Feedback\n"
+            "The previous patch failed deterministic code-stage validation. "
+            "Repair only the current_blocker described below. When "
+            "offending_telemetry_usages is present, treat each listed "
+            "file_path/json_pointer/line_text as the concrete generated call "
+            "to edit: use an approved protected mechanism id for new mechanism "
+            "evidence, or remove that newly added telemetry call. Baseline or "
+            "structural telemetry ids may remain only when unchanged.\n\n"
+            f"{_bounded_json(code_self_check_feedback, _AGENTIC_CODE_SELF_CHECK_FEEDBACK_CHARS)}"
         )
     if observations:
         full_algorithm_reads = _solver_design_full_algorithm_file_reads(observations)

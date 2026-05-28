@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.core.models import MechanismChange
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -954,6 +955,99 @@ def test_agentic_session_repairs_self_reported_unresolved_patch_issue(
     assert repair_context["previous_patch"]["code_content"] == bad_payload[
         "code_content"
     ].rstrip()
+
+
+def test_agentic_session_repairs_telemetry_identity_with_delta_feedback(
+    tmp_path: Path,
+) -> None:
+    mechanism_changes = (
+        MechanismChange(id="granular_intensify", change_type="add"),
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add a granular neighborhood intensification pass.",
+        change_locus="search_policy",
+        action="modify",
+        target_file="policies/search_policy.py",
+        novelty_signature={
+            "budget_pattern": "lower_baseline_fraction",
+            "round_limit_pattern": "fixed_small_cap",
+        },
+        mechanism_changes=mechanism_changes,
+    )
+    bad_patch = PatchProposal(
+        file_path="policies/search_policy.py",
+        action="modify",
+        code_content=(
+            "def baseline_time_fraction(instance, time_limit_sec):\n"
+            "    context.record_move('alns', attempted=1, accepted=0)\n"
+            "    return 0.35\n\n"
+            "def max_operator_rounds(instance, time_limit_sec):\n"
+            "    return 10\n"
+        ),
+        mechanism_changes=mechanism_changes,
+    )
+    good_patch = PatchProposal(
+        file_path="policies/search_policy.py",
+        action="modify",
+        code_content=bad_patch.code_content.replace(
+            "context.record_move('alns'",
+            "context.record_move('granular_intensify'",
+        ),
+        mechanism_changes=mechanism_changes,
+    )
+    creative = SequentialPatchCreative(
+        [bad_patch, good_patch],
+        hypothesis=hypothesis,
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == good_patch
+    assert len(creative.code_contexts) == 2
+    repair_context = creative.code_contexts[1]
+    feedback = repair_context["agentic_code_self_check_feedback"]
+    assert feedback["failure_code"] == "code_stage_telemetry_identity_mismatch"
+    assert feedback["offending_telemetry_ids"] == ["alns"]
+    assert feedback["protected_mechanism_ids"] == ["granular_intensify"]
+    assert feedback["offending_telemetry_usages"] == [
+        {
+            "mechanism_id": "alns",
+            "file_path": "policies/search_policy.py",
+            "json_pointer": "/code_content",
+            "line": 2,
+            "column": 5,
+            "helper": "record_move",
+            "receiver": "context",
+            "line_text": "context.record_move('alns', attempted=1, accepted=0)",
+            "usage_kind": "new_or_increased_generated_telemetry",
+            "repair_guidance": (
+                "Replace this telemetry mechanism id with an approved "
+                "protected mechanism id, or remove this newly added "
+                "mechanism-evidence call."
+            ),
+        }
+    ]
 
 
 def test_agentic_session_rejects_self_reported_unresolved_patch_after_repair(

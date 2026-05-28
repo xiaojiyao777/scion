@@ -152,6 +152,97 @@ def test_code_stage_identity_rejects_new_off_brief_telemetry_id() -> None:
     assert "vns_initial" not in issue
 
 
+def test_code_stage_identity_reports_delta_level_offending_telemetry_usage() -> None:
+    scheduler_before = (
+        "def run(self):\n"
+        "    self.context.record_phase('alns', 1)\n"
+        "    return best\n"
+    )
+    scheduler_after = scheduler_before.replace(
+        "    return best\n",
+        "    if not improved:\n"
+        "        self.context.record_move('alns', attempted=1, accepted=0)\n"
+        "    return best\n",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add a granular intensification module.",
+        change_locus="solver_design",
+        action="create_new",
+        target_file="policies/baseline_modules/granular_neighborhood.py",
+        mechanism_changes=(
+            MechanismChange(id="granular_intensify", change_type="add"),
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/granular_neighborhood.py",
+        action="create",
+        code_content=(
+            "def run(context):\n"
+            "    context.record_iteration('granular_intensify', 1)\n"
+        ),
+        mechanism_changes=(
+            MechanismChange(id="granular_intensify", change_type="add"),
+        ),
+        additional_changes=(
+            PatchFileChange(
+                file_path="policies/baseline_modules/scheduler.py",
+                action="modify",
+                code_content=scheduler_after,
+            ),
+        ),
+    )
+
+    issue = _code_stage_identity_issue(
+        hypothesis,
+        patch,
+        code_context={
+            "solver_design_branch_current_integration_files": (
+                "### policies/baseline_modules/scheduler.py\n"
+                "```python\n"
+                f"{scheduler_before}```"
+            ),
+        },
+    )
+
+    assert issue is not None
+    assert "code_stage_telemetry_identity_mismatch" in issue
+    assert "Offending generated telemetry usages" in issue
+    assert '"mechanism_id": "alns"' in issue
+    assert '"file_path": "policies/baseline_modules/scheduler.py"' in issue
+    assert '"json_pointer": "/additional_changes/0/code_content"' in issue
+    assert '"helper": "record_move"' in issue
+    assert "self.context.record_move('alns'" in issue
+    assert "granular_intensify" in issue
+
+    fixed_patch = PatchProposal(
+        file_path=patch.file_path,
+        action=patch.action,
+        code_content=patch.code_content,
+        mechanism_changes=patch.mechanism_changes,
+        additional_changes=(
+            PatchFileChange(
+                file_path="policies/baseline_modules/scheduler.py",
+                action="modify",
+                code_content=scheduler_after.replace(
+                    "self.context.record_move('alns'",
+                    "self.context.record_move('granular_intensify'",
+                ),
+            ),
+        ),
+    )
+    assert _code_stage_identity_issue(
+        hypothesis,
+        fixed_patch,
+        code_context={
+            "solver_design_branch_current_integration_files": (
+                "### policies/baseline_modules/scheduler.py\n"
+                "```python\n"
+                f"{scheduler_before}```"
+            ),
+        },
+    ) is None
+
+
 def test_code_stage_identity_uses_provider_declared_structural_telemetry() -> None:
     patch = _patch(
         mechanism_id="nblist_or_opt1",

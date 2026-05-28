@@ -228,6 +228,16 @@ def test_code_prompt_telemetry_identity_retry_preserves_only_protected_ids():
                 "hypothesis: ['vns_compaction']."
             ),
             "offending_telemetry_ids": ["vns_compaction"],
+            "offending_telemetry_usages": [
+                {
+                    "mechanism_id": "vns_compaction",
+                    "file_path": "policies/baseline_modules/local_search.py",
+                    "json_pointer": "/code_content",
+                    "line": 2,
+                    "helper": "record_phase",
+                    "line_text": "self.context.record_phase('vns_compaction', 1)",
+                }
+            ],
             "protected_mechanism_ids": ["compaction_trigger", "route_compaction"],
             "telemetry_preservation_policy": "protected_mechanism_ids_only",
         },
@@ -235,7 +245,12 @@ def test_code_prompt_telemetry_identity_retry_preserves_only_protected_ids():
 
     _system_blocks, user_prompt = _split_code_context(ctx)
 
+    assert "Code Self-Check Retry Feedback" in user_prompt
     assert "Current blocker is telemetry identity" in user_prompt
+    assert "offending_telemetry_usages" in user_prompt
+    assert "policies/baseline_modules/local_search.py" in user_prompt
+    assert "/code_content" in user_prompt
+    assert "self.context.record_phase('vns_compaction', 1)" in user_prompt
     assert "outside protected_mechanism_ids" in user_prompt
     assert "delete them or rename newly added/changed calls" in user_prompt
     assert "vns_compaction" in user_prompt
