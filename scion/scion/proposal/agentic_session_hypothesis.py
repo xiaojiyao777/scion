@@ -115,7 +115,10 @@ class AgenticSessionHypothesisMixin:
                 1
                 + _MAX_HYPOTHESIS_SEMANTIC_RETRIES
                 + _MAX_HYPOTHESIS_PREVIEW_RETRIES
-                + _MAX_HYPOTHESIS_GROUNDING_RETRIES
+                + (
+                    _MAX_HYPOTHESIS_GROUNDING_RETRIES
+                    * _MAX_HYPOTHESIS_GROUNDING_TARGET_KEYS
+                )
             )
             for attempt in range(1, max_attempts + 1):
                 if self._session_timeout_reached(state):
@@ -453,17 +456,29 @@ class AgenticSessionHypothesisMixin:
                         "without changing the mechanism."
                     )
                 hypothesis_context["agentic_hypothesis_retry_attempt"] = attempt
-            if grounding_rejections:
+            active_grounding_rejections = _active_grounding_rejections_for_prompt(
+                grounding_rejections,
+                semantic_rejections=semantic_rejections,
+                preview_rejections=preview_rejections,
+            )
+            if active_grounding_rejections:
                 hypothesis_context["agentic_hypothesis_grounding_rejections"] = [
                     _sanitize_agentic_value(rejection)
-                    for rejection in grounding_rejections
+                    for rejection in active_grounding_rejections
                 ]
+                latest_grounding = active_grounding_rejections[-1]
+                target_file = str(latest_grounding.get("target_file") or "").strip()
                 hypothesis_context["agentic_hypothesis_grounding_retry_rule"] = (
                     "The previous solver_design hypothesis selected an existing "
-                    "target_file whose full source was not visible in that "
-                    "hypothesis API prompt. The target file has now been read. "
-                    "Redraft the same target/mechanism only after using the full "
-                    "target-file observation now present in agentic_tool_observations."
+                    "target_file whose full source was not visible in the API "
+                    "prompt that generated it. This grounding feedback is scoped "
+                    f"to target_file={target_file!r}; do not use source from a "
+                    "different target_file as grounding. The target file has now "
+                    "been read and is projected into this API-visible prompt. "
+                    "Redraft only after using that target-file observation. If "
+                    "separate semantic feedback requires changing to a different "
+                    "existing target_file, Scion must ground that new target in "
+                    "a later prompt before approval."
                 )
                 hypothesis_context["agentic_hypothesis_retry_attempt"] = attempt
             if observations:
@@ -559,12 +574,25 @@ class AgenticSessionHypothesisMixin:
                 observations,
                 target_read_args,
             )
+            target_context_key = _target_grounding_context_key(
+                target_read_args,
+                target_context,
+            )
+            target_retry_count = _grounding_rejection_count_for_target_context(
+                grounding_rejections,
+                target_context_key,
+            )
             if (
                 _observations_include_sufficient_target_context(
                     observations,
                     target_read_args,
                 )
-                and len(grounding_rejections) < _MAX_HYPOTHESIS_GROUNDING_RETRIES
+                and target_retry_count < _MAX_HYPOTHESIS_GROUNDING_RETRIES
+                and _distinct_grounding_target_key_count(
+                    grounding_rejections,
+                    additional_key=target_context_key,
+                )
+                <= _MAX_HYPOTHESIS_GROUNDING_TARGET_KEYS
             ):
                 grounding_rejections.append(
                     _solver_design_target_prompt_grounding_feedback(
@@ -572,6 +600,8 @@ class AgenticSessionHypothesisMixin:
                         target_read_args,
                         attempt=attempt,
                         target_context=target_context,
+                        target_context_key=target_context_key,
+                        retry_count_for_target=target_retry_count + 1,
                     )
                 )
                 state.note(
@@ -580,6 +610,12 @@ class AgenticSessionHypothesisMixin:
                     metadata={
                         "attempt": attempt,
                         "target_file": target_read_args.get("file_path"),
+                        "target_context_key": target_context_key,
+                        "target_context_digest": target_context.get(
+                            "content_digest"
+                        ),
+                        "target_retry_count": target_retry_count + 1,
+                        "api_visible_in_latest_prompt": False,
                         "failure_code": "solver_design_target_not_in_hypothesis_prompt",
                     },
                 )
@@ -594,7 +630,12 @@ class AgenticSessionHypothesisMixin:
                     f"{target_read_args.get('file_path')!r}, but the API-visible "
                     "hypothesis prompt did not include a sufficiently complete "
                     "provider-declared target-file context observation for that "
-                    "file and Scion could not collect one before retry."
+                    "file. "
+                    f"target_context_key={target_context_key!r}; "
+                    f"target_context_digest={target_context.get('content_digest')!r}; "
+                    "api_visible_in_latest_prompt=False; "
+                    f"retry_count_for_target={target_retry_count}; "
+                    f"distinct_grounding_target_count={_distinct_grounding_target_key_count(grounding_rejections)}."
                 )
             output = self._failed_output(
                 request=request,
@@ -609,7 +650,15 @@ class AgenticSessionHypothesisMixin:
             state.note(
                 AgenticProposalPhase.FINALIZE,
                 "Session failed closed before solver_design hypothesis approval because target-file source was not API-visible to hypothesis generation.",
-                metadata={"detail": detail, "attempt": attempt},
+                metadata={
+                    "detail": detail,
+                    "attempt": attempt,
+                    "target_file": target_read_args.get("file_path"),
+                    "target_context_key": target_context_key,
+                    "target_context_digest": target_context.get("content_digest"),
+                    "api_visible_in_latest_prompt": False,
+                    "retry_count_for_target": target_retry_count,
+                },
             )
             return self._persist(output, state)
 
@@ -1739,6 +1788,8 @@ def _solver_design_target_prompt_grounding_feedback(
     *,
     attempt: int,
     target_context: Mapping[str, Any] | None = None,
+    target_context_key: str = "",
+    retry_count_for_target: int = 0,
 ) -> dict[str, Any]:
     target_file = str(target_read_args.get("file_path") or "").strip()
     target_context = dict(target_context or {})
@@ -1764,6 +1815,10 @@ def _solver_design_target_prompt_grounding_feedback(
             "failure_code": "solver_design_target_not_in_hypothesis_prompt",
             "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
             "target_file": target_file,
+            "target_context_key": target_context_key,
+            "target_context_digest": target_context.get("content_digest"),
+            "api_visible_in_latest_prompt": False,
+            "retry_count_for_target": retry_count_for_target,
             "reason": (
                 "The previous solver_design hypothesis selected an existing "
                 "target_file, but sufficiently complete target-file context was "
@@ -1774,6 +1829,75 @@ def _solver_design_target_prompt_grounding_feedback(
             "retry_constraint": retry_constraint,
         }
     )
+
+
+def _target_grounding_context_key(
+    target_read_args: Mapping[str, Any],
+    target_context: Mapping[str, Any] | None = None,
+) -> str:
+    target_file = _normalize_prompt_grounding_path(target_read_args.get("file_path"))
+    context = target_context or {}
+    digest = str(
+        context.get("content_digest")
+        or context.get("digest")
+        or target_read_args.get("source_digest")
+        or ""
+    ).strip()
+    if digest:
+        return f"{target_file}@{digest}"
+    coverage = str(context.get("coverage_status") or "").strip()
+    size_chars = str(context.get("size_chars") or "").strip()
+    max_chars = str(target_read_args.get("max_chars") or "").strip()
+    return f"{target_file}@{coverage}:{size_chars}:{max_chars}"
+
+
+def _grounding_rejection_count_for_target_context(
+    grounding_rejections: list[Mapping[str, Any]],
+    target_context_key: str,
+) -> int:
+    return sum(
+        1
+        for rejection in grounding_rejections
+        if str(rejection.get("target_context_key") or "") == target_context_key
+    )
+
+
+def _distinct_grounding_target_key_count(
+    grounding_rejections: list[Mapping[str, Any]],
+    *,
+    additional_key: str | None = None,
+) -> int:
+    keys = {
+        str(rejection.get("target_context_key") or "").strip()
+        for rejection in grounding_rejections
+        if str(rejection.get("target_context_key") or "").strip()
+    }
+    if additional_key:
+        keys.add(str(additional_key).strip())
+    return len(keys)
+
+
+def _active_grounding_rejections_for_prompt(
+    grounding_rejections: list[Mapping[str, Any]],
+    *,
+    semantic_rejections: list[Mapping[str, Any]],
+    preview_rejections: list[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    if not grounding_rejections:
+        return []
+    latest_semantic_or_preview_attempt = max(
+        [
+            int(rejection.get("attempt") or 0)
+            for rejection in [*semantic_rejections, *preview_rejections]
+        ]
+        or [0]
+    )
+    active = [
+        rejection
+        for rejection in grounding_rejections
+        if int(rejection.get("attempt") or 0) >= latest_semantic_or_preview_attempt
+    ]
+    return active[-1:] if active else []
 
 
 def _prompt_observations_include_sufficient_target_context(

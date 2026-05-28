@@ -66,6 +66,40 @@ def _scheduler_hypothesis(text: str) -> HypothesisProposal:
     )
 
 
+def _solver_design_file_hypothesis(
+    *,
+    target_file: str,
+    mechanism_id: str,
+    text: str,
+) -> HypothesisProposal:
+    return HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            hypothesis_text=text,
+            target_weakness="Runtime feedback points at a solver-design gap.",
+            expected_effect="Improve total_distance while preserving feasibility.",
+            mechanism_changes=[
+                {"id": mechanism_id, "change_type": "add"},
+            ],
+            novelty_signature={
+                "algorithm_family": "solver_design_target_grounding_test",
+                "target_file": target_file,
+            },
+            expected_telemetry={
+                "activity": ["solver_algorithm_search_iterations"],
+                "activation": [
+                    f"solver_algorithm_context_records.{mechanism_id}_iterations",
+                    f"solver_algorithm_phase_runtime_ms.{mechanism_id}",
+                ],
+                "budget": [
+                    f"solver_algorithm_phase_runtime_ms.{mechanism_id}"
+                ],
+            },
+        )
+    )
+
+
 def test_solver_design_existing_target_file_is_read_then_redrafted(
     tmp_path: Path,
 ) -> None:
@@ -172,6 +206,165 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     assert scheduler_receipts[0]["prompt_inclusion_status"] == (
         "not_asserted_by_read_receipt"
     )
+
+
+def test_target_file_grounding_retry_resets_when_semantic_retry_changes_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scion.proposal.agentic_session_hypothesis as hypothesis_module
+
+    target_a = "policies/baseline_modules/destroy_repair.py"
+    target_b = "policies/baseline_modules/acceptance.py"
+    first_a = _solver_design_file_hypothesis(
+        target_file=target_a,
+        mechanism_id="capacity_cluster_repair",
+        text="Add capacity_cluster_repair in destroy_repair.py.",
+    )
+    second_a = _solver_design_file_hypothesis(
+        target_file=target_a,
+        mechanism_id="capacity_cluster_repair",
+        text="After reading destroy_repair.py, add capacity_cluster_repair.",
+    )
+    first_b = _solver_design_file_hypothesis(
+        target_file=target_b,
+        mechanism_id="contextual_pair_weights",
+        text="Switch to acceptance.py for contextual pair weights.",
+    )
+    second_b = _solver_design_file_hypothesis(
+        target_file=target_b,
+        mechanism_id="contextual_pair_weights",
+        text="After reading acceptance.py, add contextual pair weights.",
+    )
+
+    class RejectTargetAOnce:
+        def __init__(self) -> None:
+            self.rejected = False
+
+        def evaluate(self, hypothesis, **_kwargs):
+            if (
+                not self.rejected
+                and str(hypothesis.target_file) == target_a
+            ):
+                self.rejected = True
+                return SimpleNamespace(
+                    is_hard_block=True,
+                    premise_check="contradicted",
+                    failure_category="premise_contradicted",
+                    mechanism="shaw_related_removal",
+                    reason="semantic retry should choose a different mechanism family",
+                    fact_packet_digest="",
+                    to_rejection=lambda _hypothesis: {
+                        "source": "mechanism_novelty_gate",
+                        "gate_name": "MechanismNoveltyGate",
+                        "premise_check": "contradicted",
+                        "failure_category": "premise_contradicted",
+                        "mechanism": "shaw_related_removal",
+                        "reason": (
+                            "semantic retry should choose a different "
+                            "mechanism family"
+                        ),
+                        "target_file": target_a,
+                    },
+                )
+            return None
+
+    monkeypatch.setattr(
+        hypothesis_module,
+        "_MECHANISM_NOVELTY_GATE",
+        RejectTargetAOnce(),
+    )
+    creative = SequentialHypothesisCreative([first_a, second_a, first_b, second_b])
+    context = _cvrp_context_with_champion(tmp_path)
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-target-switch"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-grounding-switch",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "target-grounding-switch"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == second_b
+    assert len(creative.hypothesis_contexts) == 4
+
+    destroy_retry_context = creative.hypothesis_contexts[1]
+    destroy_grounding = destroy_retry_context[
+        "agentic_hypothesis_grounding_rejections"
+    ][0]
+    assert destroy_grounding["target_file"] == target_a
+    assert destroy_grounding["target_context_key"].startswith(f"{target_a}@")
+
+    semantic_retry_context = creative.hypothesis_contexts[2]
+    assert "agentic_hypothesis_semantic_rejections" in semantic_retry_context
+    assert "agentic_hypothesis_grounding_rejections" not in semantic_retry_context
+
+    acceptance_retry_context = creative.hypothesis_contexts[3]
+    acceptance_grounding = acceptance_retry_context[
+        "agentic_hypothesis_grounding_rejections"
+    ][0]
+    assert acceptance_grounding["target_file"] == target_b
+    assert acceptance_grounding["target_context_key"].startswith(f"{target_b}@")
+    assert acceptance_grounding["retry_count_for_target"] == 1
+    assert acceptance_grounding["api_visible_in_latest_prompt"] is False
+    assert target_a not in json.dumps(
+        acceptance_retry_context["agentic_hypothesis_grounding_rejections"],
+        sort_keys=True,
+    )
+    acceptance_reads = [
+        observation
+        for observation in acceptance_retry_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_b
+    ]
+    assert acceptance_reads
+    assert acceptance_reads[0]["structured_payload"]["readable"] is True
+    assert acceptance_reads[0]["structured_payload"]["truncated"] is False
+
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in str(ref)
+    ]
+    assert [manifest["call_kind"] for manifest in manifests[:4]] == [
+        "hypothesis",
+        "hypothesis_grounding_retry",
+        "hypothesis_semantic_retry",
+        "hypothesis_grounding_retry",
+    ]
+    third_manifest = manifests[2]
+    fourth_manifest = manifests[3]
+    assert not any(
+        item.get("tool_name") == "context.read_algorithm_file"
+        and item.get("file_path") == target_b
+        and item.get("full_content_visible_in_rendered_prompt") is True
+        for item in third_manifest["included_observations"]
+    )
+    acceptance_items = [
+        item
+        for item in fourth_manifest["included_observations"]
+        if item.get("tool_name") == "context.read_algorithm_file"
+        and item.get("file_path") == target_b
+    ]
+    assert acceptance_items
+    assert acceptance_items[0]["included_in_prompt_for_call"] is True
+    assert acceptance_items[0]["full_content_visible_in_rendered_prompt"] is True
+    assert acceptance_items[0]["full_content_visible_in_dedicated_source_section"] is True
 
 
 def test_algorithm_slice_receipt_is_not_sufficient_target_file_grounding() -> None:
