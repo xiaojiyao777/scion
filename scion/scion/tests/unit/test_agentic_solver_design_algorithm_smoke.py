@@ -3,6 +3,7 @@ from __future__ import annotations
 from scion.proposal.tools.previews.algorithm_smoke_feedback import (
     _algorithm_smoke_agent_payload,
 )
+from scion.core.models import MechanismChange, PatchFileChange
 from scion.proposal.agentic_session_tool_call import (
     _algorithm_smoke_execution_evidence_payload,
     _tool_observation_transcript_metadata,
@@ -406,6 +407,97 @@ def test_algorithm_smoke_budget_compacted_create_and_modify_keep_provider_ledger
         if item["provider_hook_used"]
     } >= {"provider_small", "provider_medium"}
     assert evidence.get("evidence_diagnostics", []) == []
+
+
+def test_algorithm_smoke_static_diagnostic_preserves_provider_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _cvrp_context_with_provider_cases(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "scion.proposal.solver_design_smoke.preview._run_solver_design_smoke",
+        lambda **_kwargs: pytest.fail(
+            "static smoke diagnostic should not execute runtime smoke"
+        ),
+    )
+    mechanism = MechanismChange(
+        id="variance_gated_acceptance",
+        change_type="modify",
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/acceptance.py",
+            mechanism_changes=(mechanism,),
+        )
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/acceptance.py",
+        action="modify",
+        code_content="def accept_candidate(current, candidate):\n    return candidate\n",
+        additional_changes=(
+            PatchFileChange(
+                file_path="policies/baseline_modules/scheduler.py",
+                action="modify",
+                code_content=(
+                    "def scheduler_probe(context):\n"
+                    "    context.record_move(\n"
+                    "        'variance_gated_acceptance',\n"
+                    "        attempted=1,\n"
+                    "        accepted=1,\n"
+                    "        delta=1.0,\n"
+                    "    )\n"
+                ),
+            ),
+        ),
+    )
+
+    raw = _runtime_algorithm_smoke_preview(context, patch, "solver_design", hypothesis)
+    observation = _algorithm_smoke_observation_from_runtime(raw)
+    state = AgenticProposalSessionState(
+        session_id="session",
+        campaign_id="campaign",
+        branch_id="branch",
+    )
+    evidence = _algorithm_smoke_execution_evidence_payload(state, observation)
+    metadata = _tool_observation_transcript_metadata(observation)
+
+    assert raw is not None
+    assert raw["runtime_smoke_run"] is False
+    assert raw["provider_hook_used"] is True
+    assert raw["provider_case_count"] >= 2
+    assert raw["provider_case_attempted_count"] == 0
+    provider_records = [
+        item for item in raw["case_execution_ledger"] if item["provider_hook_used"]
+    ]
+    assert {item["label"] for item in provider_records} >= {
+        "provider_small",
+        "provider_medium",
+    }
+    assert all(item["attempted"] is False for item in provider_records)
+    raw_codes = {item["code"] for item in raw["evidence_diagnostics"]}
+    assert (
+        "provider_representative_smoke_cases_skipped_by_static_diagnostic"
+        in raw_codes
+    )
+
+    assert evidence["provider_hook_used"] is True
+    assert evidence["provider_case_count"] >= 2
+    assert evidence["provider_case_attempted_count"] == 0
+    assert {
+        item["label"]
+        for item in evidence["case_execution_ledger"]
+        if item["provider_hook_used"]
+    } >= {"provider_small", "provider_medium"}
+    evidence_codes = {item["code"] for item in evidence["evidence_diagnostics"]}
+    assert (
+        "provider_representative_smoke_cases_skipped_by_static_diagnostic"
+        in evidence_codes
+    )
+    assert "algorithm_smoke_provider_ledger_fields_missing" not in evidence_codes
+    assert metadata["runtime_smoke_provider_hook_used"] is True
+    assert metadata["runtime_smoke_provider_case_count"] >= 2
+    assert metadata["runtime_smoke_provider_case_attempted_count"] == 0
 
 
 @pytest.mark.parametrize(

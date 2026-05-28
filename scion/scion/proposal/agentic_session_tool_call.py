@@ -469,6 +469,7 @@ def _algorithm_smoke_execution_evidence_payload(
             "provider_unavailable",
             "provider_case_count",
             "provider_case_attempted_count",
+            "provenance",
             "runtime_budget_diagnostic",
             "runtime_audit_failure",
         )

@@ -123,7 +123,16 @@ def _runtime_algorithm_smoke_preview(
             "skipped": False,
             "workspace_materialized": False,
             "runtime_smoke_run": False,
+            "selected_surface": surface_name,
             "issues": ["No runnable base workspace found for solver_design smoke."],
+            **_unavailable_provider_smoke_evidence(
+                selected_surface=surface_name,
+                code="solver_design_smoke_workspace_unavailable",
+                detail=(
+                    "No runnable base workspace was available, so provider "
+                    "representative smoke cases could not be selected or run."
+                ),
+            ),
         }
     if not canary_rel:
         return {
@@ -131,7 +140,16 @@ def _runtime_algorithm_smoke_preview(
             "skipped": False,
             "workspace_materialized": False,
             "runtime_smoke_run": False,
+            "selected_surface": surface_name,
             "issues": ["No canary_case_path configured for solver_design smoke."],
+            **_unavailable_provider_smoke_evidence(
+                selected_surface=surface_name,
+                code="solver_design_smoke_canary_unavailable",
+                detail=(
+                    "No canary_case_path was configured, so provider "
+                    "representative smoke cases could not be selected or run."
+                ),
+            ),
         }
     static_issue = _solver_design_static_issue(
         patch=patch,
@@ -139,6 +157,19 @@ def _runtime_algorithm_smoke_preview(
         provider=provider,
     )
     if static_issue:
+        provider_evidence = _unrun_provider_smoke_evidence(
+            context=context,
+            base_workspace=base_workspace,
+            canary_rel=canary_rel,
+            provider=provider,
+            selected_surface=surface_name,
+            skip_code="provider_representative_smoke_cases_skipped_by_static_diagnostic",
+            skip_detail=(
+                "Provider representative smoke cases were selected, but "
+                "runtime smoke execution was skipped because a static smoke "
+                "diagnostic fired before candidate execution."
+            ),
+        )
         return {
             "passed": False,
             "skipped": False,
@@ -146,6 +177,7 @@ def _runtime_algorithm_smoke_preview(
             "runtime_smoke_run": False,
             "selected_surface": surface_name,
             "issues": [static_issue],
+            **provider_evidence,
         }
 
     with tempfile.TemporaryDirectory(prefix="scion_algorithm_smoke_") as tmp:
@@ -186,13 +218,26 @@ def _runtime_algorithm_smoke_preview(
                 context=context,
             )
             if not smoke_cases:
+                provider_evidence = _unrun_provider_smoke_evidence_from_cases(
+                    smoke_cases=smoke_cases,
+                    missing_cases=missing_cases,
+                    provider=provider,
+                    selected_surface=surface_name,
+                    skip_code="provider_representative_smoke_cases_unavailable",
+                    skip_detail=(
+                        "No runnable provider representative smoke cases were "
+                        "available for algorithm smoke."
+                    ),
+                )
                 return {
                     "passed": False,
                     "skipped": False,
                     "workspace_materialized": True,
                     "runtime_smoke_run": False,
+                    "selected_surface": surface_name,
                     "issues": missing_cases
                     or [f"No runnable smoke case found: {canary_rel}"],
+                    **provider_evidence,
                 }
             registry_path = workspace / "registry.yaml"
             if not registry_path.exists():
@@ -380,6 +425,27 @@ def _runtime_algorithm_smoke_preview(
                 "skipped": False,
                 "workspace_materialized": True,
                 "runtime_smoke_run": False,
+                "selected_surface": surface_name,
+                "provider_hook_used": False,
+                "provider_case_count": 0,
+                "provider_case_attempted_count": 0,
+                "case_count": 0,
+                "selected_case_count": 0,
+                "attempted_case_count": 0,
+                "case_execution_ledger": [],
+                "cases": [],
+                "evidence_diagnostics": [
+                    {
+                        "code": "provider_representative_smoke_case_selection_failed",
+                        "severity": "warning",
+                        "detail": (
+                            "Runtime smoke setup failed before provider "
+                            "representative evidence could be completed."
+                        ),
+                        "provider_case_count": 0,
+                        "provider_case_attempted_count": 0,
+                    }
+                ],
                 "issues": [f"runtime smoke setup failed: {type(exc).__name__}: {exc}"],
             }
 
@@ -448,6 +514,174 @@ def _runtime_algorithm_smoke_preview(
         if repair_guidance:
             payload["repair_guidance"] = repair_guidance
     return payload
+
+
+def _unavailable_provider_smoke_evidence(
+    *,
+    selected_surface: str,
+    code: str,
+    detail: str,
+) -> dict[str, Any]:
+    return {
+        "provider_hook_used": False,
+        "provider_case_count": 0,
+        "provider_case_attempted_count": 0,
+        "case_count": 0,
+        "selected_case_count": 0,
+        "attempted_case_count": 0,
+        "case_execution_ledger": [],
+        "cases": [],
+        "provenance": {
+            "source": "provider_smoke_not_selectable",
+            "absolute_paths_exposed": False,
+        },
+        "evidence_diagnostics": [
+            {
+                "code": code,
+                "severity": "warning",
+                "detail": detail,
+                "selected_surface": selected_surface,
+                "provider_case_count": 0,
+                "provider_case_attempted_count": 0,
+            }
+        ],
+    }
+
+
+def _unrun_provider_smoke_evidence(
+    *,
+    context: ProposalToolContext,
+    base_workspace: Path,
+    canary_rel: str,
+    provider: Any,
+    selected_surface: str,
+    skip_code: str,
+    skip_detail: str,
+) -> dict[str, Any]:
+    try:
+        smoke_cases, missing_cases = _runtime_smoke_cases(
+            workspace=base_workspace,
+            base_workspace=base_workspace,
+            canary_rel=canary_rel,
+            split_manifest=context.split_manifest,
+            seed_ledger=context.seed_ledger,
+            safe_data_roots=_runtime_smoke_safe_data_roots(context),
+            provider=provider,
+            context=context,
+        )
+    except Exception as exc:
+        return {
+            "provider_hook_used": False,
+            "provider_case_count": 0,
+            "provider_case_attempted_count": 0,
+            "case_count": 0,
+            "selected_case_count": 0,
+            "attempted_case_count": 0,
+            "case_execution_ledger": [],
+            "cases": [],
+            "provenance": {
+                "source": "provider_smoke_static_selection_failed",
+                "absolute_paths_exposed": False,
+            },
+            "evidence_diagnostics": [
+                {
+                    "code": "provider_representative_smoke_case_selection_failed",
+                    "severity": "warning",
+                    "detail": (
+                        "Provider representative smoke case selection failed "
+                        f"before runtime execution: {type(exc).__name__}: {exc}"
+                    ),
+                    "provider_case_count": 0,
+                    "provider_case_attempted_count": 0,
+                }
+            ],
+        }
+    return _unrun_provider_smoke_evidence_from_cases(
+        smoke_cases=smoke_cases,
+        missing_cases=missing_cases,
+        provider=provider,
+        selected_surface=selected_surface,
+        skip_code=skip_code,
+        skip_detail=skip_detail,
+    )
+
+
+def _unrun_provider_smoke_evidence_from_cases(
+    *,
+    smoke_cases: list[Any],
+    missing_cases: list[str],
+    provider: Any,
+    selected_surface: str,
+    skip_code: str,
+    skip_detail: str,
+) -> dict[str, Any]:
+    ledger = _runtime_smoke_case_execution_ledger(
+        smoke_cases,
+        [],
+        selected_surface=selected_surface,
+    )
+    provider_case_count = sum(
+        1 for item in ledger if item.get("provider_hook_used")
+    )
+    provider_case_attempted_count = sum(
+        1
+        for item in ledger
+        if item.get("provider_hook_used") and item.get("attempted")
+    )
+    diagnostics: list[dict[str, Any]] = []
+    provider_missing_cases = _provider_case_missing_issues(missing_cases)
+    if provider_case_count > 0:
+        diagnostics.append(
+            {
+                "code": skip_code,
+                "severity": "warning",
+                "detail": skip_detail,
+                "provider_case_count": provider_case_count,
+                "provider_case_attempted_count": provider_case_attempted_count,
+            }
+        )
+    elif provider_missing_cases:
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_cases_unavailable",
+                "severity": "warning",
+                "detail": (
+                    "Provider representative smoke cases were requested but "
+                    "could not be resolved from safe data roots."
+                ),
+                "provider_case_count": 0,
+                "provider_case_attempted_count": 0,
+                "missing_cases": provider_missing_cases[:4],
+            }
+        )
+    elif provider is not None:
+        diagnostics.append(
+            {
+                "code": "provider_representative_smoke_cases_not_selected",
+                "severity": "warning",
+                "detail": (
+                    "A solver-design smoke provider is registered, but it did "
+                    "not provide representative cases for this algorithm smoke."
+                ),
+                "provider_case_count": 0,
+                "provider_case_attempted_count": 0,
+            }
+        )
+    return {
+        "provider_hook_used": provider_case_count > 0,
+        "provider_case_count": provider_case_count,
+        "provider_case_attempted_count": provider_case_attempted_count,
+        "case_count": 0,
+        "selected_case_count": len(ledger),
+        "attempted_case_count": 0,
+        "case_execution_ledger": ledger,
+        "cases": ledger,
+        "provenance": {
+            "source": "provider_smoke_static_case_selection",
+            "absolute_paths_exposed": False,
+        },
+        "evidence_diagnostics": diagnostics,
+    }
 
 
 def _provider_case_missing_issues(missing_cases: list[str]) -> list[str]:
