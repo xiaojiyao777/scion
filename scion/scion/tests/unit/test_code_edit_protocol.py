@@ -410,6 +410,9 @@ def test_prompt_manifest_digest_matches_displayed_target_raw_content() -> None:
     displayed_source = displayed.group("source")
     assert source_digest_for_content(displayed_source) in prompt
     assert source_digest_for_content(wrapped_source) not in prompt
+    assert "hard limit 85% of files over 2000 chars" in prompt
+    assert "under 35% of the file" in prompt
+    assert "full_file_reason` is not an authorization or replace policy" in prompt
 
 
 def test_exact_replace_rejects_stale_source_digest() -> None:
@@ -530,7 +533,43 @@ def test_existing_modify_near_whole_file_exact_replace_is_rejected() -> None:
     message = str(excinfo.value)
     assert "existing_file_near_whole_file_exact_replace_rejected" in message
     assert "coverage_ratio" in message
+    assert "old_string_chars" in message
+    assert "file_chars" in message
+    assert "source_digest" in message
     assert "create a helper file and add a small integration edit" in message
+    assert _is_code_edit_protocol_retryable(excinfo.value)
+
+    retry_context = _code_edit_protocol_retry_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surface_name": "local",
+            "research_surface_kind": "operator",
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+        HypothesisProposal(
+            hypothesis_text="Modify a large file.",
+            change_locus="local",
+            action="modify",
+            target_file="policies/example.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_probe", change_type="modify"),
+            ),
+        ),
+        excinfo.value,
+    )
+    _, user_prompt = _split_code_context(retry_context)
+    feedback = retry_context["agentic_code_edit_retry_feedback"]
+    assert feedback["reason"] == "existing_file_near_whole_file_exact_replace_rejected"
+    assert feedback["coverage_ratio"] > 0.85
+    assert feedback["old_string_chars"] == len(old_string)
+    assert feedback["file_chars"] == len(before)
+    assert feedback["source_digest"] == source_digest_for_content(before)
+    assert "Split the change into smaller exact_replace edits" in user_prompt
+    assert "coverage_ratio" in user_prompt
+    assert "old_string_chars" in user_prompt
+    assert "file_chars" in user_prompt
+    assert "function/block-level exact_replace edits" in user_prompt
 
 
 def test_existing_modify_block_exact_replace_in_large_file_is_allowed() -> None:

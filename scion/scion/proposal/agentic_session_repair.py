@@ -268,6 +268,8 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
         "existing_file_create_rejected",
         "existing_file_full_file_modify_rejected",
         "existing_file_full_file_modify_source_required",
+        "existing_file_near_whole_file_exact_replace_rejected",
+        "existing_file_whole_file_exact_replace_rejected",
     }
 
 
@@ -322,6 +324,35 @@ def _code_edit_protocol_retry_context(
             "non-empty old_string, new_string, and replace_all. For deletion "
             "use new_string: \"\"; never omit new_string or use null."
         )
+    elif reason in {
+        "existing_file_near_whole_file_exact_replace_rejected",
+        "existing_file_whole_file_exact_replace_rejected",
+    }:
+        coverage_ratio = feedback.get("coverage_ratio")
+        old_string_chars = feedback.get("old_string_chars")
+        file_chars = feedback.get("file_chars")
+        source_digest = feedback.get("source_digest")
+        guidance = str(feedback.get("guidance") or "").strip()
+        retry_context["prior_code_failure"] = (
+            "Typed exact_replace edit was too broad: "
+            f"{reason} in {target_file!r}. "
+            f"coverage_ratio={coverage_ratio!r}, "
+            f"old_string_chars={old_string_chars!r}, "
+            f"file_chars={file_chars!r}, source_digest={source_digest!r}. "
+            f"{guidance} Preserve target_file={hypothesis.target_file!r}, "
+            f"action={hypothesis.action!r}, and mechanism_changes "
+            f"ids={protected_ids!r}; repair only the edit granularity. "
+            "Do not replace a registry/function plus unrelated later functions "
+            "as one contiguous old_string."
+        )
+        final_task = (
+            "Return the same patch intent split into function/block-level "
+            "exact_replace edits, or create a helper file and add one small "
+            "integration edit. Each existing-file old_string must identify only "
+            "the local block that changes; keep old_string coverage below the "
+            "recommended coverage ratio and never use one near-whole-file "
+            "selector to repair runtime feedback."
+        )
     else:
         retry_context["prior_code_failure"] = (
             "Typed edit target/action failed: existing file requires modify "
@@ -351,6 +382,13 @@ def _code_edit_protocol_retry_context(
             "match_count": feedback.get("match_count"),
             "candidate_matches": feedback.get("candidate_matches"),
             "source_digest": feedback.get("source_digest"),
+            "old_string_chars": feedback.get("old_string_chars"),
+            "file_chars": feedback.get("file_chars"),
+            "coverage_ratio": feedback.get("coverage_ratio"),
+            "max_coverage_ratio": feedback.get("max_coverage_ratio"),
+            "recommended_max_coverage_ratio": feedback.get(
+                "recommended_max_coverage_ratio"
+            ),
             "stage": feedback.get("stage"),
             "field": feedback.get("field"),
             "change_pointer": feedback.get("change_pointer"),
@@ -358,6 +396,12 @@ def _code_edit_protocol_retry_context(
             "guidance": feedback.get("guidance"),
             "minimal_json_shape": feedback.get("minimal_json_shape"),
             "final_task": final_task,
+            "edit_size_policy": (
+                "Existing-file exact_replace old_string must be a local "
+                "function/block/import/registration selector, not most of the "
+                "file. Split large repairs into serializable small edits or a "
+                "new helper file plus a minimal integration edit."
+            ),
             "replace_all_rule": (
                 "Use replace_all=true only when the intended edit is global "
                 "across every candidate match."

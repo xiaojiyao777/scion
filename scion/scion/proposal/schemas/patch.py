@@ -529,6 +529,10 @@ Produce a typed edit set that implements the hypothesis.
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
+- For existing-file `exact_replace`, keep `old_string` scoped to a function,
+  import block, registry entry, or local code block. Host preflight rejects
+  whole-file and near-whole-file selectors (hard limit 85% of files over 2000
+  chars); aim for each `old_string` to stay under 35% of the file.
 - For `exact_replace`, `old_string` must be a non-empty string and `new_string` must be present as a string. To delete text, set `new_string` to `""`; do not omit it or set it to null.
 - Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization.
 - Existing files must never be changed through `action="create"`, `create_new`, or `full_file`; existing file requires `action="modify"` with `edit_intent="exact_replace"` and `source_digest`. Create/full content is only for genuinely new files.

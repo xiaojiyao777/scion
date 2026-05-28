@@ -47,6 +47,41 @@ class ExactReplaceShapeRetryCreative(FakeCreative):
         return self.patch
 
 
+class NearWholeExactReplaceRetryCreative(FakeCreative):
+    def __init__(self, patch: PatchProposal, *, fail_times: int = 1) -> None:
+        super().__init__(patch=patch)
+        self.calls = 0
+        self.fail_times = fail_times
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            _raise_near_whole_exact_replace()
+        return self.patch
+
+
+def _raise_near_whole_exact_replace() -> None:
+    head = "def target():\n"
+    body = "".join(f"    value_{idx} = {idx}\n" for idx in range(180))
+    tail = "def untouched():\n    return 1\n"
+    before = head + body + tail
+    _parse_patch(
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": source_digest_for_content(before),
+            "old_string": head + body,
+            "new_string": head + "    return 2\n",
+        },
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+    )
+
+
 def test_solver_design_telemetry_repair_rule_forbids_fake_activation() -> None:
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
@@ -266,6 +301,94 @@ def test_agentic_session_retries_exact_replace_schema_preflight_feedback(
         event.metadata.get("failure_code") == "code_edit_protocol_retry"
         for event in output.transcript
     )
+
+
+def test_agentic_session_retries_near_whole_exact_replace_feedback(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = NearWholeExactReplaceRetryCreative(patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == patch
+    assert len(creative.code_contexts) == 2
+    retry_context = creative.code_contexts[1]
+    feedback = retry_context["agentic_code_edit_retry_feedback"]
+    assert feedback["reason"] == "existing_file_near_whole_file_exact_replace_rejected"
+    assert feedback["coverage_ratio"] > 0.85
+    assert feedback["old_string_chars"] > 2000
+    assert feedback["file_chars"] > feedback["old_string_chars"]
+    assert feedback["source_digest"]
+    assert "Split the change into smaller exact_replace edits" in feedback["guidance"]
+    assert "function/block-level exact_replace edits" in feedback["final_task"]
+    assert "coverage_ratio" in retry_context["prior_code_failure"]
+    assert "old_string_chars" in retry_context["prior_code_failure"]
+    assert "file_chars" in retry_context["prior_code_failure"]
+    assert any(
+        event.metadata.get("failure_code") == "code_edit_protocol_retry"
+        for event in output.transcript
+    )
+
+
+def test_agentic_session_blocks_after_repeated_near_whole_exact_replace(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = NearWholeExactReplaceRetryCreative(patch, fail_times=2)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.patch is None
+    assert output.failure_category == "schema_output_failure"
+    assert output.failure_detail is not None
+    assert "existing_file_near_whole_file_exact_replace_rejected" in output.failure_detail
+    assert len(creative.code_contexts) == 2
+    assert sum(
+        1
+        for event in output.transcript
+        if event.metadata.get("failure_code") == "code_edit_protocol_retry"
+    ) == 1
 
 
 def test_creative_layer_renders_agentic_observations_and_research_diagnosis() -> None:

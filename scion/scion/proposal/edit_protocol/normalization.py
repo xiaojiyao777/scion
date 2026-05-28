@@ -40,6 +40,7 @@ _LOOSE_FILE_SOURCE_RE = re.compile(
 
 _NEAR_WHOLE_FILE_EXACT_REPLACE_MIN_CHARS = 2000
 _NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE = 0.85
+_RECOMMENDED_EXACT_REPLACE_MAX_COVERAGE = 0.35
 
 
 class PatchEditProtocolError(ValueError):
@@ -942,13 +943,19 @@ def _raise_exact_replace_granularity_error(
                 "old_string_chars": old_string_chars,
                 "file_chars": file_chars,
                 "coverage_ratio": round(coverage_ratio, 4),
+                "max_coverage_ratio": _NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE,
+                "recommended_max_coverage_ratio": (
+                    _RECOMMENDED_EXACT_REPLACE_MAX_COVERAGE
+                ),
                 "detail": detail,
                 "guidance": (
                     "Split the change into smaller exact_replace edits for a "
                     "function/block, or create a helper file and add a small "
                     "integration edit. Each old_string should identify only the "
                     "function, import block, registration entry, or local code "
-                    "block that actually changes."
+                    "block that actually changes. Keep exact_replace old_string "
+                    "well below whole-file scope; use the recommended coverage "
+                    "ratio as the retry target."
                 ),
             },
             sort_keys=True,
