@@ -219,7 +219,11 @@ def _normalize_change(
             composing_same_file=composing_same_file,
             prior_change_pointers=prior_change_pointers,
         )
+        eof_final_newline_tolerated = bool(
+            change.pop("_host_eof_final_newline_tolerated", False)
+        )
     else:
+        eof_final_newline_tolerated = False
         _validate_existing_file_full_file_modify(
             file_path=file_path,
             action=action,
@@ -262,6 +266,7 @@ def _normalize_change(
         ),
         content_after=content_after,
         change_pointer=change_pointer,
+        eof_final_newline_tolerated=eof_final_newline_tolerated,
     )
     return change, [metadata]
 
@@ -851,6 +856,15 @@ def _apply_exact_replace(
     )
     occurrences = before.count(old_string)
     if occurrences == 0:
+        eof_adjusted = _apply_eof_final_newline_drift(
+            before=before,
+            old_string=old_string,
+            new_string=new_string,
+        )
+        if eof_adjusted is not None:
+            if isinstance(change, dict):
+                change["_host_eof_final_newline_tolerated"] = True
+            return eof_adjusted
         if composing_same_file:
             _raise_duplicate_file_error(
                 reason="exact_replace_not_serializable",
@@ -884,6 +898,28 @@ def _apply_exact_replace(
     if replace_all:
         return before.replace(old_string, new_string)
     return before.replace(old_string, new_string, 1)
+
+
+def _apply_eof_final_newline_drift(
+    *,
+    before: str,
+    old_string: str,
+    new_string: str,
+) -> str | None:
+    """Tolerate selectors copied with one terminal newline absent in source."""
+    if old_string.endswith("\r\n"):
+        old_adjusted = old_string[:-2]
+        new_adjusted = new_string[:-2] if new_string.endswith("\r\n") else new_string
+    elif old_string.endswith("\n"):
+        old_adjusted = old_string[:-1]
+        new_adjusted = new_string[:-1] if new_string.endswith("\n") else new_string
+    else:
+        return None
+    if not old_adjusted or before.endswith(old_string):
+        return None
+    if not before.endswith(old_adjusted):
+        return None
+    return before[: len(before) - len(old_adjusted)] + new_adjusted
 
 
 def _old_string_not_unique_payload(
@@ -1072,6 +1108,7 @@ def _normalization_metadata(
     source_provenance: str | None = None,
     content_after: str,
     change_pointer: str,
+    eof_final_newline_tolerated: bool = False,
 ) -> dict[str, Any]:
     before_digest = source_digest_for_content(before) if before is not None else None
     after_digest = source_digest_for_content(content_after)
@@ -1081,7 +1118,7 @@ def _normalization_metadata(
         before_digest=before_digest,
         after_digest=after_digest,
     )
-    return {
+    metadata = {
         "field": "patch_set_change",
         "repair_kind": "typed_edit_normalization",
         "action": "normalized_to_canonical_full_content",
@@ -1097,6 +1134,19 @@ def _normalization_metadata(
         "derived_diff_summary": diff_stats,
         "evidence_refs": _string_list(change.get("evidence_refs")),
     }
+    if eof_final_newline_tolerated:
+        metadata.update(
+            {
+                "selector_repair": "eof_final_newline_tolerated",
+                "eof_final_newline_tolerated": True,
+                "selector_repair_guidance": (
+                    "Host tolerated a terminal-newline-only selector drift at "
+                    "EOF. Future exact_replace old_string values should match "
+                    "the displayed source bytes exactly."
+                ),
+            }
+        )
+    return metadata
 
 
 def _diff_stats(before: str | None, after: str) -> dict[str, Any]:

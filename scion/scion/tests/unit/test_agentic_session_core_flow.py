@@ -431,7 +431,7 @@ def test_agentic_session_retries_not_serializable_exact_replace_feedback(
     assert feedback["prior_json_pointers"] == ["/"]
     assert "Use one file change for this file" in feedback["guidance"]
     assert "no-op exact_replace" in feedback["guidance"]
-    assert "Prefer one change per file" in retry_context["prior_code_failure"]
+    assert "must use one change per file" in retry_context["prior_code_failure"]
     assert "old_string == new_string" in retry_context["prior_code_failure"]
     assert "no-op EOF/trailing newline" in feedback["final_task"]
     assert any(

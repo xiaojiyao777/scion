@@ -243,7 +243,13 @@ class ContractGate:
                 selected_surface=selected_surface,
             )
         )
-        checks.append(self._c8_import_whitelist(patch, patch_graph=patch_graph))
+        checks.append(
+            self._c8_import_whitelist(
+                patch,
+                patch_graph=patch_graph,
+                base_file_content=base_file_content,
+            )
+        )
         checks.append(
             self._c9_sensitive_api(
                 patch,
@@ -409,13 +415,28 @@ class ContractGate:
         patch: PatchProposal,
         *,
         patch_graph: PatchSetGraph | None = None,
+        base_file_content: Callable[[str], str | None] | None = None,
     ) -> CheckResult:
         return check_import_whitelist(
             patch,
             problem_spec=self._spec,
             patch_graph=patch_graph,
             is_editable_solver_file=self._is_solver_design_patch_path,
+            relative_import_file_exists=(
+                self._relative_import_file_exists(base_file_content)
+            ),
         )
+
+    def _relative_import_file_exists(
+        self,
+        base_file_content: Callable[[str], str | None] | None,
+    ) -> Callable[[str], bool]:
+        reader = base_file_content or self._champion_file_content
+
+        def exists(file_rel: str) -> bool:
+            return reader(file_rel) is not None
+
+        return exists
 
     # ------------------------------------------------------------------
     # C9: Sensitive API detection

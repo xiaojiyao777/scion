@@ -196,7 +196,47 @@ def test_code_prompt_summarizes_previous_patch_telemetry_records():
     assert "context.record_phase('mechanism_x', ...)" in user_prompt
     assert "context.record_iteration('mechanism_x', ...)" in user_prompt
     assert "context.record_move('mechanism_x', ...)" in user_prompt
-    assert "preserving any telemetry records from the previous patch" in user_prompt
+    assert "mechanism-specific calls only when they are not the current blocker" in user_prompt
+
+
+def test_code_prompt_telemetry_identity_retry_does_not_preserve_offending_id():
+    ctx = _base_context(
+        prior_code_failure=(
+            "code_stage_telemetry_identity_mismatch: patch records telemetry "
+            "for mechanism id(s) not declared by the approved hypothesis: "
+            "['alns']. Use the protected mechanism id(s) "
+            "['route_shape_polish'] or remove unrelated telemetry."
+        ),
+        previous_patch={
+            "file_path": "policies/baseline_modules/local_search.py",
+            "action": "modify",
+            "code_content": (
+                "def apply(context):\n"
+                "    context.record_iteration('alns', 1)\n"
+                "    context.record_move('route_shape_polish', attempted=1, accepted=1)\n"
+            ),
+        },
+        agentic_code_self_check_feedback={
+            "passed": False,
+            "failure_code": "code_stage_telemetry_identity_mismatch",
+            "issue": (
+                "code_stage_telemetry_identity_mismatch: patch records "
+                "telemetry for mechanism id(s) not declared by the approved "
+                "hypothesis: ['alns']."
+            ),
+            "offending_telemetry_ids": ["alns"],
+            "protected_mechanism_ids": ["route_shape_polish"],
+        },
+    )
+
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "Current blocker is telemetry identity" in user_prompt
+    assert "delete them or rename newly added/changed calls" in user_prompt
+    assert "alns" in user_prompt
+    assert "route_shape_polish" in user_prompt
+    assert "context.record_move('route_shape_polish', ...)" in user_prompt
+    assert "context.record_iteration('alns', ...)" not in user_prompt
 
 
 def test_code_prompt_includes_solver_design_mechanism_telemetry_obligation():

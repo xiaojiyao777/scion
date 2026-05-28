@@ -55,6 +55,19 @@ class PatchSetGraph:
             for target in targets
         )
 
+    def relative_import_targets(
+        self,
+        *,
+        importer_path: str,
+        node: ast.ImportFrom,
+    ) -> tuple[str, ...]:
+        """Return normalized module-file targets for a relative import."""
+        try:
+            importer_rel = normalize_relative_patch_path(importer_path)
+        except ValueError:
+            return ()
+        return _relative_import_module_targets(importer_rel, node)
+
 
 def _relative_import_module_targets(
     importer_rel: str,

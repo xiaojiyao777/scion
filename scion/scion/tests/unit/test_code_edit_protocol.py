@@ -1140,9 +1140,13 @@ def test_not_serializable_exact_replace_enters_code_retry_feedback() -> None:
     assert feedback["reason"] == "exact_replace_not_serializable"
     assert feedback["json_pointer"] == "/additional_changes/0"
     assert feedback["prior_json_pointers"] == ["/"]
+    assert "single blocker" in feedback["current_blocker_only"]
+    assert "one change per file" in feedback["same_file_retry_policy"]
     assert "Use one file change for this file" in user_prompt
+    assert "the retry must use one change per file" in user_prompt
     assert "old_string == new_string" in user_prompt
     assert "no-op EOF/trailing newline" in user_prompt
+    assert "C8_import_whitelist" not in user_prompt
 
 
 def test_noop_eof_exact_replace_additional_change_is_dropped_with_audit() -> None:
@@ -1215,6 +1219,61 @@ def test_noop_eof_exact_replace_additional_change_is_dropped_with_audit() -> Non
         "EOF/trailing-whitespace-only edits" in item["guidance"]
         for item in noop_audits
     )
+
+
+def test_eof_newline_exact_replace_selector_drift_is_tolerated_with_audit() -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    scheduler_before = "A = 1\nB = 1"
+    digest = source_digest_for_content(scheduler_before)
+    raw = {
+        "file_path": "policies/baseline_modules/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "A = 1",
+                "new_string": "A = 2",
+            },
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "B = 1\n",
+                "new_string": "B = 2\n",
+            },
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={
+            "patch_source_files": {
+                scheduler_path: scheduler_before,
+            },
+        },
+    )
+
+    assert len(patch.additional_changes) == 1
+    assert patch.additional_changes[0].file_path == scheduler_path
+    assert patch.additional_changes[0].code_content == "A = 2\nB = 2"
+    eof_repairs = [
+        item
+        for item in patch.repair_attribution
+        if item.get("selector_repair") == "eof_final_newline_tolerated"
+    ]
+    assert [item["json_pointer"] for item in eof_repairs] == [
+        "/additional_changes/1"
+    ]
+    assert eof_repairs[0]["eof_final_newline_tolerated"] is True
+    assert eof_repairs[0]["source_digest"] == digest
 
 
 def test_duplicate_full_file_conflict_is_rejected_before_schema_loop() -> None:

@@ -30,6 +30,7 @@ def check_import_whitelist(
     problem_spec: ProblemSpec,
     patch_graph: PatchSetGraph | None = None,
     is_editable_solver_file: Callable[[str], bool] | None = None,
+    relative_import_file_exists: Callable[[str], bool] | None = None,
 ) -> CheckResult:
     t0 = time.monotonic_ns()
     if patch.action == "delete":
@@ -72,6 +73,19 @@ def check_import_whitelist(
                 )
             ):
                 continue
+            if (
+                patch_graph is not None
+                and is_editable_solver_file is not None
+                and relative_import_file_exists is not None
+                and _allows_existing_relative_import(
+                    patch.file_path,
+                    node,
+                    patch_graph=patch_graph,
+                    is_editable_solver_file=is_editable_solver_file,
+                    relative_import_file_exists=relative_import_file_exists,
+                )
+            ):
+                continue
             if node.module:
                 top = node.module.split(".")[0]
                 if not _in_whitelist(top, whitelist):
@@ -85,6 +99,36 @@ def check_import_whitelist(
     passed = len(violations) == 0
     detail = "imports ok" if passed else f"non-whitelisted imports: {violations}"
     return check_result("C8_import_whitelist", passed, "heavy", detail, t0)
+
+
+def _allows_existing_relative_import(
+    importer_path: str,
+    node: ast.ImportFrom,
+    *,
+    patch_graph: PatchSetGraph,
+    is_editable_solver_file: Callable[[str], bool],
+    relative_import_file_exists: Callable[[str], bool],
+) -> bool:
+    if node.level <= 0:
+        return False
+    try:
+        importer_rel = normalize_relative_patch_path(importer_path)
+    except ValueError:
+        return False
+    if not is_editable_solver_file(importer_rel):
+        return False
+    targets = patch_graph.relative_import_targets(
+        importer_path=importer_rel,
+        node=node,
+    )
+    if not targets:
+        return False
+    return all(
+        target != importer_rel
+        and is_editable_solver_file(target)
+        and relative_import_file_exists(target)
+        for target in targets
+    )
 
 
 def check_sensitive_api(

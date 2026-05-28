@@ -1,6 +1,9 @@
 """AgenticSessionRepair mixin."""
 from __future__ import annotations
 
+import ast
+import re
+
 from scion.core.models import mechanism_changes
 from scion.proposal.agentic_session_common import *
 
@@ -96,13 +99,19 @@ class AgenticSessionRepairMixin:
             repair_context = dict(code_context)
             repair_context["prior_code_failure"] = issue_detail
             repair_context["previous_patch"] = _proposal_payload(patch)
-            repair_context["agentic_code_self_check_feedback"] = {
+            self_check_feedback = {
                 "passed": False,
                 "issue": issue_detail,
                 "file_path": patch.file_path,
                 "action": patch.action,
                 "test_hint": patch.test_hint,
             }
+            self_check_feedback.update(
+                _code_self_check_structured_feedback(issue_detail, hypothesis)
+            )
+            repair_context["agentic_code_self_check_feedback"] = (
+                self_check_feedback
+            )
             research_diagnosis = _research_diagnosis_from_observations(observations)
             if research_diagnosis:
                 repair_context["agentic_research_diagnosis"] = research_diagnosis
@@ -274,6 +283,53 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
     }
 
 
+def _code_self_check_structured_feedback(
+    issue_detail: str,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    if "code_stage_telemetry_identity_mismatch" not in str(issue_detail or ""):
+        return {}
+    protected_ids = [
+        str(change.id)
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    offending_ids = _parse_telemetry_identity_ids(issue_detail)
+    return _drop_empty_dict(
+        {
+            "failure_code": "code_stage_telemetry_identity_mismatch",
+            "current_blocker": "telemetry_identity",
+            "offending_telemetry_ids": offending_ids,
+            "protected_mechanism_ids": protected_ids,
+            "repair_instruction": (
+                "Remove newly added/changed telemetry under offending ids, "
+                "or rename those calls to the protected mechanism id. Do not "
+                "preserve an offending telemetry id from the previous patch."
+            ),
+        }
+    )
+
+
+def _parse_telemetry_identity_ids(issue_detail: str) -> list[str]:
+    match = re.search(
+        r"not declared by the approved hypothesis:\s*(\[[^\]]*\])",
+        str(issue_detail or ""),
+    )
+    if match:
+        try:
+            parsed = ast.literal_eval(match.group(1))
+        except (SyntaxError, ValueError):
+            parsed = []
+        if isinstance(parsed, (list, tuple, set)):
+            return sorted(
+                str(item).strip()
+                for item in parsed
+                if str(item).strip()
+            )
+    fallback = re.findall(r"['\"]([A-Za-z][A-Za-z0-9_]{1,63})['\"]", str(issue_detail))
+    return sorted(dict.fromkeys(fallback))
+
+
 def _code_edit_protocol_retry_context(
     context: Mapping[str, Any],
     hypothesis: HypothesisProposal,
@@ -315,17 +371,18 @@ def _code_edit_protocol_retry_context(
             f"{feedback.get('guidance') or ''} Preserve "
             f"target_file={hypothesis.target_file!r}, action={hypothesis.action!r}, "
             f"and mechanism_changes ids={protected_ids!r}; repair only the "
-            "same-file edit ordering/granularity. Prefer one change per file. "
-            "If multiple exact_replace edits remain, each later old_string must "
-            "match the content after earlier edits. Remove no-op EOF/trailing "
-            "newline edits and any old_string == new_string entries."
+            "current same-file serialization blocker. For the failing file, "
+            "the retry must use one change per file: merge intended edits into "
+            "a single exact_replace or emit a helper file plus one small "
+            "integration edit. Do not include multiple additional_changes for "
+            "that file. Remove no-op EOF/trailing newline edits and any "
+            "old_string == new_string entries."
         )
         final_task = (
-            "Return the same patch intent with one serializable change for the "
-            "failing file when possible. Otherwise return multiple same-file "
-            "exact_replace edits ordered so each old_string matches the content "
-            "after earlier edits. Do not generate no-op EOF/trailing newline "
-            "edits or old_string == new_string entries."
+            "Return the same patch intent with one file change for the failing "
+            "file. Do not generate no-op EOF/trailing newline edits, "
+            "old_string == new_string entries, or multiple same-file "
+            "additional_changes."
         )
     elif reason.startswith("exact_replace_"):
         field = str(feedback.get("field") or "typed edit field")
@@ -420,6 +477,17 @@ def _code_edit_protocol_retry_context(
             "guidance": feedback.get("guidance"),
             "minimal_json_shape": feedback.get("minimal_json_shape"),
             "final_task": final_task,
+            "current_blocker_only": (
+                "Repair the single blocker named in reason; do not mix older "
+                "runtime, preview, or import-whitelist blockers into this "
+                "typed-edit retry."
+            ),
+            "same_file_retry_policy": (
+                "After exact_replace_not_serializable, use one change per file "
+                "for the failing file."
+            )
+            if reason == "exact_replace_not_serializable"
+            else "",
             "edit_size_policy": (
                 "Existing-file exact_replace old_string must be a local "
                 "function/block/import/registration selector, not most of the "

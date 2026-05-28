@@ -202,7 +202,10 @@ def _split_code_context(
         prior_failure_section += (
             f"## Branch Code Status\n{D['branch_hygiene_guidance']}\n\n"
         )
-    previous_patch_section = _previous_patch_prompt_section(D["previous_patch"])
+    previous_patch_section = _previous_patch_prompt_section(
+        D["previous_patch"],
+        current_feedback=D["agentic_code_self_check_feedback"],
+    )
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     cacheable_agentic_context = ""
     dynamic_agentic_context = ""
@@ -543,14 +546,30 @@ def _is_timeout_failure(text: str) -> bool:
     return "timed out" in lowered or "timeout" in lowered
 
 
-def _previous_patch_prompt_section(value: Any) -> str:
+def _previous_patch_prompt_section(
+    value: Any,
+    *,
+    current_feedback: Any = None,
+) -> str:
     if value in (None, "", {}, []):
         return ""
-    telemetry_summary = _previous_patch_telemetry_summary(value)
+    telemetry_policy = _telemetry_identity_preservation_policy(current_feedback)
+    telemetry_summary = _previous_patch_telemetry_summary(
+        value,
+        exclude_ids=telemetry_policy["offending_ids"],
+    )
+    telemetry_blocker_section = ""
+    if telemetry_policy["offending_ids"]:
+        telemetry_blocker_section = (
+            "Current blocker is telemetry identity. Do not preserve telemetry "
+            "records for offending mechanism id(s) "
+            f"{sorted(telemetry_policy['offending_ids'])!r}; delete them or "
+            "rename newly added/changed calls to the protected mechanism id(s) "
+            f"{sorted(telemetry_policy['protected_ids'])!r}.\n\n"
+        )
     telemetry_section = (
         "Telemetry records detected in the previous patch. Preserve these "
-        "mechanism-specific calls while repairing unrelated runtime or API "
-        "issues:\n"
+        "mechanism-specific calls only when they are not the current blocker:\n"
         f"{telemetry_summary}\n\n"
         if telemetry_summary
         else ""
@@ -559,9 +578,11 @@ def _previous_patch_prompt_section(value: Any) -> str:
     return (
         "## Previous Patch Attempt\n"
         "This is the immediately previous generated patch attempt. Repair it "
-        "instead of starting from scratch. Preserve any helper calls, imports, "
-        "mechanism ids, and telemetry records that already addressed earlier "
-        "feedback, unless the current failure explicitly says they are wrong.\n\n"
+        "instead of starting from scratch. Current failure feedback overrides "
+        "generic preservation. Preserve helper calls, imports, mechanism ids, "
+        "and telemetry records only when the current blocker does not identify "
+        "them as wrong.\n\n"
+        f"{telemetry_blocker_section}"
         f"{telemetry_section}"
         f"{_bounded_json(compact_previous, 6000)}\n\n"
     )
@@ -642,27 +663,69 @@ def _snippet_text(value: Any, max_chars: int = 600) -> str:
     return text[: max(0, max_chars - len(suffix))] + suffix
 
 
-def _previous_patch_telemetry_summary(value: Any) -> str:
-    calls = _extract_previous_patch_telemetry_calls(value)
+def _previous_patch_telemetry_summary(
+    value: Any,
+    *,
+    exclude_ids: set[str] | None = None,
+) -> str:
+    calls = _extract_previous_patch_telemetry_calls(
+        value,
+        exclude_ids=exclude_ids or set(),
+    )
     if not calls:
         return ""
     return "\n".join(f"- `{call}`" for call in calls[:18])
 
 
-def _extract_previous_patch_telemetry_calls(value: Any) -> list[str]:
+def _extract_previous_patch_telemetry_calls(
+    value: Any,
+    *,
+    exclude_ids: set[str] | None = None,
+) -> list[str]:
     text = _previous_patch_text(value)
     if not text:
         return []
+    excluded = exclude_ids or set()
     pattern = re.compile(
         r"context\.(record_phase|record_iteration|record_move)\("
         r"\s*(['\"])([a-z][a-z0-9_]{0,63})\2",
     )
     calls: list[str] = []
     for match in pattern.finditer(text):
-        call = f"context.{match.group(1)}('{match.group(3)}', ...)"
+        mechanism_id = match.group(3)
+        if mechanism_id in excluded:
+            continue
+        call = f"context.{match.group(1)}('{mechanism_id}', ...)"
         if call not in calls:
             calls.append(call)
     return calls
+
+
+def _telemetry_identity_preservation_policy(feedback: Any) -> dict[str, set[str]]:
+    if not isinstance(feedback, dict):
+        return {"offending_ids": set(), "protected_ids": set()}
+    failure_code = str(feedback.get("failure_code") or "")
+    issue = str(feedback.get("issue") or "")
+    if (
+        failure_code != "code_stage_telemetry_identity_mismatch"
+        and "code_stage_telemetry_identity_mismatch" not in issue
+    ):
+        return {"offending_ids": set(), "protected_ids": set()}
+    return {
+        "offending_ids": _string_set(feedback.get("offending_telemetry_ids")),
+        "protected_ids": _string_set(feedback.get("protected_mechanism_ids")),
+    }
+
+
+def _string_set(value: Any) -> set[str]:
+    if isinstance(value, str):
+        values = [value]
+    else:
+        try:
+            values = list(value or [])
+        except TypeError:
+            values = [value]
+    return {str(item).strip() for item in values if str(item).strip()}
 
 
 def _previous_patch_text(value: Any) -> str:
