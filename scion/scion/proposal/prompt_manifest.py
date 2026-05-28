@@ -258,7 +258,21 @@ def _code_file_visibility_ledger(
                     section_statuses=section_statuses,
                 )
             )
-    if not target_record and not integration_records:
+    algorithm_read_records: list[dict[str, Any]] = []
+    for file_path, content in _code_context_full_algorithm_read_sources(
+        context
+    ).items():
+        algorithm_read_records.append(
+            _code_file_visibility_record(
+                file_path=file_path,
+                content=content,
+                role="solver_design_full_algorithm_file_read",
+                section_name="solver_design_full_algorithm_file_reads",
+                provider_prompt_text=provider_prompt_text,
+                section_statuses=section_statuses,
+            )
+        )
+    if not target_record and not integration_records and not algorithm_read_records:
         return {}
     return _drop_empty(
         {
@@ -271,6 +285,7 @@ def _code_file_visibility_ledger(
             ),
             "target_file": target_record,
             "integration_files": integration_records,
+            "algorithm_file_reads": algorithm_read_records,
         }
     )
 
@@ -942,6 +957,56 @@ def _parse_markdown_source_files(value: Any) -> dict[str, str]:
         if path:
             files[path] = content
     return files
+
+
+def _code_context_full_algorithm_read_sources(
+    context: Mapping[str, Any],
+) -> dict[str, str]:
+    sources: dict[str, str] = {}
+    for item in _iter_full_algorithm_read_payloads(
+        context.get("solver_design_full_algorithm_file_reads")
+    ):
+        path = _normalize_path(item.get("file_path"))
+        content = item.get("content_preview")
+        if path and isinstance(content, str):
+            sources[path] = content
+    observations = context.get("agentic_tool_observations")
+    if isinstance(observations, (list, tuple)):
+        for observation in observations:
+            if not isinstance(observation, Mapping):
+                continue
+            if observation.get("tool_name") != "context.read_algorithm_file":
+                continue
+            if bool(observation.get("is_error")):
+                continue
+            payload = observation.get("structured_payload")
+            for item in _iter_full_algorithm_read_payloads([payload]):
+                path = _normalize_path(item.get("file_path"))
+                content = item.get("content_preview")
+                if path and isinstance(content, str):
+                    sources[path] = content
+    return sources
+
+
+def _iter_full_algorithm_read_payloads(value: Any) -> list[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        value = value.get("reads")
+    if not isinstance(value, (list, tuple)):
+        return []
+    payloads: list[Mapping[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("readable") is not True:
+            continue
+        if item.get("active") is False:
+            continue
+        if bool(item.get("truncated")):
+            continue
+        if not isinstance(item.get("content_preview"), str):
+            continue
+        payloads.append(item)
+    return payloads
 
 
 def _source_text_from_context_value(

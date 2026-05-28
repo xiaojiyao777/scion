@@ -517,6 +517,8 @@ class ContextManager:
             "target_file": hypothesis.target_file,
             "target_file_code": target_file_code,
             "target_file_exists": target_file_exists,
+            "solver_design_source_root": source_root,
+            "solver_design_champion_root": champion.code_snapshot_path,
             "champion_operators_code": champion_operators_code,
             "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,
@@ -526,6 +528,8 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if branch_workspace and os.path.isdir(branch_workspace):
+            ctx["branch_workspace"] = branch_workspace
         active_subject_taxonomy = active_subject_taxonomy_payload(
             problem_spec=problem_spec,
             adapter=self._adapter,

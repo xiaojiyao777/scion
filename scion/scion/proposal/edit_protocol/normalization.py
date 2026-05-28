@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import difflib
+import fnmatch
 import hashlib
 import json
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping
 
 from scion.proposal.schemas.patch import (
@@ -62,6 +64,16 @@ class _ComposedChange:
     actions: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class _SourceRecord:
+    content: str
+    provenance: str
+
+    @property
+    def digest(self) -> str:
+        return source_digest_for_content(self.content)
+
+
 def normalize_patch_typed_edits(
     raw: Mapping[str, Any],
     *,
@@ -84,7 +96,16 @@ def normalize_patch_typed_edits(
     except PatchSchemaPreflightError as exc:
         raise PatchEditProtocolError(str(exc)) from exc
 
-    source_files = _source_files_from_context(context)
+    source_records = _source_records_from_context(
+        context,
+        requested_paths=_patch_requested_paths(normalized),
+    )
+    source_files = {
+        path: record.content for path, record in source_records.items()
+    }
+    source_provenance = {
+        path: record.provenance for path, record in source_records.items()
+    }
     reject_legacy_code_content = bool(
         (context or {}).get("reject_legacy_code_content_full_file_modify")
     )
@@ -94,6 +115,7 @@ def normalize_patch_typed_edits(
     normalized, metadata = _normalize_patch_set_changes(
         normalized,
         source_files=source_files,
+        source_provenance=source_provenance,
         reject_legacy_code_content=reject_legacy_code_content,
         allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
     )
@@ -104,17 +126,21 @@ def normalize_patch_typed_edits(
 def build_patch_edit_source_manifest(context: Mapping[str, Any]) -> str:
     """Render compact source digests for model-facing typed edit prompts."""
 
-    source_files = _source_files_from_context(context)
-    if not source_files:
+    source_records = _source_records_from_context(context)
+    if not source_records:
         return "(no editable source digests available)"
     lines = [
         (
-            "Use these sha256 source_digest values for exact_replace edits. "
-            "For create actions use null."
+            "Use these canonical sha256 source_digest values for "
+            "exact_replace edits. For create actions use null. Each record "
+            "also lists the source provenance used to compute the digest."
         )
     ]
-    for path, content in sorted(source_files.items()):
-        lines.append(f"- {path}: {source_digest_for_content(content)}")
+    for path, record in sorted(source_records.items()):
+        lines.append(
+            f"- {path}: source_digest={record.digest}; "
+            f"provenance={record.provenance}"
+        )
     return "\n".join(lines)
 
 
@@ -128,6 +154,7 @@ def _normalize_change(
     raw_change: Mapping[str, Any],
     *,
     source_files: Mapping[str, str],
+    source_provenance: Mapping[str, str] | None = None,
     original_source_files: Mapping[str, str] | None = None,
     change_pointer: str,
     allow_original_source_digest: bool = False,
@@ -227,6 +254,11 @@ def _normalize_change(
         action=action,
         edit_intent=edit_intent,
         before=before,
+        source_provenance=(
+            source_provenance.get(file_path)
+            if source_provenance is not None
+            else None
+        ),
         content_after=content_after,
         change_pointer=change_pointer,
     )
@@ -237,6 +269,7 @@ def _normalize_patch_set_changes(
     normalized: dict[str, Any],
     *,
     source_files: Mapping[str, str],
+    source_provenance: Mapping[str, str] | None = None,
     reject_legacy_code_content: bool = False,
     allow_host_internal_full_file_modify: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -271,6 +304,7 @@ def _normalize_patch_set_changes(
         change, change_metadata = _normalize_change(
             slot.raw,
             source_files=source_state,
+            source_provenance=source_provenance,
             original_source_files=source_files,
             change_pointer=slot.pointer,
             allow_original_source_digest=(
@@ -957,6 +991,7 @@ def _normalization_metadata(
     action: str,
     edit_intent: str,
     before: str | None,
+    source_provenance: str | None = None,
     content_after: str,
     change_pointer: str,
 ) -> dict[str, Any]:
@@ -977,6 +1012,8 @@ def _normalization_metadata(
         "patch_action": action,
         "edit_intent": edit_intent,
         "source_digest": _digest_text(change.get("source_digest")) or before_digest,
+        "source_record_digest": before_digest,
+        "source_provenance": source_provenance or "",
         "content_after_digest": after_digest,
         "derived_diff_ref": derived_diff_ref,
         "derived_diff_summary": diff_stats,
@@ -1036,9 +1073,20 @@ def _derived_diff_ref(
 
 
 def _source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, str]:
+    return {
+        path: record.content
+        for path, record in _source_records_from_context(context).items()
+    }
+
+
+def _source_records_from_context(
+    context: Mapping[str, Any] | None,
+    *,
+    requested_paths: tuple[str, ...] = (),
+) -> dict[str, _SourceRecord]:
     if not context:
         return {}
-    source_files: dict[str, str] = {}
+    source_files: dict[str, _SourceRecord] = {}
     for key in ("patch_source_files", "source_files", "editable_source_files"):
         value = context.get(key)
         if isinstance(value, Mapping):
@@ -1049,7 +1097,12 @@ def _source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, s
                     expected_path=normalized_path,
                 )
                 if normalized_path and source is not None:
-                    source_files[normalized_path] = source
+                    _put_source_record(
+                        source_files,
+                        normalized_path,
+                        source,
+                        key,
+                    )
     target_file = _normalize_path(context.get("target_file"))
     target_content = context.get("target_file_code")
     target_source = _source_text_from_context_value(
@@ -1057,14 +1110,192 @@ def _source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, s
         expected_path=target_file,
     )
     if target_file and target_source is not None:
-        source_files[target_file] = target_source
+        _put_source_record(source_files, target_file, target_source, "target_file_code")
     original_code = context.get("original_code")
     if isinstance(original_code, str):
-        source_files.update(_parse_original_code_source(original_code))
-    integration_files = context.get("solver_design_branch_current_integration_files")
+        _put_source_records(
+            source_files,
+            _parse_original_code_source(original_code),
+            "original_code",
+        )
+    for key in ("solver_design_branch_current_integration_files",):
+        integration_files = context.get(key)
+        if isinstance(integration_files, str):
+            _put_source_records(
+                source_files,
+                _parse_markdown_source_files(integration_files),
+                key,
+            )
+    _put_source_records(
+        source_files,
+        _solver_design_full_read_sources(
+            context.get("solver_design_full_algorithm_file_reads")
+        ),
+        "solver_design_full_algorithm_file_reads",
+    )
+    _put_source_records(
+        source_files,
+        _agentic_tool_observation_full_read_sources(
+            context.get("agentic_tool_observations")
+        ),
+        "agentic_tool_observations.context.read_algorithm_file",
+    )
+    integration_files = context.get("agentic_required_full_integration_files")
     if isinstance(integration_files, str):
-        source_files.update(_parse_markdown_source_files(integration_files))
+        _put_source_records(
+            source_files,
+            _parse_markdown_source_files(integration_files),
+            "agentic_required_full_integration_files",
+        )
+    for requested_path in requested_paths:
+        if requested_path in source_files:
+            continue
+        fallback = _branch_workspace_source(context, requested_path)
+        if fallback is not None:
+            _put_source_record(
+                source_files,
+                requested_path,
+                fallback,
+                "branch_workspace_fallback",
+            )
     return source_files
+
+
+def _put_source_records(
+    records: dict[str, _SourceRecord],
+    sources: Mapping[str, str],
+    provenance: str,
+) -> None:
+    for path, content in sources.items():
+        _put_source_record(records, path, content, provenance)
+
+
+def _put_source_record(
+    records: dict[str, _SourceRecord],
+    path: str,
+    content: str,
+    provenance: str,
+) -> None:
+    normalized_path = _normalize_path(path)
+    if not normalized_path or content is None:
+        return
+    records[normalized_path] = _SourceRecord(
+        content=str(content),
+        provenance=provenance,
+    )
+
+
+def _patch_requested_paths(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    paths: list[str] = []
+    for slot in _patch_set_slots(raw):
+        path = _normalize_path(slot.raw.get("file_path"))
+        if path:
+            paths.append(path)
+    return tuple(dict.fromkeys(paths))
+
+
+def _solver_design_full_read_sources(value: Any) -> dict[str, str]:
+    records: dict[str, str] = {}
+    if isinstance(value, Mapping):
+        value = value.get("reads")
+    if not isinstance(value, (list, tuple)):
+        return records
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        source = _full_read_source_from_payload(item)
+        path = _normalize_path(item.get("file_path"))
+        if path and source is not None:
+            records[path] = source
+    return records
+
+
+def _agentic_tool_observation_full_read_sources(value: Any) -> dict[str, str]:
+    records: dict[str, str] = {}
+    if not isinstance(value, (list, tuple)):
+        return records
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("tool_name") != "context.read_algorithm_file":
+            continue
+        if bool(item.get("is_error")):
+            continue
+        payload = item.get("structured_payload")
+        if not isinstance(payload, Mapping):
+            continue
+        source = _full_read_source_from_payload(payload)
+        path = _normalize_path(payload.get("file_path"))
+        if path and source is not None:
+            records[path] = source
+    return records
+
+
+def _full_read_source_from_payload(payload: Mapping[str, Any]) -> str | None:
+    if payload.get("readable") is not True:
+        return None
+    if payload.get("active") is False:
+        return None
+    if bool(payload.get("truncated")):
+        return None
+    content = payload.get("content_preview")
+    if not isinstance(content, str):
+        return None
+    return content
+
+
+def _branch_workspace_source(
+    context: Mapping[str, Any],
+    requested_path: str,
+) -> str | None:
+    normalized_path = _normalize_path(requested_path)
+    if not normalized_path or not _path_editable_for_branch_fallback(
+        context,
+        normalized_path,
+    ):
+        return None
+    root_value = (
+        context.get("branch_workspace")
+        or context.get("solver_design_source_root")
+        or context.get("source_root")
+    )
+    if not isinstance(root_value, str) or not root_value.strip():
+        return None
+    try:
+        root = Path(root_value).resolve()
+        candidate = (root / normalized_path).resolve()
+        candidate.relative_to(root)
+    except Exception:
+        return None
+    if not candidate.is_file():
+        return None
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _path_editable_for_branch_fallback(
+    context: Mapping[str, Any],
+    path: str,
+) -> bool:
+    editable_patterns = _pattern_list(context.get("editable_patterns"))
+    if not editable_patterns:
+        return False
+    frozen_patterns = _pattern_list(context.get("frozen_patterns"))
+    if any(fnmatch.fnmatchcase(path, pattern) for pattern in frozen_patterns):
+        return False
+    return any(fnmatch.fnmatchcase(path, pattern) for pattern in editable_patterns)
+
+
+def _pattern_list(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        items = re.split(r"[\n,]+", value)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        items = [str(item) for item in value]
+    else:
+        return ()
+    return tuple(item.strip() for item in items if item and item.strip())
 
 
 def _parse_markdown_source_files(rendered: str) -> dict[str, str]:

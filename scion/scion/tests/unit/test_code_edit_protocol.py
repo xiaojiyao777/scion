@@ -21,6 +21,7 @@ from scion.proposal.agentic_session_repair import (
 )
 from scion.proposal.engine import ProposalValidationError, _parse_patch
 from scion.proposal.engine.code_prompts import _split_code_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA
 from scion.tests.contract_test_support import make_spec
 
@@ -769,6 +770,220 @@ def test_additional_changes_accept_typed_exact_replace() -> None:
         and item.get("edit_intent") == "exact_replace"
         for item in patch.repair_attribution
     )
+
+
+def test_additional_exact_replace_uses_full_algorithm_read_source() -> None:
+    local_path = "policies/baseline_modules/local_search.py"
+    local_source = "LOCAL_SEARCH_OPS = []\n"
+    local_digest = source_digest_for_content(local_source)
+    short_digest = "d10534349d46680b"
+    raw = {
+        "file_path": "policies/baseline_modules/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": local_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": local_digest,
+                "old_string": "LOCAL_SEARCH_OPS = []",
+                "new_string": "LOCAL_SEARCH_OPS = ['compact_absorption']",
+            }
+        ],
+    }
+    context = {
+        "solver_design_full_algorithm_file_reads": [
+            {
+                "file_path": local_path,
+                "readable": True,
+                "active": True,
+                "truncated": False,
+                "size_chars": len(local_source),
+                "max_chars": len(local_source),
+                "digest": short_digest,
+                "content_preview": local_source,
+            }
+        ],
+        "editable_patterns": "policies/**/*.py",
+        "frozen_patterns": "data/**",
+    }
+
+    patch = _parse_patch(raw, context=context)
+    manifest = build_patch_edit_source_manifest(context)
+
+    assert patch.additional_changes[0].code_content == (
+        "LOCAL_SEARCH_OPS = ['compact_absorption']\n"
+    )
+    attribution = next(
+        item
+        for item in patch.repair_attribution
+        if item.get("json_pointer") == "/additional_changes/0"
+    )
+    assert attribution["source_provenance"] == "solver_design_full_algorithm_file_reads"
+    assert attribution["source_record_digest"] == local_digest
+    assert f"source_digest={local_digest}" in manifest
+    assert short_digest not in manifest
+
+
+def test_additional_exact_replace_uses_required_full_integration_source() -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    scheduler_source = "SCHEDULED = []\n"
+    scheduler_digest = source_digest_for_content(scheduler_source)
+    required_section = (
+        f"### {scheduler_path}\n"
+        "Provenance: retry required full source\n"
+        f"```python\n{scheduler_source}```"
+    )
+    raw = {
+        "file_path": "policies/baseline_modules/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": scheduler_digest,
+                "old_string": "SCHEDULED = []",
+                "new_string": "SCHEDULED = ['new_helper']",
+            }
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={"agentic_required_full_integration_files": required_section},
+    )
+
+    assert patch.additional_changes[0].code_content == (
+        "SCHEDULED = ['new_helper']\n"
+    )
+    attribution = next(
+        item
+        for item in patch.repair_attribution
+        if item.get("json_pointer") == "/additional_changes/0"
+    )
+    assert attribution["source_provenance"] == "agentic_required_full_integration_files"
+    assert attribution["source_record_digest"] == scheduler_digest
+
+
+def test_additional_exact_replace_uses_editable_branch_workspace_fallback(
+    tmp_path,
+) -> None:
+    local_path = "policies/baseline_modules/local_search.py"
+    local_source = "LOCAL_SEARCH_OPS = []\n"
+    workspace = tmp_path / "branch"
+    file_path = workspace / local_path
+    file_path.parent.mkdir(parents=True)
+    file_path.write_text(local_source, encoding="utf-8")
+    raw = {
+        "file_path": "policies/baseline_modules/new_helper.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "source_digest": None,
+        "content_after": "def helper():\n    return 1\n",
+        "full_file_reason": "new helper module",
+        "additional_changes": [
+            {
+                "file_path": local_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(local_source),
+                "old_string": "LOCAL_SEARCH_OPS = []",
+                "new_string": "LOCAL_SEARCH_OPS = ['workspace_fallback']",
+            }
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={
+            "branch_workspace": str(workspace),
+            "editable_patterns": "policies/**/*.py",
+            "frozen_patterns": "data/**",
+        },
+    )
+
+    assert patch.additional_changes[0].code_content == (
+        "LOCAL_SEARCH_OPS = ['workspace_fallback']\n"
+    )
+    attribution = next(
+        item
+        for item in patch.repair_attribution
+        if item.get("json_pointer") == "/additional_changes/0"
+    )
+    assert attribution["source_provenance"] == "branch_workspace_fallback"
+    assert attribution["source_record_digest"] == source_digest_for_content(
+        local_source
+    )
+
+
+def test_code_prompt_uses_source_digest_hash_for_short_full_read_digest() -> None:
+    source = "LOCAL_SEARCH_OPS = []\n"
+    full_digest = source_digest_for_content(source)
+    short_digest = "d10534349d46680b"
+    context = {
+        "problem_summary": "Example problem",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "hypothesis_detail": "Wire a variant.",
+        "target_file": "policies/baseline_modules/new_helper.py",
+        "target_file_code": "(new file — will be created)",
+        "operator_interface_spec": "solver design",
+        "import_whitelist": "- math",
+        "editable_patterns": "policies/**/*.py",
+        "frozen_patterns": "data/**",
+        "agentic_tool_observations": [
+            {
+                "observation_id": "obs-local-search",
+                "tool_name": "context.read_algorithm_file",
+                "digest": short_digest,
+                "structured_payload": {
+                    "file_path": "policies/baseline_modules/local_search.py",
+                    "readable": True,
+                    "active": True,
+                    "truncated": False,
+                    "size_chars": len(source),
+                    "max_chars": len(source),
+                    "digest": short_digest,
+                    "content_preview": source,
+                },
+            }
+        ],
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    rendered = "\n\n".join(
+        str(block.get("text", "")) for block in system_blocks
+    ) + user_prompt
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert full_digest in rendered
+    assert "source_digest_hash" in rendered
+    assert f'"source_digest": "{short_digest}"' not in rendered
+    assert f"source_digest={full_digest}" in rendered
+    ledger_records = manifest["code_file_visibility_ledger"]["algorithm_file_reads"]
+    assert (
+        ledger_records[0]["file_path"]
+        == "policies/baseline_modules/local_search.py"
+    )
+    assert ledger_records[0]["full_content_visible_in_rendered_prompt"] is True
 
 
 def test_duplicate_additional_exact_replace_changes_are_composed() -> None:

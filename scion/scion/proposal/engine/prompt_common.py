@@ -1076,7 +1076,9 @@ def _dedupe_observation_payload(
                 "sha256": compact.get("sha256"),
                 "size_chars": compact.get("size_chars"),
                 "source": compact.get("source"),
-                "source_digest": compact.get("source_digest"),
+                "source_digest": _canonical_full_source_digest(compact),
+                "source_digest_hash": _noncanonical_source_digest_hash(compact)
+                or compact.get("digest"),
                 "truncated": compact.get("truncated"),
             }
         )
@@ -1706,7 +1708,9 @@ def _solver_design_full_algorithm_file_reads(observations: Any) -> list[dict[str
                     "module": payload.get("module"),
                     "readable": payload.get("readable"),
                     "source": payload.get("source"),
-                    "source_digest": payload.get("digest"),
+                    "source_digest": _canonical_full_source_digest(payload),
+                    "source_digest_hash": _noncanonical_source_digest_hash(payload)
+                    or payload.get("digest"),
                     "sha256": payload.get("sha256"),
                     "truncated": payload.get("truncated"),
                     "size_chars": payload.get("size_chars"),
@@ -1716,6 +1720,30 @@ def _solver_design_full_algorithm_file_reads(observations: Any) -> list[dict[str
             )
         )
     return reads
+
+
+def _canonical_full_source_digest(payload: dict[str, Any]) -> str:
+    for key in ("source_digest", "sha256"):
+        value = payload.get(key)
+        if _looks_like_sha256(value):
+            return str(value)
+    content = payload.get("content_preview")
+    if isinstance(content, str) and content and _is_full_algorithm_file_payload(payload):
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return ""
+
+
+def _noncanonical_source_digest_hash(payload: dict[str, Any]) -> Any:
+    value = payload.get("source_digest_hash") or payload.get("source_digest")
+    if _looks_like_sha256(value):
+        return ""
+    return value
+
+
+def _looks_like_sha256(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdefABCDEF" for ch in value)
 
 
 def _is_full_algorithm_file_payload(payload: dict[str, Any]) -> bool:

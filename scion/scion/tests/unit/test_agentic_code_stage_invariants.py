@@ -7,6 +7,7 @@ from scion.core.models import (
     PatchProposal,
 )
 from scion.proposal.agentic_session_patch_flow import (
+    _code_context_with_required_full_integration_files,
     _code_integration_visibility_issue,
     _code_stage_identity_issue,
 )
@@ -269,3 +270,34 @@ def test_code_prompt_manifest_records_required_full_integration_source() -> None
     assert scheduler_record["role"] == "required_full_integration_edit_source"
     assert scheduler_record["full_content_visible_in_rendered_prompt"] is True
     assert _code_integration_visibility_issue(patch, manifest) is None
+
+
+def test_required_full_integration_projection_uses_full_algorithm_read_source() -> None:
+    local_path = "policies/baseline_modules/local_search.py"
+    local_source = "LOCAL_SEARCH_OPS = []\n"
+    retry_context = _code_context_with_required_full_integration_files(
+        {
+            "agentic_tool_observations": [
+                {
+                    "observation_id": "obs-local-search",
+                    "tool_name": "context.read_algorithm_file",
+                    "is_error": False,
+                    "structured_payload": {
+                        "file_path": local_path,
+                        "readable": True,
+                        "active": True,
+                        "truncated": False,
+                        "size_chars": len(local_source),
+                        "max_chars": len(local_source),
+                        "content_preview": local_source,
+                    },
+                }
+            ],
+            "solver_design_branch_current_integration_files": "",
+        },
+        [local_path],
+    )
+
+    required = retry_context["agentic_required_full_integration_files"]
+    assert f"### {local_path}" in required
+    assert local_source in required

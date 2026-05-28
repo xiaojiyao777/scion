@@ -684,7 +684,8 @@ def _compact_code_algorithm_file_payload(payload: Mapping[str, Any]) -> dict[str
             "readable": payload.get("readable"),
             "source": payload.get("source"),
             "digest": payload.get("digest"),
-            "source_digest": _compact_code_prompt_value(payload.get("source_digest")),
+            "source_digest": _canonical_code_source_digest(payload),
+            "source_digest_hash": _noncanonical_code_source_digest(payload),
             "truncated": payload.get("truncated"),
             "size_chars": payload.get("size_chars"),
             "max_chars": payload.get("max_chars"),
@@ -715,7 +716,8 @@ def _compact_code_algorithm_symbol_payload(
             "readable": payload.get("readable"),
             "source": payload.get("source"),
             "digest": payload.get("digest"),
-            "source_digest": _compact_code_prompt_value(payload.get("source_digest")),
+            "source_digest": _canonical_code_source_digest(payload),
+            "source_digest_hash": _noncanonical_code_source_digest(payload),
             "truncated": payload.get("truncated"),
             "coverage": _compact_code_prompt_value(payload.get("coverage")),
             "content_preview": _limit_string(
@@ -724,6 +726,46 @@ def _compact_code_algorithm_symbol_payload(
             ),
         }
     )
+
+
+def _canonical_code_source_digest(payload: Mapping[str, Any]) -> str:
+    for key in ("source_digest", "sha256"):
+        value = payload.get(key)
+        if _looks_like_sha256(value):
+            return str(value)
+    content = payload.get("content_preview")
+    if isinstance(content, str) and content and _payload_content_is_complete(payload):
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return ""
+
+
+def _noncanonical_code_source_digest(payload: Mapping[str, Any]) -> Any:
+    value = payload.get("source_digest")
+    if _looks_like_sha256(value):
+        return ""
+    return _compact_code_prompt_value(value)
+
+
+def _payload_content_is_complete(payload: Mapping[str, Any]) -> bool:
+    if payload.get("readable") is not True:
+        return False
+    if bool(payload.get("truncated")):
+        return False
+    preview_chars = len(str(payload.get("content_preview") or ""))
+    for key in ("size_chars", "max_chars"):
+        try:
+            expected = int(payload.get(key))
+        except Exception:
+            continue
+        if expected >= 0 and preview_chars >= expected:
+            return True
+    return False
+
+
+def _looks_like_sha256(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdefABCDEF" for ch in value)
 
 
 def _compact_code_surface_payload(payload: Mapping[str, Any]) -> dict[str, Any]:

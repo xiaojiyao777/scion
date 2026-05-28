@@ -924,6 +924,16 @@ def _code_context_source_by_path(
         "solver_design_branch_current_integration_files",
     ):
         result.update(_parse_markdown_source_files(code_context.get(key)))
+    result.update(
+        _full_algorithm_read_sources(
+            code_context.get("solver_design_full_algorithm_file_reads")
+        )
+    )
+    result.update(
+        _agentic_tool_observation_full_read_sources(
+            code_context.get("agentic_tool_observations")
+        )
+    )
     return result
 
 
@@ -974,6 +984,14 @@ def _full_visible_code_prompt_paths(manifest: Any) -> set[str]:
         path = _normalize_patch_path(record.get("file_path"))
         if path:
             paths.add(path)
+    for record in ledger.get("algorithm_file_reads") or ():
+        if not isinstance(record, Mapping):
+            continue
+        if not record.get("full_content_visible_in_rendered_prompt"):
+            continue
+        path = _normalize_patch_path(record.get("file_path"))
+        if path:
+            paths.add(path)
     return paths
 
 
@@ -982,9 +1000,7 @@ def _code_context_with_required_full_integration_files(
     paths: Any,
 ) -> dict[str, Any]:
     retry_context = dict(code_context)
-    source_files = _parse_markdown_source_files(
-        retry_context.get("solver_design_branch_current_integration_files")
-    )
+    source_files = _code_context_source_by_path(retry_context)
     required_sections: list[str] = []
     for path in paths or ():
         normalized = _normalize_patch_path(path)
@@ -1002,6 +1018,54 @@ def _code_context_with_required_full_integration_files(
             required_sections
         )
     return retry_context
+
+
+def _full_algorithm_read_sources(value: Any) -> dict[str, str]:
+    if isinstance(value, Mapping):
+        value = value.get("reads")
+    if not isinstance(value, (list, tuple)):
+        return {}
+    sources: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        path = _normalize_patch_path(item.get("file_path"))
+        content = _full_algorithm_read_content(item)
+        if path and content is not None:
+            sources[path] = content
+    return sources
+
+
+def _agentic_tool_observation_full_read_sources(value: Any) -> dict[str, str]:
+    if not isinstance(value, (list, tuple)):
+        return {}
+    sources: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("tool_name") != "context.read_algorithm_file":
+            continue
+        if bool(item.get("is_error")):
+            continue
+        payload = item.get("structured_payload")
+        if not isinstance(payload, Mapping):
+            continue
+        path = _normalize_patch_path(payload.get("file_path"))
+        content = _full_algorithm_read_content(payload)
+        if path and content is not None:
+            sources[path] = content
+    return sources
+
+
+def _full_algorithm_read_content(payload: Mapping[str, Any]) -> str | None:
+    if payload.get("readable") is not True:
+        return None
+    if payload.get("active") is False:
+        return None
+    if bool(payload.get("truncated")):
+        return None
+    content = payload.get("content_preview")
+    return content if isinstance(content, str) else None
 
 
 def _parse_markdown_source_files(value: Any) -> dict[str, str]:
