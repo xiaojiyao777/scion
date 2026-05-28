@@ -239,6 +239,17 @@ def _is_removal_savings_contrast_or_negated_addition(text: str) -> bool:
             "not another savings-removal",
             "not a removal savings",
             "not a removal-savings",
+            "not claiming removal savings",
+            "not claiming removal savings ranking is missing",
+            "without claiming removal savings",
+            "without claiming removal savings ranking is missing",
+            "rather than claiming removal savings",
+            "rather than claiming removal savings ranking is missing",
+            "instead of claiming removal savings",
+            "does not claim removal savings",
+            "does not claim removal savings ranking is missing",
+            "not a missing removal savings claim",
+            "not a claim that removal savings",
             "does not add savings removal",
             "does not add removal savings",
             "without adding savings removal",
@@ -347,6 +358,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
         (
             "_worst_removal",
             "worst removal",
+            "savings worst",
             "existing removal savings",
             "current removal savings",
             "active removal savings",
@@ -364,7 +376,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
     return bool(
         re.search(
             r"\b(?:existing|current|active|baseline|already)?\b.{0,80}"
-            r"\b(?:_worst_removal|worst removal)\b.{0,140}"
+            r"\b(?:_worst_removal|worst removal|savings worst)\b.{0,140}"
             r"\b(?:already|uses?|ranks?|seeds?|sorts?|orders?|targets?|"
             r"based|by|with)\b.{0,100}\b"
             + savings
@@ -375,7 +387,12 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
             r"\b"
             + savings
             + r"\b.{0,140}\b(?:existing|current|active|baseline|already)?"
-            r".{0,80}\b(?:_worst_removal|worst removal)\b",
+            r".{0,80}\b(?:_worst_removal|worst removal|savings worst)\b",
+        )
+        or re.search(
+            r"\b(?:existing|current|active|baseline|already|portfolio|"
+            r"includes?|contains?)\b.{0,140}\b(?:savings worst|worst removal|"
+            r"_worst_removal)\b",
             text,
         )
     )

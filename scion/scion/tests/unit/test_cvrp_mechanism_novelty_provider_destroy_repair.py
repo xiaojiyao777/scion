@@ -826,6 +826,137 @@ def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason()
     assert "_shaw_removal" not in result.reason
 
 
+def test_cvrp_provider_allows_reported_removal_savings_negated_claim() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a slack-cluster removal destroy operator that chooses a "
+            "high-load anchor route, estimates the load slack created by "
+            "removing one or two expensive anchor customers, and then removes "
+            "a bounded cluster of nearby customers from complementary routes "
+            "whose demands can plausibly be exchanged into that slack before "
+            "existing regret repair rebuilds the routes. It is materially "
+            "different from existing random, savings-worst, Shaw related, and "
+            "whole-route removal: the full destroy_repair.py shows no operator "
+            "that targets route-pair load complementarity or residual-capacity "
+            "exchange potential, while not claiming removal-savings ranking is "
+            "missing."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Current destroy portfolio perturbs customers uniformly, by "
+            "individual removal saving, by relatedness, or by whole route, "
+            "but lacks a capacity-slack targeted route-pair destroy."
+        ),
+        expected_effect="Improve total_distance with a route-pair slack variant.",
+        mechanism_changes=(
+            MechanismChange(id="slack_cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+@pytest.mark.parametrize(
+    "disclaimer",
+    [
+        "not claiming removal-savings ranking is missing",
+        "without claiming removal-savings ranking is missing",
+        "rather than claiming removal-savings ranking is missing",
+        "does not claim removal-savings ranking is missing",
+        "not a missing removal-savings claim",
+        "not a claim that removal-savings ranking is absent",
+        "without claiming detour-cost removal is missing",
+        "does not claim _worst_removal saving is missing",
+    ],
+)
+def test_cvrp_provider_allows_removal_savings_negated_premise_variants(
+    disclaimer: str,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Existing savings-worst removal and _worst_removal already rank "
+            "customers by removal saving with cost_of_remove. Add a route-pair "
+            "slack cluster removal variant; no operator targets route-pair load "
+            f"complementarity, while {disclaimer}."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing removal savings is active, but route-pair slack targeting "
+            "is not represented."
+        ),
+        expected_effect="Improve total_distance with complementary-route removal.",
+        mechanism_changes=(
+            MechanismChange(id="slack_cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_provider_allows_existing_worst_removal_distinct_variant_claim() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Existing _worst_removal uses removal savings with cost_of_remove, "
+            "but no operator targets route-pair load complementarity or residual "
+            "capacity exchange potential. Propose a slack-cluster removal "
+            "variant that uses route-pair capacity slack rather than another "
+            "removal-savings ranking."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Removal savings exists; route-pair slack targeting does not.",
+        expected_effect="Improve total_distance via a distinct destroy variant.",
+        mechanism_changes=(
+            MechanismChange(id="slack_cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_provider_rejects_baseline_lacks_removal_savings_worst_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The baseline lacks removal-savings worst removal. Add the missing "
+            "detour-cost removal operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Removal-savings worst removal is missing.",
+        expected_effect="Improve total_distance by adding removal-savings removal.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "removal_savings_worst_removal"
+
+
 def test_cvrp_provider_allows_position_cost_variant_acknowledging_worst_removal() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
