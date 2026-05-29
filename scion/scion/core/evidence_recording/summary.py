@@ -414,6 +414,8 @@ class CampaignSummaryMixin:
                 True,
             ),
             "attempt_kind": getattr(step, "attempt_kind", "screening"),
+            "scheduler_slot": getattr(step, "scheduler_slot", ""),
+            "scheduler_reason": getattr(step, "scheduler_reason", ""),
             "repair_policy_reason": getattr(step, "repair_policy_reason", None),
             "repair_mechanism_ids": list(
                 getattr(step, "repair_mechanism_ids", ()) or ()

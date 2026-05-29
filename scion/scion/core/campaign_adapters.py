@@ -135,6 +135,11 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
             ),
         ),
         record_step=getattr(owner, "_record_step", lambda step: None),
+        record_scheduler_result=getattr(
+            owner,
+            "_record_scheduler_result",
+            lambda result: None,
+        ),
         decision_reason_codes_for=getattr(
             owner,
             "_decision_reason_codes_for",

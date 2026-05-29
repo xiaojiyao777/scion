@@ -314,3 +314,59 @@ class LineageRecorderMixin:
                 self.registry.record_decision(**decision_payload)
             except Exception as exc:  # pragma: no cover
                 logger.debug("registry.record_decision failed: %s", exc)
+
+    def record_scheduler_result_lineage(
+        self,
+        *,
+        result: Any,
+        step: Any | None = None,
+    ) -> None:
+        """Append a replayable scheduler/result event when scheduler metadata exists."""
+        slot = str(getattr(result, "scheduler_slot", "") or "")
+        reason = str(getattr(result, "scheduler_reason", "") or "")
+        if not (slot or reason) or self.registry is None:
+            return
+        branch_id = str(getattr(result, "branch_id", "") or "")
+        decision = getattr(result, "decision", None)
+        decision_value = (
+            decision.value if getattr(decision, "value", None) is not None else decision
+        )
+        payload = {
+            "schema": "scion.scheduler_result.v1",
+            "scheduler_slot": slot,
+            "scheduler_reason": reason,
+            "result_action": str(getattr(result, "action", "") or ""),
+            "result_reason": str(getattr(result, "reason", "") or ""),
+            "branch_id": branch_id,
+            "decision": decision_value,
+            "counts_toward_max_rounds": bool(
+                getattr(result, "counts_toward_max_rounds", True)
+            ),
+            "attempt_kind": str(getattr(result, "attempt_kind", "screening") or ""),
+            "step_round": getattr(step, "round_num", None),
+            "step_branch_id": getattr(step, "branch_id", None),
+            "step_decision": (
+                step.decision.value
+                if getattr(getattr(step, "decision", None), "value", None) is not None
+                else getattr(step, "decision", None)
+            ),
+        }
+        event = {
+            "campaign_id": self.campaign_id,
+            "branch_id": branch_id,
+            "timestamp": datetime.now().isoformat(),
+            "event_kind": "scheduler_result",
+            "patch_action": payload["result_action"],
+            "decision": decision_value,
+            "scheduler_slot": slot,
+            "scheduler_reason": reason,
+            "decision_features_json": json.dumps(payload, sort_keys=True),
+            "audit_payload_json": json.dumps(payload, sort_keys=True),
+        }
+        hypothesis_id = getattr(step, "hypothesis_id", None)
+        if hypothesis_id:
+            event["hypothesis_id"] = hypothesis_id
+        try:
+            self.registry.record_event(event)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("registry.record_event scheduler_result failed: %s", exc)

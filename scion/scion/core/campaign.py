@@ -241,6 +241,10 @@ class CampaignManager:
             else:
                 logger.info("[SATURATION DEBUG] extract returned None for stage=%s", step.protocol_result.stage)
 
+    def _record_scheduler_result(self, result: StepResult) -> None:
+        """Persist scheduler metadata after a branch step returns its result."""
+        self._evidence_recorder.record_scheduler_result(result, self._step_history)
+
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
         self._run_runtime_preflight()

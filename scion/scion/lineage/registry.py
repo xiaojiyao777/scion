@@ -68,6 +68,8 @@ class LineageRegistry:
                     decision_features_json TEXT,
                     decision               TEXT,
                     decision_reason        TEXT,
+                    scheduler_slot         TEXT,
+                    scheduler_reason       TEXT,
                     model_id               TEXT,
                     protocol_version       TEXT,
                     prompt_tokens          INTEGER,
@@ -97,6 +99,8 @@ class LineageRegistry:
                 "telemetry_guard_failed": "INTEGER",
                 "telemetry_failure_categories_json": "TEXT",
                 "telemetry_failure_details_json": "TEXT",
+                "scheduler_slot": "TEXT",
+                "scheduler_reason": "TEXT",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (

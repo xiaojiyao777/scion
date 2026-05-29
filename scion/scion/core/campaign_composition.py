@@ -474,6 +474,7 @@ def compose_campaign_services(
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
         record_step=owner._record_step,
+        record_scheduler_result=owner._record_scheduler_result,
         decision_reason_codes_for=owner._decision_reason_codes_for,
         run_explore_step=owner._explore_step_pipeline.run,
         run_eval_step_callback=owner._run_eval_step,

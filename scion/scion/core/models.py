@@ -554,3 +554,5 @@ class StepRecord:
     candidate_construction_errors: int = 0
     candidate_portfolio_errors: int = 0
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
+    scheduler_slot: str = ""
+    scheduler_reason: str = ""

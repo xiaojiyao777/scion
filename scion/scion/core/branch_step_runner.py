@@ -64,6 +64,7 @@ class BranchStepRunner:
     increment_round: Callable[[], int]
     increment_rounds_since_last_promote: Callable[[], None]
     hypothesis_store: Any
+    record_scheduler_result: Optional[Callable[[StepResult], None]] = None
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -80,11 +81,10 @@ class BranchStepRunner:
         sched = self.scheduler.select_next(active)
 
         if sched.action == "at_capacity":
-            return StepResult(
-                action="skip",
-                reason="max_active_branches reached",
-                scheduler_slot=sched.slot,
-                scheduler_reason=sched.reason,
+            return _finalize_scheduler_result(
+                StepResult(action="skip", reason="max_active_branches reached"),
+                sched,
+                self.record_scheduler_result,
             )
 
         if sched.action == "create_new":
@@ -98,7 +98,11 @@ class BranchStepRunner:
                 logger.debug("BranchStore.save (create) failed: %s", exc)
             result = self.run_explore_step(branch)
             result.action = "create_branch"
-            return _with_scheduler_metadata(result, sched)
+            return _finalize_scheduler_result(
+                result,
+                sched,
+                self.record_scheduler_result,
+            )
 
         branch = sched.branch
         assert branch is not None
@@ -109,22 +113,31 @@ class BranchStepRunner:
                 self.persist_branch_state(branch.branch_id)
             except StateTransitionError as exc:
                 logger.error("schedule_branch failed: %s", exc)
-                return StepResult(
-                    action="skip",
-                    branch_id=branch.branch_id,
-                    reason=str(exc),
+                return _finalize_scheduler_result(
+                    StepResult(
+                        action="skip",
+                        branch_id=branch.branch_id,
+                        reason=str(exc),
+                    ),
+                    sched,
+                    self.record_scheduler_result,
                 )
 
         branch = self.branch_controller.get_branch(branch.branch_id)
 
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
-            return _with_scheduler_metadata(
+            return _finalize_scheduler_result(
                 self.run_reconcile_step_callback(branch),
                 sched,
+                self.record_scheduler_result,
             )
 
         if branch.state == BranchState.EXPLORE:
-            return _with_scheduler_metadata(self.run_explore_step(branch), sched)
+            return _finalize_scheduler_result(
+                self.run_explore_step(branch),
+                sched,
+                self.record_scheduler_result,
+            )
 
         if branch.state in (
             BranchState.EXPLORE_EXPAND,
@@ -133,14 +146,16 @@ class BranchStepRunner:
             BranchState.FROZEN_TESTING,
         ):
             try:
-                return _with_scheduler_metadata(
+                return _finalize_scheduler_result(
                     self.run_eval_step_callback(branch),
                     sched,
+                    self.record_scheduler_result,
                 )
             except RuntimeError as exc:
-                return _with_scheduler_metadata(
+                return _finalize_scheduler_result(
                     self._handle_eval_runtime_error(branch, exc),
                     sched,
+                    self.record_scheduler_result,
                 )
 
         logger.warning(
@@ -148,10 +163,14 @@ class BranchStepRunner:
             branch.branch_id,
             branch.state.value,
         )
-        return StepResult(
-            action="skip",
-            branch_id=branch.branch_id,
-            reason=f"unhandled state {branch.state.value}",
+        return _finalize_scheduler_result(
+            StepResult(
+                action="skip",
+                branch_id=branch.branch_id,
+                reason=f"unhandled state {branch.state.value}",
+            ),
+            sched,
+            self.record_scheduler_result,
         )
 
     def run_eval_step(self, branch: Branch) -> StepResult:
@@ -449,4 +468,18 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
         if result.scheduler_reason:
             suffix += f"; scheduler_reason={result.scheduler_reason}"
         result.reason = f"{result.reason}; {suffix}" if result.reason else suffix
+    return result
+
+
+def _finalize_scheduler_result(
+    result: StepResult,
+    sched: Any,
+    record_scheduler_result: Optional[Callable[[StepResult], None]] = None,
+) -> StepResult:
+    result = _with_scheduler_metadata(result, sched)
+    if record_scheduler_result is not None:
+        try:
+            record_scheduler_result(result)
+        except Exception as exc:  # pragma: no cover - persistence must not stop a step
+            logger.debug("record_scheduler_result failed: %s", exc)
     return result

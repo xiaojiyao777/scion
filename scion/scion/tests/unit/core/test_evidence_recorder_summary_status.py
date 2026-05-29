@@ -91,6 +91,63 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
 
 
+def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> None:
+    registry = LineageRegistry(str(tmp_path / "scion.db"))
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        registry=registry,
+        state_provider=lambda: {
+            "n_experiments": 1,
+            "proposal_attempts": 1,
+            "screened_experiments": 1,
+            "branches": [],
+        },
+    )
+    step_history: list[StepRecord] = []
+    recorder.record_step(
+        replace(_step("/tmp/metrics-scheduler.json"), round_num=1),
+        step_history,
+    )
+
+    recorder.record_scheduler_result(
+        StepResult(
+            action="explore",
+            branch_id="branch-1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="decision=continue_explore; scheduler_slot=refine_active",
+            scheduler_slot="refine_active",
+            scheduler_reason="existing_branch_selected",
+        ),
+        step_history,
+    )
+    summary = recorder.write_campaign_summary(
+        step_history=step_history,
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    assert step_history[0].scheduler_slot == "refine_active"
+    assert step_history[0].scheduler_reason == "existing_branch_selected"
+    summary_step = summary["steps"][0]
+    assert summary_step["scheduler_slot"] == "refine_active"
+    assert summary_step["scheduler_reason"] == "existing_branch_selected"
+
+    events = registry.query_by_branch("branch-1")
+    scheduler_events = [
+        event for event in events if event["event_kind"] == "scheduler_result"
+    ]
+    assert len(scheduler_events) == 1
+    event = scheduler_events[0]
+    assert event["scheduler_slot"] == "refine_active"
+    assert event["scheduler_reason"] == "existing_branch_selected"
+    payload = json.loads(event["audit_payload_json"])
+    assert payload["scheduler_slot"] == "refine_active"
+    assert payload["scheduler_reason"] == "existing_branch_selected"
+    assert payload["step_round"] == 1
+
+
 def test_campaign_summary_promotes_runtime_budget_diagnostics(tmp_path: Path) -> None:
     diagnostic = {
         "schema": "scion.runtime_budget_diagnostic.v1",
@@ -666,12 +723,16 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
             branch_id="branch-1",
             reason="agent_quality_blocked",
             counts_toward_max_rounds=False,
+            scheduler_slot="repair_diagnostic",
+            scheduler_reason="retry_branch_selected",
         )
     )
 
     assert status["proposal_attempts"] == 2
     assert status["screened_experiments"] == 0
     assert status["last_result"]["counts_toward_max_rounds"] is False
+    assert status["last_result"]["scheduler_slot"] == "repair_diagnostic"
+    assert status["last_result"]["scheduler_reason"] == "retry_branch_selected"
 
 
 def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:

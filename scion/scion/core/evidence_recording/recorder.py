@@ -54,6 +54,34 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         if search_memory is not None:
             search_memory.update(step)
 
+    def record_scheduler_result(
+        self,
+        result: Any,
+        step_history: MutableSequence[StepRecord],
+    ) -> None:
+        """Persist scheduler metadata on the latest matching step and lineage."""
+        slot = str(getattr(result, "scheduler_slot", "") or "")
+        reason = str(getattr(result, "scheduler_reason", "") or "")
+        if not (slot or reason):
+            return
+        step: StepRecord | None = None
+        branch_id = str(getattr(result, "branch_id", "") or "")
+        if branch_id:
+            for candidate in reversed(step_history):
+                if candidate.branch_id != branch_id:
+                    continue
+                step = candidate
+                if getattr(candidate, "scheduler_slot", "") or getattr(
+                    candidate,
+                    "scheduler_reason",
+                    "",
+                ):
+                    break
+                candidate.scheduler_slot = slot
+                candidate.scheduler_reason = reason
+                break
+        self.record_scheduler_result_lineage(result=result, step=step)
+
     def attach_final_evidence_refs(self, refs: Mapping[str, Any]) -> None:
         """Store future final quality harness refs without touching step schema."""
         self.final_evidence_refs.update(dict(refs))
