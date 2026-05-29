@@ -17,6 +17,7 @@ from .constants import (
     AGENTIC_BUDGET_CONTROL,
     AGENTIC_FAILURE_DETAIL_CHARS,
     ALGORITHM_SMOKE_FAILURE,
+    BRANCH_FOLLOWUP_POLICY_VIOLATION,
     LEGACY_PREMISE_CONTRADICTED,
     LLM_TRANSIENT_API_ERROR,
     PROPOSAL_ACTIVATION_DIAGNOSTIC,
@@ -78,6 +79,16 @@ def _agentic_quality_block_classification(
         return {
             "failure_class": AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE.value,
             "failure_code": "mechanism_changes_duplicate_id_conflict",
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
+    if (
+        failure_code == BRANCH_FOLLOWUP_POLICY_VIOLATION
+        or failure_category == BRANCH_FOLLOWUP_POLICY_VIOLATION
+        or BRANCH_FOLLOWUP_POLICY_VIOLATION in detail
+    ):
+        return {
+            "failure_class": AGENT_GROUNDING_FAILURE,
+            "failure_code": BRANCH_FOLLOWUP_POLICY_VIOLATION,
             "block_reason": AGENT_QUALITY_BLOCKED,
         }
     if (

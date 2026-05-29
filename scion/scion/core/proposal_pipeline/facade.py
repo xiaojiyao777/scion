@@ -27,6 +27,9 @@ from scion.core.models import (
 from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import AgenticProposalOutput
 from scion.proposal.engine import ProposalValidationError
+from scion.proposal.context.branch_followup import (
+    validate_weak_positive_followup_hypothesis,
+)
 from scion.proposal.llm_client import (
     LLMBalanceError,
     LLMFormatError,
@@ -289,6 +292,20 @@ class ProposalPipeline(
                 self.circuit_breaker.record_failure(repair_check.detail)
             return None, None
 
+        followup_check = validate_weak_positive_followup_hypothesis(
+            branch,
+            hypothesis,
+            step_history=self.step_history,
+        )
+        if not followup_check.allowed:
+            self.hypothesis_failure_details[bid] = followup_check.detail
+            self.handle_failure(
+                branch,
+                FailureEvent(category="proposal", detail=followup_check.detail),
+            )
+            self.circuit_breaker.record_failure(followup_check.detail)
+            return None, None
+
         self.circuit_breaker.record_success()
         self._clear_agentic_quality_feedback(bid)
         return hypothesis, self._hypothesis_record(branch, hypothesis)
@@ -319,6 +336,7 @@ class ProposalPipeline(
                 branch,
                 self.branch_workspaces,
             ),
+            step_history=self.step_history,
         )
         context["branch_hygiene"] = branch_hygiene_context(branch)
         context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)

@@ -18,4 +18,5 @@ TOOL_BUDGET_EXHAUSTED = AgenticFailureCategory.TOOL_BUDGET_EXHAUSTED.value
 ALGORITHM_SMOKE_FAILURE = AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE.value
 PROPOSAL_ACTIVATION_DIAGNOSTIC = "proposal_activation_diagnostic"
 ACTIVATION_NOT_OBSERVED_DIAGNOSTIC = "activation_not_observed_diagnostic"
+BRANCH_FOLLOWUP_POLICY_VIOLATION = "branch_followup_policy_violation"
 SESSION_TIMEOUT = AgenticTerminationReason.SESSION_TIMEOUT.value

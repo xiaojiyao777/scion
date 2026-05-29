@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
@@ -15,8 +16,14 @@ from scion.core.models import (
 )
 from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import (
+    AgenticFailureCategory,
     AgenticProposalOutput,
     AgenticProposalStatus,
+    AgenticTerminationReason,
+)
+from scion.proposal.context.branch_followup import (
+    BRANCH_FOLLOWUP_POLICY_VIOLATION,
+    validate_weak_positive_followup_hypothesis,
 )
 from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import (
@@ -103,6 +110,29 @@ class AgenticLifecycleMixin:
             ),
         )
         output = self._sanitize_pre_contract_agentic_output(output)
+        if (
+            output.status != AgenticProposalStatus.FAILED
+            and output.hypothesis is not None
+        ):
+            followup_check = validate_weak_positive_followup_hypothesis(
+                branch,
+                output.hypothesis,
+                step_history=self.step_history,
+            )
+            if not followup_check.allowed:
+                output = replace(
+                    output,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=(
+                        AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED
+                    ),
+                    failure_detail=followup_check.detail,
+                    failure_category=AgenticFailureCategory.PREMISE_CONTRADICTED,
+                    structured_rejection={
+                        **followup_check.structured_rejection(),
+                        "failure_code": BRANCH_FOLLOWUP_POLICY_VIOLATION,
+                    },
+                )
         self._record_agentic_lineage_event(output)
         self._record_agentic_session_ref(output)
         self.agentic_outputs[bid] = output

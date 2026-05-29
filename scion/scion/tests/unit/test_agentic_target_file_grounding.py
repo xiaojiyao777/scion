@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.context_manager.code_context import (
+    _build_solver_design_branch_current_integration_files,
+)
 from scion.proposal.agentic_session_hypothesis import (
     _observations_include_sufficient_target_context,
 )
@@ -973,6 +976,81 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
     assert cacheability["estimated_cacheable_chars"] >= (
         target_status["char_count"] + integration_status["char_count"]
     )
+
+
+def test_code_prompt_projects_branch_created_helper_for_cross_target_followup(
+    tmp_path: Path,
+) -> None:
+    target_rel = "policies/active_policy.py"
+    helper_rel = "policies/helpers/alpha_helper.py"
+    target_path = tmp_path / target_rel
+    helper_path = tmp_path / helper_rel
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    helper_path.parent.mkdir(parents=True, exist_ok=True)
+    target_source = "def active_policy():\n    return alpha_helper()\n"
+    helper_source = "def alpha_helper():\n    return 7\n"
+    target_path.write_text(target_source, encoding="utf-8")
+    helper_path.write_text(helper_source, encoding="utf-8")
+
+    integration_files = _build_solver_design_branch_current_integration_files(
+        source_root=str(tmp_path),
+        champion_root=str(tmp_path),
+        target_file=target_rel,
+        branch_created_files=(helper_rel,),
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": target_rel,
+        "target_file_code": (
+            f"File: {target_rel}\n```python\n{target_source}```\n"
+        ),
+        "solver_design_branch_current_integration_files": integration_files,
+        "hypothesis_text": "Integrate the prior helper into the active policy.",
+        "hypothesis_implementation_brief": {
+            "hypothesis_text": "Integrate the prior helper into the active policy.",
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_rel,
+            "mechanism_changes": [
+                {"id": "alpha_refinement", "change_type": "modify"}
+            ],
+        },
+        "problem_summary": "Generic combinatorial optimisation problem.",
+        "problem_object": "Generic problem object.",
+        "solver_mechanics": "Call active_policy from the declared entrypoint.",
+        "operator_interface_spec": "solve(instance, rng, time_limit_sec, context)",
+        "import_whitelist": "math, random",
+        "editable_patterns": "policies/*.py, policies/helpers/*.py",
+        "frozen_patterns": "adapter.py",
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-branch-created-helper",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "Branch-Created Helper Sources" in rendered_system
+    assert "same-branch created files are included" in rendered_system
+    assert helper_rel in rendered_system
+    assert "branch_created_helper=True" in rendered_system
+    assert helper_source.strip() in rendered_system
+    assert helper_source.strip() not in user_prompt
+    helper_records = [
+        item
+        for item in manifest["code_file_visibility_ledger"]["integration_files"]
+        if item["file_path"] == helper_rel
+    ]
+    assert helper_records
+    assert helper_records[0]["full_content_visible_in_rendered_prompt"] is True
 
 
 def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:

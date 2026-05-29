@@ -159,6 +159,8 @@ def validate_branch_continuation_hypothesis(
             hypothesis,
             step_history=step_history,
         )
+    if _is_weak_positive_branch(branch):
+        return RepairPolicyCheck(allowed=True)
     if not branch_requires_same_mechanism_followup(branch):
         return RepairPolicyCheck(allowed=True)
 
@@ -336,6 +338,14 @@ def _step_has_repairable_telemetry(step: StepRecord) -> bool:
         for code in (getattr(protocol, "reason_codes", ()) or ())
     }
     return any("telemetry_repairable" in code for code in protocol_codes)
+
+
+def _is_weak_positive_branch(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    return status == "active_weak_positive" or tier == "weak_positive"
 
 
 def _has_repair_intent(hypothesis: HypothesisProposal | None) -> bool:

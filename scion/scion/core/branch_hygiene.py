@@ -16,7 +16,11 @@ REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK = (
     "repair_first_same_mechanism_or_clean_fork"
 )
 SAME_MECHANISM_FOLLOWUP_ONLY = "same_mechanism_followup_only"
+BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE = (
+    "branch_local_followup_or_explicit_bridge"
+)
 SAME_MECHANISM_ONLY_MODE = "same_mechanism_only"
+BRANCH_LOCAL_FOLLOWUP_MODE = "branch_local_followup"
 OPEN_EXPLORATION_MODE = "open_exploration"
 CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
     "clean_fork_required_for_new_mechanism"
@@ -255,30 +259,46 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     same_mechanism_followup_required = branch_requires_same_mechanism_followup(
         branch
     )
+    weak_positive_followup = (
+        status == "active_weak_positive"
+        or last_screening_feedback_tier == "weak_positive"
+    )
+    strict_same_mechanism_followup = (
+        same_mechanism_followup_required and not weak_positive_followup
+    )
     followup_policy = (
+        BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE
+        if weak_positive_followup
+        else
         SAME_MECHANISM_FOLLOWUP_ONLY
         if same_mechanism_followup_required
         else OPEN_EXPLORATION_ALLOWED
     )
     generation_mode = (
+        BRANCH_LOCAL_FOLLOWUP_MODE
+        if weak_positive_followup
+        else
         SAME_MECHANISM_ONLY_MODE
-        if same_mechanism_followup_required
+        if strict_same_mechanism_followup
         else OPEN_EXPLORATION_MODE
     )
     clean_fork_policy = (
         CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM
-        if same_mechanism_followup_required
+        if strict_same_mechanism_followup
         else None
     )
     protected_mechanism_ids = list(branch_mechanism_ids(branch))
     allowed_mechanism_ids = (
         list(protected_mechanism_ids)
-        if same_mechanism_followup_required
+        if strict_same_mechanism_followup
         else []
     )
     if repair_focus_required:
         baseline_policy = "champion_required_for_repair"
         repair_focus_reason = WIRING_SUSPECT_REQUIRES_REPAIR
+    elif weak_positive_followup:
+        baseline_policy = "branch_workspace_branch_local_followup"
+        repair_focus_reason = None
     elif status.startswith("active_"):
         baseline_policy = "branch_workspace_same_mechanism_followup_only"
         repair_focus_reason = None
@@ -299,23 +319,24 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             else None
         ),
         "branch_followup_policy": followup_policy,
+        "weak_positive_followup": weak_positive_followup,
         "clean_fork_policy": clean_fork_policy,
         "branch_mechanism_ids": list(protected_mechanism_ids),
         "allowed_mechanism_ids": allowed_mechanism_ids,
         "protected_mechanism_ids": list(protected_mechanism_ids),
         "forbidden_mechanism_policy": (
             NO_UNRELATED_MECHANISM_IDS
-            if same_mechanism_followup_required
+            if strict_same_mechanism_followup
             else None
         ),
         "same_mechanism_allowed_actions": (
             list(SAME_MECHANISM_ALLOWED_ACTIONS)
-            if same_mechanism_followup_required
+            if strict_same_mechanism_followup
             else []
         ),
         "mechanism_change_policy": (
             "mechanism_changes_must_use_allowed_or_protected_ids"
-            if same_mechanism_followup_required
+            if strict_same_mechanism_followup
             else None
         ),
         "repair_mechanism_ids": list(
@@ -374,6 +395,28 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)
         protected = _protected_mechanism_text(context)
         allowed_actions = _allowed_actions_text(context)
+        if context.get("weak_positive_followup"):
+            return (
+                f"branch_code_status={status}; telemetry_outcome={outcome}; "
+                f"screening_tier={tier}; baseline_policy="
+                f"{context['baseline_policy']}; branch_followup_policy="
+                f"{context['branch_followup_policy']}; clean_fork_policy="
+                f"{context['clean_fork_policy']}; hypothesis_generation_mode="
+                f"{context['hypothesis_generation_mode']}; "
+                f"prior_mechanism_ids={protected}; "
+                f"prior_touched_file_policy=prefer_branch_local_files. "
+                "This is a weak-positive active branch. Default to a "
+                "branch-local continuation that refines the prior mechanism, "
+                "prior target/touched files, branch-created helpers, or the "
+                "trigger, schedule, composition, budget allocation, or "
+                "activation of the existing branch idea. If the next "
+                "hypothesis changes target file, adds/renames a mechanism "
+                "family, or moves work into a new module, it must explicitly "
+                "bridge to the branch history: name which prior weak signal "
+                "is preserved, which branch-local failure is being tested, "
+                "and why the prior mechanism cannot be directly refined."
+                f"{reroute_suffix}"
+            )
         return (
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
@@ -524,6 +567,8 @@ __all__ = [
     "BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE",
     "BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK",
     "BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT",
+    "BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE",
+    "BRANCH_LOCAL_FOLLOWUP_MODE",
     "CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM",
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
     "OPEN_EXPLORATION_ALLOWED",

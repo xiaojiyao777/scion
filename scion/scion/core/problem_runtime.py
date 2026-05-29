@@ -65,14 +65,19 @@ class ProblemRuntime:
 
     def build_code_context(self, **kwargs):
         kwargs.setdefault("problem_spec", self._spec)
-        try:
-            return self._ctx_manager.build_code_context(**kwargs)
-        except TypeError as exc:
-            if "branch_workspace" not in str(exc) or "branch_workspace" not in kwargs:
-                raise
-            compat_kwargs = dict(kwargs)
-            compat_kwargs.pop("branch_workspace", None)
-            return self._ctx_manager.build_code_context(**compat_kwargs)
+        compat_kwargs = dict(kwargs)
+        optional_keys = ("branch_workspace", "step_history")
+        while True:
+            try:
+                return self._ctx_manager.build_code_context(**compat_kwargs)
+            except TypeError as exc:
+                removed = False
+                for key in optional_keys:
+                    if key in str(exc) and key in compat_kwargs:
+                        compat_kwargs.pop(key, None)
+                        removed = True
+                if not removed:
+                    raise
 
     def build_fix_context(self, **kwargs):
         kwargs.setdefault("problem_spec", self._spec)

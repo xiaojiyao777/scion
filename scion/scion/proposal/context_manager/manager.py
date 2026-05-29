@@ -30,6 +30,11 @@ from scion.proposal.context.branch_dossier import (
     build_branch_dossier,
     render_branch_dossier,
 )
+from scion.proposal.context.branch_followup import (
+    branch_created_files,
+    build_branch_followup_policy,
+    render_branch_followup_policy,
+)
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -415,6 +420,13 @@ class ContextManager:
             safe_hypothesis_steps,
         )
         branch_dossier = render_branch_dossier(branch_dossier_payload)
+        branch_followup_policy_payload = build_branch_followup_policy(
+            branch,
+            safe_hypothesis_steps,
+        )
+        branch_followup_policy = render_branch_followup_policy(
+            branch_followup_policy_payload
+        )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -450,6 +462,8 @@ class ContextManager:
             "branch_direction": branch_direction,
             "branch_dossier": branch_dossier,
             "branch_dossier_payload": branch_dossier_payload,
+            "branch_followup_policy": branch_followup_policy,
+            "branch_followup_policy_payload": branch_followup_policy_payload,
             "exploration_coverage": exploration_coverage,
             "strategy_guidance": strategy_guidance,
             "champion_baselines": champion_baselines,
@@ -486,6 +500,7 @@ class ContextManager:
         problem_spec: ProblemSpec,
         prior_failure: Optional[str] = None,
         branch_workspace: Optional[str] = None,
+        step_history: Optional[list[StepRecord]] = None,
     ) -> Dict[str, Any]:
         """Context for generate_code (Round 2).
 
@@ -510,6 +525,7 @@ class ContextManager:
             if branch_workspace and os.path.isdir(branch_workspace)
             else champion.code_snapshot_path
         )
+        branch_step_history = step_history or []
         target_file_exists = _target_file_exists_in_root(
             source_root,
             hypothesis.target_file,
@@ -605,6 +621,10 @@ class ContextManager:
                     champion_root=champion.code_snapshot_path,
                     target_file=hypothesis.target_file,
                     provider=solver_design_prompt_provider,
+                    branch_created_files=branch_created_files(
+                        branch,
+                        branch_step_history,
+                    ),
                 )
             )
         if prior_failure is not None:

@@ -87,6 +87,7 @@ class AgenticRequestMixin:
                     branch,
                     self.branch_workspaces,
                 ),
+                step_history=self.step_history,
             )
             code_context["branch_hygiene"] = branch_hygiene_context(branch)
             code_context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)

@@ -16,6 +16,7 @@ from scion.core.models import (
     StepRecord,
     mechanism_changes,
 )
+from scion.proposal.context.branch_followup import branch_created_files
 
 
 def build_branch_dossier(
@@ -43,6 +44,7 @@ def build_branch_dossier(
             "direction": getattr(branch, "direction", None),
             "mechanisms": mechanisms,
             "touched_files": touched_files,
+            "branch_created_files": list(branch_created_files(branch, branch_steps)),
             "outcome_timeline": [
                 _timeline_item(step) for step in recent_steps
             ],

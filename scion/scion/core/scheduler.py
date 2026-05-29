@@ -89,6 +89,7 @@ class Scheduler:
                 return SchedulerAction(
                     action="run_existing",
                     branch=selected,
+                    reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
                 )
 
@@ -96,9 +97,11 @@ class Scheduler:
         if research:
             pending_retry = [b for b in research if b.pending_retry]
             if pending_retry:
+                selected = _select_fair(pending_retry)
                 return SchedulerAction(
                     action="run_existing",
-                    branch=_select_fair(pending_retry),
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
                     slot="repair_diagnostic",
                 )
             eligible_research = [
@@ -117,6 +120,7 @@ class Scheduler:
                 return SchedulerAction(
                     action="at_capacity",
                     branch=None,
+                    reason="active_branch_limit_reached",
                     slot="capacity_blocked",
                 )
             if (
@@ -147,6 +151,7 @@ class Scheduler:
                 return SchedulerAction(
                     action="run_existing",
                     branch=selected,
+                    reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
                 )
             if len(active_for_proposal_capacity) < self._max_active_branches and any(
@@ -155,6 +160,7 @@ class Scheduler:
                 return SchedulerAction(
                     action="create_new",
                     branch=None,
+                    reason="established_branch_portfolio_expansion",
                     slot="explore_new",
                 )
             selection_pool = clean_research or eligible_research
@@ -162,6 +168,7 @@ class Scheduler:
             return SchedulerAction(
                 action="run_existing",
                 branch=selected,
+                reason=_reason_for_branch(selected),
                 slot=_slot_for_branch(selected),
             )
 
@@ -170,10 +177,16 @@ class Scheduler:
             return SchedulerAction(
                 action="at_capacity",
                 branch=None,
+                reason="active_branch_limit_reached",
                 slot="capacity_blocked",
             )
 
-        return SchedulerAction(action="create_new", branch=None, slot="explore_new")
+        return SchedulerAction(
+            action="create_new",
+            branch=None,
+            reason="new_exploration_slot_available",
+            slot="explore_new",
+        )
 
 
 def _select_fair(candidates: List[Branch]) -> Branch:
@@ -216,3 +229,22 @@ def _slot_for_branch(
     }:
         return "repair_diagnostic"
     return "refine_active"
+
+
+def _reason_for_branch(branch: Branch) -> str:
+    if getattr(branch, "pending_retry", False):
+        return "pending_retry_diagnostic_followup"
+    slot = _slot_for_branch(branch)
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    if slot == "exploit_weak_positive":
+        return "weak_positive_signal_followup"
+    if slot == "repair_diagnostic":
+        if status in {"telemetry_wiring_suspect", "telemetry_invalid"}:
+            return "telemetry_diagnostic_followup"
+        if status == "active_runtime_regression" or tier == "runtime_regression":
+            return "runtime_diagnostic_followup"
+        if status.startswith("active_") or tier:
+            return "effect_diagnostic_followup"
+        return "diagnostic_followup"
+    return "active_branch_refinement"

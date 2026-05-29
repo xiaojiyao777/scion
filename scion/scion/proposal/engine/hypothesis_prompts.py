@@ -86,6 +86,10 @@ def _split_hypothesis_context(
         branch_context_parts.append(f"## Branch Direction\n{D['branch_direction']}")
     if D["branch_dossier"]:
         branch_context_parts.append(f"## Branch Dossier\n{D['branch_dossier']}")
+    if D["branch_followup_policy"]:
+        branch_context_parts.append(
+            f"## Branch Follow-up Policy\n{D['branch_followup_policy']}"
+        )
     if D["branch_hygiene_guidance"]:
         branch_context_parts.append(
             f"## Branch Code Status\n{D['branch_hygiene_guidance']}"
@@ -158,9 +162,15 @@ def _split_hypothesis_context(
     dynamic_agentic_prefix = (
         f"{dynamic_agentic_context}\n\n" if dynamic_agentic_context else ""
     )
+    experiment_history = str(D["experiment_history"]).strip()
+    experiment_history_section = (
+        f"## Experiment History — This Branch\n{experiment_history}\n\n"
+        if experiment_history
+        else ""
+    )
     user_prompt = (
         f"{dynamic_agentic_prefix}"
-        f"## Experiment History — This Branch\n{D['experiment_history']}\n\n"
+        f"{experiment_history_section}"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
         f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"

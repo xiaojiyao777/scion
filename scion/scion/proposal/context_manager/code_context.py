@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import ChampionState
@@ -115,6 +115,7 @@ def _build_solver_design_branch_current_integration_files(
     champion_root: str,
     target_file: Optional[str],
     provider: Any | None = None,
+    branch_created_files: Sequence[str] = (),
 ) -> str:
     normalized_target = str(target_file or "").replace("\\", "/").lstrip("/")
     lines = [
@@ -140,6 +141,14 @@ def _build_solver_design_branch_current_integration_files(
             f"Provenance: {artifact['source']}; readable={artifact['readable']}\n"
             f"```python\n{artifact['content']}\n```"
         )
+    helper_projection = _branch_created_helper_source_projection(
+        branch_created_files,
+        source_root=source_root,
+        champion_root=champion_root,
+        target_file=normalized_target,
+    )
+    if helper_projection:
+        lines.append(helper_projection)
     summary_lines: list[str] = []
     for rel in _solver_design_integration_summary_files(provider):
         artifact = _read_solver_design_context_artifact(
@@ -156,6 +165,59 @@ def _build_solver_design_branch_current_integration_files(
     if summary_lines:
         lines.append(
             "### Compact sibling API summaries\n" + "\n".join(summary_lines)
+        )
+    return "\n\n".join(lines)
+
+
+_BRANCH_CREATED_HELPER_MAX_FILES = 3
+_BRANCH_CREATED_HELPER_MAX_CHARS = 16000
+
+
+def _branch_created_helper_source_projection(
+    files: Sequence[str],
+    *,
+    source_root: str,
+    champion_root: str,
+    target_file: str,
+) -> str:
+    selected: list[str] = []
+    target = str(target_file or "").replace("\\", "/").lstrip("/")
+    for item in files or ():
+        rel = str(item or "").replace("\\", "/").lstrip("/")
+        if not rel or rel == target:
+            continue
+        if rel in selected:
+            continue
+        selected.append(rel)
+        if len(selected) >= _BRANCH_CREATED_HELPER_MAX_FILES:
+            break
+    if not selected:
+        return ""
+    lines = [
+        "#### Branch-Created Helper Sources",
+        (
+            "Receipt: same-branch created files are included for bounded "
+            "cross-target follow-up context. Use them as branch-current source "
+            "when the approved target integrates, repairs, or redirects prior "
+            "branch-local work."
+        ),
+    ]
+    for rel in selected:
+        artifact = _read_solver_design_context_artifact(
+            rel,
+            source_root=source_root,
+            champion_root=champion_root,
+        )
+        content = str(artifact["content"])
+        truncated = False
+        if len(content) > _BRANCH_CREATED_HELPER_MAX_CHARS:
+            content = content[:_BRANCH_CREATED_HELPER_MAX_CHARS].rstrip()
+            truncated = True
+        lines.append(
+            f"### {rel}\n"
+            f"Provenance: {artifact['source']}; readable={artifact['readable']}; "
+            f"branch_created_helper=True; truncated={truncated}\n"
+            f"```python\n{content}\n```"
         )
     return "\n\n".join(lines)
 

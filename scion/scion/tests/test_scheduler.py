@@ -39,6 +39,7 @@ def test_no_branches_creates_new():
     assert action.action == "create_new"
     assert action.branch is None
     assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
 
 
 def test_ready_frozen_has_highest_priority():
@@ -88,6 +89,7 @@ def test_established_explore_under_capacity_creates_new_branch():
     assert action.action == "create_new"
     assert action.branch is None
     assert action.slot == "explore_new"
+    assert action.reason == "established_branch_portfolio_expansion"
 
 
 def test_verified_code_hash_without_direction_does_not_create_new_branch():
@@ -99,6 +101,7 @@ def test_verified_code_hash_without_direction_does_not_create_new_branch():
 
     assert action.action == "run_existing"
     assert action.branch is branch
+    assert action.reason == "active_branch_refinement"
 
 
 def test_pending_retry_under_capacity_runs_existing_branch():
@@ -110,6 +113,7 @@ def test_pending_retry_under_capacity_runs_existing_branch():
 
     assert action.action == "run_existing"
     assert action.branch is branch
+    assert action.reason == "pending_retry_diagnostic_followup"
 
 
 def test_lifecycle_blocked_research_branch_reroutes_to_clean_branch():
@@ -170,6 +174,7 @@ def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_follow
     assert action.action == "run_existing"
     assert action.branch is branch
     assert action.slot == "repair_diagnostic"
+    assert action.reason == "effect_diagnostic_followup"
 
 
 def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
@@ -282,6 +287,7 @@ def test_weak_positive_branch_uses_exploit_slot_at_capacity():
     assert action.action == "run_existing"
     assert action.branch is branch
     assert action.slot == "exploit_weak_positive"
+    assert action.reason == "weak_positive_signal_followup"
 
 
 def test_capacity_blocked_slot_is_auditable():
@@ -295,6 +301,7 @@ def test_capacity_blocked_slot_is_auditable():
 
     assert action.action == "at_capacity"
     assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
 
 
 def test_fifo_within_same_tier_for_unestablished_branches():
