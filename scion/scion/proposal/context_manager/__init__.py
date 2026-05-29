@@ -79,6 +79,8 @@ from .io import (
     _available_hypothesis_actions,
     _build_champion_stats,
     _expand_surface_targets_for_champion,
+    _expand_surface_targets_for_root,
+    _list_branch_surface_files,
     _list_champion_operator_files,
     _list_champion_surface_files,
     _python_api_manifest_for_file,

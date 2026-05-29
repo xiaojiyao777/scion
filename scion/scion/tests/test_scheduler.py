@@ -38,6 +38,7 @@ def test_no_branches_creates_new():
     action = sched.select_next([])
     assert action.action == "create_new"
     assert action.branch is None
+    assert action.slot == "explore_new"
 
 
 def test_ready_frozen_has_highest_priority():
@@ -86,6 +87,7 @@ def test_established_explore_under_capacity_creates_new_branch():
 
     assert action.action == "create_new"
     assert action.branch is None
+    assert action.slot == "explore_new"
 
 
 def test_verified_code_hash_without_direction_does_not_create_new_branch():
@@ -155,6 +157,7 @@ def test_lifecycle_blocked_research_branches_create_clean_fork_at_capacity():
     assert action.action == "create_new"
     assert action.branch is None
     assert action.reason == "clean_fork_after_branch_lifecycle_policy_block"
+    assert action.slot == "repair_diagnostic"
 
 
 def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_followup():
@@ -166,6 +169,7 @@ def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_follow
 
     assert action.action == "run_existing"
     assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
 
 
 def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
@@ -264,6 +268,33 @@ def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
 
     assert action.action == "run_existing"
     assert action.branch.branch_id == b_oldest_updated.branch_id
+    assert action.slot == "refine_active"
+
+
+def test_weak_positive_branch_uses_exploit_slot_at_capacity():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: established"
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "exploit_weak_positive"
+
+
+def test_capacity_blocked_slot_is_auditable():
+    branches = []
+    for offset in (0, 10, 20):
+        branch = _branch(BranchState.BLOCKED_INFRA, created_offset_s=offset)
+        branch.direction = "solver: established"
+        branches.append(branch)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.action == "at_capacity"
+    assert action.slot == "capacity_blocked"
 
 
 def test_fifo_within_same_tier_for_unestablished_branches():

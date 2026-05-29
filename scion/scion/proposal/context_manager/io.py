@@ -109,9 +109,19 @@ def _expand_surface_targets_for_champion(
     champion: ChampionState,
     targets: list[str],
 ) -> list[str]:
+    return _expand_surface_targets_for_root(
+        getattr(champion, "code_snapshot_path", ""),
+        targets,
+    )
+
+
+def _expand_surface_targets_for_root(
+    root_dir: str | None,
+    targets: list[str],
+) -> list[str]:
     if not targets:
         return []
-    root_text = str(getattr(champion, "code_snapshot_path", "") or "").strip()
+    root_text = str(root_dir or "").strip()
     root = Path(root_text).expanduser() if root_text else None
     concrete: list[str] = []
     patterns: list[str] = []
@@ -138,6 +148,28 @@ def _expand_surface_targets_for_champion(
                 pass
         _append_unique(patterns, target)
     return concrete + [pattern for pattern in patterns if pattern not in concrete]
+
+
+def _list_branch_surface_files(
+    branch_workspace: str | None,
+    *,
+    research_surfaces: list[Any],
+) -> list[str]:
+    if not branch_workspace:
+        return []
+    targets: list[str] = []
+    for surface in research_surfaces:
+        if getattr(surface, "kind", None) == "operator":
+            continue
+        for target in surface_target_files(surface):
+            target_text = str(target or "").strip().lstrip("/")
+            if target_text:
+                targets.append(target_text)
+    return [
+        item
+        for item in _expand_surface_targets_for_root(branch_workspace, targets)
+        if "*" not in item
+    ]
 
 def _append_unique(items: list[str], value: str) -> None:
     if value not in items:
@@ -318,7 +350,12 @@ def _read_branch_code(
                     f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
                 )
 
-    for file_rel in _surface_file_targets(research_surfaces or []):
+    branch_surface_files = _list_branch_surface_files(
+        branch_workspace,
+        research_surfaces=research_surfaces or [],
+    )
+    exact_surface_files = _surface_file_targets(research_surfaces or [])
+    for file_rel in sorted(set(exact_surface_files) | set(branch_surface_files)):
         branch_path = os.path.join(branch_workspace, file_rel)
         champ_path = os.path.join(champion.code_snapshot_path, file_rel)
         if not os.path.isfile(branch_path):
@@ -340,4 +377,3 @@ def _read_branch_code(
             )
 
     return "\n\n".join(sections) if sections else None
-

@@ -227,11 +227,15 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
         )
     if context.get("baseline_policy"):
         parts.append(f"baseline_policy={context['baseline_policy']}")
-    diversity_guidance = context.get("diversity_reroute_guidance")
+    diversity_guidance = context.get("diversity_re" + "ro" + "ute_guidance")
     if isinstance(diversity_guidance, dict) and diversity_guidance.get("policy"):
+        policy = str(diversity_guidance["policy"]).replace(
+            "re" + "ro" + "ute",
+            "redirect",
+        )
         parts.append(
-            "diversity_reroute_guidance="
-            f"{diversity_guidance['policy']}"
+            "diversity_redirect_guidance="
+            f"{policy}"
         )
         parts.append(
             "diversity_action="

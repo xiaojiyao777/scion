@@ -91,7 +91,7 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "forbidden_mechanism_policy=no_unrelated_mechanism_ids" in no_effect_line
     assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
     assert (
-        "diversity_reroute_guidance=runtime_saturated_diversity_reroute"
+        "diversity_redirect_guidance=runtime_saturated_diversity_redirect"
         in no_effect_line
     )
     assert (

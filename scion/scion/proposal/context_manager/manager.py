@@ -26,6 +26,10 @@ from scion.proposal.context.feedback import (
     _build_experiment_history,
     _filter_hypothesis_prompt_steps,
 )
+from scion.proposal.context.branch_dossier import (
+    build_branch_dossier,
+    render_branch_dossier,
+)
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -75,6 +79,8 @@ from .io import (
     _available_hypothesis_actions,
     _build_champion_stats,
     _expand_surface_targets_for_champion,
+    _expand_surface_targets_for_root,
+    _list_branch_surface_files,
     _list_champion_operator_files,
     _list_champion_surface_files,
     _read_branch_code,
@@ -236,6 +242,18 @@ class ContextManager:
             champion,
             research_surfaces=research_surfaces,
         )
+        branch_surface_files = (
+            _list_branch_surface_files(
+                branch_workspace,
+                research_surfaces=research_surfaces,
+            )
+            if branch_workspace
+            else []
+        )
+        if branch_surface_files:
+            targetable_surface_files = sorted(
+                set(targetable_surface_files) | set(branch_surface_files)
+            )
         active_boundary_declared_target_files = _surface_target_files_for_names(
             research_surfaces,
             active_problem_boundary_surfaces,
@@ -244,6 +262,18 @@ class ContextManager:
             champion,
             active_boundary_declared_target_files,
         )
+        if branch_workspace:
+            active_boundary_target_files = sorted(
+                set(active_boundary_target_files)
+                | set(
+                    item
+                    for item in _expand_surface_targets_for_root(
+                        branch_workspace,
+                        active_boundary_declared_target_files,
+                    )
+                    if "*" not in item
+                )
+            )
         effective_operator_categories = (
             active_problem_boundary_surfaces
             if active_problem_boundary_surfaces
@@ -380,6 +410,11 @@ class ContextManager:
             safe_hypothesis_steps,
             branch.branch_id,
         )
+        branch_dossier_payload = build_branch_dossier(
+            branch,
+            safe_hypothesis_steps,
+        )
+        branch_dossier = render_branch_dossier(branch_dossier_payload)
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -413,6 +448,8 @@ class ContextManager:
             "sibling_summary": sibling_summary,
             "branch_code": branch_code,
             "branch_direction": branch_direction,
+            "branch_dossier": branch_dossier,
+            "branch_dossier_payload": branch_dossier_payload,
             "exploration_coverage": exploration_coverage,
             "strategy_guidance": strategy_guidance,
             "champion_baselines": champion_baselines,

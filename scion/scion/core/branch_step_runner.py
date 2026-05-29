@@ -80,7 +80,12 @@ class BranchStepRunner:
         sched = self.scheduler.select_next(active)
 
         if sched.action == "at_capacity":
-            return StepResult(action="skip", reason="max_active_branches reached")
+            return StepResult(
+                action="skip",
+                reason="max_active_branches reached",
+                scheduler_slot=sched.slot,
+                scheduler_reason=sched.reason,
+            )
 
         if sched.action == "create_new":
             with self.champion_lock:
@@ -93,7 +98,7 @@ class BranchStepRunner:
                 logger.debug("BranchStore.save (create) failed: %s", exc)
             result = self.run_explore_step(branch)
             result.action = "create_branch"
-            return result
+            return _with_scheduler_metadata(result, sched)
 
         branch = sched.branch
         assert branch is not None
@@ -113,10 +118,13 @@ class BranchStepRunner:
         branch = self.branch_controller.get_branch(branch.branch_id)
 
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
-            return self.run_reconcile_step_callback(branch)
+            return _with_scheduler_metadata(
+                self.run_reconcile_step_callback(branch),
+                sched,
+            )
 
         if branch.state == BranchState.EXPLORE:
-            return self.run_explore_step(branch)
+            return _with_scheduler_metadata(self.run_explore_step(branch), sched)
 
         if branch.state in (
             BranchState.EXPLORE_EXPAND,
@@ -125,9 +133,15 @@ class BranchStepRunner:
             BranchState.FROZEN_TESTING,
         ):
             try:
-                return self.run_eval_step_callback(branch)
+                return _with_scheduler_metadata(
+                    self.run_eval_step_callback(branch),
+                    sched,
+                )
             except RuntimeError as exc:
-                return self._handle_eval_runtime_error(branch, exc)
+                return _with_scheduler_metadata(
+                    self._handle_eval_runtime_error(branch, exc),
+                    sched,
+                )
 
         logger.warning(
             "Branch %s in unexpected state %s - skipping",
@@ -425,3 +439,14 @@ def _eval_failure_detail(
     if FROZEN_BUDGET_EXHAUSTED in reason_codes:
         return "frozen_budget", FROZEN_BUDGET_EXHAUSTED
     return None, None
+
+
+def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
+    result.scheduler_slot = str(getattr(sched, "slot", "") or "")
+    result.scheduler_reason = str(getattr(sched, "reason", "") or "")
+    if result.scheduler_slot and "scheduler_slot=" not in result.reason:
+        suffix = f"scheduler_slot={result.scheduler_slot}"
+        if result.scheduler_reason:
+            suffix += f"; scheduler_reason={result.scheduler_reason}"
+        result.reason = f"{result.reason}; {suffix}" if result.reason else suffix
+    return result

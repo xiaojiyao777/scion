@@ -42,3 +42,5 @@ class StepResult:
     failure_stage: Optional[str] = None
     failure_detail: Optional[str] = None
     failure_category: Optional[str] = None
+    scheduler_slot: str = ""
+    scheduler_reason: str = ""

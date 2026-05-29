@@ -14,6 +14,8 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     HypothesisRecord,
+    MechanismChange,
+    PairwiseCaseFeedback,
     ProtocolResult,
     StepRecord,
 )
@@ -211,6 +213,193 @@ def test_generic_v2_surface_prompt_has_no_cvrp_or_warehouse_core_terms(
         in code_ctx["operator_interface_spec"]
     )
     assert "problem-defined scalar values" in code_ctx["operator_interface_spec"]
+
+
+def test_weak_positive_branch_context_includes_branch_dossier_questions(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["description"] = "Generic assignment benchmark."
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "assignment_policy",
+            "kind": "policy",
+            "description": "Assignment refinement policy.",
+            "targets": {
+                "files": ["policies/assignment.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+            "interface": {"required_functions": ["choose"]},
+        },
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "assignment.py").write_text(
+        "def choose(instance):\n    return None\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-weak",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+        direction="assignment_policy: bounded assignment refinement",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        last_telemetry_outcome="evaluated_no_effect",
+        branch_mechanism_ids=("bounded_assignment_refine",),
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Tune bounded assignment refinement.",
+            change_locus="assignment_policy",
+            action="modify",
+            target_file="policies/assignment.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_assignment_refine", change_type="modify"),
+            ),
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=4,
+                wins=1,
+                losses=0,
+                ties=3,
+                win_rate=0.25,
+                median_delta=0.01,
+                ci_low=0.0,
+                ci_high=0.2,
+                runtime_ratio_median=1.0,
+                runtime_delta_median_ms=0.0,
+                runtime_regression_rate=0.0,
+                runtime_pairs=4,
+            ),
+            gate_outcome="continue",
+            reason_codes=(
+                "SCREENING_WEAK_SIGNAL_CONTINUE",
+                "SCREENING_RUNTIME_BUDGET_SATURATION",
+                "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+            ),
+            exposed_summary="screening summary",
+            raw_metrics_ref="/private/screening.json",
+            pair_feedback=(
+                PairwiseCaseFeedback(
+                    case_id="case-a",
+                    seed=1,
+                    comparison="win",
+                    delta=0.01,
+                ),
+            ),
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        decision_reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        step_history=[step],
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "## Branch Dossier" in prompt_text
+    assert '"last_screening_feedback_tier": "weak_positive"' in prompt_text
+    assert '"best_screening_signal"' in prompt_text
+    assert '"zero_effect_streak"' in prompt_text
+    assert "Which observed signal should this follow-up preserve?" in prompt_text
+    assert "What minimal refinement should test the branch-local explanation?" in prompt_text
+    assert "excluded_from_decision_features" in prompt_text
+
+
+def test_branch_created_helper_source_is_visible_in_hypothesis_context(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["description"] = "Generic sequencing benchmark."
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "algorithm_design",
+            "kind": "policy",
+            "description": "Problem-level algorithm boundary.",
+            "targets": {
+                "files": ["policies/base.py", "policies/helpers/*.py"],
+                "create_new_allowed": True,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+            "interface": {"required_functions": ["solve"]},
+        },
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    champion_root = tmp_path / "champion"
+    branch_root = tmp_path / "branch"
+    (champion_root / "policies").mkdir(parents=True)
+    (branch_root / "policies" / "helpers").mkdir(parents=True)
+    (champion_root / "policies" / "base.py").write_text(
+        "def solve(instance):\n    return None\n",
+        encoding="utf-8",
+    )
+    (branch_root / "policies" / "base.py").write_text(
+        "def solve(instance):\n    return None\n",
+        encoding="utf-8",
+    )
+    (branch_root / "policies" / "helpers" / "branch_helper.py").write_text(
+        "def refine_assignment(instance, incumbent):\n    return incumbent\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(champion_root),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-helper",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+        direction="algorithm_design: helper refinement",
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        branch_workspace=str(branch_root),
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "policies/helpers/branch_helper.py" in ctx["targetable_files"]
+    assert "policies/helpers/branch_helper.py (branch research-surface version)" in prompt_text
+    assert "def refine_assignment(instance, incumbent):" in prompt_text
+    assert "If action is \"modify\" or \"remove\", provide `target_file`" in prompt_text
 
 
 def test_create_new_existing_target_code_context_exposes_current_source(

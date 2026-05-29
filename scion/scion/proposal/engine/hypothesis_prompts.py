@@ -84,6 +84,8 @@ def _split_hypothesis_context(
         )
     if D["branch_direction"]:
         branch_context_parts.append(f"## Branch Direction\n{D['branch_direction']}")
+    if D["branch_dossier"]:
+        branch_context_parts.append(f"## Branch Dossier\n{D['branch_dossier']}")
     if D["branch_hygiene_guidance"]:
         branch_context_parts.append(
             f"## Branch Code Status\n{D['branch_hygiene_guidance']}"

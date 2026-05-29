@@ -16,6 +16,13 @@ class SchedulerAction:
     action: Literal["run_existing", "create_new", "at_capacity"]
     branch: Optional[Branch] = None
     reason: str = ""
+    slot: Literal[
+        "explore_new",
+        "exploit_weak_positive",
+        "repair_diagnostic",
+        "refine_active",
+        "capacity_blocked",
+    ] = "refine_active"
 
 
 # High-priority tiers (index 0 = highest priority).
@@ -78,9 +85,11 @@ class Scheduler:
         for tier in _HIGH_PRIORITY_TIERS:
             candidates = [b for b in schedulable if b.state in tier]
             if candidates:
+                selected = _select_fair(candidates)
                 return SchedulerAction(
                     action="run_existing",
-                    branch=_select_fair(candidates),
+                    branch=selected,
+                    slot=_slot_for_branch(selected),
                 )
 
         research = [b for b in schedulable if b.state in _RESEARCH_STATES]
@@ -90,6 +99,7 @@ class Scheduler:
                 return SchedulerAction(
                     action="run_existing",
                     branch=_select_fair(pending_retry),
+                    slot="repair_diagnostic",
                 )
             eligible_research = [
                 branch
@@ -102,8 +112,13 @@ class Scheduler:
                         action="create_new",
                         branch=None,
                         reason=BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+                        slot="repair_diagnostic",
                     )
-                return SchedulerAction(action="at_capacity", branch=None)
+                return SchedulerAction(
+                    action="at_capacity",
+                    branch=None,
+                    slot="capacity_blocked",
+                )
             if (
                 len(active_for_proposal_capacity) < self._max_active_branches
                 and all(
@@ -115,6 +130,7 @@ class Scheduler:
                     action="create_new",
                     branch=None,
                     reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
+                    slot="explore_new",
                 )
             clean_research = [
                 branch
@@ -127,25 +143,37 @@ class Scheduler:
                 if not _established_branch(branch)
             ]
             if clean_candidates:
+                selected = _select_fair(clean_candidates)
                 return SchedulerAction(
                     action="run_existing",
-                    branch=_select_fair(clean_candidates),
+                    branch=selected,
+                    slot=_slot_for_branch(selected),
                 )
             if len(active_for_proposal_capacity) < self._max_active_branches and any(
                 _established_branch(branch) for branch in eligible_research
             ):
-                return SchedulerAction(action="create_new", branch=None)
+                return SchedulerAction(
+                    action="create_new",
+                    branch=None,
+                    slot="explore_new",
+                )
             selection_pool = clean_research or eligible_research
+            selected = _select_fair(selection_pool)
             return SchedulerAction(
                 action="run_existing",
-                branch=_select_fair(selection_pool),
+                branch=selected,
+                slot=_slot_for_branch(selected),
             )
 
         # No actionable branch: only create new if below capacity (§4.6 / §11.5)
         if len(active_for_proposal_capacity) >= self._max_active_branches:
-            return SchedulerAction(action="at_capacity", branch=None)
+            return SchedulerAction(
+                action="at_capacity",
+                branch=None,
+                slot="capacity_blocked",
+            )
 
-        return SchedulerAction(action="create_new", branch=None)
+        return SchedulerAction(action="create_new", branch=None, slot="explore_new")
 
 
 def _select_fair(candidates: List[Branch]) -> Branch:
@@ -157,3 +185,34 @@ def _select_fair(candidates: List[Branch]) -> Branch:
 
 def _established_branch(branch: Branch) -> bool:
     return bool(branch.direction)
+
+
+def _slot_for_branch(
+    branch: Branch,
+) -> Literal[
+    "explore_new",
+    "exploit_weak_positive",
+    "repair_diagnostic",
+    "refine_active",
+    "capacity_blocked",
+]:
+    if getattr(branch, "pending_retry", False):
+        return "repair_diagnostic"
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    diagnostic_tiers = {
+        "inactive",
+        "invalid",
+        "no_effect",
+        "quality_regression",
+        "runtime_regression",
+    }
+    if status in {"telemetry_wiring_suspect", "telemetry_invalid"}:
+        return "repair_diagnostic"
+    if tier == "weak_positive" or status == "active_weak_positive":
+        return "exploit_weak_positive"
+    if tier in diagnostic_tiers or status in {
+        f"active_{item}" for item in diagnostic_tiers
+    }:
+        return "repair_diagnostic"
+    return "refine_active"
