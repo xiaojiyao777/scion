@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 from scion.core.branch_hygiene import (
+    BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE,
     CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
     SAME_MECHANISM_FOLLOWUP_ONLY,
@@ -160,7 +161,16 @@ def validate_branch_continuation_hypothesis(
             step_history=step_history,
         )
     if _is_weak_positive_branch(branch):
-        return RepairPolicyCheck(allowed=True)
+        return RepairPolicyCheck(
+            allowed=True,
+            protected_mechanism_ids=branch_continuation_mechanism_ids(
+                branch,
+                step_history,
+            ),
+            proposed_mechanism_ids=mechanism_ids_for_repair(hypothesis),
+            violation_code=BRANCH_LIFECYCLE_POLICY_VIOLATION,
+            branch_followup_policy=BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE,
+        )
     if not branch_requires_same_mechanism_followup(branch):
         return RepairPolicyCheck(allowed=True)
 
@@ -273,6 +283,8 @@ def validate_branch_continuation_patch(
         not hypothesis_check.allowed
         or not branch_requires_same_mechanism_followup(branch)
     ):
+        return hypothesis_check
+    if _is_weak_positive_branch(branch):
         return hypothesis_check
     protected = hypothesis_check.protected_mechanism_ids
     patch_ids = mechanism_ids_for_repair(patch)

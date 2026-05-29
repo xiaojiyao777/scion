@@ -207,3 +207,88 @@ def test_same_mechanism_followup_patch_blocks_unrelated_mechanism_ids() -> None:
     assert blocked.reason == "new_mechanism_requires_clean_fork"
     assert blocked.protected_mechanism_ids == ("bounded_probe",)
     assert blocked.proposed_mechanism_ids == ("new_restart",)
+
+
+def test_weak_positive_same_mechanism_refinement_does_not_lifecycle_block() -> None:
+    branch = Branch(
+        branch_id="weak-positive-followup",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        last_telemetry_outcome="case_level_positive_signal",
+        branch_mechanism_ids=("construction_multistart",),
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine the existing construction_multistart mechanism on this "
+            "same branch and target."
+        ),
+        target_weakness="The prior weak signal needs a tighter local schedule.",
+        expected_effect="Preserve the weak signal while reducing wasted work.",
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/scheduler.py",
+        action="modify",
+        mechanism_changes=(
+            {"id": "construction_multistart", "change_type": "modify"},
+        ),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content="",
+        mechanism_changes=(
+            {"id": "construction_multistart", "change_type": "modify"},
+        ),
+    )
+
+    allowed = validate_branch_continuation_patch(branch, hypothesis, patch)
+
+    assert allowed.allowed is True
+    assert allowed.detail == ""
+    assert allowed.protected_mechanism_ids == ("construction_multistart",)
+    assert allowed.proposed_mechanism_ids == ("construction_multistart",)
+    assert allowed.branch_followup_policy == (
+        "branch_local_followup_or_explicit_bridge"
+    )
+
+
+def test_weak_positive_unknown_protected_ids_do_not_hard_block_bridge() -> None:
+    branch = Branch(
+        branch_id="weak-positive-bridge",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Bridge from the prior weak signal on the same branch: this tests "
+            "a branch-local failure because the earlier mechanism cannot "
+            "directly be refined without moving the activation point."
+        ),
+        target_weakness="The previous branch-local attempt needs a bridge.",
+        expected_effect="Preserve the weak signal while testing a new target.",
+        change_locus="solver_design",
+        target_file="policies/alternate_policy.py",
+        action="modify",
+        mechanism_changes=({"id": "bridged_followup", "change_type": "add"},),
+    )
+    patch = PatchProposal(
+        file_path="policies/alternate_policy.py",
+        action="modify",
+        code_content="",
+        mechanism_changes=({"id": "bridged_followup", "change_type": "add"},),
+    )
+
+    allowed = validate_branch_continuation_patch(branch, hypothesis, patch)
+
+    assert allowed.allowed is True
+    assert allowed.detail == ""
+    assert allowed.protected_mechanism_ids == ()
+    assert allowed.proposed_mechanism_ids == ("bridged_followup",)
+    assert allowed.branch_followup_policy == (
+        "branch_local_followup_or_explicit_bridge"
+    )
