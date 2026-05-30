@@ -27,6 +27,15 @@ _SOURCE_FILE_RE = re.compile(
     r"(?P<terminal_newline>\n)```",
     re.DOTALL | re.MULTILINE,
 )
+_SOURCE_FILE_RECORD_RE = re.compile(
+    r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
+    r"(?:\s+\([^\n]*\))?\n"
+    r"(?P<metadata>(?:[^\n]*\n)*?)"
+    r"```(?:python|py)?\n"
+    r"(?P<content>.*?)"
+    r"(?P<terminal_newline>\n)```",
+    re.DOTALL | re.MULTILINE,
+)
 
 _FENCED_SOURCE_RE = re.compile(
     r"^\s*```(?:python|py)?\n(?P<content>.*?)(?P<terminal_newline>\n)```\s*$",
@@ -1428,10 +1437,11 @@ def _pattern_list(value: Any) -> tuple[str, ...]:
 
 def _parse_markdown_source_files(rendered: str) -> dict[str, str]:
     files: dict[str, str] = {}
-    for match in _SOURCE_FILE_RE.finditer(rendered):
+    for match in _SOURCE_FILE_RECORD_RE.finditer(rendered):
         path = _normalize_path(match.group("path"))
         content = match.group("content") + match.group("terminal_newline")
-        if path:
+        metadata = match.group("metadata") or ""
+        if path and _is_current_source_record(metadata, content):
             files[path] = content
     return files
 
@@ -1483,7 +1493,24 @@ def _is_existing_source_text(value: Any) -> bool:
     stripped = value.strip()
     if not stripped:
         return False
-    return "will be created" not in stripped
+    lowered = stripped.lower()
+    return not (
+        "will be created" in lowered
+        or "could not read" in lowered
+        or "missing_current_source" in lowered
+        or "readable=false" in lowered
+        or "visibility=not_visible" in lowered
+    )
+
+
+def _is_current_source_record(metadata: str, content: str) -> bool:
+    text = f"{metadata}\n{content}".lower()
+    return not (
+        "readable=false" in text
+        or "missing_current_source" in text
+        or "visibility=not_visible" in text
+        or "could not read" in text
+    )
 
 
 def _edit_intent(change: Mapping[str, Any]) -> str:

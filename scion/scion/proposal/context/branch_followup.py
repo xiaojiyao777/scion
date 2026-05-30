@@ -15,6 +15,7 @@ from scion.core.models import (
     HypothesisProposal,
     PatchFileChange,
     StepRecord,
+    patch_file_changes,
 )
 
 
@@ -258,6 +259,37 @@ def branch_touched_files(
     return tuple(files[:max_files])
 
 
+def branch_current_file_sources(
+    branch: Branch | None,
+    steps: Sequence[StepRecord] | None,
+    *,
+    max_files: int = 32,
+) -> dict[str, str]:
+    if branch is None:
+        return {}
+    sources: dict[str, str] = {}
+    for step in _branch_steps(branch, steps or ()):
+        patch = getattr(step, "patch", None)
+        if patch is None:
+            continue
+        try:
+            changes = patch_file_changes(patch)
+        except Exception:
+            changes = ()
+        for change in changes:
+            path = _clean_path(getattr(change, "file_path", ""))
+            action = str(getattr(change, "action", "") or "")
+            if not path:
+                continue
+            if action == "delete":
+                sources.pop(path, None)
+                continue
+            content = getattr(change, "code_content", None)
+            if action in {"create", "modify"} and isinstance(content, str):
+                sources[path] = content
+    return dict(list(sources.items())[:max_files])
+
+
 def _is_weak_positive_followup(branch: Branch) -> bool:
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
@@ -340,6 +372,7 @@ __all__ = [
     "WEAK_POSITIVE_FOLLOWUP_REQUIRES_BRIDGE",
     "BranchFollowupCheck",
     "branch_created_files",
+    "branch_current_file_sources",
     "branch_touched_files",
     "build_branch_followup_policy",
     "render_branch_followup_policy",

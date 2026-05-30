@@ -32,6 +32,8 @@ from scion.proposal.context.branch_dossier import (
 )
 from scion.proposal.context.branch_followup import (
     branch_created_files,
+    branch_current_file_sources,
+    branch_touched_files,
     build_branch_followup_policy,
     render_branch_followup_policy,
 )
@@ -103,6 +105,27 @@ def _target_file_exists_in_root(root: str, target_file: Optional[str]) -> bool:
         return False
     candidate = os.path.join(root, normalized)
     return os.path.isfile(candidate)
+
+
+def _render_branch_current_target_file(target_file: str, content: str) -> str:
+    return (
+        f"File: {target_file}\n"
+        "Provenance: branch_history_current; readable=True; "
+        "source_status=current_branch_source\n"
+        f"```python\n{content}\n```"
+    )
+
+
+def _render_missing_branch_current_target_file(target_file: str) -> str:
+    return (
+        f"File: {target_file}\n"
+        "Provenance: missing_current_source; readable=False; "
+        "source_status=missing_current_source; visibility=not_visible\n"
+        "Current branch source is unavailable. Do not use this placeholder "
+        "as editable source; read the current branch file before exact_replace "
+        "or choose a target with visible current source.\n"
+        f"```python\n# could not read {target_file}\n```"
+    )
 
 
 class ContextManager:
@@ -526,11 +549,35 @@ class ContextManager:
             else champion.code_snapshot_path
         )
         branch_step_history = step_history or []
+        branch_file_sources = branch_current_file_sources(
+            branch,
+            branch_step_history,
+        )
+        branch_created = branch_created_files(branch, branch_step_history)
+        branch_touched = branch_touched_files(branch, branch_step_history)
+        normalized_target_file = str(hypothesis.target_file or "").replace(
+            "\\",
+            "/",
+        ).lstrip("/")
         target_file_exists = _target_file_exists_in_root(
             source_root,
             hypothesis.target_file,
         )
-        if hypothesis.action == "create_new" and not target_file_exists:
+        if normalized_target_file in branch_file_sources:
+            target_file_exists = True
+            target_file_code = _render_branch_current_target_file(
+                normalized_target_file,
+                branch_file_sources[normalized_target_file],
+            )
+        elif (
+            normalized_target_file
+            and normalized_target_file in set(branch_created) | set(branch_touched)
+        ):
+            target_file_exists = False
+            target_file_code = _render_missing_branch_current_target_file(
+                normalized_target_file
+            )
+        elif hypothesis.action == "create_new" and not target_file_exists:
             target_file_code = "(new file — will be created)"
         else:
             target_file_code = _read_target_file_from_root(
@@ -621,10 +668,9 @@ class ContextManager:
                     champion_root=champion.code_snapshot_path,
                     target_file=hypothesis.target_file,
                     provider=solver_design_prompt_provider,
-                    branch_created_files=branch_created_files(
-                        branch,
-                        branch_step_history,
-                    ),
+                    branch_created_files=branch_created,
+                    branch_touched_files=branch_touched,
+                    branch_current_file_sources=branch_file_sources,
                 )
             )
         if prior_failure is not None:

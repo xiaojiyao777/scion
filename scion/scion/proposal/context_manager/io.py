@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Mapping, Optional
 
 from scion.core.forced_surface import surface_target_files
 from scion.core.models import ChampionState
@@ -197,8 +197,19 @@ def _read_solver_design_context_artifact(
     *,
     source_root: str,
     champion_root: str,
+    source_overrides: Mapping[str, str] | None = None,
+    allow_champion_fallback: bool = True,
 ) -> dict[str, Any]:
     normalized = rel.replace("\\", "/").lstrip("/")
+    override = (source_overrides or {}).get(normalized)
+    if isinstance(override, str):
+        return {
+            "path": Path(source_root or champion_root or "") / normalized,
+            "source": "branch_history_current",
+            "readable": True,
+            "reason": "ok",
+            "content": override,
+        }
     roots: list[tuple[Path, str]] = []
     if source_root:
         source = Path(source_root).expanduser()
@@ -209,7 +220,7 @@ def _read_solver_design_context_artifact(
             else "champion_snapshot"
         )
         roots.append((source, source_kind))
-    if champion_root:
+    if champion_root and allow_champion_fallback:
         fallback = Path(champion_root).expanduser()
         if not roots or fallback.resolve() != roots[0][0].resolve():
             roots.append((fallback, "champion_snapshot_fallback"))
@@ -229,7 +240,7 @@ def _read_solver_design_context_artifact(
             continue
     return {
         "path": Path(source_root or champion_root or "") / normalized,
-        "source": "missing",
+        "source": "missing_current_source",
         "readable": False,
         "reason": "not_found",
         "content": f"# could not read {normalized}",

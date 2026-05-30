@@ -983,18 +983,21 @@ def test_code_prompt_projects_branch_created_helper_for_cross_target_followup(
 ) -> None:
     target_rel = "policies/active_policy.py"
     helper_rel = "policies/helpers/alpha_helper.py"
-    target_path = tmp_path / target_rel
-    helper_path = tmp_path / helper_rel
+    branch_root = tmp_path / "branch"
+    champion_root = tmp_path / "champion"
+    target_path = branch_root / target_rel
+    helper_path = branch_root / helper_rel
     target_path.parent.mkdir(parents=True, exist_ok=True)
     helper_path.parent.mkdir(parents=True, exist_ok=True)
+    champion_root.mkdir(parents=True, exist_ok=True)
     target_source = "def active_policy():\n    return alpha_helper()\n"
     helper_source = "def alpha_helper():\n    return 7\n"
     target_path.write_text(target_source, encoding="utf-8")
     helper_path.write_text(helper_source, encoding="utf-8")
 
     integration_files = _build_solver_design_branch_current_integration_files(
-        source_root=str(tmp_path),
-        champion_root=str(tmp_path),
+        source_root=str(branch_root),
+        champion_root=str(champion_root),
         target_file=target_rel,
         branch_created_files=(helper_rel,),
     )
@@ -1039,7 +1042,10 @@ def test_code_prompt_projects_branch_created_helper_for_cross_target_followup(
     )
 
     assert "Branch-Created Helper Sources" in rendered_system
-    assert "same-branch created files are included" in rendered_system
+    assert (
+        "same-branch created or touched helper files are included"
+        in rendered_system
+    )
     assert helper_rel in rendered_system
     assert "branch_created_helper=True" in rendered_system
     assert helper_source.strip() in rendered_system
@@ -1051,6 +1057,112 @@ def test_code_prompt_projects_branch_created_helper_for_cross_target_followup(
     ]
     assert helper_records
     assert helper_records[0]["full_content_visible_in_rendered_prompt"] is True
+    assert helper_records[0]["source_provenance"] == "branch_workspace"
+    assert helper_records[0]["source_status"] == "current_branch_source"
+    assert helper_records[0]["readable"] is True
+
+
+def test_code_prompt_uses_branch_history_source_when_workspace_file_is_missing(
+    tmp_path: Path,
+) -> None:
+    target_rel = "policies/active_policy.py"
+    helper_rel = "policies/helpers/alpha_helper.py"
+    branch_root = tmp_path / "branch"
+    champion_root = tmp_path / "champion"
+    branch_root.mkdir(parents=True, exist_ok=True)
+    champion_root.mkdir(parents=True, exist_ok=True)
+    helper_source = "def alpha_helper():\n    return 'branch-current'\n"
+
+    integration_files = _build_solver_design_branch_current_integration_files(
+        source_root=str(branch_root),
+        champion_root=str(champion_root),
+        target_file=target_rel,
+        branch_created_files=(helper_rel,),
+        branch_current_file_sources={helper_rel: helper_source},
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": target_rel,
+        "target_file_code": "def active_policy():\n    return None\n",
+        "solver_design_branch_current_integration_files": integration_files,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-branch-history-helper",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert helper_source.strip() in rendered_system
+    assert helper_source.strip() not in user_prompt
+    helper_record = next(
+        item
+        for item in manifest["code_file_visibility_ledger"]["integration_files"]
+        if item["file_path"] == helper_rel
+    )
+    assert helper_record["source_provenance"] == "branch_history_current"
+    assert helper_record["source_status"] == "current_branch_source"
+    assert helper_record["full_content_visible_in_rendered_prompt"] is True
+
+
+def test_missing_branch_created_helper_is_not_marked_as_full_source(
+    tmp_path: Path,
+) -> None:
+    target_rel = "policies/active_policy.py"
+    helper_rel = "policies/helpers/missing_helper.py"
+    branch_root = tmp_path / "branch"
+    champion_root = tmp_path / "champion"
+    branch_root.mkdir(parents=True, exist_ok=True)
+    champion_root.mkdir(parents=True, exist_ok=True)
+
+    integration_files = _build_solver_design_branch_current_integration_files(
+        source_root=str(branch_root),
+        champion_root=str(champion_root),
+        target_file=target_rel,
+        branch_created_files=(helper_rel,),
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": target_rel,
+        "target_file_code": "def active_policy():\n    return None\n",
+        "solver_design_branch_current_integration_files": integration_files,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-missing-branch-helper",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "missing_current_source" in rendered_system
+    assert "visibility=not_visible" in rendered_system
+    assert "# could not read" in rendered_system
+    assert "# could not read" not in user_prompt
+    helper_record = next(
+        item
+        for item in manifest["code_file_visibility_ledger"]["integration_files"]
+        if item["file_path"] == helper_rel
+    )
+    assert helper_record["source_status"] == "missing_current_source"
+    assert helper_record["readable"] is False
+    assert helper_record["placeholder_visible_in_rendered_prompt"] is True
+    assert helper_record["full_content_visible_in_rendered_prompt"] is False
 
 
 def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:

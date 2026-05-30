@@ -15,6 +15,7 @@ from scion.proposal.context import branch_followup as branch_followup_module
 from scion.proposal.context.branch_followup import (
     BRANCH_FOLLOWUP_POLICY_VIOLATION,
     branch_created_files,
+    branch_current_file_sources,
     build_branch_followup_policy,
     render_branch_followup_policy,
     validate_weak_positive_followup_hypothesis,
@@ -159,6 +160,40 @@ def test_branch_followup_policy_receipt_is_in_hypothesis_prompt() -> None:
     assert "policies/helpers/alpha_helper.py" in rendered_prompt
     assert "## Experiment History" not in user_prompt
     assert branch_created_files(branch, steps) == ("policies/helpers/alpha_helper.py",)
+
+
+def test_branch_current_file_sources_replay_latest_same_branch_patch_content() -> None:
+    branch = _weak_branch()
+    first = _prior_step()
+    second = StepRecord(
+        round_num=2,
+        branch_id="branch-alpha",
+        hypothesis=_hypothesis(
+            target_file="policies/helpers/alpha_helper.py",
+            mechanism_id="alpha_refinement",
+            text="Refine the helper source.",
+        ),
+        patch=PatchProposal(
+            file_path="policies/helpers/alpha_helper.py",
+            action="modify",
+            code_content="def alpha_helper():\n    return 2\n",
+        ),
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=None,
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+
+    sources = branch_current_file_sources(branch, [first, second])
+
+    assert sources["policies/main_policy.py"] == (
+        "def main_policy():\n    return None\n"
+    )
+    assert sources["policies/helpers/alpha_helper.py"] == (
+        "def alpha_helper():\n    return 2\n"
+    )
 
 
 def test_branch_followup_module_has_no_problem_specific_control_terms() -> None:

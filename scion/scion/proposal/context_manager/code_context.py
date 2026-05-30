@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import ChampionState
@@ -116,8 +116,14 @@ def _build_solver_design_branch_current_integration_files(
     target_file: Optional[str],
     provider: Any | None = None,
     branch_created_files: Sequence[str] = (),
+    branch_touched_files: Sequence[str] = (),
+    branch_current_file_sources: Mapping[str, str] | None = None,
 ) -> str:
     normalized_target = str(target_file or "").replace("\\", "/").lstrip("/")
+    branch_current_paths = _branch_current_context_paths(
+        branch_created_files,
+        branch_touched_files,
+    )
     lines = [
         (
             "These files are branch-current integration context for "
@@ -135,17 +141,16 @@ def _build_solver_design_branch_current_integration_files(
             rel,
             source_root=source_root,
             champion_root=champion_root,
+            source_overrides=branch_current_file_sources,
+            allow_champion_fallback=(rel not in branch_current_paths),
         )
-        lines.append(
-            f"### {rel}\n"
-            f"Provenance: {artifact['source']}; readable={artifact['readable']}\n"
-            f"```python\n{artifact['content']}\n```"
-        )
+        lines.append(_render_solver_design_context_artifact(rel, artifact))
     helper_projection = _branch_created_helper_source_projection(
-        branch_created_files,
+        branch_current_paths,
         source_root=source_root,
         champion_root=champion_root,
         target_file=normalized_target,
+        branch_current_file_sources=branch_current_file_sources,
     )
     if helper_projection:
         lines.append(helper_projection)
@@ -155,6 +160,7 @@ def _build_solver_design_branch_current_integration_files(
             rel,
             source_root=source_root,
             champion_root=champion_root,
+            source_overrides=branch_current_file_sources,
         )
         summary = _python_api_manifest_for_file(Path(str(artifact["path"])))
         if not summary:
@@ -179,6 +185,7 @@ def _branch_created_helper_source_projection(
     source_root: str,
     champion_root: str,
     target_file: str,
+    branch_current_file_sources: Mapping[str, str] | None = None,
 ) -> str:
     selected: list[str] = []
     target = str(target_file or "").replace("\\", "/").lstrip("/")
@@ -196,10 +203,10 @@ def _branch_created_helper_source_projection(
     lines = [
         "#### Branch-Created Helper Sources",
         (
-            "Receipt: same-branch created files are included for bounded "
-            "cross-target follow-up context. Use them as branch-current source "
-            "when the approved target integrates, repairs, or redirects prior "
-            "branch-local work."
+            "Receipt: same-branch created or touched helper files are included "
+            "for bounded cross-target follow-up context. Use them as "
+            "branch-current source when the approved target integrates, "
+            "repairs, or redirects prior branch-local work."
         ),
     ]
     for rel in selected:
@@ -207,6 +214,8 @@ def _branch_created_helper_source_projection(
             rel,
             source_root=source_root,
             champion_root=champion_root,
+            source_overrides=branch_current_file_sources,
+            allow_champion_fallback=False,
         )
         content = str(artifact["content"])
         truncated = False
@@ -214,12 +223,58 @@ def _branch_created_helper_source_projection(
             content = content[:_BRANCH_CREATED_HELPER_MAX_CHARS].rstrip()
             truncated = True
         lines.append(
-            f"### {rel}\n"
-            f"Provenance: {artifact['source']}; readable={artifact['readable']}; "
-            f"branch_created_helper=True; truncated={truncated}\n"
-            f"```python\n{content}\n```"
+            _render_solver_design_context_artifact(
+                rel,
+                {**artifact, "content": content},
+                branch_created_helper=True,
+                truncated=truncated,
+            )
         )
     return "\n\n".join(lines)
+
+
+def _branch_current_context_paths(
+    branch_created_files: Sequence[str],
+    branch_touched_files: Sequence[str],
+) -> tuple[str, ...]:
+    paths: list[str] = []
+    for collection in (branch_created_files, branch_touched_files):
+        for item in collection or ():
+            rel = str(item or "").replace("\\", "/").lstrip("/")
+            if rel and rel not in paths:
+                paths.append(rel)
+    return tuple(paths)
+
+
+def _render_solver_design_context_artifact(
+    rel: str,
+    artifact: Mapping[str, Any],
+    *,
+    branch_created_helper: bool = False,
+    truncated: bool | None = None,
+) -> str:
+    readable = bool(artifact.get("readable"))
+    source = str(artifact.get("source") or "missing_current_source")
+    flags = [
+        f"Provenance: {source}",
+        f"readable={readable}",
+        f"source_status={'current_branch_source' if readable else 'missing_current_source'}",
+    ]
+    if branch_created_helper:
+        flags.append("branch_created_helper=True")
+    if truncated is not None:
+        flags.append(f"truncated={truncated}")
+    header = f"### {rel}\n" + "; ".join(flags)
+    if readable:
+        return f"{header}\n```python\n{artifact['content']}\n```"
+    return (
+        f"{header}\n"
+        "visibility=not_visible; content_status=missing_current_source\n"
+        f"Current branch source for {rel} is unavailable. Do not treat this "
+        "placeholder as editable source; read the current branch file before "
+        "using exact_replace or choose a target with visible current source.\n"
+        f"```python\n{artifact['content']}\n```"
+    )
 
 def _solver_design_api_manifest_files(
     provider: Any | None,

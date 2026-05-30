@@ -26,6 +26,15 @@ _SOURCE_FILE_RE = re.compile(
     r"(?P<terminal_newline>\n)```",
     re.DOTALL | re.MULTILINE,
 )
+_SOURCE_FILE_RECORD_RE = re.compile(
+    r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
+    r"(?:\s+\([^\n]*\))?\n"
+    r"(?P<metadata>(?:[^\n]*\n)*?)"
+    r"```(?:python|py)?\n"
+    r"(?P<content>.*?)"
+    r"(?P<terminal_newline>\n)```",
+    re.DOTALL | re.MULTILINE,
+)
 
 
 def stable_digest(value: Any, *, length: int = 16) -> str:
@@ -216,17 +225,22 @@ def _code_file_visibility_ledger(
     if call_kind != "code":
         return {}
     target_file = _normalize_path(context.get("target_file"))
-    target_source = _source_text_from_context_value(
+    target_source_record = _source_record_from_context_value(
         context.get("target_file_code"),
         expected_path=target_file,
     )
     target_record = _code_file_visibility_record(
         file_path=target_file,
-        content=target_source,
+        content=(
+            target_source_record.get("content")
+            if target_source_record is not None
+            else None
+        ),
         role="approved_target_file",
         section_name="approved_target_file_current_content",
         provider_prompt_text=provider_prompt_text,
         section_statuses=section_statuses,
+        source_metadata=target_source_record,
     )
     integration_records: list[dict[str, Any]] = []
     seen_integration_paths: set[str] = set()
@@ -242,7 +256,7 @@ def _code_file_visibility_ledger(
             "branch_current_integration_file",
         ),
     ):
-        for file_path, content in _parse_markdown_source_files(
+        for file_path, source_record in _parse_markdown_source_file_records(
             context.get(section_key)
         ).items():
             if file_path in seen_integration_paths:
@@ -251,11 +265,12 @@ def _code_file_visibility_ledger(
             integration_records.append(
                 _code_file_visibility_record(
                     file_path=file_path,
-                    content=content,
+                    content=source_record.get("content"),
                     role=role,
                     section_name=section_name,
                     provider_prompt_text=provider_prompt_text,
                     section_statuses=section_statuses,
+                    source_metadata=source_record,
                 )
             )
     algorithm_read_records: list[dict[str, Any]] = []
@@ -298,26 +313,50 @@ def _code_file_visibility_record(
     section_name: str,
     provider_prompt_text: str,
     section_statuses: Mapping[str, Mapping[str, Any]],
+    source_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if not file_path or content is None:
+    if not file_path:
         return {}
-    content_visible = _rendered_contains_text(provider_prompt_text, content)
+    source_status = _source_status(source_metadata, content)
+    readable = source_status == "current_branch_source"
+    content_visible = bool(
+        readable
+        and content is not None
+        and _rendered_contains_text(provider_prompt_text, content)
+    )
+    placeholder_visible = bool(
+        not readable
+        and content is not None
+        and _rendered_contains_text(provider_prompt_text, content)
+    )
     section_status = section_statuses.get(section_name, {})
     section_included = section_status.get("status") == "included"
-    return {
+    record = {
         "file_path": file_path,
         "role": role,
         "section": section_name,
         "section_status": section_status.get("status", "missing"),
         "section_char_count": section_status.get("char_count", 0),
-        "content_chars": len(content),
-        "content_hash": _text_digest(content, length=16),
+        "source_status": source_status,
+        "source_provenance": _source_provenance(source_metadata),
+        "readable": readable,
+        "content_chars": len(content or ""),
+        "content_hash": _text_digest(content, length=16) if content else "",
         "content_visible_in_rendered_prompt": content_visible,
+        "placeholder_visible_in_rendered_prompt": placeholder_visible,
+        "prompt_visibility_status": (
+            "full_current_source_visible"
+            if bool(section_included and content_visible)
+            else "placeholder_visible"
+            if placeholder_visible
+            else "not_visible"
+        ),
         "full_content_included_in_prompt": bool(section_included and content_visible),
         "full_content_visible_in_rendered_prompt": bool(
             section_included and content_visible
         ),
     }
+    return record
 
 
 def _provider_visible_section_records(
@@ -951,11 +990,27 @@ def _parse_markdown_source_files(value: Any) -> dict[str, str]:
     if not isinstance(value, str):
         return {}
     files: dict[str, str] = {}
-    for match in _SOURCE_FILE_RE.finditer(value):
+    for path, record in _parse_markdown_source_file_records(value).items():
+        if _source_status(record, record.get("content")) == "current_branch_source":
+            files[path] = str(record.get("content") or "")
+    return files
+
+
+def _parse_markdown_source_file_records(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, str):
+        return {}
+    files: dict[str, dict[str, Any]] = {}
+    for match in _SOURCE_FILE_RECORD_RE.finditer(value):
         path = _normalize_path(match.group("path"))
         content = match.group("content") + match.group("terminal_newline")
+        metadata = match.group("metadata") or ""
         if path:
-            files[path] = content
+            files[path] = {
+                "content": content,
+                "metadata": metadata,
+                "source_status": _source_status_from_text(metadata, content),
+                "source_provenance": _source_provenance_from_text(metadata),
+            }
     return files
 
 
@@ -1014,16 +1069,95 @@ def _source_text_from_context_value(
     *,
     expected_path: str = "",
 ) -> str | None:
+    record = _source_record_from_context_value(value, expected_path=expected_path)
+    if record is None:
+        return None
+    if _source_status(record, record.get("content")) != "current_branch_source":
+        return None
+    content = record.get("content")
+    return str(content) if isinstance(content, str) else None
+
+
+def _source_record_from_context_value(
+    value: Any,
+    *,
+    expected_path: str = "",
+) -> dict[str, Any] | None:
     if not isinstance(value, str):
         return None
     text = value
-    markdown_sources = _parse_markdown_source_files(text)
+    markdown_sources = _parse_markdown_source_file_records(text)
     normalized_expected = _normalize_path(expected_path)
     if normalized_expected and normalized_expected in markdown_sources:
         return markdown_sources[normalized_expected]
     if not normalized_expected and len(markdown_sources) == 1:
         return next(iter(markdown_sources.values()))
-    return text if text.strip() else None
+    if _looks_like_missing_source(text):
+        return {
+            "content": None,
+            "metadata": text,
+            "source_status": "missing_current_source",
+            "source_provenance": "missing_current_source",
+        }
+    return {
+        "content": text,
+        "metadata": "",
+        "source_status": "current_branch_source",
+        "source_provenance": "",
+    } if text.strip() else None
+
+
+def _source_status(
+    source_metadata: Mapping[str, Any] | None,
+    content: str | None,
+) -> str:
+    if source_metadata is not None:
+        status = str(source_metadata.get("source_status") or "").strip()
+        if status:
+            return status
+        metadata = str(source_metadata.get("metadata") or "")
+        return _source_status_from_text(metadata, content)
+    if content is None or _looks_like_missing_source(content):
+        return "missing_current_source"
+    return "current_branch_source"
+
+
+def _source_status_from_text(metadata: str, content: str | None) -> str:
+    text = f"{metadata}\n{content or ''}".lower()
+    if (
+        "readable=false" in text
+        or "missing_current_source" in text
+        or "visibility=not_visible" in text
+        or "could not read" in text
+    ):
+        return "missing_current_source"
+    return "current_branch_source"
+
+
+def _source_provenance(source_metadata: Mapping[str, Any] | None) -> str:
+    if source_metadata is None:
+        return ""
+    explicit = str(source_metadata.get("source_provenance") or "").strip()
+    if explicit:
+        return explicit
+    return _source_provenance_from_text(str(source_metadata.get("metadata") or ""))
+
+
+def _source_provenance_from_text(metadata: str) -> str:
+    match = re.search(r"\bProvenance:\s*([^;\n]+)", str(metadata))
+    return match.group(1).strip() if match else ""
+
+
+def _looks_like_missing_source(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return (
+        not text
+        or "will be created" in text
+        or text.startswith("(could not read ")
+        or "could not read" in text
+        or "missing_current_source" in text
+        or "readable=false" in text
+    )
 
 
 def _normalize_path(value: Any) -> str:

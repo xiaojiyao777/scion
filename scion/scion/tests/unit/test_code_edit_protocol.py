@@ -915,6 +915,39 @@ def test_additional_exact_replace_uses_required_full_integration_source() -> Non
     assert attribution["source_record_digest"] == scheduler_digest
 
 
+def test_unreadable_branch_current_integration_placeholder_is_not_edit_source() -> None:
+    helper_path = "policies/baseline_modules/helper.py"
+    missing_section = (
+        f"### {helper_path}\n"
+        "Provenance: missing_current_source; readable=False; "
+        "source_status=missing_current_source; visibility=not_visible\n"
+        "```python\n# could not read policies/baseline_modules/helper.py\n```"
+    )
+    placeholder_source = "# could not read policies/baseline_modules/helper.py\n"
+    raw = {
+        "file_path": helper_path,
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(placeholder_source),
+        "old_string": "# could not read",
+        "new_string": "def helper():\n    return 1",
+    }
+
+    with pytest.raises(PatchEditProtocolError) as exc_info:
+        normalize_patch_typed_edits(
+            raw,
+            context={
+                "solver_design_branch_current_integration_files": missing_section,
+            },
+        )
+
+    assert "exact_replace source unavailable" in str(exc_info.value)
+    manifest = build_patch_edit_source_manifest(
+        {"solver_design_branch_current_integration_files": missing_section}
+    )
+    assert helper_path not in manifest
+
+
 def test_additional_exact_replace_uses_editable_branch_workspace_fallback(
     tmp_path,
 ) -> None:

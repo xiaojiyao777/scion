@@ -15,6 +15,7 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     MechanismChange,
+    PatchProposal,
     PairwiseCaseFeedback,
     ProtocolResult,
     StepRecord,
@@ -464,6 +465,84 @@ def test_create_new_existing_target_code_context_exposes_current_source(
     assert "will be created" not in code_ctx["target_file_code"]
     assert "File: policies/dispatch_policy.py" in code_ctx["target_file_code"]
     assert "def select_limit" in code_ctx["target_file_code"]
+
+
+def test_code_context_uses_branch_history_current_source_for_created_target(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "dispatch_policy",
+            "kind": "policy",
+            "description": "Dispatch timing policy.",
+            "targets": {
+                "files": ["policies/generated_helper.py"],
+                "create_new_allowed": True,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+        },
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-history-source",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+    current_source = "def generated_helper():\n    return 2\n"
+    prior_step = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Create generated_helper.",
+            change_locus="dispatch_policy",
+            action="create_new",
+            target_file="policies/generated_helper.py",
+        ),
+        patch=PatchProposal(
+            file_path="policies/generated_helper.py",
+            action="create",
+            code_content=current_source,
+        ),
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=None,
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    followup = HypothesisProposal(
+        hypothesis_text="Refine generated_helper.",
+        change_locus="dispatch_policy",
+        action="modify",
+        target_file="policies/generated_helper.py",
+    )
+
+    code_ctx = ContextManager().build_code_context(
+        branch=branch,
+        hypothesis=followup,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[prior_step],
+    )
+
+    assert code_ctx["target_file_exists"] is True
+    assert "Provenance: branch_history_current" in code_ctx["target_file_code"]
+    assert "source_status=current_branch_source" in code_ctx["target_file_code"]
+    assert current_source.strip() in code_ctx["target_file_code"]
+    assert "could not read" not in code_ctx["target_file_code"]
 
 
 def test_forced_singleton_config_surface_context_derives_modify_target(
