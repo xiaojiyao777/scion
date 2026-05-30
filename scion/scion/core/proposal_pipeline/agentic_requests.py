@@ -21,6 +21,7 @@ from scion.proposal.tools import (
     ProposalToolContext,
     ProposalToolRegistry,
 )
+from scion.proposal.context.branch_followup import branch_current_file_sources
 
 from .boundaries import _declared_solver_design_surface_names
 from .protocols import AgenticProposalSessionLike
@@ -174,6 +175,10 @@ class AgenticRequestMixin:
             branch_workspace=branch_workspace_for_proposal(
                 branch,
                 self.branch_workspaces,
+            ),
+            branch_current_file_sources=branch_current_file_sources(
+                branch,
+                getattr(self, "step_history", ()),
             ),
             branch_hygiene=branch_hygiene_context(branch),
             branch_hygiene_guidance=branch_hygiene_guidance(branch),

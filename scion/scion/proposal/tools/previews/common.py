@@ -71,6 +71,7 @@ def _contract_gate(context: ProposalToolContext) -> ContractGate:
         spec,
         operator_execute_signature=_operator_execute_signature(context),
         champion_snapshot_path=base_snapshot_path,
+        source_overrides=getattr(context, "branch_current_file_sources", None),
     )
 
 def _contract_problem_spec(context: ProposalToolContext) -> Any:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 import time
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Mapping, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.operator_interface import parse_execute_signature
@@ -75,6 +75,23 @@ _LEGACY_PROBLEM_SCALE_NAMES = frozenset(
 )
 
 
+def _normalize_source_overrides(
+    source_overrides: Mapping[str, str] | None,
+) -> dict[str, str]:
+    if not source_overrides:
+        return {}
+    normalized: dict[str, str] = {}
+    for raw_path, content in source_overrides.items():
+        if not isinstance(content, str):
+            continue
+        try:
+            file_rel = normalize_relative_patch_path(str(raw_path))
+        except ValueError:
+            continue
+        normalized[file_rel] = content
+    return normalized
+
+
 def _syntax_source_excerpt(source: str, *, max_lines: int = 5) -> str:
     lines = str(source or "").splitlines()
     if not lines:
@@ -102,11 +119,13 @@ class ContractGate:
         operator_execute_signature: str | None = None,
         champion_snapshot_path: str | None = None,
         champion_snapshot_provider: Callable[[], str | None] | None = None,
+        source_overrides: Mapping[str, str] | None = None,
     ) -> None:
         self._spec = problem_spec
         self._operator_signature = parse_execute_signature(operator_execute_signature)
         self._champion_snapshot_path = champion_snapshot_path
         self._champion_snapshot_provider = champion_snapshot_provider
+        self._source_overrides = _normalize_source_overrides(source_overrides)
         self._surface_access = SurfaceAccess(problem_spec)
         self._novelty_checker = NoveltyChecker(problem_spec, self._surface_access)
 
@@ -152,10 +171,14 @@ class ContractGate:
         approved_hypothesis: HypothesisProposal | HypothesisRecord | None = None,
         selected_surface: str | None = None,
         base_snapshot_path: str | None = None,
+        base_file_overrides: Mapping[str, str] | None = None,
     ) -> ContractResult:
         """Run C4–C9 checks on a PatchProposal."""
         checks: List[CheckResult] = []
-        base_file_content = self._file_content_provider(base_snapshot_path)
+        base_file_content = self._file_content_provider(
+            base_snapshot_path,
+            source_overrides=base_file_overrides,
+        )
         contract_hypothesis = (
             approved_hypothesis if approved_hypothesis is not None else hypothesis
         )
@@ -480,10 +503,20 @@ class ContractGate:
     def _file_content_provider(
         self,
         snapshot_path: str | None = None,
+        *,
+        source_overrides: Mapping[str, str] | None = None,
     ) -> Callable[[str], str | None]:
         root_path = str(snapshot_path or "").strip() or self._current_champion_snapshot_path()
+        overrides = dict(self._source_overrides)
+        overrides.update(_normalize_source_overrides(source_overrides))
 
         def read_file(file_rel: str) -> str | None:
+            try:
+                normalized = normalize_relative_patch_path(file_rel)
+            except ValueError:
+                normalized = str(file_rel or "").replace("\\", "/").lstrip("/")
+            if normalized in overrides:
+                return overrides[normalized]
             return self._file_content_from_snapshot(root_path, file_rel)
 
         return read_file

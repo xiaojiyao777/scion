@@ -35,6 +35,7 @@ from scion.core.models import (
 from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 from scion.core.verification_call import run_verification_gate
+from scion.proposal.context.branch_followup import branch_current_file_sources
 
 from .common import (
     _AGENTIC_BUDGET_CONTROL,
@@ -581,6 +582,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             patch,
             approved_hypothesis=hypothesis,
             base_snapshot_path=self.branch_workspaces.get(bid),
+            base_file_overrides=branch_current_file_sources(
+                branch,
+                getattr(self, "step_history", ()),
+            ),
         )
         if not p_result.passed:
             logger.info(
