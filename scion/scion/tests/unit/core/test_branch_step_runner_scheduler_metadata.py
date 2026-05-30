@@ -26,6 +26,7 @@ def _runner(
     scheduler_action: SchedulerAction,
     branch: Branch | None = None,
     recorded_scheduler_results: list[StepResult] | None = None,
+    explore_result: StepResult | None = None,
 ) -> BranchStepRunner:
     selected_branch = branch or _branch()
     recorded = (
@@ -42,6 +43,11 @@ def _runner(
     )
     scheduler = SimpleNamespace(select_next=lambda active: scheduler_action)
     branch_store = SimpleNamespace(save=lambda branch: None)
+    selected_explore_result = explore_result or StepResult(
+        action="explore",
+        branch_id=selected_branch.branch_id,
+        reason="screening complete",
+    )
     return BranchStepRunner(
         branch_controller=branch_controller,
         scheduler=scheduler,
@@ -68,11 +74,7 @@ def _runner(
         apply_decision_and_finalize=lambda **kwargs: StepResult(action="explore"),
         record_step=lambda step: None,
         decision_reason_codes_for=lambda branch_id, protocol_result: None,
-        run_explore_step=lambda branch: StepResult(
-            action="explore",
-            branch_id=branch.branch_id,
-            reason="screening complete",
-        ),
+        run_explore_step=lambda branch: selected_explore_result,
         run_eval_step_callback=lambda branch: StepResult(
             action="validate",
             branch_id=branch.branch_id,
@@ -120,6 +122,7 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
         "scheduler_reason": "clean_fork_required_for_new_mechanism",
         "scheduler_slot": "explore_new",
     }
+    assert "improve the same branch" not in result.reason
     assert recorded == [result]
 
 
@@ -143,6 +146,58 @@ def test_run_existing_scheduler_metadata_reaches_result_and_callback() -> None:
     assert result.branch_id == "existing-branch"
     assert result.scheduler_slot == "refine_active"
     assert result.scheduler_reason == "existing_branch_selected"
+    assert result.scheduler_audit_metadata == {
+        "actual_branch_action": "continue_same_branch",
+        "post_refine_decision_reason": "screening complete",
+        "refined_branch_id": "existing-branch",
+        "same_branch_refinement_selected": True,
+        "scheduler_action": "run_existing",
+        "scheduler_reason": "existing_branch_selected",
+        "scheduler_slot": "refine_active",
+    }
+    assert recorded == [result]
+
+
+def test_same_branch_repair_soft_abandon_metadata_and_reason_are_aligned() -> None:
+    branch = _branch("repair-branch")
+    recorded: list[StepResult] = []
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="run_existing",
+            branch=branch,
+            slot="repair_diagnostic",
+            reason="effect_diagnostic_followup",
+        ),
+        branch=branch,
+        recorded_scheduler_results=recorded,
+        explore_result=StepResult(
+            action="soft_abandon",
+            branch_id="repair-branch",
+            reason=(
+                "CONTINUE_EXPLORE: weak screening signal; "
+                "improve the same branch"
+            ),
+        ),
+    )
+
+    result = runner.run_one_step()
+
+    assert result.action == "soft_abandon"
+    assert result.branch_id == "repair-branch"
+    assert "repair/refine the same branch" in result.reason
+    assert "improve the same branch" not in result.reason
+    assert result.scheduler_audit_metadata == {
+        "actual_branch_action": "soft_abandon",
+        "post_refine_abandon_reason": (
+            "CONTINUE_EXPLORE: weak screening signal; "
+            "repair/refine the same branch"
+        ),
+        "refined_branch_id": "repair-branch",
+        "same_branch_refinement_selected": True,
+        "scheduler_action": "run_existing",
+        "scheduler_reason": "effect_diagnostic_followup",
+        "scheduler_slot": "repair_diagnostic",
+    }
     assert recorded == [result]
 
 

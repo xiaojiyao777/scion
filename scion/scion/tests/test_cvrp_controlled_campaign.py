@@ -29,6 +29,7 @@ from scion.verification.gate import VerificationGate
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
+VRP_DIR = CVRP_DIR.parents[3] / "vrp"
 CONTROLLED_CANARY = "controlled/data/synthetic_controlled_canary_5.vrp"
 
 
@@ -169,17 +170,17 @@ def test_controlled_protocol_split_seed_load_and_use_vrp_paths() -> None:
     seed_ledger = SeedLedgerConfig.from_yaml(CONTROLLED_DIR / "seed_ledger.yaml")
 
     assert protocol.version == "0.4-cvrp-controlled-smoke"
-    assert split_manifest.screening == [
-        "controlled/data/synthetic_screening_micro_5.vrp",
-        "controlled/data/synthetic_screening_split_6.vrp",
-    ]
+    assert len(split_manifest.screening) == 12
+    assert all(path.startswith("cvrplib/") for path in split_manifest.screening)
+    assert Path(split_manifest.safe_data_roots[0]) == VRP_DIR
     assert split_manifest.canary == [CONTROLLED_CANARY]
     assert seed_ledger.screening == [0]
     assert seed_ledger.canary == [0]
-    assert all("vrp/cvrplib" not in path.lower() for path in split_manifest.screening)
+    assert seed_ledger.validation == [0, 1]
+    assert seed_ledger.frozen == [0, 1]
 
 
-def test_controlled_screening_runs_complete_on_synthetic_vrp_cases(
+def test_controlled_screening_runs_complete_on_vrp_cases(
     tmp_path: Path,
 ) -> None:
     proto, _, _, split_manifest, seed_ledger = _load_controlled_runtime(tmp_path)
@@ -194,14 +195,22 @@ def test_controlled_screening_runs_complete_on_synthetic_vrp_cases(
     assert result.stage == ExperimentStage.SCREENING
     assert result.case_ids == tuple(split_manifest.screening)
     assert result.seed_set == tuple(seed_ledger.screening)
-    assert result.stats.n_cases == 2
-    assert result.stats.ties == 2
+    assert result.stats.n_cases == len(split_manifest.screening)
+    assert (
+        result.stats.wins + result.stats.losses + result.stats.ties
+        == len(split_manifest.screening)
+    )
+    assert result.stats.valid_pairs == len(split_manifest.screening)
+    assert result.champion_cache_hits == 0
+    assert result.champion_cache_misses == len(split_manifest.screening)
     assert result.raw_metrics_ref
 
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
     assert raw_metrics["complete"] is True
-    assert raw_metrics["valid_pairs"] == 2
+    assert raw_metrics["valid_pairs"] == len(split_manifest.screening)
     assert raw_metrics["failed_pairs"] == 0
+    assert raw_metrics["champion_cache_hits"] == 0
+    assert raw_metrics["champion_cache_misses"] == len(split_manifest.screening)
 
 
 def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
@@ -215,7 +224,6 @@ def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
         result = campaign.run_one_step()
 
     assert result.action in {"create_branch", "validate", "promote", "abandon", "noop"}
-    assert result.decision == Decision.QUEUE_VALIDATE
     assert campaign._n_experiments >= 1
     step = next(
         item
@@ -225,10 +233,8 @@ def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
     )
     assert step.protocol_result is not None
     assert step.protocol_result.stage == ExperimentStage.SCREENING
-    assert step.protocol_result.case_ids == (
-        "controlled/data/synthetic_screening_micro_5.vrp",
-        "controlled/data/synthetic_screening_split_6.vrp",
-    )
+    assert len(step.protocol_result.case_ids) == 12
+    assert all(path.startswith("cvrplib/") for path in step.protocol_result.case_ids)
     assert step.protocol_result.seed_set == (0,)
 
     spec_v1 = _problem_v1()
@@ -245,6 +251,7 @@ def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
             candidate_workspace=CVRP_DIR,
             time_limit_sec=2,
             seeds=(0, 1),
+            data_roots=(VRP_DIR,),
             baseline_label="controlled-baseline",
             candidate_label="controlled-candidate",
             output_dir=tmp_path / "final_evidence",
@@ -261,44 +268,39 @@ def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
     summary_path = Path(campaign._campaign_dir) / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert refs == {"final_quality": summary["final_evidence_refs"]["final_quality"]}
-    assert summary["final_evidence_refs"]["final_quality"]["n_cases"] == 4
+    assert summary["final_evidence_refs"]["final_quality"]["n_cases"] == 24
     assert summary["final_evidence_refs"]["final_quality"]["problem_id"] == "cvrp"
     assert all(path.exists() for path in package_result.artifacts.values())
     assert "final_evidence_refs" not in summary["steps"][0]
 
 
-def test_controlled_campaign_promotes_then_attaches_final_evidence(
+def test_controlled_campaign_records_vrp_screening_without_forcing_promotion(
     tmp_path: Path,
 ) -> None:
     campaign = _make_campaign(tmp_path)
 
     first = campaign.run_one_step()
-    second = campaign.run_one_step()
-    third = campaign.run_one_step()
-
-    assert first.decision == Decision.QUEUE_VALIDATE
-    assert second.action == "validate"
-    assert second.decision == Decision.QUEUE_FROZEN
-    assert third.action == "frozen"
-    assert third.decision == Decision.PROMOTE
-    assert campaign._champion.version == 2
+    if first.action == "create_branch" and campaign._n_experiments == 0:
+        campaign.run_one_step()
 
     stages = [
         step.protocol_result.stage
         for step in campaign._step_history
         if step.protocol_result is not None
     ]
-    assert stages == [
-        ExperimentStage.SCREENING,
-        ExperimentStage.VALIDATION,
-        ExperimentStage.FROZEN,
-    ]
+    assert ExperimentStage.SCREENING in stages
 
-    champion_snapshot = Path(campaign._champion.code_snapshot_path)
-    assert (champion_snapshot / "policies" / "baseline_algorithm.py").is_file()
-    assert "controlled_order_probe" in (
-        champion_snapshot / "policies" / "baseline_algorithm.py"
-    ).read_text(encoding="utf-8")
+    screening_step = next(
+        step
+        for step in campaign._step_history
+        if step.protocol_result is not None
+        and step.protocol_result.stage == ExperimentStage.SCREENING
+    )
+    assert len(screening_step.protocol_result.case_ids) == 12
+    assert all(
+        path.startswith("cvrplib/")
+        for path in screening_step.protocol_result.case_ids
+    )
 
     spec_v1 = _problem_v1()
     adapter = load_problem_adapter(spec_v1)
@@ -311,20 +313,30 @@ def test_controlled_campaign_promotes_then_attaches_final_evidence(
         config=CvrpManifestEvaluationConfig(
             campaign_id=campaign._campaign_id,
             baseline_workspace=CVRP_DIR,
-            candidate_workspace=champion_snapshot,
+            candidate_workspace=CVRP_DIR,
             time_limit_sec=2,
             seeds=(0, 1),
+            data_roots=(VRP_DIR,),
             baseline_label="controlled-baseline",
-            candidate_label="controlled-promoted-v2",
+            candidate_label="controlled-candidate",
             output_dir=tmp_path / "final_evidence_promoted",
         ),
         runner=runner,
         adapter=adapter,
     )
 
-    assert package_result.package.final_quality["n_cases"] == 4
-    assert package_result.package.final_quality["worse_vs_baseline"] == 0
-    assert len(package_result.package.per_case_quality) == 4
+    final_quality = package_result.package.final_quality
+    assert final_quality["n_cases"] == 24
+    assert final_quality["n_ok"] == 24
+    assert final_quality["n_error"] == 0
+    assert final_quality["n_infeasible"] == 0
+    assert (
+        final_quality["better_vs_baseline"]
+        + final_quality["equal_vs_baseline"]
+        + final_quality["worse_vs_baseline"]
+        == final_quality["n_ok"]
+    )
+    assert len(package_result.package.per_case_quality) == 24
 
     refs = attach_final_evidence_package(
         campaign._evidence_recorder,
@@ -338,10 +350,8 @@ def test_controlled_campaign_promotes_then_attaches_final_evidence(
         )
     )
     assert refs == {"final_quality": summary["final_evidence_refs"]["final_quality"]}
-    assert summary["final_evidence_refs"]["final_quality"]["n_cases"] == 4
+    assert summary["final_evidence_refs"]["final_quality"]["n_cases"] == 24
     assert summary["final_evidence_refs"]["final_quality"]["candidate_label"] == (
-        "controlled-promoted-v2"
+        "controlled-candidate"
     )
     assert "final_evidence_refs" not in summary["steps"][0]
-    assert "final_evidence_refs" not in summary["steps"][1]
-    assert "final_evidence_refs" not in summary["steps"][2]

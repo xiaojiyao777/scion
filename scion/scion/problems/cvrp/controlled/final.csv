@@ -1,3 +1,13 @@
 instance,subset,path,dimension,bks,bks_routes,cost,gap_pct,routes,route_gap,iterations,time,time_limit,seed,feasible,benchmark_feasible,mode,status,error,wall_time
-synthetic_final_micro_5,final,controlled/data/synthetic_final_micro_5.vrp,5,11,1,11,0.0,1,0,1,0.01,2,0,true,true,baseline_synthetic,ok,,0.01
-synthetic_final_split_6,final,controlled/data/synthetic_final_split_6.vrp,6,15,1,15,0.0,1,0,1,0.01,2,0,true,true,baseline_synthetic,ok,,0.01
+A-n69-k9,final,cvrplib/A/A-n69-k9.vrp,69,1159.0,9,1169.0,0.8628127696289906,9,0,57,1.0130128959999638,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.083419782999954
+B-n68-k9,final,cvrplib/B/B-n68-k9.vrp,68,1272.0,9,1296.0,1.8867924528301887,9,0,40,1.0008402729999943,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0597173789992667
+CMT3,final,cvrplib/CMT/CMT3.vrp,101,826.137,8,862.5041917296159,4.402077588779575,8,0,17,1.0090798129995164,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.072892414999842
+CMT4,final,cvrplib/CMT/CMT4.vrp,151,1028.42,12,1078.7825709796102,4.897082026760483,12,0,4,1.1218538590001117,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1874357520000558
+E-n101-k8,final,cvrplib/E/E-n101-k8.vrp,101,815.0,8,840.0,3.067484662576687,8,0,19,1.006838725000307,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.080521969000074
+E-n101-k14,final,cvrplib/E/E-n101-k14.vrp,101,1067.0,14,1095.0,2.6241799437675724,14,0,22,1.0643155400002797,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1304799609997644
+M-n151-k12,final,cvrplib/M/M-n151-k12.vrp,151,1015.0,12,1092.0,7.586206896551724,12,0,4,1.2211226689996693,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.291727312999683
+P-n70-k10,final,cvrplib/P/P-n70-k10.vrp,70,827.0,10,844.0,2.0556227327690446,10,0,69,1.0138788360000035,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0730039279997072
+X-n129-k18,final,cvrplib/X/X-n129-k18.vrp,129,28940.0,18,30088.0,3.9668279198341394,18,0,9,1.16378101600003,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.2229978770001253
+X-n139-k10,final,cvrplib/X/X-n139-k10.vrp,139,13590.0,10,14386.0,5.857247976453275,10,0,6,1.0992978409994976,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.166803090999565
+X-n143-k7,final,cvrplib/X/X-n143-k7.vrp,143,15700.0,7,17433.0,11.038216560509555,7,0,6,1.045087317999787,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1148871430004874
+X-n167-k10,final,cvrplib/X/X-n167-k10.vrp,167,20557.0,10,21716.0,5.637982195845697,10,0,3,1.1020419000005859,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1657897400000365

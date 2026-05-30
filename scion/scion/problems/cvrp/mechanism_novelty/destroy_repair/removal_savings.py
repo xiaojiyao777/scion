@@ -33,10 +33,10 @@ def _missing_removal_savings_destroy_span(text: str) -> str:
     return span
 
 _MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS = (
-        r"\b(?:missing|lacks?|absent|without|no)\b.{0,120}"
+        r"\b(?:current|existing|active|baseline|solver|portfolio|"
+        r"destroy portfolio|operator portfolio)\b.{0,100}"
+        r"\b(?:missing|lacks?|absent|no)\b.{0,120}"
         r"\b(?:removal savings?|savings removal|detour cost|marginal distance contribution|cost of remove)\b",
-        r"\b(?:removal savings?|savings removal|detour cost|marginal distance contribution|cost of remove)\b.{0,120}"
-        r"\b(?:missing|lacks?|absent|without|no)\b",
         r"\b(?:worst removal|current|existing|active|baseline|solver)\b.{0,140}"
         r"\b(?:not|does not|doesn t|isn t|is not)\b.{0,80}"
         r"\b(?:removal savings?|savings from removal|cost of remove|detour cost)\b",

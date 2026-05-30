@@ -1,20 +1,20 @@
 version: "0.4-cvrp-controlled-smoke"
 
 screening:
-  n_cases_modify: 2
-  n_cases_create: 2
+  n_cases_modify: 12
+  n_cases_create: 12
   n_seeds: 1
-  expand_to_modify: 2
-  expand_to_create: 2
+  expand_to_modify: 12
+  expand_to_create: 12
 
 validation:
-  n_cases: 1
-  n_seeds: 1
-  expand_to: 2
+  n_cases: 8
+  n_seeds: 2
+  expand_to: 8
 
 frozen:
-  n_cases: 1
-  n_seeds: 1
+  n_cases: 8
+  n_seeds: 2
   max_uses_per_campaign: 1
 
 canary:
@@ -26,7 +26,7 @@ canary:
 runtime:
   max_runtime_ratio: 2.0
   tie_speedup_ratio: 0.75
-  tie_min_runtime_pairs: 1
+  tie_min_runtime_pairs: 4
 
 gates:
   screening:

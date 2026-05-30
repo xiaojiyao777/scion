@@ -50,6 +50,7 @@ class CvrpManifestEvaluationConfig:
     baseline_registry_path: str | Path | None = None
     candidate_registry_path: str | Path | None = None
     output_dir: str | Path | None = None
+    data_roots: Sequence[str | Path] = ()
 
 
 def build_cvrp_final_evaluation_config_from_manifest(
@@ -79,6 +80,7 @@ def build_cvrp_final_evaluation_config_from_manifest(
         baseline_registry_path=config.baseline_registry_path,
         candidate_registry_path=config.candidate_registry_path,
         output_dir=config.output_dir,
+        data_roots=config.data_roots,
     )
 
 
@@ -103,6 +105,7 @@ def build_cvrp_manifest_final_evidence_package(
         adapter=_adapter_with_manifest_path_resolution(
             adapter,
             base_workspace=config.baseline_workspace,
+            data_roots=config.data_roots,
         ),
     )
 
@@ -129,6 +132,7 @@ def write_cvrp_manifest_final_evidence_package(
         adapter=_adapter_with_manifest_path_resolution(
             adapter,
             base_workspace=config.baseline_workspace,
+            data_roots=config.data_roots,
         ),
         output_dir=output_dir,
     )
@@ -141,15 +145,31 @@ class _ManifestPathResolvingAdapter:
     against its own copied fixture tree.
     """
 
-    def __init__(self, delegate: "ProblemAdapter", base_workspace: str | Path) -> None:
+    def __init__(
+        self,
+        delegate: "ProblemAdapter",
+        base_workspace: str | Path,
+        data_roots: Sequence[str | Path] = (),
+    ) -> None:
         self._delegate = delegate
         self._base_workspace = Path(base_workspace)
+        self._data_roots = tuple(data_roots)
 
     def load_instance(self, instance_path: str) -> Any:
         path = Path(str(instance_path))
         if not path.is_absolute():
-            path = self._base_workspace / path
+            path = self._resolve_relative_path(path)
         return self._delegate.load_instance(str(path))
+
+    def _resolve_relative_path(self, path: Path) -> Path:
+        workspace_path = self._base_workspace / path
+        if workspace_path.exists():
+            return workspace_path
+        for root in self._data_roots:
+            candidate = Path(root).expanduser() / path
+            if candidate.exists():
+                return candidate.resolve(strict=False)
+        return workspace_path
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._delegate, name)
@@ -159,10 +179,12 @@ def _adapter_with_manifest_path_resolution(
     adapter: "ProblemAdapter",
     *,
     base_workspace: str | Path,
+    data_roots: Sequence[str | Path] = (),
 ) -> "ProblemAdapter":
     return _ManifestPathResolvingAdapter(
         adapter,
         base_workspace=base_workspace,
+        data_roots=data_roots,
     )  # type: ignore[return-value]
 
 

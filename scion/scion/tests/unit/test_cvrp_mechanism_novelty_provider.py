@@ -310,6 +310,101 @@ def test_cvrp_route_limit_gate_allows_feasible_route_merge_quality_variant() -> 
     assert result is None
 
 
+def test_near_field_angle_sector_destroy_is_guidance_not_hard_premise_block() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add angle_sector_removal as a depot-centered geographic wedge "
+            "destroy variant. It differs from existing random, worst, Shaw, "
+            "and whole-route removal because it removes customers by polar "
+            "sector without relying on current-route relatedness or removal "
+            "savings."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy portfolio lacks sector-shaped spatial pressure.",
+        expected_effect="Improve total_distance on clustered routes.",
+        mechanism_changes=(
+            MechanismChange(id="angle_sector_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_explicit_missing_removal_savings_claim_still_hard_blocks() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "The active destroy portfolio lacks removal savings / detour-cost "
+            "removal. Add a removal-savings destroy operator."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "removal_savings_worst_removal"
+    assert result.gate_action == "hard_block"
+
+
+def test_near_field_route_merge_compaction_is_not_route_removal_missing_claim() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Create route_merge as a route-pair merge/compaction pass for "
+            "capacity-compatible routes. The current portfolio already has "
+            "whole-route removal; this proposal targets pair compaction and "
+            "reinsertion quality, not a claim that whole-route removal is "
+            "missing."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/route_merge.py",
+        target_weakness="Route-pair compaction may improve total_distance.",
+        expected_effect="Reduce total_distance while preserving route caps.",
+        mechanism_changes=(MechanismChange(id="route_merge", change_type="add"),),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_giant_split_decoder_feasible_seed_variant_is_not_route_limit_repair_block() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add giant_split_decoder as a construction seed variant: build a "
+            "giant customer tour, split it into capacity-feasible routes under "
+            "the existing route limit, and keep the incumbent when no feasible "
+            "split improves total_distance. This is a feasible seed-quality "
+            "change, not repair of an absent route-limit guard."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness="Construction seed ordering leaves avoidable distance.",
+        expected_effect="Improve total_distance without increasing fleet_violation.",
+        mechanism_changes=(
+            MechanismChange(id="giant_split_decoder", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_route_limit_gate_allows_feasibility_filter_variant_text() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

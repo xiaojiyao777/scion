@@ -48,14 +48,14 @@ def _missing_shaw_related_removal_span(text: str) -> str:
     return ""
 
 _MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
-        r"\b(?:missing|lacks?|absent|without|no)\b.{0,80}"
+        r"\b(?:missing|lacks?|absent|no)\b.{0,80}"
         r"\b(?:shaw|related|relatedness|proximity|cluster(?:ed)?)\b.{0,80}"
         r"\b(?:destroy|remov(?:al|e)|operator|mechanism)\b",
         r"\b(?:shaw|related|relatedness|proximity|cluster(?:ed)?)\b.{0,80}"
         r"\b(?:destroy|remov(?:al|e)|operator|mechanism)\b.{0,80}"
-        r"\b(?:missing|lacks?|absent|without|no)\b",
+        r"\b(?:missing|lacks?|absent|no)\b",
         r"\b(?:current|existing|active|champion|baseline|solver)\b.{0,90}"
-        r"\b(?:missing|lacks?|absent|without|no)\b.{0,90}"
+        r"\b(?:missing|lacks?|absent|no)\b.{0,90}"
         r"\b(?:shaw|related|relatedness|proximity|cluster(?:ed)?)\b",
 )
 

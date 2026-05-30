@@ -54,6 +54,10 @@ TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE = (
     "TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE"
 )
 
+_RUNTIME_CONFIDENCE_MIN_PAIRS = 4
+_RUNTIME_SEVERE_SLOW_RATIO = 1.50
+_RUNTIME_SEVERE_SLOW_DELTA_MS = 100.0
+
 
 @dataclass(frozen=True)
 class BranchLifecycleDecision:
@@ -240,11 +244,13 @@ class BranchLifecyclePolicy:
         if (
             features.runtime_ratio_median is not None
             and features.runtime_ratio_median > self.soft_runtime_ratio_threshold
+            and self._runtime_evidence_confident(features)
         ):
             reasons.append(SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN)
         if (
             features.runtime_regression_rate is not None
             and features.runtime_regression_rate >= self.high_runtime_regression_rate
+            and self._runtime_evidence_confident(features)
         ):
             reasons.append(SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE)
         return tuple(dict.fromkeys(reasons))
@@ -293,6 +299,25 @@ class BranchLifecyclePolicy:
         if observed <= 0:
             return False
         return ties / observed >= 0.5
+
+    @staticmethod
+    def _runtime_evidence_confident(features: DecisionFeatures) -> bool:
+        runtime_pairs = int(features.runtime_pairs or 0)
+        if runtime_pairs >= _RUNTIME_CONFIDENCE_MIN_PAIRS:
+            return True
+        severe_ratio = (
+            features.runtime_ratio_median is not None
+            and features.runtime_ratio_median >= _RUNTIME_SEVERE_SLOW_RATIO
+        )
+        severe_delta = (
+            features.runtime_delta_median_ms is not None
+            and features.runtime_delta_median_ms >= _RUNTIME_SEVERE_SLOW_DELTA_MS
+        )
+        severe_rate = (
+            features.runtime_regression_rate is not None
+            and features.runtime_regression_rate >= 0.90
+        )
+        return bool(severe_ratio and severe_delta and severe_rate)
 
 
 __all__ = [

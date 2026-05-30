@@ -464,6 +464,7 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
     result.scheduler_slot = str(getattr(sched, "slot", "") or "")
     result.scheduler_reason = str(getattr(sched, "reason", "") or "")
     scheduler_action = str(getattr(sched, "action", "") or "")
+    scheduled_branch = getattr(sched, "branch", None)
     audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
     if scheduler_action:
         audit_metadata.setdefault("scheduler_action", scheduler_action)
@@ -471,6 +472,18 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
         audit_metadata.setdefault("scheduler_slot", result.scheduler_slot)
     if result.scheduler_reason:
         audit_metadata.setdefault("scheduler_reason", result.scheduler_reason)
+    aligned_reason = _scheduler_aligned_result_reason(
+        result.reason,
+        actual_branch_action=(
+            "explore_new_clean_fork"
+            if (
+                scheduler_action == "create_new"
+                and result.scheduler_slot == "explore_new"
+            )
+            else ""
+        ),
+        scheduler_slot=result.scheduler_slot,
+    )
     if scheduler_action == "create_new" and result.scheduler_slot == "explore_new":
         audit_metadata.update(
             {
@@ -483,13 +496,53 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
                 "actual_branch_action": "explore_new_clean_fork",
             }
         )
+    elif scheduler_action == "run_existing" and scheduled_branch is not None:
+        branch_id = str(
+            getattr(scheduled_branch, "branch_id", "") or result.branch_id or ""
+        )
+        actual_action = (
+            "soft_abandon"
+            if result.action == "soft_abandon"
+            else "continue_same_branch"
+        )
+        audit_metadata.update(
+            {
+                "same_branch_refinement_selected": True,
+                "refined_branch_id": branch_id,
+                "actual_branch_action": actual_action,
+            }
+        )
+        aligned_reason = _scheduler_aligned_result_reason(
+            result.reason,
+            actual_branch_action=actual_action,
+            scheduler_slot=result.scheduler_slot,
+        )
+        if result.action == "soft_abandon":
+            audit_metadata["post_refine_abandon_reason"] = aligned_reason
+        else:
+            audit_metadata["post_refine_decision_reason"] = aligned_reason
     result.scheduler_audit_metadata = audit_metadata
-    if result.scheduler_slot and "scheduler_slot=" not in result.reason:
-        suffix = f"scheduler_slot={result.scheduler_slot}"
-        if result.scheduler_reason:
-            suffix += f"; scheduler_reason={result.scheduler_reason}"
-        result.reason = f"{result.reason}; {suffix}" if result.reason else suffix
+    result.reason = aligned_reason
     return result
+
+
+def _scheduler_aligned_result_reason(
+    reason: str,
+    *,
+    actual_branch_action: str,
+    scheduler_slot: str,
+) -> str:
+    text = str(reason or "")
+    stale_phrase = "improve the same branch"
+    if stale_phrase not in text:
+        return text
+    if actual_branch_action == "explore_new_clean_fork":
+        replacement = "create a clean fork"
+    elif scheduler_slot == "repair_diagnostic":
+        replacement = "repair/refine the same branch"
+    else:
+        replacement = "refine the same branch"
+    return text.replace(stale_phrase, replacement)
 
 
 def _finalize_scheduler_result(

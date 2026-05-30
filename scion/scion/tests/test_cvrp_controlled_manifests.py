@@ -18,6 +18,7 @@ from scion.problems.cvrp.adapter import CvrpAdapter
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
+VRP_DIR = CVRP_DIR.parents[3] / "vrp"
 STAGES = ("screening", "validation", "frozen", "final")
 EXPECTED_TOP_LEVEL = (
     "README.md",
@@ -43,7 +44,12 @@ def _load_manifest(stage: str) -> CvrpCaseManifest:
 
 def _source_path(case: CvrpCaseEntry) -> Path:
     path = Path(case.source_path)
-    return path if path.is_absolute() else CVRP_DIR / path
+    if path.is_absolute():
+        return path
+    cvrp_path = CVRP_DIR / path
+    if cvrp_path.exists():
+        return cvrp_path
+    return VRP_DIR / path
 
 
 def test_all_expected_controlled_files_exist() -> None:
@@ -92,7 +98,7 @@ def test_selected_case_ids_are_disjoint_across_stages() -> None:
             )
             seen[case.case_id] = stage
 
-    assert len(seen) == 8
+    assert len(seen) == 40
 
 
 def test_every_source_path_exists_and_loads_through_cvrp_adapter() -> None:
@@ -136,12 +142,14 @@ def test_csv_rows_are_importable_and_match_checked_in_manifests() -> None:
             config=CvrpCaseSelectionConfig(
                 subsets=(stage,),
                 seeds=tuple(checked_in.config["seeds"]),  # type: ignore[arg-type]
-                max_cases_total=2,
-                source_label="controlled_synthetic_csv",
+                max_cases_total=len(checked_in.cases),
+                source_label="vrp_full_experiment_seed0_final_csv",
             ),
         )
 
-        assert [row.case_id for row in rows] == [case.case_id for case in checked_in.cases]
+        assert {row.case_id for row in rows} == {
+            case.case_id for case in checked_in.cases
+        }
         assert [case.to_payload() for case in built.cases] == [
             case.to_payload() for case in checked_in.cases
         ]
@@ -159,6 +167,7 @@ def test_final_manifest_builds_final_evaluation_config_from_budget() -> None:
         candidate_workspace=CVRP_DIR,
         time_limit_sec=final_budget["time_limit_sec"],
         seeds=final_budget["seeds"],
+        data_roots=(VRP_DIR,),
     )
 
     final_config = build_cvrp_final_evaluation_config_from_manifest(
@@ -173,14 +182,60 @@ def test_final_manifest_builds_final_evaluation_config_from_budget() -> None:
     assert final_config.case_paths == tuple(case.source_path for case in manifest.cases)
 
 
-def test_controlled_fixture_paths_do_not_reference_raw_benchmark_tree() -> None:
-    forbidden = "vrp/cvrplib"
+def test_controlled_cases_reference_vrp_cvrplib_assets_with_provenance() -> None:
     for stage in STAGES:
         manifest = _load_manifest(stage)
         rows = load_cvrp_result_rows(CONTROLLED_DIR / f"{stage}.csv")
-        assert forbidden not in str(CONTROLLED_DIR / f"{stage}.csv")
+        assert manifest.metadata["source_ledger"] == (
+            "vrp/results/full_experiment_seed0_final.csv"
+        )
+        assert manifest.metadata["source_data_root"] == "../../../../../vrp"
+        assert manifest.metadata["selection_policy"]
         for case in manifest.cases:
-            assert forbidden not in case.source_path.lower()
+            assert case.source_path.startswith("cvrplib/")
+            assert _source_path(case).is_file()
         for row in rows:
             assert row.source_path is not None
-            assert forbidden not in row.source_path.lower()
+            assert row.source_path.startswith("cvrplib/")
+
+
+def test_controlled_tier_counts_and_diversity() -> None:
+    expected_counts = {
+        "screening": 12,
+        "validation": 8,
+        "frozen": 8,
+        "final": 12,
+    }
+    expected_min_routes = {
+        "screening": 2,
+        "validation": 4,
+        "frozen": 4,
+        "final": 7,
+    }
+    for stage, expected_count in expected_counts.items():
+        manifest = _load_manifest(stage)
+        assert len(manifest.cases) == expected_count
+        subsets = {case.subset for case in manifest.cases}
+        route_counts = [case.bks_routes for case in manifest.cases if case.bks_routes]
+        dimensions = [case.dimension for case in manifest.cases if case.dimension]
+        assert len(subsets) == 1
+        assert min(route_counts) >= expected_min_routes[stage]
+        assert max(route_counts) > min(route_counts)
+        assert max(dimensions) > min(dimensions)
+
+
+def test_controlled_selection_excludes_known_bad_reference_rows() -> None:
+    bad_ids = set()
+    with (VRP_DIR / "results" / "reference_validation_bad.csv").open(
+        encoding="utf-8"
+    ) as handle:
+        next(handle)
+        for line in handle:
+            bad_ids.add(line.split(",", 1)[0])
+
+    selected = {
+        case.case_id
+        for stage in STAGES
+        for case in _load_manifest(stage).cases
+    }
+    assert selected.isdisjoint(bad_ids)

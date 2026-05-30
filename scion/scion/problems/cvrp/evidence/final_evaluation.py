@@ -54,6 +54,7 @@ class CvrpFinalEvaluationConfig:
     baseline_registry_path: str | Path | None = None
     candidate_registry_path: str | Path | None = None
     output_dir: str | Path | None = None
+    data_roots: Sequence[str | Path] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -86,16 +87,25 @@ def evaluate_cvrp_final_quality_records(
     records: list[QualityCaseRecord] = []
 
     for case_path in config.case_paths:
-        case_path_str = str(case_path)
+        manifest_case_path = str(case_path)
+        adapter_case_path = _resolve_case_path(
+            manifest_case_path,
+            base_workspace=config.baseline_workspace,
+            data_roots=config.data_roots,
+        )
+        runner_case_path = _resolve_runner_case_path(
+            manifest_case_path,
+            data_roots=config.data_roots,
+        )
         for seed in config.seeds:
             seed_int = _coerce_seed(seed)
             try:
-                instance = adapter.load_instance(case_path_str)
+                instance = adapter.load_instance(adapter_case_path)
             except Exception as exc:
                 side = _side_error("error", "load_instance", str(exc))
                 records.append(
                     _quality_record(
-                        case_id=Path(case_path_str).stem,
+                        case_id=Path(adapter_case_path).stem,
                         seed=seed_int,
                         baseline=side,
                         candidate=side,
@@ -106,7 +116,7 @@ def evaluate_cvrp_final_quality_records(
             baseline = _evaluate_side(
                 workspace=config.baseline_workspace,
                 registry_path=config.baseline_registry_path,
-                case_path=case_path_str,
+                case_path=runner_case_path,
                 seed=seed_int,
                 time_limit_sec=config.time_limit_sec,
                 runner=runner,
@@ -116,7 +126,7 @@ def evaluate_cvrp_final_quality_records(
             candidate = _evaluate_side(
                 workspace=config.candidate_workspace,
                 registry_path=config.candidate_registry_path,
-                case_path=case_path_str,
+                case_path=runner_case_path,
                 seed=seed_int,
                 time_limit_sec=config.time_limit_sec,
                 runner=runner,
@@ -125,7 +135,7 @@ def evaluate_cvrp_final_quality_records(
             )
             records.append(
                 _quality_record(
-                    case_id=_case_id(instance, case_path_str),
+                    case_id=_case_id(instance, adapter_case_path),
                     seed=seed_int,
                     baseline=baseline,
                     candidate=candidate,
@@ -133,6 +143,43 @@ def evaluate_cvrp_final_quality_records(
             )
 
     return tuple(records)
+
+
+def _resolve_runner_case_path(
+    case_path: str,
+    *,
+    data_roots: Sequence[str | Path] = (),
+) -> str:
+    path = Path(case_path)
+    if path.is_absolute():
+        return str(path)
+    for root in data_roots:
+        candidate = Path(root).expanduser() / path
+        if candidate.exists():
+            return str(candidate.resolve(strict=False))
+    return case_path
+
+
+def _resolve_case_path(
+    case_path: str,
+    *,
+    base_workspace: str | Path,
+    data_roots: Sequence[str | Path] = (),
+) -> str:
+    path = Path(case_path)
+    if path.is_absolute():
+        return str(path)
+
+    workspace_candidate = Path(base_workspace) / path
+    if workspace_candidate.exists():
+        return str(workspace_candidate)
+
+    for root in data_roots:
+        candidate = Path(root).expanduser() / path
+        if candidate.exists():
+            return str(candidate.resolve(strict=False))
+
+    return case_path
 
 
 def build_cvrp_final_evidence_package(

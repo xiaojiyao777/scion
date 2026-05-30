@@ -99,6 +99,25 @@ export SCION_LLM_MAX_RETRIES=2
 审计口径。只有在明确需要时才提高 `SCION_SDK_MAX_RETRIES`。实验阶段默认先
 用 Sonnet；Opus 只用于明确需要的高质量研究尝试。
 
+### Champion result cache
+
+`ExperimentProtocol` 默认启用 champion-side result cache。缓存写在
+`metrics/champion_result_cache/`，不写入 problem source 或 workspace。它只缓存
+champion side 的成功且已解析输出；candidate side 每个 pair 仍然 fresh run。
+
+Cache key 是严格 key，包含 schema、champion workspace digest、resolved case path
+和 case content digest、seed、`time_limit_sec`、selected surface、objective policy /
+metric specs digest，以及 runner/runtime identity。任一项变化都会 miss；因此改
+champion 代码、case 内容、seed、预算、surface 或 objective policy 后都会重新跑
+champion。
+
+Raw metrics 会记录 `champion_cache_hits`、`champion_cache_misses`、
+`champion_cached_runtime_pairs`，每个 pair 也会有
+`champion_result_source=fresh|cached`。注意 cached champion 的 `elapsed_ms` 只用于审计
+和追踪，不作为高置信 paired runtime 样本；有 cached champion pair 时
+`runtime_confidence=low_cached_champion`，聚合 `runtime_stats.runtime_pairs` 不计这些
+pair。
+
 ## 3. CVRP 配置怎么选
 
 ### Formal VRP path

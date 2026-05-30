@@ -1,0 +1,223 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
+from scion.config.protocol_config import ScreeningConfig
+from scion.core.models import ExperimentStage, RunResult, SolverOutput
+from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+from scion.protocol.experiment.cache import ChampionResultCache
+
+
+def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
+    case_path = tmp_path / "cases" / "case.json"
+    case_path.parent.mkdir()
+    case_path.write_text('{"input": 1}\n', encoding="utf-8")
+    champion_ws = _workspace(tmp_path, "champion")
+    candidate_ws = _workspace(tmp_path, "candidate")
+    runner = _CountingRunner(champion_ws=champion_ws)
+    protocol = _protocol(tmp_path, runner, case_path)
+
+    first = protocol.run_experiment(
+        ExperimentStage.SCREENING,
+        str(candidate_ws),
+        str(champion_ws),
+        "modify",
+        selected_surface="surface_a",
+    )
+    second = protocol.run_experiment(
+        ExperimentStage.SCREENING,
+        str(candidate_ws),
+        str(champion_ws),
+        "modify",
+        selected_surface="surface_a",
+    )
+
+    assert first.champion_cache_hits == 0
+    assert first.champion_cache_misses == 1
+    assert second.champion_cache_hits == 1
+    assert second.champion_cache_misses == 0
+    assert runner.call_count(str(champion_ws)) == 1
+    assert runner.call_count(str(candidate_ws)) == 2
+    assert second.stats.runtime_pairs == 0
+    assert second.runtime_confidence == "low_cached_champion"
+    assert "runtime_confidence=low_cached_champion" in second.exposed_summary
+
+    raw = json.loads(Path(second.raw_metrics_ref).read_text(encoding="utf-8"))
+    assert raw["champion_cache_hits"] == 1
+    assert raw["champion_cache_misses"] == 0
+    assert raw["champion_cached_runtime_pairs"] == 1
+    assert raw["runtime_confidence"] == "low_cached_champion"
+    assert raw["runtime_stats"]["runtime_pairs"] == 0
+    assert raw["pairs"][0]["champion_result_source"] == "cached"
+    assert raw["pairs"][0]["runtime_ratio_high_confidence"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "kwargs"),
+    [
+        ("seed", {"seed": 8}),
+        ("time_limit_sec", {"time_limit_sec": 12}),
+        ("selected_surface", {"selected_surface": "surface_b"}),
+        (
+            "objective_policy",
+            {
+                "objective_policy": SimpleNamespace(
+                    mode="weighted_sum",
+                    expose_weights_to_llm=False,
+                )
+            },
+        ),
+    ],
+)
+def test_cache_key_changes_for_protocol_inputs(tmp_path, field, kwargs):
+    cache, base_key, base_args = _primed_cache(tmp_path)
+    changed_args = {**base_args, **kwargs}
+    changed_key = cache.build_key(**changed_args)
+
+    assert field
+    assert changed_key["digest"] != base_key["digest"]
+    assert cache.get(changed_key) is None
+
+
+def test_cache_key_changes_for_case_content_and_workspace_digest(tmp_path):
+    cache, base_key, base_args = _primed_cache(tmp_path)
+    case_path = Path(base_args["case_path"])
+    case_path.write_text('{"input": 2}\n', encoding="utf-8")
+
+    changed_case_key = cache.build_key(**base_args)
+
+    assert changed_case_key["digest"] != base_key["digest"]
+    assert cache.get(changed_case_key) is None
+
+    case_path.write_text('{"input": 1}\n', encoding="utf-8")
+    workspace_path = Path(base_args["champion_workspace"])
+    (workspace_path / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
+    changed_workspace_key = cache.build_key(
+        **{**base_args, "workspace_digest": None}
+    )
+
+    assert changed_workspace_key["digest"] != base_key["digest"]
+    assert cache.get(changed_workspace_key) is None
+
+
+def test_cache_source_files_stay_generic():
+    terms = [
+        "".join(("cv", "rp")),
+        "".join(("rou", "te")),
+        "".join(("al", "ns")),
+        "".join(("vn", "s")),
+        "".join(("capa", "city")),
+        "".join(("fl", "eet")),
+        "".join(("cust", "omer")),
+        "".join(("de", "pot")),
+    ]
+    paths = [
+        Path(__file__),
+        Path(__file__).parents[2] / "protocol" / "experiment" / "cache.py",
+    ]
+    for path in paths:
+        text = path.read_text(encoding="utf-8").lower()
+        assert all(term not in text for term in terms)
+
+
+class _CountingRunner:
+    schema_version = "test-runner-v1"
+
+    def __init__(self, *, champion_ws: Path) -> None:
+        self.champion_ws = str(champion_ws)
+        self.calls: list[dict] = []
+
+    def run_solver(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        if kwargs["workdir"] == self.champion_ws:
+            return _run_result(score=2, elapsed_ms=100)
+        return _run_result(score=1, elapsed_ms=120)
+
+    def call_count(self, workdir: str) -> int:
+        return sum(1 for call in self.calls if call["workdir"] == workdir)
+
+
+def _protocol(tmp_path: Path, runner, case_path: Path) -> ExperimentProtocol:
+    return ExperimentProtocol(
+        protocol_config=ProtocolConfig(
+            screening=ScreeningConfig(n_cases_modify=1, n_cases_create=1)
+        ),
+        split_manager=SplitManager(
+            SplitManifest(
+                version="test",
+                screening=[str(case_path)],
+                validation=["validation_case"],
+                frozen=["frozen_case"],
+                canary=["canary_case"],
+            )
+        ),
+        seed_ledger=SeedLedger(
+            SeedLedgerConfig(
+                version="test",
+                screening=[7],
+                validation=[11],
+                frozen=[13],
+                canary=[17],
+            )
+        ),
+        runner=runner,
+        time_limit_sec=10,
+        metrics_dir=str(tmp_path / "metrics"),
+    )
+
+
+def _workspace(tmp_path: Path, name: str) -> Path:
+    workspace = tmp_path / name
+    workspace.mkdir()
+    (workspace / "registry.yaml").write_text("version: test\n", encoding="utf-8")
+    (workspace / "source.py").write_text("VALUE = 1\n", encoding="utf-8")
+    return workspace
+
+
+def _run_result(*, score: int, elapsed_ms: int) -> RunResult:
+    return RunResult(
+        success=True,
+        exit_code=0,
+        stdout="out",
+        stderr="",
+        elapsed_ms=elapsed_ms,
+        output=SolverOutput(
+            vehicles={},
+            assignment={},
+            objective={"score": score},
+            feasible=True,
+            runtime={"observed": score},
+        ),
+    )
+
+
+def _primed_cache(tmp_path: Path):
+    case_path = tmp_path / "cases" / "case.json"
+    case_path.parent.mkdir()
+    case_path.write_text('{"input": 1}\n', encoding="utf-8")
+    champion_ws = _workspace(tmp_path, "champion")
+    runner = _CountingRunner(champion_ws=champion_ws)
+    cache = ChampionResultCache(tmp_path / "cache")
+    base_args = {
+        "champion_workspace": str(champion_ws),
+        "case_path": str(case_path),
+        "seed": 7,
+        "time_limit_sec": 10,
+        "selected_surface": "surface_a",
+        "runner": runner,
+        "metric_specs": None,
+        "objective_policy": SimpleNamespace(
+            mode="lexicographic",
+            expose_weights_to_llm=False,
+        ),
+        "problem_spec": None,
+        "workspace_digest": None,
+    }
+    base_key = cache.build_key(**base_args)
+    assert cache.put(base_key, _run_result(score=2, elapsed_ms=100))
+    return cache, base_key, base_args

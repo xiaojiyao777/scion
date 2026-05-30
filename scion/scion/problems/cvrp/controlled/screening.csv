@@ -1,3 +1,13 @@
 instance,subset,path,dimension,bks,bks_routes,cost,gap_pct,routes,route_gap,iterations,time,time_limit,seed,feasible,benchmark_feasible,mode,status,error,wall_time
-synthetic_screening_micro_5,screening,controlled/data/synthetic_screening_micro_5.vrp,5,11,1,11,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
-synthetic_screening_split_6,screening,controlled/data/synthetic_screening_split_6.vrp,6,15,1,15,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
+E-n22-k4,screening,cvrplib/E/E-n22-k4.vrp,22,375.0,4,375.0,0.0,4,0,1385,1.0006693249997625,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0767943270002434
+E-n23-k3,screening,cvrplib/E/E-n23-k3.vrp,23,569.0,3,569.0,0.0,3,0,696,1.0016978579997158,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0691339099994366
+P-n19-k2,screening,cvrplib/P/P-n19-k2.vrp,19,212.0,2,212.0,0.0,2,0,2416,1.0001225079995493,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0576280400000542
+P-n40-k5,screening,cvrplib/P/P-n40-k5.vrp,40,458.0,5,458.0,0.0,5,0,245,1.001306365000346,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0757110570002624
+A-n32-k5,screening,cvrplib/A/A-n32-k5.vrp,32,784.0,5,784.0,0.0,5,0,338,1.0008529950000593,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0699369220001245
+A-n37-k6,screening,cvrplib/A/A-n37-k6.vrp,37,949.0,6,949.0,0.0,6,0,341,1.0021741730006397,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0777608540001893
+B-n38-k6,screening,cvrplib/B/B-n38-k6.vrp,38,805.0,6,805.0,0.0,6,0,182,1.001032584999848,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.068215395000152
+B-n45-k6,screening,cvrplib/B/B-n45-k6.vrp,45,678.0,6,679.0,0.14749262536873156,6,0,195,1.0001852219993452,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0590591440004573
+CMT1,screening,cvrplib/CMT/CMT1.vrp,51,524.611,5,524.6111466425075,2.7952617749588282e-05,5,0,228,1.0008777289995123,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0694856230002188
+E-n51-k5,screening,cvrplib/E/E-n51-k5.vrp,51,521.0,5,527.0,1.1516314779270633,5,0,229,1.0047969890001696,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0760271549997924
+P-n50-k7,screening,cvrplib/P/P-n50-k7.vrp,50,554.0,7,558.0,0.7220216606498195,7,0,139,1.0108069349998914,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0784012089998214
+A-n60-k9,screening,cvrplib/A/A-n60-k9.vrp,60,1354.0,9,1384.0,2.2156573116691285,9,0,65,1.0174756559999878,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0838011980004012

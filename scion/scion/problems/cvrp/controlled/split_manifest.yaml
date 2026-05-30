@@ -1,16 +1,41 @@
 version: "0.4-cvrp-controlled-smoke"
 
+safe_data_roots:
+  - ../../../../../vrp
+
 screening:
-  - controlled/data/synthetic_screening_micro_5.vrp
-  - controlled/data/synthetic_screening_split_6.vrp
+  - cvrplib/E/E-n22-k4.vrp
+  - cvrplib/E/E-n23-k3.vrp
+  - cvrplib/P/P-n19-k2.vrp
+  - cvrplib/P/P-n40-k5.vrp
+  - cvrplib/A/A-n32-k5.vrp
+  - cvrplib/A/A-n37-k6.vrp
+  - cvrplib/B/B-n38-k6.vrp
+  - cvrplib/B/B-n45-k6.vrp
+  - cvrplib/CMT/CMT1.vrp
+  - cvrplib/E/E-n51-k5.vrp
+  - cvrplib/P/P-n50-k7.vrp
+  - cvrplib/A/A-n60-k9.vrp
 
 validation:
-  - controlled/data/synthetic_validation_micro_5.vrp
-  - controlled/data/synthetic_validation_split_6.vrp
+  - cvrplib/A/A-n63-k10.vrp
+  - cvrplib/A/A-n80-k10.vrp
+  - cvrplib/B/B-n63-k10.vrp
+  - cvrplib/E/E-n76-k7.vrp
+  - cvrplib/E/E-n76-k8.vrp
+  - cvrplib/P/P-n76-k4.vrp
+  - cvrplib/CMT/CMT2.vrp
+  - cvrplib/M/M-n101-k10.vrp
 
 frozen:
-  - controlled/data/synthetic_frozen_micro_5.vrp
-  - controlled/data/synthetic_frozen_split_6.vrp
+  - cvrplib/F/F-n72-k4.vrp
+  - cvrplib/M/M-n121-k7.vrp
+  - cvrplib/P/P-n101-k4.vrp
+  - cvrplib/X/X-n106-k14.vrp
+  - cvrplib/CMT/CMT11.vrp
+  - cvrplib/CMT/CMT12.vrp
+  - cvrplib/X/X-n110-k13.vrp
+  - cvrplib/X/X-n120-k6.vrp
 
 canary:
   - controlled/data/synthetic_controlled_canary_5.vrp

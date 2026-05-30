@@ -23,8 +23,10 @@ def _stats(
     runtime_delta_median_ms: float | None = None,
     runtime_ratio_median: float | None = None,
     runtime_regression_rate: float | None = None,
+    runtime_pairs: int | None = None,
 ) -> EvalStats:
     n_cases = wins + losses + ties
+    resolved_runtime_pairs = n_cases if runtime_pairs is None else runtime_pairs
     return EvalStats(
         n_cases=n_cases,
         wins=wins,
@@ -37,7 +39,7 @@ def _stats(
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_ratio_median=runtime_ratio_median,
         runtime_regression_rate=runtime_regression_rate,
-        runtime_pairs=n_cases,
+        runtime_pairs=resolved_runtime_pairs,
         total_pairs=n_cases,
         attempted_pairs=n_cases,
         valid_pairs=n_cases,
@@ -68,6 +70,8 @@ def _protocol(
     median_delta: float = 0.0,
     runtime_delta_median_ms: float | None = None,
     runtime_ratio_median: float | None = None,
+    runtime_regression_rate: float | None = None,
+    runtime_pairs: int | None = None,
     candidate_operator_attempts: int = 1,
     candidate_surface_runtime_summary: dict | None = None,
 ) -> ProtocolResult:
@@ -83,6 +87,8 @@ def _protocol(
             median_delta=median_delta,
             runtime_delta_median_ms=runtime_delta_median_ms,
             runtime_ratio_median=runtime_ratio_median,
+            runtime_regression_rate=runtime_regression_rate,
+            runtime_pairs=runtime_pairs,
         ),
         gate_outcome="fail",
         reason_codes=("SCREENING_FAIL_WIN_RATE",),
@@ -144,8 +150,28 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
             case_ties=8,
             runtime_delta_median_ms=29.0,
             runtime_ratio_median=1.18,
+            runtime_regression_rate=1.0,
         )
     ).tier == "runtime_regression"
+
+
+def test_two_case_runtime_noise_is_low_confidence_not_runtime_regression() -> None:
+    summary = screening_feedback_summary(
+        _protocol(
+            case_wins=0,
+            case_losses=0,
+            case_ties=2,
+            runtime_delta_median_ms=29.0,
+            runtime_ratio_median=1.18,
+            runtime_regression_rate=1.0,
+            runtime_pairs=2,
+        )
+    )
+
+    assert summary.tier == "no_effect"
+    assert summary.runtime_confidence == "low_sample_diagnostic"
+    assert summary.opportunity_status == "opportunity_poor"
+    assert any("tiny sample" in item for item in summary.opportunity_diagnostics)
 
 
 def test_screening_feedback_treats_observed_activation_zero_effect_as_no_effect() -> None:
@@ -190,6 +216,50 @@ def test_screening_feedback_treats_observed_activation_zero_effect_as_no_effect(
     assert summary.activation_status == "observed"
     assert summary.effect_status == "no_objective_effect"
     assert summary.repeat_unchanged_allowed is False
+
+
+def test_hook_activation_without_inner_mechanism_evidence_is_opportunity_diagnostic() -> None:
+    summary = screening_feedback_summary(
+        _protocol(
+            case_wins=0,
+            case_losses=0,
+            case_ties=8,
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {
+                    "passed": True,
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "scheduler_hook",
+                            "activation_status": "observed",
+                            "effect_status": "zero",
+                        },
+                        {
+                            "mechanism": "route_pair_exchange",
+                            "activation_status": "missing",
+                            "effect_status": "unknown",
+                            "diagnostic_kind": "not_evaluated/not_triggered",
+                        },
+                    ],
+                    "mechanism_opportunity_diagnostics": [
+                        {
+                            "summary": (
+                                "screening opportunity-poor for route-pair exchange"
+                            ),
+                        }
+                    ],
+                },
+            },
+        )
+    )
+
+    assert summary.tier == "no_effect"
+    assert summary.activation_status == "observed"
+    assert summary.mechanism_evidence["hook_activation_observed"] is True
+    assert summary.mechanism_evidence["primary_mechanism"] == "route_pair_exchange"
+    assert summary.opportunity_status == "opportunity_poor"
+    assert any("route-pair" in item for item in summary.opportunity_diagnostics)
+    assert any("primary mechanism" in item for item in summary.opportunity_diagnostics)
 
 
 def test_experiment_history_renders_tier_pair_and_case_feedback() -> None:

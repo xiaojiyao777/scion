@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
 from scion.core.models import ExperimentStage, ProtocolResult
@@ -33,6 +33,9 @@ _EPS = 1e-12
 _RUNTIME_SLOW_DELTA_MS = 5.0
 _RUNTIME_SLOW_RATIO = 1.10
 _RUNTIME_REGRESSION_RATE = 0.90
+_RUNTIME_CONFIDENCE_MIN_PAIRS = 4
+_RUNTIME_SEVERE_SLOW_RATIO = 1.50
+_RUNTIME_SEVERE_SLOW_DELTA_MS = 100.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,10 @@ class ScreeningFeedbackSummary:
     allowed_followup_variants: tuple[str, ...]
     repeat_unchanged_allowed: bool
     reason_codes: tuple[str, ...] = ()
+    runtime_confidence: str = "unknown"
+    opportunity_status: str = "unknown"
+    opportunity_diagnostics: tuple[str, ...] = ()
+    mechanism_evidence: Mapping[str, Any] = field(default_factory=dict)
     feedback_digest: str = ""
 
     @property
@@ -84,6 +91,10 @@ class ScreeningFeedbackSummary:
             "runtime_summary": self.runtime_summary_payload(),
             "activation_status": self.activation_status,
             "effect_status": self.effect_status,
+            "runtime_confidence": self.runtime_confidence,
+            "opportunity_status": self.opportunity_status,
+            "opportunity_diagnostics": list(self.opportunity_diagnostics),
+            "mechanism_evidence": dict(self.mechanism_evidence or {}),
             "why_not_promoted": self.why_not_promoted,
             "allowed_followup_variants": list(self.allowed_followup_variants),
             "repeat_unchanged_allowed": self.repeat_unchanged_allowed,
@@ -163,6 +174,27 @@ def screening_feedback_summary(
         runtime_ratio=runtime_ratio,
         runtime_delta=runtime_delta,
         runtime_regression_rate=runtime_regression_rate,
+        runtime_pairs=runtime_pairs,
+    )
+    runtime_confidence = _runtime_confidence(
+        runtime_ratio=runtime_ratio,
+        runtime_delta=runtime_delta,
+        runtime_regression_rate=runtime_regression_rate,
+        runtime_pairs=runtime_pairs,
+    )
+    mechanism_evidence = _mechanism_evidence(protocol)
+    opportunity_diagnostics = _opportunity_diagnostics(
+        protocol,
+        mechanism_evidence=mechanism_evidence,
+        no_objective_effect=no_objective_effect,
+    )
+    opportunity_status = (
+        "opportunity_poor"
+        if opportunity_diagnostics
+        and any("opportunity" in item or "not evaluated" in item for item in opportunity_diagnostics)
+        else "low_confidence"
+        if opportunity_diagnostics
+        else "unknown"
     )
 
     if invalid:
@@ -208,6 +240,10 @@ def screening_feedback_summary(
         allowed_followup_variants=variants,
         repeat_unchanged_allowed=repeat_unchanged,
         reason_codes=reason_codes,
+        runtime_confidence=runtime_confidence,
+        opportunity_status=opportunity_status,
+        opportunity_diagnostics=opportunity_diagnostics,
+        mechanism_evidence=mechanism_evidence,
     )
     return _with_digest(summary)
 
@@ -232,6 +268,10 @@ def _summary(
     allowed_followup_variants: tuple[str, ...] = (),
     repeat_unchanged_allowed: bool = True,
     reason_codes: tuple[str, ...] = (),
+    runtime_confidence: str = "unknown",
+    opportunity_status: str = "unknown",
+    opportunity_diagnostics: tuple[str, ...] = (),
+    mechanism_evidence: Mapping[str, Any] | None = None,
 ) -> ScreeningFeedbackSummary:
     return ScreeningFeedbackSummary(
         tier=tier,
@@ -252,6 +292,10 @@ def _summary(
         allowed_followup_variants=allowed_followup_variants,
         repeat_unchanged_allowed=repeat_unchanged_allowed,
         reason_codes=reason_codes,
+        runtime_confidence=runtime_confidence,
+        opportunity_status=opportunity_status,
+        opportunity_diagnostics=opportunity_diagnostics,
+        mechanism_evidence=mechanism_evidence or {},
     )
 
 
@@ -339,7 +383,16 @@ def _runtime_slowdown(
     runtime_ratio: float | None,
     runtime_delta: float | None,
     runtime_regression_rate: float | None,
+    runtime_pairs: int,
 ) -> bool:
+    confidence = _runtime_confidence(
+        runtime_ratio=runtime_ratio,
+        runtime_delta=runtime_delta,
+        runtime_regression_rate=runtime_regression_rate,
+        runtime_pairs=runtime_pairs,
+    )
+    if confidence != "sufficient":
+        return False
     if runtime_ratio is not None and runtime_ratio > _RUNTIME_SLOW_RATIO:
         return True
     if runtime_delta is not None and runtime_delta >= _RUNTIME_SLOW_DELTA_MS:
@@ -350,6 +403,165 @@ def _runtime_slowdown(
     ):
         return True
     return False
+
+
+def _runtime_confidence(
+    *,
+    runtime_ratio: float | None,
+    runtime_delta: float | None,
+    runtime_regression_rate: float | None,
+    runtime_pairs: int,
+) -> str:
+    if runtime_pairs <= 0:
+        return "missing"
+    if runtime_pairs >= _RUNTIME_CONFIDENCE_MIN_PAIRS:
+        return "sufficient"
+    severe_ratio = (
+        runtime_ratio is not None and runtime_ratio >= _RUNTIME_SEVERE_SLOW_RATIO
+    )
+    severe_delta = (
+        runtime_delta is not None and runtime_delta >= _RUNTIME_SEVERE_SLOW_DELTA_MS
+    )
+    severe_rate = (
+        runtime_regression_rate is not None
+        and runtime_regression_rate >= _RUNTIME_REGRESSION_RATE
+    )
+    if severe_ratio and severe_delta and severe_rate:
+        return "sufficient"
+    return "low_sample_diagnostic"
+
+
+def _mechanism_evidence(protocol: ProtocolResult) -> dict[str, Any]:
+    guard = _telemetry_guard(protocol)
+    diagnostics = guard.get("mechanism_diagnostics") if guard else None
+    if not isinstance(diagnostics, list):
+        return {}
+    mechanisms: list[dict[str, Any]] = []
+    hook_ids: list[str] = []
+    primary_ids: list[str] = []
+    for item in diagnostics:
+        if not isinstance(item, Mapping):
+            continue
+        mechanism = str(item.get("mechanism") or "").strip()
+        if not mechanism:
+            continue
+        entry = {
+            "mechanism": mechanism,
+            "role": "wrapper_hook" if _looks_like_wrapper_hook(mechanism) else "primary",
+            "activation_status": item.get("activation_status"),
+            "runtime_status": item.get("runtime_status"),
+            "effect_status": item.get("effect_status"),
+            "diagnostic_kind": item.get("diagnostic_kind"),
+            "telemetry_outcome": item.get("telemetry_outcome"),
+        }
+        mechanisms.append(entry)
+        if entry["role"] == "wrapper_hook":
+            hook_ids.append(mechanism)
+        else:
+            primary_ids.append(mechanism)
+    primary = primary_ids[0] if primary_ids else (mechanisms[0]["mechanism"] if mechanisms else "")
+    hook_activation_observed = any(
+        item.get("role") == "wrapper_hook"
+        and str(item.get("activation_status") or "") == "observed"
+        for item in mechanisms
+    )
+    primary_entry = next(
+        (item for item in mechanisms if item.get("mechanism") == primary),
+        {},
+    )
+    return {
+        "declared_mechanism_count": len(mechanisms),
+        "primary_mechanism": primary,
+        "wrapper_hook_mechanisms": hook_ids,
+        "hook_activation_observed": hook_activation_observed,
+        "primary_activation_status": primary_entry.get("activation_status"),
+        "primary_effect_status": primary_entry.get("effect_status"),
+        "primary_diagnostic_kind": primary_entry.get("diagnostic_kind"),
+        "mechanisms": mechanisms,
+    }
+
+
+def _opportunity_diagnostics(
+    protocol: ProtocolResult,
+    *,
+    mechanism_evidence: Mapping[str, Any],
+    no_objective_effect: bool,
+) -> tuple[str, ...]:
+    diagnostics: list[str] = []
+    guard = _telemetry_guard(protocol)
+    if guard is not None:
+        for key in ("mechanism_opportunity_diagnostics", "opportunity_diagnostics"):
+            raw_items = guard.get(key)
+            if not isinstance(raw_items, list):
+                continue
+            for raw in raw_items:
+                text = str(raw.get("summary") if isinstance(raw, Mapping) else raw)
+                text = text.strip()
+                if text and text not in diagnostics:
+                    diagnostics.append(text)
+    primary = str(mechanism_evidence.get("primary_mechanism") or "").strip()
+    primary_activation = str(
+        mechanism_evidence.get("primary_activation_status") or ""
+    ).strip()
+    primary_kind = str(mechanism_evidence.get("primary_diagnostic_kind") or "").strip()
+    if (
+        primary
+        and mechanism_evidence.get("hook_activation_observed")
+        and primary_activation in {"missing", "zero", ""}
+    ):
+        diagnostics.append(
+            "wrapper hook activated, but primary mechanism was not evaluated "
+            "with mechanism-local evidence in this screening set"
+        )
+    if primary_kind == "not_evaluated/not_triggered":
+        diagnostics.append(
+            "primary mechanism not evaluated or trigger did not fire in current screening"
+        )
+    stats = protocol.stats
+    case_total = _safe_int(getattr(stats, "n_cases", 0))
+    all_case_ties = (
+        case_total > 0
+        and _safe_int(getattr(stats, "ties", 0)) == case_total
+        and _safe_int(getattr(stats, "wins", 0)) == 0
+        and _safe_int(getattr(stats, "losses", 0)) == 0
+    )
+    if no_objective_effect and all_case_ties and case_total <= 2:
+        diagnostics.append(
+            "all screening cases tied on a tiny sample; opportunity and runtime "
+            "diagnostics are low confidence"
+        )
+    runtime_budget = (
+        protocol.candidate_surface_runtime_summary or {}
+        if isinstance(protocol.candidate_surface_runtime_summary, Mapping)
+        else {}
+    )
+    budget_payload = runtime_budget.get("runtime_budget_diagnostic")
+    if isinstance(budget_payload, Mapping):
+        code = str(budget_payload.get("code") or "").lower()
+        if no_objective_effect and all_case_ties and "saturation" in code:
+            diagnostics.append(
+                "all screening cases tied while runtime budget is saturated; "
+                "current screening has low confidence for this mechanism class"
+            )
+    return tuple(dict.fromkeys(diagnostics))
+
+
+def _telemetry_guard(protocol: ProtocolResult) -> Mapping[str, Any] | None:
+    summary = protocol.candidate_surface_runtime_summary or {}
+    if not isinstance(summary, Mapping):
+        return None
+    guard = summary.get("telemetry_guard")
+    return guard if isinstance(guard, Mapping) else None
+
+
+def _looks_like_wrapper_hook(mechanism: str) -> bool:
+    text = mechanism.lower()
+    return (
+        "hook" in text
+        or text.startswith("scheduler_")
+        or text.startswith("wrapper_")
+        or text.endswith("_wrapper")
+    )
 
 
 def _why_not_promoted(

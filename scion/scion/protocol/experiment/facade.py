@@ -13,7 +13,14 @@ from scion.protocol.evaluation import (
     metric_order_from_objectives,
 )
 from scion.runtime.runner import Runner
-from .selection import SeedLedger, SplitManager, select_cases, select_seeds
+from .cache import ChampionResultCache
+from .selection import (
+    SeedLedger,
+    SplitManager,
+    resolve_case_path,
+    select_cases,
+    select_seeds,
+)
 
 if TYPE_CHECKING:
     from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
@@ -35,6 +42,8 @@ class ExperimentProtocol:
         objective_policy: "ObjectivePolicySpec | None" = None,
         require_metric_specs: bool = False,
         problem_spec: Any | None = None,
+        champion_result_cache_enabled: bool = True,
+        champion_result_cache_dir: str | None = None,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -47,6 +56,15 @@ class ExperimentProtocol:
         self._require_metric_specs = require_metric_specs
         self._problem_spec = problem_spec
         self._progress_callback: Optional[Callable[..., None]] = None
+        self._champion_result_cache_enabled = champion_result_cache_enabled
+        self._champion_result_cache = (
+            ChampionResultCache(
+                champion_result_cache_dir
+                or os.path.join(metrics_dir, "champion_result_cache")
+            )
+            if champion_result_cache_enabled
+            else None
+        )
         if self._require_metric_specs and self._metric_specs is None:
             raise ValueError("metric_specs are required for production ExperimentProtocol")
         if self._metric_specs is None:
@@ -186,6 +204,13 @@ class ExperimentProtocol:
 
     def _select_seeds(self, stage: ExperimentStage) -> List[int]:
         return select_seeds(seed_ledger=self.seed_ledger, stage=stage)
+
+    def _resolve_case_path(self, instance_path: str, *, workspace: str) -> str:
+        return resolve_case_path(
+            instance_path,
+            workspace=workspace,
+            safe_data_roots=self.split_manager.safe_data_roots(),
+        )
 
     def run_experiment(
         self,

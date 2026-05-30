@@ -23,6 +23,7 @@ from scion.core.models import (
     CanaryResult,
     ContractResult,
     Decision,
+    EvalStats,
     FailureEvent,
     HypothesisProposal,
     HypothesisRecord,
@@ -561,10 +562,16 @@ def _preserve_low_signal_screening_workspace(
         return False
     if stats.candidate_failed_pairs > 0:
         return False
-    if stats.runtime_ratio_median is not None and stats.runtime_ratio_median > 1.10:
+    runtime_confident = _screening_runtime_evidence_confident(stats)
+    if (
+        runtime_confident
+        and stats.runtime_ratio_median is not None
+        and stats.runtime_ratio_median > 1.10
+    ):
         return False
     if (
-        stats.runtime_regression_rate is not None
+        runtime_confident
+        and stats.runtime_regression_rate is not None
         and stats.runtime_regression_rate >= 0.90
     ):
         return False
@@ -577,6 +584,23 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _screening_runtime_evidence_confident(stats: EvalStats) -> bool:
+    runtime_pairs = int(getattr(stats, "runtime_pairs", 0) or 0)
+    if runtime_pairs >= 4:
+        return True
+    runtime_ratio = getattr(stats, "runtime_ratio_median", None)
+    runtime_delta = getattr(stats, "runtime_delta_median_ms", None)
+    regression_rate = getattr(stats, "runtime_regression_rate", None)
+    return bool(
+        runtime_ratio is not None
+        and runtime_ratio >= 1.50
+        and runtime_delta is not None
+        and runtime_delta >= 100.0
+        and regression_rate is not None
+        and regression_rate >= 0.90
+    )
 
 
 def _merge_mechanism_ids(

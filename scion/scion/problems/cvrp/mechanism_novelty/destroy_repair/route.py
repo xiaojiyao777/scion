@@ -242,7 +242,7 @@ def _first_missing_route_removal_claim_span(
         r"(?:whole route|entire route|route level|route removal|route destroy)"
     )
     patterns = (
-        r"\b(?:missing|lacks?|absent|without|does not have|does not include|"
+        r"\b(?:missing|lacks?|absent|does not have|does not include|"
         r"doesn't have|doesn't include)\b.{0,100}\b"
         + route_family
         + r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b",
@@ -252,7 +252,7 @@ def _first_missing_route_removal_claim_span(
         r"\b"
         + route_family
         + r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b.{0,100}"
-        r"\b(?:missing|lacks?|absent|without|no|does not have|"
+        r"\b(?:missing|lacks?|absent|no|does not have|"
         r"does not include|doesn't have|doesn't include)\b",
     )
     for pattern in patterns:
@@ -294,6 +294,14 @@ def _route_absence_window_is_negated(text: str, start: int, end: int) -> bool:
         or re.search(
             r"\b(?:does not|doesn't|do not|don't)\s+"
             r"(?:claim|assert|premise)\b.{0,140}\b"
+            + route_family
+            + r"\b.{0,80}\b(?:is|are)?\s*"
+            + absence
+            + r"\b",
+            window,
+        )
+        or re.search(
+            r"\bnot\s+(?:a\s+)?claim\b.{0,120}\b"
             + route_family
             + r"\b.{0,80}\b(?:is|are)?\s*"
             + absence

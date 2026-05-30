@@ -225,6 +225,10 @@ def _code_file_visibility_ledger(
     if call_kind != "code":
         return {}
     target_file = _normalize_path(context.get("target_file"))
+    target_file_create_mode = str(context.get("action") or "").strip() in {
+        "create",
+        "create_new",
+    }
     target_source_record = _source_record_from_context_value(
         context.get("target_file_code"),
         expected_path=target_file,
@@ -241,6 +245,7 @@ def _code_file_visibility_ledger(
         provider_prompt_text=provider_prompt_text,
         section_statuses=section_statuses,
         source_metadata=target_source_record,
+        target_file_create_mode=target_file_create_mode,
     )
     integration_records: list[dict[str, Any]] = []
     seen_integration_paths: set[str] = set()
@@ -314,6 +319,7 @@ def _code_file_visibility_record(
     provider_prompt_text: str,
     section_statuses: Mapping[str, Mapping[str, Any]],
     source_metadata: Mapping[str, Any] | None = None,
+    target_file_create_mode: bool = False,
 ) -> dict[str, Any]:
     if not file_path:
         return {}
@@ -345,7 +351,9 @@ def _code_file_visibility_record(
         "content_visible_in_rendered_prompt": content_visible,
         "placeholder_visible_in_rendered_prompt": placeholder_visible,
         "prompt_visibility_status": (
-            "full_current_source_visible"
+            "create_new_target_no_current_source"
+            if target_file_create_mode
+            else "full_current_source_visible"
             if bool(section_included and content_visible)
             else "placeholder_visible"
             if placeholder_visible
@@ -356,6 +364,9 @@ def _code_file_visibility_record(
             section_included and content_visible
         ),
     }
+    if target_file_create_mode:
+        record["target_file_create_mode"] = True
+        record["visibility_status"] = "create_new_target_no_current_source"
     return record
 
 

@@ -275,6 +275,149 @@ def test_prompt_manifest_omits_live_solver_design_provider_handle() -> None:
     ]
 
 
+def test_code_phase_renders_compact_receipts_for_read_observations() -> None:
+    read_observation = ProposalObservation(
+        observation_id="map-read-1",
+        session_id="session-1",
+        tool_name="context.read_active_solver_map",
+        tool_call_id="call-1",
+        observation_type="tool_result",
+        summary="Read active solver map.",
+        structured_payload={
+            "subject_id": "subject-1",
+            "snapshot_digest": "snapshot-1",
+            "read_receipt": {
+                "tool_name": "context.read_active_solver_map",
+                "target_id": "solver-map",
+                "digest": "receipt-digest-1",
+                "snapshot_digest": "snapshot-1",
+            },
+            "algorithm_slices": [{"slice_id": "slice-a"}],
+        },
+    )
+    prompt_observations = [
+        _code_observation_prompt_payload(observation)
+        for observation in _code_prompt_observations([read_observation])
+    ]
+    context = {
+        "problem_summary": "Synthetic problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "solver_body.py",
+        "action": "modify",
+        "hypothesis_text": "Modify solver body.",
+        "target_file_code": "File: solver_body.py\n```python\ndef solve():\n    pass\n```\n",
+        "operator_interface_spec": "def solve()",
+        "import_whitelist": "math",
+        "editable_patterns": "solver_body.py",
+        "frozen_patterns": "adapter.py",
+        "agentic_tool_observations": prompt_observations,
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-read-receipt",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=context,
+        observations=[read_observation],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "file_read_receipts" in user_prompt
+    assert "context.read_active_solver_map" in user_prompt
+    assert "receipt-digest-1" in user_prompt
+    ledger_item = manifest["tool_result_visibility_ledger"][0]
+    assert ledger_item["rendered_visibility_flag"] is True
+    assert ledger_item["omitted"] is False
+
+
+def test_latest_preview_repair_feedback_preserves_retry_diagnostics() -> None:
+    previous_patch = {
+        "file_path": "solver_body.py",
+        "action": "modify",
+        "old_string": "old implementation",
+        "new_string": "new implementation",
+    }
+    context = {
+        "problem_summary": "Synthetic problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "solver_body.py",
+        "action": "modify",
+        "hypothesis_text": "Modify solver body.",
+        "target_file_code": "File: solver_body.py\n```python\ndef solve():\n    pass\n```\n",
+        "operator_interface_spec": "def solve()",
+        "import_whitelist": "math",
+        "editable_patterns": "solver_body.py",
+        "frozen_patterns": "adapter.py",
+        "previous_patch": previous_patch,
+        "agentic_preview_feedback": {
+            "observation_id": "contract-1",
+            "tool_name": "proposal.contract_preview",
+            "summary": "Contract preview failed.",
+            "structured_payload": {
+                "passed": False,
+                "failure_code": "contract_preview_failed",
+                "root_cause": "Wrong object API used for score update.",
+                "gate_id": "C7_interface",
+                "failing_paths": ["solver_body.py"],
+                "previous_patch_summary": previous_patch,
+                "raw_artifact": "x" * 80000,
+            },
+        },
+    }
+
+    _system_blocks, user_prompt = _split_code_context(context)
+
+    assert "Wrong object API used for score update." in user_prompt
+    assert "C7_interface" in user_prompt
+    assert "solver_body.py" in user_prompt
+    assert "old_string_digest" in user_prompt
+    assert "raw_artifact" not in user_prompt
+    assert "<truncated agentic context>" not in user_prompt
+
+
+def test_create_new_target_visibility_ledger_marks_create_mode() -> None:
+    context = {
+        "problem_summary": "Synthetic problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "new_solver_body.py",
+        "action": "create_new",
+        "hypothesis_text": "Create a new solver body.",
+        "target_file_code": "(new file - will be created)",
+        "operator_interface_spec": "def solve()",
+        "import_whitelist": "math",
+        "editable_patterns": "*.py",
+        "frozen_patterns": "adapter.py",
+    }
+    system_blocks, user_prompt = _split_code_context(context)
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-create-new",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    target = manifest["code_file_visibility_ledger"]["target_file"]
+    assert target["file_path"] == "new_solver_body.py"
+    assert target["target_file_create_mode"] is True
+    assert target["visibility_status"] == "create_new_target_no_current_source"
+    assert target["prompt_visibility_status"] == "create_new_target_no_current_source"
+    assert target["source_status"] == "missing_current_source"
+
+
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:
     smoke = ProposalObservation(
         observation_id="smoke-1",

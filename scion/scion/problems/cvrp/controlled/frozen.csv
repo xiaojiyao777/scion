@@ -1,3 +1,9 @@
 instance,subset,path,dimension,bks,bks_routes,cost,gap_pct,routes,route_gap,iterations,time,time_limit,seed,feasible,benchmark_feasible,mode,status,error,wall_time
-synthetic_frozen_micro_5,frozen,controlled/data/synthetic_frozen_micro_5.vrp,5,11,1,11,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
-synthetic_frozen_split_6,frozen,controlled/data/synthetic_frozen_split_6.vrp,6,15,1,15,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
+F-n72-k4,frozen,cvrplib/F/F-n72-k4.vrp,72,237.0,4,245.0,3.375527426160337,4,0,62,1.0448882130003767,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1172764250004548
+M-n121-k7,frozen,cvrplib/M/M-n121-k7.vrp,121,1034.0,7,1043.0,0.8704061895551257,7,0,15,1.0067739129999609,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.077506884000286
+P-n101-k4,frozen,cvrplib/P/P-n101-k4.vrp,101,681.0,4,701.0,2.936857562408223,4,0,18,1.0047819189994698,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0739173299998583
+X-n106-k14,frozen,cvrplib/X/X-n106-k14.vrp,106,26362.0,14,26874.0,1.942189515211289,14,0,5,1.0514372350007761,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1118175960000372
+CMT11,frozen,cvrplib/CMT/CMT11.vrp,121,1042.12,7,1051.5258109728836,0.9025650570839949,7,0,16,1.0644478960002743,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1274980560001495
+CMT12,frozen,cvrplib/CMT/CMT12.vrp,101,819.558,10,821.9988601083345,0.29782640256510273,10,0,13,1.0268034399996395,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.092694369000128
+X-n110-k13,frozen,cvrplib/X/X-n110-k13.vrp,110,14971.0,13,15523.0,3.6871284483334446,13,0,9,1.0516696029999366,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1100495619994035
+X-n120-k6,frozen,cvrplib/X/X-n120-k6.vrp,120,13332.0,6,14250.0,6.885688568856886,6,0,6,1.1863859249997404,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.250759669999752

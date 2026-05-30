@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Sequence
 
 from scion.config.problem import SeedLedgerConfig, SplitManifest
@@ -22,6 +23,10 @@ class SplitManager:
     def get_canary_cases(self) -> List[str]:
         """Return the dedicated canary case list."""
         return list(self._manifest.canary)
+
+    def safe_data_roots(self) -> List[str]:
+        """Return optional read-only data roots for external case assets."""
+        return list(getattr(self._manifest, "safe_data_roots", ()))
 
     def validate_disjoint(self) -> bool:
         self._manifest.validate_disjoint()
@@ -124,10 +129,36 @@ def select_seeds(*, seed_ledger: SeedLedger, stage: ExperimentStage) -> List[int
     return seed_ledger.get_seeds(stage)
 
 
+def resolve_case_path(
+    instance_path: str,
+    *,
+    workspace: str,
+    safe_data_roots: Sequence[str] = (),
+) -> str:
+    """Resolve a case path against a workspace or declared read-only data roots."""
+
+    path = Path(instance_path)
+    if path.is_absolute():
+        return str(path)
+
+    workspace_candidate = Path(workspace) / path
+    if workspace_candidate.exists():
+        return str(workspace_candidate)
+
+    for root in safe_data_roots:
+        root_path = Path(root).expanduser()
+        candidate = root_path / path
+        if candidate.exists():
+            return str(candidate.resolve(strict=False))
+
+    return instance_path
+
+
 __all__ = [
     "SeedLedger",
     "SplitManager",
     "_select_evenly_spaced_cases",
+    "resolve_case_path",
     "select_cases",
     "select_seeds",
 ]

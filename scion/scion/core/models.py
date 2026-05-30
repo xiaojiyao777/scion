@@ -255,6 +255,10 @@ class ProtocolResult:
     candidate_construction_errors: int = 0
     candidate_portfolio_errors: int = 0
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
+    champion_cache_hits: int = 0
+    champion_cache_misses: int = 0
+    champion_cached_runtime_pairs: int = 0
+    runtime_confidence: str = "high"
 
 
 @dataclass(frozen=True)

@@ -165,6 +165,10 @@ def _agentic_research_context_block(
         )
     preview_feedback = context.get("agentic_preview_feedback")
     if preview_feedback:
+        preview_payload = _preview_feedback_model_projection(
+            preview_feedback,
+            code_phase=code_phase,
+        )
         heading = (
             "## Latest Preview Repair Feedback"
             if code_phase
@@ -177,7 +181,7 @@ def _agentic_research_context_block(
             "preserve the declared mechanism id, use the expected call pattern "
             "when repairing code, and report a telemetry declaration mismatch "
             "instead of fabricating effect evidence.\n\n"
-            f"{_bounded_json(preview_feedback, _preview_feedback_chars(code_phase))}"
+            f"{_bounded_json(preview_payload, _preview_feedback_chars(code_phase))}"
         )
     code_shape_feedback = context.get("agentic_code_schema_shape_retry_feedback")
     if code_phase and code_shape_feedback:
@@ -318,6 +322,257 @@ def _bounded_json(value: Any, max_chars: int) -> str:
     if len(rendered) <= max_chars:
         return rendered
     return rendered[: max(0, max_chars - 80)] + "\n... <truncated agentic context>"
+
+
+def _preview_feedback_model_projection(value: Any, *, code_phase: bool) -> Any:
+    if not code_phase or not isinstance(value, dict):
+        return value
+    structured = value.get("structured_payload")
+    payload = structured if isinstance(structured, dict) else value
+    return _drop_empty(
+        {
+            "projection_kind": "latest_preview_repair_feedback.v1",
+            "observation_id": value.get("observation_id"),
+            "tool_name": value.get("tool_name"),
+            "summary": _limit_text(str(value.get("summary") or ""), 900),
+            "failure_code": value.get("failure_code")
+            or (payload.get("failure_code") if isinstance(payload, dict) else None),
+            "repair_hint": _limit_text(str(value.get("repair_hint") or ""), 900),
+            "preserved_retry_diagnostics": _preview_retry_diagnostics(payload),
+            "structured_payload": _compact_preview_feedback_payload(payload),
+            "projection_note": (
+                "Large raw preview artifacts are compacted, but root cause, "
+                "gate/check ids, failing paths, and previous patch summaries "
+                "are preserved for retry repair."
+            ),
+        }
+    )
+
+
+def _preview_retry_diagnostics(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    found: dict[str, Any] = {}
+
+    def remember(key: str, item: Any) -> None:
+        if item in (None, "", [], (), {}):
+            return
+        found.setdefault(key, _compact_preview_critical_value(item))
+
+    def visit(item: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(item, dict):
+            lowered_path = ".".join(part.lower() for part in path)
+            failed = item.get("passed") is False or bool(
+                item.get("failed") or item.get("failure_code")
+            )
+            if failed:
+                failed_checks = found.setdefault("failed_checks", [])
+                if isinstance(failed_checks, list) and len(failed_checks) < 12:
+                    failed_checks.append(_preview_failed_item_summary(item, path))
+            for key, child in item.items():
+                normalized = str(key).lower()
+                child_path = path + (normalized,)
+                if normalized in {
+                    "root_cause",
+                    "root_cause_summary",
+                    "primary_issue",
+                    "issue_summary",
+                    "current_blocker",
+                }:
+                    remember("root_cause", child)
+                elif normalized in {
+                    "gate_id",
+                    "gate",
+                    "check_id",
+                    "check_name",
+                    "name",
+                } and (
+                    failed
+                    or "failure" in lowered_path
+                    or "preview" in lowered_path
+                    or "check" in lowered_path
+                ):
+                    remember("gate_or_check_id", child)
+                elif normalized == "failure_code" and (
+                    failed
+                    or "failure" in lowered_path
+                    or "preview" in lowered_path
+                    or "check" in lowered_path
+                ):
+                    remember("failure_code", child)
+                elif normalized in {
+                    "failing_paths",
+                    "failed_paths",
+                    "paths",
+                    "file_path",
+                    "target_file",
+                    "path",
+                } and (
+                    failed
+                    or "failure" in lowered_path
+                    or "missing" in lowered_path
+                    or "path" in normalized
+                ):
+                    remember("failing_paths", child)
+                elif normalized in {
+                    "previous_patch_summary",
+                    "patch_summary",
+                    "previous_patch",
+                    "patch",
+                }:
+                    remember(
+                        "previous_patch_summary",
+                        _compact_preview_previous_patch_summary(child),
+                    )
+                visit(child, child_path)
+        elif isinstance(item, list):
+            for child in item[:24]:
+                visit(child, path)
+
+    visit(value)
+    if "failed_checks" in found:
+        found["failed_checks"] = [
+            item for item in found["failed_checks"] if item not in ({}, None)
+        ][:12]
+    return _drop_empty(found)
+
+
+def _preview_failed_item_summary(
+    item: dict[str, Any],
+    path: tuple[str, ...],
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "path": ".".join(path),
+            "name": item.get("name") or item.get("check_id") or item.get("gate_id"),
+            "failure_code": item.get("failure_code") or item.get("code"),
+            "root_cause": _limit_text(
+                str(
+                    item.get("root_cause")
+                    or item.get("issue_summary")
+                    or item.get("detail")
+                    or item.get("reason")
+                    or ""
+                ),
+                700,
+            ),
+            "failing_paths": _compact_preview_critical_value(
+                item.get("failing_paths")
+                or item.get("failed_paths")
+                or item.get("paths")
+                or item.get("file_path")
+            ),
+        }
+    )
+
+
+def _compact_preview_feedback_payload(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return _compact_preview_critical_value(value)
+    keep = {
+        "passed",
+        "failure_code",
+        "failure_class",
+        "primary_issue",
+        "issue_summary",
+        "root_cause",
+        "root_cause_summary",
+        "current_blocker",
+        "error_category",
+        "gate_id",
+        "gate",
+        "check_id",
+        "check_name",
+        "failed_checks",
+        "checks",
+        "failing_paths",
+        "failed_paths",
+        "paths",
+        "file_path",
+        "target_file",
+        "actionable_telemetry_feedback",
+        "activation_diagnostic",
+        "telemetry_diagnostics",
+        "runtime_failure",
+        "previous_patch_summary",
+        "patch_summary",
+        "previous_patch",
+    }
+    compact: dict[str, Any] = {}
+    for key, item in value.items():
+        key_text = str(key)
+        if key_text not in keep:
+            continue
+        if key_text == "checks" and isinstance(item, list):
+            compact[key_text] = [
+                _compact_preview_critical_value(check)
+                for check in item
+                if isinstance(check, dict) and check.get("passed") is False
+            ][:16]
+            continue
+        if key_text in {
+            "previous_patch",
+            "patch",
+            "previous_patch_summary",
+            "patch_summary",
+        }:
+            compact[key_text] = _compact_preview_previous_patch_summary(item)
+            continue
+        compact[key_text] = _compact_preview_critical_value(item)
+    return _drop_empty(compact)
+
+
+def _compact_preview_critical_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= 24:
+                compact["_truncated_items"] = len(value) - 24
+                break
+            key_text = str(key)
+            if key_text in {
+                "code_content",
+                "content_after",
+                "raw_stdout",
+                "raw_stderr",
+            }:
+                compact[f"{key_text}_chars"] = len(str(item))
+                compact[f"{key_text}_digest"] = _stable_short_digest(item)
+                continue
+            compact[key_text] = _compact_preview_critical_value(item)
+        return _drop_empty(compact)
+    if isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, list):
+        items = [_compact_preview_critical_value(item) for item in value[:24]]
+        if len(value) > 24:
+            items.append({"_truncated_items": len(value) - 24})
+        return items
+    if isinstance(value, str):
+        return _limit_text(value, 1600)
+    return value
+
+
+def _compact_preview_previous_patch_summary(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return _compact_preview_critical_value(value)
+    compact: dict[str, Any] = {}
+    for key, item in value.items():
+        key_text = str(key)
+        if key_text in {"code_content", "content_after", "old_string", "new_string"}:
+            compact[f"{key_text}_chars"] = len(str(item))
+            compact[f"{key_text}_digest"] = _stable_short_digest(item)
+            compact[f"{key_text}_snippet"] = _limit_text(str(item), 260)
+            continue
+        if key_text == "additional_changes" and isinstance(item, list):
+            compact[key_text] = [
+                _compact_preview_previous_patch_summary(change)
+                for change in item[:6]
+                if isinstance(change, dict)
+            ]
+            continue
+        compact[key_text] = _compact_preview_critical_value(item)
+    return _drop_empty(compact)
 
 
 def _agentic_research_diagnosis_projection(

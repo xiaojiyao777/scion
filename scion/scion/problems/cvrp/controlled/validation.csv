@@ -1,3 +1,9 @@
 instance,subset,path,dimension,bks,bks_routes,cost,gap_pct,routes,route_gap,iterations,time,time_limit,seed,feasible,benchmark_feasible,mode,status,error,wall_time
-synthetic_validation_micro_5,validation,controlled/data/synthetic_validation_micro_5.vrp,5,11,1,11,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
-synthetic_validation_split_6,validation,controlled/data/synthetic_validation_split_6.vrp,6,15,1,15,0.0,1,0,1,0.01,1,0,true,true,baseline_synthetic,ok,,0.01
+A-n63-k10,validation,cvrplib/A/A-n63-k10.vrp,63,1314.0,10,1336.0,1.67427701674277,10,0,58,1.0225018270002693,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0931702419993599
+A-n80-k10,validation,cvrplib/A/A-n80-k10.vrp,80,1763.0,10,1848.0,4.821327283040272,10,0,24,1.0022255230005612,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0732470279999689
+B-n63-k10,validation,cvrplib/B/B-n63-k10.vrp,63,1496.0,10,1548.0,3.4759358288770055,10,0,75,1.0101086439999563,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0787326979998397
+E-n76-k7,validation,cvrplib/E/E-n76-k7.vrp,76,682.0,7,693.0,1.6129032258064515,7,0,45,1.028688258999864,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.1009616020000976
+E-n76-k8,validation,cvrplib/E/E-n76-k8.vrp,76,735.0,8,743.0,1.0884353741496597,8,0,65,1.0244568220005021,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0886327289999826
+P-n76-k4,validation,cvrplib/P/P-n76-k4.vrp,76,593.0,4,620.0,4.5531197301854975,4,0,72,1.0017461830002503,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0628144199999952
+CMT2,validation,cvrplib/CMT/CMT2.vrp,76,835.262,10,857.2622352537248,2.6339322576299287,10,0,60,1.006842045000667,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.0665895319998526
+M-n101-k10,validation,cvrplib/M/M-n101-k10.vrp,101,820.0,10,821.0,0.12195121951219512,10,0,15,1.0442983729999469,1.0,0,True,True,clarke_wright_alns_vns,ok,,1.108439365999402

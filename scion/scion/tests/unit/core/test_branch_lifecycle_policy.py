@@ -49,6 +49,7 @@ def _features(**overrides) -> DecisionFeatures:
         "runtime_guard_passed": True,
         "runtime_ratio_median": 1.001,
         "runtime_regression_rate": 0.56,
+        "runtime_pairs": 8,
         "valid_pairs": 8,
     }
     data.update(overrides)
@@ -272,6 +273,27 @@ def test_low_mid_win_runtime_slowdown_soft_abandons() -> None:
         SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
         SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
     )
+
+
+def test_two_case_runtime_noise_is_diagnostic_not_soft_abandon() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=2,
+            wins=0,
+            losses=0,
+            ties=2,
+            win_rate=0.0,
+            median_delta=0.0,
+            valid_pairs=2,
+            runtime_pairs=2,
+            runtime_delta_median_ms=29.0,
+            runtime_ratio_median=1.18,
+            runtime_regression_rate=1.0,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_NEUTRAL_SIGNAL_CONTINUE,)
 
 
 def test_low_mid_weak_positive_mostly_tie_non_regressive_keeps_branch() -> None:

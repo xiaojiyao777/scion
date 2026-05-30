@@ -37,7 +37,22 @@ _CODE_PROMPT_ALGORITHM_TOOLS = frozenset(
         "context.read_algorithm_symbol",
     }
 )
+_CODE_PROMPT_READ_RECEIPT_TOOLS = frozenset(
+    {
+        "context.list_algorithm_files",
+        "context.read_active_solver_design",
+        "context.read_active_solver_map",
+        "context.read_algorithm_slice",
+        "context.read_branch_state",
+        "context.read_objective_policy",
+        "context.read_operator_registry",
+        "context.read_solver_call_graph",
+        "context.read_surface",
+    }
+)
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
+
+
 def _observation_prompt_payload(observation: ProposalObservation) -> dict[str, Any]:
     structured_payload = _sanitize_agentic_value(observation.structured_payload)
     digest_payload = {
@@ -605,6 +620,8 @@ def _code_prompt_observations(
     latest_surface: ProposalObservation | None = None
     algorithm_reads: list[ProposalObservation] = []
     algorithm_read_keys: set[tuple[str, str, str]] = set()
+    receipt_reads: list[ProposalObservation] = []
+    receipt_read_keys: set[tuple[str, str, str]] = set()
     for observation in observations:
         if observation.tool_name == "context.read_surface":
             payload = observation.structured_payload
@@ -631,6 +648,18 @@ def _code_prompt_observations(
                             _algorithm_read_prompt_key(dropped)
                         )
             continue
+        if observation.tool_name in _CODE_PROMPT_READ_RECEIPT_TOOLS:
+            if not observation.is_error:
+                key = _read_receipt_prompt_key(observation)
+                if key in receipt_read_keys:
+                    for index, current in enumerate(receipt_reads):
+                        if _read_receipt_prompt_key(current) == key:
+                            receipt_reads[index] = observation
+                            break
+                else:
+                    receipt_read_keys.add(key)
+                    receipt_reads.append(observation)
+            continue
         if observation.tool_name in _CODE_PROMPT_FEEDBACK_TOOLS:
             selected.append(observation)
             continue
@@ -640,6 +669,7 @@ def _code_prompt_observations(
         if observation.is_error:
             selected.append(observation)
     selected.extend(algorithm_reads)
+    selected.extend(receipt_reads)
     if latest_surface is not None:
         selected.append(latest_surface)
     return selected
@@ -654,6 +684,29 @@ def _algorithm_read_prompt_key(
     return (
         observation.tool_name,
         str(payload.get("file_path") or ""),
+        str(payload.get("symbol") or ""),
+    )
+
+
+def _read_receipt_prompt_key(
+    observation: ProposalObservation,
+) -> tuple[str, str, str]:
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return (observation.tool_name, observation.observation_id, "")
+    receipt = payload.get("read_receipt")
+    receipt_payload = receipt if isinstance(receipt, Mapping) else {}
+    return (
+        observation.tool_name,
+        str(
+            payload.get("file_path")
+            or payload.get("target_file")
+            or payload.get("registry_id")
+            or payload.get("slice_id")
+            or receipt_payload.get("target_id")
+            or observation.observation_id
+            or ""
+        ),
         str(payload.get("symbol") or ""),
     )
 

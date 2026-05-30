@@ -758,6 +758,7 @@ def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_re
         "SCREENING_FAIL_WIN_RATE",
         TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
     )
     assert branch_controller.soft_abandoned is False
     assert branch.branch_id not in diagnostic_streaks
