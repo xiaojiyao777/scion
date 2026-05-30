@@ -259,6 +259,9 @@ class ProtocolResult:
     champion_cache_misses: int = 0
     champion_cached_runtime_pairs: int = 0
     runtime_confidence: str = "high"
+    opportunity_status: str = "unknown"
+    opportunity_diagnostics: Tuple[str, ...] = ()
+    mechanism_evidence: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

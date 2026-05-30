@@ -19,6 +19,16 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
             reason_codes=("SCREENING_FAIL_WIN_RATE",),
             exposed_summary="case-level gate failed",
             raw_metrics_ref="/SECRET/raw/r2-like.json",
+            champion_cache_hits=1,
+            champion_cache_misses=2,
+            champion_cached_runtime_pairs=3,
+            runtime_confidence="low_cached_champion",
+            opportunity_status="opportunity_poor",
+            opportunity_diagnostics=("primary mechanism did not trigger",),
+            mechanism_evidence={
+                "primary_mechanism": "candidate_list",
+                "primary_activation_status": "missing",
+            },
             pair_feedback=tuple(
                 PairwiseCaseFeedback(
                     case_id=f"case-{idx // 4}",
@@ -63,6 +73,16 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
         "ties": 12,
         "total": 16,
     }
+    assert row["champion_result_cache"] == {
+        "hits": 1,
+        "misses": 2,
+        "cached_runtime_pairs": 3,
+    }
+    assert row["runtime_confidence"] == "low_cached_champion"
+    assert row["opportunity_status"] == "opportunity_poor"
+    assert row["opportunity_diagnostics"] == ["primary mechanism did not trigger"]
+    assert row["mechanism_evidence"]["primary_mechanism"] == "candidate_list"
+    assert row["screening_feedback"]["runtime_confidence"] == "low_cached_champion"
     assert row["screening_feedback"]["repeat_unchanged_allowed"] is False
     assert "weak_positive is not promotable" in row["screening_feedback"][
         "why_not_promoted"

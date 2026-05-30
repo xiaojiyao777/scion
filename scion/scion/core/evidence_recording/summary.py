@@ -484,6 +484,19 @@ class CampaignSummaryMixin:
             protocol_reason_codes = list(pr.reason_codes)
             effective_reason_codes = decision_reason_codes or protocol_reason_codes
             telemetry_details = list(telemetry_decision_details(pr))
+            screening_feedback_payload: dict[str, Any] | None = None
+            if _stage_value(pr.stage) == "screening":
+                try:
+                    from scion.proposal.screening_feedback import (
+                        screening_feedback_summary,
+                    )
+
+                    screening_feedback_payload = screening_feedback_summary(
+                        pr,
+                        decision_reason_codes=tuple(decision_reason_codes),
+                    ).to_payload()
+                except Exception as exc:  # pragma: no cover - summary is best-effort
+                    logger.debug("screening feedback summary failed: %s", exc)
             raw_metrics_public_ref = public_artifact_ref(
                 pr.raw_metrics_ref,
                 base_dir=self.campaign_dir,
@@ -518,6 +531,7 @@ class CampaignSummaryMixin:
                 "runtime_delta_median_ms": stats.runtime_delta_median_ms,
                 "runtime_regression_rate": stats.runtime_regression_rate,
                 "runtime_pairs": stats.runtime_pairs,
+                "runtime_confidence": pr.runtime_confidence,
                 "total_pairs": stats.total_pairs,
                 "attempted_pairs": stats.attempted_pairs,
                 "valid_pairs": stats.valid_pairs,
@@ -547,6 +561,12 @@ class CampaignSummaryMixin:
                 ],
                 "seed_set": list(pr.seed_set),
                 "selected_surface": pr.selected_surface,
+                "champion_cache_hits": pr.champion_cache_hits,
+                "champion_cache_misses": pr.champion_cache_misses,
+                "champion_cached_runtime_pairs": pr.champion_cached_runtime_pairs,
+                "opportunity_status": pr.opportunity_status,
+                "opportunity_diagnostics": list(pr.opportunity_diagnostics or ()),
+                "mechanism_evidence": dict(pr.mechanism_evidence or {}),
                 "candidate_surface_runtime_summary": dict(
                     pr.candidate_surface_runtime_summary or {}
                 ),
@@ -610,6 +630,25 @@ class CampaignSummaryMixin:
                 ),
                 "screened_experiment_effective": screened_experiment_effective(pr),
             }
+            if screening_feedback_payload is not None:
+                step_data["protocol_result"][
+                    "screening_feedback"
+                ] = screening_feedback_payload
+                step_data["protocol_result"]["screening_feedback_digest"] = (
+                    screening_feedback_payload.get("feedback_digest")
+                )
+                step_data["protocol_result"]["opportunity_status"] = (
+                    screening_feedback_payload.get("opportunity_status")
+                    or step_data["protocol_result"]["opportunity_status"]
+                )
+                step_data["protocol_result"]["opportunity_diagnostics"] = (
+                    screening_feedback_payload.get("opportunity_diagnostics")
+                    or step_data["protocol_result"]["opportunity_diagnostics"]
+                )
+                step_data["protocol_result"]["mechanism_evidence"] = (
+                    screening_feedback_payload.get("mechanism_evidence")
+                    or step_data["protocol_result"]["mechanism_evidence"]
+                )
             telemetry_feedback = telemetry_validation_feedback(pr)
             if telemetry_feedback:
                 step_data["protocol_result"][

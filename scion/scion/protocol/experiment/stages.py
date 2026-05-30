@@ -19,6 +19,11 @@ from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
     runtime_budget_diagnostic,
 )
+from scion.core.screening_visibility import (
+    mechanism_evidence_for_protocol,
+    opportunity_diagnostics_for_protocol,
+    opportunity_status_for_diagnostics,
+)
 from scion.protocol.gates import GateResult, frozen_gate, screening_gate, validation_gate
 from scion.protocol.stats import compute_eval_stats
 from scion.runtime.audit import (
@@ -867,7 +872,7 @@ def run_experiment(
         case_fb = tuple(_aggregate_case_feedback(all_pair_feedback))
         pattern = _build_pattern_summary(case_fb)
 
-    return ProtocolResult(
+    result = ProtocolResult(
         stage=stage,
         stats=stats,
         gate_outcome=gate.outcome,
@@ -903,6 +908,27 @@ def run_experiment(
         champion_cache_misses=champion_cache_misses,
         champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_confidence=runtime_confidence,
+    )
+    no_objective_effect = (
+        stats.wins == 0
+        and stats.losses == 0
+        and pair_counts["wins"] == 0
+        and pair_counts["losses"] == 0
+        and abs(float(stats.median_delta or 0.0)) <= 1e-12
+    )
+    mechanism_evidence = mechanism_evidence_for_protocol(result)
+    opportunity_diagnostics = opportunity_diagnostics_for_protocol(
+        result,
+        mechanism_evidence=mechanism_evidence,
+        no_objective_effect=no_objective_effect,
+    )
+    return replace(
+        result,
+        mechanism_evidence=mechanism_evidence,
+        opportunity_diagnostics=opportunity_diagnostics,
+        opportunity_status=opportunity_status_for_diagnostics(
+            opportunity_diagnostics
+        ),
     )
 
 

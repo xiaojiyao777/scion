@@ -48,6 +48,15 @@ def _screening_step_payload(
         "screening_feedback_tier": screening_feedback.tier,
         "case_feedback_summary": screening_feedback_payload["case_summary"],
         "pair_feedback_summary": screening_feedback_payload["pair_summary"],
+        "champion_result_cache": {
+            "hits": protocol.champion_cache_hits,
+            "misses": protocol.champion_cache_misses,
+            "cached_runtime_pairs": protocol.champion_cached_runtime_pairs,
+        },
+        "runtime_confidence": screening_feedback.runtime_confidence,
+        "opportunity_status": screening_feedback.opportunity_status,
+        "opportunity_diagnostics": list(screening_feedback.opportunity_diagnostics),
+        "mechanism_evidence": dict(screening_feedback.mechanism_evidence or {}),
         "candidate_runtime_failure_categories": dict(
             protocol.candidate_runtime_failure_categories or {}
         ),

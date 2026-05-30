@@ -91,6 +91,54 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
 
 
+def test_campaign_summary_exposes_screening_visibility_fields(
+    tmp_path: Path,
+) -> None:
+    protocol = replace(
+        _protocol_result("/tmp/metrics-visibility.json"),
+        champion_cache_hits=2,
+        champion_cache_misses=3,
+        champion_cached_runtime_pairs=4,
+        runtime_confidence="low_cached_champion",
+        opportunity_status="opportunity_poor",
+        opportunity_diagnostics=("primary mechanism did not trigger",),
+        mechanism_evidence={
+            "primary_mechanism": "candidate_list",
+            "primary_activation_status": "missing",
+            "primary_effect_status": "not_observed",
+        },
+    )
+    step = replace(_step("/tmp/metrics-visibility.json"), protocol_result=protocol)
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    protocol_summary = summary["steps"][0]["protocol_result"]
+    assert protocol_summary["champion_cache_hits"] == 2
+    assert protocol_summary["champion_cache_misses"] == 3
+    assert protocol_summary["champion_cached_runtime_pairs"] == 4
+    assert protocol_summary["runtime_confidence"] == "low_cached_champion"
+    assert protocol_summary["opportunity_status"] == "opportunity_poor"
+    assert protocol_summary["opportunity_diagnostics"] == [
+        "primary mechanism did not trigger"
+    ]
+    assert protocol_summary["mechanism_evidence"]["primary_mechanism"] == (
+        "candidate_list"
+    )
+    assert protocol_summary["screening_feedback"]["runtime_confidence"] == (
+        "low_cached_champion"
+    )
+    assert protocol_summary["screening_feedback"]["opportunity_status"] == (
+        "opportunity_poor"
+    )
+    assert protocol_summary["screening_feedback_digest"]
+
+
 def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> None:
     registry = LineageRegistry(str(tmp_path / "scion.db"))
     recorder = EvidenceRecorder(

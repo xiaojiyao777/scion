@@ -324,9 +324,44 @@ def _build_experiment_history(
                 f"\n    screening_feedback.tier={tier_summary.tier}"
                 f"  activation={tier_summary.activation_status}"
                 f"  effect={tier_summary.effect_status}"
+                f"  runtime_confidence={tier_summary.runtime_confidence}"
+                f"  opportunity_status={tier_summary.opportunity_status}"
                 f"  repeat_unchanged_allowed="
                 f"{str(tier_summary.repeat_unchanged_allowed).lower()}"
             )
+            if (
+                getattr(pr, "champion_cache_hits", 0)
+                or getattr(pr, "champion_cache_misses", 0)
+                or getattr(pr, "champion_cached_runtime_pairs", 0)
+            ):
+                line += (
+                    "\n    champion_result_cache: "
+                    f"hits={getattr(pr, 'champion_cache_hits', 0)} "
+                    f"misses={getattr(pr, 'champion_cache_misses', 0)} "
+                    "cached_runtime_pairs="
+                    f"{getattr(pr, 'champion_cached_runtime_pairs', 0)}"
+                )
+            if tier_summary.opportunity_diagnostics:
+                line += (
+                    "\n    opportunity_diagnostics: "
+                    + " | ".join(tier_summary.opportunity_diagnostics[:3])
+                )
+            mechanism_evidence = dict(tier_summary.mechanism_evidence or {})
+            if mechanism_evidence:
+                evidence_parts = []
+                primary = mechanism_evidence.get("primary_mechanism")
+                primary_activation = mechanism_evidence.get(
+                    "primary_activation_status"
+                )
+                primary_effect = mechanism_evidence.get("primary_effect_status")
+                if primary:
+                    evidence_parts.append(f"primary={primary}")
+                if primary_activation:
+                    evidence_parts.append(f"activation={primary_activation}")
+                if primary_effect:
+                    evidence_parts.append(f"effect={primary_effect}")
+                if evidence_parts:
+                    line += "\n    mechanism_evidence: " + " ".join(evidence_parts)
             if tier_summary.allowed_followup_variants:
                 line += (
                     "\n    allowed_followup_variants: "
