@@ -181,6 +181,61 @@ def test_run_leaves_agentic_proposal_disabled_by_default(
     assert kwargs["agentic_session_timeout_sec"] is None
 
 
+def test_run_writes_wrapper_audit_status_and_exit_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    campaign_dir = tmp_path / "campaign"
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def run(self, max_rounds: int = 1000) -> None:
+            pass
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(campaign_dir),
+            "--problem",
+            str(problem_yaml),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    audit = json.loads((campaign_dir / "run_status.json").read_text(encoding="utf-8"))
+    exit_text = (campaign_dir / "exit.txt").read_text(encoding="utf-8")
+    assert audit["schema"] == "scion.run_wrapper_audit.v1"
+    assert audit["status"] == "finished"
+    assert audit["wrapper_exit_status"] == 0
+    assert audit["wrapper_signal"] is None
+    assert audit["run_pid"]
+    assert audit["started_at"]
+    assert audit["ended_at"]
+    assert "stdout" in audit
+    assert "stderr" in audit
+    assert "WRAPPER_EXIT_STATUS:0" in exit_text
+    assert "RUN_PID:" in exit_text
+
+
 def test_run_force_surface_threads_validated_request_to_campaign_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

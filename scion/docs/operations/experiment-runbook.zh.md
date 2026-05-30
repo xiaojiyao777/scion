@@ -217,8 +217,38 @@ source "'"$RUN_ROOT"'/launch.env"
 write_exit() {
   code="$1"
   reason="${2:-normal}"
-  printf "EXIT_CODE:%s\nEXIT_REASON:%s\nEXIT_UTC:%s\n" \
-    "$code" "$reason" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUN_ROOT/exit.txt"
+  ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  signal_name=""
+  case "$reason" in
+    signal_*) signal_name="${reason#signal_}" ;;
+  esac
+  cat > "$RUN_ROOT/exit.txt" <<EOF_EXIT
+WRAPPER_EXIT_STATUS:$code
+WRAPPER_SIGNAL:$signal_name
+EXIT_REASON:$reason
+RUN_PID:$$
+STARTED_AT:$STARTED_UTC
+ENDED_AT:$ended
+STDOUT:$RUN_ROOT/run.log
+STDERR:$RUN_ROOT/run.log
+EOF_EXIT
+  python - "$RUN_ROOT/run_status.json" "$code" "$reason" "$signal_name" "$ended" "$$" <<PY
+import json, sys, os
+path, code, reason, signal_name, ended, run_pid = sys.argv[1:]
+payload = {
+  "schema": "scion.run_wrapper_audit.v1",
+  "status": "signal" if signal_name else "finished",
+  "run_pid": int(run_pid),
+  "started_at": os.environ.get("STARTED_UTC", ""),
+  "ended_at": ended,
+  "wrapper_exit_status": int(code),
+  "wrapper_signal": signal_name or None,
+  "exit_reason": reason,
+  "stdout": os.path.join(os.environ["RUN_ROOT"], "run.log"),
+  "stderr": os.path.join(os.environ["RUN_ROOT"], "run.log"),
+}
+open(path, "w", encoding="utf-8").write(json.dumps(payload, indent=2, sort_keys=True))
+PY
 }
 trap '\''write_exit 143 signal_SIGTERM; exit 143'\'' TERM
 trap '\''write_exit 130 signal_SIGINT; exit 130'\'' INT

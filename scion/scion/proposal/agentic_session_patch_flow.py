@@ -55,6 +55,22 @@ class AgenticSessionPatchFlowMixin:
                     request.resume_context
                 )
             if tool_context is not None:
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Entering code-phase tool selection; persisted partial checkpoint.",
+                    metadata={
+                        "selected_surface": hypothesis.change_locus,
+                        "action": hypothesis.action,
+                        "target_file": hypothesis.target_file,
+                    },
+                )
+                self._persist_code_phase_partial(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    hypothesis=hypothesis,
+                    evidence_used=tuple(evidence),
+                )
                 code_phase_observations = self._run_code_context_tool_loop(
                     tool_context,
                     state,

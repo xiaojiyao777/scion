@@ -335,6 +335,9 @@ class LineageRecorderMixin:
             "schema": "scion.scheduler_result.v1",
             "scheduler_slot": slot,
             "scheduler_reason": reason,
+            "scheduler_audit_metadata": dict(
+                getattr(result, "scheduler_audit_metadata", None) or {}
+            ),
             "result_action": str(getattr(result, "action", "") or ""),
             "result_reason": str(getattr(result, "reason", "") or ""),
             "branch_id": branch_id,

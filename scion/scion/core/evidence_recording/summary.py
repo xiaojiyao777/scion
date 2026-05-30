@@ -416,6 +416,9 @@ class CampaignSummaryMixin:
             "attempt_kind": getattr(step, "attempt_kind", "screening"),
             "scheduler_slot": getattr(step, "scheduler_slot", ""),
             "scheduler_reason": getattr(step, "scheduler_reason", ""),
+            "scheduler_audit_metadata": dict(
+                getattr(step, "scheduler_audit_metadata", {}) or {}
+            ),
             "repair_policy_reason": getattr(step, "repair_policy_reason", None),
             "repair_mechanism_ids": list(
                 getattr(step, "repair_mechanism_ids", ()) or ()

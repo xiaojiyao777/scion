@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Mapping
 
 from scion.core.models import ChampionState
 from scion.proposal.tools.models import ProposalToolContext
@@ -90,10 +91,46 @@ def _read_code_file_from_root(
         "readable": True,
         "source": source_kind,
         "content_preview": _limit_text(content, max_chars),
+        "source_digest": _source_digest(content),
+        "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "truncated": len(content) > max_chars,
         "size_chars": len(content),
         "max_chars": max_chars,
     }
+
+
+def _read_code_file_from_overrides(
+    source_overrides: Mapping[str, str] | None,
+    target_file: str,
+    *,
+    max_chars: int,
+    source_kind: str = "branch_current_file_sources",
+) -> dict[str, Any] | None:
+    normalized = _normalize_rel_path(target_file)
+    if normalized is None:
+        return None
+    if not isinstance(source_overrides, Mapping):
+        return None
+    content = source_overrides.get(normalized)
+    if not isinstance(content, str):
+        return None
+    return {
+        "file_path": normalized,
+        "readable": True,
+        "source": source_kind,
+        "content_preview": _limit_text(content, max_chars),
+        "source_digest": _source_digest(content),
+        "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "truncated": len(content) > max_chars,
+        "size_chars": len(content),
+        "max_chars": max_chars,
+    }
+
+
+def _source_digest(content: str) -> str:
+    return hashlib.sha256(str(content or "").encode("utf-8")).hexdigest()
+
+
 def _path_has_symlink_component(root: Path, normalized_rel_path: str) -> bool:
     current = root
     for part in PurePosixPath(normalized_rel_path).parts:
@@ -106,5 +143,6 @@ __all__ = [
     "_read_champion_file",
     "_surface_code_read_root",
     "_read_code_file_from_root",
+    "_read_code_file_from_overrides",
     "_path_has_symlink_component",
 ]

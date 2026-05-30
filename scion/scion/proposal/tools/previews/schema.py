@@ -27,6 +27,7 @@ from scion.core.models import (
     mechanism_changes,
     patch_file_changes,
 )
+from scion.core.paths import normalize_relative_patch_path
 from scion.problem.providers import (
     ProblemProviderError,
     resolve_solver_design_prompt_provider,
@@ -514,6 +515,15 @@ def _read_preview_source_file(
     context: ProposalToolContext,
     file_path: str,
 ) -> str | None:
+    try:
+        normalized = normalize_relative_patch_path(file_path)
+    except ValueError:
+        normalized = str(file_path or "").replace("\\", "/").lstrip("/")
+    overrides = getattr(context, "branch_current_file_sources", None)
+    if isinstance(overrides, Mapping):
+        content = overrides.get(normalized)
+        if isinstance(content, str):
+            return content
     for root in (
         getattr(context, "branch_workspace", None),
         _attr(context.champion, "code_snapshot_path"),

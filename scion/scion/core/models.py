@@ -556,3 +556,4 @@ class StepRecord:
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
     scheduler_slot: str = ""
     scheduler_reason: str = ""
+    scheduler_audit_metadata: Dict[str, Any] = field(default_factory=dict)

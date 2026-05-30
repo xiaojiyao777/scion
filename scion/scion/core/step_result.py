@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 from scion.core.models import Decision
 
@@ -44,3 +44,4 @@ class StepResult:
     failure_category: Optional[str] = None
     scheduler_slot: str = ""
     scheduler_reason: str = ""
+    scheduler_audit_metadata: Dict[str, Any] | None = None

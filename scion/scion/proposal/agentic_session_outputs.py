@@ -336,3 +336,65 @@ class AgenticSessionOutputMixin:
                     )
                 ),
             )
+
+    def _persist_code_phase_partial(
+            self,
+            *,
+            request: AgenticProposalRequest,
+            session_id: str,
+            state: AgenticProposalSessionState,
+            hypothesis: HypothesisProposal,
+            evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+        ) -> None:
+            """Best-effort artifact checkpoint before code-phase tool selection."""
+            if self._artifact_store is None:
+                return
+            previous_status = state.status
+            state.status = AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+            compact_transcript = _compact_transcript(tuple(state.transcript))
+            transcript_digest = _transcript_digest(compact_transcript)
+            output = AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id=session_id,
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                request_id=state.request_id or state.session_id,
+                idempotency_key=self._idempotency_key_for_hypothesis(
+                    request,
+                    hypothesis,
+                ),
+                champion_version=_champion_version(request.champion),
+                champion_weight_revision=_champion_weight_revision(request.champion),
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                selected_surface=hypothesis.change_locus,
+                action=hypothesis.action,
+                hypothesis=hypothesis,
+                patch=None,
+                evidence_used=evidence_used,
+                transcript=tuple(state.transcript),
+                self_check=AgenticSelfCheck(schema_valid=True),
+                termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+                tool_loop_config=_tool_loop_config_payload(self._tool_loop_config),
+                tool_budget_used=_tool_budget_used_payload(state),
+                transcript_digest=transcript_digest,
+                failure_detail=(
+                    "code phase in progress; partial artifact checkpoint written "
+                    "before code-phase tool selection"
+                ),
+                failure_ledger=_failure_ledger_payload(state.failure_ledger),
+                observation_ledger=agentic_observation_ledger_payload(state, None),
+                phase=state.phase.value,
+            )
+            try:
+                transcript_ref = self._artifact_store.write_transcript(state)
+                output = replace(
+                    output,
+                    tainted_artifact_refs=tuple(
+                        dict.fromkeys((*state.scratch_artifact_refs, transcript_ref))
+                    ),
+                )
+                self._artifact_store.write_output(output)
+                state.idempotency_key = output.idempotency_key
+            finally:
+                state.status = previous_status

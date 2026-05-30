@@ -246,6 +246,69 @@ class _InterruptingHypothesisCreative(FakeCreative):
         raise KeyboardInterrupt("synthetic campaign abort")
 
 
+class _InterruptAfterFirstOutputStore(FileAgenticSessionArtifactStore):
+    def __init__(self, artifact_dir: Path) -> None:
+        super().__init__(artifact_dir)
+        self.output_writes = 0
+
+    def write_output(self, output):
+        ref = super().write_output(output)
+        self.output_writes += 1
+        if self.output_writes == 1:
+            raise SystemExit("synthetic external stop after partial checkpoint")
+        return ref
+
+
+def test_agentic_session_persists_code_phase_partial_before_tool_selection_interrupt(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    artifact_store = _InterruptAfterFirstOutputStore(artifact_dir)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    with pytest.raises(SystemExit):
+        session.run(
+            AgenticProposalRequest(
+                campaign_id="camp-code-partial",
+                branch=context.branch,
+                champion=context.champion,
+                hypothesis_context={},
+                build_code_context=lambda _hypothesis: {"kind": "code"},
+                approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                    passed=True,
+                    failure_reason=None,
+                ),
+                problem_id=context.problem_id,
+                problem_spec_hash=context.problem_spec_hash,
+                tool_context=context,
+            )
+        )
+
+    assert artifact_store.output_writes == 1
+    [session_dir] = [path for path in artifact_dir.iterdir() if path.is_dir()]
+    output = json.loads((session_dir / "output.json").read_text(encoding="utf-8"))
+    transcript = json.loads(
+        (session_dir / "transcript.json").read_text(encoding="utf-8")
+    )
+    index = json.loads(
+        (artifact_dir / "agentic_session_index.json").read_text(encoding="utf-8")
+    )
+
+    assert output["status"] == "partial_hypothesis_only"
+    assert output["phase"] == "inspect_interface"
+    assert output["hypothesis"]["target_file"]
+    assert "code phase in progress" in output["failure_detail"]
+    assert transcript["phase"] == "inspect_interface"
+    assert index[0]["status"] == "partial_hypothesis_only"
+    assert index[0]["target_file"] == output["hypothesis"]["target_file"]
+    assert validate_agentic_session_artifact(output).ok is True
+
+
 def test_agentic_session_persists_abort_stub_on_keyboard_interrupt(
     tmp_path: Path,
 ) -> None:

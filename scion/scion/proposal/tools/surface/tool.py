@@ -34,6 +34,7 @@ from scion.proposal.tools.surface.payloads import (
     _surface_read_payload,
 )
 from scion.proposal.tools.surface.readers import (
+    _read_code_file_from_overrides,
     _read_code_file_from_root,
     _surface_code_read_root,
 )
@@ -127,11 +128,18 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
                     summary="No champion snapshot is available for surface read.",
                 )
             source_root, source_kind = _surface_code_read_root(context)
-            code_payload = _read_code_file_from_root(
-                source_root,
-                target_file,
-                max_chars=code_char_limit,
-                source_kind=source_kind,
+            code_payload = (
+                _read_code_file_from_overrides(
+                    getattr(context, "branch_current_file_sources", None),
+                    target_file,
+                    max_chars=code_char_limit,
+                )
+                or _read_code_file_from_root(
+                    source_root,
+                    target_file,
+                    max_chars=code_char_limit,
+                    source_kind=source_kind,
+                )
             )
             if _surface_name(surface) == "solver_design" and args.section in {
                 "all",

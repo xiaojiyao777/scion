@@ -6,6 +6,7 @@ import json
 import os
 import signal
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,92 @@ class _CampaignSignalStop(KeyboardInterrupt):
         self.signum = signum
         self.reason = reason
         super().__init__(reason)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
+        "+00:00",
+        "Z",
+    )
+
+
+def _fd_target(fd: int) -> str:
+    proc_fd = Path(f"/proc/self/fd/{fd}")
+    try:
+        return os.readlink(proc_fd)
+    except OSError:
+        return f"fd:{fd}"
+
+
+class _RunAudit:
+    """Best-effort CLI wrapper audit files for detached/nohup launches."""
+
+    def __init__(self, campaign_path: Path) -> None:
+        self.campaign_path = campaign_path
+        self.path = campaign_path / "run_status.json"
+        self.exit_path = campaign_path / "exit.txt"
+        self.started_at = _utc_now_iso()
+        self.payload = {
+            "schema": "scion.run_wrapper_audit.v1",
+            "status": "running",
+            "run_pid": os.getpid(),
+            "started_at": self.started_at,
+            "ended_at": None,
+            "wrapper_exit_status": None,
+            "wrapper_signal": None,
+            "stdout": _fd_target(1),
+            "stderr": _fd_target(2),
+        }
+
+    def start(self) -> None:
+        self._write()
+
+    def finish(
+        self,
+        *,
+        exit_status: int,
+        reason: str,
+        signal_name: str | None = None,
+    ) -> None:
+        self.payload.update(
+            {
+                "status": "signal" if signal_name else "finished",
+                "ended_at": _utc_now_iso(),
+                "wrapper_exit_status": int(exit_status),
+                "wrapper_signal": signal_name,
+                "exit_reason": reason,
+            }
+        )
+        self._write()
+        self._write_exit_txt()
+
+    def _write(self) -> None:
+        try:
+            self.campaign_path.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps(self.payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            tmp.replace(self.path)
+        except OSError:
+            pass
+
+    def _write_exit_txt(self) -> None:
+        try:
+            lines = [
+                f"WRAPPER_EXIT_STATUS:{self.payload.get('wrapper_exit_status')}",
+                f"WRAPPER_SIGNAL:{self.payload.get('wrapper_signal') or ''}",
+                f"EXIT_REASON:{self.payload.get('exit_reason') or ''}",
+                f"RUN_PID:{self.payload.get('run_pid')}",
+                f"STARTED_AT:{self.payload.get('started_at')}",
+                f"ENDED_AT:{self.payload.get('ended_at')}",
+                f"STDOUT:{self.payload.get('stdout') or ''}",
+                f"STDERR:{self.payload.get('stderr') or ''}",
+            ]
+            self.exit_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except OSError:
+            pass
 
 
 @contextmanager
@@ -455,13 +542,28 @@ def register_init_run_commands(app: typer.Typer) -> None:
             f"(max_rounds={rounds}, mock_llm={mock_llm}, "
             f"disable_early_stop={disable_early_stop}{forced_surface_note})"
         )
+        run_audit = _RunAudit(campaign_path)
+        run_audit.start()
         try:
             with _campaign_signal_handlers(mgr):
                 mgr.run(max_rounds=rounds)
         except _CampaignSignalStop as exc:
             mgr.finalize_requested_stop(exc.reason)
+            run_audit.finish(
+                exit_status=128 + int(exc.signum),
+                reason=exc.reason,
+                signal_name=signal.Signals(exc.signum).name,
+            )
             typer.echo(f"Campaign stopped: {exc.reason}", err=True)
             raise typer.Exit(code=128 + int(exc.signum))
+        except Exception as exc:
+            run_audit.finish(
+                exit_status=1,
+                reason=f"exception:{type(exc).__name__}",
+            )
+            raise
+        else:
+            run_audit.finish(exit_status=0, reason="command_returned")
 
         state_data = mgr.get_state()
         typer.echo("Campaign finished.")

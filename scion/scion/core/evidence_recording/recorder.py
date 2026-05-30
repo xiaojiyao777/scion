@@ -62,6 +62,9 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         """Persist scheduler metadata on the latest matching step and lineage."""
         slot = str(getattr(result, "scheduler_slot", "") or "")
         reason = str(getattr(result, "scheduler_reason", "") or "")
+        audit_metadata = dict(
+            getattr(result, "scheduler_audit_metadata", None) or {}
+        )
         if not (slot or reason):
             return
         step: StepRecord | None = None
@@ -79,6 +82,8 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
                     break
                 candidate.scheduler_slot = slot
                 candidate.scheduler_reason = reason
+                if audit_metadata:
+                    candidate.scheduler_audit_metadata = audit_metadata
                 break
         self.record_scheduler_result_lineage(result=result, step=step)
 

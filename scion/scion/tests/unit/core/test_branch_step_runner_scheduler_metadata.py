@@ -109,6 +109,17 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
     assert result.branch_id == "new-branch"
     assert result.scheduler_slot == "explore_new"
     assert result.scheduler_reason == "clean_fork_required_for_new_mechanism"
+    assert result.scheduler_audit_metadata == {
+        "actual_branch_action": "explore_new_clean_fork",
+        "clean_fork_reason": "clean_fork_required_for_new_mechanism",
+        "clean_fork_selected": True,
+        "same_branch_refinement_not_selected_reason": (
+            "clean_fork_required_for_new_mechanism"
+        ),
+        "scheduler_action": "create_new",
+        "scheduler_reason": "clean_fork_required_for_new_mechanism",
+        "scheduler_slot": "explore_new",
+    }
     assert recorded == [result]
 
 

@@ -463,6 +463,27 @@ def _eval_failure_detail(
 def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
     result.scheduler_slot = str(getattr(sched, "slot", "") or "")
     result.scheduler_reason = str(getattr(sched, "reason", "") or "")
+    scheduler_action = str(getattr(sched, "action", "") or "")
+    audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
+    if scheduler_action:
+        audit_metadata.setdefault("scheduler_action", scheduler_action)
+    if result.scheduler_slot:
+        audit_metadata.setdefault("scheduler_slot", result.scheduler_slot)
+    if result.scheduler_reason:
+        audit_metadata.setdefault("scheduler_reason", result.scheduler_reason)
+    if scheduler_action == "create_new" and result.scheduler_slot == "explore_new":
+        audit_metadata.update(
+            {
+                "clean_fork_selected": True,
+                "clean_fork_reason": result.scheduler_reason,
+                "same_branch_refinement_not_selected_reason": (
+                    result.scheduler_reason
+                    or "scheduler_selected_clean_exploration_branch"
+                ),
+                "actual_branch_action": "explore_new_clean_fork",
+            }
+        )
+    result.scheduler_audit_metadata = audit_metadata
     if result.scheduler_slot and "scheduler_slot=" not in result.reason:
         suffix = f"scheduler_slot={result.scheduler_slot}"
         if result.scheduler_reason:

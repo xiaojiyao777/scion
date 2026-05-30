@@ -118,6 +118,10 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
             reason="decision=continue_explore; scheduler_slot=refine_active",
             scheduler_slot="refine_active",
             scheduler_reason="existing_branch_selected",
+            scheduler_audit_metadata={
+                "scheduler_action": "run_existing",
+                "same_branch_refinement_not_selected_reason": "",
+            },
         ),
         step_history,
     )
@@ -133,6 +137,9 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
     summary_step = summary["steps"][0]
     assert summary_step["scheduler_slot"] == "refine_active"
     assert summary_step["scheduler_reason"] == "existing_branch_selected"
+    assert summary_step["scheduler_audit_metadata"]["scheduler_action"] == (
+        "run_existing"
+    )
 
     events = registry.query_by_branch("branch-1")
     scheduler_events = [
@@ -145,6 +152,7 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
     payload = json.loads(event["audit_payload_json"])
     assert payload["scheduler_slot"] == "refine_active"
     assert payload["scheduler_reason"] == "existing_branch_selected"
+    assert payload["scheduler_audit_metadata"]["scheduler_action"] == "run_existing"
     assert payload["step_round"] == 1
 
 
