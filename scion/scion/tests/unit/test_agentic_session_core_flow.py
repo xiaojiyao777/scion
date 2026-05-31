@@ -827,7 +827,16 @@ def test_agentic_session_retry_error_ledger_preserves_first_patch_graph_failure(
     )
     assert [
         entry["category"] for entry in output.failure_ledger["entries"]
-    ] == ["patch_graph_failure", "structured_output_retry_exhausted"]
+    ] == [
+        "patch_graph_failure",
+        "patch_graph_failure",
+        "structured_output_retry_exhausted",
+    ]
+    retry_entry = output.failure_ledger["entries"][1]
+    assert retry_entry["source"] == "code_retry_preview_failure"
+    assert retry_entry["repair_attempt"] == 1
+    assert retry_entry["attempt_index"] == 1
+    assert retry_entry["session_index"] == 1
     assert artifact["failure_ledger"] == output.failure_ledger
     assert inspected["failure_ledger"]["first_root_cause"] == "patch_graph_failure"
     assert inspected["failure_ledger"]["latest_failure"] == (
@@ -885,7 +894,16 @@ def test_agentic_session_smoke_repair_502_is_transient_api_failure(
     assert output.failure_ledger["latest_failure"] == "llm_transient_api_error"
     assert [
         entry["category"] for entry in output.failure_ledger["entries"]
-    ] == ["algorithm_smoke_failure", "llm_transient_api_error"]
+    ] == [
+        "algorithm_smoke_failure",
+        "algorithm_smoke_failure",
+        "llm_transient_api_error",
+    ]
+    retry_entry = output.failure_ledger["entries"][1]
+    assert retry_entry["source"] == "code_retry_preview_failure"
+    assert retry_entry["repair_attempt"] == 1
+    assert retry_entry["attempt_index"] == 1
+    assert retry_entry["session_index"] == 1
     assert artifact["failure_category"] == "llm_transient_api_error"
     assert artifact["failure_ledger"] == output.failure_ledger
     assert validate_agentic_session_artifact(artifact).ok is True
