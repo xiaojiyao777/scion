@@ -798,6 +798,22 @@ jq '{request_kind, system_blocks, user_prompt, tool_schema, response, error}' "$
 如果出现同类 proposal/code 错误跨轮重复，先修框架控制或对象适配；不要继续堆
 轮数。
 
+从 v0.4 branch-governance 修复开始，实验分析还必须把“轮次视角”上升为“分支
+视角”。逐轮 trace 仍然要看，但最终结论要回答：
+
+- 这轮选择的是 clean fork、same-branch refinement、repair，还是 stale/rescreen？
+- branch 的状态如何演化：`active_weak_positive`、`active_marginal`、
+  `active_no_effect`、diagnostic、abandoned/archive？
+- 当前 head 是否仍代表该 branch 的最好 evidence，还是已被 checkpoint/restore 或
+  regression policy 处理？
+- 后续 APS prompt 是否正确引用了 branch-local screening/telemetry/code-retry
+  evidence，而不是只看到 campaign 级摘要？
+- `decision_reason_codes` 中哪些是 protocol/gate observation，哪些是 lifecycle
+  action；如果两类混在一起，必须在分析里拆开解释。
+
+扩轮到 8R/12R/20R 前，必须说明 branch pool 的健康状态和探索/利用轨迹，而不是只
+报告每轮 win/loss/tie。
+
 ### 9.10 重建一轮的完整故事
 
 每轮分析按这个顺序写：

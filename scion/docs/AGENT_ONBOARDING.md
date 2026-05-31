@@ -603,6 +603,13 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   validation is acceptable only when this trace-level review finds no framework
   control regression; aggregate `campaign_summary.json` metrics alone are not
   sufficient.
+- For branch-governance experiments, do not frame the analysis only as isolated
+  round outcomes. Reconstruct branch lineage and lifecycle: which branch was
+  selected, whether the step was a clean fork or same-branch refinement, how
+  weak-positive, marginal, no-effect, diagnostic, and abandoned states evolved,
+  and whether later agent context used branch-local evidence correctly. Round
+  trace analysis remains required, but the final judgment should be branch
+  health and search trajectory rather than a list of independent attempts.
 - Do not read source code by default for design or experiment interpretation.
   Use engineering maps first, then inspect only relevant paths for code tasks.
 - Use the project Python:

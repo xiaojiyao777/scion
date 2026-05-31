@@ -82,6 +82,11 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["effective_reason_codes"] == [
         "screening_positive",
     ]
+    assert summary_step["protocol_result"]["gate_observation_reason_codes"] == [
+        "screening_positive",
+        "runtime_ok",
+    ]
+    assert summary_step["protocol_result"]["lifecycle_action_reason_codes"] == []
     assert summary_step["protocol_result"]["effective_reason_source"] == (
         "decision_engine"
     )
@@ -1307,4 +1312,6 @@ def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
     assert protocol["protocol_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
     assert protocol["decision_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
     assert protocol["effective_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
+    assert protocol["gate_observation_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
+    assert protocol["lifecycle_action_reason_codes"] == []
     assert protocol["effective_reason_source"] == "decision_engine"

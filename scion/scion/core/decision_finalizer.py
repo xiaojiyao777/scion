@@ -18,6 +18,7 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
     SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
     SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
+    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     SCREENING_WEAK_SIGNAL_CONTINUE,
     SCREENING_ZERO_WIN_STREAK_CONTINUE,
 )
@@ -465,13 +466,11 @@ class DecisionFinalizer:
                 else "telemetry_repairable"
             )
         else:
-            signal_label = "weak screening signal"
-            if (
-                preserve_low_signal_branch
-                and screening_feedback is not None
-                and screening_feedback.tier == "marginal"
-            ):
-                signal_label = "marginal mixed screening signal"
+            signal_label = _screening_signal_label(
+                preserve_low_signal_branch=preserve_low_signal_branch,
+                screening_feedback=screening_feedback,
+                decision_reason_codes=decision_reason_codes,
+            )
             reason = (
                 f"CONTINUE_EXPLORE: {signal_label}; improve the same branch"
                 if preserve_low_signal_branch
@@ -637,6 +636,35 @@ def _retained_screening_status(
     if tier == "marginal":
         return "screening_marginal_retained"
     return "screening_retained_for_branch_followup"
+
+
+def _screening_signal_label(
+    *,
+    preserve_low_signal_branch: bool,
+    screening_feedback: object | None,
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> str:
+    if not preserve_low_signal_branch:
+        return "screening did not retain the branch"
+    tier = str(getattr(screening_feedback, "tier", "") or "")
+    if tier == "weak_positive":
+        return "weak-positive screening signal"
+    if tier == "marginal":
+        return "marginal mixed screening signal"
+    if tier == "no_effect":
+        return "neutral no-effect screening signal"
+    if tier == "runtime_regression":
+        return "runtime-regression screening diagnostic"
+    if tier == "inactive":
+        return "inactive screening diagnostic"
+    reason_set = set(decision_reason_codes or ())
+    if SCREENING_NEUTRAL_SIGNAL_CONTINUE in reason_set:
+        return "neutral no-effect screening signal"
+    if SCREENING_ZERO_WIN_STREAK_CONTINUE in reason_set:
+        return "zero-win screening signal"
+    if SCREENING_TELEMETRY_DIAGNOSTIC_RETRY in reason_set:
+        return "screening telemetry diagnostic retry"
+    return "low-signal screening result"
 
 
 def _is_regressed_weak_positive_followup(

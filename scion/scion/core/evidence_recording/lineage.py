@@ -18,6 +18,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.public_refs import public_artifact_ref, public_case_ref
+from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
     screened_experiment_effective,
@@ -75,6 +76,10 @@ class LineageRecorderMixin:
         telemetry_details = list(telemetry_decision_details(protocol_result))
         protocol_reason_codes = (
             list(protocol_result.reason_codes) if protocol_result else []
+        )
+        reason_code_groups = classify_reason_codes(
+            tuple(decision_reason_codes or ()) + tuple(protocol_reason_codes),
+            protocol_reason_codes=protocol_reason_codes,
         )
         internal_audit_payload = {
             "schema": "scion.internal_audit_refs.v1",
@@ -137,6 +142,12 @@ class LineageRecorderMixin:
             "runtime_guard": _extract_runtime_guard_evidence(verification_result),
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
+            "gate_observation_reason_codes": list(
+                reason_code_groups.gate_observation_reason_codes
+            ),
+            "lifecycle_action_reason_codes": list(
+                reason_code_groups.lifecycle_action_reason_codes
+            ),
             "auxiliary_protocol_reason_codes": protocol_reason_codes,
             "screened_experiment_effective": screened_experiment_effective(
                 protocol_result
@@ -209,6 +220,10 @@ class LineageRecorderMixin:
         protocol_reason_codes = (
             list(protocol_result.reason_codes) if protocol_result else []
         )
+        reason_code_groups = classify_reason_codes(
+            tuple(decision_reason_codes or ()) + tuple(protocol_reason_codes),
+            protocol_reason_codes=protocol_reason_codes,
+        )
         features_json = json.dumps(
             {
                 "branch_id": branch.branch_id,
@@ -243,6 +258,12 @@ class LineageRecorderMixin:
                 "runtime_guard": _extract_runtime_guard_evidence(verification_result),
                 "runtime_stats": runtime_stats,
                 "auxiliary_protocol_reason_codes": protocol_reason_codes,
+                "gate_observation_reason_codes": list(
+                    reason_code_groups.gate_observation_reason_codes
+                ),
+                "lifecycle_action_reason_codes": list(
+                    reason_code_groups.lifecycle_action_reason_codes
+                ),
                 "screened_experiment_effective": screened_experiment_effective(
                     protocol_result
                 ),

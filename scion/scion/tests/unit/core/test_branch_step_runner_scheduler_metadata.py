@@ -174,7 +174,7 @@ def test_same_branch_repair_soft_abandon_metadata_and_reason_are_aligned() -> No
             action="soft_abandon",
             branch_id="repair-branch",
             reason=(
-                "CONTINUE_EXPLORE: weak screening signal; "
+                "CONTINUE_EXPLORE: weak-positive screening signal; "
                 "improve the same branch"
             ),
         ),
@@ -189,7 +189,7 @@ def test_same_branch_repair_soft_abandon_metadata_and_reason_are_aligned() -> No
     assert result.scheduler_audit_metadata == {
         "actual_branch_action": "soft_abandon",
         "post_refine_abandon_reason": (
-            "CONTINUE_EXPLORE: weak screening signal; "
+            "CONTINUE_EXPLORE: weak-positive screening signal; "
             "repair/refine the same branch"
         ),
         "refined_branch_id": "repair-branch",

@@ -67,6 +67,29 @@ def test_weak_positive_low_win_screening_keeps_branch() -> None:
     assert decision.next_zero_win_streak == 0
 
 
+def test_win_skewed_weak_positive_keeps_branch_despite_low_gate_rate() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=4,
+            losses=1,
+            ties=7,
+            win_rate=1 / 3,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=4.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
+    assert decision.next_zero_win_streak == 0
+
+
 def test_loss_without_wins_soft_abandons_low_signal_branch() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(wins=0, losses=1, ties=7, win_rate=0.0),

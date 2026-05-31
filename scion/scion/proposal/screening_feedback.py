@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
 from scion.core.models import ExperimentStage, ProtocolResult
+from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     opportunity_diagnostics_for_protocol,
@@ -65,6 +66,8 @@ class ScreeningFeedbackSummary:
     allowed_followup_variants: tuple[str, ...]
     repeat_unchanged_allowed: bool
     reason_codes: tuple[str, ...] = ()
+    gate_observation_reason_codes: tuple[str, ...] = ()
+    lifecycle_action_reason_codes: tuple[str, ...] = ()
     runtime_confidence: str = "unknown"
     opportunity_status: str = "unknown"
     opportunity_diagnostics: tuple[str, ...] = ()
@@ -106,6 +109,12 @@ class ScreeningFeedbackSummary:
             "allowed_followup_variants": list(self.allowed_followup_variants),
             "repeat_unchanged_allowed": self.repeat_unchanged_allowed,
             "reason_codes": list(self.reason_codes),
+            "gate_observation_reason_codes": list(
+                self.gate_observation_reason_codes
+            ),
+            "lifecycle_action_reason_codes": list(
+                self.lifecycle_action_reason_codes
+            ),
             "feedback_digest": self.feedback_digest,
             "promotion_boundary": "unchanged_decision_features_and_gates",
         }
@@ -153,6 +162,10 @@ def screening_feedback_summary(
             )
             if str(code).strip()
         )
+    )
+    reason_code_groups = classify_reason_codes(
+        reason_codes,
+        protocol_reason_codes=getattr(protocol, "reason_codes", ()) or (),
     )
     activation_status = _activation_status(protocol)
     effect_status = _effect_status(
@@ -261,6 +274,12 @@ def screening_feedback_summary(
         allowed_followup_variants=variants,
         repeat_unchanged_allowed=repeat_unchanged,
         reason_codes=reason_codes,
+        gate_observation_reason_codes=(
+            reason_code_groups.gate_observation_reason_codes
+        ),
+        lifecycle_action_reason_codes=(
+            reason_code_groups.lifecycle_action_reason_codes
+        ),
         runtime_confidence=runtime_confidence,
         opportunity_status=opportunity_status,
         opportunity_diagnostics=opportunity_diagnostics,
@@ -297,6 +316,8 @@ def _summary(
     allowed_followup_variants: tuple[str, ...] = (),
     repeat_unchanged_allowed: bool = True,
     reason_codes: tuple[str, ...] = (),
+    gate_observation_reason_codes: tuple[str, ...] = (),
+    lifecycle_action_reason_codes: tuple[str, ...] = (),
     runtime_confidence: str = "unknown",
     opportunity_status: str = "unknown",
     opportunity_diagnostics: tuple[str, ...] = (),
@@ -321,6 +342,8 @@ def _summary(
         allowed_followup_variants=allowed_followup_variants,
         repeat_unchanged_allowed=repeat_unchanged_allowed,
         reason_codes=reason_codes,
+        gate_observation_reason_codes=gate_observation_reason_codes,
+        lifecycle_action_reason_codes=lifecycle_action_reason_codes,
         runtime_confidence=runtime_confidence,
         opportunity_status=opportunity_status,
         opportunity_diagnostics=opportunity_diagnostics,

@@ -151,7 +151,8 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert result.counts_toward_max_rounds is True
     assert result.attempt_kind == "screening"
-    assert "weak screening signal" in result.reason
+    assert "neutral no-effect screening signal" in result.reason
+    assert "weak screening signal" not in result.reason
     assert "runtime_budget_diagnostic=SCREENING_RUNTIME_BUDGET_SATURATION" in (
         result.reason
     )
@@ -283,6 +284,114 @@ def test_balanced_mixed_screening_workspace_is_marginal_not_weak_exploit() -> No
     assert action.slot == "refine_active"
     assert hyp_store.statuses == [
         ("h-marginal", "screening_marginal_retained")
+    ]
+
+
+def test_win_skewed_weak_positive_screening_workspace_reason_is_positive() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Tune a bounded repair ordering.",
+        change_locus="repair",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="repair_ordering", change_type="modify"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-weak-positive",
+        branch_id=branch.branch_id,
+        change_locus="repair",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    patches = {branch.branch_id: patch}
+    hyp_store = _HypothesisStore()
+    discarded: list[str] = []
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches=patches,
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=4,
+            losses=1,
+            ties=7,
+            win_rate=1 / 3,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=4.0,
+            candidate_failed_pairs=0,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="win-skewed weak-positive follow-up",
+        raw_metrics_ref="/tmp/metrics.json",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_WEAK_SIGNAL_CONTINUE,
+        ),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert "weak-positive screening signal" in result.reason
+    assert stored.branch_code_status == "active_weak_positive"
+    assert stored.last_screening_feedback_tier == "weak_positive"
+    assert discarded == []
+    assert hyp_store.statuses == [
+        ("h-weak-positive", "screening_weak_positive_retained")
     ]
 
 

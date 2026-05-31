@@ -2911,6 +2911,15 @@ zero should be preserved only as marginal follow-up evidence, not as an
 `active_weak_positive` exploit target. Scion core now has a generic marginal
 screening tier/reason, retained hypothesis statuses are clearer, and code retry
 failure artifacts include explicit attempt/session indexing for audit joins.
+The follow-up 6-round branch-lifecycle run verified that mixed/no-effect
+branches are no longer promoted to weak-positive status. Remaining P2 audit
+wording has now been tightened: retained branch reasons distinguish
+weak-positive, marginal mixed, neutral no-effect, and telemetry/runtime
+diagnostic signals, and summary/lineage/screening feedback expose separate
+gate-observation and lifecycle-action reason-code groups while preserving the
+backward-compatible `decision_reason_codes`. Future experiment reviews should
+be branch-centric: reconstruct branch lineage, current-head health, and
+explore/exploit trajectory before deciding whether to expand rounds.
 
 2026-05-22 update: the construction/Shaw validation run is documented in
 [`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md).

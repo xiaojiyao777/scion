@@ -9,6 +9,11 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
+from scion.core.branch_lifecycle_policy import (
+    SCREENING_MARGINAL_SIGNAL_CONTINUE,
+    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_WEAK_SIGNAL_CONTINUE,
+)
 from scion.proposal.context.feedback import _build_experiment_history
 from scion.proposal.screening_feedback import screening_feedback_summary
 from scion.proposal.search_memory import CampaignSearchMemory
@@ -134,6 +139,27 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
         _protocol(case_wins=2, case_losses=1, case_ties=5)
     ).tier == "weak_positive"
 
+    weak_positive = screening_feedback_summary(
+        _protocol(
+            case_wins=4,
+            case_losses=1,
+            case_ties=7,
+            ci_low=0.0,
+            ci_high=4.0,
+        ),
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_WEAK_SIGNAL_CONTINUE,
+        ),
+    )
+    assert weak_positive.tier == "weak_positive"
+    assert weak_positive.gate_observation_reason_codes == (
+        "SCREENING_FAIL_WIN_RATE",
+    )
+    assert weak_positive.lifecycle_action_reason_codes == (
+        SCREENING_WEAK_SIGNAL_CONTINUE,
+    )
+
     marginal = screening_feedback_summary(
         _protocol(
             case_wins=3,
@@ -141,14 +167,31 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
             case_ties=6,
             ci_low=-0.5,
             ci_high=0.5,
-        )
+        ),
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_MARGINAL_SIGNAL_CONTINUE,
+        ),
     )
     assert marginal.tier == "marginal"
     assert "not a weak-positive exploit signal" in marginal.why_not_promoted
+    assert marginal.gate_observation_reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+    assert marginal.lifecycle_action_reason_codes == (
+        SCREENING_MARGINAL_SIGNAL_CONTINUE,
+    )
 
-    assert screening_feedback_summary(
-        _protocol(case_wins=0, case_losses=0, case_ties=8)
-    ).tier == "no_effect"
+    no_effect = screening_feedback_summary(
+        _protocol(case_wins=0, case_losses=0, case_ties=8),
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        ),
+    )
+    assert no_effect.tier == "no_effect"
+    assert no_effect.gate_observation_reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+    assert no_effect.lifecycle_action_reason_codes == (
+        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    )
 
     assert screening_feedback_summary(
         _protocol(

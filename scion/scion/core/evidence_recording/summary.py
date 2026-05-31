@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
+from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.run_validity import build_run_validity, step_failure_categories
 from scion.core.status_reporter import (
     API_BALANCE_EXHAUSTED_STOP_REASON,
@@ -483,6 +484,10 @@ class CampaignSummaryMixin:
             pr = step.protocol_result
             protocol_reason_codes = list(pr.reason_codes)
             effective_reason_codes = decision_reason_codes or protocol_reason_codes
+            reason_code_groups = classify_reason_codes(
+                tuple(decision_reason_codes) + tuple(protocol_reason_codes),
+                protocol_reason_codes=protocol_reason_codes,
+            )
             telemetry_details = list(telemetry_decision_details(pr))
             screening_feedback_payload: dict[str, Any] | None = None
             if _stage_value(pr.stage) == "screening":
@@ -544,6 +549,12 @@ class CampaignSummaryMixin:
                 "decision_reason_codes": decision_reason_codes,
                 "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "effective_reason_codes": effective_reason_codes,
+                "gate_observation_reason_codes": list(
+                    reason_code_groups.gate_observation_reason_codes
+                ),
+                "lifecycle_action_reason_codes": list(
+                    reason_code_groups.lifecycle_action_reason_codes
+                ),
                 "effective_reason_source": (
                     "decision_engine" if decision_reason_codes else "protocol_gate"
                 ),
