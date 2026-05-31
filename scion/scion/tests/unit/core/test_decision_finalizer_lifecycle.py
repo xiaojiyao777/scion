@@ -51,6 +51,9 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
         hypothesis_text="Tune a bounded repair ordering.",
         change_locus="repair",
         action="modify",
+        mechanism_changes=(
+            MechanismChange(id="repair_ordering", change_type="modify"),
+        ),
     )
     h_record = HypothesisRecord(
         hypothesis_id="h-1",
@@ -180,6 +183,9 @@ def test_continue_explore_discards_candidate_failed_screening_workspace() -> Non
         hypothesis_text="Tune a bounded repair ordering.",
         change_locus="repair",
         action="modify",
+        mechanism_changes=(
+            MechanismChange(id="repair_ordering", change_type="modify"),
+        ),
     )
     h_record = HypothesisRecord(
         hypothesis_id="h-2",
@@ -264,6 +270,9 @@ def test_continue_explore_discards_candidate_failed_screening_workspace() -> Non
     assert result.attempt_kind == "screening"
     assert discarded == [branch.branch_id]
     assert controller.get_branch(branch.branch_id).branch_code_status == "discarded"
+    assert controller.get_branch(branch.branch_id).branch_mechanism_ids == (
+        "repair_ordering",
+    )
     assert branch.branch_id not in patches
     assert branch.branch_id in workspaces
     assert hyp_store.statuses == [("h-2", "rejected")]

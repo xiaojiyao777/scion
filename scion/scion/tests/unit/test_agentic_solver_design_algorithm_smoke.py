@@ -599,7 +599,7 @@ def test_algorithm_smoke_representative_runtime_failure_blocks_prescreen(
     assert failed["runtime_audit_summary"]
 
 
-def test_algorithm_smoke_budget_saturation_is_visible_diagnostic() -> None:
+def test_algorithm_smoke_budget_saturation_is_audit_only_for_agent() -> None:
     payload = _algorithm_smoke_agent_payload(
         {
             "passed": True,
@@ -623,13 +623,13 @@ def test_algorithm_smoke_budget_saturation_is_visible_diagnostic() -> None:
     )
 
     assert payload["passed"] is True
-    assert payload["status"] == "diagnostic"
-    assert payload["failure_code"] == "runtime_smoke_budget_diagnostic"
-    assert payload["diagnostic_passed"] is True
-    assert payload["runtime_smoke"]["runtime_budget_diagnostic"]["code"] == (
-        "TINY_RUNTIME_BUDGET_SATURATION"
+    assert payload["status"] == "passed"
+    assert "failure_code" not in payload
+    assert "diagnostic_passed" not in payload
+    assert "runtime_budget_diagnostic" not in payload["runtime_smoke"]
+    assert not any(
+        "Reduce per-case work" in hint for hint in payload.get("repair_hints", [])
     )
-    assert any("Reduce per-case work" in hint for hint in payload["repair_hints"])
 
 
 def test_algorithm_smoke_case_ledger_survives_compact_session_output() -> None:

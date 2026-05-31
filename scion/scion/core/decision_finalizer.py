@@ -361,7 +361,10 @@ class DecisionFinalizer:
             branch.telemetry_repair_mechanism_ids = ()
         elif not preserve_low_signal_branch:
             branch.branch_code_status = "discarded"
-            branch.branch_mechanism_ids = ()
+            branch.branch_mechanism_ids = _merge_mechanism_ids(
+                getattr(branch, "branch_mechanism_ids", ()) or (),
+                mechanism_ids_for_repair(hypothesis),
+            )
             branch.telemetry_repair_mechanism_ids = ()
         preserve_workspace = verification_passed and preserve_low_signal_branch
 
