@@ -24,6 +24,8 @@ def _stats(
     runtime_ratio_median: float | None = None,
     runtime_regression_rate: float | None = None,
     runtime_pairs: int | None = None,
+    ci_low: float = 0.0,
+    ci_high: float = 0.0,
 ) -> EvalStats:
     n_cases = wins + losses + ties
     resolved_runtime_pairs = n_cases if runtime_pairs is None else runtime_pairs
@@ -34,8 +36,8 @@ def _stats(
         ties=ties,
         win_rate=wins / n_cases if n_cases else 0.0,
         median_delta=median_delta,
-        ci_low=0.0,
-        ci_high=0.0,
+        ci_low=ci_low,
+        ci_high=ci_high,
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_ratio_median=runtime_ratio_median,
         runtime_regression_rate=runtime_regression_rate,
@@ -72,6 +74,8 @@ def _protocol(
     runtime_ratio_median: float | None = None,
     runtime_regression_rate: float | None = None,
     runtime_pairs: int | None = None,
+    ci_low: float = 0.0,
+    ci_high: float = 0.0,
     candidate_operator_attempts: int = 1,
     candidate_surface_runtime_summary: dict | None = None,
 ) -> ProtocolResult:
@@ -89,6 +93,8 @@ def _protocol(
             runtime_ratio_median=runtime_ratio_median,
             runtime_regression_rate=runtime_regression_rate,
             runtime_pairs=runtime_pairs,
+            ci_low=ci_low,
+            ci_high=ci_high,
         ),
         gate_outcome="fail",
         reason_codes=("SCREENING_FAIL_WIN_RATE",),
@@ -127,6 +133,18 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
     assert screening_feedback_summary(
         _protocol(case_wins=2, case_losses=1, case_ties=5)
     ).tier == "weak_positive"
+
+    marginal = screening_feedback_summary(
+        _protocol(
+            case_wins=3,
+            case_losses=3,
+            case_ties=6,
+            ci_low=-0.5,
+            ci_high=0.5,
+        )
+    )
+    assert marginal.tier == "marginal"
+    assert "not a weak-positive exploit signal" in marginal.why_not_promoted
 
     assert screening_feedback_summary(
         _protocol(case_wins=0, case_losses=0, case_ties=8)

@@ -2901,6 +2901,17 @@ P2:
 
 ## Remaining Risks
 
+2026-05-31 update: the P1/P2 observability validation run at
+`/home/clawd/research/scion-experiments/v04-v3-p1p2-observability-gpt55-4r-20260531T080550Z-claw`
+completed 4/4 effective rounds with no infrastructure failures and verified the
+low-win/loss-heavy branch lifecycle repair: a `1W/3L/8T` non-positive-CI branch
+was soft-abandoned instead of retained as weak-positive. The run also exposed a
+stricter policy need for balanced mixed evidence: `3W/3L/6T` with CI crossing
+zero should be preserved only as marginal follow-up evidence, not as an
+`active_weak_positive` exploit target. Scion core now has a generic marginal
+screening tier/reason, retained hypothesis statuses are clearer, and code retry
+failure artifacts include explicit attempt/session indexing for audit joins.
+
 2026-05-22 update: the construction/Shaw validation run is documented in
 [`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md).
 It completed 3 effective screening rounds with no construction/Shaw false

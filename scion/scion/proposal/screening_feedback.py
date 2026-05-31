@@ -28,6 +28,7 @@ ScreeningFeedbackTier = Literal[
     "invalid",
     "inactive",
     "weak_positive",
+    "marginal",
     "no_effect",
     "quality_regression",
     "runtime_regression",
@@ -164,6 +165,13 @@ def screening_feedback_summary(
 
     invalid = _has_candidate_execution_failure(protocol)
     objective_positive = case_wins > 0 or pair_wins > 0
+    case_marginal_positive = (
+        case_wins > 0
+        and (
+            case_wins <= case_losses
+            or _confidence_interval_crosses_negative(stats)
+        )
+    )
     quality_non_positive_ci = (
         getattr(stats, "ci_low", None) is not None
         and getattr(stats, "ci_high", None) is not None
@@ -214,6 +222,8 @@ def screening_feedback_summary(
         tier = "promotable"
     elif quality_negative:
         tier = "quality_regression"
+    elif case_marginal_positive:
+        tier = "marginal"
     elif objective_positive:
         tier = "weak_positive"
     elif activation_status == "not_observed":
@@ -257,6 +267,14 @@ def screening_feedback_summary(
         mechanism_evidence=mechanism_evidence,
     )
     return _with_digest(summary)
+
+
+def _confidence_interval_crosses_negative(stats: Any) -> bool:
+    ci_low = getattr(stats, "ci_low", None)
+    ci_high = getattr(stats, "ci_high", None)
+    if ci_low is None or ci_high is None:
+        return False
+    return float(ci_low) < -_EPS and float(ci_high) > _EPS
 
 
 def _summary(
@@ -460,6 +478,11 @@ def _why_not_promoted(
             (primary + "; " if primary else "")
             + "weak_positive is not promotable; screening gate remains authoritative"
         )
+    if tier == "marginal":
+        return (
+            (primary + "; " if primary else "")
+            + "marginal mixed signal is not a weak-positive exploit signal"
+        )
     if tier == "no_effect":
         return primary or "active screening produced no case-level or pair-level effect"
     if tier == "quality_regression":
@@ -470,7 +493,7 @@ def _why_not_promoted(
 
 
 def _allowed_followup_variants(tier: ScreeningFeedbackTier) -> tuple[str, ...]:
-    if tier in {"weak_positive", "no_effect"}:
+    if tier in {"weak_positive", "marginal", "no_effect"}:
         return ("trigger", "schedule", "threshold", "composition")
     if tier == "runtime_regression":
         return ("runtime_bound", "trigger", "schedule")

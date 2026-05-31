@@ -60,6 +60,12 @@ class AgenticSessionRepairMixin:
                     "reason": preview_detail,
                     "source": failed_preview.tool_name,
                     "repair_attempt": repair_attempt,
+                    "attempt_index": repair_attempt,
+                    "session_index": getattr(
+                        state,
+                        "_code_retry_failure_detail_index",
+                        None,
+                    ),
                     "artifact_ref": retry_failure_ref,
                 }
             )
@@ -151,6 +157,12 @@ class AgenticSessionRepairMixin:
                     "reason": issue_detail,
                     "source": "agentic_code_self_check",
                     "repair_attempt": repair_attempt,
+                    "attempt_index": repair_attempt,
+                    "session_index": getattr(
+                        state,
+                        "_code_retry_failure_detail_index",
+                        None,
+                    ),
                     "artifact_ref": retry_failure_ref,
                 }
             )
@@ -200,6 +212,8 @@ class AgenticSessionRepairMixin:
             repair_attempt: int,
             observation: ProposalObservation | None,
         ) -> str:
+            index = int(getattr(state, "_code_retry_failure_detail_index", 0)) + 1
+            setattr(state, "_code_retry_failure_detail_index", index)
             _record_failure_ledger_entry(
                 state,
                 phase=AgenticProposalPhase.DRAFT_PATCH,
@@ -211,13 +225,13 @@ class AgenticSessionRepairMixin:
                 detail=reason,
                 source=f"code_retry_{failure_kind}",
                 repair_attempt=repair_attempt,
+                attempt_index=repair_attempt,
+                session_index=index,
                 tool_name=source_tool,
                 observation=observation,
             )
             if self._artifact_store is None:
                 return ""
-            index = int(getattr(state, "_code_retry_failure_detail_index", 0)) + 1
-            setattr(state, "_code_retry_failure_detail_index", index)
             payload = _drop_empty_dict(
                 {
                     "schema_version": "agentic-code-retry-failure-detail.v1",
@@ -226,6 +240,8 @@ class AgenticSessionRepairMixin:
                     "campaign_id": state.campaign_id,
                     "branch_id": state.branch_id,
                     "repair_attempt": repair_attempt,
+                    "attempt_index": repair_attempt,
+                    "session_index": index,
                     "failure_kind": failure_kind,
                     "reason": reason,
                     "source": source_tool,

@@ -254,6 +254,7 @@ class AgenticSessionIndexEntry:
     transcript_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     smoke_evidence_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     code_retry_failure_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    code_retry_failure_count: int = 0
     session_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     failure_category: str = ""
     failure_detail: str = ""

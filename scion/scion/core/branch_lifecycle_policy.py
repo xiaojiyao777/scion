@@ -10,6 +10,7 @@ from scion.core.models import DecisionFeatures
 BranchLifecycleAction = Literal["keep_exploring", "soft_abandon"]
 
 SCREENING_WEAK_SIGNAL_CONTINUE = "SCREENING_WEAK_SIGNAL_CONTINUE"
+SCREENING_MARGINAL_SIGNAL_CONTINUE = "SCREENING_MARGINAL_SIGNAL_CONTINUE"
 SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL = (
     "SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL"
 )
@@ -158,10 +159,21 @@ class BranchLifecyclePolicy:
                 next_telemetry_diagnostic_streak=0,
             )
 
-        if wins > 0:
+        if wins > 0 and self._clear_weak_positive_case_signal(
+            features,
+            wins=wins,
+            losses=losses,
+        ):
             return BranchLifecycleDecision(
                 action="keep_exploring",
                 reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
+                next_zero_win_streak=0,
+                next_telemetry_diagnostic_streak=0,
+            )
+        if wins > 0:
+            return BranchLifecycleDecision(
+                action="keep_exploring",
+                reason_codes=(SCREENING_MARGINAL_SIGNAL_CONTINUE,),
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=0,
             )
@@ -232,6 +244,21 @@ class BranchLifecyclePolicy:
             and features.win_rate < self.low_win_rate_threshold
             and not features.telemetry_validation_repairable
         )
+
+    def _clear_weak_positive_case_signal(
+        self,
+        features: DecisionFeatures,
+        *,
+        wins: int,
+        losses: int,
+    ) -> bool:
+        if wins <= losses:
+            return False
+        ci_low = getattr(features, "ci_low", None)
+        ci_high = getattr(features, "ci_high", None)
+        if ci_low is not None and ci_high is not None and ci_low < 0 < ci_high:
+            return False
+        return True
 
     def _soft_abandon_reasons(
         self,

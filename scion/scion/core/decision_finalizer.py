@@ -13,6 +13,7 @@ from scion.core.branch_hygiene import (
 )
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
+    SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
     SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
@@ -413,12 +414,13 @@ class DecisionFinalizer:
             self.branch_hypotheses.pop(bid, None)
             self.hypothesis_store.mark_status(
                 h_record.hypothesis_id,
-                (
-                    "screening_no_effect"
-                    if preserve_low_signal_branch
-                    and screening_feedback is not None
-                    and screening_feedback.tier == "no_effect"
-                    else "rejected"
+                _retained_screening_status(
+                    preserve_low_signal_branch=preserve_low_signal_branch,
+                    tier=(
+                        screening_feedback.tier
+                        if screening_feedback is not None
+                        else ""
+                    ),
                 ),
             )
         else:
@@ -463,8 +465,15 @@ class DecisionFinalizer:
                 else "telemetry_repairable"
             )
         else:
+            signal_label = "weak screening signal"
+            if (
+                preserve_low_signal_branch
+                and screening_feedback is not None
+                and screening_feedback.tier == "marginal"
+            ):
+                signal_label = "marginal mixed screening signal"
             reason = (
-                "CONTINUE_EXPLORE: weak screening signal; improve the same branch"
+                f"CONTINUE_EXPLORE: {signal_label}; improve the same branch"
                 if preserve_low_signal_branch
                 else "CONTINUE_EXPLORE: re-propose next step"
             )
@@ -603,6 +612,7 @@ def _preserve_low_signal_screening_workspace(
     ):
         return False
     lifecycle_codes = {
+        SCREENING_MARGINAL_SIGNAL_CONTINUE,
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         SCREENING_WEAK_SIGNAL_CONTINUE,
         SCREENING_ZERO_WIN_STREAK_CONTINUE,
@@ -611,6 +621,22 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _retained_screening_status(
+    *,
+    preserve_low_signal_branch: bool,
+    tier: str,
+) -> str:
+    if not preserve_low_signal_branch:
+        return "rejected"
+    if tier == "no_effect":
+        return "screening_no_effect"
+    if tier == "weak_positive":
+        return "screening_weak_positive_retained"
+    if tier == "marginal":
+        return "screening_marginal_retained"
+    return "screening_retained_for_branch_followup"
 
 
 def _is_regressed_weak_positive_followup(

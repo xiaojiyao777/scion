@@ -411,6 +411,7 @@ class AgenticSessionStore:
             transcript_artifact_refs=transcript_refs,
             smoke_evidence_artifact_refs=smoke_evidence_refs,
             code_retry_failure_artifact_refs=code_retry_failure_refs,
+            code_retry_failure_count=len(code_retry_failure_refs),
             session_artifact_refs=session_artifact_refs,
             **summary_fields,
         )
@@ -562,6 +563,15 @@ class AgenticSessionStore:
                         code_retry_failure_artifact_refs=_refs_with_marker(
                             session_artifact_refs,
                             _CODE_RETRY_FAILURE_REF_MARKER,
+                        ),
+                        code_retry_failure_count=int(
+                            item.get("code_retry_failure_count")
+                            or len(
+                                _refs_with_marker(
+                                    session_artifact_refs,
+                                    _CODE_RETRY_FAILURE_REF_MARKER,
+                                )
+                            )
                         ),
                         session_artifact_refs=session_artifact_refs,
                         **summary_fields,

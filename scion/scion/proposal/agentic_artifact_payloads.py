@@ -259,6 +259,7 @@ def _agentic_output_artifact(
         "transcript_artifact_refs": list(transcript_refs),
         "smoke_evidence_artifact_refs": list(smoke_evidence_refs),
         "code_retry_failure_artifact_refs": list(code_retry_failure_refs),
+        "code_retry_failure_count": len(code_retry_failure_refs),
         "tainted": True,
     }
     return _json_ready(_sanitize_agentic_value(artifact))

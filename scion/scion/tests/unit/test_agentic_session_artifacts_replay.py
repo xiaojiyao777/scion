@@ -490,17 +490,35 @@ def test_agentic_session_index_refs_smoke_and_code_retry_failure_artifacts(
     assert index_entry["phase"]
     assert index_entry["smoke_evidence_artifact_refs"]
     assert index_entry["code_retry_failure_artifact_refs"]
+    assert index_entry["code_retry_failure_count"] == 1
     assert retry_ref in index_entry["session_artifact_refs"]
     assert artifact["code_retry_failure_artifact_refs"] == (
         index_entry["code_retry_failure_artifact_refs"]
     )
+    assert artifact["code_retry_failure_count"] == 1
     assert retry_artifact["artifact_kind"] == "code_retry_failure_detail"
     assert retry_artifact["failure_kind"] == "preview_failure"
+    assert retry_artifact["repair_attempt"] == 1
+    assert retry_artifact["attempt_index"] == 1
+    assert retry_artifact["session_index"] == 1
     assert retry_artifact["source"] == "proposal.algorithm_smoke"
     assert "algorithm smoke did not pass" in retry_artifact["reason"]
-    assert creative.code_contexts[1]["agentic_code_retry_failure_detail"][
-        "artifact_ref"
-    ].endswith("code_retry_failure_detail_0001.json")
+    context_failure_detail = creative.code_contexts[1][
+        "agentic_code_retry_failure_detail"
+    ]
+    assert context_failure_detail["artifact_ref"].endswith(
+        "code_retry_failure_detail_0001.json"
+    )
+    assert context_failure_detail["attempt_index"] == 1
+    assert context_failure_detail["session_index"] == 1
+    ledger_entry = next(
+        item
+        for item in artifact["failure_ledger"]["entries"]
+        if item["source"] == "code_retry_preview_failure"
+    )
+    assert ledger_entry["repair_attempt"] == 1
+    assert ledger_entry["attempt_index"] == 1
+    assert ledger_entry["session_index"] == 1
 
 
 def test_partial_hypothesis_awaiting_approval_is_not_contract_failure(

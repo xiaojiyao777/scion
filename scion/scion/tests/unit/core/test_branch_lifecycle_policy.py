@@ -5,6 +5,7 @@ import uuid
 from scion.core.branch_lifecycle_policy import (
     BranchLifecyclePolicy,
     SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+    SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
@@ -97,6 +98,30 @@ def test_loss_heavy_low_win_screening_does_not_keep_as_weak_positive() -> None:
     assert SCREENING_WEAK_SIGNAL_CONTINUE not in decision.reason_codes
     assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
     assert SCREENING_SOFT_ABANDON_NON_POSITIVE_CI in decision.reason_codes
+
+
+def test_balanced_mixed_screening_signal_is_marginal_not_weak_positive() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=3,
+            losses=3,
+            ties=6,
+            win_rate=0.25,
+            median_delta=0.0,
+            ci_low=-0.5,
+            ci_high=0.5,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_MARGINAL_SIGNAL_CONTINUE,)
+    assert SCREENING_WEAK_SIGNAL_CONTINUE not in decision.reason_codes
+    assert decision.next_zero_win_streak == 0
 
 
 def test_pair_level_wins_without_case_gate_keep_branch_as_weak_positive() -> None:
