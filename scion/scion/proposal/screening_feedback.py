@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
+from scion.core.branch_lifecycle_policy import SCREENING_MARGINAL_SIGNAL_CONTINUE
 from scion.core.models import ExperimentStage, ProtocolResult
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.screening_visibility import (
@@ -191,10 +192,12 @@ def screening_feedback_summary(
         and float(getattr(stats, "ci_low")) < -_EPS
         and float(getattr(stats, "ci_high")) <= _EPS
     )
+    lifecycle_marginal_continue = SCREENING_MARGINAL_SIGNAL_CONTINUE in reason_codes
+    loss_heavy_positive = case_wins > 0 and case_losses >= case_wins + 2
     quality_negative = (
         (median_delta is not None and median_delta < -_EPS)
         or quality_non_positive_ci
-        or (case_wins > 0 and case_losses >= case_wins + 2)
+        or (loss_heavy_positive and not lifecycle_marginal_continue)
         or (case_losses > 0 and case_wins == 0)
         or (pair_losses > 0 and pair_wins == 0 and case_wins == 0)
     )

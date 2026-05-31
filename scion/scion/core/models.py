@@ -310,6 +310,68 @@ class ScreeningPatternSummary:
     consistent_loss_cases: Tuple[str, ...] = ()
     key_observations: Tuple[str, ...] = ()
 
+
+@dataclass(frozen=True)
+class BranchCheckpointEvidence:
+    """Generic screened-evidence summary attached to a restorable branch checkpoint."""
+
+    wins: int = 0
+    losses: int = 0
+    ties: int = 0
+    median_delta: Optional[float] = None
+    ci_low: Optional[float] = None
+    ci_high: Optional[float] = None
+    runtime_ratio_median: Optional[float] = None
+    runtime_regression_rate: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class BranchCheckpointDiagnostics:
+    """Generic diagnostic reason-code summary for branch checkpoint audit."""
+
+    gate_observation_reason_codes: Tuple[str, ...] = ()
+    lifecycle_action_reason_codes: Tuple[str, ...] = ()
+    telemetry_outcome: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class BranchCheckpointCounters:
+    """Generic lifecycle counters captured with a branch checkpoint."""
+
+    followup_count: int = 0
+    rollback_count: int = 0
+    stale_count: int = 0
+
+
+@dataclass(frozen=True)
+class BranchCheckpointRecord:
+    """Auditable metadata for a branch-lineage checkpoint.
+
+    The record is generic by design: it carries code/evidence/status fields but
+    no problem-object semantics. Problem packages may add richer diagnostics in
+    their own artifacts and reference them through generic reason codes.
+    """
+
+    checkpoint_id: str
+    branch_id: str
+    lineage_id: str
+    parent_checkpoint_id: Optional[str]
+    workspace_ref: str
+    patch_digest: Optional[str]
+    code_hash: Optional[str]
+    branch_code_status: str
+    screening_tier: Optional[str]
+    evidence: BranchCheckpointEvidence = field(
+        default_factory=BranchCheckpointEvidence
+    )
+    diagnostics: BranchCheckpointDiagnostics = field(
+        default_factory=BranchCheckpointDiagnostics
+    )
+    counters: BranchCheckpointCounters = field(
+        default_factory=BranchCheckpointCounters
+    )
+    created_at: datetime = field(default_factory=datetime.now)
+
 # --- Decision Features (The "Safe" Boundary) ---
 
 @dataclass(frozen=True)
@@ -394,6 +456,7 @@ class Branch:
     state: BranchState
     base_champion_id: int
     base_champion_hash: str
+    lineage_id: Optional[str] = None
     current_code_hash: Optional[str] = None
     last_clean_code_hash: Optional[str] = None
     retry_count: int = 0
@@ -420,6 +483,10 @@ class Branch:
     last_branch_lifecycle_policy_block: Dict[str, Any] = field(
         default_factory=dict
     )
+    best_quality_checkpoint_id: Optional[str] = None
+    last_valid_checkpoint_id: Optional[str] = None
+    rollback_count: int = 0
+    last_rollback_reason: Optional[str] = None
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3

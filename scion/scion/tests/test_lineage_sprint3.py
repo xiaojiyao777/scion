@@ -227,6 +227,11 @@ class TestBranchStore:
         b.blocked_rounds = 2
         b.consecutive_llm_retries = 1
         b.infra_block_count = 4
+        b.lineage_id = "lineage-runtime"
+        b.best_quality_checkpoint_id = "checkpoint-best"
+        b.last_valid_checkpoint_id = "checkpoint-last"
+        b.rollback_count = 2
+        b.last_rollback_reason = "screening_regression"
 
         store.save(b)
         loaded = store.load("br_runtime")
@@ -251,6 +256,11 @@ class TestBranchStore:
             "reason": "new_mechanism_requires_clean_fork",
             "block_count": 1,
         }
+        assert loaded.lineage_id == "lineage-runtime"
+        assert loaded.best_quality_checkpoint_id == "checkpoint-best"
+        assert loaded.last_valid_checkpoint_id == "checkpoint-last"
+        assert loaded.rollback_count == 2
+        assert loaded.last_rollback_reason == "screening_regression"
         assert loaded.pending_retry is True
         assert loaded.blocked_rounds == 2
         assert loaded.consecutive_llm_retries == 1

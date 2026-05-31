@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
 from scion.core.branch import StateTransitionError
-from scion.core.branch_lifecycle_policy import BranchLifecyclePolicy
+from scion.core.branch_lifecycle_policy import (
+    BranchLifecycleDecision,
+    BranchLifecyclePolicy,
+)
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
 from scion.core.features import BudgetState, SafeFeatureExtractor
@@ -192,18 +195,26 @@ class EvaluationOrchestrator:
                 current_telemetry_diagnostic_streak=(
                     self.branch_telemetry_diagnostic_streaks.get(bid, 0)
                 ),
+                branch_code_status=getattr(branch, "branch_code_status", ""),
+                branch_screening_tier=getattr(
+                    branch,
+                    "last_screening_feedback_tier",
+                    "",
+                )
+                or "",
+                has_checkpoint=_branch_has_checkpoint(branch),
             )
             if lifecycle.reason_codes:
                 self.decision_reason_codes[bid] = _merge_reason_codes(
                     base_reason_codes,
-                    lifecycle.reason_codes,
+                    _lifecycle_reason_codes(lifecycle),
                 )
             self.branch_telemetry_diagnostic_streaks[bid] = (
                 lifecycle.next_telemetry_diagnostic_streak
             )
-            if lifecycle.soft_abandon:
+            if lifecycle.action == "archive_lineage":
                 logger.info(
-                    "Branch %s: telemetry diagnostic lifecycle=%s -> soft_abandon",
+                    "Branch %s: telemetry diagnostic lifecycle=%s -> archive_lineage",
                     bid,
                     lifecycle.reason_codes,
                 )
@@ -211,6 +222,7 @@ class EvaluationOrchestrator:
                     bid,
                     features.win_rate or 0.0,
                     lifecycle.reason_codes,
+                    lifecycle_action=lifecycle.action,
                 )
                 self.increment_soft_abandon_streak()
                 self.apply_soft_abandon(
@@ -230,15 +242,23 @@ class EvaluationOrchestrator:
             lifecycle = self.branch_lifecycle_policy.decide(
                 features,
                 current_zero_win_streak=self.branch_zero_win_streaks.get(bid, 0),
+                branch_code_status=getattr(branch, "branch_code_status", ""),
+                branch_screening_tier=getattr(
+                    branch,
+                    "last_screening_feedback_tier",
+                    "",
+                )
+                or "",
+                has_checkpoint=_branch_has_checkpoint(branch),
             )
             if lifecycle.reason_codes:
                 self.decision_reason_codes[bid] = _merge_reason_codes(
                     base_reason_codes,
-                    lifecycle.reason_codes,
+                    _lifecycle_reason_codes(lifecycle),
                 )
-            if lifecycle.soft_abandon:
+            if lifecycle.action == "archive_lineage":
                 logger.info(
-                    "Branch %s: win_rate=%.2f lifecycle=%s -> soft_abandon",
+                    "Branch %s: win_rate=%.2f lifecycle=%s -> archive_lineage",
                     bid,
                     features.win_rate,
                     lifecycle.reason_codes,
@@ -248,6 +268,7 @@ class EvaluationOrchestrator:
                     bid,
                     features.win_rate,
                     lifecycle.reason_codes,
+                    lifecycle_action=lifecycle.action,
                 )
                 self.increment_soft_abandon_streak()
                 self.apply_soft_abandon(
@@ -319,6 +340,8 @@ class EvaluationOrchestrator:
         branch_id: str,
         win_rate: float,
         reason_codes: tuple[str, ...],
+        *,
+        lifecycle_action: str = "archive_lineage",
     ) -> None:
         try:
             self.registry.record_event(
@@ -331,6 +354,7 @@ class EvaluationOrchestrator:
                     "reason_codes": list(reason_codes),
                     "win_rate": win_rate,
                     "abandon_type": "soft_lifecycle",
+                    "lifecycle_action": lifecycle_action,
                 }
             )
         except Exception:
@@ -342,6 +366,28 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _lifecycle_reason_codes(
+    lifecycle: BranchLifecycleDecision,
+) -> tuple[str, ...]:
+    if lifecycle.action in {"retain_head", "keep_exploring", "archive_lineage"}:
+        return tuple(lifecycle.reason_codes or ())
+    return tuple(
+        dict.fromkeys(
+            (
+                lifecycle.action_reason_code,
+                *tuple(lifecycle.reason_codes or ()),
+            )
+        )
+    )
+
+
+def _branch_has_checkpoint(branch: Branch) -> bool:
+    return bool(
+        getattr(branch, "best_quality_checkpoint_id", None)
+        or getattr(branch, "last_valid_checkpoint_id", None)
+    )
 
 
 def _frozen_budget_protocol_result(*, used: int, limit: int) -> ProtocolResult:

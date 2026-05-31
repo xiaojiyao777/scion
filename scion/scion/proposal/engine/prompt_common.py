@@ -180,7 +180,8 @@ def _agentic_research_context_block(
             "Treat actionable_telemetry_feedback as executable repair input: "
             "preserve the declared mechanism id, use the expected call pattern "
             "when repairing code, and report a telemetry declaration mismatch "
-            "instead of fabricating effect evidence.\n\n"
+            "instead of fabricating effect evidence; do not fabricate effect "
+            "evidence.\n\n"
             f"{_bounded_json(preview_payload, _preview_feedback_chars(code_phase))}"
         )
     code_shape_feedback = context.get("agentic_code_schema_shape_retry_feedback")

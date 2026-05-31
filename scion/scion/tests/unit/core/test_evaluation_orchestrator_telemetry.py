@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from scion.config.problem import ProtocolConfig
 from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
@@ -840,7 +841,7 @@ def test_formal_budget_starved_is_branch_local_diagnostic_not_abandon() -> None:
     assert budget_used == 0
 
 
-def test_repeated_telemetry_diagnostic_can_soft_abandon() -> None:
+def test_repeated_telemetry_diagnostic_parks_lineage_without_archive() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
     workspaces = {branch.branch_id: "/tmp/candidate"}
@@ -884,13 +885,14 @@ def test_repeated_telemetry_diagnostic_can_soft_abandon() -> None:
         _hypothesis(),
     )
 
-    assert decision == Decision.ABANDON
+    assert decision == Decision.CONTINUE_EXPLORE
     assert protocol_result is not None
-    assert branch_controller.soft_abandoned is True
-    assert branch.branch_id not in workspaces
+    assert branch_controller.soft_abandoned is False
+    assert branch.branch_id in workspaces
     assert decision_reason_codes[branch.branch_id] == (
         "TELEMETRY_VALIDATION_REPAIRABLE",
         "SCREENING_TELEMETRY_REPAIRABLE",
+        BRANCH_LIFECYCLE_PARK_LINEAGE,
         TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
     )
 

@@ -7,7 +7,16 @@ from typing import Literal
 from scion.core.models import DecisionFeatures
 
 
-BranchLifecycleAction = Literal["keep_exploring", "soft_abandon"]
+BranchLifecycleAction = Literal[
+    "retain_head",
+    "retain_checkpoint",
+    "rollback_to_checkpoint",
+    "park_lineage",
+    "archive_lineage",
+    # Backward-compatible values for older callers/tests.
+    "keep_exploring",
+    "soft_abandon",
+]
 
 SCREENING_WEAK_SIGNAL_CONTINUE = "SCREENING_WEAK_SIGNAL_CONTINUE"
 SCREENING_MARGINAL_SIGNAL_CONTINUE = "SCREENING_MARGINAL_SIGNAL_CONTINUE"
@@ -60,6 +69,13 @@ TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE = (
 TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE = (
     "TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE"
 )
+BRANCH_LIFECYCLE_RETAIN_HEAD = "BRANCH_LIFECYCLE_RETAIN_HEAD"
+BRANCH_LIFECYCLE_RETAIN_CHECKPOINT = "BRANCH_LIFECYCLE_RETAIN_CHECKPOINT"
+BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT = (
+    "BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT"
+)
+BRANCH_LIFECYCLE_PARK_LINEAGE = "BRANCH_LIFECYCLE_PARK_LINEAGE"
+BRANCH_LIFECYCLE_ARCHIVE_LINEAGE = "BRANCH_LIFECYCLE_ARCHIVE_LINEAGE"
 
 _RUNTIME_CONFIDENCE_MIN_PAIRS = 4
 _RUNTIME_SEVERE_SLOW_RATIO = 1.50
@@ -75,7 +91,11 @@ class BranchLifecycleDecision:
 
     @property
     def soft_abandon(self) -> bool:
-        return self.action == "soft_abandon"
+        return self.action in {"soft_abandon", "park_lineage", "archive_lineage"}
+
+    @property
+    def action_reason_code(self) -> str:
+        return _action_reason_code(self.action)
 
 
 @dataclass(frozen=True)
@@ -95,6 +115,9 @@ class BranchLifecyclePolicy:
         *,
         current_zero_win_streak: int = 0,
         current_telemetry_diagnostic_streak: int = 0,
+        branch_code_status: str = "",
+        branch_screening_tier: str = "",
+        has_checkpoint: bool = False,
     ) -> BranchLifecycleDecision:
         if features.telemetry_validation_repairable:
             return self._decide_telemetry_diagnostic(
@@ -102,11 +125,14 @@ class BranchLifecyclePolicy:
                 current_telemetry_diagnostic_streak=(
                     current_telemetry_diagnostic_streak
                 ),
+                branch_code_status=branch_code_status,
+                branch_screening_tier=branch_screening_tier,
+                has_checkpoint=has_checkpoint,
             )
 
         if not self._eligible_low_win_screening(features):
             return BranchLifecycleDecision(
-                action="keep_exploring",
+                action="retain_head",
                 reason_codes=(),
                 next_zero_win_streak=current_zero_win_streak,
                 next_telemetry_diagnostic_streak=0,
@@ -120,16 +146,33 @@ class BranchLifecyclePolicy:
 
         if features.stale:
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action="archive_lineage",
                 reason_codes=(SCREENING_STALE_RESCREEN_FAIL,),
                 next_zero_win_streak=next_zero_win_streak,
                 next_telemetry_diagnostic_streak=0,
             )
 
         soft_reasons = self._soft_abandon_reasons(features, wins=wins, losses=losses)
+        prior_evidence_tier = _branch_evidence_tier(
+            branch_code_status,
+            branch_screening_tier,
+        )
+        if (
+            wins > 0
+            and not prior_evidence_tier
+            and set(soft_reasons) == {SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP}
+        ):
+            soft_reasons = ()
         if soft_reasons:
+            action = self._regression_action(
+                features,
+                reason_codes=soft_reasons,
+                branch_code_status=branch_code_status,
+                branch_screening_tier=branch_screening_tier,
+                has_checkpoint=has_checkpoint,
+            )
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action=action,
                 reason_codes=soft_reasons,
                 next_zero_win_streak=next_zero_win_streak,
                 next_telemetry_diagnostic_streak=0,
@@ -145,7 +188,7 @@ class BranchLifecyclePolicy:
             and next_zero_win_streak >= self.diagnostic_zero_win_streak_limit
         ):
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action="park_lineage",
                 reason_codes=diagnostic_reroute_reasons,
                 next_zero_win_streak=next_zero_win_streak,
                 next_telemetry_diagnostic_streak=0,
@@ -153,7 +196,7 @@ class BranchLifecyclePolicy:
 
         if wins == 0 and next_zero_win_streak >= self.zero_win_streak_limit:
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action="park_lineage",
                 reason_codes=(SCREENING_ZERO_WIN_STREAK_EXHAUSTED,),
                 next_zero_win_streak=next_zero_win_streak,
                 next_telemetry_diagnostic_streak=0,
@@ -165,14 +208,14 @@ class BranchLifecyclePolicy:
             losses=losses,
         ):
             return BranchLifecycleDecision(
-                action="keep_exploring",
+                action="retain_head",
                 reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=0,
             )
         if wins > 0:
             return BranchLifecycleDecision(
-                action="keep_exploring",
+                action="retain_head",
                 reason_codes=(SCREENING_MARGINAL_SIGNAL_CONTINUE,),
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=0,
@@ -180,7 +223,7 @@ class BranchLifecyclePolicy:
 
         if pair_wins > 0:
             return BranchLifecycleDecision(
-                action="keep_exploring",
+                action="retain_head",
                 reason_codes=(
                     SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
                     *diagnostic_reasons,
@@ -197,7 +240,7 @@ class BranchLifecyclePolicy:
             else SCREENING_ZERO_WIN_STREAK_CONTINUE
         )
         return BranchLifecycleDecision(
-            action="keep_exploring",
+            action="retain_head",
             reason_codes=(reason, *diagnostic_reasons),
             next_zero_win_streak=next_zero_win_streak,
             next_telemetry_diagnostic_streak=0,
@@ -208,19 +251,31 @@ class BranchLifecyclePolicy:
         features: DecisionFeatures,
         *,
         current_telemetry_diagnostic_streak: int,
+        branch_code_status: str = "",
+        branch_screening_tier: str = "",
+        has_checkpoint: bool = False,
     ) -> BranchLifecycleDecision:
         next_streak = max(0, current_telemetry_diagnostic_streak) + 1
         severe_reasons = self._telemetry_diagnostic_abandon_reasons(features)
         if severe_reasons:
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action="archive_lineage",
                 reason_codes=severe_reasons,
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=next_streak,
             )
         if next_streak >= self.telemetry_diagnostic_streak_limit:
             return BranchLifecycleDecision(
-                action="soft_abandon",
+                action=(
+                    "retain_checkpoint"
+                    if has_checkpoint
+                    and _branch_evidence_tier(
+                        branch_code_status,
+                        branch_screening_tier,
+                    )
+                    == "weak_positive"
+                    else "park_lineage"
+                ),
                 reason_codes=(TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,),
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=next_streak,
@@ -231,7 +286,7 @@ class BranchLifecyclePolicy:
             else SCREENING_TELEMETRY_DIAGNOSTIC_RETRY
         )
         return BranchLifecycleDecision(
-            action="keep_exploring",
+            action="retain_head",
             reason_codes=(reason,),
             next_zero_win_streak=0,
             next_telemetry_diagnostic_streak=next_streak,
@@ -306,6 +361,28 @@ class BranchLifecyclePolicy:
             reasons.append(TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE)
         return tuple(dict.fromkeys(reasons))
 
+    def _regression_action(
+        self,
+        features: DecisionFeatures,
+        *,
+        reason_codes: tuple[str, ...],
+        branch_code_status: str,
+        branch_screening_tier: str,
+        has_checkpoint: bool,
+    ) -> BranchLifecycleAction:
+        reason_set = set(reason_codes)
+        if (
+            SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE in reason_set
+            or features.candidate_failed_pairs > 0
+        ):
+            return "archive_lineage"
+        tier = _branch_evidence_tier(branch_code_status, branch_screening_tier)
+        if tier == "weak_positive" and has_checkpoint:
+            return "rollback_to_checkpoint"
+        if tier in {"marginal", "no_effect"}:
+            return "park_lineage"
+        return "archive_lineage"
+
     @staticmethod
     def _low_signal_diagnostic_reasons(
         features: DecisionFeatures,
@@ -362,9 +439,43 @@ class BranchLifecyclePolicy:
         return bool(severe_ratio and severe_delta and severe_rate)
 
 
+def _branch_evidence_tier(
+    branch_code_status: str,
+    branch_screening_tier: str,
+) -> str:
+    status = str(branch_code_status or "")
+    tier = str(branch_screening_tier or "")
+    if tier in {"weak_positive", "marginal", "no_effect"}:
+        return tier
+    if status == "active_weak_positive":
+        return "weak_positive"
+    if status == "active_marginal":
+        return "marginal"
+    if status == "active_no_effect":
+        return "no_effect"
+    return ""
+
+
+def _action_reason_code(action: BranchLifecycleAction) -> str:
+    return {
+        "retain_head": BRANCH_LIFECYCLE_RETAIN_HEAD,
+        "retain_checkpoint": BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+        "rollback_to_checkpoint": BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
+        "park_lineage": BRANCH_LIFECYCLE_PARK_LINEAGE,
+        "archive_lineage": BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+        "keep_exploring": BRANCH_LIFECYCLE_RETAIN_HEAD,
+        "soft_abandon": BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+    }[action]
+
+
 __all__ = [
     "BranchLifecycleDecision",
     "BranchLifecyclePolicy",
+    "BRANCH_LIFECYCLE_ARCHIVE_LINEAGE",
+    "BRANCH_LIFECYCLE_PARK_LINEAGE",
+    "BRANCH_LIFECYCLE_RETAIN_CHECKPOINT",
+    "BRANCH_LIFECYCLE_RETAIN_HEAD",
+    "BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT",
     "SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL",
     "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
     "SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE",

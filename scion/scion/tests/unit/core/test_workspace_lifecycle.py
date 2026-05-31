@@ -177,10 +177,27 @@ def test_regressed_followup_restore_recovers_checkpoint_workspace_and_patch(
         followup_patch,
         remember_patch=True,
     )
+    checkpoint_records = service.branch_checkpoint_registry.records_for_lineage(
+        branch.lineage_id or branch.branch_id
+    )
+    assert len(checkpoint_records) == 1
+    checkpoint_record = checkpoint_records[0].record
+    assert checkpoint_record.branch_id == branch.branch_id
+    assert checkpoint_record.lineage_id == (branch.lineage_id or branch.branch_id)
+    assert checkpoint_record.code_hash == "checkpoint-hash"
+    assert checkpoint_record.branch_code_status == "active_weak_positive"
+    assert checkpoint_record.screening_tier == "weak_positive"
+    assert checkpoint_record.patch_digest is not None
+    assert branch.best_quality_checkpoint_id == checkpoint_record.checkpoint_id
+    assert branch.last_valid_checkpoint_id == checkpoint_record.checkpoint_id
     candidate_file.write_text("# regressed\n", encoding="utf-8")
     ctrl.record_verification_pass(branch.branch_id, "regressed-hash")
 
-    restored = service.restore_branch_checkpoint(branch)
+    restored = service.restore_branch_checkpoint(
+        branch,
+        reason="screening_regression",
+        reason_codes=("quality_regression",),
+    )
 
     stored = ctrl.get_branch(branch.branch_id)
     restored_file = Path(workspaces[branch.branch_id]) / "operators" / "existing.py"
@@ -192,9 +209,97 @@ def test_regressed_followup_restore_recovers_checkpoint_workspace_and_patch(
     assert stored.last_screening_feedback_tier == "weak_positive"
     assert stored.last_telemetry_outcome == "case_level_positive_signal"
     assert stored.branch_mechanism_ids == ("mechanism",)
+    assert stored.rollback_count == 1
+    assert stored.last_rollback_reason == "screening_regression"
+    updated_record = service.branch_checkpoint_registry.records_for_lineage(
+        branch.lineage_id or branch.branch_id
+    )[0].record
+    assert updated_record.counters.rollback_count == 1
+    assert "quality_regression" in (
+        updated_record.diagnostics.lifecycle_action_reason_codes
+    )
     assert patches[branch.branch_id] is checkpoint_patch
     assert materializer.cleaned == [str(workspace)]
-    assert not Path(f"{workspace}.checkpoint").exists()
+    assert Path(updated_record.workspace_ref).is_dir()
+
+
+def test_last_valid_checkpoint_is_recorded_for_verified_branch(
+    tmp_path: Path,
+) -> None:
+    service, branch, ctrl, _, workspaces, _ = _service(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "operators").mkdir()
+    (workspace / "operators" / "existing.py").write_text(
+        "# last valid\n",
+        encoding="utf-8",
+    )
+    workspaces[branch.branch_id] = str(workspace)
+    ctrl.record_candidate_code(branch.branch_id, "valid-hash")
+    ctrl.record_verification_pass(branch.branch_id, "valid-hash")
+    branch.branch_code_status = "clean"
+    branch.last_screening_feedback_tier = None
+    patch = PatchProposal(
+        file_path="operators/existing.py",
+        action="modify",
+        code_content="# followup\n",
+    )
+
+    service.apply_patch(branch, str(workspace), patch, remember_patch=True)
+
+    records = service.branch_checkpoint_registry.records_for_lineage(
+        branch.lineage_id or branch.branch_id
+    )
+    assert len(records) == 1
+    assert records[0].record.screening_tier == "last_valid"
+    assert records[0].record.code_hash == "valid-hash"
+    assert branch.last_valid_checkpoint_id == records[0].record.checkpoint_id
+
+
+def test_checkpoint_registry_keeps_bounded_best_quality_and_last_valid(
+    tmp_path: Path,
+) -> None:
+    service, branch, ctrl, _, workspaces, _ = _service(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "operators").mkdir()
+    (workspace / "operators" / "existing.py").write_text(
+        "# checkpoint\n",
+        encoding="utf-8",
+    )
+    workspaces[branch.branch_id] = str(workspace)
+    tiers = [
+        ("weak_positive", "active_weak_positive", "hash-weak"),
+        ("no_effect", "active_no_effect", "hash-no-effect"),
+        ("marginal", "active_marginal", "hash-marginal"),
+    ]
+
+    for idx, (tier, status, code_hash) in enumerate(tiers):
+        ctrl.record_candidate_code(branch.branch_id, code_hash)
+        ctrl.record_verification_pass(branch.branch_id, code_hash)
+        branch.last_screening_feedback_tier = tier
+        branch.branch_code_status = status
+        service.apply_patch(
+            branch,
+            str(workspace),
+            PatchProposal(
+                file_path="operators/existing.py",
+                action="modify",
+                code_content=f"# followup {idx}\n",
+            ),
+            remember_patch=True,
+        )
+
+    records = service.branch_checkpoint_registry.records_for_lineage(
+        branch.lineage_id or branch.branch_id
+    )
+    assert len(records) == 2
+    retained_tiers = {record.record.screening_tier for record in records}
+    assert retained_tiers == {"weak_positive", "marginal"}
+    summary = service.checkpoint_summary()[branch.lineage_id or branch.branch_id]
+    assert summary["checkpoint_count"] == 2
+    assert summary["best_quality_checkpoint_id"] == branch.best_quality_checkpoint_id
+    assert summary["last_valid_checkpoint_id"] == branch.last_valid_checkpoint_id
 
 
 def test_record_verification_pass_updates_clean_hash(tmp_path: Path) -> None:

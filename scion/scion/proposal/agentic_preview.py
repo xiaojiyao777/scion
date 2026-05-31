@@ -681,7 +681,11 @@ def _compact_algorithm_smoke_observation(
     )
     compact_payload = _drop_empty_mapping(
         {
-            "passed": agent_payload.get("passed", bool(payload.get("passed"))),
+            "passed": (
+                payload.get("passed")
+                if "passed" in payload
+                else agent_payload.get("passed")
+            ),
             "status": agent_payload.get("status"),
             "failure_code": agent_payload.get("failure_code"),
             "failure_class": agent_payload.get("failure_class"),
@@ -692,7 +696,9 @@ def _compact_algorithm_smoke_observation(
             "diagnostic_not_clean_pass": agent_payload.get(
                 "diagnostic_not_clean_pass"
             ),
-            "agent_summary": agent_payload.get("agent_summary"),
+            "agent_summary": _compact_algorithm_smoke_agent_summary(
+                agent_payload.get("agent_summary")
+            ),
             "actionable_telemetry_feedback": (
                 _compact_actionable_telemetry_feedback(
                     agent_payload.get("actionable_telemetry_feedback")
@@ -741,6 +747,23 @@ def _compact_algorithm_smoke_observation(
         structured_payload=compact_payload,
         repair_hint=None,
     )
+
+
+def _compact_algorithm_smoke_agent_summary(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    compact = _drop_empty_mapping(
+        {
+            "summary_kind": value.get("summary_kind"),
+            "status": value.get("status"),
+            "passed": value.get("passed"),
+            "diagnostic_not_clean_pass": value.get("diagnostic_not_clean_pass"),
+            "failure_code": value.get("failure_code"),
+            "failure_class": value.get("failure_class"),
+            "primary_issue": _limit_string(value.get("primary_issue"), 240),
+        }
+    )
+    return compact or None
 
 
 def _compact_telemetry_static_preview_for_budget(value: Any) -> dict[str, Any] | None:

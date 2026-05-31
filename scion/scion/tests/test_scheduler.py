@@ -164,12 +164,26 @@ def test_lifecycle_blocked_research_branches_create_clean_fork_at_capacity():
     assert action.slot == "repair_diagnostic"
 
 
-def test_non_clean_branch_without_lifecycle_block_remains_schedulable_for_followup():
+def test_no_effect_without_actionable_diagnostic_prefers_clean_fork():
     branch = _branch(BranchState.EXPLORE)
     branch.branch_code_status = "active_no_effect"
     branch.branch_mechanism_ids = ("bounded_probe",)
 
     action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "clean_fork_required_for_new_mechanism"
+
+
+def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
+    branch = _branch(BranchState.EXPLORE)
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+    branch.failure_codes = ["diagnostic_requires_repair"]
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
 
     assert action.action == "run_existing"
     assert action.branch is branch
@@ -189,14 +203,11 @@ def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
     assert action.reason == "clean_fork_required_for_new_mechanism"
 
 
-def test_all_same_mechanism_followup_branches_under_capacity_create_clean_branch():
+def test_non_actionable_no_effect_followup_branches_create_clean_branch():
     branches = []
-    for offset, status in enumerate(
-        ("active_no_effect", "active_runtime_regression"),
-        start=1,
-    ):
+    for offset in (1, 2):
         branch = _branch(BranchState.EXPLORE, created_offset_s=offset)
-        branch.branch_code_status = status
+        branch.branch_code_status = "active_no_effect"
         branch.branch_mechanism_ids = (f"bounded_probe_{offset}",)
         branches.append(branch)
 
@@ -205,6 +216,19 @@ def test_all_same_mechanism_followup_branches_under_capacity_create_clean_branch
     assert action.action == "create_new"
     assert action.branch is None
     assert action.reason == "clean_fork_required_for_new_mechanism"
+
+
+def test_runtime_regression_diagnostic_runs_before_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.branch_code_status = "active_runtime_regression"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    action = Scheduler(max_active_branches=3).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "runtime_diagnostic_followup"
 
 
 def test_at_capacity_prefers_clean_research_candidate_over_non_clean_followup():
@@ -288,6 +312,81 @@ def test_weak_positive_branch_uses_exploit_slot_at_capacity():
     assert action.branch is branch
     assert action.slot == "exploit_weak_positive"
     assert action.reason == "weak_positive_signal_followup"
+
+
+def test_restored_checkpoint_priority_over_marginal_and_no_effect():
+    restored = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=20,
+        updated_offset_s=20,
+    )
+    restored.direction = "solver: restored checkpoint"
+    restored.branch_code_status = "regressed_followup"
+    restored.best_quality_checkpoint_id = "checkpoint-best"
+    restored.rollback_count = 1
+
+    marginal = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    marginal.direction = "solver: marginal"
+    marginal.branch_code_status = "active_marginal"
+    marginal.last_screening_feedback_tier = "marginal"
+
+    no_effect = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=10,
+        updated_offset_s=10,
+    )
+    no_effect.direction = "solver: no effect"
+    no_effect.branch_code_status = "active_no_effect"
+
+    action = Scheduler(max_active_branches=3).select_next(
+        [marginal, no_effect, restored]
+    )
+
+    assert action.action == "run_existing"
+    assert action.branch is restored
+    assert action.slot == "refine_active"
+    assert action.reason == "restored_checkpoint_followup"
+
+
+def test_weak_positive_rollback_checkpoint_stays_exploit_slot():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: restored weak positive"
+    branch.branch_code_status = "regressed_followup"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.rollback_count = 1
+
+    action = Scheduler(max_active_branches=3).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "exploit_weak_positive"
+    assert action.reason == "restored_weak_positive_checkpoint_followup"
+
+
+def test_parked_lineage_does_not_block_clean_fork_capacity():
+    branches = []
+    for offset in (0, 10, 20):
+        branch = _branch(
+            BranchState.EXPLORE,
+            created_offset_s=offset,
+            updated_offset_s=offset,
+        )
+        branch.direction = "solver: parked"
+        branch.branch_code_status = "parked_lineage"
+        branch.best_quality_checkpoint_id = f"checkpoint-{offset}"
+        branches.append(branch)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
 
 
 def test_regressed_followup_with_stale_weak_positive_tier_is_not_exploited():

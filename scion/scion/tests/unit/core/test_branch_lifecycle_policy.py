@@ -62,7 +62,7 @@ def _features(**overrides) -> DecisionFeatures:
 def test_weak_positive_low_win_screening_keeps_branch() -> None:
     decision = BranchLifecyclePolicy().decide(_features())
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
     assert decision.next_zero_win_streak == 0
 
@@ -85,7 +85,7 @@ def test_win_skewed_weak_positive_keeps_branch_despite_low_gate_rate() -> None:
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
     assert decision.next_zero_win_streak == 0
 
@@ -95,7 +95,7 @@ def test_loss_without_wins_soft_abandons_low_signal_branch() -> None:
         _features(wins=0, losses=1, ties=7, win_rate=0.0),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN in decision.reason_codes
 
 
@@ -117,7 +117,7 @@ def test_loss_heavy_low_win_screening_does_not_keep_as_weak_positive() -> None:
         ),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert SCREENING_WEAK_SIGNAL_CONTINUE not in decision.reason_codes
     assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
     assert SCREENING_SOFT_ABANDON_NON_POSITIVE_CI in decision.reason_codes
@@ -141,7 +141,7 @@ def test_balanced_mixed_screening_signal_is_marginal_not_weak_positive() -> None
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_MARGINAL_SIGNAL_CONTINUE,)
     assert SCREENING_WEAK_SIGNAL_CONTINUE not in decision.reason_codes
     assert decision.next_zero_win_streak == 0
@@ -161,7 +161,7 @@ def test_pair_level_wins_without_case_gate_keep_branch_as_weak_positive() -> Non
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,)
     assert decision.next_zero_win_streak == 0
 
@@ -182,7 +182,7 @@ def test_pair_level_wins_with_runtime_saturation_preserve_reroute_streak() -> No
         current_zero_win_streak=0,
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (
         SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
         SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
@@ -203,7 +203,7 @@ def test_negative_delta_and_runtime_slowdown_soft_abandon() -> None:
         ),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert decision.reason_codes == (
         SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
         SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
@@ -224,10 +224,10 @@ def test_neutral_all_tie_branch_survives_until_zero_win_streak_limit() -> None:
         current_zero_win_streak=2,
     )
 
-    assert keep.action == "keep_exploring"
+    assert keep.action == "retain_head"
     assert keep.reason_codes == (SCREENING_NEUTRAL_SIGNAL_CONTINUE,)
     assert keep.next_zero_win_streak == 1
-    assert exhausted.action == "soft_abandon"
+    assert exhausted.action == "park_lineage"
     assert exhausted.reason_codes == (SCREENING_ZERO_WIN_STREAK_EXHAUSTED,)
 
 
@@ -255,13 +255,13 @@ def test_runtime_saturation_diagnostic_reroutes_before_generic_zero_win_limit() 
         current_zero_win_streak=1,
     )
 
-    assert keep.action == "keep_exploring"
+    assert keep.action == "retain_head"
     assert keep.reason_codes == (
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
     )
     assert keep.next_zero_win_streak == 1
-    assert reroute.action == "soft_abandon"
+    assert reroute.action == "park_lineage"
     assert reroute.reason_codes == (SCREENING_RUNTIME_SATURATION_REROUTE,)
     assert reroute.next_zero_win_streak == 2
 
@@ -292,19 +292,19 @@ def test_effect_zero_diagnostic_reroutes_without_hard_validation_failure() -> No
         current_zero_win_streak=1,
     )
 
-    assert keep.action == "keep_exploring"
+    assert keep.action == "retain_head"
     assert keep.reason_codes == (
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     )
-    assert reroute.action == "soft_abandon"
+    assert reroute.action == "park_lineage"
     assert reroute.reason_codes == (SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,)
 
 
 def test_stale_rescreen_low_win_remains_abandon_for_reconcile() -> None:
     decision = BranchLifecyclePolicy().decide(_features(stale=True))
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert decision.reason_codes == (SCREENING_STALE_RESCREEN_FAIL,)
 
 
@@ -323,7 +323,7 @@ def test_low_mid_win_negative_delta_soft_abandons() -> None:
         ),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert decision.reason_codes == (SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,)
 
 
@@ -342,7 +342,7 @@ def test_low_mid_win_runtime_slowdown_soft_abandons() -> None:
         ),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert decision.reason_codes == (
         SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
         SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
@@ -366,7 +366,7 @@ def test_two_case_runtime_noise_is_diagnostic_not_soft_abandon() -> None:
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_NEUTRAL_SIGNAL_CONTINUE,)
 
 
@@ -386,7 +386,7 @@ def test_low_mid_weak_positive_mostly_tie_non_regressive_keeps_branch() -> None:
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
     assert decision.next_zero_win_streak == 0
 
@@ -427,9 +427,9 @@ def test_low_mid_positive_case_balance_keeps_weak_positive() -> None:
         ),
     )
 
-    assert three_two.action == "keep_exploring"
+    assert three_two.action == "retain_head"
     assert three_two.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
-    assert four_one.action == "keep_exploring"
+    assert four_one.action == "retain_head"
     assert four_one.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
 
 
@@ -449,10 +449,72 @@ def test_low_mid_candidate_runtime_failures_soft_abandon() -> None:
         ),
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "archive_lineage"
     assert decision.reason_codes == (
         SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     )
+
+
+def test_weak_positive_regression_with_checkpoint_rolls_back() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=1,
+            losses=5,
+            ties=6,
+            win_rate=1 / 12,
+            ci_low=-4.0,
+            ci_high=0.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+        branch_code_status="active_weak_positive",
+        branch_screening_tier="weak_positive",
+        has_checkpoint=True,
+    )
+
+    assert decision.action == "rollback_to_checkpoint"
+    assert decision.soft_abandon is False
+    assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
+
+
+def test_marginal_failed_followup_parks_lineage() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=1,
+            losses=5,
+            ties=6,
+            win_rate=1 / 12,
+            ci_low=-4.0,
+            ci_high=0.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+        has_checkpoint=True,
+    )
+
+    assert decision.action == "park_lineage"
+    assert decision.soft_abandon is True
+
+
+def test_no_effect_exhausted_parks_instead_of_archiving() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(wins=0, losses=0, ties=8, win_rate=0.0),
+        current_zero_win_streak=2,
+        branch_code_status="active_no_effect",
+        branch_screening_tier="no_effect",
+        has_checkpoint=True,
+    )
+
+    assert decision.action == "park_lineage"
+    assert decision.reason_codes == (SCREENING_ZERO_WIN_STREAK_EXHAUSTED,)
 
 
 def test_screening_telemetry_diagnostic_retries_before_streak_limit() -> None:
@@ -468,7 +530,7 @@ def test_screening_telemetry_diagnostic_retries_before_streak_limit() -> None:
         current_telemetry_diagnostic_streak=1,
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,)
     assert decision.next_telemetry_diagnostic_streak == 2
 
@@ -486,7 +548,7 @@ def test_telemetry_diagnostic_streak_exhaustion_soft_abandons() -> None:
         current_telemetry_diagnostic_streak=2,
     )
 
-    assert decision.action == "soft_abandon"
+    assert decision.action == "park_lineage"
     assert decision.reason_codes == (TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,)
     assert decision.next_telemetry_diagnostic_streak == 3
 
@@ -504,7 +566,7 @@ def test_telemetry_diagnostic_quality_regression_still_retries_before_streak_lim
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,)
     assert decision.next_telemetry_diagnostic_streak == 1
 
@@ -522,5 +584,5 @@ def test_validation_telemetry_diagnostic_uses_stage_retry_reason() -> None:
         ),
     )
 
-    assert decision.action == "keep_exploring"
+    assert decision.action == "retain_head"
     assert decision.reason_codes == (VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,)

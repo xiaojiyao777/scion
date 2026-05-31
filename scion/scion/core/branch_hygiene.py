@@ -44,6 +44,13 @@ BRANCH_LIFECYCLE_REROUTE_LOOP_LIMIT = 1
 RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE = (
     "runtime_saturated_diversity_reroute"
 )
+PARKED_BRANCH_CODE_STATUSES = frozenset(
+    {
+        "parked",
+        "parked_lineage",
+        "lineage_parked",
+    }
+)
 
 SUSPECT_BRANCH_CODE_STATUSES = frozenset(
     {
@@ -127,6 +134,107 @@ def branch_lifecycle_new_mechanism_ineligible(branch: Branch | None) -> bool:
         return False
     return bool(
         getattr(branch, "branch_lifecycle_new_mechanism_ineligible", False)
+    )
+
+
+def branch_is_parked_lineage(branch: Branch | None) -> bool:
+    return branch_code_status(branch) in PARKED_BRANCH_CODE_STATUSES
+
+
+def branch_has_retained_checkpoint(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    return bool(
+        getattr(branch, "best_quality_checkpoint_id", None)
+        or getattr(branch, "last_valid_checkpoint_id", None)
+    )
+
+
+def branch_has_actionable_diagnostic(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    if branch_requires_repair_focus(branch):
+        return True
+    status = branch_code_status(branch)
+    if status in {
+        "active_runtime_regression",
+        "telemetry_wiring_suspect",
+        "telemetry_invalid",
+    }:
+        return True
+    if getattr(branch, "pending_retry", False):
+        return True
+    if getattr(branch, "failure_codes", None):
+        return True
+    if getattr(branch, "branch_lifecycle_policy_blocks", 0):
+        return True
+    return False
+
+
+def branch_lineage_status(branch: Branch | None) -> str:
+    status = branch_code_status(branch)
+    tier = (
+        str(getattr(branch, "last_screening_feedback_tier", "") or "")
+        if branch is not None
+        else ""
+    )
+    rollback_count = (
+        max(0, int(getattr(branch, "rollback_count", 0) or 0))
+        if branch is not None
+        else 0
+    )
+    has_checkpoint = branch_has_retained_checkpoint(branch)
+    if branch_is_parked_lineage(branch):
+        return "parked"
+    if rollback_count > 0 and has_checkpoint:
+        if tier == "weak_positive" or status == "active_weak_positive":
+            return "restored_weak_positive"
+        return "restored_checkpoint"
+    if status in {
+        "discarded",
+        "regressed_followup",
+        "quality_regression",
+        "active_quality_regression",
+    }:
+        return "diagnostic_repair"
+    if status == "active_weak_positive" or tier == "weak_positive":
+        return "active_weak_positive"
+    if status == "active_marginal" or tier == "marginal":
+        return "active_marginal"
+    if status == "active_no_effect" or tier == "no_effect":
+        return "active_no_effect"
+    if branch_requires_repair_focus(branch):
+        return "diagnostic_repair"
+    if has_checkpoint:
+        return "checkpoint_retained"
+    return "open"
+
+
+def branch_checkpoint_status(branch: Branch | None) -> str:
+    if branch is None:
+        return "none"
+    if getattr(branch, "best_quality_checkpoint_id", None):
+        return "best_quality_retained"
+    if getattr(branch, "last_valid_checkpoint_id", None):
+        return "last_valid_retained"
+    return "none"
+
+
+def branch_prompt_card(branch: Branch | None) -> str:
+    """Compact generic branch card for APS prompts and sibling summaries."""
+    context = branch_hygiene_context(branch)
+    allowed = ",".join(context["allowed_next_actions"]) or "none"
+    forbidden = ",".join(context["forbidden_next_actions"]) or "none"
+    return (
+        f"lineage_status={context['lineage_status']} "
+        f"current_head_status={context['current_head_status']} "
+        f"best_checkpoint_status={context['best_checkpoint_status']} "
+        f"rollback_count={context['rollback_count']} "
+        f"allowed_next_actions={allowed} "
+        f"forbidden_next_actions={forbidden} "
+        f"latest_head_failed={str(context['latest_head_failed']).lower()} "
+        "lineage_retained_checkpoint="
+        f"{str(context['lineage_retained_checkpoint']).lower()}"
     )
 
 
@@ -305,8 +413,44 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     else:
         baseline_policy = "clean"
         repair_focus_reason = None
+    lineage_status = branch_lineage_status(branch)
+    current_head_status = status
+    best_checkpoint_status = branch_checkpoint_status(branch)
+    rollback_count = (
+        max(0, int(getattr(branch, "rollback_count", 0) or 0))
+        if branch is not None
+        else 0
+    )
+    latest_head_failed = status in {
+        "discarded",
+        "regressed_followup",
+        "quality_regression",
+        "active_quality_regression",
+    }
+    lineage_retained_checkpoint = branch_has_retained_checkpoint(branch)
+    allowed_next_actions = _branch_card_allowed_actions(
+        branch,
+        lineage_status=lineage_status,
+        strict_same_mechanism_followup=strict_same_mechanism_followup,
+        repair_focus_required=repair_focus_required,
+    )
+    forbidden_next_actions = _branch_card_forbidden_actions(
+        branch,
+        lineage_status=lineage_status,
+        strict_same_mechanism_followup=strict_same_mechanism_followup,
+        latest_head_failed=latest_head_failed,
+        has_checkpoint=lineage_retained_checkpoint,
+    )
     context = {
         "branch_code_status": status,
+        "lineage_status": lineage_status,
+        "current_head_status": current_head_status,
+        "best_checkpoint_status": best_checkpoint_status,
+        "rollback_count": rollback_count,
+        "allowed_next_actions": allowed_next_actions,
+        "forbidden_next_actions": forbidden_next_actions,
+        "latest_head_failed": latest_head_failed,
+        "lineage_retained_checkpoint": lineage_retained_checkpoint,
         "last_screening_feedback_tier": last_screening_feedback_tier,
         "last_telemetry_outcome": last_telemetry_outcome,
         "repair_focus_required": repair_focus_required,
@@ -361,6 +505,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
 def branch_hygiene_guidance(branch: Branch | None) -> str:
     """Human-readable branch hygiene guidance for prompts and diagnostics."""
     context = branch_hygiene_context(branch)
+    card = branch_prompt_card(branch)
     status = context["branch_code_status"]
     outcome = context.get("last_telemetry_outcome") or "unknown"
     tier = context.get("last_screening_feedback_tier") or "unknown"
@@ -369,6 +514,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         protected = _protected_mechanism_text(context)
         allowed_actions = _allowed_actions_text(context)
         return (
+            f"{card}; "
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; "
             f"repair_focus={context['repair_focus_reason']}; "
@@ -397,6 +543,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         allowed_actions = _allowed_actions_text(context)
         if context.get("weak_positive_followup"):
             return (
+                f"{card}; "
                 f"branch_code_status={status}; telemetry_outcome={outcome}; "
                 f"screening_tier={tier}; baseline_policy="
                 f"{context['baseline_policy']}; branch_followup_policy="
@@ -418,6 +565,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
                 f"{reroute_suffix}"
             )
         return (
+            f"{card}; "
             f"branch_code_status={status}; telemetry_outcome={outcome}; "
             f"screening_tier={tier}; baseline_policy="
             f"{context['baseline_policy']}; branch_followup_policy="
@@ -562,6 +710,66 @@ def _allowed_actions_text(context: Mapping[str, Any]) -> str:
     return ",".join(actions) if actions else "none"
 
 
+def _branch_card_allowed_actions(
+    branch: Branch | None,
+    *,
+    lineage_status: str,
+    strict_same_mechanism_followup: bool,
+    repair_focus_required: bool,
+) -> list[str]:
+    if branch_is_parked_lineage(branch):
+        return ["clean_fork"]
+    if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
+        branch
+    ):
+        return ["clean_fork"]
+    actions: list[str] = []
+    if repair_focus_required:
+        actions.extend(["repair", "telemetry_wiring"])
+    if lineage_status in {
+        "active_weak_positive",
+        "restored_weak_positive",
+        "restored_checkpoint",
+        "checkpoint_retained",
+    }:
+        actions.append("refine_checkpoint")
+    if lineage_status in {
+        "active_weak_positive",
+        "restored_weak_positive",
+        "active_marginal",
+    }:
+        actions.extend(["tune", "integrate", "parameterize"])
+    if strict_same_mechanism_followup:
+        actions.extend(SAME_MECHANISM_ALLOWED_ACTIONS)
+    if lineage_status == "active_no_effect":
+        actions.extend(["diagnose", "repair"])
+    if not actions:
+        actions.append("open_exploration")
+    return list(dict.fromkeys(actions))
+
+
+def _branch_card_forbidden_actions(
+    branch: Branch | None,
+    *,
+    lineage_status: str,
+    strict_same_mechanism_followup: bool,
+    latest_head_failed: bool,
+    has_checkpoint: bool,
+) -> list[str]:
+    forbidden: list[str] = []
+    if branch_is_parked_lineage(branch):
+        forbidden.append("consume_active_slot")
+    if strict_same_mechanism_followup:
+        forbidden.append("unrelated_mechanism")
+    if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
+        branch
+    ):
+        forbidden.append("unchanged_repeat")
+    if latest_head_failed and has_checkpoint:
+        forbidden.append("treat_failed_head_as_lineage_failure")
+    return list(dict.fromkeys(forbidden))
+
+
 __all__ = [
     "ACTIVATION_MISSING_OR_WIRING_SUSPECT",
     "BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE",
@@ -572,6 +780,7 @@ __all__ = [
     "CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM",
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
     "OPEN_EXPLORATION_ALLOWED",
+    "PARKED_BRANCH_CODE_STATUSES",
     "REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK",
     "NO_UNRELATED_MECHANISM_IDS",
     "OPEN_EXPLORATION_MODE",
@@ -584,12 +793,18 @@ __all__ = [
     "TELEMETRY_WIRING_SUSPECT",
     "WIRING_SUSPECT_REQUIRES_REPAIR",
     "branch_allows_clean_workspace_reuse",
+    "branch_checkpoint_status",
     "branch_code_status",
+    "branch_has_actionable_diagnostic",
+    "branch_has_retained_checkpoint",
     "branch_lifecycle_new_mechanism_ineligible",
     "branch_lifecycle_reroute_context",
     "branch_hygiene_context",
     "branch_hygiene_guidance",
+    "branch_is_parked_lineage",
+    "branch_lineage_status",
     "branch_mechanism_ids",
+    "branch_prompt_card",
     "branch_requires_repair_focus",
     "branch_requires_same_mechanism_followup",
     "branch_workspace_for_proposal",

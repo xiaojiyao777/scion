@@ -5,7 +5,11 @@ from typing import List, Literal, Optional
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
     CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
+    branch_has_actionable_diagnostic,
+    branch_has_retained_checkpoint,
+    branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
+    branch_lineage_status,
     branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch, BranchState
@@ -73,14 +77,16 @@ class Scheduler:
         active_for_proposal_capacity = [
             b
             for b in active
-            if not (
-                b.state in _RESEARCH_STATES
-                and branch_lifecycle_new_mechanism_ineligible(b)
-            )
+            if _counts_toward_proposal_capacity(b)
         ]
         # BLOCKED_INFRA branches are not schedulable, though they still count
         # toward the active-branch cap until recovery/abandon clears them.
-        schedulable = [b for b in active if b.state != BranchState.BLOCKED_INFRA]
+        schedulable = [
+            b
+            for b in active
+            if b.state != BranchState.BLOCKED_INFRA
+            and not branch_is_parked_lineage(b)
+        ]
 
         for tier in _HIGH_PRIORITY_TIERS:
             candidates = [b for b in schedulable if b.state in tier]
@@ -108,6 +114,7 @@ class Scheduler:
                 branch
                 for branch in research
                 if not branch_lifecycle_new_mechanism_ineligible(branch)
+                and not branch_is_parked_lineage(branch)
             ]
             if not eligible_research:
                 if len(active_for_proposal_capacity) < self._max_active_branches:
@@ -122,6 +129,19 @@ class Scheduler:
                     branch=None,
                     reason="active_branch_limit_reached",
                     slot="capacity_blocked",
+                )
+            priority_candidates = [
+                branch
+                for branch in eligible_research
+                if _branch_research_priority(branch) <= 40
+            ]
+            if priority_candidates:
+                selected = _select_budgeted(priority_candidates)
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
+                    slot=_slot_for_branch(selected),
                 )
             if (
                 len(active_for_proposal_capacity) < self._max_active_branches
@@ -164,7 +184,7 @@ class Scheduler:
                     slot="explore_new",
                 )
             selection_pool = clean_research or eligible_research
-            selected = _select_fair(selection_pool)
+            selected = _select_budgeted(selection_pool)
             return SchedulerAction(
                 action="run_existing",
                 branch=selected,
@@ -196,8 +216,61 @@ def _select_fair(candidates: List[Branch]) -> Branch:
     )[0]
 
 
+def _select_budgeted(candidates: List[Branch]) -> Branch:
+    return sorted(
+        candidates,
+        key=lambda b: (
+            _branch_research_priority(b),
+            0 if b.pending_retry else 1,
+            b.updated_at,
+            b.created_at,
+        ),
+    )[0]
+
+
 def _established_branch(branch: Branch) -> bool:
     return bool(branch.direction)
+
+
+def _counts_toward_proposal_capacity(branch: Branch) -> bool:
+    if branch_is_parked_lineage(branch):
+        return False
+    if branch.state in _RESEARCH_STATES and (
+        branch_lifecycle_new_mechanism_ineligible(branch)
+        or _no_effect_without_actionable_diagnostic(branch)
+    ):
+        return False
+    return True
+
+
+def _branch_research_priority(branch: Branch) -> int:
+    status = branch_lineage_status(branch)
+    if getattr(branch, "pending_retry", False):
+        return 0
+    if status in {"active_weak_positive", "restored_weak_positive"}:
+        return 10
+    if status == "restored_checkpoint":
+        return 20
+    if status == "active_marginal":
+        return 30
+    if branch_has_actionable_diagnostic(branch):
+        return 40
+    if not _established_branch(branch):
+        return 50
+    if _no_effect_without_actionable_diagnostic(branch):
+        return 70
+    if branch_has_retained_checkpoint(branch):
+        return 80
+    return 60
+
+
+def _no_effect_without_actionable_diagnostic(branch: Branch) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    return (
+        (status == "active_no_effect" or tier == "no_effect")
+        and not branch_has_actionable_diagnostic(branch)
+    )
 
 
 def _slot_for_branch(
@@ -211,6 +284,11 @@ def _slot_for_branch(
 ]:
     if getattr(branch, "pending_retry", False):
         return "repair_diagnostic"
+    lineage_status = branch_lineage_status(branch)
+    if lineage_status in {"active_weak_positive", "restored_weak_positive"}:
+        return "exploit_weak_positive"
+    if lineage_status == "restored_checkpoint":
+        return "refine_active"
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
     diagnostic_tiers = {
@@ -229,8 +307,6 @@ def _slot_for_branch(
     }
     if status in diagnostic_statuses:
         return "repair_diagnostic"
-    if tier == "weak_positive" or status == "active_weak_positive":
-        return "exploit_weak_positive"
     if tier in diagnostic_tiers:
         return "repair_diagnostic"
     return "refine_active"
@@ -243,12 +319,18 @@ def _reason_for_branch(branch: Branch) -> str:
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
     if slot == "exploit_weak_positive":
+        if branch_lineage_status(branch) == "restored_weak_positive":
+            return "restored_weak_positive_checkpoint_followup"
         return "weak_positive_signal_followup"
+    if branch_lineage_status(branch) == "restored_checkpoint":
+        return "restored_checkpoint_followup"
     if slot == "repair_diagnostic":
         if status in {"telemetry_wiring_suspect", "telemetry_invalid"}:
             return "telemetry_diagnostic_followup"
         if status == "active_runtime_regression" or tier == "runtime_regression":
             return "runtime_diagnostic_followup"
+        if _no_effect_without_actionable_diagnostic(branch):
+            return "no_effect_without_actionable_diagnostic_deprioritized"
         if status.startswith("active_") or tier:
             return "effect_diagnostic_followup"
         return "diagnostic_followup"

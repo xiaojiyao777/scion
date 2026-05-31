@@ -166,10 +166,10 @@ def _compact_algorithm_smoke_repair_feedback(
             "required_calls": required_calls,
             "allowed_repair_shape": _allowed_repair_shape(actionable, required_calls),
             "forbidden_repair_shape": (
-                "Do not rename the mechanism id, weaken expected_telemetry, "
-                "fabricate positive deltas, force unconditional activation, use "
-                "max(..., 1), or add guarantee-positive fallback behavior just "
-                "to satisfy smoke."
+                "Do not rename the mechanism id, do not weaken "
+                "expected_telemetry, do not fabricate positive deltas, do not "
+                "force unconditional activation, do not use max(..., 1), or add "
+                "guarantee-positive fallback behavior just to satisfy smoke."
             ),
             "conditional_activation_guidance": (
                 "For rare-trigger mechanisms, instrument the natural condition, "
@@ -548,8 +548,8 @@ def _solver_design_code_scope_control(
                 "when they exist. Baseline or structural telemetry ids outside "
                 "mechanism_changes are diagnostic context only; do not "
                 "introduce or increase them as mechanism evidence. Do not "
-                "force rare branches to run, fabricate positive counters, "
-                "wrap counters with max(..., 1), or add "
+                "force rare branches to run, do not fabricate positive counters, "
+                "do not wrap counters with max(..., 1), or add "
                 "fallback behavior whose only purpose is satisfying telemetry."
             ),
             "telemetry_obligation_rule": _solver_design_telemetry_obligation_rule(

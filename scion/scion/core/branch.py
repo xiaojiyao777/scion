@@ -82,6 +82,7 @@ class BranchController:
             state=BranchState.EXPLORE,
             base_champion_id=champion.version,
             base_champion_hash=champion.code_snapshot_hash,
+            lineage_id=branch_id,
             weight_revision=champion.weight_revision,
         )
         self._branches[branch_id] = branch

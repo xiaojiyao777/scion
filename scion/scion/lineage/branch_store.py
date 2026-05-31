@@ -85,7 +85,7 @@ class BranchStore:
                 """
                 INSERT OR REPLACE INTO branches
                 (branch_id, state, base_champion_id, base_champion_hash,
-                 current_code_hash, last_clean_code_hash, retry_count,
+                 lineage_id, current_code_hash, last_clean_code_hash, retry_count,
                  screening_expand_count, validation_expand_count,
                  failure_codes, created_at, updated_at, direction,
                  weight_revision, branch_code_status,
@@ -97,15 +97,18 @@ class BranchStore:
                  branch_lifecycle_new_mechanism_ineligible,
                  branch_lifecycle_reroute_reason,
                  last_branch_lifecycle_policy_block_json,
+                 best_quality_checkpoint_id, last_valid_checkpoint_id,
+                 rollback_count, last_rollback_reason,
                  pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
                     branch.state.value,
                     branch.base_champion_id,
                     branch.base_champion_hash,
+                    branch.lineage_id or branch.branch_id,
                     branch.current_code_hash,
                     branch.last_clean_code_hash,
                     branch.retry_count,
@@ -128,6 +131,10 @@ class BranchStore:
                     json.dumps(
                         dict(branch.last_branch_lifecycle_policy_block or {})
                     ),
+                    branch.best_quality_checkpoint_id,
+                    branch.last_valid_checkpoint_id,
+                    branch.rollback_count,
+                    branch.last_rollback_reason,
                     1 if branch.pending_retry else 0,
                     branch.blocked_rounds,
                     branch.consecutive_llm_retries,
@@ -164,6 +171,7 @@ class BranchStore:
             state=BranchState(d["state"]),
             base_champion_id=d["base_champion_id"],
             base_champion_hash=d["base_champion_hash"],
+            lineage_id=d.get("lineage_id") or d["branch_id"],
             current_code_hash=d.get("current_code_hash"),
             last_clean_code_hash=d.get("last_clean_code_hash"),
             retry_count=d.get("retry_count", 0),
@@ -198,6 +206,10 @@ class BranchStore:
             last_branch_lifecycle_policy_block=_json_mapping(
                 d.get("last_branch_lifecycle_policy_block_json")
             ),
+            best_quality_checkpoint_id=d.get("best_quality_checkpoint_id"),
+            last_valid_checkpoint_id=d.get("last_valid_checkpoint_id"),
+            rollback_count=d.get("rollback_count") or 0,
+            last_rollback_reason=d.get("last_rollback_reason"),
             pending_retry=bool(d.get("pending_retry") or 0),
             blocked_rounds=d.get("blocked_rounds") or 0,
             consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,

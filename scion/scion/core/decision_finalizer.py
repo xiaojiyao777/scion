@@ -8,11 +8,17 @@ from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.branch_hygiene import (
+    BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
+    BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
     WIRING_SUSPECT_REQUIRES_REPAIR,
 )
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
+    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+    BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
     SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
@@ -107,7 +113,7 @@ class DecisionFinalizer:
     cleanup_workspace: Callable[[str], None]
     persist_branch_state: Callable[[str], None]
     reset_recent_abandoned_count: Callable[[], None]
-    restore_branch_checkpoint: Callable[[Branch], bool] | None = None
+    restore_branch_checkpoint: Callable[..., bool] | None = None
 
     def apply(
         self,
@@ -320,12 +326,22 @@ class DecisionFinalizer:
         telemetry_effect_zero = TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in set(
             decision_reason_codes or ()
         )
+        lifecycle_action = _lifecycle_action(decision_reason_codes)
+        park_lineage = lifecycle_action == "park_lineage"
+        rollback_to_checkpoint = lifecycle_action == "rollback_to_checkpoint"
+        retain_checkpoint = lifecycle_action == "retain_checkpoint"
+        positive_low_signal_continue = _positive_low_signal_continue(
+            decision_reason_codes
+        )
         verification_passed = verification_result.passed
         has_positive_signal = (
             protocol_result is not None
             and protocol_result.stats is not None
             and protocol_result.stats.win_rate > 0
-            and not _screening_quality_regressed(protocol_result.stats)
+            and (
+                positive_low_signal_continue
+                or not _screening_quality_regressed(protocol_result.stats)
+            )
         )
         preserve_low_signal_branch = _preserve_low_signal_screening_workspace(
             protocol_result,
@@ -349,7 +365,14 @@ class DecisionFinalizer:
         if telemetry_repairable:
             repair_mechanism_ids = mechanism_ids_for_repair(hypothesis)
         restored_regressed_checkpoint = False
-        if telemetry_repairable:
+        if telemetry_repairable and (park_lineage or retain_checkpoint):
+            _park_lineage(
+                branch,
+                reason_codes=tuple(decision_reason_codes or ()),
+                checkpoint_retained=retain_checkpoint,
+            )
+            branch.telemetry_repair_mechanism_ids = ()
+        elif telemetry_repairable:
             branch.branch_code_status = "telemetry_wiring_suspect"
             branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
             branch.branch_mechanism_ids = _merge_mechanism_ids(
@@ -374,13 +397,30 @@ class DecisionFinalizer:
             )
             branch.telemetry_repair_mechanism_ids = ()
         elif not preserve_low_signal_branch:
-            if regressed_followup and self.restore_branch_checkpoint is not None:
-                restored_regressed_checkpoint = self.restore_branch_checkpoint(branch)
+            if (
+                (rollback_to_checkpoint or regressed_followup)
+                and self.restore_branch_checkpoint is not None
+            ):
+                restored_regressed_checkpoint = self._restore_checkpoint(
+                    branch,
+                    reason=(
+                        "rollback_to_checkpoint"
+                        if rollback_to_checkpoint
+                        else "regressed_followup"
+                    ),
+                    reason_codes=tuple(decision_reason_codes or ()),
+                )
             if regressed_followup and not restored_regressed_checkpoint:
                 branch.branch_code_status = "regressed_followup"
                 branch.current_code_hash = branch.last_clean_code_hash
                 branch.last_screening_feedback_tier = "quality_regression"
                 branch.last_telemetry_outcome = "regressed_followup"
+            elif park_lineage or retain_checkpoint:
+                _park_lineage(
+                    branch,
+                    reason_codes=tuple(decision_reason_codes or ()),
+                    checkpoint_retained=retain_checkpoint,
+                )
             elif not regressed_followup:
                 branch.branch_code_status = "discarded"
             branch.branch_mechanism_ids = _merge_mechanism_ids(
@@ -389,11 +429,15 @@ class DecisionFinalizer:
             )
             branch.telemetry_repair_mechanism_ids = ()
         preserve_workspace = verification_passed and (
-            preserve_low_signal_branch or restored_regressed_checkpoint
+            preserve_low_signal_branch
+            or restored_regressed_checkpoint
         )
 
         if not preserve_workspace:
-            self.discard_branch_workspace(bid)
+            if park_lineage or retain_checkpoint:
+                self._discard_current_workspace_preserve_checkpoints(bid)
+            else:
+                self.discard_branch_workspace(bid)
             self.branch_patches.pop(bid, None)
 
         if preserve_workspace and branch.direction is None:
@@ -447,35 +491,60 @@ class DecisionFinalizer:
         self.reset_recent_abandoned_count()
         self.persist_branch_state(bid)
         if telemetry_repairable:
-            reason_code = (
-                VALIDATION_TELEMETRY_REPAIRABLE
-                if telemetry_repair_stage == "validation"
-                else TELEMETRY_VALIDATION_REPAIRABLE
-            )
-            reason = (
-                f"{reason_code}: repair declared mechanism telemetry on the "
-                f"same branch; repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}; "
-                f"repair_policy={REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK}; "
-                f"repair_mechanism_ids={','.join(repair_mechanism_ids) or 'unknown'}; "
-                f"branch_code_status={branch.branch_code_status}; "
-                f"telemetry_outcome={branch.last_telemetry_outcome}"
-            )
-            attempt_kind = (
-                "validation_repair_required"
-                if telemetry_repair_stage == "validation"
-                else "telemetry_repairable"
-            )
+            if park_lineage or retain_checkpoint:
+                reason = (
+                    "CONTINUE_EXPLORE: "
+                    f"{'retain_checkpoint' if retain_checkpoint else 'park_lineage'}; "
+                    "telemetry diagnostic budget exhausted without archiving "
+                    "the lineage"
+                )
+                attempt_kind = "branch_lifecycle_policy"
+            else:
+                reason_code = (
+                    VALIDATION_TELEMETRY_REPAIRABLE
+                    if telemetry_repair_stage == "validation"
+                    else TELEMETRY_VALIDATION_REPAIRABLE
+                )
+                reason = (
+                    f"{reason_code}: repair declared mechanism telemetry on the "
+                    f"same branch; repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}; "
+                    f"repair_policy={REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK}; "
+                    f"repair_mechanism_ids={','.join(repair_mechanism_ids) or 'unknown'}; "
+                    f"branch_code_status={branch.branch_code_status}; "
+                    f"telemetry_outcome={branch.last_telemetry_outcome}"
+                )
+                attempt_kind = (
+                    "validation_repair_required"
+                    if telemetry_repair_stage == "validation"
+                    else "telemetry_repairable"
+                )
         else:
             signal_label = _screening_signal_label(
                 preserve_low_signal_branch=preserve_low_signal_branch,
                 screening_feedback=screening_feedback,
                 decision_reason_codes=decision_reason_codes,
             )
-            reason = (
-                f"CONTINUE_EXPLORE: {signal_label}; improve the same branch"
-                if preserve_low_signal_branch
-                else "CONTINUE_EXPLORE: re-propose next step"
-            )
+            if restored_regressed_checkpoint:
+                reason = (
+                    "CONTINUE_EXPLORE: rollback_to_checkpoint; "
+                    "latest refinement was archived as negative evidence"
+                )
+            elif park_lineage:
+                reason = (
+                    "CONTINUE_EXPLORE: park_lineage; keep lineage evidence and "
+                    "prefer clean fork or later checkpoint-aware follow-up"
+                )
+            elif retain_checkpoint:
+                reason = (
+                    "CONTINUE_EXPLORE: retain_checkpoint; preserve best "
+                    "checkpoint and avoid treating failed head as active"
+                )
+            else:
+                reason = (
+                    f"CONTINUE_EXPLORE: {signal_label}; improve the same branch"
+                    if preserve_low_signal_branch
+                    else "CONTINUE_EXPLORE: re-propose next step"
+                )
             runtime_budget_code = runtime_budget_diagnostic_code(protocol_result)
             if runtime_budget_code:
                 reason = (
@@ -495,6 +564,53 @@ class DecisionFinalizer:
                 WIRING_SUSPECT_REQUIRES_REPAIR if telemetry_repairable else ""
             ),
         )
+
+    def _restore_checkpoint(
+        self,
+        branch: Branch,
+        *,
+        reason: str,
+        reason_codes: tuple[str, ...],
+    ) -> bool:
+        if self.restore_branch_checkpoint is None:
+            return False
+        previous_count = int(getattr(branch, "rollback_count", 0) or 0)
+        try:
+            restored = self.restore_branch_checkpoint(
+                branch,
+                reason=reason,
+                reason_codes=reason_codes,
+            )
+        except TypeError:
+            restored = self.restore_branch_checkpoint(branch)
+        if not restored:
+            return False
+        if int(getattr(branch, "rollback_count", 0) or 0) <= previous_count:
+            branch.rollback_count = previous_count + 1
+        branch.last_rollback_reason = reason
+        _merge_branch_lifecycle_block(
+            branch,
+            action="rollback_to_checkpoint",
+            reason_codes=reason_codes,
+        )
+        return True
+
+    def _discard_current_workspace_preserve_checkpoints(self, branch_id: str) -> None:
+        workspace = self.branch_workspaces.pop(branch_id, None)
+        if not workspace:
+            return
+        try:
+            self.archive_workspace(workspace, branch_id)
+        except Exception as exc:
+            logger.debug(
+                "Branch %s: parked workspace archive failed: %s",
+                branch_id,
+                exc,
+            )
+        try:
+            self.cleanup_workspace(workspace)
+        except Exception:
+            pass
 
     def _promote(
         self,
@@ -591,7 +707,10 @@ def _preserve_low_signal_screening_workspace(
     stats = protocol_result.stats
     if stats is None:
         return False
-    if _screening_quality_regressed(stats):
+    positive_low_signal_continue = _positive_low_signal_continue(
+        decision_reason_codes
+    )
+    if _screening_quality_regressed(stats) and not positive_low_signal_continue:
         return False
     if stats.median_delta is not None and stats.median_delta < 0:
         return False
@@ -620,6 +739,103 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _positive_low_signal_continue(
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> bool:
+    reason_set = set(decision_reason_codes or ())
+    return bool(
+        reason_set
+        & {
+            SCREENING_MARGINAL_SIGNAL_CONTINUE,
+            SCREENING_WEAK_SIGNAL_CONTINUE,
+        }
+    )
+
+
+def _lifecycle_action(
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> str:
+    reason_set = set(decision_reason_codes or ())
+    if BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT in reason_set:
+        return "rollback_to_checkpoint"
+    if BRANCH_LIFECYCLE_PARK_LINEAGE in reason_set:
+        return "park_lineage"
+    if BRANCH_LIFECYCLE_RETAIN_CHECKPOINT in reason_set:
+        return "retain_checkpoint"
+    if BRANCH_LIFECYCLE_ARCHIVE_LINEAGE in reason_set:
+        return "archive_lineage"
+    return "retain_head"
+
+
+def _park_lineage(
+    branch: Branch,
+    *,
+    reason_codes: tuple[str, ...],
+    checkpoint_retained: bool,
+) -> None:
+    branch.branch_code_status = "parked_lineage"
+    branch.last_telemetry_outcome = (
+        "checkpoint_retained"
+        if checkpoint_retained
+        else "parked_lineage"
+    )
+    branch.branch_lifecycle_new_mechanism_ineligible = True
+    branch.branch_lifecycle_reroute_reason = (
+        BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK
+    )
+    _merge_branch_lifecycle_block(
+        branch,
+        action="park_lineage",
+        reason_codes=reason_codes,
+    )
+
+
+def _merge_branch_lifecycle_block(
+    branch: Branch,
+    *,
+    action: str,
+    reason_codes: tuple[str, ...],
+) -> None:
+    existing = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    block_count = int(
+        existing.get("block_count")
+        or getattr(branch, "branch_lifecycle_policy_blocks", 0)
+        or 0
+    ) + 1
+    lifecycle_reason_codes = tuple(
+        dict.fromkeys(
+            [
+                *tuple(existing.get("lifecycle_action_reason_codes") or ()),
+                *tuple(reason_codes or ()),
+            ]
+        )
+    )
+    existing.update(
+        {
+            "reason": action,
+            "block_count": block_count,
+            "reroute_reason": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+            "new_mechanism_ineligible_reason": (
+                BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE
+            ),
+            "lifecycle_action_reason_codes": list(lifecycle_reason_codes),
+            "rollback_count": int(getattr(branch, "rollback_count", 0) or 0),
+            "best_quality_checkpoint_id": getattr(
+                branch,
+                "best_quality_checkpoint_id",
+                None,
+            ),
+            "last_valid_checkpoint_id": getattr(
+                branch,
+                "last_valid_checkpoint_id",
+                None,
+            ),
+        }
+    )
+    branch.branch_lifecycle_policy_blocks = block_count
+    branch.last_branch_lifecycle_policy_block = existing
 
 
 def _retained_screening_status(

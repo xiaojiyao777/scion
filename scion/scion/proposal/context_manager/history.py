@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Dict, List, Optional
 
-from scion.core.branch_hygiene import branch_hygiene_context
+from scion.core.branch_hygiene import branch_hygiene_context, branch_prompt_card
 from scion.core.models import (
     Branch,
     ExperimentStage,
@@ -190,6 +190,7 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
     last_telemetry_outcome = context.get("last_telemetry_outcome") or "none"
     repair_focus_required = bool(context.get("repair_focus_required"))
     parts = [
+        branch_prompt_card(branch),
         f"branch_code_status={context['branch_code_status']}",
         f"last_telemetry_outcome={last_telemetry_outcome}",
         f"repair_focus_required={str(repair_focus_required).lower()}",

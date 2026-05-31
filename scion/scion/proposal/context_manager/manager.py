@@ -553,8 +553,19 @@ class ContextManager:
             branch,
             branch_step_history,
         )
-        branch_created = branch_created_files(branch, branch_step_history)
-        branch_touched = branch_touched_files(branch, branch_step_history)
+        branch_workspace_visible = bool(
+            branch_workspace and os.path.isdir(branch_workspace)
+        )
+        branch_created = (
+            branch_created_files(branch, branch_step_history)
+            if branch_workspace_visible or branch_file_sources
+            else ()
+        )
+        branch_touched = (
+            branch_touched_files(branch, branch_step_history)
+            if branch_workspace_visible or branch_file_sources
+            else ()
+        )
         normalized_target_file = str(hypothesis.target_file or "").replace(
             "\\",
             "/",

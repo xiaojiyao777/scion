@@ -129,6 +129,47 @@ def test_sibling_prompt_projection_includes_lifecycle_reroute_policy() -> None:
     ) in blocked_line
 
 
+def test_sibling_prompt_projection_includes_checkpoint_branch_card() -> None:
+    branch = _branch("restore123456", branch_code_status="regressed_followup")
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.rollback_count = 1
+
+    summary = _summarise_siblings([branch])
+    prompt = _hypothesis_prompt_user_text(summary)
+    restore_line = next(line for line in prompt.splitlines() if "restore" in line)
+
+    assert "lineage_status=restored_weak_positive" in restore_line
+    assert "current_head_status=regressed_followup" in restore_line
+    assert "best_checkpoint_status=best_quality_retained" in restore_line
+    assert "rollback_count=1" in restore_line
+    assert "latest_head_failed=true" in restore_line
+    assert "lineage_retained_checkpoint=true" in restore_line
+    assert "allowed_next_actions=refine_checkpoint,tune,integrate,parameterize" in (
+        restore_line
+    )
+    assert (
+        "forbidden_next_actions=treat_failed_head_as_lineage_failure"
+        in restore_line
+    )
+
+
+def test_no_effect_branch_card_marks_unchanged_repeat_forbidden() -> None:
+    branch = _branch("noeffect123", branch_code_status="active_no_effect")
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    rendered = branch_hygiene_guidance(branch)
+
+    assert "lineage_status=active_no_effect" in rendered
+    assert "current_head_status=active_no_effect" in rendered
+    assert "best_checkpoint_status=none" in rendered
+    assert "allowed_next_actions=clean_fork" in rendered
+    assert "forbidden_next_actions=unrelated_mechanism,unchanged_repeat" in rendered
+    for forbidden in ("CVRP", "route", "capacity", "customer", "vehicle"):
+        assert forbidden not in rendered
+
+
 def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
     branch = _branch("followup123", branch_code_status="active_no_effect")
     branch.last_telemetry_outcome = "no_objective_effect"

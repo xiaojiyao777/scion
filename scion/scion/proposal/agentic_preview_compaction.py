@@ -184,7 +184,9 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
             "micro_benchmark": _compact_micro_benchmark_section(
                 value.get("micro_benchmark")
             ),
-            "runtime": _compact_runtime_section(value.get("runtime")),
+            "runtime": _compact_runtime_section(
+                value.get("runtime") or value.get("runtime_counters")
+            ),
             "run": _compact_smoke_run_section(value.get("run")),
             "runs": _compact_smoke_runs(value.get("runs")),
         }
@@ -420,6 +422,13 @@ def _compact_runtime_section(value: Any) -> dict[str, Any] | None:
 
 def _compact_smoke_run_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
+        return None
+    if (
+        value.get("success") is True
+        and value.get("exit_code") in (None, 0)
+        and value.get("error_category") in (None, "")
+        and value.get("stderr") in (None, "")
+    ):
         return None
     return _drop_empty_mapping(
         {
