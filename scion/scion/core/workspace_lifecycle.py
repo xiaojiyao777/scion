@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, MutableMapping, Protocol
 
 from scion.core.branch_hygiene import branch_requires_repair_focus
@@ -42,6 +44,19 @@ class AppliedPatch:
     patch: PatchProposal
 
 
+@dataclass(frozen=True)
+class BranchWorkspaceCheckpoint:
+    workspace: str
+    checkpoint_workspace: str
+    current_code_hash: str | None
+    last_clean_code_hash: str | None
+    branch_code_status: str
+    last_screening_feedback_tier: str | None
+    last_telemetry_outcome: str | None
+    branch_mechanism_ids: tuple[str, ...]
+    patch: PatchProposal | None
+
+
 @dataclass
 class WorkspaceLifecycleService:
     """Own workspace setup, patch materialization, and registry sync.
@@ -56,6 +71,9 @@ class WorkspaceLifecycleService:
     branch_patches: MutableMapping[str, PatchProposal]
     champion_lock: Any
     get_champion: Callable[[], ChampionState]
+    branch_checkpoints: MutableMapping[str, BranchWorkspaceCheckpoint] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def from_owner(cls, owner: Any) -> "WorkspaceLifecycleService":
@@ -110,6 +128,8 @@ class WorkspaceLifecycleService:
         sync_registry: bool = False,
     ) -> AppliedPatch:
         """Apply a patch and record the candidate code hash before verification."""
+        if remember_patch:
+            self._capture_branch_checkpoint(branch, workspace)
         code_hash = self.materializer.apply_patch(workspace, patch)
         if remember_patch:
             self.branch_patches[branch.branch_id] = patch
@@ -121,7 +141,55 @@ class WorkspaceLifecycleService:
     def record_verification_pass(self, branch: Branch, code_hash: str) -> None:
         self.branch_controller.record_verification_pass(branch.branch_id, code_hash)
 
+    def restore_branch_checkpoint(self, branch: Branch) -> bool:
+        """Restore the last protected branch workspace checkpoint.
+
+        This is used when a same-branch follow-up passes syntax/contract/
+        verification but later screening shows that the new head regressed.
+        Verification updates the clean code hash before screening, so the prior
+        screened checkpoint must be captured before patch application.
+        """
+        checkpoint = self.branch_checkpoints.pop(branch.branch_id, None)
+        if checkpoint is None:
+            return False
+        src = Path(checkpoint.checkpoint_workspace)
+        dest = Path(checkpoint.workspace)
+        if not src.is_dir():
+            return False
+        try:
+            if dest.exists():
+                self.materializer.cleanup(str(dest))
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(src, dest, symlinks=False)
+            self.branch_workspaces[branch.branch_id] = str(dest)
+            branch.current_code_hash = checkpoint.current_code_hash
+            branch.last_clean_code_hash = checkpoint.last_clean_code_hash
+            branch.branch_code_status = checkpoint.branch_code_status
+            branch.last_screening_feedback_tier = (
+                checkpoint.last_screening_feedback_tier
+            )
+            branch.last_telemetry_outcome = checkpoint.last_telemetry_outcome
+            branch.branch_mechanism_ids = checkpoint.branch_mechanism_ids
+            if checkpoint.patch is None:
+                self.branch_patches.pop(branch.branch_id, None)
+            else:
+                self.branch_patches[branch.branch_id] = checkpoint.patch
+            return True
+        finally:
+            try:
+                if src.exists():
+                    shutil.rmtree(src)
+            except Exception:
+                pass
+
     def discard_branch_workspace(self, branch_id: str) -> None:
+        checkpoint = self.branch_checkpoints.pop(branch_id, None)
+        if checkpoint is not None:
+            try:
+                shutil.rmtree(checkpoint.checkpoint_workspace)
+            except Exception:
+                pass
         workspace = self.branch_workspaces.pop(branch_id, None)
         if not workspace:
             return
@@ -154,3 +222,47 @@ class WorkspaceLifecycleService:
             pool_mgr.export_registry(candidate_pool, workspace)
         except Exception as exc:
             logger.debug("_sync_pool_registry failed (non-fatal): %s", exc)
+
+    def _capture_branch_checkpoint(self, branch: Branch, workspace: str) -> None:
+        if not _should_checkpoint_branch(branch):
+            return
+        src = Path(workspace)
+        if not src.is_dir():
+            return
+        dest = Path(f"{workspace}.checkpoint")
+        try:
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(src, dest, symlinks=False)
+        except Exception as exc:
+            logger.debug(
+                "Branch %s: checkpoint capture failed: %s",
+                branch.branch_id,
+                exc,
+            )
+            return
+        self.branch_checkpoints[branch.branch_id] = BranchWorkspaceCheckpoint(
+            workspace=str(src),
+            checkpoint_workspace=str(dest),
+            current_code_hash=getattr(branch, "current_code_hash", None),
+            last_clean_code_hash=getattr(branch, "last_clean_code_hash", None),
+            branch_code_status=str(
+                getattr(branch, "branch_code_status", "clean") or "clean"
+            ),
+            last_screening_feedback_tier=getattr(
+                branch,
+                "last_screening_feedback_tier",
+                None,
+            ),
+            last_telemetry_outcome=getattr(branch, "last_telemetry_outcome", None),
+            branch_mechanism_ids=tuple(
+                getattr(branch, "branch_mechanism_ids", ()) or ()
+            ),
+            patch=self.branch_patches.get(branch.branch_id),
+        )
+
+
+def _should_checkpoint_branch(branch: Branch) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    return status == "active_weak_positive" or tier == "weak_positive"

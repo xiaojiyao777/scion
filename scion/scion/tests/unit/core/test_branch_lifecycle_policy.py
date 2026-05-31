@@ -7,8 +7,10 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
+    SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
     SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
     SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
+    SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
     SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
     SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
     SCREENING_STALE_RESCREEN_FAIL,
@@ -71,6 +73,30 @@ def test_loss_without_wins_soft_abandons_low_signal_branch() -> None:
 
     assert decision.action == "soft_abandon"
     assert SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN in decision.reason_codes
+
+
+def test_loss_heavy_low_win_screening_does_not_keep_as_weak_positive() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=1,
+            losses=5,
+            ties=6,
+            win_rate=1 / 12,
+            ci_low=-4.0,
+            ci_high=0.0,
+            median_delta=0.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+
+    assert decision.action == "soft_abandon"
+    assert SCREENING_WEAK_SIGNAL_CONTINUE not in decision.reason_codes
+    assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
+    assert SCREENING_SOFT_ABANDON_NON_POSITIVE_CI in decision.reason_codes
 
 
 def test_pair_level_wins_without_case_gate_keep_branch_as_weak_positive() -> None:
@@ -315,6 +341,48 @@ def test_low_mid_weak_positive_mostly_tie_non_regressive_keeps_branch() -> None:
     assert decision.action == "keep_exploring"
     assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
     assert decision.next_zero_win_streak == 0
+
+
+def test_low_mid_positive_case_balance_keeps_weak_positive() -> None:
+    policy = BranchLifecyclePolicy()
+
+    three_two = policy.decide(
+        _features(
+            n_cases=12,
+            wins=3,
+            losses=2,
+            ties=7,
+            win_rate=0.25,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=1.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+    four_one = policy.decide(
+        _features(
+            n_cases=12,
+            wins=4,
+            losses=1,
+            ties=7,
+            win_rate=1 / 3,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=5.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+
+    assert three_two.action == "keep_exploring"
+    assert three_two.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
+    assert four_one.action == "keep_exploring"
+    assert four_one.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
 
 
 def test_low_mid_candidate_runtime_failures_soft_abandon() -> None:

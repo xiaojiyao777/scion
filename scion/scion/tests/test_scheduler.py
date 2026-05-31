@@ -290,6 +290,20 @@ def test_weak_positive_branch_uses_exploit_slot_at_capacity():
     assert action.reason == "weak_positive_signal_followup"
 
 
+def test_regressed_followup_with_stale_weak_positive_tier_is_not_exploited():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: established"
+    branch.branch_code_status = "regressed_followup"
+    branch.last_screening_feedback_tier = "weak_positive"
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "effect_diagnostic_followup"
+
+
 def test_capacity_blocked_slot_is_auditable():
     branches = []
     for offset in (0, 10, 20):

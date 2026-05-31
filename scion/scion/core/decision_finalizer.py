@@ -14,6 +14,9 @@ from scion.core.branch_hygiene import (
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+    SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
+    SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
     SCREENING_WEAK_SIGNAL_CONTINUE,
     SCREENING_ZERO_WIN_STREAK_CONTINUE,
 )
@@ -102,6 +105,7 @@ class DecisionFinalizer:
     cleanup_workspace: Callable[[str], None]
     persist_branch_state: Callable[[str], None]
     reset_recent_abandoned_count: Callable[[], None]
+    restore_branch_checkpoint: Callable[[Branch], bool] | None = None
 
     def apply(
         self,
@@ -319,8 +323,14 @@ class DecisionFinalizer:
             protocol_result is not None
             and protocol_result.stats is not None
             and protocol_result.stats.win_rate > 0
+            and not _screening_quality_regressed(protocol_result.stats)
         )
         preserve_low_signal_branch = _preserve_low_signal_screening_workspace(
+            protocol_result,
+            decision_reason_codes,
+        )
+        regressed_followup = _is_regressed_weak_positive_followup(
+            branch,
             protocol_result,
             decision_reason_codes,
         )
@@ -336,6 +346,8 @@ class DecisionFinalizer:
             branch.last_screening_feedback_tier = screening_feedback.tier
         if telemetry_repairable:
             repair_mechanism_ids = mechanism_ids_for_repair(hypothesis)
+        restored_regressed_checkpoint = False
+        if telemetry_repairable:
             branch.branch_code_status = "telemetry_wiring_suspect"
             branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
             branch.branch_mechanism_ids = _merge_mechanism_ids(
@@ -360,13 +372,23 @@ class DecisionFinalizer:
             )
             branch.telemetry_repair_mechanism_ids = ()
         elif not preserve_low_signal_branch:
-            branch.branch_code_status = "discarded"
+            if regressed_followup and self.restore_branch_checkpoint is not None:
+                restored_regressed_checkpoint = self.restore_branch_checkpoint(branch)
+            if regressed_followup and not restored_regressed_checkpoint:
+                branch.branch_code_status = "regressed_followup"
+                branch.current_code_hash = branch.last_clean_code_hash
+                branch.last_screening_feedback_tier = "quality_regression"
+                branch.last_telemetry_outcome = "regressed_followup"
+            elif not regressed_followup:
+                branch.branch_code_status = "discarded"
             branch.branch_mechanism_ids = _merge_mechanism_ids(
                 getattr(branch, "branch_mechanism_ids", ()) or (),
                 mechanism_ids_for_repair(hypothesis),
             )
             branch.telemetry_repair_mechanism_ids = ()
-        preserve_workspace = verification_passed and preserve_low_signal_branch
+        preserve_workspace = verification_passed and (
+            preserve_low_signal_branch or restored_regressed_checkpoint
+        )
 
         if not preserve_workspace:
             self.discard_branch_workspace(bid)
@@ -561,6 +583,8 @@ def _preserve_low_signal_screening_workspace(
     stats = protocol_result.stats
     if stats is None:
         return False
+    if _screening_quality_regressed(stats):
+        return False
     if stats.median_delta is not None and stats.median_delta < 0:
         return False
     if stats.candidate_failed_pairs > 0:
@@ -585,6 +609,47 @@ def _preserve_low_signal_screening_workspace(
     }
     reason_set = set(decision_reason_codes or ())
     if lifecycle_codes & reason_set:
+        return True
+    return False
+
+
+def _is_regressed_weak_positive_followup(
+    branch: Branch,
+    protocol_result: Optional[ProtocolResult],
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    if status != "active_weak_positive" and tier != "weak_positive":
+        return False
+    if protocol_result is None:
+        return False
+    if getattr(protocol_result.stage, "value", protocol_result.stage) != "screening":
+        return False
+    stats = protocol_result.stats
+    if stats is None:
+        return False
+    reason_set = set(decision_reason_codes or ())
+    if reason_set & {
+        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+        SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
+        SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
+    }:
+        return True
+    return _screening_quality_regressed(stats)
+
+
+def _screening_quality_regressed(stats: EvalStats) -> bool:
+    wins = max(0, int(getattr(stats, "wins", 0) or 0))
+    losses = max(0, int(getattr(stats, "losses", 0) or 0))
+    median_delta = getattr(stats, "median_delta", None)
+    if median_delta is not None and median_delta < 0:
+        return True
+    if wins > 0 and losses >= wins + 2:
+        return True
+    ci_low = getattr(stats, "ci_low", None)
+    ci_high = getattr(stats, "ci_high", None)
+    if ci_low is not None and ci_high is not None and ci_low < 0 and ci_high <= 0:
         return True
     return False
 

@@ -143,6 +143,60 @@ def test_apply_patch_records_candidate_hash_without_clean_hash(tmp_path: Path) -
     assert stored.last_clean_code_hash is None
 
 
+def test_regressed_followup_restore_recovers_checkpoint_workspace_and_patch(
+    tmp_path: Path,
+) -> None:
+    service, branch, ctrl, materializer, workspaces, patches = _service(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    candidate_file = workspace / "operators" / "existing.py"
+    candidate_file.parent.mkdir()
+    candidate_file.write_text("# checkpoint\n", encoding="utf-8")
+    workspaces[branch.branch_id] = str(workspace)
+    ctrl.record_candidate_code(branch.branch_id, "checkpoint-hash")
+    ctrl.record_verification_pass(branch.branch_id, "checkpoint-hash")
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.last_telemetry_outcome = "case_level_positive_signal"
+    branch.branch_mechanism_ids = ("mechanism",)
+    checkpoint_patch = PatchProposal(
+        file_path="operators/existing.py",
+        action="modify",
+        code_content="# checkpoint\n",
+    )
+    patches[branch.branch_id] = checkpoint_patch
+    followup_patch = PatchProposal(
+        file_path="operators/existing.py",
+        action="modify",
+        code_content="# regressed\n",
+    )
+
+    service.apply_patch(
+        branch,
+        str(workspace),
+        followup_patch,
+        remember_patch=True,
+    )
+    candidate_file.write_text("# regressed\n", encoding="utf-8")
+    ctrl.record_verification_pass(branch.branch_id, "regressed-hash")
+
+    restored = service.restore_branch_checkpoint(branch)
+
+    stored = ctrl.get_branch(branch.branch_id)
+    restored_file = Path(workspaces[branch.branch_id]) / "operators" / "existing.py"
+    assert restored is True
+    assert restored_file.read_text(encoding="utf-8") == "# checkpoint\n"
+    assert stored.current_code_hash == "checkpoint-hash"
+    assert stored.last_clean_code_hash == "checkpoint-hash"
+    assert stored.branch_code_status == "active_weak_positive"
+    assert stored.last_screening_feedback_tier == "weak_positive"
+    assert stored.last_telemetry_outcome == "case_level_positive_signal"
+    assert stored.branch_mechanism_ids == ("mechanism",)
+    assert patches[branch.branch_id] is checkpoint_patch
+    assert materializer.cleaned == [str(workspace)]
+    assert not Path(f"{workspace}.checkpoint").exists()
+
+
 def test_record_verification_pass_updates_clean_hash(tmp_path: Path) -> None:
     service, branch, ctrl, _, _, _ = _service(tmp_path)
 

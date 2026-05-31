@@ -220,13 +220,18 @@ def _slot_for_branch(
         "quality_regression",
         "runtime_regression",
     }
-    if status in {"telemetry_wiring_suspect", "telemetry_invalid"}:
+    diagnostic_statuses = {
+        "discarded",
+        "regressed_followup",
+        "telemetry_wiring_suspect",
+        "telemetry_invalid",
+        *(f"active_{item}" for item in diagnostic_tiers),
+    }
+    if status in diagnostic_statuses:
         return "repair_diagnostic"
     if tier == "weak_positive" or status == "active_weak_positive":
         return "exploit_weak_positive"
-    if tier in diagnostic_tiers or status in {
-        f"active_{item}" for item in diagnostic_tiers
-    }:
+    if tier in diagnostic_tiers:
         return "repair_diagnostic"
     return "refine_active"
 

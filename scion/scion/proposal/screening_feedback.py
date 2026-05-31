@@ -164,8 +164,16 @@ def screening_feedback_summary(
 
     invalid = _has_candidate_execution_failure(protocol)
     objective_positive = case_wins > 0 or pair_wins > 0
+    quality_non_positive_ci = (
+        getattr(stats, "ci_low", None) is not None
+        and getattr(stats, "ci_high", None) is not None
+        and float(getattr(stats, "ci_low")) < -_EPS
+        and float(getattr(stats, "ci_high")) <= _EPS
+    )
     quality_negative = (
         (median_delta is not None and median_delta < -_EPS)
+        or quality_non_positive_ci
+        or (case_wins > 0 and case_losses >= case_wins + 2)
         or (case_losses > 0 and case_wins == 0)
         or (pair_losses > 0 and pair_wins == 0 and case_wins == 0)
     )

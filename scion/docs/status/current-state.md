@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-27*
+*Last updated: 2026-05-31*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -8,6 +8,21 @@ handoff. Historical repair and experiment notes were moved to
 [`../experiments/v0.4/`](../experiments/v0.4/).
 
 ## Status
+
+The 2026-05-31 smoke-lineage 8-round local `gpt-5.5` validation completed
+cleanly (`8/8`, no quality blocks, no telemetry failed experiments) but showed
+a generic branch-lifecycle gap: same-branch follow-ups that regressed from a
+weak-positive checkpoint could still leave the branch head classified as
+`active_weak_positive`. The repair keeps the v3 boundary intact and does not
+add research-object semantics to core. Low-win screening now treats
+loss-heavy or non-positive-CI results as quality-regressive instead of weak
+positive. Before patching an existing weak-positive branch workspace, Scion
+captures a generic filesystem/code-hash checkpoint; if screening later marks
+the follow-up as regressed, the checkpoint workspace, patch, code hashes,
+mechanism ids, and weak-positive status are restored rather than allowing the
+regressed head to be exploited. If restore is unavailable, the branch is marked
+`regressed_followup`, which the scheduler routes as diagnostic instead of
+`exploit_weak_positive`.
 
 The 2026-05-27 smoke-evidence stopped-run follow-up closes three audit gaps.
 CVRP-owned premise gates now ignore negated route-removal missing claims such
