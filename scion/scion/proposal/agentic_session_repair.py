@@ -45,6 +45,24 @@ class AgenticSessionRepairMixin:
                 repair_context["agentic_preview_feedback"] = (
                     _preview_repair_feedback_prompt_payload(failed_preview)
                 )
+            preview_detail = str(repair_context["prior_code_failure"])
+            retry_failure_ref = self._write_code_retry_failure_detail(
+                state,
+                failure_kind="preview_failure",
+                reason=preview_detail,
+                source_tool=failed_preview.tool_name,
+                repair_attempt=repair_attempt,
+                observation=failed_preview,
+            )
+            repair_context["agentic_code_retry_failure_detail"] = _drop_empty_dict(
+                {
+                    "failure_kind": "preview_failure",
+                    "reason": preview_detail,
+                    "source": failed_preview.tool_name,
+                    "repair_attempt": repair_attempt,
+                    "artifact_ref": retry_failure_ref,
+                }
+            )
             research_diagnosis = _research_diagnosis_from_observations(observations)
             if research_diagnosis:
                 repair_context["agentic_research_diagnosis"] = research_diagnosis
@@ -114,8 +132,27 @@ class AgenticSessionRepairMixin:
                     code_context=code_context,
                 )
             )
+            retry_failure_ref = self._write_code_retry_failure_detail(
+                state,
+                failure_kind="code_self_check_failure",
+                reason=issue_detail,
+                source_tool="agentic_code_self_check",
+                repair_attempt=repair_attempt,
+                observation=None,
+            )
+            if retry_failure_ref:
+                self_check_feedback["artifact_ref"] = retry_failure_ref
             repair_context["agentic_code_self_check_feedback"] = (
                 self_check_feedback
+            )
+            repair_context["agentic_code_retry_failure_detail"] = _drop_empty_dict(
+                {
+                    "failure_kind": "code_self_check_failure",
+                    "reason": issue_detail,
+                    "source": "agentic_code_self_check",
+                    "repair_attempt": repair_attempt,
+                    "artifact_ref": retry_failure_ref,
+                }
             )
             research_diagnosis = _research_diagnosis_from_observations(observations)
             if research_diagnosis:
@@ -152,6 +189,60 @@ class AgenticSessionRepairMixin:
                 code_context=repair_context,
                 observations=observations,
             )
+
+    def _write_code_retry_failure_detail(
+            self,
+            state: AgenticProposalSessionState,
+            *,
+            failure_kind: str,
+            reason: str,
+            source_tool: str,
+            repair_attempt: int,
+            observation: ProposalObservation | None,
+        ) -> str:
+            _record_failure_ledger_entry(
+                state,
+                phase=AgenticProposalPhase.DRAFT_PATCH,
+                category=(
+                    _preview_failure_category([observation])
+                    if observation is not None
+                    else AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+                ),
+                detail=reason,
+                source=f"code_retry_{failure_kind}",
+                repair_attempt=repair_attempt,
+                tool_name=source_tool,
+                observation=observation,
+            )
+            if self._artifact_store is None:
+                return ""
+            index = int(getattr(state, "_code_retry_failure_detail_index", 0)) + 1
+            setattr(state, "_code_retry_failure_detail_index", index)
+            payload = _drop_empty_dict(
+                {
+                    "schema_version": "agentic-code-retry-failure-detail.v1",
+                    "artifact_kind": "code_retry_failure_detail",
+                    "session_id": state.session_id,
+                    "campaign_id": state.campaign_id,
+                    "branch_id": state.branch_id,
+                    "repair_attempt": repair_attempt,
+                    "failure_kind": failure_kind,
+                    "reason": reason,
+                    "source": source_tool,
+                    "tool_name": source_tool,
+                    "observation_id": getattr(observation, "observation_id", ""),
+                    "observation_failure_code": _enum_value(
+                        getattr(observation, "failure_code", "")
+                    ),
+                }
+            )
+            ref = self._artifact_store.write_scratch(
+                state.session_id,
+                f"code_retry_failure_detail_{index:04d}.json",
+                payload,
+            )
+            state.scratch_artifact_refs.append(ref)
+            return ref
 
     def _generate_code_with_timeout_retry(
             self,

@@ -2946,6 +2946,9 @@ fact packet now states the regret score/tie-break semantics used by
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.
+- APS prompt projection still needs a low-risk follow-up to label or suppress
+  repeated low-value read receipts more explicitly without hiding full target
+  or branch-current source from code-generation prompts.
 - Runtime isolation is resource-limited and env-sanitized, but not yet a full
   read-only mount sandbox.
 - Stale/reconcile semantics still need a dedicated v3-aligned review.

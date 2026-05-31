@@ -461,6 +461,7 @@ def test_algorithm_smoke_static_diagnostic_preserves_provider_evidence(
     )
     evidence = _algorithm_smoke_execution_evidence_payload(state, observation)
     metadata = _tool_observation_transcript_metadata(observation)
+    compact_observation = _compact_algorithm_smoke_observation(observation)
 
     assert raw is not None
     assert raw["runtime_smoke_run"] is False
@@ -498,6 +499,72 @@ def test_algorithm_smoke_static_diagnostic_preserves_provider_evidence(
     assert metadata["runtime_smoke_provider_hook_used"] is True
     assert metadata["runtime_smoke_provider_case_count"] >= 2
     assert metadata["runtime_smoke_provider_case_attempted_count"] == 0
+    assert compact_observation is not None
+    compact_payload = compact_observation.structured_payload
+    assert compact_payload["passed"] is True
+    assert compact_payload["status"] == "diagnostic"
+    assert compact_payload["runtime_smoke_run"] is False
+    assert compact_payload["runtime_case_attempted_count"] == 0
+    assert compact_payload["diagnostic_not_clean_pass"] is True
+    assert compact_payload["agent_summary"]["summary_kind"] == (
+        "diagnostic_guidance_not_clean_runtime_pass"
+    )
+    assert compact_payload["agent_summary"]["diagnostic_not_clean_pass"] is True
+    assert compact_payload["runtime_smoke"]["runtime_smoke_run"] is False
+    assert compact_payload["runtime_smoke"]["provider_case_attempted_count"] == 0
+    assert "not a clean runtime smoke pass" in compact_observation.summary
+
+
+def test_algorithm_smoke_clean_runtime_pass_is_not_diagnostic_guidance() -> None:
+    observation = ProposalObservation(
+        observation_id="smoke-clean",
+        session_id="session",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-1",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke passed.",
+        structured_payload={
+            "passed": True,
+            "runtime_smoke": {
+                "passed": True,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "attempted_case_count": 2,
+                "provider_hook_used": True,
+                "provider_case_count": 2,
+                "provider_case_attempted_count": 2,
+                "case_execution_ledger": [
+                    {
+                        "label": "provider_small",
+                        "provider_hook_used": True,
+                        "attempted": True,
+                        "success": True,
+                        "passed": True,
+                    },
+                    {
+                        "label": "provider_medium",
+                        "provider_hook_used": True,
+                        "attempted": True,
+                        "success": True,
+                        "passed": True,
+                    },
+                ],
+            },
+        },
+    )
+
+    compact_observation = _compact_algorithm_smoke_observation(observation)
+
+    assert compact_observation is not None
+    payload = compact_observation.structured_payload
+    assert payload["passed"] is True
+    assert payload["status"] == "passed"
+    assert payload["runtime_smoke_run"] is True
+    assert payload["runtime_case_attempted_count"] == 2
+    assert "diagnostic_not_clean_pass" not in payload
+    assert payload["agent_summary"]["summary_kind"] == "clean_runtime_smoke_pass"
+    assert "passed on compact tainted preview" in compact_observation.summary
 
 
 @pytest.mark.parametrize(

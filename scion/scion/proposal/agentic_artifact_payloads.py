@@ -191,6 +191,13 @@ def _agentic_output_artifact(
     prompt_manifest_refs = tuple(
         ref for ref in tainted_refs if "api_visible_prompt_manifest" in ref
     )
+    transcript_refs = tuple(ref for ref in tainted_refs if ref.endswith("/transcript.json"))
+    smoke_evidence_refs = tuple(
+        ref for ref in tainted_refs if "algorithm_smoke_execution_evidence" in ref
+    )
+    code_retry_failure_refs = tuple(
+        ref for ref in tainted_refs if "code_retry_failure_detail" in ref
+    )
     artifact = {
         "schema_version": output.schema_version or AGENTIC_SESSION_SCHEMA_VERSION,
         "artifact_kind": "agentic_proposal_output",
@@ -200,6 +207,7 @@ def _agentic_output_artifact(
         "campaign_id": output.campaign_id,
         "branch_id": output.branch_id,
         "phase": output.phase,
+        "kind": "agentic_proposal_session",
         "status": _enum_value(output.status),
         "termination_reason": _enum_value(output.termination_reason),
         "tool_loop_config": dict(output.tool_loop_config),
@@ -247,6 +255,10 @@ def _agentic_output_artifact(
             prompt_manifest_refs[-1] if prompt_manifest_refs else ""
         ),
         "prompt_manifest_artifact_refs": list(prompt_manifest_refs),
+        "transcript_artifact_ref": transcript_refs[-1] if transcript_refs else "",
+        "transcript_artifact_refs": list(transcript_refs),
+        "smoke_evidence_artifact_refs": list(smoke_evidence_refs),
+        "code_retry_failure_artifact_refs": list(code_retry_failure_refs),
         "tainted": True,
     }
     return _json_ready(_sanitize_agentic_value(artifact))

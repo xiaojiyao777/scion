@@ -227,6 +227,7 @@ class AgenticSessionIndexEntry:
     session_id: str
     request_id: str
     idempotency_key: str
+    branch_id: str
     artifact_ref: str
     artifact_path: str
     transcript_digest: str
@@ -245,6 +246,15 @@ class AgenticSessionIndexEntry:
     prompt_manifest_ref_scope: str = "artifact_dir_relative"
     raw_prompt_saved: bool = False
     prompt_manifest_not_required_reason: str = ""
+    phase: str = ""
+    kind: str = "agentic_proposal_session"
+    round_num: int | None = None
+    output_artifact_ref: str = ""
+    transcript_artifact_ref: str = ""
+    transcript_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    smoke_evidence_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    code_retry_failure_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    session_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     failure_category: str = ""
     failure_detail: str = ""
     failure_reason: str = ""

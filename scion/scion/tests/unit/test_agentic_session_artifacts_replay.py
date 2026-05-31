@@ -141,6 +141,12 @@ def test_agentic_session_store_indexes_output_and_loads_across_instances(
     assert not contains_absolute_path(index_payload)
     assert index_entry["artifact_ref"].endswith("/output.json")
     assert index_entry["artifact_ref"] == index_entry["artifact_path"]
+    assert index_entry["branch_id"] == output.branch_id
+    assert index_entry["kind"] == "agentic_proposal_session"
+    assert index_entry["phase"]
+    assert index_entry["output_artifact_ref"] == index_entry["artifact_ref"]
+    assert index_entry["transcript_artifact_ref"].endswith("/transcript.json")
+    assert index_entry["transcript_artifact_ref"] in index_entry["session_artifact_refs"]
     assert index_entry["artifact_ref_scope"] == "artifact_dir_relative"
     assert index_entry["artifact_path_internal_only"] is True
     assert index_entry["prompt_manifest_required"] is True
@@ -165,6 +171,8 @@ def test_agentic_session_store_indexes_output_and_loads_across_instances(
     assert by_session.entry.raw_prompt_saved is False
     assert by_key is not None
     assert by_key.entry.session_id == output.session_id
+    assert by_session.entry.branch_id == output.branch_id
+    assert by_session.entry.output_artifact_ref == index_entry["artifact_ref"]
 
 
 def test_agentic_session_index_marks_prompt_manifest_not_required_when_no_llm_call(
@@ -431,6 +439,68 @@ def test_agentic_session_index_preserves_failure_and_hypothesis_summary_fields(
     assert artifact_summary["failure_reason"] == output.failure_detail
     assert artifact_summary["target_file"] == "policies/generic_policy.py"
     assert artifact_summary["mechanism_ids"] == ["generic_counter_probe"]
+
+
+def test_agentic_session_index_refs_smoke_and_code_retry_failure_artifacts(
+    tmp_path: Path,
+) -> None:
+    initial_patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = _PatchThenTransientApiErrorCreative(initial_patch)
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    registry = ProposalToolRegistry.default_read_only()
+    registry._tools["proposal.algorithm_smoke"] = _FailingAlgorithmSmokeTool()
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=registry,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    store = AgenticSessionStore(tmp_path / "aps-artifacts")
+    index_entry = json.loads(store.index_path.read_text(encoding="utf-8"))[0]
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    retry_ref = index_entry["code_retry_failure_artifact_refs"][0]
+    retry_artifact = json.loads(
+        (tmp_path / "aps-artifacts" / retry_ref).read_text(encoding="utf-8")
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert index_entry["branch_id"] == context.branch.branch_id
+    assert index_entry["phase"]
+    assert index_entry["smoke_evidence_artifact_refs"]
+    assert index_entry["code_retry_failure_artifact_refs"]
+    assert retry_ref in index_entry["session_artifact_refs"]
+    assert artifact["code_retry_failure_artifact_refs"] == (
+        index_entry["code_retry_failure_artifact_refs"]
+    )
+    assert retry_artifact["artifact_kind"] == "code_retry_failure_detail"
+    assert retry_artifact["failure_kind"] == "preview_failure"
+    assert retry_artifact["source"] == "proposal.algorithm_smoke"
+    assert "algorithm smoke did not pass" in retry_artifact["reason"]
+    assert creative.code_contexts[1]["agentic_code_retry_failure_detail"][
+        "artifact_ref"
+    ].endswith("code_retry_failure_detail_0001.json")
 
 
 def test_partial_hypothesis_awaiting_approval_is_not_contract_failure(

@@ -161,3 +161,40 @@ def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
     assert "bounded_probe" in rendered
     assert "tune, integrate, repair, parameterize, or wire telemetry" in rendered
     assert "clean branch or clean fork before generation" in rendered
+
+
+def test_same_mechanism_constraints_are_prominent_in_hypothesis_prompt() -> None:
+    branch = _branch("followup123", branch_code_status="active_no_effect")
+    branch.last_telemetry_outcome = "no_objective_effect"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surfaces": "Research surfaces: local_search",
+            "operator_categories": "local_search",
+            "available_actions": "modify",
+            "targetable_files": "operators/local_search.py",
+            "champion_operators_code": "# champion code",
+            "champion_stats": "Champion baseline",
+            "experiment_history": "(none)",
+            "blacklist_summary": "(none)",
+            "active_hyp_summary": "(none)",
+            "sibling_summary": "(none)",
+            "branch_hygiene_guidance": branch_hygiene_guidance(branch),
+        }
+    )
+    rendered_system = "\n".join(str(block["text"]) for block in system_blocks)
+    rendered = rendered_system + user_prompt
+
+    constraints_pos = rendered.find("## Same-Mechanism Follow-up Constraints")
+    branch_status_pos = rendered.find("## Branch Code Status")
+    user_task_pos = rendered.find("## Analysis Steps")
+
+    assert constraints_pos >= 0
+    assert constraints_pos < branch_status_pos
+    assert constraints_pos < user_task_pos
+    assert "protected_mechanism_ids=bounded_probe" in rendered
+    assert "allowed_actions=tune,integrate,repair,parameterize,telemetry_wiring" in rendered
+    assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in rendered
+    assert "new or unrelated mechanism requires a clean branch or clean fork" in rendered

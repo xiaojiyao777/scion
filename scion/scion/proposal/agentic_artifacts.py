@@ -64,13 +64,19 @@ _RAW_REF_MARKERS = (
     "SECRET_HOLDOUT",
 )
 _PROMPT_MANIFEST_REF_MARKER = "api_visible_prompt_manifest"
+_SMOKE_EVIDENCE_REF_MARKER = "algorithm_smoke_execution_evidence"
+_CODE_RETRY_FAILURE_REF_MARKER = "code_retry_failure_detail"
 _PROMPT_MANIFEST_NOT_REQUIRED_REASON = "no_llm_call_recorded_for_session"
 _PROMPT_MANIFEST_TOOL_ONLY_REASON = (
     "tool_context_recorded_but_no_model_prompt_call_recorded_for_session"
 )
 
 
-def _dedupe_public_refs(values: Any) -> tuple[str, ...]:
+def _dedupe_public_refs(
+    values: Any,
+    *,
+    base_dir: str | Path | None = None,
+) -> tuple[str, ...]:
     if isinstance(values, str):
         candidates = (values,)
     elif isinstance(values, (list, tuple)):
@@ -82,7 +88,7 @@ def _dedupe_public_refs(values: Any) -> tuple[str, ...]:
             candidates = (str(values),) if values else ()
     refs: list[str] = []
     for candidate in candidates:
-        public_ref = public_artifact_ref(candidate)
+        public_ref = public_artifact_ref(candidate, base_dir=base_dir, kind="artifact")
         if public_ref and public_ref not in refs:
             refs.append(public_ref)
     return tuple(refs)
@@ -96,6 +102,39 @@ def _prompt_manifest_refs_from_output(
         for ref in output.tainted_artifact_refs
         if _PROMPT_MANIFEST_REF_MARKER in str(ref)
     )
+
+
+def _artifact_refs_from_output(
+    output: AgenticProposalOutput,
+    *,
+    base_dir: str | Path | None = None,
+) -> tuple[str, ...]:
+    return _dedupe_public_refs(output.tainted_artifact_refs, base_dir=base_dir)
+
+
+def _artifact_refs_from_index_item(item: Mapping[str, Any]) -> tuple[str, ...]:
+    refs = _dedupe_public_refs(
+        item.get("session_artifact_refs") or item.get("tainted_artifact_refs") or ()
+    )
+    if refs:
+        return refs
+    values = [
+        item.get("artifact_ref"),
+        item.get("output_artifact_ref"),
+        item.get("transcript_artifact_ref"),
+        *(item.get("prompt_manifest_artifact_refs") or ()),
+        *(item.get("smoke_evidence_artifact_refs") or ()),
+        *(item.get("code_retry_failure_artifact_refs") or ()),
+    ]
+    return _dedupe_public_refs(value for value in values if value)
+
+
+def _refs_with_marker(refs: tuple[str, ...], marker: str) -> tuple[str, ...]:
+    return tuple(ref for ref in refs if marker in ref)
+
+
+def _transcript_refs(refs: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(ref for ref in refs if "transcript.json" in ref)
 
 
 def _prompt_manifest_refs_from_index_item(item: Mapping[str, Any]) -> tuple[str, ...]:
@@ -269,6 +308,15 @@ def _string_tuple(values: Any) -> tuple[str, ...]:
     return tuple(compact)
 
 
+def _int_or_none(value: Any) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _drop_empty_index_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
     compact: dict[str, Any] = {}
     for key, value in payload.items():
@@ -310,6 +358,19 @@ class AgenticSessionStore:
             else _prompt_manifest_not_required_reason_for_output(output)
         )
         summary_fields = _agentic_index_summary_fields(output)
+        session_artifact_refs = _artifact_refs_from_output(
+            output,
+            base_dir=self._root,
+        )
+        transcript_refs = _transcript_refs(session_artifact_refs)
+        smoke_evidence_refs = _refs_with_marker(
+            session_artifact_refs,
+            _SMOKE_EVIDENCE_REF_MARKER,
+        )
+        code_retry_failure_refs = _refs_with_marker(
+            session_artifact_refs,
+            _CODE_RETRY_FAILURE_REF_MARKER,
+        )
         kept: list[AgenticSessionIndexEntry] = []
         for entry in entries:
             if entry.session_id == output.session_id:
@@ -321,6 +382,7 @@ class AgenticSessionStore:
             session_id=output.session_id,
             request_id=output.request_id or output.session_id,
             idempotency_key=output.idempotency_key,
+            branch_id=output.branch_id,
             artifact_ref=public_ref,
             artifact_path=public_ref,
             transcript_digest=output.transcript_digest,
@@ -341,6 +403,15 @@ class AgenticSessionStore:
             prompt_manifest_ref_scope="artifact_dir_relative",
             raw_prompt_saved=False,
             prompt_manifest_not_required_reason=prompt_manifest_not_required_reason,
+            phase=str(output.phase or ""),
+            kind="agentic_proposal_session",
+            round_num=None,
+            output_artifact_ref=public_ref,
+            transcript_artifact_ref=transcript_refs[-1] if transcript_refs else "",
+            transcript_artifact_refs=transcript_refs,
+            smoke_evidence_artifact_refs=smoke_evidence_refs,
+            code_retry_failure_artifact_refs=code_retry_failure_refs,
+            session_artifact_refs=session_artifact_refs,
             **summary_fields,
         )
         kept.append(entry)
@@ -433,12 +504,15 @@ class AgenticSessionStore:
                     else _prompt_manifest_not_required_reason_for_index_item(item)
                 )
                 summary_fields = _agentic_index_summary_fields_from_item(item)
+                session_artifact_refs = _artifact_refs_from_index_item(item)
+                transcript_refs = _transcript_refs(session_artifact_refs)
                 entries.append(
                     AgenticSessionIndexEntry(
                         schema_version=str(item.get("schema_version") or ""),
                         session_id=str(item.get("session_id") or ""),
                         request_id=str(item.get("request_id") or ""),
                         idempotency_key=str(item.get("idempotency_key") or ""),
+                        branch_id=str(item.get("branch_id") or ""),
                         artifact_ref=public_ref,
                         artifact_path=public_ref,
                         transcript_digest=str(item.get("transcript_digest") or ""),
@@ -463,6 +537,33 @@ class AgenticSessionStore:
                         prompt_manifest_not_required_reason=(
                             prompt_manifest_not_required_reason
                         ),
+                        phase=str(item.get("phase") or ""),
+                        kind=str(item.get("kind") or "agentic_proposal_session"),
+                        round_num=_int_or_none(
+                            item.get("round_num") or item.get("round")
+                        ),
+                        output_artifact_ref=str(
+                            item.get("output_artifact_ref") or public_ref
+                        ),
+                        transcript_artifact_ref=(
+                            str(item.get("transcript_artifact_ref") or "")
+                            or (transcript_refs[-1] if transcript_refs else "")
+                        ),
+                        transcript_artifact_refs=(
+                            _dedupe_public_refs(
+                                item.get("transcript_artifact_refs") or ()
+                            )
+                            or transcript_refs
+                        ),
+                        smoke_evidence_artifact_refs=_refs_with_marker(
+                            session_artifact_refs,
+                            _SMOKE_EVIDENCE_REF_MARKER,
+                        ),
+                        code_retry_failure_artifact_refs=_refs_with_marker(
+                            session_artifact_refs,
+                            _CODE_RETRY_FAILURE_REF_MARKER,
+                        ),
+                        session_artifact_refs=session_artifact_refs,
                         **summary_fields,
                     )
                 )

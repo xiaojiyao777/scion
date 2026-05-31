@@ -21,6 +21,9 @@ from scion.proposal.agentic_preview_compaction import (
     _minimal_algorithm_smoke_section,
     _minimal_contract_preview_section,
 )
+from scion.proposal.tools.previews.algorithm_smoke_feedback import (
+    _algorithm_smoke_agent_payload,
+)
 from scion.proposal.tools import (
     ProposalObservation,
     ProposalToolContext,
@@ -671,12 +674,29 @@ def _compact_algorithm_smoke_observation(
     payload = observation.structured_payload
     if not isinstance(payload, Mapping):
         return None
+    agent_payload = (
+        dict(payload)
+        if payload.get("schema") or payload.get("agent_summary")
+        else _algorithm_smoke_agent_payload(payload)
+    )
     compact_payload = _drop_empty_mapping(
         {
-            "passed": bool(payload.get("passed")),
+            "passed": agent_payload.get("passed", bool(payload.get("passed"))),
+            "status": agent_payload.get("status"),
+            "failure_code": agent_payload.get("failure_code"),
+            "failure_class": agent_payload.get("failure_class"),
+            "runtime_smoke_run": agent_payload.get("runtime_smoke_run"),
+            "runtime_case_attempted_count": agent_payload.get(
+                "runtime_case_attempted_count"
+            ),
+            "diagnostic_not_clean_pass": agent_payload.get(
+                "diagnostic_not_clean_pass"
+            ),
+            "agent_summary": agent_payload.get("agent_summary"),
             "actionable_telemetry_feedback": (
                 _compact_actionable_telemetry_feedback(
-                    payload.get("actionable_telemetry_feedback")
+                    agent_payload.get("actionable_telemetry_feedback")
+                    or payload.get("actionable_telemetry_feedback")
                 )
             ),
             "non_promotional": payload.get("non_promotional"),
@@ -698,14 +718,26 @@ def _compact_algorithm_smoke_observation(
                 payload.get("telemetry_static_preview")
             ),
             "runtime_smoke": _compact_algorithm_smoke_section(
-                payload.get("runtime_smoke")
+                agent_payload.get("runtime_smoke") or payload.get("runtime_smoke")
             ),
             "compact_due_to_budget": True,
         }
     )
+    if agent_payload.get("diagnostic_not_clean_pass"):
+        summary = (
+            f"{observation.summary} Compact smoke preview retained; diagnostic "
+            "guidance is not a clean runtime smoke pass."
+        )
+    elif agent_payload.get("passed") and agent_payload.get("status") == "passed":
+        summary = (
+            "Algorithm smoke passed on compact tainted preview. "
+            "Compact smoke preview retained."
+        )
+    else:
+        summary = f"{observation.summary} Compact smoke preview retained."
     return replace(
         observation,
-        summary=f"{observation.summary} Compact smoke preview retained.",
+        summary=summary,
         structured_payload=compact_payload,
         repair_hint=None,
     )

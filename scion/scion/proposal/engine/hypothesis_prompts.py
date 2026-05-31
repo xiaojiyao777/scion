@@ -66,6 +66,9 @@ def _split_hypothesis_context(
     )
 
     branch_context_parts = []
+    same_mechanism_constraints = _same_mechanism_followup_constraints(D)
+    if same_mechanism_constraints:
+        branch_context_parts.append(same_mechanism_constraints)
 
     if D["search_memory"]:
         branch_context_parts.append(D["search_memory"])
@@ -254,6 +257,43 @@ def _split_agentic_context_for_hypothesis_cache(
         else:
             dynamic.append(section)
     return "\n\n".join(cacheable), "\n\n".join(dynamic)
+
+
+def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
+    """Project branch-local mechanism constraints before broader research context."""
+    guidance = str(context.get("branch_hygiene_guidance") or "").strip()
+    if "protected_mechanism_ids=" not in guidance:
+        return ""
+    protected = _extract_guidance_value(guidance, "protected_mechanism_ids")
+    allowed = (
+        _extract_guidance_value(guidance, "same_mechanism_allowed_actions")
+        or "tune, integrate, repair, parameterize, telemetry_wiring"
+    )
+    clean_fork_policy = (
+        _extract_guidance_value(guidance, "clean_fork_policy")
+        or "clean_fork_required_for_new_mechanism"
+    )
+    forbidden_policy = (
+        _extract_guidance_value(guidance, "forbidden_mechanism_policy")
+        or "no_unrelated_mechanism_ids"
+    )
+    return (
+        "## Same-Mechanism Follow-up Constraints\n"
+        f"protected_mechanism_ids={protected}\n"
+        f"allowed_actions={allowed}\n"
+        f"forbidden_mechanism_policy={forbidden_policy}\n"
+        f"clean_fork_policy={clean_fork_policy}\n"
+        "For this branch, hypothesis mechanism_changes must use only the "
+        "protected ids above. Allowed work is limited to tuning, integration, "
+        "repair, parameterization, or telemetry wiring for the same mechanism. "
+        "A new or unrelated mechanism requires a clean branch or clean fork "
+        "before generation."
+    )
+
+
+def _extract_guidance_value(text: str, key: str) -> str:
+    match = re.search(rf"\b{re.escape(key)}=([^;.\n]+)", text)
+    return match.group(1).strip() if match else ""
 
 
 def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:

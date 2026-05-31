@@ -75,15 +75,17 @@ def compact_algorithm_smoke_observation_for_agent(
     if not isinstance(observation.structured_payload, Mapping):
         return None
     payload = _algorithm_smoke_agent_payload(observation.structured_payload)
-    summary = (
-        "Algorithm smoke emitted diagnostic guidance on compact tainted preview."
-        if payload.get("status") == "diagnostic"
-        else (
-            "Algorithm smoke passed on compact tainted preview."
-            if payload.get("passed")
-            else "Algorithm smoke found issues in compact tainted preview."
+    if payload.get("diagnostic_not_clean_pass"):
+        summary = (
+            "Algorithm smoke emitted diagnostic guidance; runtime smoke did not "
+            "attempt any cases, so this is not a clean runtime smoke pass."
         )
-    )
+    elif payload.get("status") == "diagnostic":
+        summary = "Algorithm smoke emitted diagnostic guidance on compact tainted preview."
+    elif payload.get("passed"):
+        summary = "Algorithm smoke passed on compact tainted preview."
+    else:
+        summary = "Algorithm smoke found issues in compact tainted preview."
     return replace(
         observation,
         summary=summary,
@@ -175,7 +177,13 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         non_blocking_static_diagnostic and not hard_smoke_failure
     )
     evidence_diagnostic_passed = (
-        _provider_unavailable_evidence_diagnostic(evidence_diagnostics)
+        (
+            _provider_unavailable_evidence_diagnostic(evidence_diagnostics)
+            or _runtime_smoke_skipped_by_diagnostic(
+                runtime_smoke,
+                evidence_diagnostics,
+            )
+        )
         and not hard_smoke_failure
     )
     if activation_diagnostic_passed:
@@ -193,7 +201,14 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     elif evidence_diagnostic_passed:
         passed = True
         status = "diagnostic"
-        failure_class = "provider_smoke_coverage_diagnostic"
+        failure_class = (
+            "runtime_smoke_skipped_diagnostic"
+            if _runtime_smoke_skipped_by_diagnostic(
+                runtime_smoke,
+                evidence_diagnostics,
+            )
+            else "provider_smoke_coverage_diagnostic"
+        )
     failure_code = _algorithm_smoke_failure_code(
         failure_class=failure_class,
         runtime_smoke=runtime_smoke,
@@ -229,13 +244,38 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     )
     selected_surface = _algorithm_smoke_selected_surface(raw_payload, runtime_smoke)
     case_count = _algorithm_smoke_case_count(runtime_smoke)
+    runtime_smoke_run = (
+        runtime_smoke.get("runtime_smoke_run") if runtime_smoke is not None else None
+    )
+    runtime_case_attempted_count = _runtime_case_attempted_count(runtime_smoke)
+    diagnostic_not_clean_pass = bool(
+        status == "diagnostic"
+        and (
+            runtime_smoke_run is False
+            or runtime_case_attempted_count == 0
+        )
+    )
     non_promotional = raw_payload.get("non_promotional", True)
     tainted_debug = raw_payload.get("tainted_debug", True)
     agent_summary = _agent_summary(
         passed=passed,
         status=status,
+        summary_kind=(
+            "diagnostic_guidance_not_clean_runtime_pass"
+            if diagnostic_not_clean_pass
+            else (
+                "clean_runtime_smoke_pass"
+                if passed and status == "passed"
+                else "diagnostic_guidance"
+                if status == "diagnostic"
+                else "smoke_issues"
+            )
+        ),
         failure_code=failure_code,
         failure_class=failure_class,
+        diagnostic_not_clean_pass=diagnostic_not_clean_pass or None,
+        runtime_smoke_run=runtime_smoke_run,
+        runtime_case_attempted_count=runtime_case_attempted_count,
         primary_issue=primary_issue,
         selected_surface=selected_surface,
         case_count=case_count,
@@ -252,6 +292,9 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "status": status,
             "failure_code": failure_code,
             "failure_class": failure_class,
+            "runtime_smoke_run": runtime_smoke_run,
+            "runtime_case_attempted_count": runtime_case_attempted_count,
+            "diagnostic_not_clean_pass": diagnostic_not_clean_pass or None,
             "diagnostic_passed": (
                 activation_diagnostic_passed
                 or telemetry_diagnostic_passed
@@ -318,6 +361,56 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         f"{_algorithm_smoke_digest(compact_payload.get('agent_summary'))}"
     )
     return compact_payload
+
+
+def _runtime_case_attempted_count(
+    runtime_smoke: Mapping[str, Any] | None,
+) -> int | None:
+    if runtime_smoke is None:
+        return None
+    for key in (
+        "attempted_case_count",
+        "provider_case_attempted_count",
+        "selected_case_attempted_count",
+    ):
+        value = _int_or_none(runtime_smoke.get(key))
+        if value is not None:
+            return value
+    ledger = runtime_smoke.get("case_execution_ledger") or runtime_smoke.get("cases")
+    if isinstance(ledger, (list, tuple)):
+        return sum(
+            1
+            for item in ledger
+            if isinstance(item, Mapping) and item.get("attempted") is True
+        )
+    if runtime_smoke.get("runtime_smoke_run") is True:
+        return 1
+    if runtime_smoke.get("runtime_smoke_run") is False:
+        return 0
+    return None
+
+
+def _runtime_smoke_skipped_by_diagnostic(
+    runtime_smoke: Mapping[str, Any] | None,
+    evidence_diagnostics: list[dict[str, Any]],
+) -> bool:
+    if runtime_smoke is None or runtime_smoke.get("runtime_smoke_run") is not False:
+        return False
+    if _runtime_case_attempted_count(runtime_smoke) not in (0, None):
+        return False
+    diagnostic_codes = {
+        str(item.get("code") or "")
+        for item in evidence_diagnostics
+        if isinstance(item, Mapping)
+    }
+    if "provider_representative_smoke_cases_skipped_by_static_diagnostic" in (
+        diagnostic_codes
+    ):
+        return True
+    if "static_diagnostic" in diagnostic_codes:
+        return True
+    telemetry_static = _mapping_or_none(runtime_smoke.get("telemetry_static_preview"))
+    return _telemetry_static_diagnostic_passed(telemetry_static)
 
 
 def _algorithm_smoke_evidence_diagnostics(
