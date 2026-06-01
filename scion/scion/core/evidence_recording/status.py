@@ -134,6 +134,66 @@ def _merge_runtime_budget_status(
             payload["runtime_budget_diagnostic_code"] = code
 
 
+def _branch_rows(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    rows = payload.get("branches")
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, Mapping)]
+
+
+def _sync_branch_progress_from_rows(
+    progress: Mapping[str, Any],
+    branch_rows: list[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    branch_id = str(progress.get("branch_id") or "")
+    merged = dict(progress)
+    if not branch_id:
+        return merged
+    for row in branch_rows:
+        if str(row.get("id") or row.get("branch_id") or "") != branch_id:
+            continue
+        card = row.get("branch_card")
+        if not isinstance(card, Mapping):
+            card = row
+        merged["branch_card"] = dict(card)
+        for key in _BRANCH_PROGRESS_FIELDS:
+            if key in card:
+                merged[key] = card[key]
+        return merged
+    return merged
+
+
+def _sync_in_flight_branch_fields(
+    snapshot: Mapping[str, Any],
+    progress: Mapping[str, Any] | None,
+    branch_rows: list[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    merged = dict(snapshot)
+    source = progress if isinstance(progress, Mapping) else None
+    if source is None and merged.get("branch_id"):
+        source = _sync_branch_progress_from_rows(merged, branch_rows)
+    if not isinstance(source, Mapping):
+        return merged
+    for key in ("branch_card", *_BRANCH_PROGRESS_FIELDS):
+        if key in source:
+            merged[key] = source[key]
+    return merged
+
+
+_BRANCH_PROGRESS_FIELDS = (
+    "lineage_status",
+    "current_head_status",
+    "best_checkpoint_status",
+    "best_quality_checkpoint_id",
+    "last_valid_checkpoint_id",
+    "rollback_count",
+    "lineage_retained_checkpoint",
+    "latest_head_failed",
+    "allowed_next_actions",
+    "forbidden_next_actions",
+)
+
+
 class StatusWriterMixin:
     def write_status(
         self,
@@ -196,11 +256,22 @@ class StatusWriterMixin:
                 balance_exhausted=bool(payload.get("balance_exhausted")),
                 circuit_breaker_tripped=bool(payload.get("circuit_breaker_tripped")),
             )
-        if self.current_status_progress is not None:
-            payload["current_progress"] = self.current_status_progress
-            _merge_runtime_budget_status(payload, self.current_status_progress)
+        branch_rows = _branch_rows(payload)
+        current_progress = self.current_status_progress
+        if current_progress is not None:
+            current_progress = _sync_branch_progress_from_rows(
+                current_progress,
+                branch_rows,
+            )
+            self.current_status_progress = current_progress
+            payload["current_progress"] = current_progress
+            _merge_runtime_budget_status(payload, current_progress)
         if self.in_flight_protocol is not None:
-            payload["in_flight_protocol"] = self.in_flight_protocol
+            payload["in_flight_protocol"] = _sync_in_flight_branch_fields(
+                self.in_flight_protocol,
+                current_progress,
+                branch_rows,
+            )
             if self.last_status_result is not None:
                 payload["last_completed_result"] = self.last_status_result
         payload = normalize_status_payload(payload)

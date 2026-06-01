@@ -4,9 +4,14 @@ import uuid
 
 from scion.core.branch_lifecycle_policy import (
     BranchLifecyclePolicy,
+    decision_features_signal_signature,
     SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+    SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
     SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,
+    SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
+    SCREENING_ROLLBACK_BUDGET_EXHAUSTED,
     SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
     SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
@@ -480,6 +485,32 @@ def test_weak_positive_regression_with_checkpoint_rolls_back() -> None:
     assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
 
 
+def test_rollback_budget_exhausted_parks_weak_positive_checkpoint() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=12,
+            wins=1,
+            losses=5,
+            ties=6,
+            win_rate=1 / 12,
+            ci_low=-4.0,
+            ci_high=0.0,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+        branch_code_status="active_weak_positive",
+        branch_screening_tier="weak_positive",
+        has_checkpoint=True,
+        rollback_count=2,
+    )
+
+    assert decision.action == "park_lineage"
+    assert SCREENING_ROLLBACK_BUDGET_EXHAUSTED in decision.reason_codes
+    assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP in decision.reason_codes
+
+
 def test_marginal_failed_followup_parks_lineage() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(
@@ -504,6 +535,41 @@ def test_marginal_failed_followup_parks_lineage() -> None:
     assert decision.soft_abandon is True
 
 
+def test_repeated_marginal_signature_parks_lineage() -> None:
+    features = _features(
+        n_cases=12,
+        wins=3,
+        losses=3,
+        ties=6,
+        win_rate=0.25,
+        median_delta=0.0,
+        ci_low=-0.5,
+        ci_high=0.5,
+        valid_pairs=12,
+        runtime_pairs=12,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.0,
+    )
+    signature = decision_features_signal_signature(features)
+
+    decision = BranchLifecyclePolicy().decide(
+        features,
+        current_marginal_no_effect_streak=1,
+        last_signal_signature=signature,
+        current_signal_signature_repeat_count=1,
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+
+    assert decision.action == "park_lineage"
+    assert decision.reason_codes == (
+        SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
+        SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
+    )
+    assert decision.next_marginal_no_effect_streak == 2
+    assert decision.next_signal_signature_repeat_count == 2
+
+
 def test_no_effect_exhausted_parks_instead_of_archiving() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(wins=0, losses=0, ties=8, win_rate=0.0),
@@ -514,7 +580,20 @@ def test_no_effect_exhausted_parks_instead_of_archiving() -> None:
     )
 
     assert decision.action == "park_lineage"
-    assert decision.reason_codes == (SCREENING_ZERO_WIN_STREAK_EXHAUSTED,)
+    assert decision.reason_codes == (SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,)
+
+
+def test_no_effect_followup_budget_allows_only_one_diagnostic_retry() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(wins=0, losses=0, ties=8, win_rate=0.0),
+        current_no_effect_diagnostic_followups=1,
+        branch_code_status="active_no_effect",
+        branch_screening_tier="no_effect",
+    )
+
+    assert decision.action == "park_lineage"
+    assert decision.reason_codes == (SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,)
+    assert decision.next_no_effect_diagnostic_followups == 2
 
 
 def test_screening_telemetry_diagnostic_retries_before_streak_limit() -> None:

@@ -161,6 +161,13 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert controller.get_branch(branch.branch_id).last_telemetry_outcome == (
         "no_objective_effect"
     )
+    assert controller.get_branch(
+        branch.branch_id
+    ).lifecycle_no_effect_diagnostic_followups == 1
+    assert controller.get_branch(branch.branch_id).lifecycle_signal_repeat_count == 1
+    assert controller.get_branch(
+        branch.branch_id
+    ).lifecycle_last_signal_signature
     assert hyp_store.statuses == [("h-1", "screening_no_effect")]
 
 def test_balanced_mixed_screening_workspace_is_marginal_not_weak_exploit() -> None:
@@ -270,6 +277,9 @@ def test_balanced_mixed_screening_workspace_is_marginal_not_weak_exploit() -> No
     assert "marginal mixed screening signal" in result.reason
     assert stored.branch_code_status == "active_marginal"
     assert stored.last_screening_feedback_tier == "marginal"
+    assert stored.lifecycle_marginal_no_effect_streak == 1
+    assert stored.lifecycle_signal_repeat_count == 1
+    assert stored.lifecycle_last_signal_signature
     assert discarded == []
     assert action.slot == "refine_active"
     assert hyp_store.statuses == [
@@ -388,6 +398,9 @@ def test_marginal_failed_followup_parks_lineage_without_archiving_branch() -> No
     assert stored.branch_lifecycle_reroute_reason == (
         "clean_fork_after_branch_lifecycle_policy_block"
     )
+    assert stored.last_branch_lifecycle_policy_block[
+        "lifecycle_marginal_no_effect_streak"
+    ] == 0
     assert branch.branch_id not in workspaces
     assert branch.branch_id not in patches
     assert archived == ["/tmp/workspace"]
@@ -487,4 +500,5 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert stored.branch_code_status == "parked_lineage"
     assert stored.state == BranchState.EXPLORE
+    assert stored.lifecycle_no_effect_diagnostic_followups == 2
     assert action.action == "create_new"

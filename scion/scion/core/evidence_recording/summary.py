@@ -367,8 +367,17 @@ class CampaignSummaryMixin:
         if self.state_provider is not None:
             try:
                 state = dict(self.state_provider())
+                branch_rows = [dict(row) for row in (state.get("branches") or []) if isinstance(row, Mapping)]
+                branch_cards = _branch_cards_from_rows(branch_rows)
                 summary["n_active_branches"] = state.get("n_active_branches")
-                summary["branches"] = list(state.get("branches") or [])
+                summary["branches"] = branch_rows
+                summary["branch_cards"] = branch_cards
+                summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
+                if isinstance(state.get("current_progress"), Mapping):
+                    summary["current_progress"] = dict(state["current_progress"])
+                if isinstance(state.get("checkpoint_inventory"), Mapping):
+                    summary["checkpoint_inventory"] = dict(state["checkpoint_inventory"])
+                summary["rollback_events"] = _rollback_events(steps, branch_cards)
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary failed: %s", exc)
 
@@ -681,6 +690,91 @@ class CampaignSummaryMixin:
                 ]
         return step_data
 
+def _branch_cards_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [dict(row["branch_card"]) for row in rows if isinstance(row.get("branch_card"), Mapping)]
+
+def _branch_history_cards(steps: Iterable[StepRecord], active_cards: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    cards_by_branch = {str(card.get("branch_id") or ""): dict(card) for card in active_cards if card.get("branch_id")}
+    grouped: dict[str, list[StepRecord]] = {}
+    for step in steps:
+        grouped.setdefault(step.branch_id, []).append(step)
+    for branch_id, branch_steps in grouped.items():
+        latest, card = branch_steps[-1], dict(cards_by_branch.get(branch_id, {}))
+        reason_codes, evidence = _step_reason_codes(latest), _step_generic_evidence(latest)
+        status = _step_status(latest)
+        retained = bool(card.get("best_quality_checkpoint_id") or card.get("last_valid_checkpoint_id"))
+        card.update({
+            "branch_id": branch_id,
+            "direction": card.get("direction") or f"{latest.hypothesis.action}/{latest.hypothesis.change_locus}",
+            "status": status,
+            "mechanism_ids": card.get("mechanism_ids") or _step_mechanism_ids(branch_steps),
+            "current_head_status": card.get("current_head_status") or evidence["tier"],
+            "best_checkpoint_status": card.get("best_checkpoint_status", "none"),
+            "best_quality_checkpoint_id": card.get("best_quality_checkpoint_id"),
+            "last_valid_checkpoint_id": card.get("last_valid_checkpoint_id"),
+            "rollback_count": int(card.get("rollback_count") or 0),
+            "latest_head_failed": card.get("latest_head_failed", status == "abandoned" or evidence["tier"] in {"regression", "invalid"}),
+            "lineage_retained_checkpoint": retained,
+            "allowed_next_actions": card.get("allowed_next_actions") or ["clean_fork"],
+            "forbidden_next_actions": card.get("forbidden_next_actions") or ["resume_abandoned_lineage_without_new_evidence"],
+            "generic_evidence_summary": card.get("generic_evidence_summary") or evidence,
+            "why_not_promoted_reason_codes": card.get("why_not_promoted_reason_codes") or reason_codes,
+            "why_abandoned_reason_codes": card.get("why_abandoned_reason_codes") or (reason_codes if status == "abandoned" else []),
+        })
+        cards_by_branch[branch_id] = card
+    return list(cards_by_branch.values())
+
+def _rollback_events(steps: Iterable[StepRecord], branch_cards: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for step in steps:
+        codes = _step_reason_codes(step)
+        if any("rollback" in code.lower() for code in codes):
+            events.append({"branch_id": step.branch_id, "round": step.round_num, "reason_codes": codes})
+    for card in branch_cards:
+        rollback_count = int(card.get("rollback_count") or 0)
+        if rollback_count:
+            events.append({"branch_id": card.get("branch_id"), "rollback_count": rollback_count, "best_quality_checkpoint_id": card.get("best_quality_checkpoint_id"), "last_valid_checkpoint_id": card.get("last_valid_checkpoint_id")})
+    return events
+
+def _step_mechanism_ids(steps: Iterable[StepRecord]) -> list[str]:
+    ids: list[str] = []
+    for step in steps:
+        for source in (step.hypothesis, step.patch):
+            for change in getattr(source, "mechanism_changes", ()) or ():
+                value = str(getattr(change, "id", "") or "").strip()
+                if value:
+                    ids.append(value)
+        ids.extend(str(item) for item in (step.repair_mechanism_ids or ()) if item)
+    return list(dict.fromkeys(ids))
+
+def _step_reason_codes(step: StepRecord) -> list[str]:
+    codes = list(step.decision_reason_codes or ())
+    if step.protocol_result is not None:
+        codes.extend(step.protocol_result.reason_codes)
+    detail = str(step.failure_detail or step.verification_detail or "").strip()
+    if detail:
+        codes.append(detail.split(":", 1)[0].split()[0])
+    return list(dict.fromkeys(str(code) for code in codes if str(code)))
+
+def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
+    pr = step.protocol_result
+    if pr is None:
+        return {"tier": "invalid" if step.failure_stage else "unknown"}
+    stats = pr.stats
+    if stats.losses > stats.wins or stats.median_delta < 0:
+        tier = "regression"
+    elif stats.wins > stats.losses:
+        tier = "weak_positive" if pr.gate_outcome == "pass" else "marginal"
+    else:
+        tier = "no_effect" if stats.wins == 0 and stats.losses == 0 else "marginal"
+    evidence: dict[str, Any] = {"tier": tier, "wins": stats.wins, "losses": stats.losses, "ties": stats.ties, "effect": {"median_delta": stats.median_delta, "ci_low": stats.ci_low, "ci_high": stats.ci_high}}
+    if stats.runtime_ratio_median is not None or stats.runtime_regression_rate is not None:
+        evidence["runtime"] = {"runtime_ratio_median": stats.runtime_ratio_median, "runtime_regression_rate": stats.runtime_regression_rate}
+    return evidence
+
+def _step_status(step: StepRecord) -> str:
+    decision = step.decision.value if getattr(step.decision, "value", None) else None
+    return "abandoned" if decision == "abandon" else str(step.failure_stage or decision or "screened")
 
 def _runtime_budget_diagnostic(protocol_result: Any) -> dict[str, Any] | None:
     surface_summary = getattr(protocol_result, "candidate_surface_runtime_summary", None)

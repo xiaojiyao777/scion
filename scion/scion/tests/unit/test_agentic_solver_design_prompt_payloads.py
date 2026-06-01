@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
-from scion.proposal.engine import _split_code_context
+from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_solver_design_test_support import *
 
@@ -778,6 +778,85 @@ def test_code_retry_prompt_keeps_actionable_delta_telemetry_feedback() -> None:
     assert "delta=None" in user_prompt
     assert "expected_telemetry" in user_prompt
     assert "not fabricate" in user_prompt
+
+
+def test_hypothesis_schema_retry_prompt_preserves_allowed_telemetry_template() -> None:
+    activation_fields = [
+        f"solver_runtime_probe_{idx}.declared_probe" for idx in range(9)
+    ]
+    effect_fields = [
+        f"solver_effect_probe_{idx}.declared_probe" for idx in range(7)
+    ]
+    feedback = {
+        "attempt": 1,
+        "attempt_kind": "schema_accounting_repair",
+        "repair_classification": "telemetry_schema_accounting_repair",
+        "failure_code": "C11_expected_telemetry",
+        "reason": "expected_telemetry.activation used a broad aggregate label",
+        "allowed_top_level_categories": [
+            "activation",
+            "activity",
+            "budget",
+            "effect",
+        ],
+        "exact_allowed_top_level_categories": [
+            "activation",
+            "activity",
+            "budget",
+            "effect",
+        ],
+        "declared_mechanism_ids": ["declared_probe"],
+        "protected_mechanism_ids": ["declared_probe"],
+        "template_mechanism_ids": ["declared_probe"],
+        "legal_mechanism_id_policy": (
+            "Expected telemetry paths for mechanism-specific evidence must "
+            "use the exact declared/protected mechanism id."
+        ),
+        "allowed_expected_telemetry_template": {
+            "selected_surface": "solver_design",
+            "mechanism_id": "declared_probe",
+            "mechanism_ids": ["declared_probe"],
+            "template_is_exact": True,
+            "template_truncated": False,
+            "expected_telemetry": {
+                "activation": activation_fields,
+                "effect": effect_fields,
+            },
+        },
+        "preserve_hypothesis": {
+            "target_file": "policies/synthetic.py",
+            "mechanism_changes": [
+                {"id": "declared_probe", "change_type": "modify"}
+            ],
+        },
+        "retry_constraint": (
+            "Repair only expected_telemetry/schema fields for the same "
+            "hypothesis."
+        ),
+    }
+
+    _system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Synthetic problem.",
+            "champion_operators_code": "def solve(): pass",
+            "champion_stats": "{}",
+            "experiment_history": "",
+            "blacklist_summary": "",
+            "active_hyp_summary": "",
+            "sibling_summary": "",
+            "operator_categories": "solver_design",
+            "agentic_hypothesis_retry_attempt": 2,
+            "agentic_hypothesis_preview_rejections": [feedback],
+        }
+    )
+
+    assert "Hypothesis Schema/Telemetry Retry Feedback" in user_prompt
+    assert "schema/accounting repair" in user_prompt
+    assert "... <truncated agentic context>" not in user_prompt
+    assert "schema_accounting_repair" in user_prompt
+    assert "template_truncated" in user_prompt
+    for field in activation_fields + effect_fields:
+        assert field in user_prompt
 
 
 def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(

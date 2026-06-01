@@ -6,6 +6,11 @@ import hashlib
 import json
 from typing import Any, Dict
 
+from scion.proposal.engine.telemetry_retry_projection import (
+    schema_retry_feedback_json as _schema_retry_feedback_json,
+    schema_retry_feedback_projection as _schema_retry_feedback_projection,
+)
+
 
 class _DefaultDict(dict):
     """dict subclass that returns '' for missing keys (safe format_map)."""
@@ -75,8 +80,11 @@ def _agentic_research_context_block(
             "preview. Use this feedback as a hard structured-output constraint: "
             "the final task is to repair the same hypothesis' schema/telemetry "
             "fields. Preserve the protected identity exactly and ignore ordinary "
-            "exploration guidance that would choose a different mechanism.\n\n"
-            f"{_bounded_json(retry_payload, _AGENTIC_SCHEMA_RETRY_FEEDBACK_CHARS)}"
+            "exploration guidance that would choose a different mechanism. "
+            "This is a schema/accounting repair, not a new algorithmic "
+            "hypothesis; the exact allowed telemetry template in this section "
+            "is authoritative.\n\n"
+            f"{_schema_retry_feedback_json(retry_payload)}"
         )
     grounding_rejections = context.get("agentic_hypothesis_grounding_rejections")
     if grounding_rejections:
@@ -498,11 +506,21 @@ def _compact_preview_feedback_payload(value: Any) -> Any:
         "previous_patch_summary",
         "patch_summary",
         "previous_patch",
+        "allowed_top_level_categories",
+        "exact_allowed_top_level_categories",
+        "declared_mechanism_ids",
+        "protected_mechanism_ids",
+        "template_mechanism_ids",
+        "legal_mechanism_id_policy",
+        "allowed_expected_telemetry_template",
     }
     compact: dict[str, Any] = {}
     for key, item in value.items():
         key_text = str(key)
         if key_text not in keep:
+            continue
+        if key_text == "allowed_expected_telemetry_template":
+            compact[key_text] = item
             continue
         if key_text == "checks" and isinstance(item, list):
             compact[key_text] = [
@@ -641,101 +659,6 @@ def _compact_runtime_diagnosis(value: dict[str, Any], *, row_limit: int) -> dict
             ),
             "branch_states": value.get("branch_states"),
             "audit_digest": _stable_short_digest(value),
-        }
-    )
-
-
-def _schema_retry_feedback_projection(
-    *,
-    retry_attempt: Any,
-    retry_rule: Any,
-    preview_rejections: Any,
-) -> dict[str, Any]:
-    if not isinstance(preview_rejections, list):
-        preview_rejections = [preview_rejections]
-    compact_items = [
-        _schema_retry_feedback_item(item)
-        for item in preview_rejections[-3:]
-        if isinstance(item, dict)
-    ]
-    latest = compact_items[-1] if compact_items else {}
-    return _drop_empty(
-        {
-            "retry_attempt": retry_attempt,
-            "retry_mode": (
-                "identity_corrective"
-                if latest.get("failure_code") == "schema_retry_drift"
-                else "schema_telemetry_repair"
-            ),
-            "final_task": (
-                "Repair expected_telemetry/schema fields for the same "
-                "hypothesis. Do not explore, rename, retarget, or switch "
-                "mechanism family during this schema retry."
-            ),
-            "retry_rule": retry_rule,
-            "protected_exact_identity": latest.get("protected_identity")
-            or _protected_identity_from_preserve(latest.get("preserve_hypothesis")),
-            "latest_failure_code": latest.get("failure_code"),
-            "preview_rejections": compact_items,
-        }
-    )
-
-
-def _schema_retry_feedback_item(item: dict[str, Any]) -> dict[str, Any]:
-    preserve = item.get("preserve_hypothesis")
-    return _drop_empty(
-        {
-            "attempt": item.get("attempt"),
-            "failure_code": item.get("failure_code"),
-            "source": item.get("source"),
-            "corrective_retry": item.get("corrective_retry"),
-            "drift_fields": item.get("drift_fields"),
-            "reason": _limit_text(str(item.get("reason") or ""), 900),
-            "requested_activation_fields": _bounded_list(
-                item.get("requested_activation_fields"),
-                8,
-            ),
-            "allowed_expected_telemetry_template": (
-                item.get("allowed_expected_telemetry_template")
-            ),
-            "protected_identity": item.get("protected_identity")
-            or _protected_identity_from_preserve(preserve),
-            "preserve_hypothesis": _compact_preserve_hypothesis(preserve),
-            "retry_constraint": _limit_text(
-                str(item.get("retry_constraint") or ""),
-                700,
-            ),
-        }
-    )
-
-
-def _compact_preserve_hypothesis(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        return {}
-    return _drop_empty(
-        {
-            "action": value.get("action"),
-            "target_file": value.get("target_file"),
-            "mechanism_changes": value.get("mechanism_changes"),
-        }
-    )
-
-
-def _protected_identity_from_preserve(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        return {}
-    changes = value.get("mechanism_changes")
-    mechanism_ids: list[str] = []
-    if isinstance(changes, list):
-        for change in changes:
-            if isinstance(change, dict) and str(change.get("id") or "").strip():
-                mechanism_ids.append(str(change.get("id")).strip())
-    return _drop_empty(
-        {
-            "action": value.get("action"),
-            "target_file": value.get("target_file"),
-            "mechanism_change_ids": list(dict.fromkeys(mechanism_ids)),
-            "mechanism_changes": changes,
         }
     )
 

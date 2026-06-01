@@ -8,17 +8,11 @@ from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.branch_hygiene import (
-    BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
-    BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
     WIRING_SUSPECT_REQUIRES_REPAIR,
 )
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
-    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
-    BRANCH_LIFECYCLE_PARK_LINEAGE,
-    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
-    BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
     SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
@@ -27,6 +21,12 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     SCREENING_WEAK_SIGNAL_CONTINUE,
     SCREENING_ZERO_WIN_STREAK_CONTINUE,
+)
+from scion.core.decision_lifecycle_actions import (
+    lifecycle_action as _lifecycle_action,
+    merge_branch_lifecycle_block as _merge_branch_lifecycle_block,
+    park_lineage as _park_lineage,
+    update_branch_lifecycle_signal_state as _update_branch_lifecycle_signal_state,
 )
 from scion.core.models import (
     Branch,
@@ -361,6 +361,12 @@ class DecisionFinalizer:
             else None
         )
         if screening_feedback is not None and screening_feedback.case_total:
+            _update_branch_lifecycle_signal_state(
+                branch,
+                protocol_result=protocol_result,
+                screening_feedback=screening_feedback,
+                telemetry_effect_zero=telemetry_effect_zero,
+            )
             branch.last_screening_feedback_tier = screening_feedback.tier
         if telemetry_repairable:
             repair_mechanism_ids = mechanism_ids_for_repair(hypothesis)
@@ -752,90 +758,6 @@ def _positive_low_signal_continue(
             SCREENING_WEAK_SIGNAL_CONTINUE,
         }
     )
-
-
-def _lifecycle_action(
-    decision_reason_codes: Optional[tuple[str, ...]],
-) -> str:
-    reason_set = set(decision_reason_codes or ())
-    if BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT in reason_set:
-        return "rollback_to_checkpoint"
-    if BRANCH_LIFECYCLE_PARK_LINEAGE in reason_set:
-        return "park_lineage"
-    if BRANCH_LIFECYCLE_RETAIN_CHECKPOINT in reason_set:
-        return "retain_checkpoint"
-    if BRANCH_LIFECYCLE_ARCHIVE_LINEAGE in reason_set:
-        return "archive_lineage"
-    return "retain_head"
-
-
-def _park_lineage(
-    branch: Branch,
-    *,
-    reason_codes: tuple[str, ...],
-    checkpoint_retained: bool,
-) -> None:
-    branch.branch_code_status = "parked_lineage"
-    branch.last_telemetry_outcome = (
-        "checkpoint_retained"
-        if checkpoint_retained
-        else "parked_lineage"
-    )
-    branch.branch_lifecycle_new_mechanism_ineligible = True
-    branch.branch_lifecycle_reroute_reason = (
-        BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK
-    )
-    _merge_branch_lifecycle_block(
-        branch,
-        action="park_lineage",
-        reason_codes=reason_codes,
-    )
-
-
-def _merge_branch_lifecycle_block(
-    branch: Branch,
-    *,
-    action: str,
-    reason_codes: tuple[str, ...],
-) -> None:
-    existing = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
-    block_count = int(
-        existing.get("block_count")
-        or getattr(branch, "branch_lifecycle_policy_blocks", 0)
-        or 0
-    ) + 1
-    lifecycle_reason_codes = tuple(
-        dict.fromkeys(
-            [
-                *tuple(existing.get("lifecycle_action_reason_codes") or ()),
-                *tuple(reason_codes or ()),
-            ]
-        )
-    )
-    existing.update(
-        {
-            "reason": action,
-            "block_count": block_count,
-            "reroute_reason": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
-            "new_mechanism_ineligible_reason": (
-                BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE
-            ),
-            "lifecycle_action_reason_codes": list(lifecycle_reason_codes),
-            "rollback_count": int(getattr(branch, "rollback_count", 0) or 0),
-            "best_quality_checkpoint_id": getattr(
-                branch,
-                "best_quality_checkpoint_id",
-                None,
-            ),
-            "last_valid_checkpoint_id": getattr(
-                branch,
-                "last_valid_checkpoint_id",
-                None,
-            ),
-        }
-    )
-    branch.branch_lifecycle_policy_blocks = block_count
-    branch.last_branch_lifecycle_policy_block = existing
 
 
 def _retained_screening_status(

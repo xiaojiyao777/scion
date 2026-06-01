@@ -368,6 +368,41 @@ def test_weak_positive_rollback_checkpoint_stays_exploit_slot():
     assert action.reason == "restored_weak_positive_checkpoint_followup"
 
 
+def test_rollback_budget_exhausted_branch_does_not_block_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: restored weak positive"
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.rollback_count = 2
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
+
+
+def test_repeated_marginal_loop_does_not_block_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: repeated marginal"
+    branch.branch_code_status = "active_marginal"
+    branch.last_screening_feedback_tier = "marginal"
+    branch.lifecycle_marginal_no_effect_streak = 2
+    branch.lifecycle_signal_repeat_count = 2
+    branch.lifecycle_last_signal_signature = (
+        "wins=3;losses=3;ties=6;median_delta=0"
+    )
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
+
+
 def test_parked_lineage_does_not_block_clean_fork_capacity():
     branches = []
     for offset in (0, 10, 20):

@@ -6,6 +6,9 @@ from typing import Any, Mapping
 
 from scion.problem.providers import active_subject_taxonomy_payload
 from scion.proposal.agentic_session_common import *
+from scion.proposal.hypothesis_telemetry_retry import (
+    expected_telemetry_retry_feedback as _expected_telemetry_retry_feedback,
+)
 from scion.proposal.negative_facts import render_negative_fact_block
 from scion.runtime.telemetry_guard import expected_telemetry_template
 
@@ -1189,59 +1192,18 @@ def _hypothesis_preview_retry_feedback(
     ):
         return None
 
-    allowed_template = telemetry.get("allowed_expected_telemetry_template")
-    if not isinstance(allowed_template, Mapping):
-        allowed_template = {}
-    requested_fields = telemetry.get("requested_fields")
-    requested_activation = ()
-    if isinstance(requested_fields, Mapping):
-        activation = requested_fields.get("activation")
-        if isinstance(activation, (list, tuple)):
-            requested_activation = tuple(
-                str(field).strip() for field in activation if str(field).strip()
-            )
-    return _drop_empty_dict(
-        {
-            "attempt": attempt,
-            "source": "hypothesis_preview_gate",
-            "gate_name": "proposal.schema_preview",
-            "failure_code": "C11_expected_telemetry",
-            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
-            "reason": _limit_string(
-                str(problem_telemetry.get("reason") or "")
-                or telemetry_detail
-                or c11_detail
-                or detail,
-                1000,
-            ),
-            "requested_activation_fields": list(requested_activation),
-            "offending_fields": list(
-                problem_telemetry.get("offending_fields") or ()
-            ),
-            "telemetry_category_guidance": problem_telemetry.get(
-                "telemetry_category_guidance"
-            ),
-            "allowed_repair_shape": problem_telemetry.get("allowed_repair_shape"),
-            "forbidden_repair_shape": problem_telemetry.get("forbidden_repair_shape"),
-            "final_task": (
-                problem_telemetry.get("allowed_repair_shape")
-                or "Repair the expected_telemetry contract for the same mechanism."
-            ),
-            "allowed_expected_telemetry_template": (
-                _compact_expected_telemetry_template(allowed_template)
-            ),
-            "preserve_hypothesis": _hypothesis_retry_anchor(previous_hypothesis),
-            "protected_identity": _schema_retry_protected_identity(
-                _hypothesis_retry_anchor(previous_hypothesis)
-            ),
-            "retry_constraint": (
-                "Repair only expected_telemetry/schema fields. Preserve the "
-                "prior action, target_file, mechanism_changes ids/change_types, "
-                "and telemetry activation mechanism refs; do not switch "
-                "mechanisms or targets for a C11/schema retry. Natural-language "
-                "hypothesis and novelty_signature wording may be clarified."
-            ),
-        }
+    preserve_hypothesis = _hypothesis_retry_anchor(previous_hypothesis)
+    protected_identity = _schema_retry_protected_identity(preserve_hypothesis)
+    return _expected_telemetry_retry_feedback(
+        hypothesis,
+        telemetry,
+        problem_telemetry,
+        detail=detail,
+        attempt=attempt,
+        c11_detail=c11_detail,
+        telemetry_detail=telemetry_detail,
+        preserve_hypothesis=preserve_hypothesis,
+        protected_identity=protected_identity,
     )
 
 
@@ -1281,6 +1243,8 @@ def _same_mechanism_preview_retry_feedback(
     return _drop_empty_dict(
         {
             "attempt": attempt,
+            "attempt_kind": "schema_accounting_repair",
+            "repair_classification": "branch_followup_schema_repair",
             "source": "hypothesis_preview_gate",
             "gate_name": "proposal.schema_preview",
             "failure_code": "same_mechanism_only_violation",
@@ -1755,30 +1719,6 @@ def _mechanism_ref_matches(observed: str, protected: str) -> bool:
             or observed.startswith(f"{protected}_")
             or protected.startswith(f"{observed}_")
         )
-    )
-
-
-def _compact_expected_telemetry_template(value: Mapping[str, Any]) -> dict[str, Any]:
-    expected = value.get("expected_telemetry")
-    compact_expected: dict[str, list[str]] = {}
-    if isinstance(expected, Mapping):
-        for category in ("activation", "budget", "effect", "activity"):
-            fields = expected.get(category)
-            if not isinstance(fields, (list, tuple)):
-                continue
-            compact_fields = [
-                str(field).strip()
-                for field in list(fields)[:4]
-                if str(field).strip()
-            ]
-            if compact_fields:
-                compact_expected[category] = compact_fields
-    return _drop_empty_dict(
-        {
-            "selected_surface": value.get("selected_surface"),
-            "mechanism_id": value.get("mechanism_id"),
-            "expected_telemetry": compact_expected,
-        }
     )
 
 

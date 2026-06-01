@@ -133,18 +133,42 @@ def test_sibling_prompt_projection_includes_checkpoint_branch_card() -> None:
     branch = _branch("restore123456", branch_code_status="regressed_followup")
     branch.last_screening_feedback_tier = "weak_positive"
     branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.last_valid_checkpoint_id = "checkpoint-last"
     branch.rollback_count = 1
+    branch.branch_mechanism_ids = ("generic_probe",)
+    branch.last_branch_lifecycle_policy_block = {
+        "screening_case_wins": 3,
+        "screening_case_losses": 1,
+        "screening_case_ties": 2,
+        "median_delta": 0.04,
+        "runtime_ratio_median": 1.03,
+        "decision_reason_codes": ["BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT"],
+    }
 
     summary = _summarise_siblings([branch])
     prompt = _hypothesis_prompt_user_text(summary)
     restore_line = next(line for line in prompt.splitlines() if "restore" in line)
 
+    assert "branch_id=restore123456" in restore_line
+    assert "status=explore" in restore_line
+    assert "mechanism_ids=generic_probe" in restore_line
     assert "lineage_status=restored_weak_positive" in restore_line
     assert "current_head_status=regressed_followup" in restore_line
     assert "best_checkpoint_status=best_quality_retained" in restore_line
+    assert "best_quality_checkpoint_id=checkpoint-best" in restore_line
+    assert "last_valid_checkpoint_id=checkpoint-last" in restore_line
     assert "rollback_count=1" in restore_line
     assert "latest_head_failed=true" in restore_line
     assert "lineage_retained_checkpoint=true" in restore_line
+    assert (
+        "generic_evidence_summary=tier:weak_positive,wins:3,losses:1,ties:2"
+        in restore_line
+    )
+    assert "effect:0.04" in restore_line
+    assert "runtime:1.03" in restore_line
+    assert "why_not_promoted_reason_codes=BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT" in (
+        restore_line
+    )
     assert "allowed_next_actions=refine_checkpoint,tune,integrate,parameterize" in (
         restore_line
     )

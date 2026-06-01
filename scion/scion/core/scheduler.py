@@ -86,6 +86,7 @@ class Scheduler:
             for b in active
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
+            and not _branch_lifecycle_budget_exhausted(b)
         ]
 
         for tier in _HIGH_PRIORITY_TIERS:
@@ -115,6 +116,7 @@ class Scheduler:
                 for branch in research
                 if not branch_lifecycle_new_mechanism_ineligible(branch)
                 and not branch_is_parked_lineage(branch)
+                and not _branch_lifecycle_budget_exhausted(branch)
             ]
             if not eligible_research:
                 if len(active_for_proposal_capacity) < self._max_active_branches:
@@ -235,12 +237,59 @@ def _established_branch(branch: Branch) -> bool:
 def _counts_toward_proposal_capacity(branch: Branch) -> bool:
     if branch_is_parked_lineage(branch):
         return False
+    if branch.state in _RESEARCH_STATES and _branch_lifecycle_budget_exhausted(
+        branch
+    ):
+        return False
     if branch.state in _RESEARCH_STATES and (
         branch_lifecycle_new_mechanism_ineligible(branch)
         or _no_effect_without_actionable_diagnostic(branch)
     ):
         return False
     return True
+
+
+def _branch_lifecycle_budget_exhausted(branch: Branch) -> bool:
+    if branch.state not in _RESEARCH_STATES:
+        return False
+    return _rollback_budget_exhausted(branch) or _marginal_loop_exhausted(branch)
+
+
+def _rollback_budget_exhausted(branch: Branch) -> bool:
+    return (
+        max(0, int(getattr(branch, "rollback_count", 0) or 0)) >= 2
+        and (
+            bool(getattr(branch, "best_quality_checkpoint_id", None))
+            or bool(getattr(branch, "last_valid_checkpoint_id", None))
+        )
+    )
+
+
+def _marginal_loop_exhausted(branch: Branch) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    if status not in {"active_marginal", "active_no_effect"} and tier not in {
+        "marginal",
+        "no_effect",
+    }:
+        return False
+    repeated = max(
+        0,
+        int(getattr(branch, "lifecycle_signal_repeat_count", 0) or 0),
+    )
+    marginal_or_no_effect_streak = max(
+        0,
+        int(getattr(branch, "lifecycle_marginal_no_effect_streak", 0) or 0),
+    )
+    no_effect_followups = max(
+        0,
+        int(getattr(branch, "lifecycle_no_effect_diagnostic_followups", 0) or 0),
+    )
+    return (
+        marginal_or_no_effect_streak >= 2
+        and repeated >= 2
+        or no_effect_followups >= 2
+    )
 
 
 def _branch_research_priority(branch: Branch) -> int:

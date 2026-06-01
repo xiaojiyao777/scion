@@ -1,6 +1,7 @@
 """Focused tests split from test_agentic_proposal_tools_schema.py."""
 
 from .agentic_schema_test_support import *  # noqa: F401,F403
+from scion.problem.spec import ProblemSpecV1
 from scion.proposal.schemas import HypothesisProposalInput
 
 def test_old_style_patch_json_is_accepted_without_transport_premise_check() -> None:
@@ -251,6 +252,71 @@ def test_schema_preview_invalid_expected_telemetry_category_is_hard_feedback(
     )
 
 
+def test_schema_preview_c11_renders_exact_allowed_telemetry_template(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    spec_payload = context.problem_spec.model_dump()
+    search_policy = dict(spec_payload["research_surfaces"][1])
+    evidence = dict(search_policy.get("evidence") or {})
+    evidence["runtime_field_roles"] = {
+        "mechanism_activation": [
+            f"policy_activation_{idx}.{{mechanism}}" for idx in range(7)
+        ],
+        "mechanism_effect": [
+            f"policy_effect_{idx}.{{mechanism}}" for idx in range(6)
+        ],
+        "budget": [
+            f"policy_budget_{idx}.{{mechanism}}" for idx in range(5)
+        ],
+        "activity": ["policy_loaded"],
+    }
+    search_policy["evidence"] = evidence
+    spec_payload["research_surfaces"][1] = search_policy
+    context = replace(
+        context,
+        problem_spec=ProblemSpecV1(**spec_payload),
+        adapter=None,
+    )
+    hypothesis = _valid_hypothesis_payload(
+        mechanism_changes=[{"id": "budget_probe", "change_type": "modify"}],
+        expected_telemetry={"activation": ["policy_activation_0.aggregate"]},
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    telemetry = preview.structured_payload["hypothesis"][
+        "expected_telemetry_contract"
+    ]
+    template = telemetry["allowed_expected_telemetry_template"]
+
+    assert preview.structured_payload["passed"] is False
+    assert telemetry["exact_allowed_top_level_categories"] == [
+        "activation",
+        "activity",
+        "budget",
+        "effect",
+    ]
+    assert telemetry["declared_mechanism_ids"] == ["budget_probe"]
+    assert telemetry["template_mechanism_ids"] == ["budget_probe"]
+    assert template["template_truncated"] is False
+    assert template["mechanism_ids"] == ["budget_probe"]
+    assert template["expected_telemetry"]["activation"] == [
+        f"policy_activation_{idx}.budget_probe" for idx in range(7)
+    ]
+    assert template["expected_telemetry"]["effect"] == [
+        f"policy_effect_{idx}.budget_probe" for idx in range(6)
+    ]
+    assert template["expected_telemetry"]["budget"] == [
+        f"policy_budget_{idx}.budget_probe" for idx in range(5)
+    ]
+
+
 def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
     description = HYPOTHESIS_PROPOSAL_SCHEMA["properties"]["expected_telemetry"][
         "description"
@@ -276,8 +342,10 @@ def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
     assert "Aggregate outcome or activity fields" in description
     assert "effect or activity, not activation" in description
     assert "mechanism-specific path containing the declared mechanism id" in description
+    assert "broad aggregate phase" in description
     assert "existing phase or component" in description
     assert "mechanism-specific activity evidence" in tool_description
+    assert "broad aggregate phase" in tool_description
     assert "existing phase or component" in tool_description
 
 

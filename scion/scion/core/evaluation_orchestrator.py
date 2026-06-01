@@ -195,6 +195,27 @@ class EvaluationOrchestrator:
                 current_telemetry_diagnostic_streak=(
                     self.branch_telemetry_diagnostic_streaks.get(bid, 0)
                 ),
+                current_marginal_no_effect_streak=getattr(
+                    branch,
+                    "lifecycle_marginal_no_effect_streak",
+                    0,
+                ),
+                current_no_effect_diagnostic_followups=getattr(
+                    branch,
+                    "lifecycle_no_effect_diagnostic_followups",
+                    0,
+                ),
+                last_signal_signature=getattr(
+                    branch,
+                    "lifecycle_last_signal_signature",
+                    None,
+                ),
+                current_signal_signature_repeat_count=getattr(
+                    branch,
+                    "lifecycle_signal_repeat_count",
+                    0,
+                ),
+                rollback_count=getattr(branch, "rollback_count", 0),
                 branch_code_status=getattr(branch, "branch_code_status", ""),
                 branch_screening_tier=getattr(
                     branch,
@@ -242,6 +263,27 @@ class EvaluationOrchestrator:
             lifecycle = self.branch_lifecycle_policy.decide(
                 features,
                 current_zero_win_streak=self.branch_zero_win_streaks.get(bid, 0),
+                current_marginal_no_effect_streak=getattr(
+                    branch,
+                    "lifecycle_marginal_no_effect_streak",
+                    0,
+                ),
+                current_no_effect_diagnostic_followups=getattr(
+                    branch,
+                    "lifecycle_no_effect_diagnostic_followups",
+                    0,
+                ),
+                last_signal_signature=getattr(
+                    branch,
+                    "lifecycle_last_signal_signature",
+                    None,
+                ),
+                current_signal_signature_repeat_count=getattr(
+                    branch,
+                    "lifecycle_signal_repeat_count",
+                    0,
+                ),
+                rollback_count=getattr(branch, "rollback_count", 0),
                 branch_code_status=getattr(branch, "branch_code_status", ""),
                 branch_screening_tier=getattr(
                     branch,

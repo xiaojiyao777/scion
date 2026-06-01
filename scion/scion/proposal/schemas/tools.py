@@ -82,6 +82,8 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "whole map field alone is not activation evidence. If changing an "
         "existing phase or component, declare a specific mechanism id for the "
         "changed lever and use that same id in every expected_telemetry path. "
+        "Do not replace that declared mechanism id with a broad aggregate "
+        "phase, family, or runtime bucket label. "
         "Declare best_delta/delta_sum effect fields only when the mechanism "
         "can emit a positive improvement delta through record_move; otherwise "
         "declare activity or activation telemetry instead.\n"

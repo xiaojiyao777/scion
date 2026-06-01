@@ -15,7 +15,11 @@ from scion.core.campaign_adapters import (
     _workspace_service_for,
 )
 from scion.core.campaign_governance import CampaignGovernanceService
-from scion.core.branch_hygiene import campaign_branch_lifecycle_reroute_status
+from scion.core.branch_hygiene import (
+    branch_hygiene_context,
+    branch_prompt_card,
+    campaign_branch_lifecycle_reroute_status,
+)
 from scion.core.circuit_breaker import CircuitBreaker, MAX_CONSECUTIVE_LLM_FAILURES
 from scion.core.explore_step_pipeline import build_verification_detail
 from scion.core.features import BudgetState
@@ -330,6 +334,23 @@ class CampaignManager:
         branch_lifecycle_reroute_policy = campaign_branch_lifecycle_reroute_status(
             branches
         )
+        branch_rows = [_branch_state_row(b) for b in branches]
+        branch_cards = [row["branch_card"] for row in branch_rows]
+        try:
+            from scion.core.evidence_recording.summary import _branch_history_cards
+
+            branch_history_cards = _branch_history_cards(
+                self._step_history,
+                branch_cards,
+            )
+        except Exception as exc:  # pragma: no cover - status is best-effort
+            logger.debug("branch history card projection failed: %s", exc)
+            branch_history_cards = branch_cards
+        checkpoint_inventory: Dict[str, Any] = {}
+        try:
+            checkpoint_inventory = _workspace_service_for(self).checkpoint_summary()
+        except Exception as exc:  # pragma: no cover - status is best-effort
+            logger.debug("checkpoint summary failed: %s", exc)
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
@@ -347,62 +368,10 @@ class CampaignManager:
             "balance_exhausted": self._balance_exhausted,
             "circuit_breaker_tripped": self._circuit_breaker.is_tripped,
             "frozen_budget": self._frozen_budget_ledger.snapshot(),
-            "branches": [
-                {
-                    "id": b.branch_id,
-                    "state": b.state.value,
-                    "base_champion_id": b.base_champion_id,
-                    "weight_revision": getattr(b, "weight_revision", 0),
-                    "branch_code_status": getattr(
-                        b,
-                        "branch_code_status",
-                        "clean",
-                    ),
-                    "last_screening_feedback_tier": getattr(
-                        b,
-                        "last_screening_feedback_tier",
-                        None,
-                    ),
-                    "last_telemetry_outcome": getattr(
-                        b,
-                        "last_telemetry_outcome",
-                        None,
-                    ),
-                    "branch_mechanism_ids": list(
-                        getattr(b, "branch_mechanism_ids", ()) or ()
-                    ),
-                    "telemetry_repair_mechanism_ids": list(
-                        getattr(b, "telemetry_repair_mechanism_ids", ()) or ()
-                    ),
-                    "telemetry_repair_attempts": dict(
-                        getattr(b, "telemetry_repair_attempts", {}) or {}
-                    ),
-                    "branch_lifecycle_policy_blocks": getattr(
-                        b,
-                        "branch_lifecycle_policy_blocks",
-                        0,
-                    ),
-                    "branch_lifecycle_new_mechanism_ineligible": getattr(
-                        b,
-                        "branch_lifecycle_new_mechanism_ineligible",
-                        False,
-                    ),
-                    "branch_lifecycle_reroute_reason": getattr(
-                        b,
-                        "branch_lifecycle_reroute_reason",
-                        None,
-                    ),
-                    "last_branch_lifecycle_policy_block": dict(
-                        getattr(
-                            b,
-                            "last_branch_lifecycle_policy_block",
-                            {},
-                        )
-                        or {}
-                    ),
-                }
-                for b in branches
-            ],
+            "branches": branch_rows,
+            "branch_cards": branch_cards,
+            "branch_history_cards": branch_history_cards,
+            "checkpoint_inventory": checkpoint_inventory,
         }
         if branch_lifecycle_reroute_policy:
             state["branch_lifecycle_reroute_policy"] = (
@@ -416,7 +385,10 @@ class CampaignManager:
         ):
             state["weight_optimization"] = weight_opt_status
         if self._current_status_progress is not None:
-            state["current_progress"] = self._current_status_progress
+            state["current_progress"] = _sync_branch_progress_from_rows(
+                self._current_status_progress,
+                branch_rows,
+            )
         return state
 
     def _write_status(
@@ -922,3 +894,84 @@ class CampaignManager:
 def _build_verification_detail(vresult: VerificationResult) -> Optional[str]:
     """Compatibility wrapper for the extracted explore-step helper."""
     return build_verification_detail(vresult)
+
+
+def _branch_state_row(branch: Branch) -> Dict[str, Any]:
+    card = dict(branch_hygiene_context(branch))
+    card["branch_card_text"] = branch_prompt_card(branch)
+    return {
+        "id": branch.branch_id,
+        "state": branch.state.value,
+        "base_champion_id": branch.base_champion_id,
+        "weight_revision": getattr(branch, "weight_revision", 0),
+        "branch_code_status": getattr(branch, "branch_code_status", "clean"),
+        "last_screening_feedback_tier": getattr(
+            branch,
+            "last_screening_feedback_tier",
+            None,
+        ),
+        "last_telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
+        "branch_mechanism_ids": list(
+            getattr(branch, "branch_mechanism_ids", ()) or ()
+        ),
+        "telemetry_repair_mechanism_ids": list(
+            getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+        ),
+        "telemetry_repair_attempts": dict(
+            getattr(branch, "telemetry_repair_attempts", {}) or {}
+        ),
+        "branch_lifecycle_policy_blocks": getattr(
+            branch,
+            "branch_lifecycle_policy_blocks",
+            0,
+        ),
+        "branch_lifecycle_new_mechanism_ineligible": getattr(
+            branch,
+            "branch_lifecycle_new_mechanism_ineligible",
+            False,
+        ),
+        "branch_lifecycle_reroute_reason": getattr(
+            branch,
+            "branch_lifecycle_reroute_reason",
+            None,
+        ),
+        "last_branch_lifecycle_policy_block": dict(
+            getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
+        ),
+        "best_quality_checkpoint_id": getattr(
+            branch,
+            "best_quality_checkpoint_id",
+            None,
+        ),
+        "last_valid_checkpoint_id": getattr(branch, "last_valid_checkpoint_id", None),
+        "rollback_count": int(getattr(branch, "rollback_count", 0) or 0),
+        "last_rollback_reason": getattr(branch, "last_rollback_reason", None),
+        "branch_card": card,
+        "branch_card_text": card["branch_card_text"],
+    }
+
+
+def _sync_branch_progress_from_rows(
+    progress: Dict[str, Any],
+    branch_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    branch_id = str(progress.get("branch_id") or "")
+    merged = dict(progress)
+    for row in branch_rows:
+        if str(row.get("id") or "") != branch_id:
+            continue
+        card = dict(row.get("branch_card") or {})
+        merged["branch_card"] = card
+        for key in (
+            "lineage_status",
+            "current_head_status",
+            "best_checkpoint_status",
+            "best_quality_checkpoint_id",
+            "last_valid_checkpoint_id",
+            "rollback_count",
+            "lineage_retained_checkpoint",
+        ):
+            if key in card:
+                merged[key] = card[key]
+        break
+    return merged

@@ -621,6 +621,7 @@ def _hypothesis_schema_preview(
             context,
             hypothesis,
             c11_check,
+            branch_continuation_guard=branch_continuation_guard,
         ),
         "problem_expected_telemetry_preview": problem_telemetry_preview,
         "mechanism_binding": _mechanism_binding_preview(hypothesis, c12_check),
@@ -784,6 +785,8 @@ def _expected_telemetry_contract_preview(
     context: ProposalToolContext,
     hypothesis: HypothesisProposal,
     c11_check: Any | None,
+    *,
+    branch_continuation_guard: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     expected = getattr(hypothesis, "expected_telemetry", {}) or {}
     requested_categories: list[str] = []
@@ -812,19 +815,50 @@ def _expected_telemetry_contract_preview(
     except Exception:
         problem_spec = None
     declared_mechanisms = mechanism_changes(hypothesis)
+    declared_mechanism_ids = sorted(
+        dict.fromkeys(
+            str(change.id).strip()
+            for change in declared_mechanisms
+            if str(change.id).strip()
+        )
+    )
+    protected_mechanism_ids = _protected_mechanism_ids_from_branch_guard(
+        branch_continuation_guard
+    )
+    template_mechanism_ids = (
+        protected_mechanism_ids or declared_mechanism_ids
+    )
     declared_fields = sorted(
         declared_surface_telemetry_fields(
             surface,
             problem_spec=problem_spec,
-            declared_mechanisms=declared_mechanisms,
+            declared_mechanisms=template_mechanism_ids or declared_mechanisms,
         )
+    )
+    claims = normalize_expected_telemetry(expected)
+    requested_fields = {
+        category: list(fields)
+        for category, fields in sorted(claims.items())
+        if fields
+    }
+    exact_template_field_budget = max(
+        _PREVIEW_MAX_CHECKS,
+        len(declared_fields)
+        + sum(len(fields) for fields in requested_fields.values())
+        + max(1, len(template_mechanism_ids or declared_mechanism_ids))
+        * _PREVIEW_MAX_CHECKS,
     )
     allowed_template = expected_telemetry_template(
         problem_spec=problem_spec,
         selected_surface=getattr(hypothesis, "change_locus", None),
-        declared_mechanisms=declared_mechanisms,
-        max_fields_per_category=_PREVIEW_MAX_CHECKS,
+        declared_mechanisms=template_mechanism_ids or declared_mechanisms,
+        max_fields_per_category=exact_template_field_budget,
     )
+    if template_mechanism_ids:
+        allowed_template = dict(allowed_template)
+        allowed_template["mechanism_ids"] = list(template_mechanism_ids)
+        allowed_template["template_is_exact"] = True
+        allowed_template["template_truncated"] = False
     template_expected = allowed_template.get("expected_telemetry")
     mechanism_fields = sorted(
         {
@@ -838,12 +872,6 @@ def _expected_telemetry_contract_preview(
             for field in fields
         }
     )
-    claims = normalize_expected_telemetry(expected)
-    requested_fields = {
-        category: list(fields)
-        for category, fields in sorted(claims.items())
-        if fields
-    }
     passed = None if c11_check is None else bool(_attr(c11_check, "passed"))
     detail = "" if c11_check is None or passed else str(_attr(c11_check, "detail", ""))
     return _drop_empty_items(
@@ -854,7 +882,16 @@ def _expected_telemetry_contract_preview(
             "requested_categories": requested_categories,
             "invalid_categories": sorted(dict.fromkeys(invalid_categories)),
             "allowed_categories": sorted(EXPECTED_TELEMETRY_CATEGORIES),
+            "allowed_top_level_categories": sorted(EXPECTED_TELEMETRY_CATEGORIES),
+            "exact_allowed_top_level_categories": sorted(
+                EXPECTED_TELEMETRY_CATEGORIES
+            ),
             "requested_fields": requested_fields,
+            "declared_mechanism_ids": declared_mechanism_ids,
+            "protected_mechanism_ids": protected_mechanism_ids,
+            "template_mechanism_ids": list(
+                template_mechanism_ids or declared_mechanism_ids
+            ),
             "declared_runtime_fields": declared_fields[:_PREVIEW_MAX_CHECKS * 4],
             "declared_mechanism_runtime_fields": mechanism_fields[
                 : _PREVIEW_MAX_CHECKS * 4
@@ -869,14 +906,34 @@ def _expected_telemetry_contract_preview(
                 "keys declared by the selected research surface evidence contract. "
                 "Do not put explanatory prose in expected_telemetry values; if "
                 "mechanism fields are declared, substitute the concrete mechanism "
-                "id into those field templates. Do not use existing phase names "
-                "as activation for a newly declared mechanism unless that exact "
-                "mechanism id is declared in mechanism_changes."
+                "id into those field templates. Do not replace a declared "
+                "mechanism id with a broad aggregate phase, family, or runtime "
+                "bucket label. Do not use existing phase names as activation "
+                "for a newly declared mechanism unless that exact mechanism id "
+                "is declared in mechanism_changes."
                 if not passed
                 else ""
             ),
         }
     )
+
+
+def _protected_mechanism_ids_from_branch_guard(
+    branch_continuation_guard: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(branch_continuation_guard, Mapping):
+        return []
+    return sorted(
+        dict.fromkeys(
+            str(item).strip()
+            for item in (
+                branch_continuation_guard.get("protected_mechanism_ids") or ()
+            )
+            if str(item).strip()
+        )
+    )
+
+
 def _mechanism_binding_preview(
     hypothesis: HypothesisProposal,
     c12_check: Any | None,

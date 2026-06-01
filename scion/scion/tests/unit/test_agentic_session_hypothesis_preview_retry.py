@@ -410,13 +410,41 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     retry_context = creative.hypothesis_contexts[2]
     retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
     assert retry_feedback["failure_code"] == "C11_expected_telemetry"
+    assert retry_feedback["attempt_kind"] == "schema_accounting_repair"
+    assert (
+        retry_feedback["repair_classification"]
+        == "telemetry_schema_accounting_repair"
+    )
     assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(retry_feedback)
     assert "Repair only expected_telemetry/schema fields" in retry_feedback[
         "retry_constraint"
     ]
+    assert "schema/accounting repair" in retry_feedback["retry_constraint"]
     assert "switch mechanisms or targets" in retry_feedback["retry_constraint"]
     assert "declared_runtime_fields" not in retry_feedback
     assert "declared_mechanism_runtime_fields" not in retry_feedback
+    assert retry_feedback["exact_allowed_top_level_categories"] == [
+        "activation",
+        "activity",
+        "budget",
+        "effect",
+    ]
+    assert retry_feedback["declared_mechanism_ids"] == [
+        "adaptive_vns_operator_weights"
+    ]
+    assert retry_feedback["protected_mechanism_ids"] == [
+        "adaptive_vns_operator_weights"
+    ]
+    assert (
+        "broad aggregate phase"
+        in retry_feedback["legal_mechanism_id_policy"]
+    )
+    assert retry_feedback["allowed_expected_telemetry_template"][
+        "template_truncated"
+    ] is False
+    assert retry_feedback["allowed_expected_telemetry_template"][
+        "mechanism_ids"
+    ] == ["adaptive_vns_operator_weights"]
     assert retry_feedback["allowed_expected_telemetry_template"][
         "expected_telemetry"
     ]["activation"] == [

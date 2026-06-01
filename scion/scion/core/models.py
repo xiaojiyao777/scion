@@ -487,6 +487,10 @@ class Branch:
     last_valid_checkpoint_id: Optional[str] = None
     rollback_count: int = 0
     last_rollback_reason: Optional[str] = None
+    lifecycle_marginal_no_effect_streak: int = 0
+    lifecycle_no_effect_diagnostic_followups: int = 0
+    lifecycle_last_signal_signature: Optional[str] = None
+    lifecycle_signal_repeat_count: int = 0
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
