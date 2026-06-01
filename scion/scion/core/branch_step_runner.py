@@ -18,7 +18,12 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
-from scion.core.scheduler import Scheduler
+from scion.core.scheduler import (
+    Scheduler,
+    active_slot_capacity_block_metadata,
+    reclaim_active_slot_for_new_branch,
+    reconcile_active_slot_overflow,
+)
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
 from scion.core.verification_call import run_verification_gate
@@ -77,14 +82,63 @@ class BranchStepRunner:
             )
 
         self.tick_blocked_branches()
-        active = self.branch_controller.get_active_branches()
-        sched = self.scheduler.select_next(active)
+        max_active_branches = _scheduler_max_active_branches(self.scheduler)
+        active_slot_reconciliations: list[dict[str, Any]] = []
 
-        if sched.action == "at_capacity":
+        active = self.branch_controller.get_active_branches()
+        if max_active_branches is not None:
+            reconciliation = reconcile_active_slot_overflow(
+                active,
+                max_active_branches=max_active_branches,
+            )
+            if reconciliation.changed:
+                self._persist_active_slot_reconciliation(reconciliation)
+                active_slot_reconciliations.append(
+                    reconciliation.as_audit_metadata()
+                )
+                active = self.branch_controller.get_active_branches()
+
+        sched = self.scheduler.select_next(active)
+        if sched.action == "at_capacity" and max_active_branches is not None:
+            reconciliation = reclaim_active_slot_for_new_branch(
+                active,
+                max_active_branches=max_active_branches,
+            )
+            if reconciliation.changed:
+                self._persist_active_slot_reconciliation(reconciliation)
+                active_slot_reconciliations.append(
+                    reconciliation.as_audit_metadata()
+                )
+                active = self.branch_controller.get_active_branches()
+                sched = self.scheduler.select_next(active)
+
+        def finalize(
+            result: StepResult,
+            *,
+            capacity_block: dict[str, Any] | None = None,
+        ) -> StepResult:
             return _finalize_scheduler_result(
-                StepResult(action="skip", reason="max_active_branches reached"),
+                _attach_active_slot_audit(
+                    result,
+                    active_slot_reconciliations,
+                    capacity_block=capacity_block,
+                ),
                 sched,
                 self.record_scheduler_result,
+            )
+
+        if sched.action == "at_capacity":
+            capacity_block = (
+                active_slot_capacity_block_metadata(
+                    active,
+                    max_active_branches=max_active_branches,
+                )
+                if max_active_branches is not None
+                else None
+            )
+            return finalize(
+                StepResult(action="skip", reason="max_active_branches reached"),
+                capacity_block=capacity_block,
             )
 
         if sched.action == "create_new":
@@ -98,11 +152,7 @@ class BranchStepRunner:
                 logger.debug("BranchStore.save (create) failed: %s", exc)
             result = self.run_explore_step(branch)
             result.action = "create_branch"
-            return _finalize_scheduler_result(
-                result,
-                sched,
-                self.record_scheduler_result,
-            )
+            return finalize(result)
 
         branch = sched.branch
         assert branch is not None
@@ -113,31 +163,21 @@ class BranchStepRunner:
                 self.persist_branch_state(branch.branch_id)
             except StateTransitionError as exc:
                 logger.error("schedule_branch failed: %s", exc)
-                return _finalize_scheduler_result(
+                return finalize(
                     StepResult(
                         action="skip",
                         branch_id=branch.branch_id,
                         reason=str(exc),
-                    ),
-                    sched,
-                    self.record_scheduler_result,
+                    )
                 )
 
         branch = self.branch_controller.get_branch(branch.branch_id)
 
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
-            return _finalize_scheduler_result(
-                self.run_reconcile_step_callback(branch),
-                sched,
-                self.record_scheduler_result,
-            )
+            return finalize(self.run_reconcile_step_callback(branch))
 
         if branch.state == BranchState.EXPLORE:
-            return _finalize_scheduler_result(
-                self.run_explore_step(branch),
-                sched,
-                self.record_scheduler_result,
-            )
+            return finalize(self.run_explore_step(branch))
 
         if branch.state in (
             BranchState.EXPLORE_EXPAND,
@@ -146,32 +186,33 @@ class BranchStepRunner:
             BranchState.FROZEN_TESTING,
         ):
             try:
-                return _finalize_scheduler_result(
-                    self.run_eval_step_callback(branch),
-                    sched,
-                    self.record_scheduler_result,
-                )
+                return finalize(self.run_eval_step_callback(branch))
             except RuntimeError as exc:
-                return _finalize_scheduler_result(
-                    self._handle_eval_runtime_error(branch, exc),
-                    sched,
-                    self.record_scheduler_result,
-                )
+                return finalize(self._handle_eval_runtime_error(branch, exc))
 
         logger.warning(
             "Branch %s in unexpected state %s - skipping",
             branch.branch_id,
             branch.state.value,
         )
-        return _finalize_scheduler_result(
+        return finalize(
             StepResult(
                 action="skip",
                 branch_id=branch.branch_id,
                 reason=f"unhandled state {branch.state.value}",
-            ),
-            sched,
-            self.record_scheduler_result,
+            )
         )
+
+    def _persist_active_slot_reconciliation(self, reconciliation: Any) -> None:
+        for branch_id in getattr(reconciliation, "parked_branch_ids", ()) or ():
+            try:
+                self.persist_branch_state(str(branch_id))
+            except Exception as exc:  # pragma: no cover - persistence is best-effort
+                logger.debug(
+                    "Branch %s: active-slot reconciliation persist failed: %s",
+                    branch_id,
+                    exc,
+                )
 
     def run_eval_step(self, branch: Branch) -> StepResult:
         """Evaluation-only step for validation/frozen branches."""
@@ -458,6 +499,34 @@ def _eval_failure_detail(
     if FROZEN_BUDGET_EXHAUSTED in reason_codes:
         return "frozen_budget", FROZEN_BUDGET_EXHAUSTED
     return None, None
+
+
+def _scheduler_max_active_branches(scheduler: Any) -> int | None:
+    value = getattr(scheduler, "max_active_branches", None)
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _attach_active_slot_audit(
+    result: StepResult,
+    reconciliations: list[dict[str, Any]],
+    *,
+    capacity_block: dict[str, Any] | None = None,
+) -> StepResult:
+    if not reconciliations and capacity_block is None:
+        return result
+    audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
+    if reconciliations:
+        audit_metadata["active_slot_reconciliations"] = list(reconciliations)
+        audit_metadata["active_slot_reconciliation"] = dict(reconciliations[-1])
+    if capacity_block is not None:
+        audit_metadata["active_slot_hard_cap"] = dict(capacity_block)
+    result.scheduler_audit_metadata = audit_metadata
+    return result
 
 
 def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:

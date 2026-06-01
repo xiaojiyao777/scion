@@ -5,7 +5,11 @@ from datetime import datetime, timedelta
 import pytest
 
 from scion.core.models import Branch, BranchState
-from scion.core.scheduler import Scheduler, SchedulerAction, active_slot_inventory
+from scion.core.scheduler import (
+    Scheduler,
+    active_slot_inventory,
+    reclaim_active_slot_for_new_branch,
+)
 
 
 def _branch(
@@ -154,7 +158,7 @@ def test_lifecycle_blocked_research_branch_reroutes_to_clean_branch():
     assert action.branch is clean
 
 
-def test_lifecycle_blocked_research_branches_create_clean_fork_at_capacity():
+def test_lifecycle_blocked_research_branches_do_not_create_clean_fork_at_capacity():
     branches = []
     for offset in (0, 10, 20):
         branch = _branch(
@@ -172,23 +176,23 @@ def test_lifecycle_blocked_research_branches_create_clean_fork_at_capacity():
 
     action = Scheduler(max_active_branches=3).select_next(branches)
 
-    assert action.action == "create_new"
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.reason == "clean_fork_after_branch_lifecycle_policy_block"
-    assert action.slot == "repair_diagnostic"
+    assert action.reason == "active_branch_limit_reached"
+    assert action.slot == "capacity_blocked"
 
 
-def test_no_effect_without_actionable_diagnostic_prefers_clean_fork():
+def test_no_effect_without_actionable_diagnostic_does_not_bypass_hard_cap():
     branch = _branch(BranchState.EXPLORE)
     branch.branch_code_status = "active_no_effect"
     branch.branch_mechanism_ids = ("bounded_probe",)
 
     action = Scheduler(max_active_branches=1).select_next([branch])
 
-    assert action.action == "create_new"
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "clean_fork_required_for_new_mechanism"
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
 
 
 def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
@@ -382,7 +386,7 @@ def test_weak_positive_rollback_checkpoint_stays_exploit_slot():
     assert action.reason == "restored_weak_positive_checkpoint_followup"
 
 
-def test_rollback_budget_exhausted_branch_does_not_block_clean_fork():
+def test_rollback_budget_exhausted_branch_does_not_bypass_hard_cap():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "solver: restored weak positive"
     branch.branch_code_status = "active_weak_positive"
@@ -392,13 +396,13 @@ def test_rollback_budget_exhausted_branch_does_not_block_clean_fork():
 
     action = Scheduler(max_active_branches=1).select_next([branch])
 
-    assert action.action == "create_new"
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
 
 
-def test_repeated_marginal_loop_does_not_block_clean_fork():
+def test_repeated_marginal_loop_does_not_bypass_hard_cap():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "solver: repeated marginal"
     branch.branch_code_status = "active_marginal"
@@ -411,10 +415,10 @@ def test_repeated_marginal_loop_does_not_block_clean_fork():
 
     action = Scheduler(max_active_branches=1).select_next([branch])
 
-    assert action.action == "create_new"
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
 
 
 def test_marginal_plateau_prefers_other_active_lineage():
@@ -440,7 +444,7 @@ def test_marginal_plateau_prefers_other_active_lineage():
     assert action.branch is clean
 
 
-def test_repeated_weak_signal_opens_clean_fork_capacity():
+def test_repeated_weak_signal_does_not_bypass_hard_cap():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "solver: repeated weak signal"
     branch.branch_code_status = "active_weak_positive"
@@ -450,13 +454,61 @@ def test_repeated_weak_signal_opens_clean_fork_capacity():
     action = Scheduler(max_active_branches=1).select_next([branch])
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert action.action == "create_new"
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "plateau_reroute_clean_fork"
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
     assert inventory["used"] == 1
     assert inventory["available"] == 0
     assert inventory["branch_ids"] == [branch.branch_id]
+
+
+@pytest.mark.parametrize(
+    "status,tier,extra",
+    [
+        ("active_no_effect", "no_effect", {"branch_mechanism_ids": ("probe",)}),
+        (
+            "active_marginal",
+            "marginal",
+            {
+                "lifecycle_marginal_no_effect_streak": 2,
+                "lifecycle_signal_repeat_count": 2,
+            },
+        ),
+        (
+            "active_weak_positive",
+            "weak_positive",
+            {"lifecycle_signal_repeat_count": 2},
+        ),
+    ],
+)
+def test_low_value_branch_reclaim_parks_and_releases_active_slot(
+    status: str,
+    tier: str,
+    extra: dict,
+) -> None:
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: repeated low signal"
+    branch.branch_code_status = status
+    branch.last_screening_feedback_tier = tier
+    for key, value in extra.items():
+        setattr(branch, key, value)
+
+    reconciliation = reclaim_active_slot_for_new_branch(
+        [branch],
+        max_active_branches=1,
+    )
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert reconciliation.changed is True
+    assert reconciliation.parked_branch_ids == (branch.branch_id,)
+    assert branch.state == BranchState.PARKED_LINEAGE
+    assert branch.branch_code_status == "parked_lineage"
+    assert branch.last_branch_lifecycle_policy_block[
+        "active_slot_reconciliation"
+    ]["mode"] == "new_branch_reclaim"
+    assert inventory["used"] == 0
+    assert inventory["parked_lineage_ids"] == [branch.branch_id]
 
 
 def test_parked_lineage_does_not_block_clean_fork_capacity():

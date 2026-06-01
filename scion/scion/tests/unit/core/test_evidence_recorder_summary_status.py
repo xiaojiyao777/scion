@@ -378,6 +378,59 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
     assert status["active_slots"]["branch_ids"] == ["branch-1"]
 
 
+def test_status_and_summary_cap_active_slots_from_branch_cards(
+    tmp_path: Path,
+) -> None:
+    def active_row(branch_id: str) -> dict:
+        return {
+            "id": branch_id,
+            "branch_card": {
+                "branch_id": branch_id,
+                "status": "explore",
+                "active_slot_status": "active_slot",
+                "counts_toward_active_slots": True,
+            },
+        }
+
+    state = {
+        "n_experiments": 3,
+        "proposal_attempts": 3,
+        "screened_experiments": 3,
+        "n_active_branches": 3,
+        "active_slots": {
+            "used": 3,
+            "max": 2,
+            "available": 0,
+            "branch_ids": ["branch-a", "branch-b", "branch-c"],
+        },
+        "branches": [
+            active_row("branch-a"),
+            active_row("branch-b"),
+            active_row("branch-c"),
+        ],
+    }
+    recorder = EvidenceRecorder(
+        campaign_id="camp-active-slots",
+        campaign_dir=tmp_path,
+        state_provider=lambda: state,
+    )
+
+    status = recorder.write_status()
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=0,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    for payload in (status, summary):
+        assert payload["n_active_branches"] == 2
+        assert payload["active_slots"]["used"] == 2
+        assert payload["active_slots"]["max"] == 2
+        assert payload["active_slots"]["branch_ids"] == ["branch-a", "branch-b"]
+        assert payload["active_slots"]["overflow_branch_ids"] == ["branch-c"]
+
+
 def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     tmp_path: Path,
 ) -> None:

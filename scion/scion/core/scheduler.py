@@ -1,8 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Iterable, List, Literal, Optional
 
 from scion.core.branch_hygiene import (
+    BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
     CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
     branch_has_actionable_diagnostic,
@@ -53,6 +55,33 @@ _TERMINAL_STATES = frozenset({
 
 _DEFAULT_MAX_ACTIVE_BRANCHES = 3
 _PLATEAU_REROUTE_REASON = "plateau_reroute_clean_fork"
+ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
+ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH = "active_slot_reclaimed_for_new_branch"
+ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
+
+
+@dataclass(frozen=True)
+class ActiveSlotReconciliation:
+    mode: Literal["overflow", "new_branch_reclaim"]
+    reason: str
+    before_used: int
+    after_used: int
+    max_active_branches: int
+    parked_branch_ids: tuple[str, ...] = ()
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.parked_branch_ids)
+
+    def as_audit_metadata(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "reason": self.reason,
+            "before_used": self.before_used,
+            "after_used": self.after_used,
+            "max_active_branches": self.max_active_branches,
+            "parked_branch_ids": list(self.parked_branch_ids),
+        }
 
 
 class Scheduler:
@@ -83,11 +112,7 @@ class Scheduler:
         are broken by oldest updated_at as a last-run approximation.
         """
         active = [b for b in branches if b.state not in _TERMINAL_STATES]
-        active_for_proposal_capacity = [
-            b
-            for b in active
-            if _counts_toward_proposal_capacity(b)
-        ]
+        active_for_slots = active_slot_branches(active)
         # BLOCKED_INFRA branches are not schedulable, though they still count
         # toward the active-branch cap until recovery/abandon clears them.
         schedulable = [
@@ -128,7 +153,7 @@ class Scheduler:
                 and not _branch_lifecycle_budget_exhausted(branch)
             ]
             if not eligible_research:
-                if len(active_for_proposal_capacity) < self._max_active_branches:
+                if len(active_for_slots) < self._max_active_branches:
                     return SchedulerAction(
                         action="create_new",
                         branch=None,
@@ -159,28 +184,36 @@ class Scheduler:
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
                 )
-            if (
-                not preferred_research
-                and len(active_for_proposal_capacity) < self._max_active_branches
-            ):
+            if not preferred_research:
+                if len(active_for_slots) < self._max_active_branches:
+                    return SchedulerAction(
+                        action="create_new",
+                        branch=None,
+                        reason=_PLATEAU_REROUTE_REASON,
+                        slot="explore_new",
+                    )
                 return SchedulerAction(
-                    action="create_new",
+                    action="at_capacity",
                     branch=None,
-                    reason=_PLATEAU_REROUTE_REASON,
-                    slot="explore_new",
+                    reason="active_branch_limit_reached",
+                    slot="capacity_blocked",
                 )
-            if (
-                len(active_for_proposal_capacity) < self._max_active_branches
-                and all(
-                    branch_requires_same_mechanism_followup(branch)
-                    for branch in eligible_research
-                )
+            if all(
+                branch_requires_same_mechanism_followup(branch)
+                for branch in eligible_research
             ):
+                if len(active_for_slots) < self._max_active_branches:
+                    return SchedulerAction(
+                        action="create_new",
+                        branch=None,
+                        reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
+                        slot="explore_new",
+                    )
                 return SchedulerAction(
-                    action="create_new",
+                    action="at_capacity",
                     branch=None,
-                    reason=CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM,
-                    slot="explore_new",
+                    reason="active_branch_limit_reached",
+                    slot="capacity_blocked",
                 )
             clean_research = [
                 branch
@@ -200,7 +233,7 @@ class Scheduler:
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
                 )
-            if len(active_for_proposal_capacity) < self._max_active_branches and any(
+            if len(active_for_slots) < self._max_active_branches and any(
                 _established_branch(branch) for branch in eligible_research
             ):
                 return SchedulerAction(
@@ -219,7 +252,7 @@ class Scheduler:
             )
 
         # No actionable branch: only create new if below capacity (§4.6 / §11.5)
-        if len(active_for_proposal_capacity) >= self._max_active_branches:
+        if len(active_for_slots) >= self._max_active_branches:
             return SchedulerAction(
                 action="at_capacity",
                 branch=None,
@@ -258,28 +291,13 @@ def _established_branch(branch: Branch) -> bool:
     return bool(branch.direction)
 
 
-def _counts_toward_proposal_capacity(branch: Branch) -> bool:
-    if branch_is_parked_lineage(branch):
-        return False
-    if branch.state in _RESEARCH_STATES and _branch_lifecycle_budget_exhausted(
-        branch
-    ):
-        return False
-    if branch.state in _RESEARCH_STATES and (
-        branch_lifecycle_new_mechanism_ineligible(branch)
-        or _no_effect_without_actionable_diagnostic(branch)
-        or _branch_plateau_reroute_preferred(branch)
-    ):
-        return False
-    return True
-
-
 def branch_counts_toward_active_slots(branch: Branch) -> bool:
     """Return whether ``branch`` consumes a reported active lineage slot.
 
-    Proposal scheduling can temporarily prefer a clean fork over a weak or
-    exhausted follow-up, but status/summary/DB active-slot accounting is the
-    live lineage inventory: non-terminal, non-parked branches consume slots.
+    Proposal scheduling may prefer a clean fork over a weak or exhausted
+    follow-up, but active-slot accounting is the live lineage inventory:
+    non-terminal, non-parked branches consume slots until reconciliation parks
+    or otherwise terminalizes them.
     """
     if branch.state in _TERMINAL_STATES:
         return False
@@ -320,6 +338,219 @@ def active_slot_inventory(
         "parked_lineages": len(parked),
         "parked_lineage_ids": [branch.branch_id for branch in parked],
     }
+
+
+def reconcile_active_slot_overflow(
+    branches: Iterable[Branch],
+    *,
+    max_active_branches: int,
+) -> ActiveSlotReconciliation:
+    """Park deterministic low-value lineages until live active slots fit the cap."""
+    branch_list = list(branches)
+    limit = max(0, int(max_active_branches))
+    return _reconcile_active_slots(
+        branch_list,
+        max_active_branches=limit,
+        target_used=limit,
+        mode="overflow",
+        reason=ACTIVE_SLOT_HARD_CAP_RECONCILED,
+        reclaim_filter=lambda _branch: True,
+    )
+
+
+def reclaim_active_slot_for_new_branch(
+    branches: Iterable[Branch],
+    *,
+    max_active_branches: int,
+) -> ActiveSlotReconciliation:
+    """Release one low-value active slot before admitting a clean fork."""
+    branch_list = list(branches)
+    limit = max(0, int(max_active_branches))
+    active = active_slot_branches(branch_list)
+    if limit <= 0 or len(active) < limit:
+        return ActiveSlotReconciliation(
+            mode="new_branch_reclaim",
+            reason=ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH,
+            before_used=len(active),
+            after_used=len(active),
+            max_active_branches=limit,
+        )
+    return _reconcile_active_slots(
+        branch_list,
+        max_active_branches=limit,
+        target_used=limit - 1,
+        mode="new_branch_reclaim",
+        reason=ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH,
+        reclaim_filter=_eligible_new_branch_slot_reclaim,
+    )
+
+
+def active_slot_capacity_block_metadata(
+    branches: Iterable[Branch],
+    *,
+    max_active_branches: int,
+) -> dict[str, Any]:
+    active = active_slot_branches(list(branches))
+    limit = max(0, int(max_active_branches))
+    return {
+        "reason": ACTIVE_SLOT_HARD_CAP_BLOCKED,
+        "used": len(active),
+        "max_active_branches": limit,
+        "branch_ids": [branch.branch_id for branch in active],
+    }
+
+
+def _reconcile_active_slots(
+    branches: list[Branch],
+    *,
+    max_active_branches: int,
+    target_used: int,
+    mode: Literal["overflow", "new_branch_reclaim"],
+    reason: str,
+    reclaim_filter: Any,
+) -> ActiveSlotReconciliation:
+    active = active_slot_branches(branches)
+    before_used = len(active)
+    target = max(0, int(target_used))
+    if before_used <= target:
+        return ActiveSlotReconciliation(
+            mode=mode,
+            reason=reason,
+            before_used=before_used,
+            after_used=before_used,
+            max_active_branches=max_active_branches,
+        )
+
+    candidates = sorted(
+        [branch for branch in active if reclaim_filter(branch)],
+        key=_active_slot_reclaim_sort_key,
+    )
+    parked: list[str] = []
+    for branch in candidates:
+        if len(active_slot_branches(branches)) <= target:
+            break
+        _park_active_slot_branch(
+            branch,
+            reason=reason,
+            mode=mode,
+            max_active_branches=max_active_branches,
+            before_used=before_used,
+        )
+        parked.append(branch.branch_id)
+    after_used = len(active_slot_branches(branches))
+    return ActiveSlotReconciliation(
+        mode=mode,
+        reason=reason,
+        before_used=before_used,
+        after_used=after_used,
+        max_active_branches=max_active_branches,
+        parked_branch_ids=tuple(parked),
+    )
+
+
+def _eligible_new_branch_slot_reclaim(branch: Branch) -> bool:
+    if branch.state not in _RESEARCH_STATES:
+        return False
+    return (
+        _branch_lifecycle_budget_exhausted(branch)
+        or branch_lifecycle_new_mechanism_ineligible(branch)
+        or _no_effect_without_actionable_diagnostic(branch)
+        or _branch_plateau_reroute_preferred(branch)
+    )
+
+
+def _active_slot_reclaim_sort_key(branch: Branch) -> tuple[Any, ...]:
+    status = branch_lineage_status(branch)
+    if _branch_lifecycle_budget_exhausted(branch):
+        bucket = 0
+    elif branch_lifecycle_new_mechanism_ineligible(branch):
+        bucket = 1
+    elif _no_effect_without_actionable_diagnostic(branch):
+        bucket = 2
+    elif _branch_plateau_reroute_preferred(branch):
+        bucket = 3
+    elif status == "active_no_effect":
+        bucket = 4
+    elif status == "active_marginal":
+        bucket = 5
+    elif branch.state == BranchState.BLOCKED_INFRA:
+        bucket = 10
+    elif branch.state in _RESEARCH_STATES:
+        bucket = 20
+    elif branch.state in {BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE}:
+        bucket = 30
+    else:
+        bucket = 40
+    if getattr(branch, "pending_retry", False):
+        bucket += 25
+    policy_blocks = max(
+        0,
+        int(getattr(branch, "branch_lifecycle_policy_blocks", 0) or 0),
+    )
+    return (
+        bucket,
+        1 if branch_has_retained_checkpoint(branch) else 0,
+        -policy_blocks,
+        getattr(branch, "updated_at", datetime.min),
+        getattr(branch, "created_at", datetime.min),
+        branch.branch_id,
+    )
+
+
+def _park_active_slot_branch(
+    branch: Branch,
+    *,
+    reason: str,
+    mode: str,
+    max_active_branches: int,
+    before_used: int,
+) -> None:
+    now = datetime.now()
+    existing = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    block_count = (
+        int(
+            existing.get("block_count")
+            or getattr(branch, "branch_lifecycle_policy_blocks", 0)
+            or 0
+        )
+        + 1
+    )
+    lifecycle_codes = list(existing.get("lifecycle_action_reason_codes") or ())
+    if reason not in lifecycle_codes:
+        lifecycle_codes.append(reason)
+    existing.update(
+        {
+            "reason": reason,
+            "detail": (
+                f"{reason}: active_slots.used={before_used} "
+                f"max_active_branches={max_active_branches}"
+            ),
+            "recorded_at": now.isoformat(),
+            "block_count": block_count,
+            "reroute_reason": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+            "new_mechanism_ineligible_reason": (
+                BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE
+            ),
+            "lifecycle_action_reason_codes": lifecycle_codes,
+            "active_slot_reconciliation": {
+                "mode": mode,
+                "before_used": before_used,
+                "max_active_branches": max_active_branches,
+            },
+            "active_slot_status": "parked_lineage",
+            "next_selection": "excluded_from_active_slot_pool",
+        }
+    )
+    branch.state = BranchState.PARKED_LINEAGE
+    branch.branch_code_status = "parked_lineage"
+    branch.last_telemetry_outcome = reason
+    branch.branch_lifecycle_policy_blocks = block_count
+    branch.branch_lifecycle_new_mechanism_ineligible = True
+    branch.branch_lifecycle_reroute_reason = (
+        BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK
+    )
+    branch.last_branch_lifecycle_policy_block = existing
+    branch.updated_at = now
 
 
 def _branch_lifecycle_budget_exhausted(branch: Branch) -> bool:

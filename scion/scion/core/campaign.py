@@ -31,7 +31,10 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.evidence_recording.accounting import proposal_accounting_fields
-from scion.core.scheduler import active_slot_inventory
+from scion.core.scheduler import (
+    active_slot_inventory,
+    reconcile_active_slot_overflow,
+)
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
@@ -302,6 +305,14 @@ class CampaignManager:
         max_active_branches = int(
             getattr(self._scheduler, "max_active_branches", 0) or 0
         )
+        active_slot_reconciliation = reconcile_active_slot_overflow(
+            branches,
+            max_active_branches=max_active_branches,
+        )
+        if active_slot_reconciliation.changed:
+            for branch_id in active_slot_reconciliation.parked_branch_ids:
+                self._persist_branch_state(branch_id)
+            branches = self._branch_ctrl.get_reportable_branches()
         active_slots = active_slot_inventory(
             branches,
             max_active_branches=max_active_branches,
@@ -410,6 +421,10 @@ class CampaignManager:
         if branch_lifecycle_reroute_policy:
             state["branch_lifecycle_reroute_policy"] = (
                 branch_lifecycle_reroute_policy
+            )
+        if active_slot_reconciliation.changed:
+            state["active_slot_reconciliation"] = (
+                active_slot_reconciliation.as_audit_metadata()
             )
         weight_opt_status = self._weight_opt_coord.status_snapshot()
         if (
