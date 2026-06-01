@@ -503,16 +503,23 @@ def test_algorithm_smoke_static_diagnostic_preserves_provider_evidence(
     compact_payload = compact_observation.structured_payload
     assert compact_payload["passed"] is True
     assert compact_payload["status"] == "diagnostic"
+    assert compact_payload["display_status"] == "passed_with_diagnostic"
+    assert compact_payload["advisory"] is True
     assert compact_payload["runtime_smoke_run"] is False
     assert compact_payload["runtime_case_attempted_count"] == 0
     assert compact_payload["diagnostic_not_clean_pass"] is True
     assert compact_payload["agent_summary"]["summary_kind"] == (
         "diagnostic_guidance_not_clean_runtime_pass"
     )
+    assert compact_payload["agent_summary"]["display_status"] == (
+        "passed_with_diagnostic"
+    )
+    assert compact_payload["agent_summary"]["advisory"] is True
     assert compact_payload["agent_summary"]["diagnostic_not_clean_pass"] is True
     assert compact_payload["runtime_smoke"]["runtime_smoke_run"] is False
     assert compact_payload["runtime_smoke"]["provider_case_attempted_count"] == 0
     assert "not a clean runtime smoke pass" in compact_observation.summary
+    assert "diagnostic advisory" in compact_observation.summary
 
 
 def test_algorithm_smoke_clean_runtime_pass_is_not_diagnostic_guidance() -> None:
@@ -824,6 +831,8 @@ def test_algorithm_smoke_provider_unavailable_warning_is_explicit(
     assert raw is not None
     assert raw["provider_unavailable"] is True
     assert payload["status"] == "diagnostic"
+    assert payload["display_status"] == "passed_with_diagnostic"
+    assert payload["advisory"] is True
     assert payload["failure_code"] == "provider_smoke_coverage_diagnostic"
     codes = {item["code"] for item in payload["evidence_diagnostics"]}
     assert "solver_design_smoke_provider_unavailable" in codes

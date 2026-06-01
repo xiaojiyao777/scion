@@ -454,8 +454,9 @@ def test_repeated_weak_signal_opens_clean_fork_capacity():
     assert action.branch is None
     assert action.slot == "explore_new"
     assert action.reason == "plateau_reroute_clean_fork"
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
+    assert inventory["used"] == 1
+    assert inventory["available"] == 0
+    assert inventory["branch_ids"] == [branch.branch_id]
 
 
 def test_parked_lineage_does_not_block_clean_fork_capacity():

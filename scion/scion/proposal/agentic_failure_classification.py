@@ -84,10 +84,12 @@ def _record_failure_ledger_entry(
         failure_code = failure_code or _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE
     observation_payload: dict[str, Any] = {}
     if observation is not None:
+        observation_full_refs = _observation_full_refs(observation.structured_payload)
         observation_payload = {
             "observation_id": observation.observation_id,
             "tool_name": observation.tool_name,
             "failure_code": _enum_value(observation.failure_code),
+            "full_refs": observation_full_refs,
         }
     detail_full = str(detail or "")
     detail_compact = _limit_string(detail_full, 800)
@@ -108,6 +110,7 @@ def _record_failure_ledger_entry(
             "session_index": session_index,
             "tool_name": tool_name or observation_payload.get("tool_name"),
             "observation_id": observation_payload.get("observation_id"),
+            "observation_full_refs": observation_payload.get("full_refs"),
             "failure_code": failure_code or observation_payload.get("failure_code"),
             "diagnostic_payload": (
                 _sanitize_agentic_value(dict(diagnostic_payload))
@@ -120,6 +123,19 @@ def _record_failure_ledger_entry(
     if _failure_ledger_latest_matches(state.failure_ledger, entry):
         return
     state.failure_ledger.append(entry)
+
+
+def _observation_full_refs(value: Any) -> list[str]:
+    if not isinstance(value, Mapping):
+        return []
+    refs: list[str] = []
+    for key, item in value.items():
+        if not str(key).endswith("_full_ref"):
+            continue
+        text = str(item or "").strip()
+        if text:
+            refs.append(text)
+    return list(dict.fromkeys(refs))
 
 
 def _failure_ledger_latest_matches(

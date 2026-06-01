@@ -1008,9 +1008,11 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
     bad = _vns_hypothesis(_bad_vns_phase_telemetry())
     creative = SequentialHypothesisCreative([bad, bad])
     context = _cvrp_context_with_champion(tmp_path)
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
+        artifact_store=artifact_store,
     )
 
     output = session.run(
@@ -1042,9 +1044,11 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
     assert output.failure_ledger["latest_failure"] == "schema_output_failure"
     ledger_entry = output.failure_ledger["entries"][-1]
     assert ledger_entry["failure_code"] == "C11_expected_telemetry"
+    assert ledger_entry["diagnostic_ref"]
     diagnostic = ledger_entry["diagnostic_payload"]
     assert diagnostic["failure_code"] == "C11_expected_telemetry"
     assert diagnostic["reason_full"]
+    assert diagnostic["offending_fields_full"]
     assert diagnostic["allowed_expected_telemetry_template_full"][
         "template_truncated"
     ] is False
@@ -1055,9 +1059,24 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
         "solver_algorithm_phase_runtime_ms.adaptive_vns_operator_weights",
     ]
     self_check_c11 = output.self_check.diagnostics["C11_expected_telemetry"]
+    assert output.self_check.schema_preview_full_refs
+    assert set(self_check_c11["preview_full_refs"]).issubset(
+        set(output.self_check.schema_preview_full_refs)
+    )
     assert self_check_c11["expected_telemetry_contract"][
         "allowed_expected_telemetry_template"
     ]["template_truncated"] is False
+    full_ref = next(
+        ref for ref in output.tainted_artifact_refs if "self_check_preview_full" in ref
+    )
+    full_payload = json.loads(Path(full_ref).read_text(encoding="utf-8"))
+    assert full_payload["structured_payload_full"]["hypothesis"][
+        "expected_telemetry_contract"
+    ]["allowed_expected_telemetry_template"]["template_truncated"] is False
+    retry_payload = json.loads(
+        Path(ledger_entry["diagnostic_ref"]).read_text(encoding="utf-8")
+    )
+    assert retry_payload["feedback"]["offending_fields_full"]
 
 
 def test_non_repairable_target_preview_failure_fails_closed(

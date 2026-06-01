@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any, Dict, Iterable, Mapping
 
+from scion.core.branch_cards import active_slot_inventory_from_branch_cards
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
 from scion.core.reason_code_groups import classify_reason_codes
@@ -396,9 +397,22 @@ class CampaignSummaryMixin:
                 state = dict(self.state_provider())
                 branch_rows = [dict(row) for row in (state.get("branches") or []) if isinstance(row, Mapping)]
                 branch_cards = _branch_cards_from_rows(branch_rows)
-                summary["n_active_branches"] = state.get("n_active_branches")
-                if isinstance(state.get("active_slots"), Mapping):
-                    summary["active_slots"] = dict(state["active_slots"])
+                existing_active_slots = (
+                    dict(state["active_slots"])
+                    if isinstance(state.get("active_slots"), Mapping)
+                    else {}
+                )
+                reconciled_active_slots = active_slot_inventory_from_branch_cards(
+                    branch_cards,
+                    max_active_branches=existing_active_slots.get("max"),
+                )
+                if reconciled_active_slots is not None:
+                    summary["n_active_branches"] = reconciled_active_slots["used"]
+                    summary["active_slots"] = reconciled_active_slots
+                else:
+                    summary["n_active_branches"] = state.get("n_active_branches")
+                    if existing_active_slots:
+                        summary["active_slots"] = existing_active_slots
                 summary["branches"] = branch_rows
                 summary["branch_cards"] = branch_cards
                 summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
@@ -749,6 +763,14 @@ def _branch_history_cards(steps: Iterable[StepRecord], active_cards: Iterable[Ma
             "allowed_next_actions": card.get("allowed_next_actions") or ["clean_fork"],
             "forbidden_next_actions": card.get("forbidden_next_actions") or ["resume_abandoned_lineage_without_new_evidence"],
             "generic_evidence_summary": card.get("generic_evidence_summary") or evidence,
+            "case_level_winners": card.get("case_level_winners")
+            or _step_case_outcomes(latest, "win"),
+            "case_level_losses": card.get("case_level_losses")
+            or _step_case_outcomes(latest, "loss"),
+            "phase_activation_summary": card.get("phase_activation_summary")
+            or _step_phase_activation_summary(latest),
+            "runtime_evidence_confidence": card.get("runtime_evidence_confidence")
+            or _step_runtime_evidence_confidence(latest),
             "why_not_promoted_reason_codes": card.get("why_not_promoted_reason_codes") or reason_codes,
             "why_abandoned_reason_codes": card.get("why_abandoned_reason_codes") or (reason_codes if status == "abandoned" else []),
         })
@@ -801,7 +823,131 @@ def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
     evidence: dict[str, Any] = {"tier": tier, "wins": stats.wins, "losses": stats.losses, "ties": stats.ties, "effect": {"median_delta": stats.median_delta, "ci_low": stats.ci_low, "ci_high": stats.ci_high}}
     if stats.runtime_ratio_median is not None or stats.runtime_regression_rate is not None:
         evidence["runtime"] = {"runtime_ratio_median": stats.runtime_ratio_median, "runtime_regression_rate": stats.runtime_regression_rate}
+    runtime_confidence = str(getattr(pr, "runtime_confidence", "") or "").strip()
+    if runtime_confidence:
+        evidence["runtime_evidence_confidence"] = runtime_confidence
     return evidence
+
+def _step_case_outcomes(step: StepRecord, dominant_result: str) -> list[dict[str, Any]]:
+    pr = step.protocol_result
+    if pr is None:
+        return []
+    outcomes: list[dict[str, Any]] = []
+    for feedback in getattr(pr, "case_feedback", ()) or ():
+        if str(getattr(feedback, "dominant_result", "") or "") != dominant_result:
+            continue
+        deltas = getattr(feedback, "median_deltas", {}) or {}
+        outcomes.append(
+            {
+                "case_id": str(getattr(feedback, "case_id", "") or ""),
+                "result": dominant_result,
+                "delta": _case_delta_for_protocol(deltas, pr),
+                "effect_counters": {
+                    "wins": max(0, int(getattr(feedback, "wins", 0) or 0)),
+                    "losses": max(0, int(getattr(feedback, "losses", 0) or 0)),
+                    "ties": max(0, int(getattr(feedback, "ties", 0) or 0)),
+                    "pairs": max(0, int(getattr(feedback, "n_pairs", 0) or 0)),
+                },
+            }
+        )
+        if len(outcomes) >= 5:
+            return outcomes
+    if outcomes:
+        return outcomes
+    return _step_pair_outcomes(pr, dominant_result)
+
+def _step_pair_outcomes(protocol_result: Any, dominant_result: str) -> list[dict[str, Any]]:
+    grouped: dict[str, list[Any]] = {}
+    for row in getattr(protocol_result, "pair_feedback", ()) or ():
+        case_id = str(getattr(row, "case_id", "") or "")
+        if case_id:
+            grouped.setdefault(case_id, []).append(row)
+    outcomes: list[dict[str, Any]] = []
+    for case_id, rows in sorted(grouped.items()):
+        wins = sum(1 for row in rows if getattr(row, "comparison", None) == "win")
+        losses = sum(1 for row in rows if getattr(row, "comparison", None) == "loss")
+        ties = len(rows) - wins - losses
+        result = "win" if wins > losses else "loss" if losses > wins else "tie"
+        if result != dominant_result:
+            continue
+        deltas = [
+            float(getattr(row, "delta"))
+            for row in rows
+            if isinstance(getattr(row, "delta", None), (int, float))
+        ]
+        outcomes.append(
+            {
+                "case_id": case_id,
+                "result": result,
+                "delta": _median(deltas) if deltas else None,
+                "effect_counters": {
+                    "wins": wins,
+                    "losses": losses,
+                    "ties": ties,
+                    "pairs": len(rows),
+                },
+            }
+        )
+        if len(outcomes) >= 5:
+            return outcomes
+    return outcomes
+
+def _step_phase_activation_summary(step: StepRecord) -> dict[str, Any]:
+    pr = step.protocol_result
+    if pr is None:
+        return {
+            "stage": str(step.failure_stage or "unknown"),
+            "activation_status": "unknown",
+            "effect_status": "unknown",
+            "opportunity_status": "unknown",
+            "telemetry_outcome": None,
+        }
+    stats = pr.stats
+    mechanism_evidence = getattr(pr, "mechanism_evidence", {}) or {}
+    return {
+        "stage": _stage_value(pr.stage),
+        "activation_status": str(
+            mechanism_evidence.get("primary_activation_status") or "unknown"
+        ),
+        "effect_status": str(
+            mechanism_evidence.get("primary_effect_status")
+            or (
+                "observed"
+                if max(0, int(getattr(stats, "wins", 0) or 0))
+                or max(0, int(getattr(stats, "losses", 0) or 0))
+                else "not_observed"
+            )
+        ),
+        "opportunity_status": str(getattr(pr, "opportunity_status", "") or "unknown"),
+        "telemetry_outcome": "failed" if formal_telemetry_guard_failed(pr) else pr.gate_outcome,
+    }
+
+def _step_runtime_evidence_confidence(step: StepRecord) -> str:
+    pr = step.protocol_result
+    if pr is None:
+        return "unknown"
+    return str(getattr(pr, "runtime_confidence", "") or "unknown")
+
+def _case_delta_for_protocol(deltas: Mapping[str, Any], protocol_result: Any) -> float | None:
+    if not isinstance(deltas, Mapping):
+        return None
+    metric = str(getattr(protocol_result.stats, "statistical_metric", "") or "")
+    keys = [metric] if metric else []
+    keys.extend(sorted(str(key) for key in deltas if str(key) not in keys))
+    for key in keys:
+        try:
+            return float(deltas[key])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    size = len(ordered)
+    midpoint = size // 2
+    if size % 2:
+        return ordered[midpoint]
+    return (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
 
 def _step_status(step: StepRecord) -> str:
     decision = step.decision.value if getattr(step.decision, "value", None) else None

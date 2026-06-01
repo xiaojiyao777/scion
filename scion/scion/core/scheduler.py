@@ -275,10 +275,17 @@ def _counts_toward_proposal_capacity(branch: Branch) -> bool:
 
 
 def branch_counts_toward_active_slots(branch: Branch) -> bool:
-    """Return whether ``branch`` consumes an active scheduling slot."""
+    """Return whether ``branch`` consumes a reported active lineage slot.
+
+    Proposal scheduling can temporarily prefer a clean fork over a weak or
+    exhausted follow-up, but status/summary/DB active-slot accounting is the
+    live lineage inventory: non-terminal, non-parked branches consume slots.
+    """
     if branch.state in _TERMINAL_STATES:
         return False
-    return _counts_toward_proposal_capacity(branch)
+    if branch_is_parked_lineage(branch):
+        return False
+    return True
 
 
 def active_slot_branches(branches: Iterable[Branch]) -> list[Branch]:

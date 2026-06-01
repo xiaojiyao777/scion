@@ -50,8 +50,10 @@ _AGENTIC_BUDGET_CONTROL_SKIP_REASONS = frozenset(
 class AgenticSelfCheck:
     schema_valid: bool = False
     schema_preview_codes: tuple[str, ...] = ()
+    schema_preview_full_refs: tuple[str, ...] = ()
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
+    contract_preview_full_refs: tuple[str, ...] = ()
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
 def _self_check_from_previews(
@@ -59,9 +61,11 @@ def _self_check_from_previews(
 ) -> AgenticSelfCheck:
     schema_preview_evaluated = False
     schema_preview_codes_by_source: dict[str, tuple[str, ...]] = {}
+    schema_preview_full_refs_by_source: dict[str, tuple[str, ...]] = {}
     schema_passed_by_source: dict[str, bool] = {}
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
+    contract_preview_full_refs: tuple[str, ...] = ()
     diagnostics: dict[str, Any] = {}
     for observation in observations:
         if observation.is_error:
@@ -103,6 +107,9 @@ def _self_check_from_previews(
             schema_preview_evaluated = True
             preview_passed = bool(payload.get("passed"))
             schema_passed_by_source[observation.tool_name] = preview_passed
+            refs = _preview_full_refs(payload)
+            if refs:
+                schema_preview_full_refs_by_source[observation.tool_name] = refs
             if not preview_passed:
                 schema_preview_codes_by_source[observation.tool_name] = (
                     _preview_codes(payload)
@@ -115,6 +122,7 @@ def _self_check_from_previews(
         if observation.tool_name == "proposal.contract_preview":
             contract_preview_passed = bool(payload.get("passed"))
             contract_preview_codes = _preview_codes(payload)
+            contract_preview_full_refs = _preview_full_refs(payload)
             hypothesis_codes = _hypothesis_contract_self_check_codes(payload)
             if hypothesis_codes:
                 schema_preview_evaluated = True
@@ -122,6 +130,10 @@ def _self_check_from_previews(
                 schema_preview_codes_by_source[
                     "proposal.contract_preview.hypothesis"
                 ] = hypothesis_codes
+                if contract_preview_full_refs:
+                    schema_preview_full_refs_by_source[
+                        "proposal.contract_preview.hypothesis"
+                    ] = contract_preview_full_refs
                 c11_diagnostic = _c11_self_check_diagnostic(payload)
                 if c11_diagnostic:
                     diagnostics["C11_expected_telemetry"] = c11_diagnostic
@@ -131,17 +143,26 @@ def _self_check_from_previews(
                     "proposal.contract_preview.hypothesis",
                     None,
                 )
+                schema_preview_full_refs_by_source.pop(
+                    "proposal.contract_preview.hypothesis",
+                    None,
+                )
     schema_valid = (
         all(schema_passed_by_source.values()) if schema_preview_evaluated else False
     )
     schema_preview_codes: list[str] = []
     for codes in schema_preview_codes_by_source.values():
         schema_preview_codes.extend(codes)
+    schema_preview_full_refs: list[str] = []
+    for refs in schema_preview_full_refs_by_source.values():
+        schema_preview_full_refs.extend(refs)
     return AgenticSelfCheck(
         schema_valid=schema_valid,
         schema_preview_codes=tuple(dict.fromkeys(schema_preview_codes)),
+        schema_preview_full_refs=tuple(dict.fromkeys(schema_preview_full_refs)),
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
+        contract_preview_full_refs=contract_preview_full_refs,
         diagnostics=diagnostics,
     )
 
@@ -604,6 +625,20 @@ def _preview_codes(payload: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(codes))
 
 
+def _preview_full_refs(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    refs: list[str] = []
+    for key, value in payload.items():
+        if not str(key).endswith("_full_ref"):
+            continue
+        text = str(value or "").strip()
+        if text:
+            refs.append(text)
+    generic = str(payload.get("self_check_preview_full_ref") or "").strip()
+    if generic:
+        refs.append(generic)
+    return tuple(dict.fromkeys(refs))
+
+
 def _c11_self_check_diagnostic(payload: Mapping[str, Any]) -> dict[str, Any]:
     hypothesis = payload.get("hypothesis")
     if not isinstance(hypothesis, Mapping):
@@ -624,9 +659,16 @@ def _c11_self_check_diagnostic(payload: Mapping[str, Any]) -> dict[str, Any]:
             "problem_expected_telemetry_preview": (
                 problem_telemetry if isinstance(problem_telemetry, Mapping) else {}
             ),
+            "preview_full_refs": list(_preview_full_refs(payload)),
+            "self_check_preview_full_ref": payload.get(
+                "self_check_preview_full_ref"
+            ),
+            "self_check_preview_full_digest": payload.get(
+                "self_check_preview_full_digest"
+            ),
             "trace_policy": (
                 "Compact summaries may be short, but this self_check diagnostic "
-                "keeps the full expected_telemetry repair detail/template."
+                "keeps or references the full expected_telemetry repair detail/template."
             ),
         }
     )
@@ -724,6 +766,8 @@ def _compact_algorithm_smoke_observation(
                 else agent_payload.get("passed")
             ),
             "status": agent_payload.get("status"),
+            "display_status": agent_payload.get("display_status"),
+            "advisory": agent_payload.get("advisory"),
             "failure_code": agent_payload.get("failure_code"),
             "failure_class": agent_payload.get("failure_class"),
             "runtime_smoke_run": agent_payload.get("runtime_smoke_run"),
@@ -769,7 +813,12 @@ def _compact_algorithm_smoke_observation(
     if agent_payload.get("diagnostic_not_clean_pass"):
         summary = (
             f"{observation.summary} Compact smoke preview retained; diagnostic "
-            "guidance is not a clean runtime smoke pass."
+            "advisory guidance is not a clean runtime smoke pass."
+        )
+    elif agent_payload.get("passed") and agent_payload.get("status") == "diagnostic":
+        summary = (
+            "Algorithm smoke passed with diagnostic advisory guidance on compact "
+            "tainted preview. Compact smoke preview retained."
         )
     elif agent_payload.get("passed") and agent_payload.get("status") == "passed":
         summary = (
@@ -793,6 +842,8 @@ def _compact_algorithm_smoke_agent_summary(value: Any) -> dict[str, Any] | None:
         {
             "summary_kind": value.get("summary_kind"),
             "status": value.get("status"),
+            "display_status": value.get("display_status"),
+            "advisory": value.get("advisory"),
             "passed": value.get("passed"),
             "diagnostic_not_clean_pass": value.get("diagnostic_not_clean_pass"),
             "failure_code": value.get("failure_code"),

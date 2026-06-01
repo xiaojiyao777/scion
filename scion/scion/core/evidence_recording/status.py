@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
+from scion.core.branch_cards import active_slot_inventory_from_branch_cards
 from scion.core.public_refs import redact_public_refs
 from scion.core.run_validity import build_run_validity
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
@@ -148,6 +149,31 @@ def _branch_rows(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [row for row in rows if isinstance(row, Mapping)]
 
 
+def _branch_cards_from_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    cards: list[Mapping[str, Any]] = []
+    for row in rows:
+        card = row.get("branch_card")
+        if isinstance(card, Mapping):
+            cards.append(card)
+    return cards
+
+
+def _reconcile_active_slots_from_branch_cards(
+    payload: Dict[str, Any],
+    branch_rows: list[Mapping[str, Any]],
+) -> None:
+    existing = payload.get("active_slots")
+    existing_slots = dict(existing) if isinstance(existing, Mapping) else {}
+    reconciled = active_slot_inventory_from_branch_cards(
+        _branch_cards_from_rows(branch_rows),
+        max_active_branches=existing_slots.get("max"),
+    )
+    if reconciled is None:
+        return
+    payload["active_slots"] = reconciled
+    payload["n_active_branches"] = reconciled["used"]
+
+
 def _sync_branch_progress_from_rows(
     progress: Mapping[str, Any],
     branch_rows: list[Mapping[str, Any]],
@@ -278,6 +304,7 @@ class StatusWriterMixin:
                 circuit_breaker_tripped=bool(payload.get("circuit_breaker_tripped")),
             )
         branch_rows = _branch_rows(payload)
+        _reconcile_active_slots_from_branch_cards(payload, branch_rows)
         current_progress = self.current_status_progress
         if current_progress is not None:
             current_progress = _sync_branch_progress_from_rows(

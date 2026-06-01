@@ -204,6 +204,18 @@ class AgenticSessionToolCallMixin:
                 args_hash=fingerprint,
             )
             artifact_observation = observation
+            preview_full_ref = ""
+            preview_full_digest = ""
+            if authoritative_preview:
+                preview_full_ref, preview_full_digest = (
+                    _write_self_check_preview_full_artifact(
+                        self._artifact_store,
+                        state,
+                        artifact_observation,
+                    )
+                )
+                if preview_full_ref:
+                    state.scratch_artifact_refs.append(preview_full_ref)
             if authoritative_preview:
                 observation = self._enforce_self_check_preview_budget(observation)
             else:
@@ -227,6 +239,13 @@ class AgenticSessionToolCallMixin:
                 observation = self._fit_observation_to_remaining(
                     observation,
                     remaining_chars=remaining,
+                )
+                prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
+            if preview_full_ref:
+                observation = _attach_self_check_preview_full_ref(
+                    observation,
+                    preview_full_ref=preview_full_ref,
+                    preview_full_digest=preview_full_digest,
                 )
                 prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
             if not authoritative_preview:
@@ -280,6 +299,9 @@ class AgenticSessionToolCallMixin:
                 "selection_source": selection_source,
             }
             metadata.update(_tool_observation_transcript_metadata(observation))
+            if preview_full_ref:
+                metadata["self_check_preview_full_ref"] = preview_full_ref
+                metadata["self_check_preview_full_digest"] = preview_full_digest
             smoke_artifact_ref = _write_algorithm_smoke_execution_evidence_artifact(
                 self._artifact_store,
                 state,
@@ -419,6 +441,77 @@ def _write_algorithm_smoke_execution_evidence_artifact(
         f"algorithm_smoke_execution_evidence_{index:04d}.json",
         payload,
     )
+
+
+def _write_self_check_preview_full_artifact(
+    artifact_store: AgenticSessionArtifactStore | None,
+    state: AgenticProposalSessionState,
+    observation: ProposalObservation,
+) -> tuple[str, str]:
+    if artifact_store is None or observation.is_error:
+        return "", ""
+    if observation.tool_name not in {
+        "proposal.schema_preview",
+        "proposal.target_permission_preview",
+        "proposal.contract_preview",
+        "proposal.algorithm_smoke",
+    }:
+        return "", ""
+    payload = (
+        observation.structured_payload
+        if isinstance(observation.structured_payload, Mapping)
+        else {}
+    )
+    full_payload = _drop_empty_dict(
+        {
+            "schema_version": "self-check-preview-full.v1",
+            "artifact_kind": "self_check_preview_full",
+            "session_id": state.session_id,
+            "campaign_id": state.campaign_id,
+            "branch_id": state.branch_id,
+            "observation_id": observation.observation_id,
+            "tool_name": observation.tool_name,
+            "tool_call_id": observation.tool_call_id,
+            "observation_type": observation.observation_type,
+            "summary": observation.summary,
+            "passed": payload.get("passed"),
+            "status": payload.get("status"),
+            "failure_code": payload.get("failure_code"),
+            "failure_class": payload.get("failure_class"),
+            "structured_payload_full": _sanitize_agentic_value(dict(payload)),
+            "structured_payload_digest": stable_digest(payload, length=64),
+            "trace_policy": (
+                "Full authoritative self-check preview payload. Compact prompt "
+                "observations may carry only a summary plus this artifact ref."
+            ),
+            "tainted": True,
+        }
+    )
+    index = int(getattr(state, "_self_check_preview_full_artifact_index", 0)) + 1
+    setattr(state, "_self_check_preview_full_artifact_index", index)
+    ref = artifact_store.write_scratch(
+        state.session_id,
+        f"self_check_preview_full_{index:04d}.json",
+        full_payload,
+    )
+    return ref, str(full_payload["structured_payload_digest"])
+
+
+def _attach_self_check_preview_full_ref(
+    observation: ProposalObservation,
+    *,
+    preview_full_ref: str,
+    preview_full_digest: str,
+) -> ProposalObservation:
+    if not isinstance(observation.structured_payload, Mapping):
+        return observation
+    prefix = observation.tool_name.removeprefix("proposal.").replace(".", "_")
+    payload = dict(observation.structured_payload)
+    payload["self_check_preview_full_ref"] = preview_full_ref
+    payload["self_check_preview_full_digest"] = preview_full_digest
+    payload[f"{prefix}_full_ref"] = preview_full_ref
+    payload[f"{prefix}_full_digest"] = preview_full_digest
+    return replace(observation, structured_payload=payload)
 
 
 def _algorithm_smoke_execution_evidence_payload(

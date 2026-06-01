@@ -151,6 +151,8 @@ def test_active_branch_card_separates_proposal_blocks_from_algorithm_reasons() -
     payload = branch_hygiene_context(branch)
     text = branch_prompt_card(branch)
 
+    assert payload["active_slot_status"] == "active_slot"
+    assert payload["counts_toward_active_slots"] is True
     assert payload["why_not_promoted_reason_codes"] == [
         "SCREENING_FAIL_LOW_WIN_RATE",
         "SCREENING_MARGINAL_SIGNAL_CONTINUE",

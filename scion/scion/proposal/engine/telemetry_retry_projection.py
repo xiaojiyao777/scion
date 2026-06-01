@@ -99,6 +99,8 @@ def _schema_retry_feedback_item(
                 item.get("requested_activation_fields"),
                 8,
             ),
+            "offending_fields": _bounded_list(item.get("offending_fields"), 8),
+            "offending_fields_full": item.get("offending_fields_full"),
             "allowed_top_level_categories": _bounded_list(
                 item.get("allowed_top_level_categories"),
                 16,

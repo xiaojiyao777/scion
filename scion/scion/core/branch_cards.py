@@ -30,6 +30,7 @@ from scion.core.branch_hygiene import (
     branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch
+from scion.core.scheduler import branch_counts_toward_active_slots
 
 
 def branch_prompt_card(branch: Branch | None) -> str:
@@ -77,6 +78,44 @@ def branch_prompt_card(branch: Branch | None) -> str:
         f"proposal_block_reason_codes={proposal_blocks} "
         f"why_abandoned_reason_codes={why_abandoned}"
     )
+
+
+def active_slot_inventory_from_branch_cards(
+    cards: Iterable[Mapping[str, Any]],
+    *,
+    max_active_branches: int | None = None,
+) -> dict[str, Any] | None:
+    """Reconcile status/summary active-slot fields from branch card payloads."""
+    active_ids: list[str] = []
+    parked_ids: list[str] = []
+    saw_slot_metadata = False
+    for card in cards:
+        if not isinstance(card, Mapping):
+            continue
+        branch_id = str(card.get("branch_id") or "").strip()
+        if not branch_id:
+            continue
+        slot_status = str(card.get("active_slot_status") or "").strip()
+        counts = card.get("counts_toward_active_slots")
+        if counts is not None or slot_status:
+            saw_slot_metadata = True
+        if counts is True or slot_status == "active_slot":
+            active_ids.append(branch_id)
+        elif slot_status == "parked_lineage":
+            parked_ids.append(branch_id)
+    if not saw_slot_metadata:
+        return None
+    used = len(dict.fromkeys(active_ids))
+    parked_ids = list(dict.fromkeys(parked_ids))
+    limit = max(0, int(max_active_branches or 0))
+    return {
+        "used": used,
+        "max": limit,
+        "available": max(0, limit - used),
+        "branch_ids": list(dict.fromkeys(active_ids)),
+        "parked_lineages": len(parked_ids),
+        "parked_lineage_ids": parked_ids,
+    }
 
 
 def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
@@ -149,9 +188,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     current_head_status = status
     state_value = _branch_state_value(branch)
     counts_toward_active_slots = (
-        branch is not None
-        and not branch_is_parked_lineage(branch)
-        and state_value not in {"promoted", "abandoned"}
+        branch_counts_toward_active_slots(branch) if branch is not None else False
     )
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (

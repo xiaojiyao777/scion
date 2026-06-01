@@ -206,6 +206,7 @@ class CvrpSolverDesignProvider:
                 ),
                 "mechanism_id": mechanisms[0],
                 "offending_fields": list(effect_fields[:4]),
+                "offending_fields_full": list(effect_fields),
                 "telemetry_category_guidance": (
                     "Activation/budget telemetry proves that the mechanism ran "
                     "or consumed bounded work. Effect telemetry is only for "
@@ -243,6 +244,7 @@ class CvrpSolverDesignProvider:
                     "advisory_code": "C11_expected_telemetry_advisory",
                     "mechanism_id": mechanism,
                     "offending_fields": offending[:4],
+                    "offending_fields_full": offending,
                     "allowed_repair_shape": (
                         "Declare activation, budget, or decision/context "
                         "evidence under the same mechanism id."
@@ -274,6 +276,7 @@ class CvrpSolverDesignProvider:
             ),
             "mechanism_id": first.get("mechanism_id"),
             "offending_fields": first.get("offending_fields"),
+            "offending_fields_full": first.get("offending_fields_full"),
             "allowed_repair_shape": first.get("allowed_repair_shape"),
             "forbidden_repair_shape": first.get("forbidden_repair_shape"),
         }

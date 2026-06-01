@@ -7,7 +7,7 @@ from scion.core.run_validity import (
     RUN_VALIDITY_INVALID_INFRA_ONLY,
     RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
 )
-from scion.core.models import MechanismChange
+from scion.core.models import CaseAggregateFeedback, MechanismChange
 from scion.core.step_result import StepResult
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
@@ -332,12 +332,23 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
         "latest_head_failed": False,
         "allowed_next_actions": ["refine_checkpoint"],
         "forbidden_next_actions": [],
+        "active_slot_status": "active_slot",
+        "counts_toward_active_slots": True,
     }
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
         state_provider=lambda: {
             "campaign_id": "camp-1",
+            "n_active_branches": 0,
+            "active_slots": {
+                "used": 0,
+                "max": 3,
+                "available": 3,
+                "branch_ids": [],
+                "parked_lineages": 0,
+                "parked_lineage_ids": [],
+            },
             "branches": [{"id": "branch-1", "branch_card": branch_card}],
             "branch_cards": [branch_card],
         },
@@ -362,6 +373,9 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
     assert status["in_flight_protocol"]["best_quality_checkpoint_id"] == (
         "checkpoint-best"
     )
+    assert status["n_active_branches"] == 1
+    assert status["active_slots"]["used"] == 1
+    assert status["active_slots"]["branch_ids"] == ["branch-1"]
 
 
 def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
@@ -387,6 +401,25 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         ),
         gate_outcome="fail",
         reason_codes=("SCREENING_REGRESSION",),
+        runtime_confidence="low_cached_champion",
+        opportunity_status="opportunity_poor",
+        mechanism_evidence={
+            "primary_activation_status": "observed",
+            "primary_effect_status": "regressed",
+        },
+        case_feedback=(
+            CaseAggregateFeedback(
+                case_id="case-loss",
+                n_pairs=3,
+                wins=0,
+                losses=3,
+                ties=0,
+                win_rate=0.0,
+                dominant_result="loss",
+                decisive_metric="objective_delta",
+                median_deltas={"objective_delta": -0.31},
+            ),
+        ),
     )
     step = replace(
         _step("/tmp/generic-metrics.json"),
@@ -408,21 +441,32 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         "allowed_next_actions": ["refine_checkpoint"],
         "forbidden_next_actions": [],
         "generic_evidence_summary": {"tier": "weak_positive"},
+        "active_slot_status": "active_slot",
+        "counts_toward_active_slots": True,
+    }
+    parked_card = {
+        "branch_id": "parked-branch",
+        "status": "parked_lineage",
+        "active_slot_status": "parked_lineage",
+        "counts_toward_active_slots": False,
     }
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
         state_provider=lambda: {
-            "n_active_branches": 1,
+            "n_active_branches": 0,
             "active_slots": {
-                "used": 1,
+                "used": 0,
                 "max": 3,
-                "available": 2,
-                "branch_ids": ["active-branch"],
-                "parked_lineages": 1,
-                "parked_lineage_ids": ["parked-branch"],
+                "available": 3,
+                "branch_ids": [],
+                "parked_lineages": 0,
+                "parked_lineage_ids": [],
             },
-            "branches": [{"id": "active-branch", "branch_card": active_card}],
+            "branches": [
+                {"id": "active-branch", "branch_card": active_card},
+                {"id": "parked-branch", "branch_card": parked_card},
+            ],
             "checkpoint_inventory": {
                 "lineage-active": {
                     "best_quality_checkpoint_id": "checkpoint-best",
@@ -457,6 +501,23 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     assert abandoned_card["generic_evidence_summary"]["runtime"][
         "runtime_ratio_median"
     ] == 1.11
+    assert abandoned_card["runtime_evidence_confidence"] == "low_cached_champion"
+    assert abandoned_card["phase_activation_summary"] == {
+        "stage": "screening",
+        "activation_status": "observed",
+        "effect_status": "regressed",
+        "opportunity_status": "opportunity_poor",
+        "telemetry_outcome": "fail",
+    }
+    assert abandoned_card["case_level_winners"] == []
+    assert abandoned_card["case_level_losses"] == [
+        {
+            "case_id": "case-loss",
+            "result": "loss",
+            "delta": -0.31,
+            "effect_counters": {"wins": 0, "losses": 3, "ties": 0, "pairs": 3},
+        }
+    ]
     assert abandoned_card["why_abandoned_reason_codes"] == [
         "BRANCH_LIFECYCLE_PARK_LINEAGE",
         "SCREENING_REGRESSION",
@@ -465,6 +526,7 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         "best_quality_checkpoint_id"
     ] == "checkpoint-best"
     assert summary["active_slots"]["used"] == 1
+    assert summary["active_slots"]["branch_ids"] == ["active-branch"]
     assert summary["active_slots"]["parked_lineage_ids"] == ["parked-branch"]
     assert summary["current_progress"]["last_valid_checkpoint_id"] == (
         "checkpoint-last"

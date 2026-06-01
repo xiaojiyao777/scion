@@ -77,11 +77,15 @@ def compact_algorithm_smoke_observation_for_agent(
     payload = _algorithm_smoke_agent_payload(observation.structured_payload)
     if payload.get("diagnostic_not_clean_pass"):
         summary = (
-            "Algorithm smoke emitted diagnostic guidance; runtime smoke did not "
-            "attempt any cases, so this is not a clean runtime smoke pass."
+            "Algorithm smoke passed with diagnostic advisory guidance; runtime "
+            "smoke did not attempt any cases, so this is not a clean runtime "
+            "smoke pass."
         )
     elif payload.get("status") == "diagnostic":
-        summary = "Algorithm smoke emitted diagnostic guidance on compact tainted preview."
+        summary = (
+            "Algorithm smoke passed with diagnostic advisory guidance on compact "
+            "tainted preview."
+        )
     elif payload.get("passed"):
         summary = "Algorithm smoke passed on compact tainted preview."
     else:
@@ -255,6 +259,17 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             or runtime_case_attempted_count == 0
         )
     )
+    diagnostic_passed = bool(
+        activation_diagnostic_passed
+        or telemetry_diagnostic_passed
+        or static_diagnostic_passed
+        or evidence_diagnostic_passed
+    )
+    display_status = (
+        "passed_with_diagnostic"
+        if status == "diagnostic" and passed
+        else status
+    )
     non_promotional = raw_payload.get("non_promotional", True)
     tainted_debug = raw_payload.get("tainted_debug", True)
     agent_summary = _agent_summary(
@@ -266,11 +281,13 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             else (
                 "clean_runtime_smoke_pass"
                 if passed and status == "passed"
-                else "diagnostic_guidance"
+                else "passed_with_diagnostic_advisory"
                 if status == "diagnostic"
                 else "smoke_issues"
             )
         ),
+        display_status=display_status,
+        advisory=diagnostic_passed or None,
         failure_code=failure_code,
         failure_class=failure_class,
         diagnostic_not_clean_pass=diagnostic_not_clean_pass or None,
@@ -290,17 +307,15 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "actionable_telemetry_feedback": actionable_telemetry_feedback,
             "passed": passed,
             "status": status,
+            "display_status": display_status,
+            "advisory": diagnostic_passed or None,
             "failure_code": failure_code,
             "failure_class": failure_class,
             "runtime_smoke_run": runtime_smoke_run,
             "runtime_case_attempted_count": runtime_case_attempted_count,
             "diagnostic_not_clean_pass": diagnostic_not_clean_pass or None,
             "diagnostic_passed": (
-                activation_diagnostic_passed
-                or telemetry_diagnostic_passed
-                or static_diagnostic_passed
-                or evidence_diagnostic_passed
-                or None
+                diagnostic_passed or None
             ),
             "primary_issue": primary_issue,
             "selected_surface": selected_surface,

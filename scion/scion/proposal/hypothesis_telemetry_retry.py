@@ -50,6 +50,11 @@ def expected_telemetry_retry_feedback(
             requested_activation = tuple(
                 str(field).strip() for field in activation if str(field).strip()
             )
+    offending_fields_full = _string_list_from_any(
+        problem_telemetry.get("offending_fields_full")
+        or problem_telemetry.get("offending_fields")
+        or requested_activation
+    )
     protected_mechanism_ids = sorted(
         dict.fromkeys(
             [
@@ -93,9 +98,8 @@ def expected_telemetry_retry_feedback(
             "telemetry_detail_full": telemetry_detail,
             "problem_telemetry_detail_full": problem_telemetry.get("reason"),
             "requested_activation_fields": list(requested_activation),
-            "offending_fields": list(
-                problem_telemetry.get("offending_fields") or ()
-            ),
+            "offending_fields": offending_fields_full[:8],
+            "offending_fields_full": offending_fields_full,
             "allowed_top_level_categories": allowed_categories,
             "exact_allowed_top_level_categories": allowed_categories,
             "declared_mechanism_ids": declared_mechanism_ids,

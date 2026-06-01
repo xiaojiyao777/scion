@@ -63,6 +63,7 @@ class _TraceWriter:
             "prompt_visibility_ledger": _prompt_visibility_ledger(
                 system_blocks=system_blocks,
                 user_prompt=prompt,
+                prompt_manifest=prompt_manifest_context,
             ),
             "prompt_cache_audit": _prompt_cache_audit(
                 system_blocks=system_blocks,
@@ -166,6 +167,7 @@ def _prompt_visibility_ledger(
     *,
     system_blocks: "list[dict]",
     user_prompt: str,
+    prompt_manifest: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     entries: list[dict[str, Any]] = []
     seen_names: dict[str, int] = {}
@@ -196,13 +198,37 @@ def _prompt_visibility_ledger(
     }
     for entry in entries:
         status_counts[str(entry.get("visibility_status") or "omitted")] += 1
-    return {
+    ledger: Dict[str, Any] = {
         "schema_version": "prompt-visibility-ledger.v1",
+        "ledger_scope": "provider_visible_prompt_sections_only",
+        "semantic_note": (
+            "Trace entries are reconstructed from provider-visible prompt "
+            "sections only. Manifest visibility_ledger is the source of truth "
+            "for full/summary/dedicated_projection/omitted/truncated semantics."
+        ),
         "status_values": list(status_counts),
         "entry_count": len(entries),
         "status_counts": status_counts,
         "entries": entries,
     }
+    if isinstance(prompt_manifest, Mapping) and prompt_manifest:
+        ledger["manifest_source_of_truth"] = {
+            "artifact_ref": prompt_manifest.get("artifact_ref"),
+            "visibility_ledger_ref": prompt_manifest.get("visibility_ledger_ref"),
+            "visibility_ledger_digest": prompt_manifest.get(
+                "visibility_ledger_digest"
+            ),
+            "prompt_hash": prompt_manifest.get("prompt_hash"),
+            "ledger_field": "prompt_manifest.visibility_ledger",
+        }
+        ledger["manifest_status_values"] = [
+            "full",
+            "summary",
+            "dedicated_projection",
+            "omitted",
+            "truncated",
+        ]
+    return ledger
 
 
 def _visibility_entries_from_text(

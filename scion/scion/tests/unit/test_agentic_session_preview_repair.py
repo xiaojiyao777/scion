@@ -549,7 +549,19 @@ def test_agentic_session_writes_session_to_trace_index(
         trace_payload = json.loads(
             (campaign_dir / trace["trace_ref"]).read_text(encoding="utf-8")
         )
-        assert trace_payload["prompt_visibility_ledger"]["entry_count"] > 0
+        trace_ledger = trace_payload["prompt_visibility_ledger"]
+        assert trace_ledger["entry_count"] > 0
+        assert trace_ledger["ledger_scope"] == "provider_visible_prompt_sections_only"
+        assert trace_ledger["manifest_source_of_truth"][
+            "visibility_ledger_ref"
+        ].endswith(trace["prompt_visibility_ledger_ref"])
+        assert trace_ledger["manifest_status_values"] == [
+            "full",
+            "summary",
+            "dedicated_projection",
+            "omitted",
+            "truncated",
+        ]
 
 
 def test_repeated_tool_call_returns_already_read_ref_without_hiding_required_reads(
