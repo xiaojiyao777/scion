@@ -240,6 +240,8 @@ class CampaignLoop:
                     same_family_retry_attempts += 1
                     if same_family_retry_attempts >= same_family_retry_limit:
                         final_reason = "same_family_retry_budget_exhausted"
+                elif kind == "proposal_diagnostic":
+                    consume_proposal_attempt()
                 elif kind == "proposal_block":
                     consume_proposal_attempt()
                     proposal_quality_blocked_attempts += 1
@@ -305,6 +307,8 @@ class CampaignLoop:
 
 def _attempt_kind(result: StepResult) -> str:
     kind = str(getattr(result, "attempt_kind", "") or "")
+    if kind == "proposal_block" and _is_soft_proposal_diagnostic(result):
+        return "proposal_diagnostic"
     if kind and kind != "screening":
         return kind
     if getattr(result, "action", None) == "reconcile":
@@ -328,7 +332,32 @@ def _attempt_kind(result: StepResult) -> str:
         or "mechanism_changes_duplicate_id_conflict" in reason
     ):
         return "schema_quality_block"
+    if _is_soft_proposal_diagnostic(result):
+        return "proposal_diagnostic"
     return "proposal_block"
+
+
+def _is_soft_proposal_diagnostic(result: StepResult) -> bool:
+    combined = " ".join(
+        str(value or "")
+        for value in (
+            getattr(result, "reason", None),
+            getattr(result, "failure_detail", None),
+            getattr(result, "failure_category", None),
+        )
+    ).lower()
+    return any(
+        marker in combined
+        for marker in (
+            "mechanism_premise_warning",
+            "mechanism_novelty_warning",
+            "mechanism_novelty_rejected",
+            "mechanism_novelty_diagnostic",
+            "duplicate_mechanism",
+            "duplicate_risk",
+            "novelty_warning",
+        )
+    )
 
 
 def _result_failure_category(result: StepResult) -> str:

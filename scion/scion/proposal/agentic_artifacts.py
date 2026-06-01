@@ -934,8 +934,9 @@ def resume_from_artifact(
                 "selected_surface": structured_rejection.get("selected_surface"),
                 "target_file": structured_rejection.get("target_file"),
                 "retry_constraint": (
-                    "Repair the contradicted factual premise; if continuing "
-                    "near an existing mechanism, state the material difference."
+                    "Honor hard boundary/objective constraints; if continuing "
+                    "near an existing mechanism, acknowledge it and state the "
+                    "material difference."
                 ),
             }.items()
             if value

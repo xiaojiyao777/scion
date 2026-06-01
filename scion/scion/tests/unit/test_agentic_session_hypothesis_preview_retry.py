@@ -888,7 +888,7 @@ def test_hypothesis_text_survives_preview_failure_artifact_serialization(
     assert "hypothesis_text" not in ledger_entry["detail"]
 
 
-def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
+def test_mechanism_premise_warning_then_c11_retry_drift_fails_closed(
     tmp_path: Path,
 ) -> None:
     duplicate = _duplicate_or_opt_hypothesis()
@@ -915,40 +915,52 @@ def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
         )
     )
 
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.status == AgenticProposalStatus.FAILED
     assert (
         output.termination_reason
-        == AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+        == AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED
     )
-    assert output.hypothesis == good
-    assert output.self_check.schema_valid is True
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.failure_detail is not None
+    assert "schema_retry_drift" in output.failure_detail
+    assert "agent_grounding_failure" not in output.failure_detail
+    assert output.hypothesis is None
+    assert output.self_check.schema_valid is False
     assert len(creative.hypothesis_contexts) == 4
-    assert (
-        creative.hypothesis_contexts[2]["agentic_hypothesis_semantic_rejections"][0][
-            "mechanism"
-        ]
-        == "cross_route_or_opt_2_3"
+    assert all(
+        "agentic_hypothesis_semantic_rejections" not in context
+        for context in creative.hypothesis_contexts
     )
-    preview_feedback = creative.hypothesis_contexts[3][
+    preview_feedback = creative.hypothesis_contexts[2][
         "agentic_hypothesis_preview_rejections"
     ][0]
     assert preview_feedback["failure_code"] == "C11_expected_telemetry"
-    assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(preview_feedback)
+    assert "cross_route_oropt" in json.dumps(preview_feedback)
+    drift_feedback = creative.hypothesis_contexts[3][
+        "agentic_hypothesis_preview_rejections"
+    ][-1]
+    assert drift_feedback["failure_code"] == "schema_retry_drift"
 
     transcript = output.transcript
     assert any(
-        "Mechanism novelty gate rejected hypothesis" in event.message
+        event.metadata.get("diagnostic_kind") == "mechanism_premise_warning"
+        and event.metadata.get("diagnostic", {}).get("quality_block") is False
+        and event.metadata.get("diagnostic", {}).get("blocking") is False
         for event in transcript
     )
     assert any(
         event.metadata.get("tool_name") == "proposal.schema_preview"
-        and "solver_algorithm_phase_runtime_ms.vns"
-        in event.metadata.get("result_summary", "")
+        and event.metadata.get("status") == "ok"
+        and "C11_expected_telemetry" in event.metadata.get("result_summary", "")
         for event in transcript
     )
     assert any(
         "Hypothesis preview gate rejected hypothesis" in event.message
         and event.metadata.get("failure_code") == "C11_expected_telemetry"
+        for event in transcript
+    )
+    assert any(
+        event.metadata.get("failure_code") == "schema_retry_drift"
         for event in transcript
     )
 

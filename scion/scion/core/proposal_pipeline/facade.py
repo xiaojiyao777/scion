@@ -183,9 +183,9 @@ class ProposalPipeline(
             context["agentic_prior_quality_blocks"] = quality_feedback
             context["agentic_prior_quality_block_rule"] = (
                 "Previous agentic proposal attempts on this branch were blocked "
-                "before code because the candidate crossed a hard grounding, "
-                "boundary, schema, or activation gate. Treat these as hard "
-                "research constraints: repair the cited premise/contract issue "
+                "before code because the candidate crossed a hard boundary, "
+                "objective, contract, schema, or activation gate. Treat these "
+                "as hard research constraints: repair the cited contract issue "
                 "before continuing near the same mechanism, and use the cited "
                 "source/gate/failure_code/reason as the grounding evidence."
             )

@@ -35,17 +35,42 @@ def test_mechanism_novelty_result_requires_auditable_evidence_for_hard_block() -
         evidence=("text match only",),
     )
 
-    assert result.result_kind == "premise_contradiction"
+    assert result.result_kind == "mechanism_premise_warning"
     assert result.gate_action == "diagnostic"
-    assert result.diagnostic_kind == "grounding_risk"
+    assert result.diagnostic_kind == "mechanism_premise_warning"
     assert result.is_hard_block is False
 
     with pytest.raises(ValueError):
         result.to_rejection(_solver_design_hypothesis("Route limit is absent."))
 
 
+def test_boundary_contradiction_result_remains_hard_block() -> None:
+    result = MechanismNoveltyResult(
+        premise_check="contradicted",
+        failure_category="boundary_contradicted",
+        mechanism="forced_surface",
+        reason="forced surface boundary contradicted",
+        evidence=("forced_surface=solver_design",),
+        fact_ids=("boundary.forced_surface",),
+        contradicted_fact_ids=("boundary.forced_surface",),
+        fact_packet_digest="facts-boundary",
+        fact_provenance={"source": "unit"},
+        result_kind="boundary_contradicted",
+        contradicted_span="acceptance_policy",
+    )
+
+    assert result.result_kind == "boundary_contradicted"
+    assert result.gate_action == "hard_block"
+    assert result.diagnostic_kind is None
+    assert result.is_hard_block is True
+
+    rejection = result.to_rejection(_solver_design_hypothesis("Wrong surface."))
+    assert rejection["failure_category"] == "boundary_contradicted"
+    assert rejection["screening_allowed"] is False
+
+
 @pytest.mark.parametrize("case_name,text,mechanism", FALSE_PREMISES)
-def test_mechanism_novelty_gate_blocks_known_false_premises(
+def test_mechanism_novelty_gate_warns_on_known_false_mechanism_premises(
     tmp_path,
     case_name: str,
     text: str,
@@ -62,8 +87,12 @@ def test_mechanism_novelty_gate_blocks_known_false_premises(
     )
 
     assert result is not None
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.premise_check == "contradicted"
+    assert result.result_kind == "mechanism_premise_warning"
+    assert result.gate_action == "diagnostic"
+    assert result.diagnostic_kind == "mechanism_premise_warning"
+    assert result.is_hard_block is False
     assert result.mechanism == mechanism
     assert result.evidence
     assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
@@ -334,7 +363,7 @@ def test_mechanism_novelty_gate_blocks_explicit_duplicate_or_opt_addition(
     ]
 
 
-def test_mechanism_novelty_gate_blocks_unsystematic_cross_route_segment_claim(
+def test_mechanism_novelty_gate_warns_on_unsystematic_cross_route_segment_claim(
     tmp_path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
@@ -351,7 +380,7 @@ def test_mechanism_novelty_gate_blocks_unsystematic_cross_route_segment_claim(
     )
 
     assert result is not None
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "cross_route_or_opt_2_3"
     assert result.contradicted_fact_ids == (
         "cvrp.local_search.cross_route_or_opt_2_3",

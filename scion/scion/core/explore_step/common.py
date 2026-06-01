@@ -50,12 +50,8 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or _AGENT_GROUNDING_FAILURE in text
         or _ALGORITHM_SMOKE_FAILURE in text
         or _PROPOSAL_ACTIVATION_DIAGNOSTIC in text
-        or _DUPLICATE_MECHANISM in text
-        or _MECHANISM_NOVELTY_REJECTED in text
         or _SCHEMA_QUALITY_BLOCK in text
         or _MECHANISM_DUPLICATE_ID_CONFLICT in text
-        or "premise_check=duplicate" in text
-        or "premise_check=contradicted" in text
         or "algorithm smoke did not pass" in text_lower
         or "runtime_smoke.telemetry_guard" in text_lower
     )

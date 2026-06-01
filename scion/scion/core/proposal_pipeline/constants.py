@@ -9,6 +9,8 @@ from scion.proposal.agentic_session import (
 AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 LEGACY_PREMISE_CONTRADICTED = "premise_contradicted"
 PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
+BOUNDARY_CONTRADICTED = "boundary_contradicted"
+OBJECTIVE_POLICY_CONTRADICTED = "objective_policy_contradicted"
 AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
 AGENTIC_FAILURE_DETAIL_CHARS = 700
 FRAMEWORK_CONTROL_FAILURE = "framework_control"

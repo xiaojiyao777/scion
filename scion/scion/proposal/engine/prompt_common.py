@@ -59,8 +59,8 @@ def _agentic_research_context_block(
         parts.append(
             "## Hypothesis Semantic Retry Feedback\n"
             "The previous hypothesis was rejected by an audited semantic gate. "
-            "Use this feedback as a hard constraint: repair any explicitly "
-            "contradicted factual premise. If the candidate remains near an "
+            "Use this feedback as a boundary/objective constraint when marked "
+            "hard. If the candidate remains near an "
             "existing mechanism, acknowledge the existing mechanism and state "
             "the material trigger, scoring, schedule, or behavior difference. "
             "If prior wording acknowledged the existing mechanism but was "

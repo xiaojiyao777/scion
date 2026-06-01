@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -30,7 +29,7 @@ from scion.tests.unit.mechanism_novelty_helpers import (
 )
 
 @pytest.mark.parametrize("case_name,text,mechanism", FALSE_PREMISES)
-def test_agentic_session_rejects_mechanism_false_premise_before_code_context(
+def test_agentic_session_warns_on_mechanism_false_premise_and_enters_code(
     tmp_path,
     case_name: str,
     text: str,
@@ -38,18 +37,19 @@ def test_agentic_session_rejects_mechanism_false_premise_before_code_context(
 ) -> None:
     del case_name
     context = _cvrp_context_with_champion(tmp_path)
+    context = replace(context, policy=ContextExposurePolicy())
     hypothesis = _solver_design_hypothesis(text)
-    creative = FakeCreative(hypothesis=hypothesis)
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content="# material variant would be implemented here\n",
+        premise_check="supported",
+    )
+    creative = FakeCreative(hypothesis=hypothesis, patch=patch)
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
-
-    def build_code_context(_hypothesis):
-        raise AssertionError("mechanism novelty rejection must stop before code")
-
-    def approve_hypothesis(_hypothesis):
-        raise AssertionError("mechanism novelty rejection must stop before approval")
 
     output = session.run(
         AgenticProposalRequest(
@@ -57,79 +57,72 @@ def test_agentic_session_rejects_mechanism_false_premise_before_code_context(
             branch=context.branch,
             champion=context.champion,
             hypothesis_context={"seed": "mechanism-novelty"},
-            build_code_context=build_code_context,
-            approve_hypothesis=approve_hypothesis,
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
             problem_id=context.problem_id,
             problem_spec_hash=context.problem_spec_hash,
             tool_context=context,
         )
     )
 
-    tool_names = [
-        event.metadata["tool_name"]
-        for event in output.transcript
-        if "tool_name" in event.metadata
-    ]
-
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.termination_reason == AgenticTerminationReason.PREMISE_CONTRADICTED
-    assert output.patch is None
-    assert output.failure_category == "agent_grounding_failure"
-    assert output.structured_rejection is not None
-    assert output.structured_rejection["premise_check"] == "contradicted"
-    assert output.structured_rejection["failure_category"] == "agent_grounding_failure"
-    assert (
-        output.structured_rejection["legacy_failure_category"]
-        == "premise_contradicted"
-    )
-    assert (
-        output.structured_rejection["failure_code"]
-        == "proposal_premise_contradicted"
-    )
-    assert output.structured_rejection["agent_block_reason"] == "agent_quality_blocked"
-    assert output.structured_rejection["mechanism"] == mechanism
-    assert output.structured_rejection["screening_allowed"] is False
-    assert output.structured_rejection["fact_packet_digest"]
-    assert output.structured_rejection["contradicted_fact_ids"] == list(
-        MECHANISM_FACT_IDS[mechanism]
-    )
-    assert output.structured_rejection["fact_provenance"]
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.patch is patch
+    assert output.failure_category is None
+    assert output.structured_rejection is None
+    assert creative.code_contexts
+    code_context = creative.code_contexts[-1]
+    warning = code_context["agentic_mechanism_novelty_warnings"][0]
+    assert warning["warning_kind"] == "mechanism_premise_warning"
+    assert warning["premise_check"] == "contradicted"
+    assert warning["failure_category"] == "mechanism_premise_warning"
+    assert warning["mechanism"] == mechanism
+    assert warning["blocking"] is False
+    assert warning["quality_block"] is False
+    assert warning["fact_packet_digest"]
+    assert warning["fact_ids"] == list(MECHANISM_FACT_IDS[mechanism])
     if mechanism == "shaw_related_removal":
         rendered = " ".join(
             [
-                output.structured_rejection["reason"],
-                *output.structured_rejection["evidence"],
+                warning["reason"],
+                warning["agent_guidance"],
             ]
         )
         assert "_shaw_removal" in rendered
-        assert "distance" in rendered
-        assert "demand" in rendered
-        assert "route" in rendered
-    assert output.failure_ledger["first_root_cause"] == "agent_grounding_failure"
-    assert output.failure_ledger["latest_failure"] == "agent_grounding_failure"
-    assert (
-        output.failure_ledger["entries"][0]["failure_code"]
-        == "proposal_premise_contradicted"
+        assert "missing" in rendered or "absent" in rendered
+    assert not any(
+        entry.get("source") == "mechanism_novelty_gate"
+        for entry in output.failure_ledger["entries"]
     )
-    assert output.failure_ledger["entries"][0]["source"] == "mechanism_novelty_gate"
-    assert creative.code_contexts == []
-    assert "proposal.schema_preview" not in tool_names
-    assert "proposal.contract_preview" not in tool_names
-    assert "proposal.algorithm_smoke" not in tool_names
+    assert any(
+        observation["tool_name"] == "proposal.mechanism_novelty_diagnostic"
+        for observation in code_context["agentic_tool_observations"]
+    )
 
 
-def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
+def test_novelty_gate_premise_warning_continues_without_semantic_retry(
     tmp_path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
+    context = replace(context, policy=ContextExposurePolicy())
     rejected = _solver_design_hypothesis(
         "The active solver lacks inter-route Or-opt segment relocation; "
         "add an NN-filtered cross-route segment relocation neighborhood."
     )
-    accepted = _solver_design_hypothesis(
-        "Improve existing cross-route Or-opt candidate ordering and delta scoring."
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content="# material variant would be implemented here\n",
+        premise_check="supported",
     )
-    creative = SequentialHypothesisCreative([rejected, rejected, accepted])
+    creative = FakeCreative(hypothesis=rejected, patch=patch)
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -146,42 +139,32 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
                 "research_surface_kind": "solver_design",
                 "target_file": "policies/baseline_modules/local_search.py",
             },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
             problem_id=context.problem_id,
             problem_spec_hash=context.problem_spec_hash,
             tool_context=context,
         )
     )
 
-    retry_context = creative.hypothesis_contexts[2]
-    retry_feedback = retry_context["agentic_hypothesis_semantic_rejections"][0]
-
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.termination_reason == (
-        AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert creative.hypothesis_contexts
+    assert not any(
+        "agentic_hypothesis_semantic_rejections" in context
+        for context in creative.hypothesis_contexts
     )
-    assert output.hypothesis == accepted
-    assert len(creative.hypothesis_contexts) == 3
-    assert retry_feedback["source"] == "mechanism_novelty_gate"
-    assert retry_feedback["premise_check"] == "contradicted"
-    assert retry_feedback["failure_code"] == "proposal_premise_contradicted"
-    assert retry_feedback["mechanism"] == "cross_route_or_opt_2_3"
-    assert retry_feedback["contradicted_fact_ids"] == [
-        "cvrp.local_search.cross_route_or_opt_2_3"
-    ]
-    assert retry_feedback["fact_packet_digest"]
-    assert retry_feedback["fact_provenance"]
-    assert "agentic_negative_fact_block" in retry_context
-    assert "fact_id=cvrp.local_search.cross_route_or_opt_2_3" in retry_context[
-        "agentic_negative_fact_block"
-    ]
-    assert "mechanism=cross_route_or_opt_2_3" in retry_context[
-        "agentic_negative_fact_block"
-    ]
-    assert "active solver" in retry_feedback["reason"].lower()
-    assert "_or_opt_2" in json.dumps(retry_feedback, sort_keys=True)
-    assert "material" in retry_context[
-        "agentic_hypothesis_retry_rule"
-    ]
+    warning = creative.code_contexts[-1]["agentic_mechanism_novelty_warnings"][0]
+    assert warning["source"] == "mechanism_novelty_gate"
+    assert warning["premise_check"] == "contradicted"
+    assert warning["warning_kind"] == "mechanism_premise_warning"
+    assert warning["mechanism"] == "cross_route_or_opt_2_3"
+    assert warning["fact_ids"] == ["cvrp.local_search.cross_route_or_opt_2_3"]
+    assert warning["fact_packet_digest"]
+    assert "active solver" in warning["reason"].lower()
+    assert "material" in warning["agent_guidance"].lower()
     assert not any(
         entry.get("source") == "mechanism_novelty_gate"
         for entry in output.failure_ledger["entries"]
@@ -224,18 +207,22 @@ def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> N
     assert "material difference" in rendered
 
 
-def test_hypothesis_semantic_retry_manifest_records_feedback_section(
+def test_mechanism_premise_warning_records_diagnostic_observation(
     tmp_path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
-    rejected = _solver_design_hypothesis(
+    context = replace(context, policy=ContextExposurePolicy())
+    hypothesis = _solver_design_hypothesis(
         "The active solver lacks inter-route Or-opt segment relocation; "
         "add an NN-filtered cross-route segment relocation neighborhood."
     )
-    accepted = _solver_design_hypothesis(
-        "Improve existing cross-route Or-opt candidate ordering and delta scoring."
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content="# material variant would be implemented here\n",
+        premise_check="supported",
     )
-    creative = SequentialHypothesisCreative([rejected, rejected, accepted])
+    creative = FakeCreative(hypothesis=hypothesis, patch=patch)
     artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
     session = AgenticProposalSession(
         creative,
@@ -254,42 +241,53 @@ def test_hypothesis_semantic_retry_manifest_records_feedback_section(
                 "research_surface_kind": "solver_design",
                 "target_file": "policies/baseline_modules/local_search.py",
             },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
             problem_id=context.problem_id,
             problem_spec_hash=context.problem_spec_hash,
             tool_context=context,
         )
     )
 
-    manifests = [
-        json.loads(Path(ref).read_text(encoding="utf-8"))
-        for ref in output.tainted_artifact_refs
-        if "api_visible_prompt_manifest" in ref
-    ]
-    retry_manifests = [
-        manifest
-        for manifest in manifests
-        if manifest.get("call_kind") == "hypothesis_semantic_retry"
+    diagnostic_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("diagnostic_kind") == "mechanism_premise_warning"
     ]
 
-    assert retry_manifests
-    retry_manifest = retry_manifests[0]
-    assert "hypothesis_semantic_retry_feedback" in retry_manifest[
-        "section_names"
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert diagnostic_events
+    assert diagnostic_events[-1].metadata["gate_action"] == "diagnostic"
+    assert creative.code_contexts
+    observations = creative.code_contexts[-1]["agentic_tool_observations"]
+    diagnostic_observations = [
+        item
+        for item in observations
+        if item["tool_name"] == "proposal.mechanism_novelty_diagnostic"
     ]
-    assert retry_manifest["section_statuses"][
-        "hypothesis_semantic_retry_feedback"
-    ]["status"] == "included"
+    assert diagnostic_observations
+    assert "material" in json.dumps(diagnostic_observations[-1], sort_keys=True)
 
 
-def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(
+def test_repeated_novelty_gate_warning_does_not_fail_after_retry_budget(
     tmp_path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
+    context = replace(context, policy=ContextExposurePolicy())
     repeated = _solver_design_hypothesis(
         "The active solver lacks inter-route Or-opt segment relocation; "
         "add an NN-filtered cross-route segment relocation neighborhood."
     )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content="# material variant would be implemented here\n",
+        premise_check="supported",
+    )
     creative = SequentialHypothesisCreative([repeated, repeated])
+    creative.patch = patch
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -306,20 +304,32 @@ def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(
                 "research_surface_kind": "solver_design",
                 "target_file": "policies/baseline_modules/local_search.py",
             },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
             problem_id=context.problem_id,
             problem_spec_hash=context.problem_spec_hash,
             tool_context=context,
         )
     )
 
-    assert len(creative.hypothesis_contexts) == 3
-    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.termination_reason == AgenticTerminationReason.PREMISE_CONTRADICTED
-    assert output.failure_category == "agent_grounding_failure"
-    assert output.structured_rejection["source"] == "mechanism_novelty_gate"
-    assert output.structured_rejection["mechanism"] == "cross_route_or_opt_2_3"
-    assert output.failure_ledger["entry_count"] == 1
-    assert output.failure_ledger["entries"][0]["source"] == "mechanism_novelty_gate"
+    assert creative.hypothesis_contexts
+    assert not any(
+        "agentic_hypothesis_semantic_rejections" in context
+        for context in creative.hypothesis_contexts
+    )
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.failure_category is None
+    assert output.structured_rejection is None
+    assert not any(
+        entry.get("source") == "mechanism_novelty_gate"
+        for entry in output.failure_ledger["entries"]
+    )
+    warning = creative.code_contexts[-1]["agentic_mechanism_novelty_warnings"][0]
+    assert warning["warning_kind"] == "mechanism_premise_warning"
+    assert warning["quality_block"] is False
 
 
 def test_duplicate_mechanism_gate_diagnostic_continues_to_code(

@@ -7,10 +7,11 @@ from scion.core.proposal_pipeline.classification import (
     _agentic_output_is_quality_blocked,
 )
 
-def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> None:
+def test_mechanism_premise_warning_is_not_quality_block_and_returns_patch() -> None:
     creative = FakeCreative()
+    patch = creative.patch
     output = AgenticProposalOutput(
-        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        status=AgenticProposalStatus.COMPLETED,
         session_id="premise-session",
         campaign_id="camp-1",
         branch_id="branch-1",
@@ -18,17 +19,23 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
         problem_id="toy",
         problem_spec_hash="spec-hash",
         hypothesis=creative.hypothesis,
-        termination_reason=AgenticTerminationReason.PREMISE_CONTRADICTED,
-        failure_detail="active solver already contains the claimed missing move",
-        failure_category="agent_grounding_failure",
+        patch=patch,
+        self_check=AgenticSelfCheck(
+            schema_valid=True,
+            contract_preview_passed=True,
+        ),
+        termination_reason=AgenticTerminationReason.COMPLETED,
         structured_rejection={
             "source": "mechanism_novelty_gate",
             "gate_name": "MechanismNoveltyGate",
             "mechanism": "cross_route_or_opt_2_3",
             "premise_check": "contradicted",
-            "failure_category": "agent_grounding_failure",
-            "failure_code": "proposal_premise_contradicted",
-            "agent_block_reason": "agent_quality_blocked",
+            "failure_category": "mechanism_premise_warning",
+            "gate_action": "diagnostic",
+            "result_kind": "mechanism_premise_warning",
+            "diagnostic_kind": "mechanism_premise_warning",
+            "screening_allowed": True,
+            "quality_block": False,
             "reason": (
                 "Hypothesis claims inter-route Or-opt is missing, but active "
                 "solver evidence already shows cross-route Or-opt."
@@ -53,51 +60,19 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
     session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
 
-    assert patch is None
+    assert patch is creative.patch
+    assert _agentic_output_is_quality_blocked(output) is False
     assert failures == []
     assert failure_streak == {"proposal": 2}
-    assert detail is not None
-    assert "agent_quality_blocked" in detail
-    assert "proposal_premise_contradicted" in detail
-    assert "agent_grounding_failure" in detail
+    assert detail is None
     assert circuit.failures == []
     assert session_ref is not None
-    assert session_ref["failure_category"] == "agent_grounding_failure"
-    assert session_ref["failure_code"] == "proposal_premise_contradicted"
-    assert session_ref["agent_block_reason"] == "agent_quality_blocked"
-    assert session_ref["primary_failure"] == {
-        "stage": "agent_quality_blocked",
-        "reason": "proposal_premise_contradicted",
-        "category": "agent_grounding_failure",
-        "code": "proposal_premise_contradicted",
-        "detail": "active solver already contains the claimed missing move",
-    }
+    assert session_ref["failure_category"] == ""
+    assert session_ref["failure_code"] == ""
+    assert session_ref["agent_block_reason"] == ""
+    assert session_ref["primary_failure"] == {}
     assert session_ref["secondary_observations"] == []
-    assert session_ref["rejection_constraint"]["source"] == (
-        "mechanism_novelty_gate"
-    )
-    assert session_ref["rejection_constraint"]["mechanism"] == (
-        "cross_route_or_opt_2_3"
-    )
-    assert "material" in session_ref["rejection_constraint"][
-        "retry_constraint"
-    ]
-    assert session_ref["rejection_constraint"]["fact_packet_digest"] == (
-        "facts-constraint"
-    )
-    assert session_ref["rejection_constraint"]["fact_provenance"] == {
-        "source": "unit_test_provider"
-    }
-    assert session_ref["rejection_constraint"]["variant_allowed"] is False
-    assert session_ref["rejection_constraint"]["contradicted_span"] == (
-        "inter-route Or-opt is missing"
-    )
-    assert session_ref["rejection_constraint"]["matched_span"] == (
-        "inter-route Or-opt is missing"
-    )
-    assert session_ref["rejection_constraint"]["allowed_variant_guidance"] == (
-        "Use a materially different mechanism."
-    )
+    assert session_ref["rejection_constraint"] is None
 
 
 def test_mechanism_novelty_warning_is_not_quality_block() -> None:
@@ -137,21 +112,19 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
         problem_id="toy",
         problem_spec_hash="spec-hash",
         hypothesis=creative.hypothesis,
-        termination_reason=AgenticTerminationReason.PREMISE_CONTRADICTED,
-        failure_detail="active solver already contains the claimed missing move",
-        failure_category="agent_grounding_failure",
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED,
+        failure_detail="objective policy forbids worsening protected objective",
+        failure_category="objective_policy_contradicted",
         structured_rejection={
-            "source": "mechanism_novelty_gate",
-            "gate_name": "MechanismNoveltyGate",
-            "mechanism": "cross_route_or_opt_2_3",
-            "premise_check": "contradicted",
-            "failure_category": "agent_grounding_failure",
-            "failure_code": "proposal_premise_contradicted",
+            "source": "objective_policy_gate",
+            "gate_name": "ObjectivePolicyGate",
+            "mechanism": "objective_policy",
+            "premise_check": "objective_policy_contradicted",
+            "failure_category": "objective_policy_contradicted",
+            "failure_code": "objective_policy_contradicted",
             "agent_block_reason": "agent_quality_blocked",
-            "reason": "active solver already has the claimed mechanism",
-            "retry_constraint": "do not repeat cross_route_or_opt_2_3",
-            "fact_ids": ["cvrp.local_search.or_opt_cross_route"],
-            "fact_packet_digest": "facts-123",
+            "reason": "objective policy forbids worsening protected objective",
+            "retry_constraint": "preserve protected objective policy",
         },
     )
     captured: list[AgenticProposalRequest] = []
@@ -181,8 +154,8 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
     assert failures == []
     assert circuit.failures == []
     stored = pipeline.agentic_quality_feedback[branch.branch_id]
-    assert stored[0]["failure_code"] == "proposal_premise_contradicted"
-    assert stored[0]["mechanism"] == "cross_route_or_opt_2_3"
+    assert stored[0]["failure_code"] == "objective_policy_contradicted"
+    assert stored[0]["mechanism"] == "objective_policy"
 
     pipeline.agentic_session = CapturingSession()
     hypothesis, record = pipeline.generate_hypothesis(branch)
@@ -193,17 +166,10 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
     assert context is not None
     rendered = json.dumps(context, sort_keys=True)
     assert "agentic_prior_quality_blocks" in context
-    assert "agentic_negative_fact_block" in context
-    assert "fact_id=cvrp.local_search.or_opt_cross_route" in context[
-        "agentic_negative_fact_block"
-    ]
-    assert "mechanism=cross_route_or_opt_2_3" in context[
-        "agentic_negative_fact_block"
-    ]
-    assert "proposal_premise_contradicted" in rendered
-    assert "cross_route_or_opt_2_3" in rendered
-    assert "facts-123" in rendered
-    assert "repair the cited premise" in context[
+    assert "objective_policy_contradicted" in rendered
+    assert "objective_policy" in rendered
+    assert "protected objective" in rendered
+    assert "hard boundary, objective, contract" in context[
         "agentic_prior_quality_block_rule"
     ]
     assert branch.branch_id not in pipeline.agentic_quality_feedback
@@ -523,31 +489,30 @@ def test_agentic_hypothesis_api_failure_category_overrides_default_self_check() 
     assert session_ref["primary_failure"]["stage"] == "hypothesis_generation_failed"
 
 
-def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -> None:
+def test_hard_objective_contradiction_enters_search_memory_as_primary_block() -> None:
     creative = FakeCreative()
     search_memory = CampaignSearchMemory()
     session_ref = {
-        "failure_category": "agent_grounding_failure",
-        "failure_code": "proposal_premise_contradicted",
+        "failure_category": "objective_policy_contradicted",
+        "failure_code": "objective_policy_contradicted",
         "agent_block_reason": "agent_quality_blocked",
         "primary_failure": {
             "stage": "agent_quality_blocked",
-            "reason": "proposal_premise_contradicted",
-            "category": "agent_grounding_failure",
-            "code": "proposal_premise_contradicted",
-            "detail": "premise_check=contradicted: active solver has evidence",
+            "reason": "objective_policy_contradicted",
+            "category": "objective_policy_contradicted",
+            "code": "objective_policy_contradicted",
+            "detail": "objective policy forbids worsening protected objective",
         },
         "rejection_constraint": {
-            "source": "mechanism_novelty_gate",
-            "mechanism": "cross_route_or_opt_2_3",
-            "premise_check": "contradicted",
-            "failure_code": "proposal_premise_contradicted",
+            "source": "objective_policy_gate",
+            "mechanism": "objective_policy",
+            "premise_check": "objective_policy_contradicted",
+            "failure_code": "objective_policy_contradicted",
             "agent_block_reason": "agent_quality_blocked",
             "reason": (
-                "Hypothesis claims inter-route Or-opt is missing, but active "
-                "solver already has the mechanism."
+                "Hypothesis would worsen a protected objective beyond policy."
             ),
-            "evidence": ["_or_opt_1", "_or_opt_2", "_or_opt_3", "_or_opt"],
+            "evidence": ["protected objective policy"],
         },
     }
     step = StepRecord(
@@ -561,9 +526,9 @@ def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -
         decision=None,
         failure_stage="agent_quality_blocked",
         failure_detail=(
-            "agentic_proposal:premise_contradicted: "
-            "agent_quality_blocked:proposal_premise_contradicted:"
-            "agent_grounding_failure"
+            "agentic_proposal:hypothesis_approval_failed: "
+            "agent_quality_blocked:objective_policy_contradicted:"
+            "objective_policy_contradicted"
         ),
         proposal_session_ref=session_ref,
     )
@@ -572,10 +537,9 @@ def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -
     rendered = search_memory.render(view="hypothesis")
 
     assert "Agentic Grounding Blocks" in rendered
-    assert "do not repeat cross_route_or_opt_2_3" in rendered
-    assert "premise_check=contradicted" in rendered
-    assert "active solver already has" in rendered
-    assert "_or_opt_2" in rendered
+    assert "do not repeat objective_policy" in rendered
+    assert "premise_check=objective_policy_contradicted" in rendered
+    assert "protected objective" in rendered
     assert "C11" not in rendered
 
 
@@ -617,15 +581,15 @@ def test_explore_pipeline_persists_agent_quality_instead_of_contract() -> None:
 
     session_ref = {
         "session_id": "premise-session",
-        "failure_category": "agent_grounding_failure",
-        "failure_code": "proposal_premise_contradicted",
+        "failure_category": "objective_policy_contradicted",
+        "failure_code": "objective_policy_contradicted",
         "agent_block_reason": "agent_quality_blocked",
         "primary_failure": {
             "stage": "agent_quality_blocked",
-            "reason": "proposal_premise_contradicted",
-            "category": "agent_grounding_failure",
-            "code": "proposal_premise_contradicted",
-            "detail": "active solver already contains the claimed mechanism",
+            "reason": "objective_policy_contradicted",
+            "category": "objective_policy_contradicted",
+            "code": "objective_policy_contradicted",
+            "detail": "objective policy forbids worsening protected objective",
         },
     }
 
@@ -669,9 +633,9 @@ def test_explore_pipeline_persists_agent_quality_instead_of_contract() -> None:
     assert marked_status == []
     assert len(steps) == 1
     assert steps[0].failure_stage == "agent_quality_blocked"
-    assert "proposal_premise_contradicted" in (steps[0].failure_detail or "")
+    assert "objective_policy_contradicted" in (steps[0].failure_detail or "")
     assert steps[0].proposal_session_ref == session_ref
-    assert branch.failure_codes == ["PROPOSAL_PREMISE_CONTRADICTED"]
+    assert branch.failure_codes == ["OBJECTIVE_POLICY_CONTRADICTED"]
     assert "CONTRACT" not in branch.failure_codes
 
 

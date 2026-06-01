@@ -40,9 +40,10 @@ def render_negative_fact_block(
             "## Do Not Claim Missing / Near-Field Mechanism Memory",
             (
                 "Provider-owned facts and prior structured rejections below are "
-                "near-field grounding constraints for this hypothesis. Treat "
-                "contradicted premises as blacklisted, but use allowed variant "
-                "guidance to preserve legitimate follow-up variants."
+                "near-field grounding diagnostics for this hypothesis. Do not "
+                "claim these mechanisms are missing; acknowledge existing "
+                "mechanisms and use allowed variant guidance to state material "
+                "differences."
             ),
             *deduped,
         ]

@@ -149,7 +149,7 @@ def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merg
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "route_limit_fleet_repair"
     assert "explicitly shows positive fleet_violation" in result.reason
     assert result.evidence
@@ -157,7 +157,7 @@ def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merg
     assert "cvrp.search_state.starts_feasible_rejects_infeasible" in (
         result.contradicted_fact_ids
     )
-    assert result.variant_allowed is False
+    assert result.variant_allowed is None
     assert result.contradicted_span
     assert result.matched_span == result.contradicted_span
     assert "Allowed variant" in (result.allowed_variant_guidance or "")
@@ -348,9 +348,9 @@ def test_explicit_missing_removal_savings_claim_still_hard_blocks() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "removal_savings_worst_removal"
-    assert result.gate_action == "hard_block"
+    assert result.gate_action == "diagnostic"
 
 
 def test_near_field_route_merge_compaction_is_not_route_removal_missing_claim() -> None:
@@ -631,9 +631,9 @@ def test_cvrp_route_limit_gate_blocks_exact_positive_state_premises() -> None:
         )
 
         assert result is not None, phrase
-        assert result.failure_category == "premise_contradicted"
+        assert result.failure_category == "mechanism_premise_warning"
         assert result.mechanism == "route_limit_fleet_repair"
-        assert result.gate_action == "hard_block"
+        assert result.gate_action == "diagnostic"
 
 
 def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
@@ -659,5 +659,5 @@ def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair(
     assert result.premise_check == "contradicted"
     assert result.mechanism == "route_limit_fleet_repair"
     assert "cvrp.search_state.guards_route_limit" in result.contradicted_fact_ids
-    assert result.variant_allowed is False
+    assert result.variant_allowed is None
     assert "positive fleet violation" in result.contradicted_span

@@ -25,7 +25,7 @@ def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "adaptive_operator_weights"
     assert result.contradicted_fact_ids == (
         "cvrp.acceptance.adaptive_operator_weights",
@@ -783,7 +783,7 @@ def test_cvrp_provider_still_blocks_explicit_missing_or_opt_claim() -> None:
     )
 
     assert result is not None
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism in {"or_opt_1_relocation", "cross_route_or_opt_2_3"}
 
 
@@ -930,7 +930,7 @@ def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "random_removal_destroy"
     assert result.contradicted_fact_ids == (
         "cvrp.destroy_repair.random_removal_destroy",
@@ -1006,7 +1006,7 @@ def test_cvrp_random_gate_blocks_current_no_random_removal_positive_premise() ->
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "random_removal_destroy"
     assert result.contradicted_span
 
@@ -1106,9 +1106,9 @@ def test_cvrp_provider_blocks_missing_shaw_claim_with_span() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "shaw_related_removal"
-    assert result.variant_allowed is False
+    assert result.variant_allowed is None
     assert "lacks related removal" in result.contradicted_span
     assert result.matched_span == result.contradicted_span
     assert "Allowed variant" in (result.allowed_variant_guidance or "")
@@ -1213,7 +1213,7 @@ def test_cvrp_provider_premise_contradictions_always_have_exact_span() -> None:
 
         assert result is not None, hypothesis.hypothesis_text
         if result.premise_check == "contradicted":
-            assert result.failure_category == "premise_contradicted"
+            assert result.failure_category == "mechanism_premise_warning"
             assert result.contradicted_span, result.mechanism
             assert result.matched_span == result.contradicted_span
-            assert result.variant_allowed is False
+            assert result.variant_allowed is None

@@ -39,14 +39,22 @@ class MechanismNoveltyResult:
     allowed_variant_guidance: str | None = None
 
     def __post_init__(self) -> None:
-        if self.premise_check == "contradicted" and self._has_hard_block_evidence():
-            result_kind = "premise_contradiction"
+        hard_result_kind = str(self.result_kind or self.failure_category or "")
+        if self.premise_check == "contradicted" and hard_result_kind in {
+            "boundary_contradicted",
+            "objective_policy_contradicted",
+        }:
+            result_kind = hard_result_kind
             gate_action = "hard_block"
             diagnostic_kind = None
-        elif self.premise_check == "contradicted":
-            result_kind = "premise_contradiction"
+        elif self.premise_check == "contradicted" and self._has_hard_block_evidence():
+            result_kind = "mechanism_premise_warning"
             gate_action = "diagnostic"
-            diagnostic_kind = "incomplete_premise_contradiction_evidence"
+            diagnostic_kind = "mechanism_premise_warning"
+        elif self.premise_check == "contradicted":
+            result_kind = "mechanism_premise_warning"
+            gate_action = "diagnostic"
+            diagnostic_kind = "mechanism_premise_warning"
         else:
             result_kind = "duplicate_diagnostic"
             gate_action = "diagnostic"
@@ -64,7 +72,7 @@ class MechanismNoveltyResult:
         if self.diagnostic_kind is None:
             if resolved_gate_action == "diagnostic":
                 if self.premise_check == "contradicted":
-                    diagnostic_kind = "grounding_risk"
+                    diagnostic_kind = "mechanism_premise_warning"
                 elif self.premise_check == "duplicate":
                     diagnostic_kind = "duplicate_risk"
                 elif resolved_result_kind == "duplicate_diagnostic":
@@ -77,7 +85,8 @@ class MechanismNoveltyResult:
     def is_hard_block(self) -> bool:
         return (
             self.premise_check == "contradicted"
-            and self.result_kind == "premise_contradiction"
+            and self.result_kind
+            in {"boundary_contradicted", "objective_policy_contradicted"}
             and self.gate_action == "hard_block"
             and self._has_hard_block_evidence()
         )
@@ -93,10 +102,11 @@ class MechanismNoveltyResult:
     def to_rejection(self, hypothesis: HypothesisProposal) -> dict[str, Any]:
         if not self.is_hard_block:
             raise ValueError(
-                "Only high-confidence premise_contradiction results with "
-                "auditable fact ids, fact provenance, fact packet digest, and "
-                "a contradicted span can be serialized as hard mechanism "
-                "novelty rejections; use to_diagnostic() otherwise."
+                "Only boundary_contradicted/objective_policy_contradicted "
+                "results with auditable fact ids, fact provenance, fact packet "
+                "digest, and a contradicted span can be serialized as hard "
+                "rejections; mechanism novelty/premise overlap uses "
+                "to_diagnostic()."
             )
         return {
             "artifact_kind": "agentic_mechanism_novelty_rejection",
@@ -128,7 +138,7 @@ class MechanismNoveltyResult:
         return {
             "artifact_kind": (
                 "agentic_mechanism_premise_diagnostic"
-                if self.result_kind == "premise_contradiction"
+                if self.result_kind == "mechanism_premise_warning"
                 else "agentic_mechanism_duplicate_diagnostic"
             ),
             "result_kind": self.result_kind,
@@ -150,6 +160,8 @@ class MechanismNoveltyResult:
             "allowed_variant_guidance": self.allowed_variant_guidance,
             "patch_generated": None,
             "screening_allowed": True,
+            "blocking": False,
+            "quality_block": False,
             "source": "mechanism_novelty_gate",
             "gate_name": "MechanismNoveltyGate",
         }
@@ -172,8 +184,9 @@ class MechanismNoveltyGate:
 
     Scion core/proposal owns the auditable control point and hard-rejection
     shape. Problem packages own domain semantics for their algorithm
-    mechanisms. Only high-confidence premise contradictions should become hard
-    blocks; duplicate/family overlap results are advisory diagnostics.
+    mechanisms. Mechanism novelty, duplicate risk, and "baseline already has a
+    similar mechanism" premise checks are advisory diagnostics; hard blocks are
+    reserved for explicit boundary/objective-policy contradictions.
     """
 
     def evaluate(

@@ -17,9 +17,11 @@ from .constants import (
     AGENTIC_BUDGET_CONTROL,
     AGENTIC_FAILURE_DETAIL_CHARS,
     ALGORITHM_SMOKE_FAILURE,
+    BOUNDARY_CONTRADICTED,
     BRANCH_FOLLOWUP_POLICY_VIOLATION,
     LEGACY_PREMISE_CONTRADICTED,
     LLM_TRANSIENT_API_ERROR,
+    OBJECTIVE_POLICY_CONTRADICTED,
     PROPOSAL_ACTIVATION_DIAGNOSTIC,
     PROPOSAL_PREMISE_CONTRADICTED,
     SESSION_TIMEOUT,
@@ -121,6 +123,20 @@ def _agentic_quality_block_classification(
             "block_reason": AGENT_QUALITY_BLOCKED,
         }
     if (
+        failure_code in {BOUNDARY_CONTRADICTED, OBJECTIVE_POLICY_CONTRADICTED}
+        or failure_category in {BOUNDARY_CONTRADICTED, OBJECTIVE_POLICY_CONTRADICTED}
+    ):
+        code = (
+            failure_code
+            if failure_code in {BOUNDARY_CONTRADICTED, OBJECTIVE_POLICY_CONTRADICTED}
+            else failure_category
+        )
+        return {
+            "failure_class": code,
+            "failure_code": code,
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
+    if (
         failure_code == PROPOSAL_PREMISE_CONTRADICTED
         or failure_category in {
             AGENT_GROUNDING_FAILURE,
@@ -151,7 +167,13 @@ def _structured_mechanism_novelty_diagnostic(
         structured.get("gate_action") == "diagnostic"
         or structured.get("screening_allowed") is True
         or str(structured.get("result_kind") or "").endswith("_diagnostic")
-        or diagnostic_kind in {"novelty_warning", "duplicate_risk", "grounding_risk"}
+        or diagnostic_kind
+        in {
+            "novelty_warning",
+            "duplicate_risk",
+            "grounding_risk",
+            "mechanism_premise_warning",
+        }
     )
 
 
@@ -346,11 +368,9 @@ def _agentic_rejection_constraint(
             "selected_surface": structured.get("selected_surface"),
             "target_file": structured.get("target_file"),
             "retry_constraint": (
-                "Repair the contradicted factual premise. If the candidate "
-                "stays near an existing mechanism, acknowledge the existing "
-                "mechanism and state the material trigger, scoring, schedule, "
-                "or behavior difference; changing names or novelty text is not "
-                "enough."
+                "Acknowledge the existing mechanism and state the material "
+                "trigger, scoring, schedule, or behavior difference. Do not "
+                "change research direction merely to satisfy novelty wording."
             ),
     }
     return {

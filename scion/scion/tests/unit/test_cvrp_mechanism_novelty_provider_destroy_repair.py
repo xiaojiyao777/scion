@@ -66,9 +66,9 @@ def test_cvrp_regret_gate_blocks_missing_claim_with_exact_span() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "regret_insertion_repair"
-    assert result.variant_allowed is False
+    assert result.variant_allowed is None
     assert "lacks regret insertion repair" in result.contradicted_span
     assert result.matched_span == result.contradicted_span
     assert "Allowed variant" in (result.allowed_variant_guidance or "")
@@ -453,7 +453,7 @@ def test_cvrp_regret_gate_blocks_current_no_regret_positive_premise() -> None:
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "regret_insertion_repair"
     assert result.contradicted_span
 
@@ -768,7 +768,7 @@ def test_cvrp_provider_still_blocks_true_missing_route_removal_claim() -> None:
     )
 
     assert result is not None
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "route_removal"
     assert "lacks route removal" in result.contradicted_span
 
@@ -820,7 +820,7 @@ def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason()
 
     assert result is not None
     assert result.premise_check == "contradicted"
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "removal_savings_worst_removal"
     assert "removal-savings or detour-cost removal is missing" in result.reason
     rendered = " ".join([result.reason, *result.evidence])
@@ -966,7 +966,7 @@ def test_cvrp_provider_rejects_baseline_lacks_removal_savings_worst_removal() ->
     )
 
     assert result is not None
-    assert result.failure_category == "premise_contradicted"
+    assert result.failure_category == "mechanism_premise_warning"
     assert result.mechanism == "removal_savings_worst_removal"
 
 

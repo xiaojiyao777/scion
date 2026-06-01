@@ -47,8 +47,14 @@ def _agentic_grounding_block_from_step(step: StepRecord) -> str:
     premise_check = str(constraint.get("premise_check") or "").strip()
     failure_code = str(constraint.get("failure_code") or "").strip()
     agent_block = str(constraint.get("agent_block_reason") or "").strip()
-    if premise_check not in {"contradicted", "duplicate"} and not (
+    if premise_check not in {
+        "contradicted",
+        "duplicate",
+        "boundary_contradicted",
+        "objective_policy_contradicted",
+    } and not (
         failure_code == "proposal_premise_contradicted"
+        or failure_code in {"boundary_contradicted", "objective_policy_contradicted"}
         or agent_block == "agent_quality_blocked"
     ):
         return ""

@@ -78,7 +78,15 @@ def _record_failure_ledger_entry(
     category_value = _failure_category_value(category)
     if not category_value:
         return
-    if category_value == _LEGACY_PREMISE_CONTRADICTED:
+    if (
+        category_value == _LEGACY_PREMISE_CONTRADICTED
+        and _structured_rejection_is_soft_novelty_diagnostic(
+            diagnostic_payload or {}
+        )
+    ):
+        category_value = "mechanism_premise_warning"
+        failure_code = failure_code or "mechanism_premise_warning"
+    elif category_value == _LEGACY_PREMISE_CONTRADICTED:
         category_value = _AGENT_GROUNDING_FAILURE
         failure_code = failure_code or _PROPOSAL_PREMISE_CONTRADICTED_CODE
     if category_value == _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE:
@@ -297,10 +305,9 @@ def _hypothesis_semantic_retry_rejection_payload(
             "selected_surface": payload.get("selected_surface"),
             "target_file": payload.get("target_file"),
             "retry_constraint": (
-                "Repair the contradicted factual premise. If the idea remains "
-                "near an existing mechanism, acknowledge that mechanism and state "
-                "the material trigger, scoring, schedule, or behavior difference; "
-                "do not relabel the same missing-premise claim."
+                "Acknowledge the existing mechanism and state the material "
+                "trigger, scoring, schedule, or behavior difference. Do not "
+                "change direction merely to satisfy novelty wording."
             ),
         }
     )
@@ -331,7 +338,13 @@ def _structured_rejection_is_soft_novelty_diagnostic(
         rejection.get("gate_action") == "diagnostic"
         or rejection.get("screening_allowed") is True
         or str(rejection.get("result_kind") or "").endswith("_diagnostic")
-        or diagnostic_kind in {"novelty_warning", "duplicate_risk", "grounding_risk"}
+        or diagnostic_kind
+        in {
+            "novelty_warning",
+            "duplicate_risk",
+            "grounding_risk",
+            "mechanism_premise_warning",
+        }
     )
 
 

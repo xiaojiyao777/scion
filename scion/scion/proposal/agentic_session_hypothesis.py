@@ -440,12 +440,12 @@ class AgenticSessionHypothesisMixin:
                     for rejection in semantic_rejections
                 ]
                 hypothesis_context["agentic_hypothesis_retry_rule"] = (
-                    "A mechanism novelty gate found a hard, fact-backed premise "
-                    "contradiction in the previous hypothesis. Repair the "
-                    "contradicted factual premise. If the idea remains near an "
+                    "An audited gate found a hard boundary/objective-policy "
+                    "contradiction in the previous hypothesis. Preserve the "
+                    "research goal when possible; if the idea remains near an "
                     "existing mechanism, explicitly acknowledge that mechanism "
                     "and state the material trigger, scoring, schedule, or "
-                    "behavior difference; do not merely relabel the same premise."
+                    "behavior difference."
                 )
                 hypothesis_context["agentic_hypothesis_retry_attempt"] = attempt
             if preview_rejections:
@@ -1089,7 +1089,7 @@ def _record_mechanism_novelty_diagnostic(
     warning = _mechanism_novelty_warning_payload(diagnostic, attempt=attempt)
     state.note(
         AgenticProposalPhase.DRAFT_HYPOTHESIS,
-        "Mechanism duplicate diagnostic recorded; continuing without hard novelty block.",
+        "Mechanism novelty diagnostic recorded; continuing without hard novelty block.",
         metadata=_drop_empty_dict(
             {
                 "attempt": attempt,
@@ -1141,9 +1141,15 @@ def _mechanism_novelty_warning_payload(
             "Existing near-field mechanism evidence may overlap with this "
             "proposal. Continue only by acknowledging the existing mechanism "
             "and stating the material trigger, scoring, schedule, or behavior "
-            "difference."
+            "difference; do not change direction merely to satisfy novelty "
+            "wording."
         )
     )
+    if "material" not in guidance.lower():
+        guidance = (
+            f"{guidance} Acknowledge the existing mechanism and state the "
+            "material trigger, scoring, schedule, or behavior difference."
+        )
     return _drop_empty_dict(
         {
             "artifact_kind": "agentic_mechanism_novelty_warning",

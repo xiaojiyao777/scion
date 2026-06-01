@@ -209,7 +209,7 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
         proposal_quality_loop_limit=2,
     )
 
-    loop.run(max_rounds=3)
+    loop.run(max_rounds=1)
 
     assert calls == 2
     assert last_results[-1].reason == "agent_quality_blocked"
@@ -217,7 +217,7 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
     assert "proposal_quality_loop" in stopped_reasons
 
 
-def test_campaign_loop_stops_broader_pre_screen_quality_blocks() -> None:
+def test_campaign_loop_does_not_count_mechanism_novelty_diagnostics_as_quality_blocks() -> None:
     results = [
         StepResult(
             action="explore",
@@ -238,6 +238,7 @@ def test_campaign_loop_stops_broader_pre_screen_quality_blocks() -> None:
     calls = 0
     stopped_reasons: list[str | None] = []
     last_results: list[StepResult] = []
+    loop_statuses: list[dict[str, Any]] = []
 
     def run_one_step() -> StepResult:
         nonlocal calls
@@ -250,6 +251,8 @@ def test_campaign_loop_stops_broader_pre_screen_quality_blocks() -> None:
             stopped_reasons.append(kwargs.get("stopped_reason"))
         if "last_result" in kwargs:
             last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            loop_statuses.append(kwargs["loop_status"])
 
     loop = CampaignLoop(
         write_status=write_status,
@@ -272,12 +275,14 @@ def test_campaign_loop_stops_broader_pre_screen_quality_blocks() -> None:
         proposal_quality_loop_limit=2,
     )
 
-    loop.run(max_rounds=3)
+    loop.run(max_rounds=1)
 
-    assert calls == 2
-    assert last_results[-1].reason == "mechanism_novelty_rejected"
-    assert last_results[-1].stopped is True
-    assert "proposal_quality_loop" in stopped_reasons
+    assert calls == 3
+    assert last_results[-1].reason == "screening complete"
+    assert last_results[-1].stopped is False
+    assert "proposal_quality_loop" not in stopped_reasons
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 0
+    assert loop_statuses[-1]["quality_blocks"] == 0
 
 
 def test_campaign_loop_counts_generic_proposal_blocks_in_quality_ceiling() -> None:

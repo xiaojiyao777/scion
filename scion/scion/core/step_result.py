@@ -27,6 +27,7 @@ class StepResult:
     attempt_kind: Literal[
         "screening",
         "proposal_block",
+        "proposal_diagnostic",
         "proposal_retry",
         "schema_quality_block",
         "branch_lifecycle_policy",

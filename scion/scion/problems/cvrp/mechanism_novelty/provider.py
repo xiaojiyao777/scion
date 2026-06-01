@@ -82,9 +82,10 @@ _ROUTE_LIMIT_FACT = "cvrp.search_state.guards_route_limit"
 
 
 class CvrpMechanismNoveltyProvider:
-    """Hard-block only explicit contradicted CVRP solver premises.
+    """Emit CVRP mechanism overlap/premise diagnostics.
 
-    Duplicate/family overlap results are diagnostics for prompt/status/routing.
+    Duplicate/family overlap and "missing existing mechanism" results are
+    diagnostics for prompt/status/routing, not hard quality blocks.
     """
 
     def evaluate_mechanism_novelty(
@@ -653,6 +654,11 @@ def _result(
             "Provider did not find an exact contradicted span in the proposal; "
             "downgraded from premise_contradicted to duplicate/novelty guidance."
         )
+    elif (
+        premise_check == "contradicted"
+        and failure_category == "premise_contradicted"
+    ):
+        failure_category = "mechanism_premise_warning"
     contradicted_fact_ids = fact_ids if premise_check == "contradicted" else ()
     return MechanismNoveltyResult(
         premise_check=premise_check,

@@ -552,8 +552,10 @@ Produce a typed edit set that implements the hypothesis.
   drop mechanism ids in the patch response.
 - `premise_check="duplicate"` is diagnostic only. Use it to disclose close
   overlap with visible code, but still provide the typed edit when the approved
-  hypothesis is a material variant. Only `contradicted` and `wrong_owner` are
-  hard no-patch premise outcomes.
+  hypothesis is a material variant. Do not use `contradicted` for novelty,
+  duplicate-risk, near-existing mechanism, or baseline-already-has-similar-
+  capability observations. Only hard boundary/objective-policy/protected-
+  constraint contradictions and `wrong_owner` are no-patch premise outcomes.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
