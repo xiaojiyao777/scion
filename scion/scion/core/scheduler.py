@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import Any, Iterable, List, Literal, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
@@ -45,14 +45,23 @@ _HIGH_PRIORITY_TIERS: List[frozenset] = [
 # Backward-compatible name for older white-box tests and downstream checks.
 _PRIORITY_TIERS = _HIGH_PRIORITY_TIERS
 _RESEARCH_STATES = frozenset({BranchState.EXPLORE})
-_TERMINAL_STATES = frozenset({BranchState.PROMOTED, BranchState.ABANDONED})
+_TERMINAL_STATES = frozenset({
+    BranchState.PROMOTED,
+    BranchState.ABANDONED,
+    BranchState.PARKED_LINEAGE,
+})
 
 _DEFAULT_MAX_ACTIVE_BRANCHES = 3
+_PLATEAU_REROUTE_REASON = "plateau_reroute_clean_fork"
 
 
 class Scheduler:
     def __init__(self, max_active_branches: int = _DEFAULT_MAX_ACTIVE_BRANCHES) -> None:
         self._max_active_branches = max_active_branches
+
+    @property
+    def max_active_branches(self) -> int:
+        return self._max_active_branches
 
     def select_next(self, branches: List[Branch]) -> SchedulerAction:
         """
@@ -132,9 +141,14 @@ class Scheduler:
                     reason="active_branch_limit_reached",
                     slot="capacity_blocked",
                 )
-            priority_candidates = [
+            preferred_research = [
                 branch
                 for branch in eligible_research
+                if not _branch_plateau_reroute_preferred(branch)
+            ]
+            priority_candidates = [
+                branch
+                for branch in preferred_research
                 if _branch_research_priority(branch) <= 40
             ]
             if priority_candidates:
@@ -144,6 +158,16 @@ class Scheduler:
                     branch=selected,
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
+                )
+            if (
+                not preferred_research
+                and len(active_for_proposal_capacity) < self._max_active_branches
+            ):
+                return SchedulerAction(
+                    action="create_new",
+                    branch=None,
+                    reason=_PLATEAU_REROUTE_REASON,
+                    slot="explore_new",
                 )
             if (
                 len(active_for_proposal_capacity) < self._max_active_branches
@@ -160,7 +184,7 @@ class Scheduler:
                 )
             clean_research = [
                 branch
-                for branch in eligible_research
+                for branch in preferred_research
                 if not branch_requires_same_mechanism_followup(branch)
             ]
             clean_candidates = [
@@ -185,7 +209,7 @@ class Scheduler:
                     reason="established_branch_portfolio_expansion",
                     slot="explore_new",
                 )
-            selection_pool = clean_research or eligible_research
+            selection_pool = clean_research or preferred_research or eligible_research
             selected = _select_budgeted(selection_pool)
             return SchedulerAction(
                 action="run_existing",
@@ -244,9 +268,51 @@ def _counts_toward_proposal_capacity(branch: Branch) -> bool:
     if branch.state in _RESEARCH_STATES and (
         branch_lifecycle_new_mechanism_ineligible(branch)
         or _no_effect_without_actionable_diagnostic(branch)
+        or _branch_plateau_reroute_preferred(branch)
     ):
         return False
     return True
+
+
+def branch_counts_toward_active_slots(branch: Branch) -> bool:
+    """Return whether ``branch`` consumes an active scheduling slot."""
+    if branch.state in _TERMINAL_STATES:
+        return False
+    return _counts_toward_proposal_capacity(branch)
+
+
+def active_slot_branches(branches: Iterable[Branch]) -> list[Branch]:
+    """Filter branches to the active-slot capacity pool."""
+    return [
+        branch
+        for branch in branches
+        if branch_counts_toward_active_slots(branch)
+    ]
+
+
+def active_slot_inventory(
+    branches: Iterable[Branch],
+    *,
+    max_active_branches: int,
+) -> dict[str, Any]:
+    """Build a status/summary inventory for active scheduling slots."""
+    branch_list = list(branches)
+    active = active_slot_branches(branch_list)
+    parked = [
+        branch
+        for branch in branch_list
+        if branch_is_parked_lineage(branch)
+    ]
+    limit = max(0, int(max_active_branches))
+    used = len(active)
+    return {
+        "used": used,
+        "max": limit,
+        "available": max(0, limit - used),
+        "branch_ids": [branch.branch_id for branch in active],
+        "parked_lineages": len(parked),
+        "parked_lineage_ids": [branch.branch_id for branch in parked],
+    }
 
 
 def _branch_lifecycle_budget_exhausted(branch: Branch) -> bool:
@@ -290,6 +356,31 @@ def _marginal_loop_exhausted(branch: Branch) -> bool:
         and repeated >= 2
         or no_effect_followups >= 2
     )
+
+
+def _branch_plateau_reroute_preferred(branch: Branch) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    repeated = max(
+        0,
+        int(getattr(branch, "lifecycle_signal_repeat_count", 0) or 0),
+    )
+    marginal_or_no_effect_streak = max(
+        0,
+        int(getattr(branch, "lifecycle_marginal_no_effect_streak", 0) or 0),
+    )
+    no_effect_followups = max(
+        0,
+        int(getattr(branch, "lifecycle_no_effect_diagnostic_followups", 0) or 0),
+    )
+    if (
+        status in {"active_marginal", "active_no_effect"}
+        or tier in {"marginal", "no_effect"}
+    ):
+        return marginal_or_no_effect_streak >= 2 or no_effect_followups >= 1
+    if status == "active_weak_positive" or tier == "weak_positive":
+        return repeated >= 2
+    return False
 
 
 def _branch_research_priority(branch: Branch) -> int:

@@ -18,6 +18,7 @@ class BranchState(Enum):
     FROZEN_TESTING = "frozen_testing"
     PROMOTED = "promoted"
     ABANDONED = "abandoned"
+    PARKED_LINEAGE = "parked_lineage"
     STALE = "stale"
     STALE_WEIGHT_UPDATE = "stale_weight_update"  # J4: re-screen needed after weight opt
     BLOCKED_INFRA = "blocked_infra"
@@ -76,6 +77,7 @@ class HypothesisProposal:
     expected_telemetry: Dict[str, Any] = field(default_factory=dict)
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
     mechanism_changes: Tuple[MechanismChange, ...] = ()
+    schema_repair_attribution: Tuple[Dict[str, Any], ...] = ()
 
 @dataclass
 class PatchFileChange:
@@ -401,6 +403,7 @@ class DecisionFeatures:
     runtime_delta_median_ms: Optional[float] = None
     runtime_regression_rate: Optional[float] = None
     runtime_pairs: int = 0
+    runtime_evidence_confidence: str = "high"
     protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
     total_pairs: int = 0
     attempted_pairs: int = 0
@@ -491,6 +494,7 @@ class Branch:
     lifecycle_no_effect_diagnostic_followups: int = 0
     lifecycle_last_signal_signature: Optional[str] = None
     lifecycle_signal_repeat_count: int = 0
+    branch_evidence_summary: Dict[str, Any] = field(default_factory=dict)
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3

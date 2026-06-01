@@ -138,6 +138,11 @@ def branch_lifecycle_new_mechanism_ineligible(branch: Branch | None) -> bool:
 
 
 def branch_is_parked_lineage(branch: Branch | None) -> bool:
+    if branch is None:
+        return False
+    state = getattr(branch, "state", None)
+    if str(getattr(state, "value", state) or "") == "parked_lineage":
+        return True
     return branch_code_status(branch) in PARKED_BRANCH_CODE_STATUSES
 
 

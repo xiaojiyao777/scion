@@ -7,6 +7,7 @@ import re
 
 from scion.core.models import mechanism_changes
 from scion.proposal.agentic_session_common import *
+from scion.proposal.session_trace_index import attach_agentic_trace_context
 
 
 class AgenticSessionRepairMixin:
@@ -281,13 +282,24 @@ class AgenticSessionRepairMixin:
         while True:
             generation_attempt += 1
             try:
+                call_context = attach_agentic_trace_context(
+                    attempt_context,
+                    session_id=state.session_id,
+                    request_id=state.request_id or state.session_id,
+                    branch_id=state.branch_id,
+                    campaign_id=state.campaign_id,
+                    request_kind="code",
+                    call_kind="code",
+                    phase=AgenticProposalPhase.DRAFT_PATCH.value,
+                    attempt_number=generation_attempt,
+                )
                 self._record_prompt_manifest(
                     state,
                     call_kind="code",
-                    prompt_context=attempt_context,
+                    prompt_context=call_context,
                     observations=observations,
                 )
-                return self._creative.generate_code(attempt_context)
+                return self._creative.generate_code(call_context)
             except self._SESSION_ERROR_TYPES as exc:
                 category = _structured_output_failure_category(exc)
                 _record_failure_ledger_entry(

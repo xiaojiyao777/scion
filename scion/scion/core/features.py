@@ -9,6 +9,7 @@ from scion.core.models import (
     CanaryResult, ProtocolResult, DecisionFeatures,
 )
 from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_detected
+from scion.core.screening_visibility import runtime_confidence_for_protocol
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
     is_repairable_telemetry_validation_failure,
@@ -40,6 +41,7 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 _METRIC_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
+_RUNTIME_CONFIDENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
 
 
 class DecisionInputGuardError(Exception):
@@ -93,6 +95,7 @@ class SafeFeatureExtractor:
         runtime_delta_median_ms: Optional[float] = None
         runtime_regression_rate: Optional[float] = None
         runtime_pairs = 0
+        runtime_evidence_confidence = "high"
         protocol_gate_outcome = None
         total_pairs = 0
         attempted_pairs = 0
@@ -125,6 +128,13 @@ class SafeFeatureExtractor:
             runtime_delta_median_ms = stats.runtime_delta_median_ms
             runtime_regression_rate = stats.runtime_regression_rate
             runtime_pairs = stats.runtime_pairs
+            runtime_evidence_confidence = runtime_confidence_for_protocol(
+                protocol,
+                runtime_ratio=runtime_ratio_median,
+                runtime_delta=runtime_delta_median_ms,
+                runtime_regression_rate=runtime_regression_rate,
+                runtime_pairs=runtime_pairs,
+            )
             total_pairs = stats.total_pairs
             attempted_pairs = stats.attempted_pairs
             valid_pairs = stats.valid_pairs
@@ -178,6 +188,7 @@ class SafeFeatureExtractor:
             runtime_delta_median_ms=runtime_delta_median_ms,
             runtime_regression_rate=runtime_regression_rate,
             runtime_pairs=runtime_pairs,
+            runtime_evidence_confidence=runtime_evidence_confidence,
             protocol_gate_outcome=protocol_gate_outcome,  # type: ignore[arg-type]
             total_pairs=total_pairs,
             attempted_pairs=attempted_pairs,
@@ -269,6 +280,14 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
     if features.runtime_pairs < 0:
         raise DecisionInputGuardError(
             f"runtime_pairs must be non-negative: {features.runtime_pairs!r}"
+        )
+    runtime_confidence = str(features.runtime_evidence_confidence or "")
+    if runtime_confidence and not _RUNTIME_CONFIDENCE_RE.fullmatch(
+        runtime_confidence
+    ):
+        raise DecisionInputGuardError(
+            "runtime_evidence_confidence must be an enum-like id, not free text: "
+            f"{features.runtime_evidence_confidence!r}"
         )
     for field_name in (
         "total_pairs",

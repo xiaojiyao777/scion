@@ -60,11 +60,12 @@ def _agentic_research_context_block(
             "## Hypothesis Semantic Retry Feedback\n"
             "The previous hypothesis was rejected by an audited semantic gate. "
             "Use this feedback as a hard constraint: repair any explicitly "
-            "contradicted factual premise, or for duplicate/no-material-novelty "
-            "feedback choose a different mechanism family or materially "
-            "different variant. If the prior wording acknowledged the existing "
-            "mechanism but was ambiguous, clarify that acknowledgement and the "
-            "variant boundary rather than drifting the research goal.\n\n"
+            "contradicted factual premise. If the candidate remains near an "
+            "existing mechanism, acknowledge the existing mechanism and state "
+            "the material trigger, scoring, schedule, or behavior difference. "
+            "If prior wording acknowledged the existing mechanism but was "
+            "ambiguous, clarify that acknowledgement and the variant boundary "
+            "rather than drifting the research goal.\n\n"
             f"{_bounded_json(retry_payload, 6000)}"
         )
     preview_rejections = context.get("agentic_hypothesis_preview_rejections")

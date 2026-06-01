@@ -6,8 +6,22 @@ from scion.core.branch_hygiene import (
     record_branch_lifecycle_policy_block,
 )
 from scion.core.branch_repair_policy import validate_branch_continuation_patch
+from scion.core.decision_lifecycle_actions import (
+    update_branch_screening_evidence_summary,
+)
 from scion.core.explore_step.pipeline import ExploreStepPipeline
-from scion.core.models import Branch, BranchState, HypothesisProposal, PatchProposal
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CaseAggregateFeedback,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    PatchProposal,
+    ProtocolResult,
+)
+from scion.core.branch_cards import branch_prompt_card
+from scion.proposal.screening_feedback import screening_feedback_summary
 
 
 def test_explore_status_progress_includes_suspect_branch_hygiene() -> None:
@@ -89,6 +103,163 @@ def test_activation_missing_outcome_requires_repair_even_if_status_is_clean() ->
 
     assert payload["repair_focus_required"] is True
     assert payload["baseline_policy"] == "champion_required_for_repair"
+
+
+def test_parked_lineage_context_exposes_inactive_slot_policy() -> None:
+    branch = Branch(
+        branch_id="parked-1",
+        state=BranchState.PARKED_LINEAGE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="parked_lineage",
+        best_quality_checkpoint_id="checkpoint-best",
+    )
+
+    payload = branch_hygiene_context(branch)
+
+    assert payload["status"] == "parked_lineage"
+    assert payload["lineage_status"] == "parked"
+    assert payload["active_slot_status"] == "parked_lineage"
+    assert payload["counts_toward_active_slots"] is False
+    assert payload["allowed_next_actions"] == ["clean_fork"]
+    assert "consume_active_slot" in payload["forbidden_next_actions"]
+    assert payload["baseline_policy"] == "parked_lineage_clean_fork_required"
+
+
+def test_active_branch_card_separates_proposal_blocks_from_algorithm_reasons() -> None:
+    branch = Branch(
+        branch_id="active-with-schema-block",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_marginal",
+        last_screening_feedback_tier="marginal",
+        failure_codes=[
+            "SCHEMA_QUALITY_BLOCK",
+            "MECHANISM_CHANGES_DUPLICATE_ID_CONFLICT",
+            "PROPOSAL_PREMISE_CONTRADICTED",
+            "SCREENING_FAIL_LOW_WIN_RATE",
+        ],
+        last_branch_lifecycle_policy_block={
+            "reason_codes": [
+                "C11_EXPECTED_TELEMETRY",
+                "SCREENING_MARGINAL_SIGNAL_CONTINUE",
+            ],
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["why_not_promoted_reason_codes"] == [
+        "SCREENING_FAIL_LOW_WIN_RATE",
+        "SCREENING_MARGINAL_SIGNAL_CONTINUE",
+    ]
+    assert payload["proposal_block_reason_codes"] == [
+        "SCHEMA_QUALITY_BLOCK",
+        "MECHANISM_CHANGES_DUPLICATE_ID_CONFLICT",
+        "PROPOSAL_PREMISE_CONTRADICTED",
+        "C11_EXPECTED_TELEMETRY",
+    ]
+    assert "why_not_promoted_reason_codes=SCREENING_FAIL_LOW_WIN_RATE" in text
+    assert "SCHEMA_QUALITY_BLOCK" not in text.split(
+        "why_not_promoted_reason_codes=",
+        1,
+    )[1].split(" ", 1)[0]
+    assert "proposal_block_reason_codes=SCHEMA_QUALITY_BLOCK" in text
+
+
+def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
+    branch = Branch(
+        branch_id="case-card",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=3,
+            wins=1,
+            losses=1,
+            ties=1,
+            win_rate=1 / 3,
+            median_delta=0.05,
+            ci_low=-0.01,
+            ci_high=0.12,
+            runtime_ratio_median=1.08,
+            runtime_delta_median_ms=12.0,
+            runtime_regression_rate=0.34,
+            runtime_pairs=3,
+            statistical_metric="objective_delta",
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_LOW_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/metrics.json",
+        case_feedback=(
+            CaseAggregateFeedback(
+                case_id="case-a",
+                n_pairs=3,
+                wins=2,
+                losses=0,
+                ties=1,
+                win_rate=2 / 3,
+                dominant_result="win",
+                decisive_metric="objective_delta",
+                median_deltas={"objective_delta": 0.40},
+            ),
+            CaseAggregateFeedback(
+                case_id="case-b",
+                n_pairs=3,
+                wins=0,
+                losses=2,
+                ties=1,
+                win_rate=0.0,
+                dominant_result="loss",
+                decisive_metric="objective_delta",
+                median_deltas={"objective_delta": -0.20},
+            ),
+        ),
+        candidate_operator_attempts=4,
+        runtime_confidence="low_cached_champion",
+        champion_cache_hits=3,
+        champion_cached_runtime_pairs=3,
+    )
+    feedback = screening_feedback_summary(
+        protocol,
+        decision_reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+    )
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["case_level_winners"] == [
+        {
+            "case_id": "case-a",
+            "result": "win",
+            "delta": 0.4,
+            "effect_counters": {"wins": 2, "losses": 0, "ties": 1, "pairs": 3},
+        }
+    ]
+    assert payload["case_level_losses"][0]["case_id"] == "case-b"
+    assert payload["phase_activation_summary"]["stage"] == "screening"
+    assert payload["phase_activation_summary"]["activation_status"] == "observed"
+    assert payload["runtime_evidence_confidence"] == "low_cached_champion"
+    assert payload["generic_evidence_summary"]["runtime_evidence_confidence"] == (
+        "low_cached_champion"
+    )
+    assert "case_level_winners=case-a:win:delta=0.4:w2l0t1" in text
+    assert "case_level_losses=case-b:loss:delta=-0.2:w0l2t1" in text
+    assert "phase_activation_summary=stage:screening" in text
+    assert "runtime_evidence_confidence=low_cached_champion" in text
 
 
 def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> None:

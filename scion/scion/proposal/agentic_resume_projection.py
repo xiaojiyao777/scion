@@ -31,6 +31,15 @@ def compact_failure_ledger_for_resume(value: Mapping[str, Any]) -> dict[str, Any
                     "attempt": latest_entry.get("attempt"),
                     "root_cause": latest_entry.get("root_cause"),
                     "detail": _limit_string(latest_entry.get("detail"), 500),
+                    "detail_full_ref": latest_entry.get("detail_full_ref"),
+                    "diagnostic_ref": latest_entry.get("diagnostic_ref"),
+                    "diagnostic_failure_code": (
+                        (latest_entry.get("diagnostic_payload") or {}).get(
+                            "failure_code"
+                        )
+                        if isinstance(latest_entry.get("diagnostic_payload"), Mapping)
+                        else None
+                    ),
                 }
             ),
         }

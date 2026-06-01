@@ -129,6 +129,7 @@ def test_campaign_summary_exposes_screening_visibility_fields(
     assert protocol_summary["champion_cache_misses"] == 3
     assert protocol_summary["champion_cached_runtime_pairs"] == 4
     assert protocol_summary["runtime_confidence"] == "low_cached_champion"
+    assert protocol_summary["runtime_evidence_confidence"] == "low_cached_champion"
     assert protocol_summary["opportunity_status"] == "opportunity_poor"
     assert protocol_summary["opportunity_diagnostics"] == [
         "primary mechanism did not trigger"
@@ -413,6 +414,14 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         campaign_dir=tmp_path,
         state_provider=lambda: {
             "n_active_branches": 1,
+            "active_slots": {
+                "used": 1,
+                "max": 3,
+                "available": 2,
+                "branch_ids": ["active-branch"],
+                "parked_lineages": 1,
+                "parked_lineage_ids": ["parked-branch"],
+            },
             "branches": [{"id": "active-branch", "branch_card": active_card}],
             "checkpoint_inventory": {
                 "lineage-active": {
@@ -455,6 +464,8 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     assert summary["checkpoint_inventory"]["lineage-active"][
         "best_quality_checkpoint_id"
     ] == "checkpoint-best"
+    assert summary["active_slots"]["used"] == 1
+    assert summary["active_slots"]["parked_lineage_ids"] == ["parked-branch"]
     assert summary["current_progress"]["last_valid_checkpoint_id"] == (
         "checkpoint-last"
     )
@@ -996,6 +1007,8 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     loop_status = {
         "requested_rounds": 3,
         "attempt_limit": 3,
+        "loop_steps": 5,
+        "campaign_steps": 5,
         "proposal_attempts": 2,
         "total_rounds": 2,
         "effective_rounds_completed": 0,
@@ -1021,6 +1034,7 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["campaign_loop"]["requested_rounds"] == 3
     assert status["requested_rounds"] == 3
     assert status["total_rounds"] == 2
+    assert status["campaign_steps"] == 5
     assert status["proposal_attempts"] == 2
     assert status["effective_rounds_completed"] == 0
     assert status["telemetry_diagnostic_attempts"] == 1
@@ -1034,12 +1048,115 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["campaign_loop"]["proposal_quality_limit"] == 6
     assert status["campaign_loop"]["proposal_quality_blocks_consumed"] == 4
     assert summary["requested_rounds"] == 3
+    assert summary["campaign_steps"] == 5
+    assert summary["screened_rounds"] == 0
     assert summary["telemetry_diagnostic_attempts"] == 1
     assert summary["branch_lifecycle_policy_blocks"] == 1
     assert summary["reconcile_lifecycle_steps"] == 1
     assert summary["non_counted_lifecycle_steps"] == 2
     assert summary["counted_experiment_steps"] == 0
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
+
+
+def test_status_and_summary_expose_proposal_accounting_fields(
+    tmp_path: Path,
+) -> None:
+    trace_dir = tmp_path / "llm_traces"
+    trace_dir.mkdir()
+    for index, request_kind in enumerate(("hypothesis", "code", "code"), start=1):
+        (trace_dir / f"{index:04d}_{request_kind}.json").write_text(
+            json.dumps(
+                {
+                    "request_kind": request_kind,
+                    "llm_usage": {
+                        "request_kind": request_kind,
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+    agentic_dir = tmp_path / "agentic_sessions"
+    agentic_dir.mkdir()
+    (agentic_dir / "agentic_session_index.json").write_text(
+        json.dumps(
+            [
+                {"session_id": "session-1", "branch_id": "branch-1"},
+                {"session_id": "session-2", "branch_id": "branch-2"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (agentic_dir / "agentic_session_trace_index.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "agentic-session-trace-index.v1",
+                "artifact_kind": "agentic_session_trace_index",
+                "session_count": 2,
+                "trace_count": 3,
+                "sessions": [
+                    {
+                        "session_id": "session-1",
+                        "hypothesis_trace_ids": ["trace-hyp"],
+                        "code_trace_ids": ["trace-code"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "screened_experiments": 2,
+            "n_steps": 7,
+            "n_active_branches": 1,
+            "branches": [],
+        },
+    )
+    loop_status = {
+        "requested_rounds": 4,
+        "loop_steps": 7,
+        "proposal_attempts": 5,
+        "proposal_attempts_consumed": 5,
+        "quality_blocks": 3,
+    }
+
+    status = recorder.write_status(loop_status=loop_status)
+    step = replace(
+        _step("/tmp/accounting-metrics.json"),
+        proposal_session_ref={"session_id": "session-1"},
+    )
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=5,
+        champion=_champion(),
+    )
+
+    for payload in (status, summary):
+        assert payload["campaign_steps"] == 7
+        assert payload["screened_rounds"] == 2
+        assert payload["quality_blocks"] == 3
+        assert payload["agentic_sessions"] == 2
+        assert payload["hypothesis_calls"] == 1
+        assert payload["code_calls"] == 2
+        assert payload["proposal_accounting"]["campaign_steps"] == 7
+        assert payload["proposal_accounting"]["screened_rounds"] == 2
+        assert payload["proposal_accounting"]["quality_blocks"] == 3
+        assert payload["proposal_accounting"]["agentic_sessions"] == 2
+        assert payload["proposal_accounting"]["hypothesis_calls"] == 1
+        assert payload["proposal_accounting"]["code_calls"] == 2
+        trace_index = payload["proposal_accounting"]["agentic_session_trace_index"]
+        assert payload["agentic_session_trace_index"] == trace_index
+        assert trace_index["artifact_ref"] == (
+            "agentic_sessions/agentic_session_trace_index.json"
+        )
+        assert trace_index["digest"]
+        assert trace_index["session_count"] == 2
+        assert trace_index["trace_count"] == 3
 
 
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(

@@ -226,8 +226,17 @@ def test_get_active_branches():
     ctrl = _ctrl()
     b1 = ctrl.create_branch(_champion())
     b2 = ctrl.create_branch(_champion())
+    b3 = ctrl.create_branch(_champion())
     ctrl.apply_decision(b2.branch_id, Decision.ABANDON)
+    b3.state = BranchState.PARKED_LINEAGE
+    b3.branch_code_status = "parked_lineage"
     active = ctrl.get_active_branches()
     ids = {b.branch_id for b in active}
     assert b1.branch_id in ids
     assert b2.branch_id not in ids
+    assert b3.branch_id not in ids
+
+    reportable = {b.branch_id for b in ctrl.get_reportable_branches()}
+    assert b1.branch_id in reportable
+    assert b2.branch_id not in reportable
+    assert b3.branch_id in reportable

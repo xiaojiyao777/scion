@@ -793,6 +793,11 @@ def test_hypothesis_schema_retry_prompt_preserves_allowed_telemetry_template() -
         "repair_classification": "telemetry_schema_accounting_repair",
         "failure_code": "C11_expected_telemetry",
         "reason": "expected_telemetry.activation used a broad aggregate label",
+        "reason_full": (
+            "expected_telemetry.activation used a broad aggregate label; "
+            "exact corrective template requires declared_probe activation "
+            "fields without changing target_file, action, or mechanism id."
+        ),
         "allowed_top_level_categories": [
             "activation",
             "activity",
@@ -821,6 +826,18 @@ def test_hypothesis_schema_retry_prompt_preserves_allowed_telemetry_template() -
             "expected_telemetry": {
                 "activation": activation_fields,
                 "effect": effect_fields,
+            },
+        },
+        "allowed_expected_telemetry_template_full": {
+            "selected_surface": "solver_design",
+            "mechanism_id": "declared_probe",
+            "mechanism_ids": ["declared_probe"],
+            "template_is_exact": True,
+            "template_truncated": False,
+            "expected_telemetry": {
+                "activation": activation_fields,
+                "effect": effect_fields,
+                "budget": ["solver_runtime_budget.declared_probe"],
             },
         },
         "preserve_hypothesis": {
@@ -855,6 +872,8 @@ def test_hypothesis_schema_retry_prompt_preserves_allowed_telemetry_template() -
     assert "... <truncated agentic context>" not in user_prompt
     assert "schema_accounting_repair" in user_prompt
     assert "template_truncated" in user_prompt
+    assert "solver_runtime_budget.declared_probe" in user_prompt
+    assert "exact corrective template requires declared_probe activation" in user_prompt
     for field in activation_fields + effect_fields:
         assert field in user_prompt
 

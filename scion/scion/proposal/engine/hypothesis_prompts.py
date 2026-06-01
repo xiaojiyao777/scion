@@ -175,7 +175,7 @@ def _split_hypothesis_context(
         f"{dynamic_agentic_prefix}"
         f"{experiment_history_section}"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
-        f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
+        f"## Currently Occupied (C10 reports duplicate-risk diagnostics)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
         f"1. Read every relevant champion research-surface file and active solver fact available in context. For operator files, note: what move type, what objective(s) it improves or protects, what it cannot improve. For policy/config files, note the declared bounded lever being changed.\n"

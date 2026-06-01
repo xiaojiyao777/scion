@@ -59,6 +59,7 @@ def _protocol(
     candidate_failed_pairs: int = 0,
     champion_failed_pairs: int = 0,
     gate_outcome: str = "pass",
+    runtime_confidence: str = "high",
 ) -> ProtocolResult:
     stats = EvalStats(
         n_cases=10, wins=7, losses=2, ties=1,
@@ -84,6 +85,7 @@ def _protocol(
         reason_codes=("SCREENING_PASS",),
         exposed_summary="ok",
         raw_metrics_ref="/tmp/m.json",
+        runtime_confidence=runtime_confidence,
     )
 
 

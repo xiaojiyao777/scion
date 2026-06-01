@@ -183,11 +183,11 @@ class ProposalPipeline(
             context["agentic_prior_quality_blocks"] = quality_feedback
             context["agentic_prior_quality_block_rule"] = (
                 "Previous agentic proposal attempts on this branch were blocked "
-                "before code because the candidate was ungrounded, duplicate, "
-                "or diagnostically inactive. Treat these as hard research "
-                "constraints: do not repeat the same premise, mechanism, or "
-                "target; use the cited source/gate/failure_code/reason as the "
-                "starting point for a different hypothesis."
+                "before code because the candidate crossed a hard grounding, "
+                "boundary, schema, or activation gate. Treat these as hard "
+                "research constraints: repair the cited premise/contract issue "
+                "before continuing near the same mechanism, and use the cited "
+                "source/gate/failure_code/reason as the grounding evidence."
             )
             negative_fact_block = render_negative_fact_block(
                 prior_quality_blocks=quality_feedback

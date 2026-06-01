@@ -212,6 +212,7 @@ class AgenticRefsMixin:
             _agentic_primary_secondary_failures(output)
         )
         rejection_constraint = _agentic_rejection_constraint(output)
+        novelty_warnings = _agentic_novelty_warnings(output)
         failure_code = str(structured.get("failure_code") or "")
         if not failure_code and isinstance(primary_failure, Mapping):
             failure_code = str(primary_failure.get("code") or "")
@@ -236,4 +237,44 @@ class AgenticRefsMixin:
             "primary_failure": primary_failure,
             "secondary_observations": secondary_observations,
             "rejection_constraint": rejection_constraint,
+            "novelty_warnings": novelty_warnings,
         }
+
+
+def _agentic_novelty_warnings(
+    output: AgenticProposalOutput,
+) -> list[Mapping[str, Any]]:
+    warnings: list[Mapping[str, Any]] = []
+    for event in output.transcript:
+        metadata = getattr(event, "metadata", {}) or {}
+        if not isinstance(metadata, Mapping):
+            continue
+        warning = metadata.get("warning")
+        if isinstance(warning, Mapping):
+            warnings.append(dict(warning))
+            continue
+        diagnostic = metadata.get("diagnostic")
+        if not isinstance(diagnostic, Mapping):
+            continue
+        if str(diagnostic.get("source") or "") != "mechanism_novelty_gate":
+            continue
+        if str(diagnostic.get("gate_action") or "") != "diagnostic":
+            continue
+        warnings.append(
+            {
+                key: value
+                for key, value in {
+                    "source": diagnostic.get("source"),
+                    "warning_kind": diagnostic.get("diagnostic_kind"),
+                    "premise_check": diagnostic.get("premise_check"),
+                    "mechanism": diagnostic.get("mechanism"),
+                    "reason": diagnostic.get("reason"),
+                    "fact_ids": diagnostic.get("fact_ids"),
+                    "fact_packet_digest": diagnostic.get("fact_packet_digest"),
+                    "blocking": False,
+                    "quality_block": False,
+                }.items()
+                if value not in (None, "", [], {})
+            }
+        )
+    return warnings[-4:]

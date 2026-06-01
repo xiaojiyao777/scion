@@ -27,6 +27,7 @@ from scion.core.telemetry_validation import (
 from scion.evidence.formal_readiness import validate_formal_readiness
 
 from .artifact_refs import _screening_rate_fields
+from .accounting import proposal_accounting_fields
 from .common import _stage_value
 from .failure_summary import (
     _contract_not_run_reason,
@@ -178,11 +179,15 @@ class CampaignSummaryMixin:
         loop_status = getattr(self, "campaign_loop_status", None)
         loop_proposal_attempts = None
         loop_total_rounds = None
+        loop_campaign_steps = None
         loop_telemetry_repair_attempts = None
         loop_telemetry_repair_counts = None
         if isinstance(loop_status, Mapping):
             loop_proposal_attempts = loop_status.get("proposal_attempts_consumed")
             loop_total_rounds = loop_status.get("total_rounds")
+            loop_campaign_steps = loop_status.get("campaign_steps")
+            if loop_campaign_steps is None:
+                loop_campaign_steps = loop_status.get("loop_steps")
             loop_effective_rounds = loop_status.get("effective_rounds_completed")
             loop_telemetry_repair_attempts = loop_status.get(
                 "telemetry_repair_attempts"
@@ -222,6 +227,12 @@ class CampaignSummaryMixin:
                 if loop_proposal_attempts is not None
                 else round_num
             ),
+            "campaign_steps": (
+                int(loop_campaign_steps)
+                if loop_campaign_steps is not None
+                else len(steps)
+            ),
+            "screened_rounds": screened_experiments,
             "effective_rounds_completed": effective_rounds_completed,
             "counted_experiment_steps": counted_experiment_steps,
             "telemetry_repair_attempts": (
@@ -338,6 +349,8 @@ class CampaignSummaryMixin:
             for key in (
                 "requested_rounds",
                 "effective_rounds_completed",
+                "campaign_steps",
+                "loop_steps",
                 "telemetry_diagnostic_attempts",
                 "branch_lifecycle_policy_blocks",
                 "reconcile_lifecycle_steps",
@@ -348,6 +361,20 @@ class CampaignSummaryMixin:
                 value = self.campaign_loop_status.get(key)
                 if value is not None:
                     summary[key] = value
+        accounting = proposal_accounting_fields(
+            campaign_dir=self.campaign_dir,
+            steps=steps,
+            loop_status=self.campaign_loop_status,
+            state=summary,
+            round_num=round_num,
+            screened_rounds=screened_experiments,
+        )
+        summary.update(accounting)
+        summary["proposal_accounting"] = {
+            "proposal_attempts": summary.get("proposal_attempts"),
+            "proposal_attempts_consumed": summary.get("proposal_attempts_consumed"),
+            **accounting,
+        }
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))
@@ -370,6 +397,8 @@ class CampaignSummaryMixin:
                 branch_rows = [dict(row) for row in (state.get("branches") or []) if isinstance(row, Mapping)]
                 branch_cards = _branch_cards_from_rows(branch_rows)
                 summary["n_active_branches"] = state.get("n_active_branches")
+                if isinstance(state.get("active_slots"), Mapping):
+                    summary["active_slots"] = dict(state["active_slots"])
                 summary["branches"] = branch_rows
                 summary["branch_cards"] = branch_cards
                 summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
@@ -478,6 +507,7 @@ class CampaignSummaryMixin:
                 "primary_failure",
                 "secondary_observations",
                 "rejection_constraint",
+                "novelty_warnings",
             }
             step_data["proposal_session_ref"] = {
                 key: value
@@ -546,6 +576,7 @@ class CampaignSummaryMixin:
                 "runtime_regression_rate": stats.runtime_regression_rate,
                 "runtime_pairs": stats.runtime_pairs,
                 "runtime_confidence": pr.runtime_confidence,
+                "runtime_evidence_confidence": pr.runtime_confidence,
                 "total_pairs": stats.total_pairs,
                 "attempted_pairs": stats.attempted_pairs,
                 "valid_pairs": stats.valid_pairs,

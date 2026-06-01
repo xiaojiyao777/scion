@@ -179,7 +179,7 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
     ]
     assert "active solver" in retry_feedback["reason"].lower()
     assert "_or_opt_2" in json.dumps(retry_feedback, sort_keys=True)
-    assert "different mechanism family" in retry_context[
+    assert "material" in retry_context[
         "agentic_hypothesis_retry_rule"
     ]
     assert not any(
@@ -207,7 +207,7 @@ def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> N
             "champion_operators_code": "code",
             "champion_stats": "stats",
             "agentic_hypothesis_semantic_rejections": semantic_feedback,
-            "agentic_hypothesis_retry_rule": "Choose a different mechanism family.",
+            "agentic_hypothesis_retry_rule": "State the material difference.",
             "agentic_hypothesis_retry_attempt": 2,
         }
     )
@@ -221,7 +221,7 @@ def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> N
     assert "_or_opt_2" in rendered
     assert "contradicted_fact_ids" in rendered
     assert "fact_packet_digest" in rendered
-    assert "different mechanism family" in rendered
+    assert "material difference" in rendered
 
 
 def test_hypothesis_semantic_retry_manifest_records_feedback_section(
@@ -372,6 +372,18 @@ def test_duplicate_mechanism_gate_diagnostic_continues_to_code(
     assert output.termination_reason == AgenticTerminationReason.COMPLETED
     assert output.patch is patch
     assert creative.code_contexts
+    code_context = creative.code_contexts[-1]
+    assert "agentic_mechanism_novelty_warnings" in code_context
+    warning = code_context["agentic_mechanism_novelty_warnings"][0]
+    assert warning["warning_kind"] == "duplicate_risk"
+    assert warning["mechanism"] == "cross_route_or_opt_2_3"
+    assert warning["blocking"] is False
+    assert warning["quality_block"] is False
+    assert "material" in warning["agent_guidance"].lower()
+    assert any(
+        observation["tool_name"] == "proposal.mechanism_novelty_diagnostic"
+        for observation in code_context["agentic_tool_observations"]
+    )
     assert output.structured_rejection is None
     assert not any(
         entry.get("source") == "mechanism_novelty_gate"
@@ -379,7 +391,56 @@ def test_duplicate_mechanism_gate_diagnostic_continues_to_code(
     )
     assert duplicate_events
     assert duplicate_events[-1].metadata["gate_action"] == "diagnostic"
+    assert duplicate_events[-1].metadata["diagnostic_kind"] == "duplicate_risk"
     assert duplicate_events[-1].metadata["mechanism"] == "cross_route_or_opt_2_3"
+
+
+def test_forced_surface_contradiction_still_hard_blocks_before_code(tmp_path) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    context = replace(
+        context,
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file="policies/baseline_modules/local_search.py",
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="acceptance_policy",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            hypothesis_text="Tune acceptance policy while a solver_design surface is forced.",
+            target_weakness="Wrong forced surface.",
+            expected_effect="Should not pass hard boundary.",
+        )
+    )
+    creative = FakeCreative(hypothesis=hypothesis)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-mechanism",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "forced-boundary"},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.patch is None
+    assert creative.code_contexts == []
+    assert "forced_surface_constraint" in (output.failure_detail or "")
 
 
 def test_agentic_session_code_context_exposes_shaw_evidence_for_premise_check(

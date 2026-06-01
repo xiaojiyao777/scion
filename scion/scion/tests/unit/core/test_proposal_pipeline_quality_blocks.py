@@ -3,6 +3,9 @@
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.models import ContractResult, HypothesisRecord, MechanismChange
+from scion.core.proposal_pipeline.classification import (
+    _agentic_output_is_quality_blocked,
+)
 
 def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> None:
     creative = FakeCreative()
@@ -76,7 +79,7 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     assert session_ref["rejection_constraint"]["mechanism"] == (
         "cross_route_or_opt_2_3"
     )
-    assert "active-solver evidence" in session_ref["rejection_constraint"][
+    assert "material" in session_ref["rejection_constraint"][
         "retry_constraint"
     ]
     assert session_ref["rejection_constraint"]["fact_packet_digest"] == (
@@ -95,6 +98,32 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     assert session_ref["rejection_constraint"]["allowed_variant_guidance"] == (
         "Use a materially different mechanism."
     )
+
+
+def test_mechanism_novelty_warning_is_not_quality_block() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="warning-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+        structured_rejection={
+            "source": "mechanism_novelty_gate",
+            "gate_action": "diagnostic",
+            "result_kind": "duplicate_diagnostic",
+            "diagnostic_kind": "duplicate_risk",
+            "mechanism": "cross_route_or_opt_2_3",
+            "premise_check": "duplicate",
+            "failure_category": "duplicate_mechanism",
+            "screening_allowed": True,
+            "reason": "Existing near-field mechanism may overlap.",
+        },
+    )
+
+    assert _agentic_output_is_quality_blocked(output) is False
 
 
 def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None:
@@ -174,7 +203,7 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
     assert "proposal_premise_contradicted" in rendered
     assert "cross_route_or_opt_2_3" in rendered
     assert "facts-123" in rendered
-    assert "do not repeat the same premise" in context[
+    assert "repair the cited premise" in context[
         "agentic_prior_quality_block_rule"
     ]
     assert branch.branch_id not in pipeline.agentic_quality_feedback

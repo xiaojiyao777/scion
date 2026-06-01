@@ -26,6 +26,11 @@ _REJECTED_STATUS_ALIASES = (
     "screening_telemetry_failed",
     "validation_telemetry_failed",
 )
+_PARKED_BRANCH_CODE_STATUSES = (
+    "parked",
+    "parked_lineage",
+    "lineage_parked",
+)
 
 
 def _json_mapping(raw: object) -> dict:
@@ -80,6 +85,12 @@ class BranchStore:
         self.registry = registry
 
     def save(self, branch: Branch) -> None:
+        state_value = (
+            BranchState.PARKED_LINEAGE.value
+            if str(getattr(branch, "branch_code_status", "") or "")
+            in _PARKED_BRANCH_CODE_STATUSES
+            else branch.state.value
+        )
         with sqlite3.connect(self.registry.db_path) as conn:
             conn.execute(
                 """
@@ -99,13 +110,14 @@ class BranchStore:
                  last_branch_lifecycle_policy_block_json,
                  best_quality_checkpoint_id, last_valid_checkpoint_id,
                  rollback_count, last_rollback_reason,
+                 branch_evidence_summary_json,
                  pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
-                    branch.state.value,
+                    state_value,
                     branch.base_champion_id,
                     branch.base_champion_hash,
                     branch.lineage_id or branch.branch_id,
@@ -135,6 +147,7 @@ class BranchStore:
                     branch.last_valid_checkpoint_id,
                     branch.rollback_count,
                     branch.last_rollback_reason,
+                    json.dumps(dict(branch.branch_evidence_summary or {})),
                     1 if branch.pending_retry else 0,
                     branch.blocked_rounds,
                     branch.consecutive_llm_retries,
@@ -153,13 +166,22 @@ class BranchStore:
             return self._row_to_branch(row)
 
     def load_all_active(self) -> List[Branch]:
-        """Return all branches not in terminal states (PROMOTED, ABANDONED, STALE)."""
-        terminal = ("promoted", "abandoned")
+        """Return branches that remain in the active scheduling pool."""
+        terminal = ("promoted", "abandoned", "parked_lineage")
+        terminal_placeholders = ",".join("?" * len(terminal))
+        parked_placeholders = ",".join(
+            "?" * len(_PARKED_BRANCH_CODE_STATUSES)
+        )
         with sqlite3.connect(self.registry.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                f"SELECT * FROM branches WHERE state NOT IN ({','.join('?'*len(terminal))})",
-                terminal,
+                (
+                    "SELECT * FROM branches "
+                    f"WHERE state NOT IN ({terminal_placeholders}) "
+                    "AND COALESCE(branch_code_status, '') "
+                    f"NOT IN ({parked_placeholders})"
+                ),
+                (*terminal, *_PARKED_BRANCH_CODE_STATUSES),
             ).fetchall()
             return [self._row_to_branch(r) for r in rows]
 
@@ -210,6 +232,9 @@ class BranchStore:
             last_valid_checkpoint_id=d.get("last_valid_checkpoint_id"),
             rollback_count=d.get("rollback_count") or 0,
             last_rollback_reason=d.get("last_rollback_reason"),
+            branch_evidence_summary=_json_mapping(
+                d.get("branch_evidence_summary_json")
+            ),
             pending_retry=bool(d.get("pending_retry") or 0),
             blocked_rounds=d.get("blocked_rounds") or 0,
             consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,

@@ -4,12 +4,15 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from scion.core.models import MechanismChange
 from scion.problem.providers import active_subject_taxonomy_payload
 from scion.proposal.agentic_session_common import *
 from scion.proposal.hypothesis_telemetry_retry import (
     expected_telemetry_retry_feedback as _expected_telemetry_retry_feedback,
 )
+from scion.proposal.session_trace_index import attach_agentic_trace_context
 from scion.proposal.negative_facts import render_negative_fact_block
+from scion.proposal.schemas import normalize_mechanism_changes_with_repair_attribution
 from scion.runtime.telemetry_guard import expected_telemetry_template
 
 
@@ -154,14 +157,26 @@ class AgenticSessionHypothesisMixin:
                             attempt=attempt,
                         )
                     )
+                    call_kind = _hypothesis_prompt_call_kind(
+                        attempt=attempt,
+                        semantic_rejections=semantic_rejections,
+                        preview_rejections=preview_rejections,
+                        grounding_rejections=grounding_rejections,
+                    )
+                    hypothesis_context = attach_agentic_trace_context(
+                        hypothesis_context,
+                        session_id=state.session_id,
+                        request_id=state.request_id or state.session_id,
+                        branch_id=state.branch_id,
+                        campaign_id=state.campaign_id,
+                        request_kind="hypothesis",
+                        call_kind=call_kind,
+                        phase=AgenticProposalPhase.DRAFT_HYPOTHESIS.value,
+                        attempt_number=attempt,
+                    )
                     self._record_prompt_manifest(
                         state,
-                        call_kind=_hypothesis_prompt_call_kind(
-                            attempt=attempt,
-                            semantic_rejections=semantic_rejections,
-                            preview_rejections=preview_rejections,
-                            grounding_rejections=grounding_rejections,
-                        ),
+                        call_kind=call_kind,
                         prompt_context=hypothesis_context,
                         observations=prompt_observations,
                     )
@@ -193,6 +208,20 @@ class AgenticSessionHypothesisMixin:
                         metadata={"error": type(exc).__name__, "attempt": attempt},
                     )
                     return None, self._persist(output, state)
+                hypothesis, schema_repairs = _normalize_hypothesis_schema_shape(
+                    hypothesis
+                )
+                if schema_repairs:
+                    state.note(
+                        AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                        "Normalized repairable hypothesis schema shape.",
+                        metadata={
+                            "attempt": attempt,
+                            "failure_code": "mechanism_changes_duplicate_id_conflict",
+                            "schema_only_repair": True,
+                            "quality_block": False,
+                        },
+                    )
 
                 if self._session_timeout_reached(state):
                     output = self._timeout_output(
@@ -411,13 +440,12 @@ class AgenticSessionHypothesisMixin:
                     for rejection in semantic_rejections
                 ]
                 hypothesis_context["agentic_hypothesis_retry_rule"] = (
-                    "A mechanism novelty gate rejected the previous hypothesis. "
-                    "If the rejection is premise_contradicted, repair the "
-                    "contradicted factual premise or explicitly acknowledge the "
-                    "existing mechanism while stating the material in-family "
-                    "variant. If it is duplicate/no material novelty, choose a "
-                    "different mechanism family or a materially different "
-                    "variant; do not merely relabel the same premise."
+                    "A mechanism novelty gate found a hard, fact-backed premise "
+                    "contradiction in the previous hypothesis. Repair the "
+                    "contradicted factual premise. If the idea remains near an "
+                    "existing mechanism, explicitly acknowledge that mechanism "
+                    "and state the material trigger, scoring, schedule, or "
+                    "behavior difference; do not merely relabel the same premise."
                 )
                 hypothesis_context["agentic_hypothesis_retry_attempt"] = attempt
             if preview_rejections:
@@ -717,6 +745,13 @@ class AgenticSessionHypothesisMixin:
                 and len(preview_rejections) < _MAX_HYPOTHESIS_PREVIEW_RETRIES
             ):
                 preview_rejections.append(retry_feedback)
+                feedback_ref, feedback_digest = (
+                    self._record_schema_retry_feedback_audit(
+                        state,
+                        retry_feedback,
+                        attempt=attempt,
+                    )
+                )
                 state.note(
                     AgenticProposalPhase.DRAFT_HYPOTHESIS,
                     "Hypothesis preview gate rejected hypothesis; retrying with structured schema feedback.",
@@ -724,9 +759,21 @@ class AgenticSessionHypothesisMixin:
                         "attempt": attempt,
                         "failure_code": retry_feedback.get("failure_code"),
                         "source": retry_feedback.get("source"),
+                        "schema_retry_feedback_ref": feedback_ref,
+                        "schema_retry_feedback_digest": feedback_digest,
                     },
                 )
                 return None
+
+            feedback_ref, feedback_digest = (
+                self._record_schema_retry_feedback_audit(
+                    state,
+                    retry_feedback,
+                    attempt=attempt,
+                )
+                if retry_feedback is not None
+                else (None, None)
+            )
 
             _record_failure_ledger_entry(
                 state,
@@ -740,6 +787,8 @@ class AgenticSessionHypothesisMixin:
                     if retry_feedback is not None
                     else None
                 ),
+                diagnostic_payload=retry_feedback,
+                diagnostic_ref=feedback_ref,
             )
             output = self._self_check_failed_output(
                 request=request,
@@ -755,9 +804,52 @@ class AgenticSessionHypothesisMixin:
             state.note(
                 AgenticProposalPhase.FINALIZE,
                 "Hypothesis self-check failed closed before approval.",
-                metadata={"detail": self_check_detail, "attempt": attempt},
+                metadata={
+                    "detail": self_check_detail,
+                    "attempt": attempt,
+                    "failure_code": (
+                        retry_feedback.get("failure_code")
+                        if retry_feedback is not None
+                        else None
+                    ),
+                    "schema_retry_feedback_ref": feedback_ref,
+                    "schema_retry_feedback_digest": feedback_digest,
+                },
             )
             return self._persist(output, state)
+
+    def _record_schema_retry_feedback_audit(
+            self,
+            state: AgenticProposalSessionState,
+            feedback: Mapping[str, Any] | None,
+            *,
+            attempt: int,
+        ) -> tuple[str | None, str | None]:
+            if not isinstance(feedback, Mapping):
+                return None, None
+            payload = {
+                "schema_version": "hypothesis-schema-retry-feedback.v1",
+                "artifact_kind": "hypothesis_schema_retry_feedback",
+                "session_id": state.session_id,
+                "attempt": attempt,
+                "failure_code": feedback.get("failure_code"),
+                "feedback": _sanitize_agentic_value(dict(feedback)),
+                "trace_policy": (
+                    "Full C11/schema retry feedback is stored here. Compact "
+                    "transcript and resume summaries may cite this artifact "
+                    "instead of copying the full template."
+                ),
+            }
+            digest = stable_digest(payload, length=64)
+            artifact_ref: str | None = None
+            if self._artifact_store is not None:
+                artifact_ref = self._artifact_store.write_scratch(
+                    state.session_id,
+                    f"hypothesis_schema_retry_feedback_{attempt:04d}.json",
+                    payload,
+                )
+                state.scratch_artifact_refs.append(artifact_ref)
+            return artifact_ref, digest
 
     def _solver_design_semantic_rejection_or_retry(
             self,
@@ -819,6 +911,7 @@ class AgenticSessionHypothesisMixin:
                     hypothesis=hypothesis,
                     result=result,
                     attempt=attempt,
+                    observations=observations,
                 )
                 return None
             parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
@@ -921,6 +1014,7 @@ class AgenticSessionHypothesisMixin:
                     hypothesis=hypothesis,
                     result=result,
                     attempt=None,
+                    observations=observations,
                 )
                 return None
             parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
@@ -989,8 +1083,10 @@ def _record_mechanism_novelty_diagnostic(
     hypothesis: HypothesisProposal,
     result: Any,
     attempt: int | None,
+    observations: list[ProposalObservation] | None = None,
 ) -> None:
     diagnostic = result.to_diagnostic(hypothesis)
+    warning = _mechanism_novelty_warning_payload(diagnostic, attempt=attempt)
     state.note(
         AgenticProposalPhase.DRAFT_HYPOTHESIS,
         "Mechanism duplicate diagnostic recorded; continuing without hard novelty block.",
@@ -1007,8 +1103,74 @@ def _record_mechanism_novelty_diagnostic(
                 "fact_packet_digest": diagnostic.get("fact_packet_digest"),
                 "reason": diagnostic.get("reason"),
                 "diagnostic": diagnostic,
+                "warning": warning,
             }
         ),
+    )
+    if observations is not None:
+        observations.append(
+            ProposalObservation(
+                observation_id=(
+                    f"mechanism-novelty-diagnostic-{len(observations) + 1:04d}"
+                ),
+                session_id=state.session_id,
+                tool_name="proposal.mechanism_novelty_diagnostic",
+                tool_call_id=(
+                    f"mechanism-novelty-diagnostic-{len(observations) + 1:04d}"
+                ),
+                observation_type="diagnostic",
+                summary=str(warning.get("summary") or "Mechanism novelty warning."),
+                structured_payload=warning,
+                exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
+                is_error=False,
+            )
+        )
+
+
+def _mechanism_novelty_warning_payload(
+    diagnostic: Mapping[str, Any],
+    *,
+    attempt: int | None,
+) -> dict[str, Any]:
+    diagnostic_kind = str(diagnostic.get("diagnostic_kind") or "").strip()
+    mechanism = str(diagnostic.get("mechanism") or "").strip()
+    reason = str(diagnostic.get("reason") or "").strip()
+    guidance = (
+        str(diagnostic.get("allowed_variant_guidance") or "").strip()
+        or (
+            "Existing near-field mechanism evidence may overlap with this "
+            "proposal. Continue only by acknowledging the existing mechanism "
+            "and stating the material trigger, scoring, schedule, or behavior "
+            "difference."
+        )
+    )
+    return _drop_empty_dict(
+        {
+            "artifact_kind": "agentic_mechanism_novelty_warning",
+            "source": diagnostic.get("source") or "mechanism_novelty_gate",
+            "gate_name": diagnostic.get("gate_name"),
+            "attempt": attempt,
+            "warning_kind": diagnostic_kind or "novelty_warning",
+            "diagnostic_kind": diagnostic_kind or "novelty_warning",
+            "premise_check": diagnostic.get("premise_check"),
+            "failure_category": diagnostic.get("failure_category"),
+            "mechanism": mechanism,
+            "selected_surface": diagnostic.get("selected_surface"),
+            "target_file": diagnostic.get("target_file"),
+            "reason": reason,
+            "fact_ids": diagnostic.get("fact_ids"),
+            "fact_packet_digest": diagnostic.get("fact_packet_digest"),
+            "snapshot_digest": diagnostic.get("snapshot_digest"),
+            "matched_span": diagnostic.get("matched_span"),
+            "summary": (
+                f"Novelty warning for {mechanism or 'candidate mechanism'}: "
+                "an existing or near-field mechanism may overlap; material "
+                "difference should be stated before implementation."
+            ),
+            "agent_guidance": guidance,
+            "blocking": False,
+            "quality_block": False,
+        }
     )
 
 
@@ -1177,7 +1339,9 @@ def _hypothesis_preview_retry_feedback(
         hypothesis,
         "C11_expected_telemetry",
     )
-    telemetry_detail = str(telemetry.get("detail") or "").strip()
+    telemetry_detail = str(
+        telemetry.get("detail_full") or telemetry.get("detail") or ""
+    ).strip()
     problem_telemetry_failed = problem_telemetry.get("passed") is False
     if (
         bool(telemetry.get("passed")) is not False
@@ -2108,6 +2272,40 @@ def _drop_empty_identity_fields(value: dict[str, str]) -> dict[str, str]:
         for key, item in value.items()
         if item not in (None, "", [], {}, ())
     }
+
+
+def _normalize_hypothesis_schema_shape(
+    hypothesis: HypothesisProposal,
+) -> tuple[HypothesisProposal, tuple[dict[str, Any], ...]]:
+    raw_changes = [
+        {
+            "id": getattr(change, "id", ""),
+            "change_type": getattr(change, "change_type", ""),
+        }
+        if not isinstance(change, Mapping)
+        else dict(change)
+        for change in getattr(hypothesis, "mechanism_changes", ()) or ()
+    ]
+    normalized, repairs = normalize_mechanism_changes_with_repair_attribution(
+        raw_changes
+    )
+    if not repairs or not isinstance(normalized, list):
+        return hypothesis, ()
+    hypothesis.mechanism_changes = tuple(
+        MechanismChange(
+            id=str(change.get("id") or "").strip(),
+            change_type=str(change.get("change_type") or "").strip(),  # type: ignore[arg-type]
+        )
+        for change in normalized
+        if isinstance(change, Mapping)
+    )
+    hypothesis.schema_repair_attribution = tuple(
+        [
+            *tuple(getattr(hypothesis, "schema_repair_attribution", ()) or ()),
+            *repairs,
+        ]
+    )
+    return hypothesis, repairs
 
 
 def _hypothesis_prompt_call_kind(

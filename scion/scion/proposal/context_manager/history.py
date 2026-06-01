@@ -171,7 +171,9 @@ def _summarise_active_hypotheses(active_hypotheses: List[HypothesisRecord]) -> s
         key_str = f"{h.change_locus}/{h.action}"
         if h.target_file:
             key_str += f" → {h.target_file}"
-        lines.append(f"  - {key_str}  [OCCUPIED — C10 will reject any duplicate]")
+        lines.append(
+            f"  - {key_str}  [OCCUPIED - C10 reports duplicate-risk diagnostics]"
+        )
     return "\n".join(lines)
 
 def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:

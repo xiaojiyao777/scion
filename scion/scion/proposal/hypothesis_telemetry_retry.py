@@ -37,6 +37,12 @@ def expected_telemetry_retry_feedback(
         or allowed_template.get("mechanism_id")
     )
     requested_fields = telemetry.get("requested_fields")
+    reason_full = (
+        str(problem_telemetry.get("reason") or "")
+        or telemetry_detail
+        or c11_detail
+        or detail
+    )
     requested_activation = ()
     if isinstance(requested_fields, Mapping):
         activation = requested_fields.get("activation")
@@ -81,13 +87,11 @@ def expected_telemetry_retry_feedback(
             "gate_name": "proposal.schema_preview",
             "failure_code": "C11_expected_telemetry",
             "failure_category": CONTRACT_BOUNDARY_FAILURE,
-            "reason": _limit_string(
-                str(problem_telemetry.get("reason") or "")
-                or telemetry_detail
-                or c11_detail
-                or detail,
-                1000,
-            ),
+            "reason": _limit_string(reason_full, 1000),
+            "reason_full": reason_full,
+            "c11_detail_full": c11_detail,
+            "telemetry_detail_full": telemetry_detail,
+            "problem_telemetry_detail_full": problem_telemetry.get("reason"),
             "requested_activation_fields": list(requested_activation),
             "offending_fields": list(
                 problem_telemetry.get("offending_fields") or ()
@@ -115,6 +119,7 @@ def expected_telemetry_retry_feedback(
             "allowed_expected_telemetry_template": (
                 _compact_expected_telemetry_template(allowed_template)
             ),
+            "allowed_expected_telemetry_template_full": dict(allowed_template),
             "preserve_hypothesis": dict(preserve_hypothesis),
             "protected_identity": dict(protected_identity),
             "retry_constraint": (

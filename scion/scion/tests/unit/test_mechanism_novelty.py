@@ -37,7 +37,7 @@ def test_mechanism_novelty_result_requires_auditable_evidence_for_hard_block() -
 
     assert result.result_kind == "premise_contradiction"
     assert result.gate_action == "diagnostic"
-    assert result.diagnostic_kind == "incomplete_premise_contradiction_evidence"
+    assert result.diagnostic_kind == "grounding_risk"
     assert result.is_hard_block is False
 
     with pytest.raises(ValueError):

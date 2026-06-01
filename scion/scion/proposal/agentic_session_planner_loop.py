@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scion.proposal.agentic_session_common import *
+from scion.proposal.session_trace_index import attach_agentic_trace_context
 
 
 class AgenticSessionPlannerLoopMixin:
@@ -122,6 +123,17 @@ class AgenticSessionPlannerLoopMixin:
                         for observation in observations
                     ],
                 }
+                planner_context = attach_agentic_trace_context(
+                    planner_context,
+                    session_id=state.session_id,
+                    request_id=state.request_id or state.session_id,
+                    branch_id=state.branch_id,
+                    campaign_id=state.campaign_id,
+                    request_kind="tool_selection",
+                    call_kind="tool_selection",
+                    phase=AgenticProposalPhase.DIAGNOSE.value,
+                    attempt_number=planner_decisions,
+                )
                 try:
                     planned = selector(_sanitize_agentic_value(planner_context))
                 except Exception as exc:

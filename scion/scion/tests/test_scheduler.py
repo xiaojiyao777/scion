@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from scion.core.models import Branch, BranchState
-from scion.core.scheduler import Scheduler, SchedulerAction
+from scion.core.scheduler import Scheduler, SchedulerAction, active_slot_inventory
 
 
 def _branch(
@@ -40,6 +40,20 @@ def test_no_branches_creates_new():
     assert action.branch is None
     assert action.slot == "explore_new"
     assert action.reason == "new_exploration_slot_available"
+
+
+def test_parked_lineage_does_not_consume_active_slot_or_schedule():
+    parked = _branch(BranchState.PARKED_LINEAGE)
+    parked.branch_code_status = "parked_lineage"
+
+    action = Scheduler(max_active_branches=1).select_next([parked])
+    inventory = active_slot_inventory([parked], max_active_branches=1)
+
+    assert action.action == "create_new"
+    assert action.reason == "new_exploration_slot_available"
+    assert inventory["used"] == 0
+    assert inventory["available"] == 1
+    assert inventory["parked_lineage_ids"] == [parked.branch_id]
 
 
 def test_ready_frozen_has_highest_priority():
@@ -401,6 +415,47 @@ def test_repeated_marginal_loop_does_not_block_clean_fork():
     assert action.branch is None
     assert action.slot == "explore_new"
     assert action.reason == "new_exploration_slot_available"
+
+
+def test_marginal_plateau_prefers_other_active_lineage():
+    plateau = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    plateau.direction = "solver: plateau marginal"
+    plateau.branch_code_status = "active_marginal"
+    plateau.last_screening_feedback_tier = "marginal"
+    plateau.lifecycle_marginal_no_effect_streak = 2
+
+    clean = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=10,
+        updated_offset_s=10,
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([plateau, clean])
+
+    assert action.action == "run_existing"
+    assert action.branch is clean
+
+
+def test_repeated_weak_signal_opens_clean_fork_capacity():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: repeated weak signal"
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.lifecycle_signal_repeat_count = 2
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "plateau_reroute_clean_fork"
+    assert inventory["used"] == 0
+    assert inventory["available"] == 1
 
 
 def test_parked_lineage_does_not_block_clean_fork_capacity():

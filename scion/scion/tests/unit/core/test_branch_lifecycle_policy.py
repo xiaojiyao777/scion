@@ -128,6 +128,48 @@ def test_loss_heavy_low_win_screening_does_not_keep_as_weak_positive() -> None:
     assert SCREENING_SOFT_ABANDON_NON_POSITIVE_CI in decision.reason_codes
 
 
+def test_low_runtime_confidence_does_not_drive_runtime_soft_abandon() -> None:
+    high_confidence = BranchLifecyclePolicy().decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            median_delta=0.0,
+            runtime_ratio_median=1.60,
+            runtime_delta_median_ms=150.0,
+            runtime_regression_rate=0.95,
+            runtime_pairs=8,
+            runtime_evidence_confidence="sufficient",
+        ),
+    )
+    low_confidence = BranchLifecyclePolicy().decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            median_delta=0.0,
+            runtime_ratio_median=1.60,
+            runtime_delta_median_ms=150.0,
+            runtime_regression_rate=0.95,
+            runtime_pairs=8,
+            runtime_evidence_confidence="low_cached_champion",
+        ),
+    )
+
+    assert SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN in high_confidence.reason_codes
+    assert SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE in (
+        high_confidence.reason_codes
+    )
+    assert SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN not in (
+        low_confidence.reason_codes
+    )
+    assert SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE not in (
+        low_confidence.reason_codes
+    )
+
+
 def test_balanced_mixed_screening_signal_is_marginal_not_weak_positive() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(

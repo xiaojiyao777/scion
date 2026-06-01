@@ -9,6 +9,7 @@ from scion.core.public_refs import redact_public_refs
 from scion.core.run_validity import build_run_validity
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
+from .accounting import proposal_accounting_fields
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,12 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "blocked_attempts": "blocked_attempts",
         "infra_failure_attempts": "infra_failure_attempts",
         "noninfra_failure_attempts": "noninfra_failure_attempts",
+        "loop_steps": "loop_steps",
+        "campaign_steps": "campaign_steps",
+        "screened_rounds": "screened_rounds",
+        "agentic_sessions": "agentic_sessions",
+        "hypothesis_calls": "hypothesis_calls",
+        "code_calls": "code_calls",
     }
     for top_key, loop_key in aliases.items():
         value = loop.get(loop_key)
@@ -211,6 +218,20 @@ class StatusWriterMixin:
         if self.campaign_loop_status is not None:
             payload["campaign_loop"] = dict(self.campaign_loop_status)
             _merge_campaign_loop_observability(payload)
+            accounting = proposal_accounting_fields(
+                campaign_dir=self.campaign_dir,
+                loop_status=self.campaign_loop_status,
+                state=payload,
+                screened_rounds=payload.get("screened_experiments"),
+            )
+            payload.update(accounting)
+            payload["proposal_accounting"] = {
+                "proposal_attempts": payload.get("proposal_attempts"),
+                "proposal_attempts_consumed": payload.get(
+                    "proposal_attempts_consumed"
+                ),
+                **accounting,
+            }
         if last_result is not None:
             self.last_status_result = {
                 "action": last_result.action,

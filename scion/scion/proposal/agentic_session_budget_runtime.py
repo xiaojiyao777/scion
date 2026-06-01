@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scion.proposal.agentic_session_common import *
+from scion.proposal.session_trace_index import attach_prompt_manifest_trace_context
 
 
 class AgenticSessionBudgetRuntimeMixin:
@@ -390,6 +391,19 @@ class AgenticSessionBudgetRuntimeMixin:
                     manifest,
                 )
                 state.scratch_artifact_refs.append(artifact_ref)
+            attach_prompt_manifest_trace_context(
+                prompt_context,
+                artifact_ref=artifact_ref,
+                prompt_hash=manifest["prompt_hash"],
+                visibility_ledger_digest=manifest["visibility_ledger_summary"][
+                    "ledger_digest"
+                ],
+                visibility_ledger_ref=(
+                    f"{artifact_ref}#visibility_ledger"
+                    if artifact_ref
+                    else "api_visible_prompt_manifest#visibility_ledger"
+                ),
+            )
             state.note(
                 state.phase,
                 "Recorded API-visible prompt manifest.",
@@ -406,6 +420,9 @@ class AgenticSessionBudgetRuntimeMixin:
                         "rendered_prompt_available"
                     ],
                     "manifest_artifact_ref": artifact_ref,
+                    "visibility_ledger_digest": manifest[
+                        "visibility_ledger_summary"
+                    ]["ledger_digest"],
                     "raw_prompt_saved": False,
                 },
             )

@@ -540,6 +540,15 @@ class BranchLifecyclePolicy:
 
     @staticmethod
     def _runtime_evidence_confident(features: DecisionFeatures) -> bool:
+        confidence = str(
+            getattr(features, "runtime_evidence_confidence", "") or ""
+        ).lower()
+        if (
+            confidence.startswith("low")
+            or "cached" in confidence
+            or confidence in {"missing", "unknown"}
+        ):
+            return False
         runtime_pairs = int(features.runtime_pairs or 0)
         if runtime_pairs >= _RUNTIME_CONFIDENCE_MIN_PAIRS:
             return True

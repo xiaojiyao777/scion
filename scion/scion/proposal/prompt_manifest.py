@@ -15,7 +15,15 @@ from typing import Any, Mapping
 from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
 
 
-MANIFEST_SCHEMA_VERSION = "api-visible-prompt-manifest.v2"
+MANIFEST_SCHEMA_VERSION = "api-visible-prompt-manifest.v3"
+VISIBILITY_LEDGER_SCHEMA_VERSION = "prompt-visibility-ledger.v1"
+VISIBILITY_STATUS_VALUES = (
+    "full",
+    "dedicated_projection",
+    "summary",
+    "truncated",
+    "omitted",
+)
 _SECTION_HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _SOURCE_FILE_RE = re.compile(
     r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
@@ -131,6 +139,11 @@ def build_api_visible_prompt_manifest(
     user_chars = len(rendered_user_prompt) if rendered_available else 0
     total_chars = system_chars + user_chars
     raw_context_digest = stable_digest(safe_context, length=64)
+    visibility_ledger = _visibility_ledger(
+        section_records=section_records,
+        included_observations=included_observations,
+        code_file_visibility_ledger=code_file_visibility_ledger,
+    )
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "artifact_kind": "api_visible_prompt_manifest",
@@ -200,6 +213,13 @@ def build_api_visible_prompt_manifest(
             if item.get("payload_digest")
         ],
         "code_file_visibility_ledger": code_file_visibility_ledger,
+        "visibility_ledger": visibility_ledger,
+        "visibility_ledger_summary": {
+            "schema_version": visibility_ledger["schema_version"],
+            "entry_count": visibility_ledger["entry_count"],
+            "status_counts": dict(visibility_ledger["status_counts"]),
+            "ledger_digest": stable_digest(visibility_ledger, length=16),
+        },
         "omitted_sections": [
             record["name"] for record in section_records if record["omitted"]
         ],
@@ -618,6 +638,228 @@ def _tool_result_visibility_ledger(
             }
         )
     return ledger
+
+
+def _visibility_ledger(
+    *,
+    section_records: list[Mapping[str, Any]],
+    included_observations: list[Mapping[str, Any]],
+    code_file_visibility_ledger: Mapping[str, Any],
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for section in section_records:
+        entries.append(_section_visibility_ledger_entry(section))
+    for item in included_observations:
+        entries.append(_tool_visibility_ledger_entry(item))
+    for record in _iter_code_visibility_records(code_file_visibility_ledger):
+        entries.append(_code_file_visibility_ledger_entry(record))
+
+    status_counts = {status: 0 for status in VISIBILITY_STATUS_VALUES}
+    for entry in entries:
+        status = str(entry.get("visibility_status") or "omitted")
+        if status not in status_counts:
+            status = "omitted"
+            entry["visibility_status"] = status
+        status_counts[status] += 1
+    return {
+        "schema_version": VISIBILITY_LEDGER_SCHEMA_VERSION,
+        "status_values": list(VISIBILITY_STATUS_VALUES),
+        "entry_count": len(entries),
+        "status_counts": status_counts,
+        "entries": entries,
+    }
+
+
+def _section_visibility_ledger_entry(section: Mapping[str, Any]) -> dict[str, Any]:
+    char_count = _coerce_int(section.get("char_count")) or 0
+    status = (
+        "omitted"
+        if section.get("omitted")
+        else "truncated"
+        if section.get("truncated")
+        else "full"
+    )
+    name = str(section.get("name") or "")
+    return _drop_empty(
+        {
+            "entry_kind": "section",
+            "section_name": name,
+            "source": "provider_prompt_section",
+            "source_ref": f"section:{name}" if name else "",
+            "visibility_status": status,
+            "char_count": char_count,
+            "token_estimate": _token_estimate(char_count),
+            "digest": section.get("content_hash") or "",
+            "ref": f"section:{name}" if name else "",
+            "projected_to_section": name,
+            "projection_ref": f"section:{name}" if name else "",
+        }
+    )
+
+
+def _tool_visibility_ledger_entry(item: Mapping[str, Any]) -> dict[str, Any]:
+    status = _tool_compact_visibility_status(item)
+    source_chars = _first_int(
+        item.get("size_chars"),
+        item.get("content_preview_chars"),
+        item.get("visible_text_chars"),
+        default=0,
+    )
+    section_name = str(item.get("rendered_visibility_source") or "")
+    projected_section = (
+        "solver_design_full_algorithm_file_reads"
+        if status == "dedicated_projection"
+        and item.get("full_content_visible_in_dedicated_source_section")
+        else section_name
+    )
+    observation_id = str(item.get("observation_id") or "")
+    return _drop_empty(
+        {
+            "entry_kind": "tool_result",
+            "section_name": section_name,
+            "source": "proposal_tool",
+            "source_tool": item.get("tool_name"),
+            "source_ref": observation_id,
+            "visibility_status": status,
+            "char_count": source_chars,
+            "token_estimate": _token_estimate(source_chars),
+            "digest": (
+                item.get("payload_hash")
+                or item.get("payload_digest")
+                or item.get("content_preview_hash")
+                or item.get("visible_text_hash")
+                or ""
+            ),
+            "ref": observation_id,
+            "file_path": item.get("file_path"),
+            "target_file": item.get("target_file"),
+            "symbol": item.get("symbol"),
+            "slice_id": item.get("slice_id"),
+            "projected_to_section": projected_section,
+            "projection_ref": (
+                f"section:{projected_section}" if projected_section else ""
+            ),
+            "content_projection_count": item.get("content_projection_count", 0),
+            "visible_content_projection_count": item.get(
+                "visible_content_projection_count", 0
+            ),
+        }
+    )
+
+
+def _code_file_visibility_ledger_entry(record: Mapping[str, Any]) -> dict[str, Any]:
+    status = _code_file_compact_visibility_status(record)
+    char_count = _coerce_int(record.get("content_chars")) or 0
+    section_name = str(record.get("section") or "")
+    return _drop_empty(
+        {
+            "entry_kind": "file_source",
+            "section_name": section_name,
+            "source": record.get("role") or "code_file",
+            "source_tool": (
+                "context.read_algorithm_file"
+                if str(record.get("role") or "").startswith(
+                    "solver_design_full_algorithm_file_read"
+                )
+                else ""
+            ),
+            "source_ref": record.get("file_path"),
+            "visibility_status": status,
+            "char_count": char_count,
+            "token_estimate": _token_estimate(char_count),
+            "digest": record.get("content_hash") or "",
+            "ref": record.get("file_path"),
+            "file_path": record.get("file_path"),
+            "projected_to_section": (
+                section_name
+                if status in {"full", "dedicated_projection", "summary", "truncated"}
+                else ""
+            ),
+            "projection_ref": (
+                f"section:{section_name}"
+                if section_name
+                and status
+                in {"full", "dedicated_projection", "summary", "truncated"}
+                else ""
+            ),
+            "source_provenance": record.get("source_provenance"),
+        }
+    )
+
+
+def _tool_compact_visibility_status(item: Mapping[str, Any]) -> str:
+    visible = bool(
+        item.get("rendered_visibility_flag")
+        or item.get("visible_text_chars")
+        or item.get("content_preview_visible_in_rendered_prompt")
+        or item.get("full_content_visible_in_rendered_prompt")
+    )
+    if not visible:
+        return "omitted"
+    if item.get("truncated") is True or item.get("payload_truncated") is True:
+        return "truncated"
+    if item.get("full_content_visible_in_dedicated_source_section"):
+        return "dedicated_projection"
+    if item.get("content_preview_visible_in_dedicated_source_section"):
+        return "dedicated_projection"
+    if item.get("full_content_visible_in_rendered_prompt"):
+        return "full"
+    if item.get("content_preview_visible_in_rendered_prompt"):
+        return "summary"
+    return "summary"
+
+
+def _code_file_compact_visibility_status(record: Mapping[str, Any]) -> str:
+    source_status = str(record.get("source_status") or "")
+    if source_status == "missing_current_source":
+        return "omitted"
+    section_status = str(record.get("section_status") or "")
+    if section_status == "omitted":
+        return "omitted"
+    if section_status == "truncated":
+        return "truncated"
+    if record.get("target_file_create_mode"):
+        return "omitted"
+    role = str(record.get("role") or "")
+    if (
+        role.startswith("solver_design_full_algorithm_file_read")
+        and record.get("full_content_visible_in_rendered_prompt")
+    ):
+        return "dedicated_projection"
+    if record.get("full_content_visible_in_rendered_prompt"):
+        return "full"
+    if record.get("placeholder_visible_in_rendered_prompt"):
+        return "summary"
+    return "omitted"
+
+
+def _iter_code_visibility_records(
+    code_file_visibility_ledger: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    if not isinstance(code_file_visibility_ledger, Mapping):
+        return []
+    records: list[Mapping[str, Any]] = []
+    target_file = code_file_visibility_ledger.get("target_file")
+    if isinstance(target_file, Mapping):
+        records.append(target_file)
+    for key in ("integration_files", "algorithm_file_reads"):
+        values = code_file_visibility_ledger.get(key)
+        if not isinstance(values, list):
+            continue
+        records.extend(item for item in values if isinstance(item, Mapping))
+    return records
+
+
+def _token_estimate(chars: int) -> int:
+    return max(0, (int(chars or 0) + 3) // 4)
+
+
+def _first_int(*values: Any, default: int) -> int:
+    for value in values:
+        parsed = _coerce_int(value)
+        if parsed is not None:
+            return parsed
+    return default
 
 
 def _observation_prompt_inclusion_fields(

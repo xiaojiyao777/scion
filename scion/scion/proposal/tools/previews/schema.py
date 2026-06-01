@@ -41,6 +41,7 @@ from scion.proposal.schemas import (
     HypothesisProposalInput,
     PatchSchemaPreflightError,
     PatchProposalInput,
+    normalize_mechanism_changes_with_repair_attribution,
     normalize_patch_output_with_repair_attribution,
     preflight_patch_exact_replace_shape,
 )
@@ -337,19 +338,31 @@ def _schema_preview_hypothesis_payload(
     context: ProposalToolContext,
     raw: Mapping[str, Any],
 ) -> dict[str, Any]:
+    payload = dict(raw)
+    payload.pop("schema_repair_attribution", None)
+    repair_attribution: tuple[dict[str, Any], ...] = ()
+    if "mechanism_changes" in payload:
+        mechanism_changes, repair_attribution = (
+            normalize_mechanism_changes_with_repair_attribution(
+                payload.get("mechanism_changes")
+            )
+        )
+        payload["mechanism_changes"] = mechanism_changes
     try:
-        validated = DraftHypothesisInput.model_validate(dict(raw))
+        validated = DraftHypothesisInput.model_validate(payload)
     except ValidationError as exc:
         return {
             "passed": False,
             "errors": exc.errors(include_url=False),
         }
     hypothesis = _hypothesis_from_input(validated)
+    hypothesis.schema_repair_attribution = repair_attribution
     schema_result = _hypothesis_schema_preview(context, hypothesis)
     return {
         **schema_result,
         "hypothesis": _hypothesis_preview_summary(hypothesis),
         "hypothesis_object": hypothesis,
+        "schema_repairs": list(repair_attribution),
     }
 
 def _hypothesis_preview_summary(
@@ -407,7 +420,10 @@ def _schema_preview_patch_payload(
 ) -> dict[str, Any]:
     try:
         preflight_patch_exact_replace_shape(raw)
-        payload = _normalized_patch_payload_for_preview(raw, context)
+        payload, repair_attribution = _normalized_patch_payload_for_preview(
+            raw,
+            context,
+        )
         payload.pop("repair_attribution", None)
         validated = DraftPatchInput.model_validate(payload)
     except PatchSchemaPreflightError as exc:
@@ -456,19 +472,22 @@ def _schema_preview_patch_payload(
         "errors": [],
         "patch": patch_summary,
         "patch_object": patch,
+        "schema_repairs": list(repair_attribution),
     }
 
 
 def _normalized_patch_payload_for_preview(
     raw: Mapping[str, Any],
     context: ProposalToolContext | None,
-) -> dict[str, Any]:
-    payload, _ = normalize_patch_output_with_repair_attribution(dict(raw))
-    payload, _ = normalize_patch_typed_edits(
+) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
+    payload, repair_attribution = normalize_patch_output_with_repair_attribution(
+        dict(raw)
+    )
+    payload, edit_attribution = normalize_patch_typed_edits(
         payload,
         context=_patch_edit_context_for_preview(payload, context),
     )
-    return payload
+    return payload, (*repair_attribution, *edit_attribution)
 
 
 def _patch_edit_context_for_preview(
@@ -879,6 +898,7 @@ def _expected_telemetry_contract_preview(
             "name": "C11_expected_telemetry",
             "passed": passed,
             "detail": _limit_text(detail, _PREVIEW_FAILURE_REASON_CHARS),
+            "detail_full": detail,
             "requested_categories": requested_categories,
             "invalid_categories": sorted(dict.fromkeys(invalid_categories)),
             "allowed_categories": sorted(EXPECTED_TELEMETRY_CATEGORIES),

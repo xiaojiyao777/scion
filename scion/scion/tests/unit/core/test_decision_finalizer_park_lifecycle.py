@@ -392,7 +392,7 @@ def test_marginal_failed_followup_parks_lineage_without_archiving_branch() -> No
 
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert "park_lineage" in result.reason
-    assert stored.state == BranchState.EXPLORE
+    assert stored.state == BranchState.PARKED_LINEAGE
     assert stored.branch_code_status == "parked_lineage"
     assert stored.branch_lifecycle_new_mechanism_ineligible is True
     assert stored.branch_lifecycle_reroute_reason == (
@@ -406,6 +406,8 @@ def test_marginal_failed_followup_parks_lineage_without_archiving_branch() -> No
     assert archived == ["/tmp/workspace"]
     assert cleaned == ["/tmp/workspace"]
     assert discarded == []
+    assert controller.get_active_branches() == []
+    assert controller.get_reportable_branches() == [stored]
     assert action.action == "create_new"
     assert hyp_store.statuses == [("h-park", "rejected")]
 
@@ -499,6 +501,8 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
 
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert stored.branch_code_status == "parked_lineage"
-    assert stored.state == BranchState.EXPLORE
+    assert stored.state == BranchState.PARKED_LINEAGE
     assert stored.lifecycle_no_effect_diagnostic_followups == 2
+    assert controller.get_active_branches() == []
+    assert controller.get_reportable_branches() == [stored]
     assert action.action == "create_new"

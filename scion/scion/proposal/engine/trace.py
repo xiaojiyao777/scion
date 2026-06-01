@@ -5,9 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Mapping
+
+from scion.proposal.session_trace_index import (
+    record_trace_finish,
+    record_trace_start,
+    trace_context_from_prompt_context,
+)
+
+_SECTION_HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
 class _TraceWriter:
@@ -31,24 +40,37 @@ class _TraceWriter:
             return None
         os.makedirs(self._trace_dir, exist_ok=True)
         digest = _prompt_hash(system_blocks, prompt)
+        created_at = datetime.now().isoformat()
         trace_id = (
             f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_"
             f"{request_kind}_{digest[:10]}_{uuid.uuid4().hex[:8]}"
         )
         path = os.path.join(self._trace_dir, f"{trace_id}.json")
+        trace_context = trace_context_from_prompt_context(context)
+        prompt_manifest_context = (
+            context.get("_scion_prompt_manifest")
+            if isinstance(context, Mapping)
+            else {}
+        )
+        if not isinstance(prompt_manifest_context, Mapping):
+            prompt_manifest_context = {}
         payload = {
             "trace_id": trace_id,
             "request_kind": request_kind,
             "model": model,
             "tool_name": tool.get("name"),
             "prompt_hash": digest,
+            "prompt_visibility_ledger": _prompt_visibility_ledger(
+                system_blocks=system_blocks,
+                user_prompt=prompt,
+            ),
             "prompt_cache_audit": _prompt_cache_audit(
                 system_blocks=system_blocks,
                 user_prompt=prompt,
                 tool_schema=tool.get("input_schema")
                 or tool.get("function", {}).get("parameters"),
             ),
-            "created_at": datetime.now().isoformat(),
+            "created_at": created_at,
             "branch_id": context.get("branch_id"),
             "champion_version": context.get("champion_version"),
             "system_blocks": system_blocks,
@@ -57,9 +79,26 @@ class _TraceWriter:
             or tool.get("function", {}).get("parameters"),
             "ok": None,
         }
+        if trace_context.get("session_id"):
+            payload["agentic_session"] = trace_context
+        if prompt_manifest_context:
+            payload["prompt_manifest"] = dict(prompt_manifest_context)
         if request_policy:
             payload["request_policy"] = request_policy
         _write_json(path, payload)
+        try:
+            record_trace_start(
+                trace_dir=self._trace_dir,
+                trace_id=trace_id,
+                trace_path=path,
+                request_kind=request_kind,
+                model=model,
+                prompt_hash=digest,
+                context=context,
+                created_at=created_at,
+            )
+        except Exception:
+            pass
         return path
 
     def write_finish(
@@ -79,9 +118,10 @@ class _TraceWriter:
                 payload = json.load(fh)
         except (OSError, json.JSONDecodeError):
             payload = {}
+        finished_at = datetime.now().isoformat()
         payload.update(
             {
-                "finished_at": datetime.now().isoformat(),
+                "finished_at": finished_at,
                 "ok": ok,
             }
         )
@@ -95,6 +135,22 @@ class _TraceWriter:
             payload["llm_retry_events"] = llm_retry_events
             payload["llm_retry_summary"] = _retry_summary(llm_retry_events)
         _write_json(path, payload)
+        agentic_context = payload.get("agentic_session")
+        if isinstance(agentic_context, Mapping):
+            try:
+                record_trace_finish(
+                    trace_dir=self._trace_dir,
+                    trace_id=str(payload.get("trace_id") or ""),
+                    context={
+                        **dict(agentic_context),
+                        "request_kind": payload.get("request_kind"),
+                    },
+                    ok=ok,
+                    finished_at=finished_at,
+                    error=error,
+                )
+            except Exception:
+                pass
 
 
 def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
@@ -104,6 +160,115 @@ def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
         default=str,
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _prompt_visibility_ledger(
+    *,
+    system_blocks: "list[dict]",
+    user_prompt: str,
+) -> Dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    seen_names: dict[str, int] = {}
+    for index, block in enumerate(system_blocks or [], start=1):
+        text = block.get("text", "") if isinstance(block, Mapping) else str(block)
+        entries.extend(
+            _visibility_entries_from_text(
+                text,
+                prompt_part="system",
+                block_index=index,
+                seen_names=seen_names,
+            )
+        )
+    entries.extend(
+        _visibility_entries_from_text(
+            user_prompt or "",
+            prompt_part="user",
+            block_index=None,
+            seen_names=seen_names,
+        )
+    )
+    status_counts = {
+        "full": 0,
+        "dedicated_projection": 0,
+        "summary": 0,
+        "truncated": 0,
+        "omitted": 0,
+    }
+    for entry in entries:
+        status_counts[str(entry.get("visibility_status") or "omitted")] += 1
+    return {
+        "schema_version": "prompt-visibility-ledger.v1",
+        "status_values": list(status_counts),
+        "entry_count": len(entries),
+        "status_counts": status_counts,
+        "entries": entries,
+    }
+
+
+def _visibility_entries_from_text(
+    text: str,
+    *,
+    prompt_part: str,
+    block_index: int | None,
+    seen_names: dict[str, int],
+) -> list[dict[str, Any]]:
+    if not text:
+        return []
+    matches = list(_SECTION_HEADING.finditer(text))
+    chunks: list[tuple[str, str]] = []
+    if not matches:
+        label = (
+            f"system_{block_index}_preamble"
+            if block_index is not None
+            else "user_preamble"
+        )
+        chunks.append((label, text))
+    else:
+        if matches[0].start() > 0 and text[: matches[0].start()].strip():
+            label = (
+                f"system_{block_index}_preamble"
+                if block_index is not None
+                else "user_preamble"
+            )
+            chunks.append((label, text[: matches[0].start()]))
+        for offset, match in enumerate(matches):
+            start = match.start()
+            end = matches[offset + 1].start() if offset + 1 < len(matches) else len(text)
+            chunks.append((match.group(1), text[start:end]))
+    entries: list[dict[str, Any]] = []
+    for heading, chunk in chunks:
+        if not chunk:
+            continue
+        base_name = _section_name(heading)
+        count = seen_names.get(base_name, 0) + 1
+        seen_names[base_name] = count
+        name = base_name if count == 1 else f"{base_name}_{count}"
+        chars = len(chunk)
+        status = (
+            "omitted"
+            if _text_has_marker(chunk, "omitted")
+            else "truncated"
+            if _text_has_marker(chunk, "truncated")
+            else "full"
+        )
+        entries.append(
+            {
+                "entry_kind": "section",
+                "section_name": name,
+                "source": "provider_prompt_section",
+                "source_ref": f"section:{name}",
+                "visibility_status": status,
+                "char_count": chars,
+                "token_estimate": _token_estimate(chars),
+                "digest": _short_hash(chunk),
+                "ref": f"section:{name}",
+                "projected_to_section": name,
+                "projection_ref": f"section:{name}",
+                "prompt_part": prompt_part,
+                "block_index": block_index,
+            }
+        )
+    return entries
 
 
 def _prompt_cache_audit(
@@ -161,6 +326,28 @@ def _prompt_cache_audit(
 
 def _short_hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _section_name(heading: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", str(heading).strip().lower()).strip("_")
+    return cleaned or "unnamed_section"
+
+
+def _token_estimate(chars: int) -> int:
+    return max(0, (int(chars or 0) + 3) // 4)
+
+
+def _text_has_marker(text: str, marker: str) -> bool:
+    lowered = text.lower()
+    if marker == "truncated":
+        return bool(
+            "<truncated" in lowered
+            or "truncated agentic context" in lowered
+            or "truncated for compact" in lowered
+        )
+    if marker == "omitted":
+        return "<omitted" in lowered or "... <omitted" in lowered
+    return marker.lower() in lowered
 
 
 def _write_json(path: str, payload: Dict[str, Any]) -> None:

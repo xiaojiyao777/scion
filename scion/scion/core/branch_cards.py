@@ -39,8 +39,17 @@ def branch_prompt_card(branch: Branch | None) -> str:
     forbidden = ",".join(context["forbidden_next_actions"]) or "none"
     mechanism_ids = ",".join(context["mechanism_ids"]) or "none"
     evidence = _format_evidence_summary(context["generic_evidence_summary"])
+    winners = _format_case_outcomes(context["case_level_winners"])
+    losses = _format_case_outcomes(context["case_level_losses"])
+    activation = _format_phase_activation_summary(
+        context["phase_activation_summary"]
+    )
+    runtime_confidence = context["runtime_evidence_confidence"] or "unknown"
     why_not_promoted = (
         ",".join(context["why_not_promoted_reason_codes"]) or "none"
+    )
+    proposal_blocks = (
+        ",".join(context["proposal_block_reason_codes"]) or "none"
     )
     why_abandoned = ",".join(context["why_abandoned_reason_codes"]) or "none"
     return (
@@ -60,7 +69,12 @@ def branch_prompt_card(branch: Branch | None) -> str:
         "lineage_retained_checkpoint="
         f"{str(context['lineage_retained_checkpoint']).lower()} "
         f"generic_evidence_summary={evidence} "
+        f"case_level_winners={winners} "
+        f"case_level_losses={losses} "
+        f"phase_activation_summary={activation} "
+        f"runtime_evidence_confidence={runtime_confidence} "
         f"why_not_promoted_reason_codes={why_not_promoted} "
+        f"proposal_block_reason_codes={proposal_blocks} "
         f"why_abandoned_reason_codes={why_abandoned}"
     )
 
@@ -119,6 +133,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     if repair_focus_required:
         baseline_policy = "champion_required_for_repair"
         repair_focus_reason = WIRING_SUSPECT_REQUIRES_REPAIR
+    elif branch_is_parked_lineage(branch):
+        baseline_policy = "parked_lineage_clean_fork_required"
+        repair_focus_reason = None
     elif weak_positive_followup:
         baseline_policy = "branch_workspace_branch_local_followup"
         repair_focus_reason = None
@@ -130,6 +147,12 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         repair_focus_reason = None
     lineage_status = branch_lineage_status(branch)
     current_head_status = status
+    state_value = _branch_state_value(branch)
+    counts_toward_active_slots = (
+        branch is not None
+        and not branch_is_parked_lineage(branch)
+        and state_value not in {"promoted", "abandoned"}
+    )
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (
         max(0, int(getattr(branch, "rollback_count", 0) or 0))
@@ -165,10 +188,18 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         if branch is not None
         else None,
         "direction": getattr(branch, "direction", None) if branch is not None else None,
-        "status": _branch_state_value(branch),
+        "status": state_value,
         "branch_code_status": status,
         "lineage_status": lineage_status,
         "current_head_status": current_head_status,
+        "active_slot_status": (
+            "active_slot"
+            if counts_toward_active_slots
+            else "parked_lineage"
+            if branch_is_parked_lineage(branch)
+            else "inactive"
+        ),
+        "counts_toward_active_slots": counts_toward_active_slots,
         "best_checkpoint_status": best_checkpoint_status,
         "best_quality_checkpoint_id": (
             getattr(branch, "best_quality_checkpoint_id", None)
@@ -195,6 +226,10 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             branch,
             current_tier=last_screening_feedback_tier,
         ),
+        "case_level_winners": _branch_case_outcomes(branch, "case_level_winners"),
+        "case_level_losses": _branch_case_outcomes(branch, "case_level_losses"),
+        "phase_activation_summary": _branch_phase_activation_summary(branch),
+        "runtime_evidence_confidence": _branch_runtime_evidence_confidence(branch),
         "gate_observation_reason_codes": _branch_block_codes(
             branch,
             "gate_observation_reason_codes",
@@ -208,6 +243,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         ),
         "rollback_reason_codes": _branch_rollback_codes(branch),
         "why_not_promoted_reason_codes": _why_not_promoted_codes(branch),
+        "proposal_block_reason_codes": _proposal_block_codes(branch),
         "why_abandoned_reason_codes": _why_abandoned_codes(branch),
         "last_screening_feedback_tier": last_screening_feedback_tier,
         "last_telemetry_outcome": last_telemetry_outcome,
@@ -488,6 +524,93 @@ def _branch_rollback_codes(branch: Branch | None) -> list[str]:
     return list(dict.fromkeys(codes))
 
 
+def _branch_evidence_summary(branch: Branch | None) -> Mapping[str, Any]:
+    if branch is None:
+        return {}
+    value = getattr(branch, "branch_evidence_summary", {}) or {}
+    return value if isinstance(value, Mapping) else {}
+
+
+def _branch_case_outcomes(branch: Branch | None, key: str) -> list[dict[str, Any]]:
+    evidence = _branch_evidence_summary(branch)
+    block = _branch_block(branch)
+    raw = evidence.get(key) or block.get(key) or []
+    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes, Mapping)):
+        return []
+    outcomes: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        case_id = str(item.get("case_id") or "").strip()
+        result = str(item.get("result") or "").strip()
+        if not case_id or result not in {"win", "loss", "tie", "mixed"}:
+            continue
+        entry: dict[str, Any] = {"case_id": case_id, "result": result}
+        delta = _optional_float(item.get("delta"))
+        if delta is not None:
+            entry["delta"] = delta
+        counters = item.get("effect_counters")
+        if isinstance(counters, Mapping):
+            compact = {
+                name: _optional_int(counters.get(name))
+                for name in ("wins", "losses", "ties", "pairs")
+            }
+            compact = {name: value for name, value in compact.items() if value is not None}
+            if compact:
+                entry["effect_counters"] = compact
+        outcomes.append(entry)
+    return outcomes[:5]
+
+
+def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
+    evidence = _branch_evidence_summary(branch)
+    block = _branch_block(branch)
+    for raw in (
+        evidence.get("phase_activation_summary"),
+        block.get("phase_activation_summary"),
+    ):
+        if isinstance(raw, Mapping):
+            return {
+                "stage": str(raw.get("stage") or "unknown"),
+                "activation_status": str(
+                    raw.get("activation_status") or "unknown"
+                ),
+                "effect_status": str(raw.get("effect_status") or "unknown"),
+                "opportunity_status": str(
+                    raw.get("opportunity_status") or "unknown"
+                ),
+                "telemetry_outcome": raw.get("telemetry_outcome"),
+            }
+    return {
+        "stage": "unknown",
+        "activation_status": "unknown",
+        "effect_status": str(
+            getattr(branch, "last_telemetry_outcome", None) or "unknown"
+        ),
+        "opportunity_status": "unknown",
+        "telemetry_outcome": (
+            getattr(branch, "last_telemetry_outcome", None)
+            if branch is not None
+            else None
+        ),
+    }
+
+
+def _branch_runtime_evidence_confidence(branch: Branch | None) -> str:
+    evidence = _branch_evidence_summary(branch)
+    block = _branch_block(branch)
+    for value in (
+        evidence.get("runtime_evidence_confidence"),
+        evidence.get("runtime_confidence"),
+        block.get("runtime_evidence_confidence"),
+        block.get("runtime_confidence"),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "unknown"
+
+
 def _why_not_promoted_codes(branch: Branch | None) -> list[str]:
     if branch is None:
         return []
@@ -501,7 +624,31 @@ def _why_not_promoted_codes(branch: Branch | None) -> list[str]:
             "reason_codes",
         )
     )
-    return list(dict.fromkeys(str(code) for code in codes if str(code)))
+    return list(
+        dict.fromkeys(
+            str(code)
+            for code in codes
+            if str(code) and not _is_proposal_block_code(str(code))
+        )
+    )
+
+
+def _proposal_block_codes(branch: Branch | None) -> list[str]:
+    if branch is None:
+        return []
+    codes = list(getattr(branch, "failure_codes", None) or ())
+    codes.extend(
+        _branch_block_codes(
+            branch,
+            "proposal_block_reason_codes",
+            "schema_reason_codes",
+            "proposal_quality_reason_codes",
+            "reason_codes",
+        )
+    )
+    return list(
+        dict.fromkeys(str(code) for code in codes if _is_proposal_block_code(str(code)))
+    )
 
 
 def _why_abandoned_codes(branch: Branch | None) -> list[str]:
@@ -517,8 +664,14 @@ def _branch_generic_evidence_summary(
     current_tier: Any,
 ) -> dict[str, Any]:
     block = _branch_block(branch)
+    evidence = _branch_evidence_summary(branch)
+    source: Mapping[str, Any] = evidence or block
     status = branch_code_status(branch)
-    tier = str(current_tier or "").strip() or _tier_from_status(status)
+    tier = (
+        str(current_tier or "").strip()
+        or str(source.get("tier") or "").strip()
+        or _tier_from_status(status)
+    )
     summary: dict[str, Any] = {"tier": tier or "unknown"}
     metric_keys = {
         "wins": ("wins", "case_wins", "pair_wins", "screening_case_wins"),
@@ -526,17 +679,25 @@ def _branch_generic_evidence_summary(
         "ties": ("ties", "case_ties", "pair_ties", "screening_case_ties"),
     }
     for name, keys in metric_keys.items():
-        value = _metric_value(block, keys, int)
+        value = _metric_value(source, keys, int)
         if value is not None:
             summary[name] = value
     for group, keys in {
         "effect": ("median_delta", "ci_low", "ci_high"),
-        "runtime": ("runtime_ratio_median", "runtime_regression_rate"),
+        "runtime": (
+            "runtime_ratio_median",
+            "runtime_delta_median_ms",
+            "runtime_regression_rate",
+            "runtime_pairs",
+        ),
     }.items():
-        values = {key: _metric_value(block, (key,), float) for key in keys}
+        values = {key: _metric_value(source, (key,), float) for key in keys}
         values = {key: value for key, value in values.items() if value is not None}
         if values:
             summary[group] = values
+    runtime_confidence = _branch_runtime_evidence_confidence(branch)
+    if runtime_confidence != "unknown":
+        summary["runtime_evidence_confidence"] = runtime_confidence
     return summary
 
 
@@ -566,6 +727,42 @@ def _metric_value(
     return None
 
 
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_proposal_block_code(code: str) -> bool:
+    text = str(code or "").strip().lower()
+    if not text:
+        return False
+    tokens = (
+        "proposal",
+        "schema",
+        "duplicate",
+        "c11",
+        "premise",
+        "agent_quality",
+        "agent_grounding",
+        "mechanism_novelty",
+        "mechanism_changes_duplicate_id",
+    )
+    return any(token in text for token in tokens)
+
+
 def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
     parts = [f"tier:{summary.get('tier', 'unknown')}"]
     for key in ("wins", "losses", "ties"):
@@ -577,7 +774,45 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
     runtime = summary.get("runtime")
     if isinstance(runtime, Mapping) and "runtime_ratio_median" in runtime:
         parts.append(f"runtime:{runtime['runtime_ratio_median']}")
+    runtime_confidence = summary.get("runtime_evidence_confidence")
+    if runtime_confidence:
+        parts.append(f"runtime_confidence:{runtime_confidence}")
     return ",".join(parts)
+
+
+def _format_case_outcomes(outcomes: Iterable[Mapping[str, Any]]) -> str:
+    parts: list[str] = []
+    for item in outcomes:
+        case_id = str(item.get("case_id") or "").strip()
+        result = str(item.get("result") or "").strip()
+        if not case_id or not result:
+            continue
+        delta = item.get("delta")
+        counters = item.get("effect_counters")
+        counter_text = ""
+        if isinstance(counters, Mapping):
+            counter_text = (
+                f":w{counters.get('wins', 0)}"
+                f"l{counters.get('losses', 0)}"
+                f"t{counters.get('ties', 0)}"
+            )
+        delta_text = "" if delta is None else f":delta={delta}"
+        parts.append(f"{case_id}:{result}{delta_text}{counter_text}")
+    return "|".join(parts) if parts else "none"
+
+
+def _format_phase_activation_summary(summary: Mapping[str, Any]) -> str:
+    return ",".join(
+        f"{key}:{_compact_card_value(summary.get(key))}"
+        for key in (
+            "stage",
+            "activation_status",
+            "effect_status",
+            "opportunity_status",
+            "telemetry_outcome",
+        )
+        if summary.get(key) is not None
+    ) or "none"
 
 
 def _compact_card_value(value: Any) -> str:

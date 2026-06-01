@@ -52,6 +52,7 @@ from scion.proposal.agentic_resume_projection import (
     build_agentic_resume_model_projection,
     compact_failure_ledger_for_resume,
 )
+from scion.proposal.session_trace_index import record_session_final
 
 _RAW_REF_MARKERS = (
     "raw_metrics_ref",
@@ -417,6 +418,21 @@ class AgenticSessionStore:
         )
         kept.append(entry)
         self._write_entries(kept)
+        try:
+            record_session_final(
+                artifact_dir=self._root,
+                session_id=entry.session_id,
+                request_id=entry.request_id,
+                branch_id=entry.branch_id,
+                campaign_id=output.campaign_id,
+                phase=entry.phase,
+                final_status=entry.status,
+                termination_reason=entry.termination_reason,
+                final_artifact_ref=public_ref,
+                final_artifact_path=public_ref,
+            )
+        except Exception:
+            pass
         return entry
 
     def load_by_session_id(self, session_id: str) -> AgenticStoredSession | None:
@@ -806,6 +822,10 @@ def inspect_agentic_session_artifact(
         },
         "tool_loop_config": payload.get("tool_loop_config", {}),
         "tool_budget_used": payload.get("tool_budget_used", {}),
+        "schema_retry_feedback_artifact_refs": payload.get(
+            "schema_retry_feedback_artifact_refs",
+            [],
+        ),
         "transcript_digest": payload.get("transcript_digest"),
         "validation": {
             "ok": validation.ok,
@@ -914,8 +934,8 @@ def resume_from_artifact(
                 "selected_surface": structured_rejection.get("selected_surface"),
                 "target_file": structured_rejection.get("target_file"),
                 "retry_constraint": (
-                    "Do not repeat this missing-premise or duplicate mechanism; "
-                    "choose a different mechanism family."
+                    "Repair the contradicted factual premise; if continuing "
+                    "near an existing mechanism, state the material difference."
                 ),
             }.items()
             if value

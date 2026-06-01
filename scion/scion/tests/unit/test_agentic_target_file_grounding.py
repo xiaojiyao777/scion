@@ -255,7 +255,7 @@ def test_target_file_grounding_retry_resets_when_semantic_retry_changes_target(
                     premise_check="contradicted",
                     failure_category="premise_contradicted",
                     mechanism="shaw_related_removal",
-                    reason="semantic retry should choose a different mechanism family",
+                    reason="semantic retry should repair the contradicted premise",
                     fact_packet_digest="",
                     to_rejection=lambda _hypothesis: {
                         "source": "mechanism_novelty_gate",
@@ -778,6 +778,123 @@ def test_prompt_manifest_marks_algorithm_slice_content_visible() -> None:
     assert included["prompt_visibility_status"] == (
         "full_content_visible_in_rendered_prompt"
     )
+
+
+def test_prompt_manifest_writes_compact_explicit_visibility_ledger() -> None:
+    full_content = "def projected_full_source():\n    return 1\n"
+    truncated_content = "def partial_source():\n    return 2\n"
+    full_observation = replace(
+        _algorithm_read_observation(
+            "context.read_algorithm_file",
+            {
+                "file_path": "policies/full.py",
+                "readable": True,
+                "content_preview": full_content,
+                "truncated": False,
+                "size_chars": len(full_content),
+                "max_chars": len(full_content),
+            },
+        ),
+        observation_id="full-source-observation",
+    )
+    truncated_observation = replace(
+        _algorithm_read_observation(
+            "context.read_algorithm_file",
+            {
+                "file_path": "policies/truncated.py",
+                "readable": True,
+                "content_preview": truncated_content,
+                "truncated": True,
+                "size_chars": len(truncated_content) * 3,
+                "max_chars": len(truncated_content),
+            },
+        ),
+        observation_id="truncated-source-observation",
+    )
+    receipt_observation = ProposalObservation(
+        observation_id="receipt-only-observation",
+        session_id="session-ledger",
+        tool_name="context.list_surfaces",
+        tool_call_id="tool-receipt",
+        observation_type="surface_list",
+        summary="receipt only",
+        structured_payload={"already_observed": True},
+    )
+    omitted_observation = ProposalObservation(
+        observation_id="omitted-observation",
+        session_id="session-ledger",
+        tool_name="context.hidden",
+        tool_call_id="tool-hidden",
+        observation_type="hidden",
+        summary="not rendered",
+        structured_payload={"content_preview": "not in rendered prompt"},
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-ledger",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[
+            full_observation,
+            truncated_observation,
+            receipt_observation,
+            omitted_observation,
+        ],
+        call_index=1,
+        system_blocks=[
+            {
+                "text": (
+                    "## Solver-Design Full Algorithm File Reads\n"
+                    f"{full_content}\n\n"
+                    "## Compact Section\n"
+                    "<truncated for compact>\n"
+                )
+            }
+        ],
+        user_prompt=(
+            "## Agentic Proposal Tool Observations\n"
+            f"{truncated_content}\n"
+            "receipt-only-observation\n"
+        ),
+    )
+
+    ledger = manifest["visibility_ledger"]
+    entries = ledger["entries"]
+    assert ledger["schema_version"] == "prompt-visibility-ledger.v1"
+    assert ledger["entry_count"] == len(entries)
+    assert set(ledger["status_values"]) == {
+        "full",
+        "dedicated_projection",
+        "summary",
+        "truncated",
+        "omitted",
+    }
+    by_ref = {
+        entry.get("source_ref") or entry.get("ref"): entry for entry in entries
+    }
+    assert by_ref[full_observation.observation_id]["visibility_status"] == (
+        "dedicated_projection"
+    )
+    assert by_ref[full_observation.observation_id]["projected_to_section"] == (
+        "solver_design_full_algorithm_file_reads"
+    )
+    assert by_ref[truncated_observation.observation_id]["visibility_status"] == (
+        "truncated"
+    )
+    assert by_ref[receipt_observation.observation_id]["visibility_status"] == (
+        "summary"
+    )
+    assert by_ref[omitted_observation.observation_id]["visibility_status"] == (
+        "omitted"
+    )
+    assert all("token_estimate" in entry for entry in entries)
+    assert all(
+        "digest" in entry
+        for entry in entries
+        if entry["visibility_status"] != "omitted"
+    )
+    assert manifest["visibility_ledger_summary"]["ledger_digest"]
 
 
 def test_prompt_manifest_records_per_tool_result_visibility_hashes() -> None:

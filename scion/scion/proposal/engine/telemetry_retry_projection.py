@@ -65,6 +65,9 @@ def schema_retry_feedback_projection(
             "allowed_expected_telemetry_template": latest.get(
                 "allowed_expected_telemetry_template"
             ),
+            "allowed_expected_telemetry_template_full": latest.get(
+                "allowed_expected_telemetry_template_full"
+            ),
             "preview_rejections": compact_items,
         }
     )
@@ -86,6 +89,12 @@ def _schema_retry_feedback_item(
             "corrective_retry": item.get("corrective_retry"),
             "drift_fields": item.get("drift_fields"),
             "reason": _limit_text(str(item.get("reason") or ""), 900),
+            "reason_full": item.get("reason_full"),
+            "c11_detail_full": item.get("c11_detail_full"),
+            "telemetry_detail_full": item.get("telemetry_detail_full"),
+            "problem_telemetry_detail_full": item.get(
+                "problem_telemetry_detail_full"
+            ),
             "requested_activation_fields": _bounded_list(
                 item.get("requested_activation_fields"),
                 8,
@@ -116,6 +125,11 @@ def _schema_retry_feedback_item(
             ),
             "allowed_expected_telemetry_template": (
                 item.get("allowed_expected_telemetry_template")
+                if include_allowed_template
+                else None
+            ),
+            "allowed_expected_telemetry_template_full": (
+                item.get("allowed_expected_telemetry_template_full")
                 if include_allowed_template
                 else None
             ),

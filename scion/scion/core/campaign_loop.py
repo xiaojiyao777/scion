@@ -468,6 +468,7 @@ def _campaign_loop_status(
         "proposal_attempts": attempts_value,
         "proposal_attempts_consumed": attempts_value,
         "loop_steps": max(0, int(loop_steps)),
+        "campaign_steps": max(0, int(loop_steps)),
         "loop_step_limit": max(0, int(loop_step_limit)),
         "effective_rounds_completed": effective_rounds,
         "telemetry_repairable_attempts": max(

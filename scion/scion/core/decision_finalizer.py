@@ -26,6 +26,7 @@ from scion.core.decision_lifecycle_actions import (
     lifecycle_action as _lifecycle_action,
     merge_branch_lifecycle_block as _merge_branch_lifecycle_block,
     park_lineage as _park_lineage,
+    update_branch_screening_evidence_summary as _update_branch_screening_evidence_summary,
     update_branch_lifecycle_signal_state as _update_branch_lifecycle_signal_state,
 )
 from scion.core.models import (
@@ -361,6 +362,11 @@ class DecisionFinalizer:
             else None
         )
         if screening_feedback is not None and screening_feedback.case_total:
+            _update_branch_screening_evidence_summary(
+                branch,
+                protocol_result=protocol_result,
+                screening_feedback=screening_feedback,
+            )
             _update_branch_lifecycle_signal_state(
                 branch,
                 protocol_result=protocol_result,
@@ -483,7 +489,11 @@ class DecisionFinalizer:
                     else "screening_telemetry_failed"
                 ),
             )
-        if branch.state not in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE):
+        if branch.state not in (
+            BranchState.EXPLORE,
+            BranchState.STALE_WEIGHT_UPDATE,
+            BranchState.PARKED_LINEAGE,
+        ):
             try:
                 self.branch_controller.apply_decision(bid, decision)
             except StateTransitionError as exc:
@@ -555,6 +565,16 @@ class DecisionFinalizer:
             if runtime_budget_code:
                 reason = (
                     f"{reason}; runtime_budget_diagnostic={runtime_budget_code}"
+                )
+            runtime_confidence = str(
+                getattr(protocol_result, "runtime_confidence", "") or ""
+            )
+            if runtime_confidence and runtime_confidence not in {
+                "high",
+                "sufficient",
+            }:
+                reason = (
+                    f"{reason}; runtime_evidence_confidence={runtime_confidence}"
                 )
             attempt_kind = "screening"
             repair_mechanism_ids = ()

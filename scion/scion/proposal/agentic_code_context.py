@@ -29,6 +29,7 @@ _CODE_PROMPT_FEEDBACK_TOOLS = frozenset(
         "feedback.query_screening",
         "feedback.query_runtime",
         "context.read_branch_state",
+        "proposal.mechanism_novelty_diagnostic",
     }
 )
 _CODE_PROMPT_ALGORITHM_TOOLS = frozenset(

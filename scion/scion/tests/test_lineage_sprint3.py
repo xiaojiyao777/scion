@@ -183,13 +183,21 @@ class TestBranchStore:
         abandoned.state = BranchState.ABANDONED
         promoted = _make_branch("br_promoted")
         promoted.state = BranchState.PROMOTED
-        for b in (active, abandoned, promoted):
+        parked = _make_branch("br_parked")
+        parked.state = BranchState.PARKED_LINEAGE
+        parked.branch_code_status = "parked_lineage"
+        legacy_parked = _make_branch("br_legacy_parked")
+        legacy_parked.branch_code_status = "parked_lineage"
+        for b in (active, abandoned, promoted, parked, legacy_parked):
             store.save(b)
         results = store.load_all_active()
         ids = {b.branch_id for b in results}
         assert "br_active" in ids
         assert "br_abandoned" not in ids
         assert "br_promoted" not in ids
+        assert "br_parked" not in ids
+        assert "br_legacy_parked" not in ids
+        assert store.load("br_legacy_parked").state == BranchState.PARKED_LINEAGE
 
     def test_failure_codes_roundtrip(self, tmp_path):
         reg = LineageRegistry(str(tmp_path / "scion.db"))
@@ -222,6 +230,18 @@ class TestBranchStore:
         b.last_branch_lifecycle_policy_block = {
             "reason": "new_mechanism_requires_clean_fork",
             "block_count": 1,
+        }
+        b.branch_evidence_summary = {
+            "tier": "no_effect",
+            "runtime_evidence_confidence": "low_cached_champion",
+            "case_level_winners": [
+                {
+                    "case_id": "case-a",
+                    "result": "win",
+                    "delta": 0.1,
+                    "effect_counters": {"wins": 1, "losses": 0, "ties": 0},
+                }
+            ],
         }
         b.pending_retry = True
         b.blocked_rounds = 2
@@ -256,6 +276,12 @@ class TestBranchStore:
             "reason": "new_mechanism_requires_clean_fork",
             "block_count": 1,
         }
+        assert loaded.branch_evidence_summary["runtime_evidence_confidence"] == (
+            "low_cached_champion"
+        )
+        assert loaded.branch_evidence_summary["case_level_winners"][0][
+            "case_id"
+        ] == "case-a"
         assert loaded.lineage_id == "lineage-runtime"
         assert loaded.best_quality_checkpoint_id == "checkpoint-best"
         assert loaded.last_valid_checkpoint_id == "checkpoint-last"

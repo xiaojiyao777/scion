@@ -9,6 +9,13 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 _MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _MECHANISM_CHANGE_TYPES = ("add", "modify", "replace", "remove", "integrate")
+_MECHANISM_CHANGE_SELECTION_PRIORITY = {
+    "integrate": 0,
+    "modify": 1,
+    "add": 2,
+    "remove": 3,
+    "replace": 4,
+}
 MECHANISM_SCHEMA_QUALITY_BLOCK = "schema_quality_block"
 MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
 _EXPECTED_TELEMETRY_CATEGORIES = ("activity", "activation", "effect", "budget")
@@ -91,44 +98,99 @@ def _empty_mechanism_changes_to_list(value: Any) -> Any:
 def _normalize_mechanism_changes_preflight(value: Any) -> Any:
     """Deduplicate safely repairable mechanism rows before schema validation."""
 
+    normalized, _repairs = normalize_mechanism_changes_with_repair_attribution(value)
+    return normalized
+
+
+def normalize_mechanism_changes_with_repair_attribution(
+    value: Any,
+    *,
+    field: str = "mechanism_changes",
+) -> tuple[Any, tuple[dict[str, Any], ...]]:
+    """Normalize duplicate mechanism ids and return auditable repair records.
+
+    Multiple rows for the same mechanism id are a JSON/schema shape problem, not
+    an algorithm-quality signal.  The normalized shape keeps one row per id and
+    deterministically selects the most specific generic action.
+    """
+
     value = _empty_mechanism_changes_to_list(value)
     if not isinstance(value, list):
-        return value
+        return value, ()
 
-    normalized: list[Any] = []
-    seen_pairs: set[tuple[str, str]] = set()
-    change_types_by_id: dict[str, set[str]] = {}
+    order: list[str] = []
+    raw_by_id: dict[str, list[tuple[str, Any]]] = {}
+    passthrough: list[Any] = []
     for item in value:
         mechanism_id, change_type = _mechanism_change_identity(item)
-        if not mechanism_id or not change_type:
-            normalized.append(item)
+        if not _mechanism_change_item_is_normalizable(item, mechanism_id, change_type):
+            passthrough.append(item)
             continue
-        change_types_by_id.setdefault(mechanism_id, set()).add(change_type)
-        pair = (mechanism_id, change_type)
-        if pair in seen_pairs:
-            continue
-        seen_pairs.add(pair)
-        normalized.append(item)
+        if mechanism_id not in raw_by_id:
+            order.append(mechanism_id)
+            raw_by_id[mechanism_id] = []
+        raw_by_id[mechanism_id].append((change_type, item))
 
-    conflicts = {
-        mechanism_id: sorted(change_types)
-        for mechanism_id, change_types in change_types_by_id.items()
-        if len(change_types) > 1
-    }
-    if conflicts:
-        rendered = "; ".join(
-            f"{mechanism_id}={','.join(change_types)}"
-            for mechanism_id, change_types in sorted(conflicts.items())
+    if not raw_by_id:
+        return value, ()
+
+    normalized: list[Any] = []
+    repairs: list[dict[str, Any]] = []
+    for mechanism_id in order:
+        entries = raw_by_id[mechanism_id]
+        change_types = [change_type for change_type, _item in entries]
+        unique_change_types = sorted(
+            dict.fromkeys(change_types),
+            key=lambda item: (
+                -_MECHANISM_CHANGE_SELECTION_PRIORITY.get(item, -1),
+                item,
+            ),
         )
-        raise ValueError(
-            f"{MECHANISM_SCHEMA_QUALITY_BLOCK}: "
-            f"{MECHANISM_DUPLICATE_ID_CONFLICT}: "
-            "mechanism_changes repeats id values with conflicting "
-            f"change_type values: {rendered}. Schema-only retry: preserve the "
-            "same hypothesis, target_file, and mechanism id; emit exactly one "
-            "mechanism_changes object per id with the intended change_type."
+        selected_change_type = unique_change_types[0]
+        normalized.append(
+            {"id": mechanism_id, "change_type": selected_change_type}
         )
-    return normalized
+        duplicate_count = len(entries) - 1
+        if duplicate_count <= 0:
+            continue
+        if len(unique_change_types) > 1:
+            repairs.append(
+                {
+                    "field": field,
+                    "repair_kind": "host_mechanical_normalization",
+                    "root_cause": "duplicate_id_multiple_change_types",
+                    "diagnostic_code": MECHANISM_DUPLICATE_ID_CONFLICT,
+                    "mechanism_id": mechanism_id,
+                    "input_change_types": change_types,
+                    "unique_change_types": unique_change_types,
+                    "selected_change_type": selected_change_type,
+                    "selection_policy": "strongest_generic_change_type",
+                    "action": "coalesced_to_single_mechanism_change",
+                    "schema_only_repair": True,
+                    "quality_block": False,
+                    "guidance": (
+                        "Host normalized duplicate mechanism_changes rows only. "
+                        "Do not rewrite algorithm assumptions for this repair."
+                    ),
+                }
+            )
+        else:
+            repairs.append(
+                {
+                    "field": field,
+                    "repair_kind": "host_mechanical_normalization",
+                    "root_cause": "exact_duplicate_item",
+                    "diagnostic_code": "mechanism_changes_exact_duplicate",
+                    "mechanism_id": mechanism_id,
+                    "selected_change_type": selected_change_type,
+                    "duplicate_count": duplicate_count,
+                    "action": "deduplicated_exact_items",
+                    "schema_only_repair": True,
+                    "quality_block": False,
+                }
+            )
+    normalized.extend(passthrough)
+    return normalized, tuple(repairs)
 
 
 def _mechanism_change_identity(item: Any) -> tuple[str, str]:
@@ -141,6 +203,20 @@ def _mechanism_change_identity(item: Any) -> tuple[str, str]:
         str(getattr(item, "id", "") or "").strip(),
         str(getattr(item, "change_type", "") or "").strip(),
     )
+
+
+def _mechanism_change_item_is_normalizable(
+    item: Any,
+    mechanism_id: str,
+    change_type: str,
+) -> bool:
+    if not _MECHANISM_ID_RE.fullmatch(mechanism_id):
+        return False
+    if change_type not in _MECHANISM_CHANGE_TYPES:
+        return False
+    if isinstance(item, dict):
+        return set(item).issubset({"id", "change_type"})
+    return True
 
 
 def _validate_unique_mechanism_change_ids(
@@ -164,6 +240,7 @@ __all__ = [
     "_normalize_mechanism_changes_preflight",
     "_mechanism_changes_json_schema",
     "_validate_unique_mechanism_change_ids",
+    "normalize_mechanism_changes_with_repair_attribution",
     "MECHANISM_DUPLICATE_ID_CONFLICT",
     "MECHANISM_SCHEMA_QUALITY_BLOCK",
 ]

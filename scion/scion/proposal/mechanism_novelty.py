@@ -50,14 +50,27 @@ class MechanismNoveltyResult:
         else:
             result_kind = "duplicate_diagnostic"
             gate_action = "diagnostic"
-            diagnostic_kind = self.failure_category or self.premise_check
+            diagnostic_kind = (
+                "duplicate_risk"
+                if self.premise_check == "duplicate"
+                else self.failure_category or self.premise_check
+            )
         if self.result_kind is None:
             object.__setattr__(self, "result_kind", result_kind)
+        resolved_result_kind = self.result_kind or result_kind
         if self.gate_action is None:
             object.__setattr__(self, "gate_action", gate_action)
+        resolved_gate_action = self.gate_action or gate_action
         if self.diagnostic_kind is None:
+            if resolved_gate_action == "diagnostic":
+                if self.premise_check == "contradicted":
+                    diagnostic_kind = "grounding_risk"
+                elif self.premise_check == "duplicate":
+                    diagnostic_kind = "duplicate_risk"
+                elif resolved_result_kind == "duplicate_diagnostic":
+                    diagnostic_kind = "novelty_warning"
             object.__setattr__(self, "diagnostic_kind", diagnostic_kind)
-        if gate_action == "diagnostic" and self.variant_allowed is False:
+        if resolved_gate_action == "diagnostic" and self.variant_allowed is False:
             object.__setattr__(self, "variant_allowed", None)
 
     @property

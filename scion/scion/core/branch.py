@@ -3,7 +3,10 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from scion.core.branch_hygiene import SUSPECT_BRANCH_CODE_STATUSES
+from scion.core.branch_hygiene import (
+    SUSPECT_BRANCH_CODE_STATUSES,
+    branch_is_parked_lineage,
+)
 from scion.core.models import (
     Branch, BranchState, ChampionState, Decision, ExperimentStage,
 )
@@ -285,7 +288,20 @@ class BranchController:
         )
 
     def get_active_branches(self) -> List[Branch]:
-        """Return all branches that are not in terminal states."""
+        """Return non-terminal branches that remain in the active pool."""
+        terminal = {
+            BranchState.PROMOTED,
+            BranchState.ABANDONED,
+            BranchState.PARKED_LINEAGE,
+        }
+        return [
+            b
+            for b in self._branches.values()
+            if b.state not in terminal and not branch_is_parked_lineage(b)
+        ]
+
+    def get_reportable_branches(self) -> List[Branch]:
+        """Return live branch records that should still appear in status cards."""
         terminal = {BranchState.PROMOTED, BranchState.ABANDONED}
         return [b for b in self._branches.values() if b.state not in terminal]
 

@@ -170,6 +170,14 @@ class AgenticSessionPatchFlowMixin:
         )
         if active_mechanisms:
             code_context["agentic_active_solver_mechanisms"] = active_mechanisms
+        novelty_warnings = [
+            _sanitize_agentic_value(dict(observation.structured_payload))
+            for observation in observations
+            if observation.tool_name == "proposal.mechanism_novelty_diagnostic"
+            and not observation.is_error
+        ]
+        if novelty_warnings:
+            code_context["agentic_mechanism_novelty_warnings"] = novelty_warnings[-4:]
 
     def _validate_patch_or_output(
         self,

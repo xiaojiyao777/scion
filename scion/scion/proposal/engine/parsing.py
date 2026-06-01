@@ -16,6 +16,7 @@ from scion.proposal.schemas import (
     HypothesisProposalInput,
     PatchSchemaPreflightError,
     PatchProposalInput,
+    normalize_mechanism_changes_with_repair_attribution,
     normalize_patch_output_with_repair_attribution,
     preflight_patch_exact_replace_shape,
 )
@@ -68,8 +69,18 @@ _PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
 
 def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
+    normalized_raw = dict(raw)
+    normalized_raw.pop("schema_repair_attribution", None)
+    repair_attribution: tuple[dict[str, Any], ...] = ()
+    if "mechanism_changes" in normalized_raw:
+        mechanism_changes, repair_attribution = (
+            normalize_mechanism_changes_with_repair_attribution(
+                normalized_raw.get("mechanism_changes")
+            )
+        )
+        normalized_raw["mechanism_changes"] = mechanism_changes
     try:
-        validated = HypothesisProposalInput(**raw)
+        validated = HypothesisProposalInput(**normalized_raw)
     except ValidationError as exc:
         raise ProposalValidationError(str(exc)) from exc
     return HypothesisProposal(
@@ -95,6 +106,7 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
             MechanismChange(id=change.id, change_type=change.change_type)
             for change in validated.mechanism_changes
         ),
+        schema_repair_attribution=repair_attribution,
     )
 
 

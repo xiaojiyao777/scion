@@ -485,6 +485,73 @@ def test_prompt_manifest_counts_rendered_provider_prompt_not_raw_context(
         ]["provider_visible_total_chars"]
 
 
+def test_agentic_session_writes_session_to_trace_index(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    trace_dir = campaign_dir / "llm_traces"
+    artifact_store = FileAgenticSessionArtifactStore(campaign_dir / "agentic_sessions")
+    client = CapturingToolClient()
+    creative = CreativeLayer(client, trace_dir=str(trace_dir))
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+
+    output = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+    ).run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={
+                "problem_summary": "Synthetic problem.",
+                "research_surfaces": "surface: search_policy",
+                "objective_policy_guidance": "Minimize cost.",
+                "champion_operators_code": "def baseline_time_fraction(): pass",
+                "champion_stats": "champion v1",
+            },
+            build_code_context=lambda _hypothesis: {
+                "kind": "code",
+                "problem_summary": "Synthetic problem.",
+                "target_file_code": "def mutate(x):\n    return x\n",
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    index_path = campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    session_entry = next(
+        item for item in index["sessions"] if item["session_id"] == output.session_id
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert index["artifact_kind"] == "agentic_session_trace_index"
+    assert index["trace_count"] >= 2
+    assert session_entry["final_status"] == "completed"
+    assert session_entry["final_artifact_ref"].endswith("/output.json")
+    assert session_entry["hypothesis_trace_ids"]
+    assert session_entry["code_trace_ids"]
+    assert not contains_absolute_path(index)
+    for trace in session_entry["traces"]:
+        assert trace["request_kind"] in {"hypothesis", "code"}
+        assert trace["attempt_number"] == 1
+        assert trace["phase"] in {"draft_hypothesis", "draft_patch"}
+        assert trace["final_status"] == "ok"
+        assert trace["trace_ref"].startswith("llm_traces/")
+        assert trace["prompt_manifest_artifact_ref"]
+        assert trace["prompt_visibility_ledger_digest"]
+        trace_payload = json.loads(
+            (campaign_dir / trace["trace_ref"]).read_text(encoding="utf-8")
+        )
+        assert trace_payload["prompt_visibility_ledger"]["entry_count"] > 0
+
+
 def test_repeated_tool_call_returns_already_read_ref_without_hiding_required_reads(
     tmp_path: Path,
 ) -> None:

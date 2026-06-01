@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 
+from .shared import normalize_mechanism_changes_with_repair_attribution
+
 _NOVELTY_SIGNATURE_SCALAR_MAX_CHARS = 120
 
 
@@ -15,8 +17,16 @@ def normalize_patch_output_with_repair_attribution(
 
     normalized = dict(raw)
     repairs: list[dict[str, Any]] = []
+    if "mechanism_changes" in normalized:
+        mechanism_changes, mechanism_repairs = (
+            normalize_mechanism_changes_with_repair_attribution(
+                normalized.get("mechanism_changes")
+            )
+        )
+        normalized["mechanism_changes"] = mechanism_changes
+        repairs.extend(mechanism_repairs)
     if "additional_changes" not in normalized:
-        return normalized, ()
+        return normalized, tuple(repairs)
 
     value = normalized.get("additional_changes")
     if value in (None, ""):

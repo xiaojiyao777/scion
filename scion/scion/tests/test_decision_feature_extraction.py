@@ -143,12 +143,35 @@ def test_extract_protocol_runtime_facts_without_free_text():
     assert features.runtime_delta_median_ms == pytest.approx(37.5)
     assert features.runtime_regression_rate == pytest.approx(0.75)
     assert features.runtime_pairs == 8
+    assert features.runtime_evidence_confidence == "sufficient"
     assert features.protocol_gate_outcome == "pass"
     assert features.total_pairs == 10
     assert features.valid_pairs == 8
     assert features.failed_pairs == 2
     assert features.candidate_failed_pairs == 1
     assert features.champion_failed_pairs == 1
+    _validate_no_free_text(features)
+
+
+def test_extract_protocol_runtime_confidence_from_cached_champion():
+    branch = _branch()
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=_protocol(
+            runtime_ratio_median=1.42,
+            runtime_delta_median_ms=37.5,
+            runtime_regression_rate=0.75,
+            runtime_pairs=8,
+            runtime_confidence="low_cached_champion",
+        ),
+        budget=BudgetState(total=100, used=0),
+    )
+
+    assert features.runtime_evidence_confidence == "low_cached_champion"
     _validate_no_free_text(features)
 
 

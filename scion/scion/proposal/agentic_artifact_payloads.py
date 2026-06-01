@@ -107,6 +107,9 @@ def _compact_transcript(
         "runtime_smoke_evidence_diagnostics",
         "runtime_budget_diagnostic",
         "algorithm_smoke_execution_evidence_ref",
+        "failure_code",
+        "schema_retry_feedback_digest",
+        "schema_retry_feedback_ref",
     }
     for event in transcript:
         metadata = {
@@ -198,6 +201,9 @@ def _agentic_output_artifact(
     code_retry_failure_refs = tuple(
         ref for ref in tainted_refs if "code_retry_failure_detail" in ref
     )
+    schema_retry_feedback_refs = tuple(
+        ref for ref in tainted_refs if "hypothesis_schema_retry_feedback" in ref
+    )
     artifact = {
         "schema_version": output.schema_version or AGENTIC_SESSION_SCHEMA_VERSION,
         "artifact_kind": "agentic_proposal_output",
@@ -260,6 +266,8 @@ def _agentic_output_artifact(
         "smoke_evidence_artifact_refs": list(smoke_evidence_refs),
         "code_retry_failure_artifact_refs": list(code_retry_failure_refs),
         "code_retry_failure_count": len(code_retry_failure_refs),
+        "schema_retry_feedback_artifact_refs": list(schema_retry_feedback_refs),
+        "schema_retry_feedback_count": len(schema_retry_feedback_refs),
         "tainted": True,
     }
     return _json_ready(_sanitize_agentic_value(artifact))

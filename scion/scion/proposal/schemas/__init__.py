@@ -34,6 +34,7 @@ from .shared import (
     _mechanism_changes_json_schema,
     _normalize_mechanism_changes_preflight,
     _validate_unique_mechanism_change_ids,
+    normalize_mechanism_changes_with_repair_attribution,
 )
 from .tools import (
     FIX_TOOL,
@@ -74,6 +75,7 @@ __all__ = [
     "_normalize_novelty_signature",
     "_normalize_novelty_signature_item",
     "_validate_unique_mechanism_change_ids",
+    "normalize_mechanism_changes_with_repair_attribution",
     "normalize_patch_output_with_repair_attribution",
     "preflight_patch_exact_replace_shape",
 ]

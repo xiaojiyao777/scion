@@ -30,6 +30,8 @@ from scion.core.models import (
     PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
 from scion.core.promotion_service import PromotionPlan
+from scion.core.evidence_recording.accounting import proposal_accounting_fields
+from scion.core.scheduler import active_slot_inventory
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
@@ -296,7 +298,14 @@ class CampaignManager:
         return CampaignGovernanceService.has_pending_evaluation(branches)
 
     def get_state(self) -> Dict[str, Any]:
-        branches = self._branch_ctrl.get_active_branches()
+        branches = self._branch_ctrl.get_reportable_branches()
+        max_active_branches = int(
+            getattr(self._scheduler, "max_active_branches", 0) or 0
+        )
+        active_slots = active_slot_inventory(
+            branches,
+            max_active_branches=max_active_branches,
+        )
         screened_experiments = sum(
             1
             for step in self._step_history
@@ -360,8 +369,10 @@ class CampaignManager:
             "telemetry_failure_details": telemetry_failure_details[-16:],
             "total_rounds": self._round_num,
             "proposal_attempts": self._round_num,
+            "proposal_attempts_consumed": self._round_num,
             "n_steps": len(self._step_history),
-            "n_active_branches": len(branches),
+            "n_active_branches": active_slots["used"],
+            "active_slots": active_slots,
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
             "budget_remaining": self._budget.remaining_ratio,
@@ -372,6 +383,29 @@ class CampaignManager:
             "branch_cards": branch_cards,
             "branch_history_cards": branch_history_cards,
             "checkpoint_inventory": checkpoint_inventory,
+        }
+        accounting = proposal_accounting_fields(
+            campaign_dir=self._campaign_dir,
+            steps=self._step_history,
+            loop_status=getattr(
+                self._evidence_recorder,
+                "campaign_loop_status",
+                None,
+            ),
+            state=state,
+            round_num=self._round_num,
+            screened_rounds=screened_experiments,
+            agentic_artifact_dir=getattr(
+                self._proposal_pipeline,
+                "agentic_artifact_dir",
+                None,
+            ),
+        )
+        state.update(accounting)
+        state["proposal_accounting"] = {
+            "proposal_attempts": state.get("proposal_attempts"),
+            "proposal_attempts_consumed": state.get("proposal_attempts_consumed"),
+            **accounting,
         }
         if branch_lifecycle_reroute_policy:
             state["branch_lifecycle_reroute_policy"] = (

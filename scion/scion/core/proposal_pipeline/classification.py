@@ -71,6 +71,8 @@ def _agentic_quality_block_classification(
     failure_category = _agentic_value(output.failure_category)
     failure_code = str(structured.get("failure_code") or "")
     premise_check = str(structured.get("premise_check") or "")
+    if _structured_mechanism_novelty_diagnostic(structured):
+        return None
     detail = str(output.failure_detail or "").lower()
     if (
         "schema_quality_block" in detail
@@ -137,6 +139,20 @@ def _agentic_quality_block_classification(
 
 def _agentic_output_is_quality_blocked(output: AgenticProposalOutput) -> bool:
     return _agentic_quality_block_classification(output) is not None
+
+
+def _structured_mechanism_novelty_diagnostic(
+    structured: Mapping[str, Any],
+) -> bool:
+    if str(structured.get("source") or "") != "mechanism_novelty_gate":
+        return False
+    diagnostic_kind = str(structured.get("diagnostic_kind") or "")
+    return (
+        structured.get("gate_action") == "diagnostic"
+        or structured.get("screening_allowed") is True
+        or str(structured.get("result_kind") or "").endswith("_diagnostic")
+        or diagnostic_kind in {"novelty_warning", "duplicate_risk", "grounding_risk"}
+    )
 
 
 def _agentic_explicit_runtime_failure(
@@ -330,9 +346,11 @@ def _agentic_rejection_constraint(
             "selected_surface": structured.get("selected_surface"),
             "target_file": structured.get("target_file"),
             "retry_constraint": (
-                "Do not repeat this missing-premise or duplicate mechanism. "
-                "Choose a different mechanism family supported by active-solver "
-                "evidence; changing names or novelty text is not enough."
+                "Repair the contradicted factual premise. If the candidate "
+                "stays near an existing mechanism, acknowledge the existing "
+                "mechanism and state the material trigger, scoring, schedule, "
+                "or behavior difference; changing names or novelty text is not "
+                "enough."
             ),
     }
     return {

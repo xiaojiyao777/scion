@@ -71,6 +71,8 @@ def _record_failure_ledger_entry(
     tool_name: str | None = None,
     observation: ProposalObservation | None = None,
     failure_code: str | None = None,
+    diagnostic_payload: Mapping[str, Any] | None = None,
+    diagnostic_ref: str | None = None,
 ) -> None:
     category_value = _failure_category_value(category)
     if not category_value:
@@ -87,13 +89,18 @@ def _record_failure_ledger_entry(
             "tool_name": observation.tool_name,
             "failure_code": _enum_value(observation.failure_code),
         }
+    detail_full = str(detail or "")
+    detail_compact = _limit_string(detail_full, 800)
     entry = _drop_empty_dict(
         {
             "entry_id": f"failure-{len(state.failure_ledger) + 1:04d}",
             "phase": phase.value,
             "category": category_value,
             "root_cause": category_value,
-            "detail": _limit_string(str(detail or ""), 800),
+            "detail": detail_compact,
+            "detail_full": (
+                detail_full if detail_compact != detail_full else None
+            ),
             "source": source,
             "attempt": attempt,
             "repair_attempt": repair_attempt,
@@ -102,6 +109,12 @@ def _record_failure_ledger_entry(
             "tool_name": tool_name or observation_payload.get("tool_name"),
             "observation_id": observation_payload.get("observation_id"),
             "failure_code": failure_code or observation_payload.get("failure_code"),
+            "diagnostic_payload": (
+                _sanitize_agentic_value(dict(diagnostic_payload))
+                if isinstance(diagnostic_payload, Mapping)
+                else None
+            ),
+            "diagnostic_ref": diagnostic_ref,
         }
     )
     if _failure_ledger_latest_matches(state.failure_ledger, entry):
@@ -168,7 +181,10 @@ def _normalized_structured_rejection(
     rejection: Mapping[str, Any],
 ) -> dict[str, Any]:
     payload = dict(rejection)
-    if _structured_rejection_is_premise_contradicted(payload):
+    if (
+        _structured_rejection_is_premise_contradicted(payload)
+        and not _structured_rejection_is_soft_novelty_diagnostic(payload)
+    ):
         legacy_category = str(_enum_value(payload.get("failure_category")) or "")
         if legacy_category and legacy_category != _AGENT_GROUNDING_FAILURE:
             payload.setdefault("legacy_failure_category", legacy_category)
@@ -208,8 +224,10 @@ def _hypothesis_semantic_retry_rejection_payload(
             "selected_surface": payload.get("selected_surface"),
             "target_file": payload.get("target_file"),
             "retry_constraint": (
-                "Do not repeat this missing-premise or duplicate mechanism. "
-                "Choose a different mechanism family with active-solver evidence."
+                "Repair the contradicted factual premise. If the idea remains "
+                "near an existing mechanism, acknowledge that mechanism and state "
+                "the material trigger, scoring, schedule, or behavior difference; "
+                "do not relabel the same missing-premise claim."
             ),
         }
     )
@@ -218,6 +236,8 @@ def _hypothesis_semantic_retry_rejection_payload(
 def _structured_rejection_is_premise_contradicted(
     rejection: Mapping[str, Any],
 ) -> bool:
+    if _structured_rejection_is_soft_novelty_diagnostic(rejection):
+        return False
     failure_category = str(_enum_value(rejection.get("failure_category")) or "")
     failure_code = str(rejection.get("failure_code") or "")
     premise_check = str(rejection.get("premise_check") or "")
@@ -225,6 +245,20 @@ def _structured_rejection_is_premise_contradicted(
         failure_code == _PROPOSAL_PREMISE_CONTRADICTED_CODE
         or premise_check == "contradicted"
         or failure_category == _LEGACY_PREMISE_CONTRADICTED
+    )
+
+
+def _structured_rejection_is_soft_novelty_diagnostic(
+    rejection: Mapping[str, Any],
+) -> bool:
+    if str(rejection.get("source") or "") != "mechanism_novelty_gate":
+        return False
+    diagnostic_kind = str(rejection.get("diagnostic_kind") or "")
+    return (
+        rejection.get("gate_action") == "diagnostic"
+        or rejection.get("screening_allowed") is True
+        or str(rejection.get("result_kind") or "").endswith("_diagnostic")
+        or diagnostic_kind in {"novelty_warning", "duplicate_risk", "grounding_risk"}
     )
 
 

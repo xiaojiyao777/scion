@@ -128,7 +128,7 @@ def test_hypothesis_mechanism_changes_deduplicate_exact_duplicates():
     ]
 
 
-def test_hypothesis_mechanism_changes_conflicting_duplicate_is_schema_quality_block():
+def test_hypothesis_mechanism_changes_conflicting_duplicate_normalizes_with_audit():
     raw = {
         "hypothesis_text": "Modify a declared generic mechanism.",
         "change_locus": "solver",
@@ -140,13 +140,38 @@ def test_hypothesis_mechanism_changes_conflicting_duplicate_is_schema_quality_bl
         ],
     }
 
-    with pytest.raises(ProposalValidationError) as excinfo:
-        _parse_hypothesis(raw)
+    result = _parse_hypothesis(raw)
 
-    message = str(excinfo.value)
-    assert "schema_quality_block" in message
-    assert "mechanism_changes_duplicate_id_conflict" in message
-    assert "Schema-only retry" in message
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", "add")
+    ]
+    assert result.schema_repair_attribution
+    repair = result.schema_repair_attribution[0]
+    assert repair["diagnostic_code"] == "mechanism_changes_duplicate_id_conflict"
+    assert repair["input_change_types"] == ["add", "modify"]
+    assert repair["selected_change_type"] == "add"
+    assert repair["schema_only_repair"] is True
+    assert repair["quality_block"] is False
+
+
+def test_hypothesis_mechanism_changes_integrate_modify_selects_modify():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "integrate"},
+            {"id": "search_seed", "change_type": "modify"},
+        ],
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", "modify")
+    ]
+    assert result.schema_repair_attribution[0]["selected_change_type"] == "modify"
 
 
 def test_hypothesis_mechanism_changes_reject_bad_id_and_type():
@@ -344,6 +369,31 @@ def test_patch_mechanism_changes_parse_and_schema_is_optional():
     assert result.mechanism_changes[0].change_type == "integrate"
     assert "mechanism_changes" in PATCH_PROPOSAL_SCHEMA["properties"]
     assert "mechanism_changes" not in PATCH_PROPOSAL_SCHEMA["required"]
+
+
+def test_patch_mechanism_changes_conflicting_duplicate_normalizes_with_audit():
+    raw = {
+        "file_path": "policies/solver.py",
+        "action": "modify",
+        "code_content": "VALUE = 1\n",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "integrate"},
+            {"id": "search_seed", "change_type": "modify"},
+        ],
+    }
+
+    result = _parse_patch(
+        raw,
+        context={"allow_host_internal_full_file_modify": True},
+    )
+
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", "modify")
+    ]
+    assert result.repair_attribution
+    repair = result.repair_attribution[0]
+    assert repair["diagnostic_code"] == "mechanism_changes_duplicate_id_conflict"
+    assert repair["quality_block"] is False
 
 
 def test_patch_mechanism_changes_reject_bad_id():

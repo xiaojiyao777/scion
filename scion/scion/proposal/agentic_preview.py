@@ -1,7 +1,7 @@
 """Preview and self-check result helpers for agentic proposal sessions."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 from typing import Any, Mapping
 
@@ -52,6 +52,7 @@ class AgenticSelfCheck:
     schema_preview_codes: tuple[str, ...] = ()
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
+    diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
 def _self_check_from_previews(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
@@ -61,6 +62,7 @@ def _self_check_from_previews(
     schema_passed_by_source: dict[str, bool] = {}
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
+    diagnostics: dict[str, Any] = {}
     for observation in observations:
         if observation.is_error:
             if observation.tool_name in {
@@ -105,6 +107,9 @@ def _self_check_from_previews(
                 schema_preview_codes_by_source[observation.tool_name] = (
                     _preview_codes(payload)
                 )
+                c11_diagnostic = _c11_self_check_diagnostic(payload)
+                if c11_diagnostic:
+                    diagnostics["C11_expected_telemetry"] = c11_diagnostic
             else:
                 schema_preview_codes_by_source.pop(observation.tool_name, None)
         if observation.tool_name == "proposal.contract_preview":
@@ -117,6 +122,9 @@ def _self_check_from_previews(
                 schema_preview_codes_by_source[
                     "proposal.contract_preview.hypothesis"
                 ] = hypothesis_codes
+                c11_diagnostic = _c11_self_check_diagnostic(payload)
+                if c11_diagnostic:
+                    diagnostics["C11_expected_telemetry"] = c11_diagnostic
             elif contract_preview_passed:
                 schema_passed_by_source["proposal.contract_preview.hypothesis"] = True
                 schema_preview_codes_by_source.pop(
@@ -134,6 +142,7 @@ def _self_check_from_previews(
         schema_preview_codes=tuple(dict.fromkeys(schema_preview_codes)),
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
+        diagnostics=diagnostics,
     )
 
 
@@ -593,6 +602,34 @@ def _preview_codes(payload: Mapping[str, Any]) -> tuple[str, ...]:
 
     visit(payload)
     return tuple(dict.fromkeys(codes))
+
+
+def _c11_self_check_diagnostic(payload: Mapping[str, Any]) -> dict[str, Any]:
+    hypothesis = payload.get("hypothesis")
+    if not isinstance(hypothesis, Mapping):
+        return {}
+    telemetry = hypothesis.get("expected_telemetry_contract")
+    problem_telemetry = hypothesis.get("problem_expected_telemetry_preview")
+    if not isinstance(telemetry, Mapping):
+        return {}
+    if telemetry.get("passed") is not False and not (
+        isinstance(problem_telemetry, Mapping)
+        and problem_telemetry.get("passed") is False
+    ):
+        return {}
+    return _drop_empty_mapping(
+        {
+            "failure_code": "C11_expected_telemetry",
+            "expected_telemetry_contract": telemetry,
+            "problem_expected_telemetry_preview": (
+                problem_telemetry if isinstance(problem_telemetry, Mapping) else {}
+            ),
+            "trace_policy": (
+                "Compact summaries may be short, but this self_check diagnostic "
+                "keeps the full expected_telemetry repair detail/template."
+            ),
+        }
+    )
 
 
 def _hypothesis_contract_self_check_codes(payload: Mapping[str, Any]) -> tuple[str, ...]:

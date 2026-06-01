@@ -480,6 +480,31 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     assert "hypothesis_schema_telemetry_retry_feedback" not in retry_manifest[
         "truncated_sections"
     ]
+    feedback_refs = [
+        ref
+        for ref in output.tainted_artifact_refs
+        if "hypothesis_schema_retry_feedback" in ref
+    ]
+    assert feedback_refs
+    feedback_artifact = json.loads(Path(feedback_refs[0]).read_text(encoding="utf-8"))
+    assert feedback_artifact["feedback"]["allowed_expected_telemetry_template_full"][
+        "expected_telemetry"
+    ]["activation"] == retry_feedback["allowed_expected_telemetry_template_full"][
+        "expected_telemetry"
+    ]["activation"]
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    assert artifact["schema_retry_feedback_artifact_refs"]
+    assert artifact["schema_retry_feedback_artifact_refs"][0].endswith(
+        "hypothesis_schema_retry_feedback_0002.json"
+    )
+    assert any(
+        event.get("metadata", {}).get("schema_retry_feedback_ref")
+        in feedback_refs
+        for event in artifact["compact_transcript"]
+    )
 
 
 def test_hypothesis_preview_c10_missing_fields_feedback_uses_repair_template(
@@ -1015,10 +1040,24 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
     assert "solver_algorithm_phase_runtime_ms.vns" in output.failure_detail
     assert output.self_check.schema_valid is False
     assert output.failure_ledger["latest_failure"] == "schema_output_failure"
-    assert (
-        output.failure_ledger["entries"][-1]["failure_code"]
-        == "C11_expected_telemetry"
-    )
+    ledger_entry = output.failure_ledger["entries"][-1]
+    assert ledger_entry["failure_code"] == "C11_expected_telemetry"
+    diagnostic = ledger_entry["diagnostic_payload"]
+    assert diagnostic["failure_code"] == "C11_expected_telemetry"
+    assert diagnostic["reason_full"]
+    assert diagnostic["allowed_expected_telemetry_template_full"][
+        "template_truncated"
+    ] is False
+    assert diagnostic["allowed_expected_telemetry_template_full"][
+        "expected_telemetry"
+    ]["activation"] == [
+        "solver_algorithm_context_records.adaptive_vns_operator_weights_iterations",
+        "solver_algorithm_phase_runtime_ms.adaptive_vns_operator_weights",
+    ]
+    self_check_c11 = output.self_check.diagnostics["C11_expected_telemetry"]
+    assert self_check_c11["expected_telemetry_contract"][
+        "allowed_expected_telemetry_template"
+    ]["template_truncated"] is False
 
 
 def test_non_repairable_target_preview_failure_fails_closed(
