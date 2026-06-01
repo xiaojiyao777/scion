@@ -737,8 +737,11 @@ def _branch_continuation_schema_preview(
             "Same-mechanism-only branch: rewrite the hypothesis so every "
             "mechanism_changes id is one of protected_mechanism_ids. Only "
             "tune, integrate, repair, parameterize, or wire telemetry within "
-            "the protected mechanism. If proposing a different mechanism, "
-            "request a clean branch/fork before generation."
+            "the protected mechanism. These are branch research action "
+            "labels, not mechanism_changes[].change_type values; map "
+            "tune/parameterize to modify and telemetry_wiring to modify or "
+            "integrate. If proposing a different mechanism, request a clean "
+            "branch/fork before generation."
         ),
         "allowed_repair_shape": {
             "mechanism_changes": [

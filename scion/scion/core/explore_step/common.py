@@ -25,6 +25,19 @@ _SCHEMA_QUALITY_BLOCK = "schema_quality_block"
 _MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
 _AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
 _AGENTIC_SESSION_TIMEOUT = "agentic_session_timeout"
+_SOFT_NOVELTY_DIAGNOSTIC_MARKERS = (
+    "mechanism_premise_warning",
+    "mechanism_novelty_warning",
+    "mechanism_novelty_diagnostic",
+    "novelty_warning",
+    "duplicate_risk",
+    "gate_action=diagnostic",
+    '"gate_action": "diagnostic"',
+    "screening_allowed=true",
+    '"screening_allowed": true',
+    "quality_block=false",
+    '"quality_block": false',
+)
 
 
 def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
@@ -42,7 +55,10 @@ def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
 def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
     text = str(detail or "")
     text_lower = text.lower()
-    if _ACTIVATION_NOT_OBSERVED_DIAGNOSTIC in text_lower:
+    if (
+        _ACTIVATION_NOT_OBSERVED_DIAGNOSTIC in text_lower
+        or _is_soft_novelty_diagnostic_detail(text_lower)
+    ):
         return False
     return (
         _AGENT_QUALITY_BLOCKED in text
@@ -55,6 +71,10 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or "algorithm smoke did not pass" in text_lower
         or "runtime_smoke.telemetry_guard" in text_lower
     )
+
+
+def _is_soft_novelty_diagnostic_detail(detail_lower: str) -> bool:
+    return any(marker in detail_lower for marker in _SOFT_NOVELTY_DIAGNOSTIC_MARKERS)
 
 
 def _is_schema_quality_block_detail(detail: str | None) -> bool:

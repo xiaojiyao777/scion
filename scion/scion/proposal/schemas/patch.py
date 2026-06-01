@@ -346,10 +346,14 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "enum": ["supported", "contradicted", "duplicate", "wrong_owner"],
             "description": (
-                "Return supported only when the approved hypothesis is still "
-                "valid, novel, and owned by this target. For contradicted, "
-                "duplicate, or wrong_owner, provide premise_check_reason and "
-                "do not generate a patch."
+                "Return supported for implementable algorithm changes. "
+                "duplicate is diagnostic only and must still include the typed "
+                "edit when the approved hypothesis is a material variant. "
+                "contradicted is legacy/diagnostic for mechanism novelty or "
+                "premise concerns and is not a no-patch exit. wrong_owner is "
+                "the only ordinary no-patch ownership exit; hard boundary, "
+                "objective-policy, or protected-constraint contradictions must "
+                "be stated explicitly in premise_check_reason."
             ),
         },
         "premise_check_reason": {"type": "string"},
@@ -549,13 +553,19 @@ Produce a typed edit set that implements the hypothesis.
   EOF/trailing newline edits. Do not emit conflicting `full_file` entries for
   the same file.
 - Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
-  drop mechanism ids in the patch response.
-- `premise_check="duplicate"` is diagnostic only. Use it to disclose close
-  overlap with visible code, but still provide the typed edit when the approved
-  hypothesis is a material variant. Do not use `contradicted` for novelty,
-  duplicate-risk, near-existing mechanism, or baseline-already-has-similar-
-  capability observations. Only hard boundary/objective-policy/protected-
-  constraint contradictions and `wrong_owner` are no-patch premise outcomes.
+  drop mechanism ids in the patch response. Use only legal generic
+  `mechanism_changes[].change_type` values: add, modify, replace, remove, or
+  integrate. Branch action labels such as tune, repair, parameterize, and
+  telemetry_wiring are not change_type values; map tune/parameterize to modify
+  and telemetry_wiring to modify or integrate.
+- `premise_check="duplicate"` and mechanism/premise `contradicted` observations
+  are diagnostic only. Use them to disclose close overlap with visible code, but
+  still provide the typed edit when the approved hypothesis is a material
+  variant. Do not use `contradicted` for novelty, duplicate-risk,
+  near-existing mechanism, baseline-already-has-similar-capability observations,
+  uncertain algorithm benefit, or telemetry expectation mismatch. Only
+  `wrong_owner` and explicit hard boundary/objective-policy/protected-constraint
+  contradictions are no-patch premise outcomes.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{

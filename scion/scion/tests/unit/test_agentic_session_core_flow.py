@@ -752,6 +752,64 @@ def test_agentic_session_records_duplicate_code_premise_check_as_diagnostic(
     assert len(creative.code_contexts) == 1
 
 
+def test_agentic_session_records_contradicted_code_premise_check_as_diagnostic(
+    tmp_path: Path,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a bounded material variant of an existing relocation mechanism."
+        ),
+        change_locus="route_local",
+        action="modify",
+        target_file="operators/local_a.py",
+        target_weakness="Existing relocation may miss a bounded variant.",
+        expected_effect="Improve distance by changing trigger and scoring.",
+    )
+    patch = PatchProposal(
+        file_path="operators/local_a.py",
+        action="modify",
+        code_content="def apply(solution):\n    return solution\n",
+        premise_check="contradicted",
+        premise_check_reason=(
+            "Visible code has a near-existing relocation capability, but this "
+            "patch implements the approved material variant."
+        ),
+    )
+    creative = FakeCreative(hypothesis=hypothesis, patch=patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(creative)
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "contradicted-diagnostic"},
+            build_code_context=lambda _hypothesis: {
+                "target_file_code": "def apply(solution):\n    return solution\n"
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.termination_reason == AgenticTerminationReason.COMPLETED
+    assert output.patch is patch
+    assert output.failure_category is None
+    assert output.structured_rejection is None
+    premise_events = [
+        event
+        for event in output.transcript
+        if event.metadata.get("diagnostic_kind") == "mechanism_premise_warning"
+    ]
+    assert premise_events
+    assert premise_events[-1].metadata["gate_action"] == "diagnostic"
+    assert premise_events[-1].metadata["quality_block"] is False
+
+
 def test_agentic_session_retry_error_ledger_records_schema_failure(
     tmp_path: Path,
 ) -> None:

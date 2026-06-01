@@ -5,7 +5,11 @@ import pytest
 
 from scion.proposal.context_manager import _format_hypothesis
 from scion.proposal.engine import ProposalValidationError, _parse_hypothesis, _parse_patch
-from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA, PATCH_PROPOSAL_SCHEMA
+from scion.proposal.schemas import (
+    HYPOTHESIS_PROPOSAL_SCHEMA,
+    PATCH_PROPOSAL_SCHEMA,
+    HypothesisProposalInput,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +176,107 @@ def test_hypothesis_mechanism_changes_integrate_modify_selects_modify():
         ("search_seed", "modify")
     ]
     assert result.schema_repair_attribution[0]["selected_change_type"] == "modify"
+
+
+@pytest.mark.parametrize(
+    ("raw_change_type", "normalized_change_type"),
+    [
+        ("parameterize", "modify"),
+        ("tune", "modify"),
+        ("telemetry_wiring", "modify"),
+    ],
+)
+def test_hypothesis_mechanism_change_type_alias_normalizes_with_audit(
+    raw_change_type: str,
+    normalized_change_type: str,
+):
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": raw_change_type},
+        ],
+    }
+
+    direct = HypothesisProposalInput.model_validate(raw)
+    result = _parse_hypothesis(raw)
+
+    assert direct.mechanism_changes[0].change_type == normalized_change_type
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", normalized_change_type)
+    ]
+    repair = next(
+        item
+        for item in result.schema_repair_attribution
+        if item.get("repair_kind") == "mechanism_change_type_alias_normalized"
+    )
+    assert repair["original_change_type"] == raw_change_type
+    assert repair["normalized_change_type"] == normalized_change_type
+    assert repair["schema_only_repair"] is True
+    assert repair["quality_block"] is False
+
+
+def test_hypothesis_duplicate_id_with_parameterize_alias_canonicalizes_legal_action():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "modify"},
+            {"id": "search_seed", "change_type": "integrate"},
+            {"id": "search_seed", "change_type": "parameterize"},
+        ],
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", "modify")
+    ]
+    repairs = list(result.schema_repair_attribution)
+    assert any(
+        item.get("repair_kind") == "mechanism_change_type_alias_normalized"
+        and item.get("original_change_type") == "parameterize"
+        and item.get("normalized_change_type") == "modify"
+        for item in repairs
+    )
+    duplicate = next(
+        item
+        for item in repairs
+        if item.get("diagnostic_code") == "mechanism_changes_duplicate_id_conflict"
+    )
+    assert duplicate["input_change_types"] == [
+        "modify",
+        "integrate",
+        "parameterize",
+    ]
+    assert duplicate["normalized_change_types"] == ["modify", "integrate", "modify"]
+    assert duplicate["selected_change_type"] == "modify"
+    assert duplicate["quality_block"] is False
+
+
+def test_mechanism_change_schema_guidance_keeps_action_labels_out_of_enum():
+    change_type_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
+        "mechanism_changes"
+    ]["items"]["properties"]["change_type"]
+    patch_change_type_schema = PATCH_PROPOSAL_SCHEMA["properties"][
+        "mechanism_changes"
+    ]["items"]["properties"]["change_type"]
+
+    assert change_type_schema["enum"] == [
+        "add",
+        "modify",
+        "replace",
+        "remove",
+        "integrate",
+    ]
+    assert patch_change_type_schema["enum"] == change_type_schema["enum"]
+    assert "parameterize" not in change_type_schema["enum"]
+    assert "telemetry_wiring" not in change_type_schema["enum"]
+    assert "not change_type values" in change_type_schema["description"]
 
 
 def test_hypothesis_mechanism_changes_reject_bad_id_and_type():
@@ -393,6 +498,46 @@ def test_patch_mechanism_changes_conflicting_duplicate_normalizes_with_audit():
     assert result.repair_attribution
     repair = result.repair_attribution[0]
     assert repair["diagnostic_code"] == "mechanism_changes_duplicate_id_conflict"
+    assert repair["quality_block"] is False
+
+
+@pytest.mark.parametrize(
+    ("raw_change_type", "normalized_change_type"),
+    [
+        ("parameterize", "modify"),
+        ("tune", "modify"),
+        ("telemetry_wiring", "modify"),
+    ],
+)
+def test_patch_mechanism_change_type_alias_normalizes_with_audit(
+    raw_change_type: str,
+    normalized_change_type: str,
+):
+    raw = {
+        "file_path": "policies/solver.py",
+        "action": "modify",
+        "code_content": "VALUE = 1\n",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": raw_change_type},
+        ],
+    }
+
+    result = _parse_patch(
+        raw,
+        context={"allow_host_internal_full_file_modify": True},
+    )
+
+    assert [(c.id, c.change_type) for c in result.mechanism_changes] == [
+        ("search_seed", normalized_change_type)
+    ]
+    repair = next(
+        item
+        for item in result.repair_attribution
+        if item.get("repair_kind") == "mechanism_change_type_alias_normalized"
+    )
+    assert repair["original_value"] == raw_change_type
+    assert repair["normalized_value"] == normalized_change_type
+    assert repair["schema_only_repair"] is True
     assert repair["quality_block"] is False
 
 

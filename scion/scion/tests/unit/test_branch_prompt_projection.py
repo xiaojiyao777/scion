@@ -225,6 +225,8 @@ def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
     assert "no_unrelated_mechanism_ids" in rendered
     assert "bounded_probe" in rendered
     assert "tune, integrate, repair, parameterize, or wire telemetry" in rendered
+    assert "research action labels, not mechanism_changes change_type values" in rendered
+    assert "map tune/parameterize to modify" in rendered
     assert "clean branch or clean fork before generation" in rendered
 
 
@@ -261,5 +263,7 @@ def test_same_mechanism_constraints_are_prominent_in_hypothesis_prompt() -> None
     assert constraints_pos < user_task_pos
     assert "protected_mechanism_ids=bounded_probe" in rendered
     assert "allowed_actions=tune,integrate,repair,parameterize,telemetry_wiring" in rendered
+    assert "allowed_actions are research action labels" in rendered
+    assert "telemetry_wiring to modify or integrate" in rendered
     assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in rendered
     assert "new or unrelated mechanism requires a clean branch or clean fork" in rendered

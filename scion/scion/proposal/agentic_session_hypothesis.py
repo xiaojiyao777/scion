@@ -212,12 +212,23 @@ class AgenticSessionHypothesisMixin:
                     hypothesis
                 )
                 if schema_repairs:
+                    repair_codes = [
+                        str(
+                            repair.get("diagnostic_code")
+                            or repair.get("repair_kind")
+                            or ""
+                        )
+                        for repair in schema_repairs
+                        if isinstance(repair, Mapping)
+                    ]
+                    repair_codes = list(dict.fromkeys(code for code in repair_codes if code))
                     state.note(
                         AgenticProposalPhase.DRAFT_HYPOTHESIS,
                         "Normalized repairable hypothesis schema shape.",
                         metadata={
                             "attempt": attempt,
-                            "failure_code": "mechanism_changes_duplicate_id_conflict",
+                            "diagnostic_codes": repair_codes,
+                            "schema_repairs": list(schema_repairs),
                             "schema_only_repair": True,
                             "quality_block": False,
                         },

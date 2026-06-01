@@ -293,9 +293,11 @@ def _recent_repeated_mechanism_result(
                 reason=(
                     "Recent campaign history already tried the same declared "
                     f"mechanism id {mechanism!r} and failed with "
-                    f"{failure_code}. Retry is blocked unless the hypothesis "
-                    "states a materially different trigger, capability, or "
-                    "objective tradeoff."
+                    f"{failure_code}. This is advisory near-field memory only; "
+                    "code generation remains allowed. The hypothesis should "
+                    "state a materially different trigger, capability, or "
+                    "objective tradeoff when it is intentionally continuing "
+                    "this line."
                 ),
                 evidence=(_step_evidence(step),),
             )
@@ -310,8 +312,9 @@ def _recent_repeated_mechanism_result(
                 reason=(
                     "Recent campaign history already tried the same structured "
                     f"novelty_signature and failed with {failure_code}. "
-                    "Choose a materially different mechanism identity before "
-                    "entering code generation again."
+                    "This is advisory near-field memory only; code generation "
+                    "remains allowed. Prefer a materially different mechanism "
+                    "identity or state why this continuation changes behavior."
                 ),
                 evidence=(_step_evidence(step),),
             )
@@ -335,8 +338,10 @@ def _recent_repeated_mechanism_result(
                 reason=(
                     "Recent campaign history already tried this target/family/"
                     f"failure signature ({candidate_target}, {candidate_family}, "
-                    f"{failure_code}). Provide a materially different capability, "
-                    "trigger, or objective tradeoff before retrying."
+                    f"{failure_code}). This is advisory near-field memory only; "
+                    "code generation remains allowed. Provide a materially "
+                    "different capability, trigger, or objective tradeoff if "
+                    "continuing the family."
                 ),
                 evidence=(_step_evidence(step),),
             )

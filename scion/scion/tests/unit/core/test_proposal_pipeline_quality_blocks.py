@@ -5,6 +5,7 @@ from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.models import ContractResult, HypothesisRecord, MechanismChange
 from scion.core.proposal_pipeline.classification import (
     _agentic_output_is_quality_blocked,
+    _agentic_primary_secondary_failures,
 )
 
 def test_mechanism_premise_warning_is_not_quality_block_and_returns_patch() -> None:
@@ -99,6 +100,58 @@ def test_mechanism_novelty_warning_is_not_quality_block() -> None:
     )
 
     assert _agentic_output_is_quality_blocked(output) is False
+
+
+def test_soft_novelty_detail_with_legacy_premise_code_is_not_quality_block() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="legacy-soft-warning-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.PREMISE_CONTRADICTED,
+        failure_category="agent_grounding_failure",
+        failure_detail=(
+            "proposal_premise_contradicted: mechanism_premise_warning; "
+            "gate_action=diagnostic; screening_allowed=true; quality_block=false"
+        ),
+    )
+
+    assert _agentic_output_is_quality_blocked(output) is False
+
+
+def test_mechanism_change_type_enum_failure_is_schema_output_not_quality_block() -> None:
+    detail = (
+        "schema or target preview did not pass "
+        "(mechanism_changes.1.change_type: Input should be "
+        "'add', 'modify', 'replace', 'remove' or 'integrate'; got parameterize)"
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="schema-alias-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+        failure_detail=detail,
+        failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+        self_check=AgenticSelfCheck(
+            schema_valid=False,
+            schema_preview_codes=(
+                "mechanism_changes.1.change_type: Input should be one of "
+                "add/modify/replace/remove/integrate; parameterize is an "
+                "allowed_next_actions label",
+            ),
+        ),
+    )
+
+    primary, secondary = _agentic_primary_secondary_failures(output)
+
+    assert _agentic_output_is_quality_blocked(output) is False
+    assert primary["stage"] == "self_check"
+    assert primary["category"] == "schema_output_failure"
+    assert primary["category"] != "contract_boundary_failure"
+    assert secondary == []
 
 
 def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None:

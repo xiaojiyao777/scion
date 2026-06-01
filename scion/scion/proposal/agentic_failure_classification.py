@@ -395,11 +395,11 @@ def _patch_premise_rejection(
     if premise_check not in {"contradicted", "wrong_owner"}:
         premise_check = "contradicted"
     reason = str(getattr(patch, "premise_check_reason", "") or "").strip()
-    category = (
-        AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
-        if premise_check == "wrong_owner"
-        else _AGENT_GROUNDING_FAILURE
-    )
+    if premise_check == "contradicted" and not _patch_contradiction_is_hard_boundary(
+        reason
+    ):
+        return None
+    category = AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
     rejection = {
         "artifact_kind": "agentic_code_premise_rejection",
         "premise_check": premise_check,
@@ -410,11 +410,29 @@ def _patch_premise_rejection(
         "patch_generated": False,
         "screening_allowed": False,
     }
-    if premise_check == "contradicted":
-        rejection["legacy_failure_category"] = _LEGACY_PREMISE_CONTRADICTED
-        rejection["failure_code"] = _PROPOSAL_PREMISE_CONTRADICTED_CODE
-        rejection["agent_block_reason"] = _AGENT_QUALITY_BLOCKED_REASON
     return rejection
+
+
+def _patch_contradiction_is_hard_boundary(reason: str) -> bool:
+    text = str(reason or "").lower()
+    if not text:
+        return False
+    return any(
+        marker in text
+        for marker in (
+            "boundary",
+            "objective policy",
+            "objective_policy",
+            "protected constraint",
+            "protected_constraint",
+            "hard constraint",
+            "feasibility constraint",
+            "wrong owner",
+            "wrong_owner",
+            "forced surface",
+            "forced_surface",
+        )
+    )
 
 
 def _preview_failure_category(

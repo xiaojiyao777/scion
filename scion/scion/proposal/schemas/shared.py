@@ -9,6 +9,11 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 _MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _MECHANISM_CHANGE_TYPES = ("add", "modify", "replace", "remove", "integrate")
+_MECHANISM_CHANGE_TYPE_ALIASES = {
+    "parameterize": "modify",
+    "tune": "modify",
+    "telemetry_wiring": "modify",
+}
 _MECHANISM_CHANGE_SELECTION_PRIORITY = {
     "integrate": 0,
     "modify": 1,
@@ -18,6 +23,9 @@ _MECHANISM_CHANGE_SELECTION_PRIORITY = {
 }
 MECHANISM_SCHEMA_QUALITY_BLOCK = "schema_quality_block"
 MECHANISM_DUPLICATE_ID_CONFLICT = "mechanism_changes_duplicate_id_conflict"
+MECHANISM_CHANGE_TYPE_ALIAS_NORMALIZED = (
+    "mechanism_change_type_alias_normalized"
+)
 _EXPECTED_TELEMETRY_CATEGORIES = ("activity", "activation", "effect", "budget")
 _EXPECTED_TELEMETRY_CATEGORY_TEXT = ", ".join(_EXPECTED_TELEMETRY_CATEGORIES)
 _EXPECTED_TELEMETRY_DESCRIPTION = (
@@ -84,6 +92,13 @@ def _mechanism_changes_json_schema() -> Dict[str, Any]:
                 "change_type": {
                     "type": "string",
                     "enum": list(_MECHANISM_CHANGE_TYPES),
+                    "description": (
+                        "Generic mechanism change enum only. Branch research "
+                        "action labels such as tune, repair, parameterize, or "
+                        "telemetry_wiring are not change_type values; map "
+                        "tune/parameterize to modify and telemetry_wiring to "
+                        "modify or integrate."
+                    ),
                 },
             },
             "additionalProperties": False,
@@ -119,26 +134,45 @@ def normalize_mechanism_changes_with_repair_attribution(
         return value, ()
 
     order: list[str] = []
-    raw_by_id: dict[str, list[tuple[str, Any]]] = {}
+    raw_by_id: dict[str, list[tuple[str, str, Any]]] = {}
     passthrough: list[Any] = []
-    for item in value:
+    repairs: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
         mechanism_id, change_type = _mechanism_change_identity(item)
-        if not _mechanism_change_item_is_normalizable(item, mechanism_id, change_type):
+        normalized_change_type = _normalize_mechanism_change_type_alias(change_type)
+        if not _mechanism_change_item_is_normalizable(
+            item,
+            mechanism_id,
+            normalized_change_type,
+        ):
             passthrough.append(item)
             continue
+        if normalized_change_type != change_type:
+            repairs.append(
+                _mechanism_change_type_alias_repair(
+                    field=field,
+                    index=index,
+                    mechanism_id=mechanism_id,
+                    original_change_type=change_type,
+                    normalized_change_type=normalized_change_type,
+                )
+            )
         if mechanism_id not in raw_by_id:
             order.append(mechanism_id)
             raw_by_id[mechanism_id] = []
-        raw_by_id[mechanism_id].append((change_type, item))
+        raw_by_id[mechanism_id].append((change_type, normalized_change_type, item))
 
     if not raw_by_id:
         return value, ()
 
     normalized: list[Any] = []
-    repairs: list[dict[str, Any]] = []
     for mechanism_id in order:
         entries = raw_by_id[mechanism_id]
-        change_types = [change_type for change_type, _item in entries]
+        original_change_types = [
+            original_change_type
+            for original_change_type, _change_type, _item in entries
+        ]
+        change_types = [change_type for _original, change_type, _item in entries]
         unique_change_types = sorted(
             dict.fromkeys(change_types),
             key=lambda item: (
@@ -161,7 +195,8 @@ def normalize_mechanism_changes_with_repair_attribution(
                     "root_cause": "duplicate_id_multiple_change_types",
                     "diagnostic_code": MECHANISM_DUPLICATE_ID_CONFLICT,
                     "mechanism_id": mechanism_id,
-                    "input_change_types": change_types,
+                    "input_change_types": original_change_types,
+                    "normalized_change_types": change_types,
                     "unique_change_types": unique_change_types,
                     "selected_change_type": selected_change_type,
                     "selection_policy": "strongest_generic_change_type",
@@ -191,6 +226,40 @@ def normalize_mechanism_changes_with_repair_attribution(
             )
     normalized.extend(passthrough)
     return normalized, tuple(repairs)
+
+
+def _normalize_mechanism_change_type_alias(change_type: str) -> str:
+    return _MECHANISM_CHANGE_TYPE_ALIASES.get(change_type, change_type)
+
+
+def _mechanism_change_type_alias_repair(
+    *,
+    field: str,
+    index: int,
+    mechanism_id: str,
+    original_change_type: str,
+    normalized_change_type: str,
+) -> dict[str, Any]:
+    return {
+        "field": field,
+        "json_pointer": f"/{field}/{index}/change_type",
+        "repair_kind": MECHANISM_CHANGE_TYPE_ALIAS_NORMALIZED,
+        "root_cause": "branch_action_label_used_as_mechanism_change_type",
+        "diagnostic_code": MECHANISM_CHANGE_TYPE_ALIAS_NORMALIZED,
+        "mechanism_id": mechanism_id,
+        "original_change_type": original_change_type,
+        "normalized_change_type": normalized_change_type,
+        "original_value": original_change_type,
+        "normalized_value": normalized_change_type,
+        "action": "normalized_change_type_alias",
+        "schema_only_repair": True,
+        "quality_block": False,
+        "guidance": (
+            "Host normalized a branch research action label to a legal "
+            "mechanism_changes change_type. Do not treat this as an algorithm "
+            "quality signal."
+        ),
+    }
 
 
 def _mechanism_change_identity(item: Any) -> tuple[str, str]:
@@ -241,6 +310,7 @@ __all__ = [
     "_mechanism_changes_json_schema",
     "_validate_unique_mechanism_change_ids",
     "normalize_mechanism_changes_with_repair_attribution",
+    "MECHANISM_CHANGE_TYPE_ALIAS_NORMALIZED",
     "MECHANISM_DUPLICATE_ID_CONFLICT",
     "MECHANISM_SCHEMA_QUALITY_BLOCK",
 ]

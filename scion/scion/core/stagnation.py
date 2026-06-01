@@ -12,7 +12,6 @@ _PROPOSAL_QUALITY_FAILURE_CODES = frozenset(
         "proposal",
         "code_generation",
         "agent_quality_blocked",
-        "proposal_premise_contradicted",
         "proposal_activation_diagnostic",
         "hypothesis_contract_failed",
         "code_generation_failed",
@@ -299,7 +298,6 @@ class StagnationDetector:
                     "code_generation",
                     "schema",
                     "agent_quality",
-                    "premise_contradicted",
                     "activation_diagnostic",
                 )
             ):

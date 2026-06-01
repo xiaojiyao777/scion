@@ -76,6 +76,8 @@ def _agentic_quality_block_classification(
     if _structured_mechanism_novelty_diagnostic(structured):
         return None
     detail = str(output.failure_detail or "").lower()
+    if _detail_is_soft_novelty_diagnostic(detail):
+        return None
     if (
         "schema_quality_block" in detail
         or "mechanism_changes_duplicate_id_conflict" in detail
@@ -143,7 +145,10 @@ def _agentic_quality_block_classification(
             LEGACY_PREMISE_CONTRADICTED,
         }
         or termination_reason == LEGACY_PREMISE_CONTRADICTED
-        or premise_check == "contradicted"
+        or (
+            premise_check == "contradicted"
+            and not _structured_mechanism_novelty_diagnostic(structured)
+        )
     ):
         return {
             "failure_class": AGENT_GROUNDING_FAILURE,
@@ -174,6 +179,25 @@ def _structured_mechanism_novelty_diagnostic(
             "grounding_risk",
             "mechanism_premise_warning",
         }
+    )
+
+
+def _detail_is_soft_novelty_diagnostic(detail: str) -> bool:
+    return any(
+        marker in detail
+        for marker in (
+            "mechanism_premise_warning",
+            "mechanism_novelty_warning",
+            "mechanism_novelty_diagnostic",
+            "novelty_warning",
+            "duplicate_risk",
+            "gate_action=diagnostic",
+            '"gate_action": "diagnostic"',
+            "screening_allowed=true",
+            '"screening_allowed": true',
+            "quality_block=false",
+            '"quality_block": false',
+        )
     )
 
 
@@ -295,10 +319,15 @@ def _agentic_primary_secondary_failures(
         return explicit_runtime_failure, secondary
 
     if output.self_check.schema_valid is False:
+        category = (
+            AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE.value
+            if _schema_invalid_is_mechanism_change_type_output_failure(output)
+            else "contract_boundary_failure"
+        )
         primary = {
             "stage": "self_check",
             "reason": "schema_or_target_preview_failed",
-            "category": "contract_boundary_failure",
+            "category": category,
         }
         if output.self_check.schema_preview_codes:
             primary["code"] = _bounded_agentic_failure_text(
@@ -330,6 +359,31 @@ def _agentic_primary_secondary_failures(
     if category:
         primary["category"] = category
     return primary, secondary
+
+
+def _schema_invalid_is_mechanism_change_type_output_failure(
+    output: AgenticProposalOutput,
+) -> bool:
+    category = _agentic_value(output.failure_category)
+    if category == AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE.value:
+        return True
+    text = " ".join(
+        str(value or "")
+        for value in (
+            output.failure_detail,
+            *tuple(output.self_check.schema_preview_codes or ()),
+        )
+    ).lower()
+    if "mechanism_changes" not in text or "change_type" not in text:
+        return False
+    return (
+        "input should be" in text
+        or "literal_error" in text
+        or "enum" in text
+        or "parameterize" in text
+        or "telemetry_wiring" in text
+        or "tune" in text
+    )
 
 
 def _agentic_rejection_constraint(
