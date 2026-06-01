@@ -30,7 +30,8 @@ def compact_failure_ledger_for_resume(value: Mapping[str, Any]) -> dict[str, Any
                     "source": latest_entry.get("source"),
                     "attempt": latest_entry.get("attempt"),
                     "root_cause": latest_entry.get("root_cause"),
-                    "detail": _limit_string(latest_entry.get("detail"), 500),
+                    "detail": _resume_failure_ledger_detail(latest_entry),
+                    "detail_short_fields": latest_entry.get("detail_short_fields"),
                     "detail_full_ref": latest_entry.get("detail_full_ref"),
                     "diagnostic_ref": latest_entry.get("diagnostic_ref"),
                     "diagnostic_failure_code": (
@@ -44,6 +45,18 @@ def compact_failure_ledger_for_resume(value: Mapping[str, Any]) -> dict[str, Any
             ),
         }
     )
+
+
+def _resume_failure_ledger_detail(entry: Mapping[str, Any]) -> str | None:
+    detail = entry.get("detail")
+    if detail in (None, ""):
+        return None
+    text = str(detail)
+    if len(text) <= 500:
+        return text
+    if entry.get("detail_short_fields"):
+        return "detail exceeds resume compact limit; see detail_short_fields"
+    return "detail exceeds resume compact limit; see artifact failure_ledger entry"
 
 
 def build_agentic_resume_model_projection(

@@ -243,6 +243,125 @@ def test_continue_explore_discards_candidate_failed_screening_workspace() -> Non
     assert branch.branch_id in workspaces
     assert hyp_store.statuses == [("h-2", "rejected")]
 
+
+def test_abandon_syncs_terminal_branch_evidence_before_lineage_and_persist() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a bounded repair ordering.",
+        change_locus="repair",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="repair_ordering", change_type="modify"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-abandon",
+        branch_id=branch.branch_id,
+        change_locus="repair",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+        mechanism_changes=(
+            MechanismChange(id="candidate_filter_probe", change_type="modify"),
+        ),
+    )
+    hyp_store = _HypothesisStore()
+    persisted: list[dict] = []
+    lineage_snapshots: list[tuple[str, dict]] = []
+
+    class BranchStore:
+        def save(self, saved_branch) -> None:
+            persisted.append(dict(saved_branch.branch_evidence_summary))
+
+    def record_lineage(*args, **_kwargs) -> None:
+        recorded_branch = args[0]
+        lineage_snapshots.append(
+            (
+                recorded_branch.branch_code_status,
+                dict(recorded_branch.branch_evidence_summary),
+            )
+        )
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=BranchStore(),
+        hypothesis_store=hyp_store,
+        branch_workspaces={},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: patch},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=record_lineage,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda _branch_id: None,
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=10,
+            wins=0,
+            losses=4,
+            ties=6,
+            win_rate=0.0,
+            median_delta=-1.5,
+            ci_low=-3.0,
+            ci_high=-0.5,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/metrics.json",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.ABANDON,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+    assert result.decision == Decision.ABANDON
+    assert stored.state == BranchState.ABANDONED
+    assert stored.branch_code_status != "clean"
+    assert stored.branch_mechanism_ids == (
+        "repair_ordering",
+        "candidate_filter_probe",
+    )
+    assert lineage_snapshots
+    assert lineage_snapshots[0][0] == stored.branch_code_status
+    assert lineage_snapshots[0][1]["terminal_reason"] == "SCREENING_FAIL_WIN_RATE"
+    assert persisted[-1]["terminal_reason"] == "SCREENING_FAIL_WIN_RATE"
+    assert persisted[-1]["losses"] == 4
+
 def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_workspace() -> None:
     controller = BranchController()
     branch = controller.create_branch(

@@ -50,6 +50,7 @@ _SELF_REPORTED_SYNTAX_NEGATIONS = (
     "syntax-valid",
 )
 _FAILURE_LEDGER_SCHEMA_VERSION = "agentic-retry-error-ledger.v1"
+_FAILURE_LEDGER_DETAIL_CHARS = 800
 _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _LEGACY_PREMISE_CONTRADICTED = AgenticFailureCategory.PREMISE_CONTRADICTED.value
 _PROPOSAL_PREMISE_CONTRADICTED_CODE = "proposal_premise_contradicted"
@@ -92,7 +93,9 @@ def _record_failure_ledger_entry(
             "full_refs": observation_full_refs,
         }
     detail_full = str(detail or "")
-    detail_compact = _limit_string(detail_full, 800)
+    detail_compact, detail_short_fields = _failure_ledger_detail_compact(
+        detail_full
+    )
     entry = _drop_empty_dict(
         {
             "entry_id": f"failure-{len(state.failure_ledger) + 1:04d}",
@@ -103,6 +106,7 @@ def _record_failure_ledger_entry(
             "detail_full": (
                 detail_full if detail_compact != detail_full else None
             ),
+            "detail_short_fields": detail_short_fields,
             "source": source,
             "attempt": attempt,
             "repair_attempt": repair_attempt,
@@ -123,6 +127,54 @@ def _record_failure_ledger_entry(
     if _failure_ledger_latest_matches(state.failure_ledger, entry):
         return
     state.failure_ledger.append(entry)
+
+
+def _failure_ledger_detail_compact(
+    detail: str,
+    *,
+    limit: int = _FAILURE_LEDGER_DETAIL_CHARS,
+) -> tuple[str, dict[str, Any] | None]:
+    text = str(detail or "")
+    if not text or len(text) <= limit:
+        return text, None
+    fields = _failure_ledger_detail_short_fields(text)
+    return (
+        "detail exceeds compact ledger limit; see detail_full and detail_short_fields",
+        fields,
+    )
+
+
+def _failure_ledger_detail_short_fields(text: str) -> dict[str, Any]:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    first_line = lines[0] if lines else ""
+    last_line = lines[-1] if lines else ""
+    fields: dict[str, Any] = {
+        "detail_chars": len(text),
+        "line_count": len(lines),
+        "first_line_prefix": first_line[:240],
+        "first_line_truncated": len(first_line) > 240,
+        "last_line_prefix": last_line[:240],
+        "last_line_truncated": len(last_line) > 240,
+    }
+    contract_codes = sorted(set(re.findall(r"\bC\d+[A-Za-z0-9_]*\b", text)))
+    if contract_codes:
+        fields["contract_codes"] = contract_codes[:12]
+    failure_codes = sorted(
+        set(re.findall(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+){1,}\b", text))
+    )
+    if failure_codes:
+        fields["failure_codes"] = failure_codes[:12]
+    key_values: dict[str, str] = {}
+    for key, value in re.findall(
+        r"\b([A-Za-z][A-Za-z0-9_]{1,40})=([^;\n]{1,240})",
+        text,
+    ):
+        key_values.setdefault(key, value.strip())
+        if len(key_values) >= 12:
+            break
+    if key_values:
+        fields["key_values"] = key_values
+    return {key: value for key, value in fields.items() if value not in ("", [], {})}
 
 
 def _observation_full_refs(value: Any) -> list[str]:
@@ -148,10 +200,15 @@ def _failure_ledger_latest_matches(
     return (
         str(latest.get("phase") or "") == str(candidate.get("phase") or "")
         and str(latest.get("category") or "") == str(candidate.get("category") or "")
-        and str(latest.get("detail") or "") == str(candidate.get("detail") or "")
+        and _failure_ledger_detail_identity(latest)
+        == _failure_ledger_detail_identity(candidate)
         and str(latest.get("source") or "") == str(candidate.get("source") or "")
         and str(latest.get("tool_name") or "") == str(candidate.get("tool_name") or "")
     )
+
+
+def _failure_ledger_detail_identity(entry: Mapping[str, Any]) -> str:
+    return str(entry.get("detail_full") or entry.get("detail") or "")
 
 
 def _failure_ledger_payload(

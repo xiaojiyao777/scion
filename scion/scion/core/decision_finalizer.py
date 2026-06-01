@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, replace
-from typing import Callable, MutableMapping, Optional, Protocol
+from typing import Callable, Iterable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.branch_hygiene import (
@@ -136,6 +136,15 @@ class DecisionFinalizer:
             bid,
             protocol_result,
         )
+        patch = self.branch_patches.get(bid)
+        if decision == Decision.ABANDON:
+            _sync_terminal_branch_evidence(
+                branch,
+                hypothesis=hypothesis,
+                patch=patch,
+                protocol_result=protocol_result,
+                decision_reason_codes=effective_reason_codes,
+            )
 
         promote_plan: PromotionPlan | None = None
         if decision == Decision.PROMOTE:
@@ -207,6 +216,7 @@ class DecisionFinalizer:
             updated_branch = self.branch_controller.get_branch(bid)
             if updated_branch and updated_branch.state == BranchState.ABANDONED:
                 self.branch_patches.pop(bid, None)
+                self._persist_current_branch(bid)
                 primary_reason = (
                     effective_reason_codes[0]
                     if effective_reason_codes
@@ -765,6 +775,186 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _sync_terminal_branch_evidence(
+    branch: Branch,
+    *,
+    hypothesis: HypothesisProposal,
+    patch: PatchProposal | None,
+    protocol_result: Optional[ProtocolResult],
+    decision_reason_codes: Iterable[str] | None,
+) -> None:
+    """Keep abandoned branch rows useful when read without campaign_summary."""
+
+    reason_codes = tuple(
+        dict.fromkeys(
+            str(code).strip()
+            for code in (decision_reason_codes or ())
+            if str(code).strip()
+        )
+    )
+    branch.branch_mechanism_ids = _merge_mechanism_ids(
+        getattr(branch, "branch_mechanism_ids", ()) or (),
+        _proposal_mechanism_ids(hypothesis, patch),
+    )
+    feedback = None
+    if protocol_result is not None and _stage_value(protocol_result) == "screening":
+        feedback = screening_feedback_summary(
+            protocol_result,
+            decision_reason_codes=reason_codes,
+        )
+        _update_branch_screening_evidence_summary(
+            branch,
+            protocol_result=protocol_result,
+            screening_feedback=feedback,
+        )
+        branch.last_screening_feedback_tier = (
+            getattr(branch, "last_screening_feedback_tier", None)
+            or feedback.tier
+        )
+        branch.last_telemetry_outcome = (
+            getattr(branch, "last_telemetry_outcome", None)
+            or feedback.effect_status
+            or feedback.activation_status
+        )
+
+    prior_status = str(getattr(branch, "branch_code_status", "") or "")
+    if prior_status in {"", "clean"}:
+        branch.branch_code_status = _terminal_branch_code_status(
+            protocol_result,
+            reason_codes,
+        )
+
+    if reason_codes:
+        branch.failure_codes = list(
+            dict.fromkeys(
+                [
+                    *list(getattr(branch, "failure_codes", None) or ()),
+                    *reason_codes,
+                ]
+            )
+        )
+
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    if (
+        protocol_result is not None
+        and getattr(protocol_result, "stats", None) is not None
+    ):
+        _merge_protocol_evidence_summary(summary, protocol_result)
+    if feedback is not None:
+        summary.setdefault("tier", feedback.tier)
+        summary.setdefault("runtime_evidence_confidence", feedback.runtime_confidence)
+        summary.setdefault(
+            "phase_activation_summary",
+            {
+                "stage": "screening",
+                "activation_status": feedback.activation_status,
+                "effect_status": feedback.effect_status,
+                "opportunity_status": feedback.opportunity_status,
+                "telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
+            },
+        )
+    summary.update(
+        {
+            "terminal_status": BranchState.ABANDONED.value,
+            "terminal_reason": reason_codes[0] if reason_codes else "decision_abandon",
+            "terminal_reason_codes": list(reason_codes),
+            "decision_reason_codes": list(reason_codes),
+            "branch_code_status": getattr(branch, "branch_code_status", "clean"),
+            "mechanism_ids": list(getattr(branch, "branch_mechanism_ids", ()) or ()),
+        }
+    )
+    branch.branch_evidence_summary = summary
+
+    block = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    terminal_reason = (
+        block.get("reason")
+        or (reason_codes[0] if reason_codes else "decision_abandon")
+    )
+    block.update(
+        {
+            "reason": terminal_reason,
+            "terminal_status": BranchState.ABANDONED.value,
+            "terminal_reason_codes": list(reason_codes),
+            "decision_reason_codes": list(reason_codes),
+            "branch_code_status": getattr(branch, "branch_code_status", "clean"),
+            "mechanism_ids": list(getattr(branch, "branch_mechanism_ids", ()) or ()),
+        }
+    )
+    branch.last_branch_lifecycle_policy_block = block
+
+
+def _proposal_mechanism_ids(
+    hypothesis: HypothesisProposal,
+    patch: PatchProposal | None,
+) -> tuple[str, ...]:
+    ids: list[str] = []
+    ids.extend(mechanism_ids_for_repair(hypothesis))
+    ids.extend(mechanism_ids_for_repair(patch))
+    return tuple(dict.fromkeys(item for item in ids if item))
+
+
+def _stage_value(protocol_result: ProtocolResult) -> str:
+    stage = getattr(protocol_result, "stage", "")
+    return str(getattr(stage, "value", stage) or "")
+
+
+def _terminal_branch_code_status(
+    protocol_result: Optional[ProtocolResult],
+    reason_codes: tuple[str, ...],
+) -> str:
+    if _lifecycle_action(reason_codes) == "archive_lineage":
+        return "discarded"
+    if protocol_result is None or getattr(protocol_result, "stats", None) is None:
+        return "abandoned_terminal"
+    stats = protocol_result.stats
+    if (
+        int(getattr(stats, "losses", 0) or 0)
+        > int(getattr(stats, "wins", 0) or 0)
+        or float(getattr(stats, "median_delta", 0.0) or 0.0) < 0.0
+    ):
+        return "quality_regression"
+    return "discarded"
+
+
+def _merge_protocol_evidence_summary(
+    summary: dict,
+    protocol_result: ProtocolResult,
+) -> None:
+    stats = protocol_result.stats
+    summary.setdefault("stage", _stage_value(protocol_result))
+    summary.setdefault("tier", _terminal_evidence_tier(protocol_result))
+    for key, value in {
+        "wins": int(getattr(stats, "wins", 0) or 0),
+        "losses": int(getattr(stats, "losses", 0) or 0),
+        "ties": int(getattr(stats, "ties", 0) or 0),
+        "median_delta": getattr(stats, "median_delta", None),
+        "ci_low": getattr(stats, "ci_low", None),
+        "ci_high": getattr(stats, "ci_high", None),
+        "runtime_ratio_median": getattr(stats, "runtime_ratio_median", None),
+        "runtime_delta_median_ms": getattr(stats, "runtime_delta_median_ms", None),
+        "runtime_regression_rate": getattr(stats, "runtime_regression_rate", None),
+        "runtime_pairs": int(getattr(stats, "runtime_pairs", 0) or 0),
+    }.items():
+        if value is not None:
+            summary.setdefault(key, value)
+
+
+def _terminal_evidence_tier(protocol_result: ProtocolResult) -> str:
+    stats = protocol_result.stats
+    wins = int(getattr(stats, "wins", 0) or 0)
+    losses = int(getattr(stats, "losses", 0) or 0)
+    median_delta = float(getattr(stats, "median_delta", 0.0) or 0.0)
+    if losses > wins or median_delta < 0.0:
+        return "regression"
+    if wins > losses:
+        return (
+            "weak_positive"
+            if protocol_result.gate_outcome == "pass"
+            else "marginal"
+        )
+    return "no_effect" if wins == 0 and losses == 0 else "marginal"
 
 
 def _positive_low_signal_continue(

@@ -9,8 +9,20 @@ from pathlib import Path
 import pytest
 
 from scion.core.models import (
-    Branch, BranchState, ChampionState, HypothesisRecord, OperatorConfig,
+    Branch,
+    BranchState,
+    ChampionState,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    HypothesisRecord,
+    MechanismChange,
+    OperatorConfig,
+    PatchProposal,
+    ProtocolResult,
 )
+from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_ARCHIVE_LINEAGE
+from scion.core.decision_finalizer import _sync_terminal_branch_evidence
 from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.champion_store import ChampionStore
 from scion.lineage.registry import LineageRegistry
@@ -291,6 +303,87 @@ class TestBranchStore:
         assert loaded.blocked_rounds == 2
         assert loaded.consecutive_llm_retries == 1
         assert loaded.infra_block_count == 4
+
+    def test_terminal_branch_evidence_roundtrip_is_not_clean_empty(self, tmp_path):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        store = BranchStore(reg)
+        branch = _make_branch("br_terminal")
+        branch.state = BranchState.ABANDONED
+        hypothesis = HypothesisProposal(
+            hypothesis_text="Try a bounded generic search refinement.",
+            change_locus="generic_search",
+            action="modify",
+            mechanism_changes=(
+                MechanismChange(id="bounded_search_refine", change_type="modify"),
+            ),
+        )
+        patch = PatchProposal(
+            file_path="solver/generic.py",
+            action="modify",
+            code_content="",
+            mechanism_changes=(
+                MechanismChange(id="candidate_filter_probe", change_type="modify"),
+            ),
+        )
+        protocol = ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=4,
+                wins=0,
+                losses=3,
+                ties=1,
+                win_rate=0.0,
+                median_delta=-2.5,
+                ci_low=-4.0,
+                ci_high=-1.0,
+                runtime_ratio_median=1.2,
+                runtime_regression_rate=0.5,
+                runtime_pairs=4,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="",
+        )
+
+        _sync_terminal_branch_evidence(
+            branch,
+            hypothesis=hypothesis,
+            patch=patch,
+            protocol_result=protocol,
+            decision_reason_codes=(
+                "SCREENING_FAIL_WIN_RATE",
+                BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+            ),
+        )
+        store.save(branch)
+        loaded = store.load("br_terminal")
+
+        assert loaded is not None
+        assert loaded.state == BranchState.ABANDONED
+        assert loaded.branch_code_status != "clean"
+        assert loaded.branch_mechanism_ids == (
+            "bounded_search_refine",
+            "candidate_filter_probe",
+        )
+        assert loaded.failure_codes == [
+            "SCREENING_FAIL_WIN_RATE",
+            BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+        ]
+        evidence = loaded.branch_evidence_summary
+        assert evidence["terminal_status"] == "abandoned"
+        assert evidence["terminal_reason"] == "SCREENING_FAIL_WIN_RATE"
+        assert evidence["terminal_reason_codes"] == [
+            "SCREENING_FAIL_WIN_RATE",
+            BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+        ]
+        assert evidence["wins"] == 0
+        assert evidence["losses"] == 3
+        assert evidence["median_delta"] == -2.5
+        assert evidence["mechanism_ids"] == [
+            "bounded_search_refine",
+            "candidate_filter_probe",
+        ]
 
 
 # ---------------------------------------------------------------------------

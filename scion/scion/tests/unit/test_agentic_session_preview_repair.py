@@ -923,6 +923,43 @@ def test_contract_preview_session_timeout_is_budget_skip_not_runtime_exception(
     assert state.failure_ledger[-1]["failure_code"] == "session_timeout"
 
 
+def test_failure_ledger_long_detail_uses_structured_short_fields_without_ellipsis() -> None:
+    state = AgenticProposalSessionState(
+        session_id="session-long-detail",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+    )
+    detail = (
+        "C11_expected_telemetry: expected_call_pattern=context.record_phase; "
+        "preview_contract=missing activation field; "
+        "offending_field=solver_algorithm_phase_runtime_ms.generic_probe\n"
+        + "contract payload field=value " * 80
+    )
+
+    agentic_session_module._record_failure_ledger_entry(
+        state,
+        phase=AgenticProposalPhase.SELF_CHECK,
+        category=agentic_session_module.AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE,
+        detail=detail,
+        source="contract_preview",
+        failure_code="C11_expected_telemetry",
+        diagnostic_ref="artifacts/diagnostic.json",
+    )
+
+    entry = state.failure_ledger[-1]
+    assert "..." not in entry["detail"]
+    assert entry["detail_full"] == detail
+    assert entry["diagnostic_ref"] == "artifacts/diagnostic.json"
+    assert entry["failure_code"] == "C11_expected_telemetry"
+    short = entry["detail_short_fields"]
+    assert short["contract_codes"] == ["C11_expected_telemetry"]
+    assert short["key_values"]["expected_call_pattern"] == "context.record_phase"
+    assert short["key_values"]["offending_field"] == (
+        "solver_algorithm_phase_runtime_ms.generic_probe"
+    )
+    assert short["first_line_truncated"] is False
+
+
 def test_agentic_session_repairs_two_contract_preview_failures(
     tmp_path: Path,
 ) -> None:
