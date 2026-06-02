@@ -743,6 +743,18 @@ def _branch_continuation_schema_preview(
             "integrate. If proposing a different mechanism, request a clean "
             "branch/fork before generation."
         ),
+        "candidate_routing": (
+            "same_branch_refinement_only"
+            if allowed
+            else "new_mechanism_requires_clean_fork_signal"
+        ),
+        "proposal_failure_accounting": (
+            "not_a_code_or_screening_failure; treat as branch scheduling "
+            "signal when active clean-fork slots are available"
+            if not allowed
+            else "same_mechanism_refinement"
+        ),
+        "clean_fork_signal": not allowed,
         "allowed_repair_shape": {
             "mechanism_changes": [
                 {"id": mechanism_id, "change_type": "modify"}

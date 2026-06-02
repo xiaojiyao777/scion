@@ -117,10 +117,16 @@ def _agentic_research_context_block(
         parts.append(
             "## Hypothesis Target-Intent Preflight\n"
             "This tainted preflight summary is not a formal hypothesis and not "
-            "a Decision input. It tells you which target source or placeholder "
-            "the host exposed before this final hypothesis call. Treat later "
-            "schema, semantic, or grounding retry feedback as authoritative if "
-            "it conflicts with this advisory intent.\n\n"
+            "a Decision input. It is binding for this formal hypothesis call: "
+            "target_file, action, change_locus, and mechanism family or "
+            "mechanism continuation must stay consistent with the selected "
+            "intent because the host exposed owner source or a create-new "
+            "placeholder for that intent. Do not switch owners or mechanisms "
+            "inside the formal hypothesis. A different target requires a "
+            "host-controlled target-intent reselect flow before formal "
+            "hypothesis generation. Treat later schema, semantic, or grounding "
+            "retry feedback as authoritative only when it keeps or explicitly "
+            "repairs that same selected intent.\n\n"
             f"{_bounded_json(target_intent, 4000)}"
         )
     target_placeholder = context.get("agentic_hypothesis_target_placeholder")

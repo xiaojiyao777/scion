@@ -118,6 +118,16 @@ class TestLocusConstraintInPrompt:
 
 
 class TestHypothesisGroundingRequirements:
+    def test_problem_semantics_are_labeled_adapter_rendered(self):
+        ctx = _make_context(
+            problem_object="Adapter-owned object model.",
+            solver_mechanics="Adapter-owned solver mechanics.",
+        )
+        text = _system_text(ctx)
+
+        assert "Problem Object (Adapter-Rendered Problem Semantics)" in text
+        assert "Solver Execution Model (Adapter-Rendered Problem Semantics)" in text
+
     def test_hypothesis_prompt_requires_feedback_and_solver_fact_grounding(self):
         ctx = _make_context(
             runtime_feedback=(

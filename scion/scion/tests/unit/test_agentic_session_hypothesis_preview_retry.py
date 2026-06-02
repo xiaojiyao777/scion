@@ -11,6 +11,10 @@ from scion.core.models import (
 from scion.proposal.agentic_session_hypothesis import (
     _hypothesis_preview_retry_feedback,
 )
+from scion.proposal.engine import (
+    _split_hypothesis_context,
+    _split_hypothesis_target_intent_context,
+)
 from scion.proposal.agentic_utils import _json_ready
 from scion.tests.unit.agentic_session_test_support import *
 
@@ -259,6 +263,14 @@ def test_same_mechanism_schema_preview_retries_unrelated_mechanism_id(
     assert feedback["protected_mechanism_ids"] == [
         "adaptive_vns_operator_weights"
     ]
+    assert guard["candidate_routing"] == "new_mechanism_requires_clean_fork_signal"
+    assert guard["clean_fork_signal"] is True
+    assert "not_a_code_or_screening_failure" in guard["proposal_failure_accounting"]
+    assert feedback["candidate_routing"] == "new_mechanism_requires_clean_fork_signal"
+    assert feedback["clean_fork_signal"] is True
+    assert "not_a_code_or_screening_failure" in feedback[
+        "proposal_failure_accounting"
+    ]
     assert "clean branch/fork" in feedback["retry_constraint"]
     assert "unrelated_restart" in feedback["reason"]
 
@@ -368,6 +380,52 @@ def test_same_mechanism_preview_retry_happens_inside_proposal_session(
         event.metadata.get("failure_code") == "new_mechanism_requires_clean_fork"
         for event in output.transcript
     )
+
+
+def test_same_branch_target_intent_and_formal_prompts_route_new_mechanisms_to_clean_fork(
+) -> None:
+    branch_hygiene = (
+        "branch_followup_policy=same_mechanism_followup_only; "
+        "hypothesis_generation_mode=same_mechanism_only; "
+        "protected_mechanism_ids=protected_budget_policy; "
+        "same_mechanism_allowed_actions=tune, integrate, repair, parameterize, telemetry_wiring; "
+        "forbidden_mechanism_policy=no_unrelated_mechanism_ids; "
+        "clean_fork_policy=clean_fork_required_for_new_mechanism"
+    )
+    context = {
+        "problem_summary": "CVRP.",
+        "research_surfaces": "solver_design",
+        "champion_operators_code": "# code",
+        "champion_stats": "stats",
+        "active_problem_boundary_surfaces": "solver_design",
+        "targetable_files": "policies/baseline_modules/destroy_repair.py",
+        "branch_hygiene_guidance": branch_hygiene,
+        "branch_followup_policy": "same_mechanism_followup_only",
+        "agentic_hypothesis_target_intent": {
+            "intent": {
+                "change_locus": "solver_design",
+                "action": "modify",
+                "target_file": "policies/baseline_modules/destroy_repair.py",
+                "mechanism_id": "protected_budget_policy",
+                "mechanism_family": "protected_budget_policy",
+            }
+        },
+    }
+
+    target_blocks, target_user = _split_hypothesis_target_intent_context(context)
+    formal_blocks, formal_user = _split_hypothesis_context(context)
+    target_rendered = "\n".join(block["text"] for block in target_blocks) + target_user
+    formal_rendered = "\n".join(block["text"] for block in formal_blocks) + formal_user
+
+    for rendered in (target_rendered, formal_rendered):
+        assert "Same-Mechanism Follow-up Constraints" in rendered
+        assert "protected_mechanism_ids=protected_budget_policy" in rendered
+        assert "clean_fork_required_for_new_mechanism" in rendered
+        assert "A new or unrelated mechanism requires a clean branch or clean fork" in rendered
+    assert "same-mechanism only" in target_user
+    assert "clean branch/fork signal" in target_user
+    assert "Selected target-intent binding" in formal_user
+    assert "Set `target_file` to selected intent value" in formal_user
 
 
 def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(

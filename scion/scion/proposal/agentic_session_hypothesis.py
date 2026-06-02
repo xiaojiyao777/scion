@@ -14,6 +14,14 @@ from scion.proposal.session_trace_index import attach_agentic_trace_context
 from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.schemas import normalize_mechanism_changes_with_repair_attribution
 from scion.proposal.schemas import HypothesisTargetIntentInput
+from scion.proposal.target_intent_binding import (
+    formal_hypothesis_target_payload as _formal_hypothesis_target_payload,
+    formal_target_source_visibility_from_manifest as _formal_target_source_visibility_from_manifest,
+    selected_target_intent_payload as _selected_target_intent_payload,
+    target_intent_binding_retry_feedback as _target_intent_binding_retry_feedback,
+    target_intent_binding_retry_pending as _target_intent_binding_retry_pending,
+    target_intent_mechanism_family as _target_intent_mechanism_family,
+)
 from scion.runtime.telemetry_guard import expected_telemetry_template
 
 
@@ -275,6 +283,100 @@ class AgenticSessionHypothesisMixin:
                     )
                     return None, self._persist(output, state)
 
+                binding_feedback = _target_intent_binding_retry_feedback(
+                    target_intent,
+                    hypothesis,
+                    attempt=attempt,
+                    manifest=getattr(state, "_latest_hypothesis_prompt_manifest", None),
+                )
+                if binding_feedback is not None:
+                    binding_ref, binding_digest = (
+                        self._record_hypothesis_target_binding_audit(
+                            state,
+                            target_intent=target_intent,
+                            hypothesis=hypothesis,
+                            binding_status="mismatch",
+                            retry_reason=binding_feedback.get("reason"),
+                            attempt=attempt,
+                            status="retry"
+                            if len(preview_rejections)
+                            < _MAX_HYPOTHESIS_PREVIEW_RETRIES
+                            else "blocked",
+                            manifest=getattr(
+                                state,
+                                "_latest_hypothesis_prompt_manifest",
+                                None,
+                            ),
+                        )
+                    )
+                    feedback_ref, feedback_digest = (
+                        self._record_schema_retry_feedback_audit(
+                            state,
+                            binding_feedback,
+                            attempt=attempt,
+                        )
+                    )
+                    if len(preview_rejections) < _MAX_HYPOTHESIS_PREVIEW_RETRIES:
+                        preview_rejections.append(binding_feedback)
+                        state.note(
+                            AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                            "Formal hypothesis did not bind to the selected target intent; retrying under the same selected intent.",
+                            metadata={
+                                "attempt": attempt,
+                                "failure_code": binding_feedback.get("failure_code"),
+                                "binding_status": "mismatch",
+                                "selected_target_intent": binding_feedback.get(
+                                    "selected_target_intent"
+                                ),
+                                "formal_hypothesis_target": binding_feedback.get(
+                                    "formal_hypothesis_target"
+                                ),
+                                "binding_audit_ref": binding_ref,
+                                "binding_audit_digest": binding_digest,
+                                "schema_retry_feedback_ref": feedback_ref,
+                                "schema_retry_feedback_digest": feedback_digest,
+                            },
+                        )
+                        continue
+
+                    detail = str(binding_feedback.get("reason") or "").strip()
+                    _record_failure_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                        category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                        detail=detail,
+                        source="hypothesis_target_intent_binding_gate",
+                        attempt=attempt,
+                        failure_code="target_intent_binding_mismatch",
+                        diagnostic_payload=binding_feedback,
+                        diagnostic_ref=feedback_ref,
+                    )
+                    output = self._failed_output(
+                        request=request,
+                        session_id=session_id,
+                        status=AgenticProposalStatus.FAILED,
+                        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                        detail=detail,
+                        evidence_used=tuple(evidence),
+                        failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Session failed closed because formal hypothesis target/action did not bind to the selected target intent.",
+                        metadata={
+                            "detail": detail,
+                            "attempt": attempt,
+                            "failure_code": "target_intent_binding_mismatch",
+                            "binding_status": "mismatch",
+                            "binding_audit_ref": binding_ref,
+                            "binding_audit_digest": binding_digest,
+                            "schema_retry_feedback_ref": feedback_ref,
+                            "schema_retry_feedback_digest": feedback_digest,
+                        },
+                    )
+                    return None, self._persist(output, state)
+
                 preview_preservation_count = len(preview_rejections)
                 preview_preservation_output = (
                     self._hypothesis_preview_preservation_drift_or_retry(
@@ -344,6 +446,21 @@ class AgenticSessionHypothesisMixin:
                     return None, preview_output
                 if len(preview_rejections) > preview_feedback_count:
                     continue
+                if target_intent is not None:
+                    self._record_hypothesis_target_binding_audit(
+                        state,
+                        target_intent=target_intent,
+                        hypothesis=hypothesis,
+                        binding_status="bound",
+                        retry_reason="",
+                        attempt=attempt,
+                        status="succeeded",
+                        manifest=getattr(
+                            state,
+                            "_latest_hypothesis_prompt_manifest",
+                            None,
+                        ),
+                    )
                 return hypothesis, None
             return None, None
 
@@ -577,6 +694,58 @@ class AgenticSessionHypothesisMixin:
                 state.scratch_artifact_refs.append(artifact_ref)
             return artifact_ref, digest
 
+    def _record_hypothesis_target_binding_audit(
+            self,
+            state: AgenticProposalSessionState,
+            *,
+            target_intent: Mapping[str, Any] | None,
+            hypothesis: HypothesisProposal,
+            binding_status: str,
+            retry_reason: Any,
+            attempt: int,
+            status: str,
+            manifest: Mapping[str, Any] | None,
+        ) -> tuple[str | None, str]:
+            selected_intent = _selected_target_intent_payload(target_intent)
+            payload = {
+                "schema_version": "hypothesis-target-intent-binding.v1",
+                "artifact_kind": "hypothesis_target_intent_binding",
+                "call_kind": "hypothesis",
+                "session_id": state.session_id,
+                "attempt": attempt,
+                "status": status,
+                "binding_status": binding_status,
+                "retry_reason": str(retry_reason or ""),
+                "tainted": True,
+                "decision_input": False,
+                "selected_target_intent": _sanitize_agentic_value(selected_intent),
+                "formal_hypothesis_target": _sanitize_agentic_value(
+                    _formal_hypothesis_target_payload(hypothesis)
+                ),
+                "formal_target_source_visibility_ledger": _sanitize_agentic_value(
+                    _formal_target_source_visibility_from_manifest(
+                        manifest,
+                        hypothesis,
+                    )
+                ),
+                "trace_policy": (
+                    "Proposal-layer audit of whether the final formal "
+                    "hypothesis stayed bound to the selected target-intent "
+                    "preflight. The source-visibility ledger is keyed by the "
+                    "formal hypothesis target_file, not by the preflight owner."
+                ),
+            }
+            digest = stable_digest(payload, length=64)
+            artifact_ref: str | None = None
+            if self._artifact_store is not None:
+                artifact_ref = self._artifact_store.write_scratch(
+                    state.session_id,
+                    f"hypothesis_target_intent_binding_{attempt:04d}.json",
+                    payload,
+                )
+                state.scratch_artifact_refs.append(artifact_ref)
+            return artifact_ref, digest
+
     def _hypothesis_preview_preservation_drift_or_retry(
             self,
             *,
@@ -723,6 +892,18 @@ class AgenticSessionHypothesisMixin:
                         "for that same hypothesis; do not explore, rename, or "
                         "choose a different mechanism."
                     )
+                elif _target_intent_binding_retry_pending(preview_rejections):
+                    hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
+                        "TARGET-INTENT BINDING RETRY. The selected "
+                        "hypothesis_target_intent is binding for this final "
+                        "formal hypothesis call. Rewrite under the same "
+                        "selected intent: preserve change_locus, action, "
+                        "target_file, and mechanism family/continuation from "
+                        "selected_target_intent. Do not switch owners or "
+                        "mechanisms. A different target requires a host-owned "
+                        "target-intent reselect flow before formal hypothesis "
+                        "generation."
+                    )
                 elif _same_mechanism_preview_retry_pending(preview_rejections):
                     hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
                         "SAME-MECHANISM BRANCH RETRY. The selected branch is "
@@ -732,7 +913,10 @@ class AgenticSessionHypothesisMixin:
                         "integrate, repair, parameterize, or telemetry wiring "
                         "inside the protected mechanism. A genuinely different "
                         "mechanism requires a clean branch/fork before "
-                        "hypothesis generation."
+                        "hypothesis generation; when active clean-fork slots "
+                        "are available, treat the new-mechanism idea as a "
+                        "branch-routing signal rather than burning this "
+                        "same-branch formal proposal."
                     )
                 else:
                     hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
@@ -1694,6 +1878,11 @@ def _same_mechanism_preview_retry_feedback(
             ),
             "allowed_actions": allowed_actions,
             "allowed_repair_shape": guard.get("allowed_repair_shape"),
+            "candidate_routing": guard.get("candidate_routing"),
+            "proposal_failure_accounting": guard.get(
+                "proposal_failure_accounting"
+            ),
+            "clean_fork_signal": guard.get("clean_fork_signal"),
             "protected_identity": {
                 "protected_mechanism_ids": protected_ids,
                 "allowed_mechanism_ids": allowed_ids,
@@ -1708,7 +1897,8 @@ def _same_mechanism_preview_retry_feedback(
                 "keep the work to tune, integrate, repair, parameterize, or "
                 "telemetry wiring within that protected mechanism. If the "
                 "intended idea is a new mechanism, stop this branch attempt "
-                "and use a clean branch/fork before generation."
+                "and use a clean branch/fork before generation. Treat that as "
+                "a branch-routing signal, not as a code or screening failure."
             ),
         }
     )
@@ -2552,6 +2742,11 @@ def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
     validated = HypothesisTargetIntentInput(**payload)
     change_locus = str(validated.change_locus or validated.surface or "").strip()
     action = _normalize_target_intent_action(validated.action)
+    mechanism_family, mechanism_family_status = _target_intent_mechanism_family(
+        mechanism_family=validated.mechanism_family,
+        mechanism_id=validated.mechanism_id,
+        mechanism_sketch=validated.mechanism_sketch,
+    )
     return _drop_empty_dict(
         {
             "change_locus": change_locus,
@@ -2559,7 +2754,8 @@ def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
             "action": action,
             "target_file": _normalize_prompt_grounding_path(validated.target_file),
             "mechanism_id": validated.mechanism_id,
-            "mechanism_family": validated.mechanism_family,
+            "mechanism_family": mechanism_family,
+            "mechanism_family_status": mechanism_family_status,
             "mechanism_sketch": validated.mechanism_sketch,
             "confidence": validated.confidence,
             "notes": validated.notes,

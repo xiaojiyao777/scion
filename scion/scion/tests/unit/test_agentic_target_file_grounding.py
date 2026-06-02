@@ -12,6 +12,7 @@ from scion.proposal.agentic_session_hypothesis import (
 )
 from scion.proposal.agentic_observation_ledger.payloads import read_receipt_from_entry
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
+from scion.proposal.target_intent_binding import target_intent_binding_retry_feedback
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -163,6 +164,125 @@ def _target_intent_artifacts(output: AgenticProposalOutput) -> list[dict]:
         for payload in payloads
         if payload.get("artifact_kind") == "hypothesis_target_intent"
     ]
+
+
+def _target_binding_artifacts(output: AgenticProposalOutput) -> list[dict]:
+    return [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "hypothesis_target_intent_binding" in str(ref)
+    ]
+
+
+def test_target_intent_mismatch_retries_then_blocks_before_code(
+    tmp_path: Path,
+) -> None:
+    selected_target = "policies/baseline_modules/local_search.py"
+    formal_target = "policies/baseline_modules/destroy_repair.py"
+    bad = _solver_design_file_hypothesis(
+        target_file=formal_target,
+        mechanism_id="cvrp_route_count_aware_repair",
+        text="Modify destroy_repair.py despite the selected local_search intent.",
+    )
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": selected_target,
+            "mechanism_id": "cvrp.local_search.route_merge_savings",
+            "mechanism_sketch": "Refine route merge savings in local_search.py.",
+            "confidence": 0.72,
+        },
+        hypotheses=[bad, bad],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-target-intent-mismatch"
+    )
+    code_context_calls: list[HypothesisProposal] = []
+
+    def build_code_context(hypothesis: HypothesisProposal) -> dict:
+        code_context_calls.append(hypothesis)
+        return {"kind": "code"}
+
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-intent-mismatch",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "target-intent-mismatch"},
+            build_code_context=build_code_context,
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(passed=True),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert (
+        output.termination_reason
+        == AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED
+    )
+    assert code_context_calls == []
+    assert len(creative.hypothesis_contexts) == 2
+    retry_context = creative.hypothesis_contexts[1]
+    retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
+    assert retry_feedback["failure_code"] == "target_intent_binding_mismatch"
+    assert retry_feedback["binding_status"] == "mismatch"
+    assert retry_feedback["selected_target_intent"]["target_file"] == selected_target
+    assert retry_feedback["formal_hypothesis_target"]["target_file"] == formal_target
+    assert "TARGET-INTENT BINDING RETRY" in retry_context[
+        "agentic_hypothesis_preview_retry_rule"
+    ]
+
+    binding_artifacts = _target_binding_artifacts(output)
+    assert [artifact["status"] for artifact in binding_artifacts] == [
+        "retry",
+        "blocked",
+    ]
+    blocked = binding_artifacts[-1]
+    assert blocked["binding_status"] == "mismatch"
+    assert blocked["selected_target_intent"]["target_file"] == selected_target
+    assert blocked["formal_hypothesis_target"]["target_file"] == formal_target
+    formal_ledger = blocked["formal_target_source_visibility_ledger"]
+    assert formal_ledger["formal_target"]["target_file"] == formal_target
+    assert formal_ledger["owner_source"]["file_path"] == formal_target
+    assert formal_ledger["source_of_truth"] == (
+        "formal_hypothesis_target_file; not preflight target intent"
+    )
+    assert "target_intent_binding_mismatch" in output.failure_detail
+
+
+def test_target_intent_binding_allows_same_mechanism_refinement_suffix() -> None:
+    hypothesis = _solver_design_file_hypothesis(
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_id="cvrp_route_count_aware_repair_quality_guard",
+        text="Refine the selected route-count-aware repair with a quality guard.",
+    )
+    feedback = target_intent_binding_retry_feedback(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/destroy_repair.py",
+            "mechanism_id": "cvrp_route_count_aware_repair",
+            "mechanism_family": "route_count_aware_repair",
+        },
+        hypothesis,
+        attempt=1,
+        manifest=None,
+    )
+
+    assert feedback is None
 
 
 def test_solver_design_existing_target_file_is_visible_before_first_hypothesis(
@@ -451,6 +571,21 @@ def test_target_intent_preflight_grounds_non_top_existing_target_before_first_hy
     assert intent_artifacts[0]["call_kind"] == "hypothesis_target_intent"
     assert intent_artifacts[0]["formal_proposal"] is False
     assert intent_artifacts[0]["intent"]["intent"]["target_file"] == target_file
+    assert intent_artifacts[0]["intent"]["intent"]["mechanism_family_status"] == (
+        "fallback_from_mechanism_id"
+    )
+    assert intent_artifacts[0]["intent"]["intent"]["mechanism_family"]
+    binding_artifacts = _target_binding_artifacts(output)
+    assert len(binding_artifacts) == 1
+    binding = binding_artifacts[0]
+    assert binding["status"] == "succeeded"
+    assert binding["binding_status"] == "bound"
+    assert binding["selected_target_intent"]["target_file"] == target_file
+    assert binding["formal_hypothesis_target"]["target_file"] == target_file
+    formal_ledger = binding["formal_target_source_visibility_ledger"]
+    assert formal_ledger["formal_target"]["target_file"] == target_file
+    assert formal_ledger["owner_source"]["file_path"] == target_file
+    assert formal_ledger["visibility_status"] == "full_dedicated_source_visible"
 
 
 def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded(
@@ -1353,6 +1488,65 @@ def test_prompt_manifest_marks_algorithm_slice_content_visible() -> None:
     assert included["prompt_visibility_status"] == (
         "full_content_visible_in_rendered_prompt"
     )
+
+
+def test_prompt_manifest_distinguishes_bounded_tool_projection_from_section_truncation(
+) -> None:
+    slice_content = "def bounded_scheduler_slice():\n    return 11\n"
+    observation = _algorithm_read_observation(
+        "context.read_algorithm_slice",
+        {
+            "available": True,
+            "slice_id": "cvrp.slice.scheduler.solve",
+            "file_path": "policies/baseline_modules/scheduler.py",
+            "symbols": ["solve"],
+            "content": slice_content,
+            "content_digest": "scheduler-slice-digest",
+            "truncated": True,
+            "max_chars": 6000,
+            "size_chars": 12000,
+        },
+    )
+    user_prompt = (
+        "## Agentic Proposal Tool Observations\n"
+        + json.dumps(
+            [
+                {
+                    "observation_id": observation.observation_id,
+                    "tool_name": observation.tool_name,
+                    "slice_id": "cvrp.slice.scheduler.solve",
+                    "content_preview": slice_content,
+                }
+            ]
+        )
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="bounded-projection",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[observation],
+        call_index=1,
+        system_blocks=[],
+        user_prompt=user_prompt,
+    )
+
+    assert manifest["truncated_sections"] == []
+    assert manifest["prompt_section_truncation_count"] == 0
+    assert manifest["bounded_tool_projection_count"] == 1
+    diagnostics = manifest["projection_diagnostics"]
+    assert diagnostics["prompt_section_truncation_count"] == 0
+    assert diagnostics["bounded_tool_projection_count"] == 1
+    bounded = diagnostics["bounded_tool_projections"][0]
+    assert bounded["projection_kind"] == "bounded_tool_projection"
+    assert bounded["truncation_scope"] == "tool_result_payload_projection"
+    assert bounded["prompt_section_truncation"] is False
+    ledger_item = manifest["tool_result_visibility_ledger"][0]
+    assert ledger_item["projection_kind"] == "bounded_tool_projection"
+    assert ledger_item["truncation_scope"] == "tool_result_payload_projection"
+    assert ledger_item["prompt_section_truncation"] is False
+    assert "not prompt section truncation" in ledger_item["projection_reason"]
 
 
 def test_prompt_manifest_writes_compact_explicit_visibility_ledger() -> None:

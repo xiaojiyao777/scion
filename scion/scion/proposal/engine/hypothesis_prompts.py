@@ -25,11 +25,15 @@ def _split_hypothesis_context(
     solver_mechanics = str(D["solver_mechanics"]).strip()
     problem_object = str(D["problem_object"]).strip()
     problem_object_text = (
-        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+        f"## Problem Object (Adapter-Rendered Problem Semantics)\n"
+        f"{problem_object}\n\n"
+        if problem_object
+        else ""
     )
     if solver_mechanics:
         solver_mechanics_text = (
-            f"## Solver Execution Model\n{solver_mechanics}\n\n"
+            f"## Solver Execution Model (Adapter-Rendered Problem Semantics)\n"
+            f"{solver_mechanics}\n\n"
             f"Design implications for new research-surface changes:\n"
             f"- Follow the problem-specific execution model above; do not assume a fixed invocation count.\n"
             f"- Operator surfaces MUST preserve feasibility and the adapter-defined solution contract.\n"
@@ -38,7 +42,7 @@ def _split_hypothesis_context(
         )
     else:
         solver_mechanics_text = (
-            "## Solver Execution Model\n"
+            "## Solver Execution Model (Adapter-Rendered Problem Semantics)\n"
             "The exact operator execution model is problem-specific. Use the problem summary, "
             "operator interface, current champion code, and runtime feedback as the source of truth.\n\n"
             "Design implications for new research-surface changes:\n"
@@ -225,7 +229,10 @@ def _split_hypothesis_target_intent_context(
     solver_mechanics = str(D["solver_mechanics"]).strip()
     problem_object = str(D["problem_object"]).strip()
     problem_object_text = (
-        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+        f"## Problem Object (Adapter-Rendered Problem Semantics)\n"
+        f"{problem_object}\n\n"
+        if problem_object
+        else ""
     )
     static_text = (
         "You are a target-intent preflight worker for a governed research "
@@ -239,7 +246,7 @@ def _split_hypothesis_target_intent_context(
         f"{problem_object_text}"
         f"{D['research_surfaces']}\n\n"
         f"{D['objective_policy_guidance']}\n\n"
-        f"## Solver Execution Model\n"
+        f"## Solver Execution Model (Adapter-Rendered Problem Semantics)\n"
         f"{solver_mechanics if solver_mechanics else 'Use the declared problem and surface context as the source of truth.'}"
     )
     champion_text = (
@@ -250,7 +257,11 @@ def _split_hypothesis_target_intent_context(
         f"## Champion State\n{D['champion_stats']}"
     )
     branch_context_parts = []
+    same_mechanism_constraints = _same_mechanism_followup_constraints(D)
+    if same_mechanism_constraints:
+        branch_context_parts.append(same_mechanism_constraints)
     for key, title in (
+        ("branch_hygiene_guidance", "Branch Same-Mechanism / Clean-Fork Guidance"),
         ("branch_followup_policy", "Branch Follow-up Policy"),
         ("branch_dossier", "Branch Dossier"),
         ("experiment_history", "Experiment History"),
@@ -315,6 +326,11 @@ def _split_hypothesis_target_intent_context(
         "Choose the likely target intent for the next formal hypothesis.",
         "Return only structured fields. Do not include final hypothesis prose.",
         "Use action `modify` or `remove` for an existing target; use `create_new` for a new target.",
+        (
+            "The selected intent will bind the following formal hypothesis: "
+            "target_file, action, change_locus, and mechanism family or "
+            "mechanism continuation must stay consistent after preflight."
+        ),
     ]
     if forced_surface:
         task_lines.append(f"Set `change_locus` exactly to `{forced_surface}`.")
@@ -328,6 +344,14 @@ def _split_hypothesis_target_intent_context(
         task_lines.append(
             "For existing targets, choose `target_file` from declared active "
             f"boundary files when applicable: {targetable_files}."
+        )
+    if same_mechanism_constraints:
+        task_lines.append(
+            "Same-branch refinement is same-mechanism only. Select a target "
+            "intent for the protected mechanism. If the best idea is a new or "
+            "unrelated mechanism, do not force it into this same-branch formal "
+            "hypothesis; it requires a clean branch/fork signal before formal "
+            "hypothesis generation."
         )
     user_prompt = (
         f"{dynamic_agentic_context + chr(10) + chr(10) if dynamic_agentic_context else ''}"
@@ -457,6 +481,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         raw_novelty_requirements = constraints.get("novelty_signature_requirements")
         if isinstance(raw_novelty_requirements, Mapping):
             novelty_requirements = raw_novelty_requirements
+    target_intent_lines = _target_intent_binding_task_lines(context)
     if forced_surface:
         lines = [
             "## Task",
@@ -482,6 +507,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 'If the forced action is "modify" or "remove", provide a '
                 "target_file declared by the forced surface."
             )
+        lines.extend(target_intent_lines)
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     if active_boundary:
@@ -505,6 +531,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 'If action is "modify" or "remove", provide `target_file` '
                 f"from the active boundary files: {targetable_files}."
             )
+        lines.extend(target_intent_lines)
         if "solver_design" in active_boundary:
             lines.extend(_solver_design_hypothesis_guidance(context))
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
@@ -514,14 +541,55 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         context.get("available_actions") or "create_new, modify, remove"
     )
     targetable_files = str(context.get("targetable_files") or "")
-    return (
-        "## Task\n"
-        "Propose ONE new hypothesis for improving the solver.\n"
-        f"Choose a research surface from {operator_categories} as `change_locus`.\n"
-        f"Set `action` to one of: {available_actions}.\n"
-        'If action is "modify" or "remove", provide `target_file` from '
-        f"the targetable files when available: {targetable_files}.\n"
+    lines = [
+        "## Task",
+        "Propose ONE new hypothesis for improving the solver.",
+        f"Choose a research surface from {operator_categories} as `change_locus`.",
+        f"Set `action` to one of: {available_actions}.",
+        (
+            'If action is "modify" or "remove", provide `target_file` from '
+            f"the targetable files when available: {targetable_files}."
+        ),
+    ]
+    lines.extend(target_intent_lines)
+    return "\n".join(lines) + "\n"
+
+
+def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
+    raw_intent = context.get("agentic_hypothesis_target_intent")
+    if not isinstance(raw_intent, Mapping):
+        return []
+    intent_value = raw_intent.get("intent")
+    intent = intent_value if isinstance(intent_value, Mapping) else raw_intent
+    change_locus = str(intent.get("change_locus") or intent.get("surface") or "").strip()
+    action = str(intent.get("action") or "").strip()
+    target_file = str(intent.get("target_file") or "").strip()
+    mechanism_family = str(intent.get("mechanism_family") or "").strip()
+    mechanism_id = str(intent.get("mechanism_id") or "").strip()
+    lines = [
+        "Selected target-intent binding: this formal hypothesis must keep "
+        "`change_locus`, `action`, `target_file`, and mechanism family or "
+        "mechanism continuation consistent with the host-selected intent."
+    ]
+    if change_locus:
+        lines.append(f"Set `change_locus` to selected intent value `{change_locus}`.")
+    if action:
+        lines.append(f"Set `action` to selected intent value `{action}`.")
+    if target_file:
+        lines.append(f"Set `target_file` to selected intent value `{target_file}`.")
+    if mechanism_id or mechanism_family:
+        lines.append(
+            "Use mechanism_changes / novelty_signature that continue selected "
+            f"mechanism_id `{mechanism_id or '<none>'}` or mechanism_family "
+            f"`{mechanism_family or '<none>'}`; do not switch to a different "
+            "mechanism in the formal hypothesis."
+        )
+    lines.append(
+        "If the intended formal hypothesis needs a different target or "
+        "mechanism, stop and require a host-controlled target-intent reselect "
+        "before formal hypothesis generation."
     )
+    return lines
 
 
 def _novelty_signature_task_lines(

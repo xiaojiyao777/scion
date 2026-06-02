@@ -153,6 +153,10 @@ def build_api_visible_prompt_manifest(
         included_observations=included_observations,
         code_file_visibility_ledger=code_file_visibility_ledger,
     )
+    projection_diagnostics = _projection_diagnostics(
+        section_records=section_records,
+        included_observations=included_observations,
+    )
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "artifact_kind": "api_visible_prompt_manifest",
@@ -232,6 +236,13 @@ def build_api_visible_prompt_manifest(
             "status_counts": dict(visibility_ledger["status_counts"]),
             "ledger_digest": stable_digest(visibility_ledger, length=16),
         },
+        "projection_diagnostics": projection_diagnostics,
+        "bounded_tool_projection_count": projection_diagnostics[
+            "bounded_tool_projection_count"
+        ],
+        "prompt_section_truncation_count": projection_diagnostics[
+            "prompt_section_truncation_count"
+        ],
         "omitted_sections": [
             record["name"] for record in section_records if record["omitted"]
         ],
@@ -756,6 +767,7 @@ def _tool_result_visibility_ledger(
 ) -> list[dict[str, Any]]:
     ledger: list[dict[str, Any]] = []
     for item in included_observations:
+        bounded_projection = _is_bounded_tool_projection(item)
         ledger.append(
             {
                 "observation_id": item.get("observation_id"),
@@ -777,6 +789,24 @@ def _tool_result_visibility_ledger(
                 "truncated": item.get("truncated")
                 if item.get("truncated") is not None
                 else item.get("payload_truncated"),
+                "projection_kind": (
+                    "bounded_tool_projection"
+                    if bounded_projection
+                    else "full_or_summary_tool_projection"
+                ),
+                "truncation_scope": (
+                    "tool_result_payload_projection"
+                    if bounded_projection
+                    else ""
+                ),
+                "prompt_section_truncation": False,
+                "projection_reason": (
+                    "Tool payload/content was bounded before rendering; this "
+                    "is not prompt section truncation. See truncated_sections "
+                    "for provider-visible prompt section truncation."
+                    if bounded_projection
+                    else ""
+                ),
                 "omitted": bool(item.get("omitted_from_rendered_prompt")),
                 "omitted_reason": item.get("omitted_reason", ""),
                 "content_projection_count": item.get("content_projection_count", 0),
@@ -861,6 +891,7 @@ def _tool_visibility_ledger_entry(item: Mapping[str, Any]) -> dict[str, Any]:
         else section_name
     )
     observation_id = str(item.get("observation_id") or "")
+    bounded_projection = _is_bounded_tool_projection(item)
     return _drop_empty(
         {
             "entry_kind": "tool_result",
@@ -891,6 +922,17 @@ def _tool_visibility_ledger_entry(item: Mapping[str, Any]) -> dict[str, Any]:
             "visible_content_projection_count": item.get(
                 "visible_content_projection_count", 0
             ),
+            "projection_kind": (
+                "bounded_tool_projection"
+                if bounded_projection
+                else "full_or_summary_tool_projection"
+            ),
+            "truncation_scope": (
+                "tool_result_payload_projection"
+                if bounded_projection
+                else ""
+            ),
+            "prompt_section_truncation": False,
         }
     )
 
@@ -955,6 +997,61 @@ def _tool_compact_visibility_status(item: Mapping[str, Any]) -> str:
     if item.get("content_preview_visible_in_rendered_prompt"):
         return "summary"
     return "summary"
+
+
+def _projection_diagnostics(
+    *,
+    section_records: list[Mapping[str, Any]],
+    included_observations: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    truncated_sections = [
+        str(record.get("name") or "")
+        for record in section_records
+        if record.get("truncated")
+    ]
+    bounded_tool_projections = [
+        _drop_empty(
+            {
+                "observation_id": item.get("observation_id"),
+                "tool_name": item.get("tool_name"),
+                "file_path": item.get("file_path"),
+                "target_file": item.get("target_file"),
+                "slice_id": item.get("slice_id"),
+                "projection_kind": "bounded_tool_projection",
+                "truncation_scope": "tool_result_payload_projection",
+                "prompt_section_truncation": False,
+                "reason": (
+                    "Tool result payload/content was bounded before rendering; "
+                    "this does not mean the API-visible prompt section was "
+                    "truncated."
+                ),
+            }
+        )
+        for item in included_observations
+        if _is_bounded_tool_projection(item)
+    ]
+    return {
+        "schema_version": "prompt-projection-diagnostics.v1",
+        "prompt_section_truncation_count": len(truncated_sections),
+        "truncated_sections": truncated_sections,
+        "bounded_tool_projection_count": len(bounded_tool_projections),
+        "bounded_tool_projections": bounded_tool_projections,
+        "interpretation": (
+            "truncated_sections reports provider-visible prompt section "
+            "truncation. bounded_tool_projections reports tool payloads that "
+            "were intentionally projected under a content budget before being "
+            "rendered; those are not prompt section truncations."
+        ),
+    }
+
+
+def _is_bounded_tool_projection(item: Mapping[str, Any]) -> bool:
+    if item.get("truncated") is True or item.get("payload_truncated") is True:
+        return True
+    for projection in item.get("content_projections") or ():
+        if isinstance(projection, Mapping) and projection.get("full_content_included") is False:
+            return True
+    return False
 
 
 def _code_file_compact_visibility_status(record: Mapping[str, Any]) -> str:

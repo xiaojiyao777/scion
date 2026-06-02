@@ -49,11 +49,13 @@ def _split_tool_selection_context(
         )
     if stable_context:
         stable_parts.append(
-            "## Stable Tool Selection Context\n"
+            "## Stable Tool Selection Context (Adapter/Provider-Rendered Anchors)\n"
             "These fields are stable for this proposal phase and are cached so "
             "repeated tool planning calls do not resend unchanged research-object "
-            "facts. Dynamic observations and remaining budgets are in the user "
-            "message below.\n"
+            "facts. Problem-object semantics in this block come from "
+            "problem-owned adapters/providers; generic Scion only carries the "
+            "audited anchors and cache boundary. Dynamic observations and "
+            "remaining budgets are in the user message below.\n"
             f"{json.dumps(stable_context, indent=2, sort_keys=True, default=str)}"
         )
     system_blocks = [
