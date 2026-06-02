@@ -96,6 +96,7 @@ class SafeFeatureExtractor:
         runtime_regression_rate: Optional[float] = None
         runtime_pairs = 0
         runtime_evidence_confidence = "high"
+        runtime_evidence_status = "sufficient"
         protocol_gate_outcome = None
         total_pairs = 0
         attempted_pairs = 0
@@ -128,6 +129,10 @@ class SafeFeatureExtractor:
             runtime_delta_median_ms = stats.runtime_delta_median_ms
             runtime_regression_rate = stats.runtime_regression_rate
             runtime_pairs = stats.runtime_pairs
+            runtime_evidence_status = str(
+                getattr(stats, "runtime_evidence_status", "sufficient")
+                or "sufficient"
+            )
             runtime_evidence_confidence = runtime_confidence_for_protocol(
                 protocol,
                 runtime_ratio=runtime_ratio_median,
@@ -189,6 +194,7 @@ class SafeFeatureExtractor:
             runtime_regression_rate=runtime_regression_rate,
             runtime_pairs=runtime_pairs,
             runtime_evidence_confidence=runtime_evidence_confidence,
+            runtime_evidence_status=runtime_evidence_status,
             protocol_gate_outcome=protocol_gate_outcome,  # type: ignore[arg-type]
             total_pairs=total_pairs,
             attempted_pairs=attempted_pairs,
@@ -288,6 +294,12 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         raise DecisionInputGuardError(
             "runtime_evidence_confidence must be an enum-like id, not free text: "
             f"{features.runtime_evidence_confidence!r}"
+        )
+    runtime_status = str(features.runtime_evidence_status or "")
+    if runtime_status and not _RUNTIME_CONFIDENCE_RE.fullmatch(runtime_status):
+        raise DecisionInputGuardError(
+            "runtime_evidence_status must be an enum-like id, not free text: "
+            f"{features.runtime_evidence_status!r}"
         )
     for field_name in (
         "total_pairs",

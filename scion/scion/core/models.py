@@ -230,6 +230,12 @@ class EvalStats:
     failed_pairs: int = 0
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
+    champion_cached_runtime_pairs: int = 0
+    runtime_evidence_status: Literal[
+        "sufficient",
+        "insufficient",
+        "fresh_champion_required",
+    ] = "sufficient"
 
 @dataclass(frozen=True)
 class ProtocolResult:
@@ -247,6 +253,7 @@ class ProtocolResult:
     pattern_summary: Optional["ScreeningPatternSummary"] = None
     selected_surface: Optional[str] = None
     candidate_surface_runtime_summary: Dict[str, Any] = field(default_factory=dict)
+    candidate_phase_telemetry_summary: Dict[str, Any] = field(default_factory=dict)
     candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
     candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
     candidate_operator_attempts: int = 0
@@ -261,6 +268,7 @@ class ProtocolResult:
     champion_cache_misses: int = 0
     champion_cached_runtime_pairs: int = 0
     runtime_confidence: str = "high"
+    runtime_evidence_status: str = "sufficient"
     opportunity_status: str = "unknown"
     opportunity_diagnostics: Tuple[str, ...] = ()
     mechanism_evidence: Dict[str, Any] = field(default_factory=dict)
@@ -404,6 +412,7 @@ class DecisionFeatures:
     runtime_regression_rate: Optional[float] = None
     runtime_pairs: int = 0
     runtime_evidence_confidence: str = "high"
+    runtime_evidence_status: str = "sufficient"
     protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
     total_pairs: int = 0
     attempted_pairs: int = 0

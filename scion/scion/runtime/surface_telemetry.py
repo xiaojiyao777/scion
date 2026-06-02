@@ -64,6 +64,7 @@ def declared_surface_telemetry_fields(
         "optional_runtime_fields",
         "activity_runtime_fields",
         "effect_probe_runtime_fields",
+        "phase_runtime_fields",
         "stage_budget_runtime_fields",
     ):
         fields.update(_string_list(_field(evidence, name)))
@@ -189,6 +190,48 @@ def declared_stop_reason_fields(
         for field in sorted(fields)
         if str(field or "").strip().replace(".", "_").endswith("stop_reason")
     )
+
+
+def declared_phase_runtime_fields(
+    surface: Any | None,
+    *,
+    problem_spec: Any | None = None,
+) -> tuple[str, ...]:
+    """Return adapter-declared runtime fields that carry phase/bucket timings."""
+
+    evidence = _field(surface, "evidence")
+    fields: list[str] = []
+    fields.extend(_string_list(_field(evidence, "phase_runtime_fields")))
+    fields.extend(
+        field
+        for field in declared_surface_telemetry_fields(
+            surface,
+            problem_spec=problem_spec,
+        )
+        if str(field or "").strip().replace(".", "_").endswith("phase_runtime_ms")
+    )
+    return tuple(dict.fromkeys(field for field in fields if _is_concrete_runtime_field(field)))
+
+
+def declared_phase_telemetry_buckets(
+    surface: Any | None,
+    *,
+    problem_spec: Any | None = None,
+) -> tuple[str, ...]:
+    """Return adapter-declared phase/bucket names for summary projection."""
+
+    evidence = _field(surface, "evidence")
+    buckets: list[str] = []
+    for owner in (
+        _field(problem_spec, "evidence"),
+        problem_spec,
+        evidence,
+        surface,
+    ):
+        buckets.extend(_string_list(_field(owner, "phase_telemetry_buckets")))
+        buckets.extend(_string_list(_field(owner, "runtime_phase_buckets")))
+        buckets.extend(_string_list(_field(owner, "phase_runtime_buckets")))
+    return tuple(dict.fromkeys(bucket for bucket in buckets if bucket))
 
 
 def declared_counter_runtime_fields(

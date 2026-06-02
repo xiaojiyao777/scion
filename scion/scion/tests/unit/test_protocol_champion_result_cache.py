@@ -27,14 +27,12 @@ def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
         str(candidate_ws),
         str(champion_ws),
         "modify",
-        selected_surface="surface_a",
     )
     second = protocol.run_experiment(
         ExperimentStage.SCREENING,
         str(candidate_ws),
         str(champion_ws),
         "modify",
-        selected_surface="surface_a",
     )
 
     assert first.champion_cache_hits == 0
@@ -55,6 +53,48 @@ def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
     assert raw["runtime_stats"]["runtime_pairs"] == 0
     assert raw["pairs"][0]["champion_result_source"] == "cached"
     assert raw["pairs"][0]["runtime_ratio_high_confidence"] is False
+
+
+def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
+    case_path = tmp_path / "cases" / "case.json"
+    case_path.parent.mkdir()
+    case_path.write_text('{"input": 1}\n', encoding="utf-8")
+    champion_ws = _workspace(tmp_path, "champion")
+    candidate_ws = _workspace(tmp_path, "candidate")
+    runner = _TieRuntimeRunner(champion_ws=champion_ws)
+    protocol = _protocol(tmp_path, runner, case_path)
+
+    first = protocol.run_experiment(
+        ExperimentStage.SCREENING,
+        str(candidate_ws),
+        str(champion_ws),
+        "modify",
+    )
+    second = protocol.run_experiment(
+        ExperimentStage.SCREENING,
+        str(candidate_ws),
+        str(champion_ws),
+        "modify",
+    )
+
+    assert first.gate_outcome == "pass"
+    assert first.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert first.stats.runtime_pairs == 1
+    assert second.gate_outcome == "unclear"
+    assert second.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+    assert second.stats.runtime_pairs == 0
+    assert second.stats.champion_cached_runtime_pairs == 1
+    assert second.stats.runtime_evidence_status == "fresh_champion_required"
+    assert second.runtime_evidence_status == "fresh_champion_required"
+    assert "runtime_evidence_status=fresh_champion_required" in (
+        second.exposed_summary
+    )
+    assert runner.call_count(str(champion_ws)) == 1
+
+    raw = json.loads(Path(second.raw_metrics_ref).read_text(encoding="utf-8"))
+    assert raw["runtime_evidence_status"] == "fresh_champion_required"
+    assert raw["runtime_stats"]["runtime_pairs"] == 0
+    assert raw["pairs"][0]["champion_result_source"] == "cached"
 
 
 @pytest.mark.parametrize(
@@ -140,6 +180,14 @@ class _CountingRunner:
 
     def call_count(self, workdir: str) -> int:
         return sum(1 for call in self.calls if call["workdir"] == workdir)
+
+
+class _TieRuntimeRunner(_CountingRunner):
+    def run_solver(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        if kwargs["workdir"] == self.champion_ws:
+            return _run_result(score=1, elapsed_ms=100)
+        return _run_result(score=1, elapsed_ms=50)
 
 
 def _protocol(tmp_path: Path, runner, case_path: Path) -> ExperimentProtocol:

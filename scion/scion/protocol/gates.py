@@ -23,6 +23,11 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     wr = stats.win_rate
     threshold = config.screening_win_rate_threshold
 
+    if _runtime_tie_fresh_champion_required(stats, config):
+        return GateResult(
+            outcome="unclear",
+            reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        )
     if wr >= threshold and stats.median_delta >= config.min_practical_delta:
         return GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
     elif _runtime_tie_improvement(stats, config):
@@ -50,6 +55,11 @@ def validation_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     wr = stats.win_rate
     threshold = config.validation_win_rate_threshold
 
+    if _runtime_tie_fresh_champion_required(stats, config):
+        return GateResult(
+            outcome="unclear",
+            reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        )
     if _runtime_tie_improvement(stats, config):
         return GateResult(
             outcome="pass",
@@ -81,6 +91,12 @@ def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     - pass: ci_low >= 0
     - fail: anything else (including CI straddling 0)
     """
+    if _runtime_tie_fresh_champion_required(stats, config):
+        return GateResult(
+            outcome="unclear",
+            reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        )
+
     if _runtime_tie_improvement(stats, config):
         return GateResult(
             outcome="pass",
@@ -120,3 +136,22 @@ def _runtime_tie_improvement(stats: EvalStats, config: ProtocolConfig) -> bool:
     if stats.median_delta < 0:
         return False
     return stats.ci_low >= 0
+
+
+def _runtime_tie_fresh_champion_required(
+    stats: EvalStats,
+    config: ProtocolConfig,
+) -> bool:
+    if config.runtime.champion_runtime_policy != "fresh_required_for_runtime_tie":
+        return False
+    if stats.champion_cached_runtime_pairs <= 0:
+        return False
+    if stats.runtime_pairs >= config.runtime.tie_min_runtime_pairs:
+        return False
+    if stats.candidate_failed_pairs > 0 or stats.failed_pairs > 0:
+        return False
+    if stats.losses > 0 or stats.median_delta < 0 or stats.ci_low < 0:
+        return False
+    if stats.wins > 0:
+        return False
+    return stats.n_cases > 0 and stats.ties > 0

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -87,6 +87,96 @@ class RuntimeGovernanceConfig(BaseModel):
 
     tie_min_runtime_pairs: int = Field(gt=0, default=1)
     """Minimum paired runtime samples required for tie-preserving speedup decisions."""
+
+    champion_runtime_policy: Literal[
+        "allow_cached",
+        "fresh_required_for_runtime_tie",
+        "fresh_always",
+    ] = "fresh_required_for_runtime_tie"
+    """Champion runtime freshness policy for runtime-sensitive promotion evidence."""
+
+
+class EvaluationStageConfig(BaseModel):
+    """Generic staged evaluation step.
+
+    This is intentionally problem-agnostic. Concrete split contents and runtime
+    field meanings remain adapter-owned; protocol config only names stages and
+    their evidence/exposure policy.
+    """
+
+    name: str = Field(min_length=1)
+    """Stable stage name such as quick_signal or broad_safety."""
+
+    role: Literal[
+        "quick_prescreen",
+        "broad_screening",
+        "screening",
+        "validation",
+        "frozen_holdout",
+        "diagnostic",
+    ]
+    """Protocol role for reporting and downstream scheduling hooks."""
+
+    split: Literal["screening", "validation", "frozen", "canary"] = "screening"
+    """Split namespace used by the stage."""
+
+    n_cases: Optional[int] = Field(default=None, gt=0)
+    """Optional case cap for this stage; None means use the split default."""
+
+    n_seeds: Optional[int] = Field(default=None, gt=0)
+    """Optional seed cap for this stage; None means use the ledger default."""
+
+    expose: str = "aggregate_only"
+    """Exposure control level for the stage output."""
+
+    gate: Literal["none", "diagnostic", "screening", "validation", "frozen"] = "diagnostic"
+    """Gate family applied to the stage result."""
+
+    hard_failure: bool = False
+    """Whether this stage may hard-fail the candidate."""
+
+    smoke_runtime_policy: Literal["diagnostic_only", "hard_failure"] = "diagnostic_only"
+    """How runtime noise from smoke/pre-screen diagnostics is interpreted."""
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "role": self.role,
+            "split": self.split,
+            "n_cases": self.n_cases,
+            "n_seeds": self.n_seeds,
+            "expose": self.expose,
+            "gate": self.gate,
+            "hard_failure": self.hard_failure,
+            "smoke_runtime_policy": self.smoke_runtime_policy,
+        }
+
+
+class EvaluationPipelineConfig(BaseModel):
+    """Optional quick -> broad staged evaluation protocol."""
+
+    enabled: bool = False
+    stages: tuple[EvaluationStageConfig, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate_stage_names(self) -> "EvaluationPipelineConfig":
+        names = [stage.name for stage in self.stages]
+        if len(names) != len(set(names)):
+            raise ValueError("evaluation pipeline stage names must be unique")
+        return self
+
+    def summary(self) -> list[dict[str, object]]:
+        return [stage.summary() for stage in self.stages]
+
+
+class SmokePrescreenConfig(BaseModel):
+    """Generic hook for cheap candidate diagnostics before formal protocol."""
+
+    enabled: bool = False
+    stage_name: str = "quick_prescreen"
+    runtime_noise_policy: Literal["diagnostic_only", "hard_failure"] = "diagnostic_only"
+    max_cases: Optional[int] = Field(default=None, gt=0)
+    notes: str = ""
 
 
 class RetryConfig(BaseModel):
@@ -171,6 +261,14 @@ class ProtocolConfig(BaseModel):
     runtime: RuntimeGovernanceConfig = Field(default_factory=RuntimeGovernanceConfig)
     """Runtime and algorithm-efficiency governance."""
 
+    evaluation_pipeline: EvaluationPipelineConfig = Field(
+        default_factory=EvaluationPipelineConfig
+    )
+    """Optional staged quick/broad evaluation protocol."""
+
+    smoke_prescreen: SmokePrescreenConfig = Field(default_factory=SmokePrescreenConfig)
+    """Optional cheap pre-screen diagnostic hook."""
+
     # ------------------------------------------------------------------
     # Backward-compatibility properties (used by gates.py and old tests)
     # ------------------------------------------------------------------
@@ -194,6 +292,51 @@ class ProtocolConfig(BaseModel):
     def max_runtime_ratio(self) -> float:
         """Alias for runtime.max_runtime_ratio."""
         return self.runtime.max_runtime_ratio
+
+    def evaluation_stage_summary(self) -> list[dict[str, object]]:
+        """Return protocol-stage reporting metadata.
+
+        If an explicit staged pipeline is configured, it is reported verbatim.
+        Otherwise this returns the legacy v3 stage shape so callers can render
+        one uniform summary.
+        """
+        if self.evaluation_pipeline.enabled or self.evaluation_pipeline.stages:
+            return self.evaluation_pipeline.summary()
+        return [
+            {
+                "name": "screening",
+                "role": "screening",
+                "split": "screening",
+                "n_cases": None,
+                "n_seeds": self.screening.n_seeds,
+                "expose": self.screening.expose,
+                "gate": "screening",
+                "hard_failure": True,
+                "smoke_runtime_policy": "diagnostic_only",
+            },
+            {
+                "name": "validation",
+                "role": "validation",
+                "split": "validation",
+                "n_cases": self.validation.n_cases,
+                "n_seeds": self.validation.n_seeds,
+                "expose": self.validation.expose,
+                "gate": "validation",
+                "hard_failure": True,
+                "smoke_runtime_policy": "diagnostic_only",
+            },
+            {
+                "name": "frozen",
+                "role": "frozen_holdout",
+                "split": "frozen",
+                "n_cases": self.frozen.n_cases,
+                "n_seeds": self.frozen.n_seeds,
+                "expose": self.frozen.expose,
+                "gate": "frozen",
+                "hard_failure": True,
+                "smoke_runtime_policy": "diagnostic_only",
+            },
+        ]
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ProtocolConfig":

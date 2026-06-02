@@ -42,6 +42,13 @@ class DecisionEngine:
         if runtime_veto is not None:
             return runtime_veto
 
+        if features.runtime_evidence_status == "fresh_champion_required":
+            return self._out(
+                features,
+                Decision.CONTINUE_EXPLORE,
+                ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+            )
+
         if features.telemetry_validation_repairable:
             if features.stage == "validation":
                 return self._out(

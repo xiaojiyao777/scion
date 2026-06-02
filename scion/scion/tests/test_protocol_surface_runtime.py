@@ -451,6 +451,62 @@ def test_runtime_summary_includes_declared_surface_telemetry(
     assert candidate_runtime_summary["dispatch_baseline_calls"] == 1
 
 
+def test_phase_telemetry_summary_projection_is_adapter_bucketed(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "generic_solver_phase_runtime_ms": {
+            "setup": 5,
+            "search": 11,
+            "adapter_extra": 3,
+        },
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(2, 1000, elapsed_ms=50, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=SimpleNamespace(
+            research_surfaces=[
+                SimpleNamespace(
+                    name="generic_solver",
+                    evidence=SimpleNamespace(
+                        phase_runtime_fields=[
+                            "generic_solver_phase_runtime_ms",
+                        ],
+                        phase_telemetry_buckets=["setup", "search"],
+                    ),
+                )
+            ]
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="generic_solver",
+    )
+
+    summary = result.candidate_phase_telemetry_summary
+    assert summary["selected_surface"] == "generic_solver"
+    assert summary["phase_runtime_fields"] == ["generic_solver_phase_runtime_ms"]
+    assert summary["declared_buckets"] == ["setup", "search"]
+    assert summary["candidate_pairs"] == 4
+    assert summary["runtime_observed_pairs"] == 4
+    assert summary["buckets"]["setup"]["declared"] is True
+    assert summary["buckets"]["setup"]["weighted_sum_ms"] == 20.0
+    assert summary["buckets"]["search"]["max_ms"] == 11.0
+    assert summary["buckets"]["adapter_extra"]["declared"] is False
+    assert "phase_telemetry=observed_pairs=4" in result.exposed_summary
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_phase_telemetry_summary"] == summary
+
+
 @pytest.mark.parametrize(
     "champion_result",
     [

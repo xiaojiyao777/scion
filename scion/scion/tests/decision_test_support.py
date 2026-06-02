@@ -60,6 +60,7 @@ def _protocol(
     champion_failed_pairs: int = 0,
     gate_outcome: str = "pass",
     runtime_confidence: str = "high",
+    runtime_evidence_status: str = "sufficient",
 ) -> ProtocolResult:
     stats = EvalStats(
         n_cases=10, wins=7, losses=2, ties=1,
@@ -69,6 +70,7 @@ def _protocol(
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_regression_rate=runtime_regression_rate,
         runtime_pairs=runtime_pairs,
+        runtime_evidence_status=runtime_evidence_status,
         statistical_status=statistical_status,
         statistical_metric=statistical_metric,
         total_pairs=total_pairs,
@@ -86,6 +88,7 @@ def _protocol(
         exposed_summary="ok",
         raw_metrics_ref="/tmp/m.json",
         runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_evidence_status,
     )
 
 
@@ -160,6 +163,7 @@ def _features(
     runtime_ratio_median=None,
     runtime_delta_median_ms=None,
     runtime_pairs: int = 0,
+    runtime_evidence_status: str = "sufficient",
     failed_pairs: int = 0,
     candidate_failed_pairs: int = 0,
     protocol_gate_outcome=None,
@@ -188,6 +192,7 @@ def _features(
         runtime_ratio_median=runtime_ratio_median,
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_pairs=runtime_pairs,
+        runtime_evidence_status=runtime_evidence_status,
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         protocol_gate_outcome=protocol_gate_outcome,

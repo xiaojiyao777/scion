@@ -168,6 +168,27 @@ def test_screening_gate_passes_runtime_tie_improvement():
     assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
 
 
+def test_runtime_tie_with_cached_champion_requires_fresh_runtime():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_ratio_median=None,
+        runtime_delta_median_ms=None,
+        runtime_pairs=0,
+        champion_cached_runtime_pairs=10,
+    )
+
+    result = screening_gate(stats, _cfg)
+
+    assert result.outcome == "unclear"
+    assert result.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+
+
 def test_screening_gate_expand():
     stats = _make_stats(win_rate=0.55, median_delta=0.01)
     result = screening_gate(stats, _cfg)

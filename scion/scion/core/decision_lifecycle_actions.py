@@ -207,6 +207,11 @@ def update_branch_screening_evidence_summary(
             or getattr(protocol_result, "runtime_confidence", "")
             or "unknown"
         ),
+        "runtime_evidence_status": str(
+            getattr(protocol_result, "runtime_evidence_status", "")
+            or getattr(stats, "runtime_evidence_status", "")
+            or "sufficient"
+        ),
         "phase_activation_summary": {
             "stage": "screening",
             "activation_status": str(
@@ -252,6 +257,13 @@ def update_branch_screening_evidence_summary(
             ),
         },
     }
+    phase_telemetry = getattr(
+        protocol_result,
+        "candidate_phase_telemetry_summary",
+        None,
+    )
+    if isinstance(phase_telemetry, Mapping) and phase_telemetry:
+        summary["phase_telemetry_summary"] = dict(phase_telemetry)
     if reason_codes:
         summary["decision_reason_codes"] = list(reason_codes)
         summary["reason_codes"] = list(reason_codes)

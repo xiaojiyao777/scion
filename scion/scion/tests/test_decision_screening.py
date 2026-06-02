@@ -108,6 +108,21 @@ def test_decision_screening_runtime_tie_improvement_queues_validation():
     assert "SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
 
 
+def test_decision_runtime_tie_fresh_required_continues_without_promotion():
+    f = _features(
+        stage="screening",
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_pairs=0,
+        runtime_evidence_status="fresh_champion_required",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert out.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+
+
 def test_decision_screening_low_win_positive_effect_expands_screening():
     f = _features(stage="screening", win_rate=0.55, median_delta=0.01)
     out = _engine.decide(f)

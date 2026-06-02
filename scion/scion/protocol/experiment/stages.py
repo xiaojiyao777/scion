@@ -48,6 +48,12 @@ from .feedback import (
     _extract_case_features,
     _pair_feedback_counts,
 )
+from .phase_telemetry import (
+    _finalize_phase_telemetry_summary,
+    _format_phase_telemetry_summary,
+    _phase_telemetry_summary_template,
+    _record_phase_telemetry_sample,
+)
 from .runtime_observation import (
     _append_guard_runtime,
     _build_runtime_stats,
@@ -128,11 +134,14 @@ def run_experiment(
     champion_cache_misses = 0
     champion_cache_writes = 0
     champion_cached_runtime_pairs = 0
+    runtime_evidence_status = "sufficient"
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     champion_cache = getattr(protocol, "_champion_result_cache", None)
+    champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
     champion_cache_enabled = bool(
         getattr(protocol, "_champion_result_cache_enabled", False)
         and champion_cache is not None
+        and champion_runtime_policy != "fresh_always"
     )
     champion_workspace_digest = (
         compute_workspace_digest(champion_ws) if champion_cache_enabled else None
@@ -148,6 +157,10 @@ def run_experiment(
     candidate_surface_runtime_summary = _surface_runtime_summary_template(
         selected_surface=normalized_selected_surface,
         required_fields=surface_required_runtime_fields,
+    )
+    candidate_phase_telemetry_summary = _phase_telemetry_summary_template(
+        problem_spec=protocol._problem_spec,
+        selected_surface=normalized_selected_surface,
     )
 
     def _write_metrics_snapshot(*, complete: bool) -> None:
@@ -173,6 +186,7 @@ def run_experiment(
                         if champion_cached_runtime_pairs
                         else "high"
                     ),
+                    "runtime_evidence_status": runtime_evidence_status,
                     "champion_cache_hits": champion_cache_hits,
                     "champion_cache_misses": champion_cache_misses,
                     "champion_cache_writes": champion_cache_writes,
@@ -189,6 +203,11 @@ def run_experiment(
                             candidate_surface_runtime_summary,
                             candidate_telemetry_guard_summary,
                             runtime_budget_diagnostic_summary,
+                        )
+                    ),
+                    "candidate_phase_telemetry_summary": (
+                        _finalize_phase_telemetry_summary(
+                            candidate_phase_telemetry_summary
                         )
                     ),
                     "candidate_telemetry_guard_summary": (
@@ -297,6 +316,10 @@ def run_experiment(
             _record_surface_runtime_sample(
                 cand_r,
                 candidate_surface_runtime_summary,
+            )
+            _record_phase_telemetry_sample(
+                cand_r,
+                candidate_phase_telemetry_summary,
             )
             runtime_fields = _runtime_fields(
                 cand_r,
@@ -716,12 +739,19 @@ def run_experiment(
         )
 
     runtime_stats = _build_runtime_stats(runtime_ratios, runtime_deltas_ms)
+    runtime_evidence_status = _runtime_evidence_status(
+        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
+        runtime_pairs=runtime_stats["runtime_pairs"],
+        min_runtime_pairs=protocol.config.runtime.tie_min_runtime_pairs,
+    )
     stats = replace(
         stats,
         runtime_ratio_median=runtime_stats["runtime_ratio_median"],
         runtime_delta_median_ms=runtime_stats["runtime_delta_median_ms"],
         runtime_regression_rate=runtime_stats["runtime_regression_rate"],
         runtime_pairs=runtime_stats["runtime_pairs"],
+        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
+        runtime_evidence_status=runtime_evidence_status,
         total_pairs=total_pairs,
         attempted_pairs=attempted_pairs,
         valid_pairs=valid_pairs,
@@ -736,6 +766,13 @@ def run_experiment(
             gate = validation_gate(stats, protocol.config)
         else:
             gate = frozen_gate(stats, protocol.config)
+
+        if "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in gate.reason_codes:
+            runtime_evidence_status = "fresh_champion_required"
+            stats = replace(
+                stats,
+                runtime_evidence_status=runtime_evidence_status,
+            )
 
         if failed_pairs > 0 and stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN):
             reason_codes = ["INCOMPLETE_EVIDENCE"]
@@ -824,6 +861,9 @@ def run_experiment(
     telemetry_guard_summary = _format_telemetry_guard_summary(
         candidate_telemetry_guard_summary
     )
+    phase_telemetry_summary = _format_phase_telemetry_summary(
+        _finalize_phase_telemetry_summary(candidate_phase_telemetry_summary)
+    )
     runtime_budget_summary = format_runtime_budget_diagnostic(
         runtime_budget_diagnostic_summary
     )
@@ -835,6 +875,7 @@ def run_experiment(
         f" champion_cache_misses={champion_cache_misses}"
         f" champion_cached_runtime_pairs={champion_cached_runtime_pairs}"
         f" runtime_confidence={runtime_confidence}"
+        f" runtime_evidence_status={runtime_evidence_status}"
     )
 
     # Exposure control
@@ -849,7 +890,8 @@ def run_experiment(
             f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
             f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}{runtime_budget_summary}"
+            f"{telemetry_guard_summary}{phase_telemetry_summary}"
+            f"{runtime_budget_summary}"
             f"{champion_cache_summary}"
         )
     else:
@@ -861,7 +903,8 @@ def run_experiment(
             f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
             f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}{runtime_budget_summary}"
+            f"{telemetry_guard_summary}{phase_telemetry_summary}"
+            f"{runtime_budget_summary}"
             f"{champion_cache_summary}"
         )
 
@@ -890,6 +933,9 @@ def run_experiment(
             candidate_telemetry_guard_summary,
             runtime_budget_diagnostic_summary,
         ),
+        candidate_phase_telemetry_summary=_finalize_phase_telemetry_summary(
+            candidate_phase_telemetry_summary
+        ),
         candidate_runtime_failure_categories=dict(candidate_runtime_categories),
         candidate_first_runtime_failure=candidate_first_runtime_failure,
         candidate_operator_attempts=candidate_runtime_counters["operator_attempts"],
@@ -908,6 +954,7 @@ def run_experiment(
         champion_cache_misses=champion_cache_misses,
         champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_evidence_status,
     )
     no_objective_effect = (
         stats.wins == 0
@@ -939,6 +986,17 @@ def _append_elapsed_sample(samples: list[float], value: Any) -> None:
         return
     if elapsed >= 0:
         samples.append(elapsed)
+
+
+def _runtime_evidence_status(
+    *,
+    champion_cached_runtime_pairs: int,
+    runtime_pairs: int,
+    min_runtime_pairs: int,
+) -> str:
+    if champion_cached_runtime_pairs > 0 and runtime_pairs < min_runtime_pairs:
+        return "insufficient"
+    return "sufficient"
 
 
 __all__ = ["run_experiment"]

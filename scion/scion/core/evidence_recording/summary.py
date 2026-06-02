@@ -605,6 +605,11 @@ class CampaignSummaryMixin:
                 "runtime_pairs": stats.runtime_pairs,
                 "runtime_confidence": pr.runtime_confidence,
                 "runtime_evidence_confidence": pr.runtime_confidence,
+                "runtime_evidence_status": getattr(
+                    pr,
+                    "runtime_evidence_status",
+                    getattr(stats, "runtime_evidence_status", "sufficient"),
+                ),
                 "total_pairs": stats.total_pairs,
                 "attempted_pairs": stats.attempted_pairs,
                 "valid_pairs": stats.valid_pairs,
@@ -648,6 +653,9 @@ class CampaignSummaryMixin:
                 "mechanism_evidence": dict(pr.mechanism_evidence or {}),
                 "candidate_surface_runtime_summary": dict(
                     pr.candidate_surface_runtime_summary or {}
+                ),
+                "candidate_phase_telemetry_summary": dict(
+                    getattr(pr, "candidate_phase_telemetry_summary", {}) or {}
                 ),
                 "runtime_budget_diagnostic": _runtime_budget_diagnostic(pr),
                 "runtime_aggregate_exclusion": (
@@ -889,6 +897,9 @@ def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
     runtime_confidence = str(getattr(pr, "runtime_confidence", "") or "").strip()
     if runtime_confidence:
         evidence["runtime_evidence_confidence"] = runtime_confidence
+    runtime_status = str(getattr(pr, "runtime_evidence_status", "") or "").strip()
+    if runtime_status:
+        evidence["runtime_evidence_status"] = runtime_status
     runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(pr)
     if runtime_aggregate_exclusion:
         evidence["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
