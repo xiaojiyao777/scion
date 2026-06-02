@@ -377,6 +377,7 @@ class DecisionFinalizer:
                 branch,
                 protocol_result=protocol_result,
                 screening_feedback=screening_feedback,
+                decision_reason_codes=decision_reason_codes,
             )
             _update_branch_lifecycle_signal_state(
                 branch,
@@ -809,6 +810,7 @@ def _sync_terminal_branch_evidence(
             branch,
             protocol_result=protocol_result,
             screening_feedback=feedback,
+            decision_reason_codes=reason_codes,
         )
         branch.last_screening_feedback_tier = (
             getattr(branch, "last_screening_feedback_tier", None)

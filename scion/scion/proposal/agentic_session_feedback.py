@@ -61,15 +61,19 @@ def _feedback_observation_canonical_scope(
         return None
     payload = observation.structured_payload
     payload = payload if isinstance(payload, Mapping) else {}
-    status = payload.get("runtime_observation_status")
-    if isinstance(status, Mapping):
-        scope = status.get("canonical_scope")
-        if isinstance(scope, Mapping):
-            return (
-                observation.tool_name,
-                str(scope.get("branch_id") or "").strip(),
-                str(scope.get("surface") or default_surface or "").strip(),
-            )
+    for status_key in (
+        "screening_observation_status",
+        "runtime_observation_status",
+    ):
+        status = payload.get(status_key)
+        if isinstance(status, Mapping):
+            scope = status.get("canonical_scope")
+            if isinstance(scope, Mapping):
+                return (
+                    observation.tool_name,
+                    str(scope.get("branch_id") or "").strip(),
+                    str(scope.get("surface") or default_surface or "").strip(),
+                )
     return (
         observation.tool_name,
         str(payload.get("branch_id") or "").strip(),
@@ -128,7 +132,10 @@ def _canonical_feedback_observations(
     selected: list[ProposalObservation] = []
     index_by_scope: dict[tuple[str, str, str], int] = {}
     for observation in observations:
-        if observation.tool_name != "feedback.query_runtime":
+        if observation.tool_name not in {
+            "feedback.query_screening",
+            "feedback.query_runtime",
+        }:
             selected.append(observation)
             continue
         scope = _feedback_observation_canonical_scope(
@@ -195,6 +202,9 @@ def _compact_screening_feedback_payload(payload: Mapping[str, Any]) -> dict[str,
             ),
             "query_scope": _compact_feedback_value_for_budget(
                 payload.get("query_scope")
+            ),
+            "screening_observation_status": _compact_feedback_value_for_budget(
+                payload.get("screening_observation_status")
             ),
             "available_screening_step_count": payload.get(
                 "available_screening_step_count"
@@ -519,6 +529,9 @@ def _shrink_feedback_payload_to_target(payload: dict[str, Any]) -> dict[str, Any
                 "available_screening_step_count"
             ),
             "matched_screening_step_count": payload.get("matched_screening_step_count"),
+            "screening_observation_status": payload.get(
+                "screening_observation_status"
+            ),
             "runtime_observation_status": payload.get("runtime_observation_status"),
             "screening_steps": _minimal_screening_rows_for_budget(
                 payload.get("screening_steps")
@@ -615,8 +628,16 @@ def _screening_feedback_observation_has_rows(
     observation: ProposalObservation,
 ) -> bool:
     payload = observation.structured_payload
-    rows = payload.get("screening_steps") if isinstance(payload, Mapping) else None
-    return isinstance(rows, list) and bool(rows)
+    if not isinstance(payload, Mapping):
+        return False
+    status = payload.get("screening_observation_status")
+    if isinstance(status, Mapping) and status.get("usable") is True:
+        return True
+    rows = payload.get("screening_steps")
+    if isinstance(rows, list) and bool(rows):
+        return True
+    inactive_rows = payload.get("inactive_reference_steps")
+    return isinstance(inactive_rows, list) and bool(inactive_rows)
 
 
 def _runtime_feedback_observation_has_content(

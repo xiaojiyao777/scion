@@ -266,16 +266,19 @@ class AgenticSessionPlannerLoopMixin:
                         error_code="invalid_tool_selection",
                         tool_name=name,
                     )
-                if name == "feedback.query_runtime" and _has_equivalent_feedback_observation(
-                    observations,
-                    name,
-                    args,
-                    default_surface=str(context.forced_surface or "").strip(),
+                if (
+                    name in {"feedback.query_screening", "feedback.query_runtime"}
+                    and _has_equivalent_feedback_observation(
+                        observations,
+                        name,
+                        args,
+                        default_surface=str(context.forced_surface or "").strip(),
+                    )
                 ):
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         (
-                            "Planner selected runtime feedback already covered "
+                            "Planner selected feedback already covered "
                             "by an equivalent canonical observation."
                         ),
                         metadata={
@@ -283,7 +286,7 @@ class AgenticSessionPlannerLoopMixin:
                             "tool_name": name,
                             "error_code": "feedback_observation_satisfied",
                             "selection_source": "planner_selected",
-                            "skip_reason": "equivalent_runtime_observation",
+                            "skip_reason": "equivalent_feedback_observation",
                         },
                     )
                     missing = self._missing_planner_context_error(context, observations)

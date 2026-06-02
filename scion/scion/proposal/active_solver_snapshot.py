@@ -117,7 +117,8 @@ def read_algorithm_file_payload(
     inputs = _active_solver_inputs(context)
     allowed_files = _allowed_algorithm_files(inputs["manifest"])
     rel_path = _normalize_algorithm_file(file_path, allowed_files)
-    source_kind = str(inputs["source_kind"])
+    source_overrides = inputs.get("source_overrides")
+    source_kind = _source_kind_for_path(inputs, rel_path)
     if rel_path is None:
         safe_path = _safe_rejected_file_path(file_path)
         return {
@@ -128,13 +129,25 @@ def read_algorithm_file_payload(
             "allowed_files": sorted(allowed_files),
             "source": source_kind,
         }
-    artifact = _read_code_file_from_root(
-        inputs["source_root"] or "",
-        rel_path,
-        max_chars=max(0, max_chars),
-        source_kind=source_kind,
+    artifact = (
+        _read_code_file_from_overrides(
+            source_overrides,
+            rel_path,
+            max_chars=max(0, max_chars),
+        )
+        or _read_code_file_from_root(
+            inputs["source_root"] or "",
+            rel_path,
+            max_chars=max(0, max_chars),
+            source_kind=source_kind,
+        )
     )
-    text = _file_text(inputs["source_root"], source_kind, rel_path)
+    text = _file_text(
+        inputs["source_root"],
+        str(inputs["source_kind"]),
+        rel_path,
+        source_overrides=source_overrides,
+    )
     line_coverage = _line_coverage_payload(
         content_preview=str(artifact.get("content_preview") or ""),
         source=text,
@@ -242,14 +255,24 @@ def legacy_inactive_surface_exclusion(
 
 def _active_solver_inputs(context: ProposalToolContext) -> dict[str, Any]:
     source_root, source_kind = active_solver_source_root(context)
-    manifest = _algorithm_file_manifest(context)
+    source_overrides = _branch_current_source_overrides(context)
+    manifest = _merge_branch_current_manifest(
+        _algorithm_file_manifest(context),
+        source_overrides,
+    )
     files = _list_algorithm_files_from_manifest(
         source_root,
         source_kind,
         manifest,
+        source_overrides=source_overrides,
     )
     file_texts = {
-        str(item["file_path"]): _file_text(source_root, source_kind, str(item["file_path"]))
+        str(item["file_path"]): _file_text(
+            source_root,
+            source_kind,
+            str(item["file_path"]),
+            source_overrides=source_overrides,
+        )
         for item in files
         if item.get("file_path")
     }
@@ -273,6 +296,7 @@ def _active_solver_inputs(context: ProposalToolContext) -> dict[str, Any]:
         "provider": _active_solver_provider(context),
         "source_root": source_root,
         "source_kind": source_kind,
+        "source_overrides": source_overrides,
         "manifest": manifest,
         "files": files,
         "file_texts": file_texts,
@@ -312,21 +336,73 @@ def _algorithm_file_manifest(context: ProposalToolContext) -> tuple[dict[str, An
     return tuple(manifest)
 
 
+def _branch_current_source_overrides(context: ProposalToolContext) -> dict[str, str]:
+    raw = getattr(context, "branch_current_file_sources", None)
+    if not isinstance(raw, Mapping):
+        return {}
+    overrides: dict[str, str] = {}
+    for path, content in raw.items():
+        normalized = _normalize_rel_path(str(path or ""))
+        if normalized is None or not isinstance(content, str):
+            continue
+        overrides[normalized] = content
+    return overrides
+
+
+def _merge_branch_current_manifest(
+    manifest: Sequence[Mapping[str, Any]],
+    source_overrides: Mapping[str, str],
+) -> tuple[dict[str, Any], ...]:
+    rows = [dict(item) for item in manifest]
+    existing_paths = {
+        str(item.get("file_path") or "")
+        for item in rows
+        if str(item.get("file_path") or "")
+    }
+    for path in source_overrides:
+        if path in existing_paths:
+            continue
+        rows.append(
+            {
+                "file_path": path,
+                "role": "branch_current_algorithm_file",
+                "active": True,
+                "branch_current": True,
+            }
+        )
+        existing_paths.add(path)
+    return tuple(rows)
+
+
 def _list_algorithm_files_from_manifest(
     source_root: str | Path | None,
     source_kind: str,
     manifest: Sequence[Mapping[str, Any]],
+    *,
+    source_overrides: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in manifest:
         rel_path = str(item.get("file_path") or "")
-        artifact = _read_code_file_from_root(
-            source_root or "",
-            rel_path,
-            max_chars=0,
-            source_kind=source_kind,
+        artifact = (
+            _read_code_file_from_overrides(
+                source_overrides,
+                rel_path,
+                max_chars=0,
+            )
+            or _read_code_file_from_root(
+                source_root or "",
+                rel_path,
+                max_chars=0,
+                source_kind=source_kind,
+            )
         )
-        text = _file_text(source_root, source_kind, rel_path)
+        text = _file_text(
+            source_root,
+            source_kind,
+            rel_path,
+            source_overrides=source_overrides,
+        )
         row = {
             **{
                 str(key): value
@@ -339,7 +415,7 @@ def _list_algorithm_files_from_manifest(
             "active": bool(item.get("active")),
             "readable": bool(artifact.get("readable")),
             "reason": artifact.get("reason"),
-            "source": source_kind,
+            "source": artifact.get("source") or source_kind,
             "size_chars": len(text) if text else artifact.get("size_chars"),
             "sha256": _sha256(text) if text else None,
             "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
@@ -521,7 +597,14 @@ def _file_text(
     source_root: str | Path | None,
     source_kind: str,
     rel_path: str,
+    *,
+    source_overrides: Mapping[str, str] | None = None,
 ) -> str:
+    normalized = _normalize_rel_path(rel_path)
+    if normalized is not None and isinstance(source_overrides, Mapping):
+        content = source_overrides.get(normalized)
+        if isinstance(content, str):
+            return content
     if source_root is None:
         return ""
     artifact = _read_code_file_from_root(
@@ -533,6 +616,14 @@ def _file_text(
     if not artifact.get("readable"):
         return ""
     return str(artifact.get("content_preview") or "")
+
+
+def _source_kind_for_path(inputs: Mapping[str, Any], rel_path: str | None) -> str:
+    if rel_path:
+        overrides = inputs.get("source_overrides")
+        if isinstance(overrides, Mapping) and rel_path in overrides:
+            return "branch_current_file_sources"
+    return str(inputs.get("source_kind") or "")
 
 
 def _line_coverage_payload(
@@ -712,6 +803,30 @@ def _read_code_file_from_root(
         "file_path": normalized,
         "readable": True,
         "source": source_kind,
+        "content_preview": _limit_text(content, max_chars),
+        "truncated": len(content) > max_chars,
+        "size_chars": len(content),
+        "max_chars": max_chars,
+    }
+
+
+def _read_code_file_from_overrides(
+    source_overrides: Mapping[str, str] | None,
+    target_file: str,
+    *,
+    max_chars: int,
+) -> dict[str, Any] | None:
+    normalized = _normalize_rel_path(target_file)
+    if normalized is None or not isinstance(source_overrides, Mapping):
+        return None
+    content = source_overrides.get(normalized)
+    if not isinstance(content, str):
+        return None
+    max_chars = max(0, int(max_chars))
+    return {
+        "file_path": normalized,
+        "readable": True,
+        "source": "branch_current_file_sources",
         "content_preview": _limit_text(content, max_chars),
         "truncated": len(content) > max_chars,
         "size_chars": len(content),

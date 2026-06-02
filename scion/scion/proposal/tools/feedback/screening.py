@@ -108,9 +108,20 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
                         ),
                     )
                 )
+        screening_status = _screening_observation_status(
+            context=context,
+            args=args,
+            active_steps=available_screening_steps,
+            inactive_reference_steps=inactive_reference_screening_steps,
+            matched_count=matched_count,
+            inactive_reference_count=inactive_reference_count,
+            rows=rows,
+            inactive_reference_rows=inactive_reference_rows,
+        )
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "screening_observation_status": screening_status,
             "provenance": _feedback_payload_provenance(
                 source="screening_step_history",
                 feedback_scope=feedback_scope,
@@ -131,6 +142,7 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
             "inactive_reference_steps": inactive_reference_rows,
         }
         payload = _bound_compact_feedback_payload(payload)
+        payload.setdefault("screening_observation_status", screening_status)
         return self._observation(
             context,
             observation_type="screening_feedback",
@@ -140,6 +152,34 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.SCREENING_DETAIL,
         )
+
+
+def _screening_observation_status(
+    *,
+    context: ProposalToolContext,
+    args: FeedbackQueryInput,
+    active_steps: list,
+    inactive_reference_steps: list,
+    matched_count: int,
+    inactive_reference_count: int,
+    rows: list,
+    inactive_reference_rows: list,
+) -> dict:
+    return {
+        "schema_version": "screening_feedback_observation_status.v1",
+        "canonical_scope": {
+            "campaign_id": context.campaign_id,
+            "branch_id": str(args.branch_id or "").strip(),
+            "surface": str(args.surface or context.forced_surface or "").strip(),
+        },
+        "usable": bool(rows or inactive_reference_rows),
+        "active_step_count": len(active_steps),
+        "inactive_reference_step_count": len(inactive_reference_steps),
+        "matched_screening_step_count": matched_count,
+        "matched_inactive_reference_count": inactive_reference_count,
+        "screening_feedback_available": bool(rows),
+        "inactive_reference_feedback_available": bool(inactive_reference_rows),
+    }
 
 __all__ = [
     "FeedbackQueryScreeningTool",

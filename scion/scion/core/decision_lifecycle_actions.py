@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from statistics import median
-from typing import Any, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
@@ -138,6 +138,7 @@ def update_branch_screening_evidence_summary(
     *,
     protocol_result: Optional[ProtocolResult],
     screening_feedback: object | None,
+    decision_reason_codes: Iterable[str] | None = None,
 ) -> None:
     """Persist compact generic screening evidence for branch cards."""
     if protocol_result is None or protocol_result.stats is None:
@@ -148,6 +149,16 @@ def update_branch_screening_evidence_summary(
     mechanism_evidence = mechanism_evidence_for_protocol(protocol_result)
     runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(
         protocol_result
+    )
+    reason_codes = tuple(
+        dict.fromkeys(
+            str(code).strip()
+            for code in (
+                tuple(decision_reason_codes or ())
+                + tuple(getattr(protocol_result, "reason_codes", ()) or ())
+            )
+            if str(code).strip()
+        )
     )
     summary = {
         "stage": "screening",
@@ -219,10 +230,18 @@ def update_branch_screening_evidence_summary(
             ),
         },
     }
+    if reason_codes:
+        summary["decision_reason_codes"] = list(reason_codes)
+        summary["reason_codes"] = list(reason_codes)
+        summary["why_not_promoted_reason_codes"] = list(reason_codes)
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
     branch.branch_evidence_summary = summary
     block = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    if reason_codes:
+        block.setdefault("decision_reason_codes", list(reason_codes))
+        block.setdefault("reason_codes", list(reason_codes))
+        block.setdefault("why_not_promoted_reason_codes", list(reason_codes))
     block.setdefault("runtime_evidence_confidence", summary["runtime_evidence_confidence"])
     block.setdefault("phase_activation_summary", summary["phase_activation_summary"])
     if runtime_aggregate_exclusion:

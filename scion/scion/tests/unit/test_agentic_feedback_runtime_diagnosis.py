@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from scion.proposal.agentic_session_feedback import (
+    _canonical_feedback_observations,
+    _has_equivalent_feedback_observation,
+)
+from scion.proposal.agentic_session_tools import (
+    _has_successful_code_phase_reusable_observation,
+)
 from scion.tests.unit.agentic_feedback_test_support import *
 
 def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
@@ -200,6 +207,47 @@ def test_feedback_query_defaults_to_campaign_scope_across_branches(
     )
     assert branch_scoped.structured_payload["matched_screening_step_count"] == 0
     assert branch_scoped.structured_payload["screening_steps"] == []
+
+
+def test_screening_feedback_observation_satisfies_equivalent_scope(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(_context(tmp_path), forced_surface="search_policy")
+    first = registry.call("feedback.query_screening", {}, context)
+    second = registry.call("feedback.query_screening", {}, context)
+
+    assert first.structured_payload["screening_observation_status"]["usable"] is True
+    assert _has_equivalent_feedback_observation(
+        [first],
+        "feedback.query_screening",
+        {},
+        default_surface="search_policy",
+    )
+    assert not _has_equivalent_feedback_observation(
+        [first],
+        "feedback.query_screening",
+        {"surface": "route_local"},
+        default_surface="search_policy",
+    )
+    assert _has_successful_code_phase_reusable_observation(
+        [first],
+        "feedback.query_screening",
+        {},
+        hypothesis=_hyp("search_policy"),
+    )
+
+    canonical = _canonical_feedback_observations(
+        [first, second],
+        default_surface="search_policy",
+    )
+
+    screening_observations = [
+        observation
+        for observation in canonical
+        if observation.tool_name == "feedback.query_screening"
+    ]
+    assert screening_observations == [second]
 
 
 def test_runtime_feedback_exposes_compact_surface_attribution(

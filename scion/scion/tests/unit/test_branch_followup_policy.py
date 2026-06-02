@@ -20,7 +20,16 @@ from scion.proposal.context.branch_followup import (
     render_branch_followup_policy,
     validate_weak_positive_followup_hypothesis,
 )
+from scion.proposal.agentic_grounding import (
+    _pre_hypothesis_solver_design_target_file_read_args,
+    _solver_design_target_file_read_args,
+)
+from scion.proposal.active_solver_snapshot import (
+    list_algorithm_files_payload,
+    read_algorithm_file_payload,
+)
 from scion.proposal.engine import _split_hypothesis_context
+from scion.proposal.tools.models import ProposalToolContext
 
 
 def _weak_branch() -> Branch:
@@ -194,6 +203,70 @@ def test_branch_current_file_sources_replay_latest_same_branch_patch_content() -
     assert sources["policies/helpers/alpha_helper.py"] == (
         "def alpha_helper():\n    return 2\n"
     )
+
+
+class _BranchCurrentGroundingProvider:
+    def active_solver_algorithm_file_manifest(self, context):
+        del context
+        return (
+            {
+                "file_path": "policies/main_policy.py",
+                "role": "active_entrypoint",
+                "active": True,
+            },
+        )
+
+    def active_subject_policy(self, context=None, *, surface=None, subject_id=None):
+        del context, surface, subject_id
+        return {
+            "entrypoint_paths": ("policies/main_policy.py",),
+            "support_module_globs": ("policies/helpers/*.py",),
+        }
+
+
+class _BranchCurrentGroundingAdapter:
+    def active_solver_design_provider(self):
+        return _BranchCurrentGroundingProvider()
+
+    def active_subject_policy_provider(self):
+        return _BranchCurrentGroundingProvider()
+
+
+def test_branch_current_created_file_is_existing_hypothesis_grounding_target() -> None:
+    target_file = "policies/helpers/branch_created.py"
+    source = "def branch_created_helper():\n    return 3\n"
+    context = ProposalToolContext(
+        session_id="session-branch-current",
+        campaign_id="campaign-branch-current",
+        adapter=_BranchCurrentGroundingAdapter(),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+        branch_current_file_sources={target_file: source},
+    )
+    hypothesis = _hypothesis(
+        target_file=target_file,
+        mechanism_id="alpha_refinement",
+    )
+    object.__setattr__(hypothesis, "change_locus", "solver_design")
+
+    file_rows = list_algorithm_files_payload(context, include_inactive=True)
+    preground_args = _pre_hypothesis_solver_design_target_file_read_args(context)
+    target_args = _solver_design_target_file_read_args(hypothesis, context=context)
+    payload = read_algorithm_file_payload(context, target_file, max_chars=24000)
+
+    assert target_file in {row["file_path"] for row in file_rows}
+    assert preground_args == [
+        {
+            "surface": "solver_design",
+            "file_path": target_file,
+            "max_chars": 24000,
+        }
+    ]
+    assert target_args == preground_args[0]
+    assert payload["readable"] is True
+    assert payload["source"] == "branch_current_file_sources"
+    assert payload["content_preview"] == source
 
 
 def test_branch_followup_module_has_no_problem_specific_control_terms() -> None:

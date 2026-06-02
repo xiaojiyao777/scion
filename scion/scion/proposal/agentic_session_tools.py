@@ -909,12 +909,15 @@ def _has_successful_code_phase_reusable_observation(
     *,
     hypothesis: HypothesisProposal,
 ) -> bool:
-    if tool_name in {
-        "memory.query",
-        "feedback.query_screening",
-        "feedback.query_runtime",
-    }:
+    if tool_name == "memory.query":
         return False
+    if tool_name in {"feedback.query_screening", "feedback.query_runtime"}:
+        return _has_successful_reusable_observation(
+            observations,
+            tool_name,
+            args,
+            forced_surface=hypothesis.change_locus,
+        )
     if tool_name == "context.read_surface":
         requested_surface = str(
             args.get("surface") or hypothesis.change_locus or ""

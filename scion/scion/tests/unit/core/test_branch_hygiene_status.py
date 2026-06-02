@@ -197,6 +197,60 @@ def test_branch_card_uses_structured_decision_reason_codes_when_block_empty() ->
     ) in text
 
 
+def test_active_branch_card_renders_latest_screening_decision_reason_codes() -> None:
+    branch = Branch(
+        branch_id="active-latest-reasons",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_neutral",
+        last_screening_feedback_tier="neutral",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=0,
+            losses=0,
+            ties=12,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="continue",
+        reason_codes=("TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+        exposed_summary="screening summary",
+        raw_metrics_ref="/safe/screening.json",
+    )
+    decision_codes = (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    )
+    feedback = screening_feedback_summary(
+        protocol,
+        decision_reason_codes=decision_codes,
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+        decision_reason_codes=decision_codes,
+    )
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["why_not_promoted_reason_codes"] == [
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+        "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+    ]
+    assert "why_not_promoted_reason_codes=SCREENING_FAIL_WIN_RATE" in text
+    assert "SCREENING_NEUTRAL_SIGNAL_CONTINUE" in text
+    assert "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in text
+
+
 def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     branch = Branch(
         branch_id="case-card",
