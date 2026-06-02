@@ -9,6 +9,7 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
     SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT,
     SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,
     SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
     SCREENING_ROLLBACK_BUDGET_EXHAUSTED,
@@ -623,6 +624,20 @@ def test_no_effect_exhausted_parks_instead_of_archiving() -> None:
 
     assert decision.action == "park_lineage"
     assert decision.reason_codes == (SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,)
+
+
+def test_no_effect_after_weak_checkpoint_retain_checkpoint_not_head() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(wins=0, losses=0, ties=12, win_rate=0.0),
+        branch_code_status="active_weak_positive",
+        branch_screening_tier="weak_positive",
+        has_checkpoint=True,
+    )
+
+    assert decision.action == "retain_checkpoint"
+    assert decision.reason_codes == (
+        SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT,
+    )
 
 
 def test_no_effect_followup_budget_allows_only_one_diagnostic_retry() -> None:

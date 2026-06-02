@@ -269,6 +269,20 @@ def update_branch_screening_evidence_summary(
     history_codes = _historical_reason_codes(previous_summary, reason_codes)
     if history_codes:
         summary["history_reason_codes"] = list(history_codes)
+    history_phase_summaries = _historical_phase_activation_summaries(
+        previous_summary,
+        current_summary=summary,
+    )
+    if history_phase_summaries:
+        summary["history_phase_activation_summaries"] = history_phase_summaries
+    history_runtime_confidences = _historical_runtime_confidences(
+        previous_summary,
+        current_runtime_confidence=summary["runtime_evidence_confidence"],
+    )
+    if history_runtime_confidences:
+        summary["history_runtime_evidence_confidences"] = list(
+            history_runtime_confidences
+        )
     best_checkpoint_codes = _best_checkpoint_reason_codes(
         branch,
         previous_summary=previous_summary,
@@ -277,6 +291,7 @@ def update_branch_screening_evidence_summary(
     )
     if best_checkpoint_codes:
         summary["best_checkpoint_reason_codes"] = list(best_checkpoint_codes)
+        summary.update(_best_checkpoint_summary_fields(previous_summary))
     branch.branch_evidence_summary = summary
 
 
@@ -322,6 +337,129 @@ def _best_checkpoint_reason_codes(
     ):
         return ()
     return previous_codes
+
+
+def _best_checkpoint_summary_fields(
+    previous_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    existing_generic = previous_summary.get("best_checkpoint_generic_evidence_summary")
+    if isinstance(existing_generic, Mapping):
+        fields["best_checkpoint_generic_evidence_summary"] = dict(existing_generic)
+        existing_phase = previous_summary.get("best_checkpoint_phase_activation_summary")
+        if isinstance(existing_phase, Mapping):
+            fields["best_checkpoint_phase_activation_summary"] = dict(existing_phase)
+        existing_runtime = str(
+            previous_summary.get("best_checkpoint_runtime_evidence_confidence") or ""
+        ).strip()
+        if existing_runtime:
+            fields["best_checkpoint_runtime_evidence_confidence"] = existing_runtime
+        existing_telemetry = str(
+            previous_summary.get("best_checkpoint_telemetry_outcome") or ""
+        ).strip()
+        if existing_telemetry:
+            fields["best_checkpoint_telemetry_outcome"] = existing_telemetry
+        return fields
+    fields["best_checkpoint_generic_evidence_summary"] = _generic_evidence_payload(
+        previous_summary
+    )
+    phase = previous_summary.get("phase_activation_summary")
+    if isinstance(phase, Mapping):
+        fields["best_checkpoint_phase_activation_summary"] = dict(phase)
+    runtime_confidence = str(
+        previous_summary.get("runtime_evidence_confidence") or ""
+    ).strip()
+    if runtime_confidence:
+        fields["best_checkpoint_runtime_evidence_confidence"] = runtime_confidence
+    telemetry_outcome = (
+        fields.get("best_checkpoint_phase_activation_summary") or {}
+    ).get("telemetry_outcome")
+    if telemetry_outcome:
+        fields["best_checkpoint_telemetry_outcome"] = telemetry_outcome
+    return fields
+
+
+def _generic_evidence_payload(summary: Mapping[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "tier": str(summary.get("tier") or "unknown"),
+    }
+    for key in ("wins", "losses", "ties"):
+        if summary.get(key) is not None:
+            payload[key] = summary.get(key)
+    effect = {
+        key: summary.get(key)
+        for key in ("median_delta", "ci_low", "ci_high")
+        if summary.get(key) is not None
+    }
+    if effect:
+        payload["effect"] = effect
+    runtime = {
+        key: summary.get(key)
+        for key in (
+            "runtime_ratio_median",
+            "runtime_delta_median_ms",
+            "runtime_regression_rate",
+            "runtime_pairs",
+        )
+        if summary.get(key) is not None
+    }
+    if runtime:
+        payload["runtime"] = runtime
+    runtime_confidence = str(
+        summary.get("runtime_evidence_confidence") or ""
+    ).strip()
+    if runtime_confidence:
+        payload["runtime_evidence_confidence"] = runtime_confidence
+    return payload
+
+
+def _historical_phase_activation_summaries(
+    previous_summary: Mapping[str, Any],
+    *,
+    current_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    history = [
+        dict(item)
+        for item in previous_summary.get("history_phase_activation_summaries") or ()
+        if isinstance(item, Mapping)
+    ]
+    previous_phase = previous_summary.get("phase_activation_summary")
+    current_phase = current_summary.get("phase_activation_summary")
+    if (
+        isinstance(previous_phase, Mapping)
+        and previous_phase
+        and previous_phase != current_phase
+    ):
+        history.append(dict(previous_phase))
+    return _unique_mapping_history(history)
+
+
+def _historical_runtime_confidences(
+    previous_summary: Mapping[str, Any],
+    *,
+    current_runtime_confidence: Any,
+) -> tuple[str, ...]:
+    history = list(
+        _string_tuple(previous_summary.get("history_runtime_evidence_confidences"))
+    )
+    previous_runtime = str(
+        previous_summary.get("runtime_evidence_confidence") or ""
+    ).strip()
+    if previous_runtime and previous_runtime != str(current_runtime_confidence or ""):
+        history.append(previous_runtime)
+    return tuple(dict.fromkeys(history))
+
+
+def _unique_mapping_history(items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    for item in items:
+        marker = tuple(sorted((str(key), str(value)) for key, value in item.items()))
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(dict(item))
+    return unique
 
 
 def _screening_tier_rank(tier: Any) -> int:

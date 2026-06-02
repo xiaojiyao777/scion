@@ -347,6 +347,109 @@ def test_branch_card_current_reason_codes_do_not_mix_prior_head() -> None:
     assert branch.failure_codes == []
 
 
+def test_branch_card_telemetry_summaries_are_current_best_history_scoped() -> None:
+    branch = Branch(
+        branch_id="telemetry-layering",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+    weak_protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=2,
+            losses=0,
+            ties=10,
+            win_rate=1 / 6,
+            median_delta=0.2,
+            ci_low=0.0,
+            ci_high=0.5,
+        ),
+        gate_outcome="continue",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="weak positive screening",
+        raw_metrics_ref="/safe/weak.json",
+    )
+    weak_codes = (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_WEAK_SIGNAL_CONTINUE",
+    )
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=weak_protocol,
+        screening_feedback=screening_feedback_summary(
+            weak_protocol,
+            decision_reason_codes=weak_codes,
+        ),
+        decision_reason_codes=weak_codes,
+    )
+
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.last_valid_checkpoint_id = "checkpoint-best"
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    no_effect_protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=0,
+            losses=0,
+            ties=12,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="continue",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="no-effect follow-up screening",
+        raw_metrics_ref="/safe/no-effect.json",
+    )
+    no_effect_codes = (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=no_effect_protocol,
+        screening_feedback=screening_feedback_summary(
+            no_effect_protocol,
+            decision_reason_codes=no_effect_codes,
+        ),
+        decision_reason_codes=no_effect_codes,
+    )
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["generic_evidence_summary"]["tier"] == "no_effect"
+    assert payload["current_head_generic_evidence_summary"]["wins"] == 0
+    assert payload["phase_activation_summary"]["effect_status"] == (
+        "no_objective_effect"
+    )
+    assert payload["current_head_phase_activation_summary"] == (
+        payload["phase_activation_summary"]
+    )
+    assert payload["best_checkpoint_reason_codes"] == list(weak_codes)
+    assert payload["best_checkpoint_generic_evidence_summary"]["tier"] == (
+        "weak_positive"
+    )
+    assert payload["best_checkpoint_generic_evidence_summary"]["wins"] == 2
+    assert payload["best_checkpoint_phase_activation_summary"]["effect_status"] == (
+        "case_level_positive_signal"
+    )
+    assert payload["history_phase_activation_summaries"] == [
+        payload["best_checkpoint_phase_activation_summary"]
+    ]
+    assert "generic_evidence_summary=tier:no_effect" in text
+    assert "best_checkpoint_generic_evidence_summary=tier:weak_positive" in text
+    assert "best_checkpoint_phase_activation_summary=stage:screening" in text
+    assert "history_phase_activation_summaries=stage:screening" in text
+
+
 def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     branch = Branch(
         branch_id="case-card",

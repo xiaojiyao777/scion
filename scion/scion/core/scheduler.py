@@ -12,6 +12,7 @@ from scion.core.branch_hygiene import (
     branch_is_parked_lineage,
     branch_lifecycle_new_mechanism_ineligible,
     branch_lineage_status,
+    branch_requires_repair_focus,
     branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch, BranchState
@@ -120,6 +121,7 @@ class Scheduler:
             for b in active
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
+            and not _retained_checkpoint_no_effect_current_head(b)
             and not _branch_lifecycle_budget_exhausted(b)
         ]
 
@@ -302,6 +304,8 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
     if branch.state in _TERMINAL_STATES:
         return False
     if branch_is_parked_lineage(branch):
+        return False
+    if _retained_checkpoint_no_effect_current_head(branch):
         return False
     return True
 
@@ -649,6 +653,24 @@ def _no_effect_without_actionable_diagnostic(branch: Branch) -> bool:
         (status == "active_no_effect" or tier == "no_effect")
         and not branch_has_actionable_diagnostic(branch)
     )
+
+
+def _retained_checkpoint_no_effect_current_head(branch: Branch) -> bool:
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    current_no_effect = status in {"active_no_effect", "active_neutral"} or tier in {
+        "no_effect",
+        "neutral",
+    }
+    if not current_no_effect or not branch_has_retained_checkpoint(branch):
+        return False
+    if getattr(branch, "pending_retry", False):
+        return False
+    if branch_requires_repair_focus(branch):
+        return False
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return False
+    return True
 
 
 def _slot_for_branch(

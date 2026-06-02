@@ -160,12 +160,10 @@ def test_sibling_prompt_projection_includes_checkpoint_branch_card() -> None:
     assert "rollback_count=1" in restore_line
     assert "latest_head_failed=true" in restore_line
     assert "lineage_retained_checkpoint=true" in restore_line
-    assert (
-        "generic_evidence_summary=tier:weak_positive,wins:3,losses:1,ties:2"
-        in restore_line
-    )
-    assert "effect:0.04" in restore_line
-    assert "runtime:1.03" in restore_line
+    assert "generic_evidence_summary=tier:weak_positive" in restore_line
+    assert "wins:3" not in restore_line
+    assert "effect:0.04" not in restore_line
+    assert "runtime:1.03" not in restore_line
     assert "why_not_promoted_reason_codes=BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT" in (
         restore_line
     )

@@ -51,6 +51,15 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     activation = _format_phase_activation_summary(
         _card_mapping(context.get("phase_activation_summary"))
     )
+    best_checkpoint_evidence = _format_evidence_summary(
+        _card_mapping(context.get("best_checkpoint_generic_evidence_summary"))
+    )
+    best_checkpoint_activation = _format_phase_activation_summary(
+        _card_mapping(context.get("best_checkpoint_phase_activation_summary"))
+    )
+    history_activation = _format_phase_activation_history(
+        _card_mapping_list(context.get("history_phase_activation_summaries"))
+    )
     runtime_confidence = context.get("runtime_evidence_confidence") or "unknown"
     why_not_promoted = (
         ",".join(_card_list(context.get("why_not_promoted_reason_codes"))) or "none"
@@ -60,6 +69,33 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     )
     why_abandoned = (
         ",".join(_card_list(context.get("why_abandoned_reason_codes"))) or "none"
+    )
+    optional_parts: list[str] = []
+    if _card_mapping(context.get("best_checkpoint_generic_evidence_summary")):
+        optional_parts.append(
+            f"best_checkpoint_generic_evidence_summary={best_checkpoint_evidence}"
+        )
+    if _card_mapping(context.get("best_checkpoint_phase_activation_summary")):
+        optional_parts.append(
+            "best_checkpoint_phase_activation_summary="
+            f"{best_checkpoint_activation}"
+        )
+    best_checkpoint_runtime_confidence = context.get(
+        "best_checkpoint_runtime_evidence_confidence"
+    )
+    if best_checkpoint_runtime_confidence:
+        optional_parts.append(
+            "best_checkpoint_runtime_evidence_confidence="
+            f"{best_checkpoint_runtime_confidence}"
+        )
+    if history_activation != "none":
+        optional_parts.append(
+            f"history_phase_activation_summaries={history_activation}"
+        )
+    optional_suffix = (
+        " " + " ".join(optional_parts)
+        if optional_parts
+        else ""
     )
     return (
         f"branch_id={context.get('branch_id') or 'unknown'} "
@@ -85,6 +121,7 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         f"why_not_promoted_reason_codes={why_not_promoted} "
         f"proposal_block_reason_codes={proposal_blocks} "
         f"why_abandoned_reason_codes={why_abandoned}"
+        f"{optional_suffix}"
     )
 
 
@@ -311,16 +348,48 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             branch,
             current_tier=last_screening_feedback_tier,
         ),
+        "current_head_generic_evidence_summary": _branch_generic_evidence_summary(
+            branch,
+            current_tier=last_screening_feedback_tier,
+        ),
         "case_level_winners": _branch_case_outcomes(branch, "case_level_winners"),
         "case_level_losses": _branch_case_outcomes(branch, "case_level_losses"),
         "phase_activation_summary": _branch_phase_activation_summary(branch),
+        "current_head_phase_activation_summary": _branch_phase_activation_summary(
+            branch
+        ),
         "runtime_evidence_confidence": _branch_runtime_evidence_confidence(branch),
+        "current_head_runtime_evidence_confidence": (
+            _branch_runtime_evidence_confidence(branch)
+        ),
         "gate_observation_reason_codes": _current_gate_observation_codes(branch),
         "lifecycle_action_reason_codes": _lifecycle_action_reason_codes(branch),
         "rollback_reason_codes": _branch_rollback_codes(branch),
         "why_not_promoted_reason_codes": _why_not_promoted_codes(branch),
         "best_checkpoint_reason_codes": _best_checkpoint_reason_codes(branch),
         "history_reason_codes": _history_reason_codes(branch),
+        "best_checkpoint_generic_evidence_summary": (
+            _best_checkpoint_mapping(branch, "best_checkpoint_generic_evidence_summary")
+        ),
+        "best_checkpoint_phase_activation_summary": (
+            _best_checkpoint_mapping(branch, "best_checkpoint_phase_activation_summary")
+        ),
+        "best_checkpoint_runtime_evidence_confidence": _best_checkpoint_scalar(
+            branch,
+            "best_checkpoint_runtime_evidence_confidence",
+        ),
+        "best_checkpoint_telemetry_outcome": _best_checkpoint_scalar(
+            branch,
+            "best_checkpoint_telemetry_outcome",
+        ),
+        "history_phase_activation_summaries": _history_mapping_list(
+            branch,
+            "history_phase_activation_summaries",
+        ),
+        "history_runtime_evidence_confidences": _branch_evidence_codes(
+            branch,
+            "history_runtime_evidence_confidences",
+        ),
         "proposal_block_reason_codes": _proposal_block_codes(branch),
         "why_abandoned_reason_codes": _why_abandoned_codes(branch),
         "last_screening_feedback_tier": last_screening_feedback_tier,
@@ -617,6 +686,25 @@ def _branch_evidence_codes(branch: Branch | None, *keys: str) -> list[str]:
     return _mapping_codes(evidence, *keys)
 
 
+def _best_checkpoint_mapping(branch: Branch | None, key: str) -> dict[str, Any]:
+    value = _branch_evidence_summary(branch).get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _best_checkpoint_scalar(branch: Branch | None, key: str) -> Any:
+    value = _branch_evidence_summary(branch).get(key)
+    if isinstance(value, (Mapping, list, tuple, set)):
+        return None
+    return value
+
+
+def _history_mapping_list(branch: Branch | None, key: str) -> list[dict[str, Any]]:
+    value = _branch_evidence_summary(branch).get(key)
+    if not isinstance(value, Iterable) or isinstance(value, (str, bytes, Mapping)):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
 def _mapping_codes(source: Mapping[str, Any], *keys: str) -> list[str]:
     codes: list[str] = []
     for key in keys:
@@ -680,29 +768,25 @@ def _branch_case_outcomes(branch: Branch | None, key: str) -> list[dict[str, Any
 
 def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
     evidence = _branch_evidence_summary(branch)
-    block = _branch_block(branch)
-    for raw in (
-        evidence.get("phase_activation_summary"),
-        block.get("phase_activation_summary"),
-    ):
-        if isinstance(raw, Mapping):
-            return {
-                "stage": str(raw.get("stage") or "unknown"),
-                "activation_status": str(
-                    raw.get("activation_status") or "unknown"
-                ),
-                "effect_status": str(raw.get("effect_status") or "unknown"),
-                "activation_evidence_status": str(
-                    raw.get("activation_evidence_status") or "unknown"
-                ),
-                "objective_effect_status": str(
-                    raw.get("objective_effect_status") or "unknown"
-                ),
-                "opportunity_status": str(
-                    raw.get("opportunity_status") or "unknown"
-                ),
-                "telemetry_outcome": raw.get("telemetry_outcome"),
-            }
+    raw = evidence.get("phase_activation_summary")
+    if isinstance(raw, Mapping):
+        return {
+            "stage": str(raw.get("stage") or "unknown"),
+            "activation_status": str(
+                raw.get("activation_status") or "unknown"
+            ),
+            "effect_status": str(raw.get("effect_status") or "unknown"),
+            "activation_evidence_status": str(
+                raw.get("activation_evidence_status") or "unknown"
+            ),
+            "objective_effect_status": str(
+                raw.get("objective_effect_status") or "unknown"
+            ),
+            "opportunity_status": str(
+                raw.get("opportunity_status") or "unknown"
+            ),
+            "telemetry_outcome": raw.get("telemetry_outcome"),
+        }
     return {
         "stage": "unknown",
         "activation_status": "unknown",
@@ -722,12 +806,9 @@ def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
 
 def _branch_runtime_evidence_confidence(branch: Branch | None) -> str:
     evidence = _branch_evidence_summary(branch)
-    block = _branch_block(branch)
     for value in (
         evidence.get("runtime_evidence_confidence"),
         evidence.get("runtime_confidence"),
-        block.get("runtime_evidence_confidence"),
-        block.get("runtime_confidence"),
     ):
         text = str(value or "").strip()
         if text:
@@ -845,9 +926,8 @@ def _branch_generic_evidence_summary(
     *,
     current_tier: Any,
 ) -> dict[str, Any]:
-    block = _branch_block(branch)
     evidence = _branch_evidence_summary(branch)
-    source: Mapping[str, Any] = evidence or block
+    source: Mapping[str, Any] = evidence
     status = branch_code_status(branch)
     tier = (
         str(current_tier or "").strip()
@@ -1027,6 +1107,16 @@ def _format_phase_activation_summary(summary: Mapping[str, Any]) -> str:
         )
         if summary.get(key) is not None
     ) or "none"
+
+
+def _format_phase_activation_history(summaries: Iterable[Mapping[str, Any]]) -> str:
+    parts = [
+        _format_phase_activation_summary(summary)
+        for summary in summaries
+        if summary
+    ]
+    parts = [part for part in parts if part != "none"]
+    return "|".join(parts) if parts else "none"
 
 
 def _compact_card_value(value: Any) -> str:

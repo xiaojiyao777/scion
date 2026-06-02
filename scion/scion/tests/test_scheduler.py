@@ -212,6 +212,27 @@ def test_no_effect_without_actionable_diagnostic_does_not_bypass_hard_cap():
     assert action.reason == "active_branch_limit_reached"
 
 
+def test_no_effect_head_with_retained_checkpoint_releases_slot_for_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: weakened checkpoint follow-up"
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.last_valid_checkpoint_id = "checkpoint-last"
+    branch.branch_mechanism_ids = ("retained_probe",)
+
+    action = Scheduler(max_active_branches=3).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=3)
+
+    assert inventory["used"] == 0
+    assert inventory["available"] == 3
+    assert inventory["branch_ids"] == []
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
+
+
 def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
     branch = _branch(BranchState.EXPLORE)
     branch.branch_code_status = "active_no_effect"

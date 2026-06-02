@@ -37,6 +37,9 @@ SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED = (
 SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED = (
     "SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED"
 )
+SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT = (
+    "SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT"
+)
 SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN = (
     "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN"
 )
@@ -279,6 +282,15 @@ class BranchLifecyclePolicy:
             return build(
                 action="park_lineage",
                 reason_codes=(SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED,),
+            )
+        if (
+            current_signal_tier == "no_effect"
+            and has_checkpoint
+            and prior_evidence_tier == "weak_positive"
+        ):
+            return build(
+                action="retain_checkpoint",
+                reason_codes=(SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT,),
             )
         if (
             current_signal_tier in {"marginal", "no_effect"}
@@ -768,6 +780,7 @@ __all__ = [
     "SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL",
     "SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED",
     "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    "SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT",
     "SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED",
     "SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED",
     "SCREENING_ROLLBACK_BUDGET_EXHAUSTED",

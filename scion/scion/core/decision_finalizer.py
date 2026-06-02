@@ -360,6 +360,8 @@ class DecisionFinalizer:
             protocol_result,
             decision_reason_codes,
         )
+        if lifecycle_action != "retain_head":
+            preserve_low_signal_branch = False
         regressed_followup = _is_regressed_weak_positive_followup(
             branch,
             protocol_result,
