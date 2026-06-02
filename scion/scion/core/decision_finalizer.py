@@ -46,6 +46,7 @@ from scion.core.models import (
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
 from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
+from scion.core.screening_visibility import runtime_aggregate_exclusion_for_protocol
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
@@ -939,6 +940,14 @@ def _merge_protocol_evidence_summary(
     }.items():
         if value is not None:
             summary.setdefault(key, value)
+    runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(
+        protocol_result
+    )
+    if runtime_aggregate_exclusion:
+        summary.setdefault(
+            "runtime_aggregate_exclusion",
+            runtime_aggregate_exclusion,
+        )
 
 
 def _terminal_evidence_tier(protocol_result: ProtocolResult) -> str:

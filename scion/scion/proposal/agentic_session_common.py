@@ -140,8 +140,10 @@ from scion.proposal.agentic_session_budget import (
     _should_deny_optional_tool_for_budget as _should_deny_optional_tool_for_budget_config,
 )
 from scion.proposal.agentic_session_feedback import (
+    _canonical_feedback_observations,
     _compact_feedback_observation_for_budget,
     _feedback_query_args,
+    _has_equivalent_feedback_observation,
     _has_feedback_screening_history,
     _observation_satisfies_compact_requirement,
 )
@@ -292,6 +294,7 @@ __all__ = (
     "_authoritative_preview_observations",
     "_budgeted_tool_args",
     "_can_use_signal_timeout",
+    "_canonical_feedback_observations",
     "_champion_version",
     "_champion_weight_revision",
     "_code_context_tool_summary",
@@ -320,6 +323,7 @@ __all__ = (
     "_filter_model_facing_tool_names",
     "_has_active_solver_embedded_call_graph",
     "_has_code_phase_surface_read",
+    "_has_equivalent_feedback_observation",
     "_has_feedback_screening_history",
     "_has_relevant_algorithm_slice_read",
     "_has_successful_code_phase_reusable_observation",

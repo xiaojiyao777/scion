@@ -13,7 +13,10 @@ from scion.proposal.agentic_models import (
     AgenticProposalPhase,
     AgenticProposalSessionState,
 )
-from scion.proposal.agentic_session_feedback import _observation_satisfies_compact_requirement
+from scion.proposal.agentic_session_feedback import (
+    _canonical_feedback_observations,
+    _observation_satisfies_compact_requirement,
+)
 from scion.proposal.agentic_utils import _drop_empty_dict, _enum_value, _sanitize_agentic_value
 from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.tools import ProposalObservation, ProposalToolContext
@@ -100,7 +103,11 @@ def _hypothesis_prompt_observations(
     context: ProposalToolContext | None,
 ) -> list[ProposalObservation]:
     selected: list[ProposalObservation] = []
-    for observation in observations:
+    default_surface = str(getattr(context, "forced_surface", "") or "").strip()
+    for observation in _canonical_feedback_observations(
+        observations,
+        default_surface=default_surface,
+    ):
         if observation.tool_name in _HYPOTHESIS_PROMPT_COMPACT_REQUIREMENT_TOOLS:
             if _observation_satisfies_compact_requirement(context, observation):
                 selected.append(observation)

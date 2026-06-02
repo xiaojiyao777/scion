@@ -211,6 +211,79 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     )
 
 
+def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/scheduler.py"
+    branch_source = (
+        "class BranchScopedScheduler:\n"
+        "    def choose(self, state):\n"
+        "        return state\n"
+    )
+    creative = FakeCreative(
+        hypothesis=_scheduler_hypothesis(
+            "Modify the existing scheduler.py owner file for bounded scheduling."
+        )
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        branch_current_file_sources={target_file: branch_source},
+    )
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "artifacts-inferred")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-pregrounding",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "target-pregrounding"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.hypothesis_contexts) == 1
+    first_context = creative.hypothesis_contexts[0]
+    assert "agentic_hypothesis_grounding_rejections" not in first_context
+    target_observations = [
+        observation
+        for observation in first_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_file
+    ]
+    assert target_observations
+    assert target_observations[0]["structured_payload"]["readable"] is True
+    assert target_observations[0]["structured_payload"]["truncated"] is False
+
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in str(ref)
+    ]
+    assert manifests[0]["call_kind"] == "hypothesis"
+    assert not any(manifest["call_kind"] == "hypothesis_grounding_retry" for manifest in manifests)
+    prompt_items = [
+        item
+        for item in manifests[0]["included_observations"]
+        if item.get("tool_name") == "context.read_algorithm_file"
+        and item.get("file_path") == target_file
+    ]
+    assert prompt_items
+    assert prompt_items[0]["included_in_prompt_for_call"] is True
+    assert prompt_items[0]["full_content_visible_anywhere_in_rendered_prompt"] is True
+
+
 def test_target_file_grounding_retry_resets_when_semantic_retry_changes_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

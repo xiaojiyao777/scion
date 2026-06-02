@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from scion.proposal.agentic_observation_ledger.reuse import (
     already_observed_from_inherited_ledger,
 )
+from scion.proposal.agentic_observation_ledger.payloads import (
+    compact_observation_ledger_for_resume,
+)
 from scion.tests.unit.agentic_session_test_support import *
 from scion.tests.unit.test_active_solver_map import _FullProvider, _context as _map_context
 
@@ -161,3 +164,37 @@ def test_active_map_inherited_receipt_with_stale_digest_forces_reread() -> None:
     )
 
     assert reused is None
+
+
+def test_resume_observation_ledger_canonicalizes_runtime_feedback_scope() -> None:
+    ledger = {
+        "schema_version": "agentic-observation-ledger.v1",
+        "session_id": "session-1",
+        "observations": [
+            {
+                "observation_id": "runtime-old",
+                "tool_name": "feedback.query_runtime",
+                "normalized_args": {"branch_id": "branch-1", "surface": "solver"},
+                "summary": "old runtime feedback",
+            },
+            {
+                "observation_id": "runtime-other-branch",
+                "tool_name": "feedback.query_runtime",
+                "normalized_args": {"branch_id": "branch-2", "surface": "solver"},
+                "summary": "other branch runtime feedback",
+            },
+            {
+                "observation_id": "runtime-new",
+                "tool_name": "feedback.query_runtime",
+                "normalized_args": {"branch_id": "branch-1", "surface": "solver"},
+                "summary": "new runtime feedback",
+            },
+        ],
+    }
+
+    compact = compact_observation_ledger_for_resume(ledger, max_entries=10)
+    observation_ids = [
+        entry["observation_id"] for entry in compact["observations"]
+    ]
+
+    assert observation_ids == ["runtime-new", "runtime-other-branch"]

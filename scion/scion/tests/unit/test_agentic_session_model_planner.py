@@ -223,6 +223,128 @@ def test_solver_design_planner_repeated_completed_required_tool_does_not_loop(
     ) == 1
 
 
+def test_planner_reuses_equivalent_runtime_feedback_observation(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "feedback.query_runtime",
+                "args": {"branch_id": "branch-1"},
+            },
+            {
+                "tool_name": "feedback.query_runtime",
+                "args": {"branch_id": "branch-1", "max_items": 12},
+            },
+        ]
+    )
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(
+            max_tool_calls=8,
+            max_steps=12,
+            max_repeated_tool_calls=1,
+        ),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-runtime-dedupe",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_loop_config=session._tool_loop_config.__dict__,
+    )
+
+    observations = session._run_bounded_planner_tools(context, state)
+    runtime_observations = [
+        observation
+        for observation in observations
+        if observation.tool_name == "feedback.query_runtime"
+    ]
+
+    assert len(runtime_observations) == 1
+    assert runtime_observations[0].structured_payload[
+        "runtime_observation_status"
+    ]["usable"] is True
+    assert state.loop_stop_reason != "repeated_tool_call"
+    assert any(
+        event.metadata.get("tool_name") == "feedback.query_runtime"
+        and event.metadata.get("error_code") == "feedback_observation_satisfied"
+        for event in state.transcript
+    )
+    assert not any(
+        event.metadata.get("error_code") == "repeated_tool_call_fuse"
+        for event in state.transcript
+    )
+
+
+def test_runtime_feedback_prompt_projection_canonicalizes_equivalent_scope(
+    tmp_path: Path,
+) -> None:
+    from scion.proposal.agentic_code_context import _code_prompt_observations
+    from scion.proposal.agentic_session_feedback import (
+        _has_equivalent_feedback_observation,
+    )
+    from scion.proposal.agentic_session_observations import (
+        _hypothesis_prompt_observations,
+    )
+
+    context = replace(_context(tmp_path), forced_surface="solver_design")
+
+    def runtime_observation(observation_id: str, marker: str) -> ProposalObservation:
+        return ProposalObservation(
+            observation_id=observation_id,
+            session_id="session-runtime-canonical",
+            tool_name="feedback.query_runtime",
+            tool_call_id=observation_id,
+            observation_type="runtime_feedback",
+            summary=f"Runtime feedback {marker}.",
+            structured_payload={
+                "branch_id": "branch-1",
+                "surface": "solver_design",
+                "runtime_feedback": marker,
+                "runtime_observation_status": {
+                    "schema_version": "runtime_feedback_observation_status.v1",
+                    "usable": True,
+                    "canonical_scope": {
+                        "campaign_id": "camp-1",
+                        "branch_id": "branch-1",
+                        "surface": "solver_design",
+                    },
+                },
+            },
+        )
+
+    older = runtime_observation("runtime-older", "older")
+    newer = runtime_observation("runtime-newer", "newer")
+
+    assert _hypothesis_prompt_observations([older, newer], context) == [newer]
+    assert _code_prompt_observations([older, newer]) == [newer]
+    assert not _has_equivalent_feedback_observation(
+        [newer],
+        "feedback.query_runtime",
+        {},
+        default_surface="solver_design",
+    )
+
+    broad_payload = dict(newer.structured_payload)
+    broad_status = dict(broad_payload["runtime_observation_status"])
+    broad_status["canonical_scope"] = {
+        "campaign_id": "camp-1",
+        "branch_id": "",
+        "surface": "solver_design",
+    }
+    broad_payload["branch_id"] = ""
+    broad_payload["runtime_observation_status"] = broad_status
+    broad = replace(newer, observation_id="runtime-broad", structured_payload=broad_payload)
+    assert _has_equivalent_feedback_observation(
+        [broad],
+        "feedback.query_runtime",
+        {"branch_id": "branch-1"},
+        default_surface="solver_design",
+    )
+
+
 def test_solver_design_planner_guidance_exposes_registry_and_slice_ids_after_map(
     tmp_path: Path,
 ) -> None:
@@ -396,7 +518,7 @@ def test_solver_design_planner_status_requires_existing_target_source_before_sto
         for item in planner_status["next_required_tools"]
     )
     assert file_guidance["recommended_args"]["file_path"] == target_file
-    assert "existing provider-declared active file" in file_guidance[
+    assert "provider-declared active target candidate" in file_guidance[
         "existing_target_grounding_rule"
     ]
     assert any(

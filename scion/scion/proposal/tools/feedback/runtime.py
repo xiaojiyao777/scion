@@ -90,9 +90,56 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             ),
             _COMPACT_FEEDBACK_TEXT_CHARS,
         )
+        active_attribution = [
+            _with_feedback_provenance(
+                attribution,
+                _feedback_step_provenance(
+                    step,
+                    boundary_surfaces=feedback_scope.boundary_surfaces,
+                    role="active_boundary_evidence"
+                    if feedback_scope.enforced
+                    else "screening_evidence",
+                ),
+            )
+            for step in reversed(active_steps)
+            for attribution in (_surface_runtime_attribution_payload(step),)
+            if (
+                attribution
+                and step.protocol_result is not None
+                and step.protocol_result.stage == ExperimentStage.SCREENING
+            )
+        ][: args.max_items]
+        inactive_attribution = [
+            _with_feedback_provenance(
+                attribution,
+                _feedback_step_provenance(
+                    step,
+                    boundary_surfaces=feedback_scope.boundary_surfaces,
+                    role="inactive_reference",
+                ),
+            )
+            for step in reversed(inactive_reference_steps)
+            for attribution in (_surface_runtime_attribution_payload(step),)
+            if (
+                attribution
+                and step.protocol_result is not None
+                and step.protocol_result.stage == ExperimentStage.SCREENING
+            )
+        ][: args.max_items]
+        runtime_status = _runtime_observation_status(
+            context=context,
+            args=args,
+            active_steps=active_steps,
+            inactive_reference_steps=inactive_reference_steps,
+            runtime_feedback=rendered,
+            runtime_failure_guidance=guidance,
+            active_attribution=active_attribution,
+            inactive_attribution=inactive_attribution,
+        )
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "runtime_observation_status": runtime_status,
             "provenance": _feedback_payload_provenance(
                 source="screening_runtime_history",
                 feedback_scope=feedback_scope,
@@ -107,43 +154,9 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             "active_boundary_filter": feedback_scope.payload(),
             "runtime_feedback": rendered,
             "runtime_failure_guidance": guidance,
-            "screening_runtime_attribution": [
-                _with_feedback_provenance(
-                    attribution,
-                    _feedback_step_provenance(
-                        step,
-                        boundary_surfaces=feedback_scope.boundary_surfaces,
-                        role="active_boundary_evidence"
-                        if feedback_scope.enforced
-                        else "screening_evidence",
-                    ),
-                )
-                for step in reversed(active_steps)
-                for attribution in (_surface_runtime_attribution_payload(step),)
-                if (
-                    attribution
-                    and step.protocol_result is not None
-                    and step.protocol_result.stage == ExperimentStage.SCREENING
-                )
-            ][: args.max_items],
+            "screening_runtime_attribution": active_attribution,
             "inactive_reference_runtime_feedback": inactive_rendered,
-            "inactive_reference_runtime_attribution": [
-                _with_feedback_provenance(
-                    attribution,
-                    _feedback_step_provenance(
-                        step,
-                        boundary_surfaces=feedback_scope.boundary_surfaces,
-                        role="inactive_reference",
-                    ),
-                )
-                for step in reversed(inactive_reference_steps)
-                for attribution in (_surface_runtime_attribution_payload(step),)
-                if (
-                    attribution
-                    and step.protocol_result is not None
-                    and step.protocol_result.stage == ExperimentStage.SCREENING
-                )
-            ][: args.max_items],
+            "inactive_reference_runtime_attribution": inactive_attribution,
             "research_diagnosis": _research_diagnosis_payload(
                 active_steps,
                 max_items=args.max_items,
@@ -155,6 +168,7 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             "metrics_file_refs_exposed": False,
         }
         payload = _bound_compact_feedback_payload(payload)
+        payload.setdefault("runtime_observation_status", runtime_status)
         return self._observation(
             context,
             observation_type="runtime_feedback",
@@ -166,6 +180,59 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.SCREENING_DETAIL,
         )
+
+
+def _runtime_observation_status(
+    *,
+    context: ProposalToolContext,
+    args: FeedbackQueryInput,
+    active_steps: list,
+    inactive_reference_steps: list,
+    runtime_feedback: str,
+    runtime_failure_guidance: str,
+    active_attribution: list,
+    inactive_attribution: list,
+) -> dict:
+    low_confidence_exclusions = []
+    for step in active_steps:
+        protocol = getattr(step, "protocol_result", None)
+        if protocol is None:
+            continue
+        stats = getattr(protocol, "stats", None)
+        runtime_pairs = int(getattr(stats, "runtime_pairs", 0) or 0)
+        confidence = str(getattr(protocol, "runtime_confidence", "") or "").strip()
+        cached_pairs = int(getattr(protocol, "champion_cached_runtime_pairs", 0) or 0)
+        if runtime_pairs <= 0 and confidence and confidence != "high":
+            low_confidence_exclusions.append(
+                {
+                    "round_num": getattr(step, "round_num", None),
+                    "runtime_confidence": confidence,
+                    "champion_cached_runtime_pairs": cached_pairs,
+                    "reason": confidence,
+                }
+            )
+    usable = bool(
+        runtime_feedback.strip()
+        or runtime_failure_guidance.strip()
+        or active_attribution
+        or inactive_attribution
+    )
+    return {
+        "schema_version": "runtime_feedback_observation_status.v1",
+        "canonical_scope": {
+            "campaign_id": context.campaign_id,
+            "branch_id": str(args.branch_id or "").strip(),
+            "surface": str(args.surface or context.forced_surface or "").strip(),
+        },
+        "usable": usable,
+        "active_step_count": len(active_steps),
+        "inactive_reference_step_count": len(inactive_reference_steps),
+        "active_runtime_attribution_count": len(active_attribution),
+        "inactive_runtime_attribution_count": len(inactive_attribution),
+        "runtime_feedback_available": bool(runtime_feedback.strip()),
+        "runtime_failure_guidance_available": bool(runtime_failure_guidance.strip()),
+        "aggregate_runtime_exclusion_reasons": low_confidence_exclusions[:4],
+    }
 
 __all__ = [
     "FeedbackQueryRuntimeTool",

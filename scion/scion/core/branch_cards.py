@@ -580,12 +580,21 @@ def _branch_block(branch: Branch | None) -> Mapping[str, Any]:
 
 def _branch_block_codes(branch: Branch | None, *keys: str) -> list[str]:
     block = _branch_block(branch)
+    return _mapping_codes(block, *keys)
+
+
+def _branch_evidence_codes(branch: Branch | None, *keys: str) -> list[str]:
+    evidence = _branch_evidence_summary(branch)
+    return _mapping_codes(evidence, *keys)
+
+
+def _mapping_codes(source: Mapping[str, Any], *keys: str) -> list[str]:
     codes: list[str] = []
     for key in keys:
-        value = block.get(key)
+        value = source.get(key)
         if isinstance(value, str):
             codes.extend([value] if value else [])
-        elif isinstance(value, Iterable):
+        elif isinstance(value, Iterable) and not isinstance(value, Mapping):
             codes.extend(str(item) for item in value if str(item))
     return list(dict.fromkeys(codes))
 
@@ -654,6 +663,12 @@ def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
                     raw.get("activation_status") or "unknown"
                 ),
                 "effect_status": str(raw.get("effect_status") or "unknown"),
+                "activation_evidence_status": str(
+                    raw.get("activation_evidence_status") or "unknown"
+                ),
+                "objective_effect_status": str(
+                    raw.get("objective_effect_status") or "unknown"
+                ),
                 "opportunity_status": str(
                     raw.get("opportunity_status") or "unknown"
                 ),
@@ -665,6 +680,8 @@ def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
         "effect_status": str(
             getattr(branch, "last_telemetry_outcome", None) or "unknown"
         ),
+        "activation_evidence_status": "unknown",
+        "objective_effect_status": "unknown",
         "opportunity_status": "unknown",
         "telemetry_outcome": (
             getattr(branch, "last_telemetry_outcome", None)
@@ -694,6 +711,17 @@ def _why_not_promoted_codes(branch: Branch | None) -> list[str]:
         return []
     codes = list(getattr(branch, "failure_codes", None) or ())
     codes.extend(
+        _branch_evidence_codes(
+            branch,
+            "why_not_promoted_reason_codes",
+            "lifecycle_action_reason_codes",
+            "decision_reason_codes",
+            "terminal_reason_codes",
+            "effective_reason_codes",
+            "reason_codes",
+        )
+    )
+    codes.extend(
         _branch_block_codes(
             branch,
             "why_not_promoted_reason_codes",
@@ -715,6 +743,15 @@ def _proposal_block_codes(branch: Branch | None) -> list[str]:
     if branch is None:
         return []
     codes = list(getattr(branch, "failure_codes", None) or ())
+    codes.extend(
+        _branch_evidence_codes(
+            branch,
+            "proposal_block_reason_codes",
+            "schema_reason_codes",
+            "proposal_quality_reason_codes",
+            "reason_codes",
+        )
+    )
     codes.extend(
         _branch_block_codes(
             branch,
@@ -776,6 +813,9 @@ def _branch_generic_evidence_summary(
     runtime_confidence = _branch_runtime_evidence_confidence(branch)
     if runtime_confidence != "unknown":
         summary["runtime_evidence_confidence"] = runtime_confidence
+    runtime_aggregate_exclusion = source.get("runtime_aggregate_exclusion")
+    if isinstance(runtime_aggregate_exclusion, Mapping) and runtime_aggregate_exclusion:
+        summary["runtime_aggregate_exclusion"] = dict(runtime_aggregate_exclusion)
     return summary
 
 
@@ -855,6 +895,11 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
     runtime_confidence = summary.get("runtime_evidence_confidence")
     if runtime_confidence:
         parts.append(f"runtime_confidence:{runtime_confidence}")
+    exclusion = summary.get("runtime_aggregate_exclusion")
+    if isinstance(exclusion, Mapping) and exclusion.get("excluded"):
+        reason = exclusion.get("reason") or exclusion.get("runtime_confidence")
+        if reason:
+            parts.append(f"runtime_aggregate_excluded:{reason}")
     return ",".join(parts)
 
 
@@ -886,6 +931,8 @@ def _format_phase_activation_summary(summary: Mapping[str, Any]) -> str:
             "stage",
             "activation_status",
             "effect_status",
+            "activation_evidence_status",
+            "objective_effect_status",
             "opportunity_status",
             "telemetry_outcome",
         )

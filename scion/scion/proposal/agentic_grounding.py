@@ -168,7 +168,10 @@ def _forced_solver_design_target_file_read_args(
 ) -> dict[str, Any] | None:
     if context is None or not _context_requires_solver_design_grounding(context):
         return None
-    target_file = _normalize_solver_design_target_file(context.forced_target_file)
+    target_file = _inferred_solver_design_target_file(
+        context,
+        observations=observations,
+    )
     if not _is_solver_design_algorithm_target(
         target_file,
         context=context,
@@ -191,6 +194,98 @@ def _forced_solver_design_target_file_read_args(
         "file_path": target_file,
         "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
     }
+
+
+def _inferred_solver_design_target_file(
+    context: ProposalToolContext | None,
+    *,
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation] = (),
+) -> str:
+    """Return a generic existing solver-design target candidate, if one exists."""
+
+    if context is None or not _context_requires_solver_design_grounding(context):
+        return ""
+    candidates = _solver_design_target_candidates(context)
+    if not candidates:
+        return ""
+    existing_paths = set(
+        _existing_algorithm_file_paths(context=context, observations=observations)
+    )
+    branch_current_paths = {
+        _normalize_solver_design_target_file(path)
+        for path in getattr(context, "branch_current_file_sources", {}) or {}
+        if _normalize_solver_design_target_file(path)
+    }
+    for candidate in candidates:
+        target_file = _normalize_solver_design_target_file(candidate)
+        if not target_file:
+            continue
+        if not _is_solver_design_algorithm_target(
+            target_file,
+            context=context,
+            surface=context.forced_surface,
+        ):
+            continue
+        if (
+            target_file in existing_paths
+            or target_file in branch_current_paths
+            or _target_declared_for_solver_design_surface(context, target_file)
+        ):
+            return target_file
+    return ""
+
+
+def _solver_design_target_candidates(context: ProposalToolContext) -> list[str]:
+    candidates: list[str] = []
+
+    forced_action = str(context.forced_action or "").strip()
+    forced_target = _normalize_solver_design_target_file(context.forced_target_file)
+    if forced_target and (not forced_action or forced_action in {"modify", "remove"}):
+        candidates.append(forced_target)
+
+    branch_id = str(getattr(context, "branch_id", None) or "").strip()
+    for step in reversed(tuple(getattr(context, "step_history", ()) or ())):
+        if branch_id and str(getattr(step, "branch_id", "") or "") != branch_id:
+            continue
+        hypothesis = getattr(step, "hypothesis", None)
+        if hypothesis is not None and str(
+            getattr(hypothesis, "action", "") or ""
+        ) in {"modify", "remove"}:
+            candidates.append(
+                _normalize_solver_design_target_file(
+                    getattr(hypothesis, "target_file", "")
+                )
+            )
+        patch = getattr(step, "patch", None)
+        for change in _patch_changes_for_target_candidates(patch):
+            action = str(getattr(change, "action", "") or "")
+            if action in {"modify", "delete"}:
+                candidates.append(
+                    _normalize_solver_design_target_file(
+                        getattr(change, "file_path", "")
+                    )
+                )
+
+    candidates.extend(
+        _normalize_solver_design_target_file(path)
+        for path in getattr(context, "branch_current_file_sources", {}) or {}
+    )
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _patch_changes_for_target_candidates(patch: Any) -> tuple[Any, ...]:
+    if patch is None:
+        return ()
+    try:
+        from scion.core.models import patch_file_changes
+
+        return tuple(patch_file_changes(patch))
+    except Exception:
+        changes = [patch]
+        extra = getattr(patch, "additional_changes", ()) or ()
+        if isinstance(extra, (list, tuple)):
+            changes.extend(extra)
+        return tuple(changes)
 
 
 def _solver_design_target_boundary_error(

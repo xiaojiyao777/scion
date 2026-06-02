@@ -216,7 +216,8 @@ class AgenticRefsMixin:
         failure_code = str(structured.get("failure_code") or "")
         if not failure_code and isinstance(primary_failure, Mapping):
             failure_code = str(primary_failure.get("code") or "")
-        return {
+        planner_loop_diagnostic = _agentic_planner_loop_diagnostic(output)
+        payload = {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
             "request_id": output.request_id,
@@ -239,6 +240,9 @@ class AgenticRefsMixin:
             "rejection_constraint": rejection_constraint,
             "novelty_warnings": novelty_warnings,
         }
+        if planner_loop_diagnostic:
+            payload["planner_loop_diagnostic"] = planner_loop_diagnostic
+        return payload
 
 
 def _agentic_novelty_warnings(
@@ -278,3 +282,31 @@ def _agentic_novelty_warnings(
             }
         )
     return warnings[-4:]
+
+
+def _agentic_planner_loop_diagnostic(
+    output: AgenticProposalOutput,
+) -> Mapping[str, Any]:
+    failure_category = _agentic_value(output.failure_category)
+    termination_reason = (
+        output.termination_reason.value
+        if isinstance(output.termination_reason, AgenticTerminationReason)
+        else str(output.termination_reason)
+    )
+    diagnostic_codes = {
+        "tool_budget_exhausted",
+        "tool_loop_limit",
+        "repeated_tool_call",
+    }
+    if failure_category not in diagnostic_codes and termination_reason not in diagnostic_codes:
+        return {}
+    code = failure_category if failure_category in diagnostic_codes else termination_reason
+    return {
+        "schema_version": "planner_loop_diagnostic.v1",
+        "category": "planner_loop_diagnostic",
+        "code": code,
+        "failure_category": failure_category,
+        "termination_reason": termination_reason,
+        "diagnostic_only": False,
+        "formal_round_succeeded": False,
+    }

@@ -45,12 +45,58 @@ def runtime_confidence_for_protocol(
     return "low_sample_diagnostic"
 
 
+def runtime_aggregate_exclusion_for_protocol(protocol: Any) -> dict[str, Any]:
+    """Explain why aggregate runtime stats are absent while evidence exists."""
+
+    stats = getattr(protocol, "stats", None)
+    if protocol is None or stats is None:
+        return {}
+    runtime_pairs = _safe_int(getattr(stats, "runtime_pairs", 0))
+    if runtime_pairs > 0:
+        return {}
+    confidence = str(getattr(protocol, "runtime_confidence", "") or "").strip()
+    cached_pairs = _safe_int(getattr(protocol, "champion_cached_runtime_pairs", 0))
+    candidate_summary = getattr(protocol, "candidate_surface_runtime_summary", None)
+    candidate_pair_count = _candidate_runtime_pair_count(candidate_summary)
+    if not confidence or confidence in {"high", "unknown"}:
+        return {}
+    if cached_pairs <= 0 and candidate_pair_count <= 0:
+        return {}
+    return {
+        "schema_version": "runtime_aggregate_exclusion.v1",
+        "excluded": True,
+        "reason": confidence,
+        "runtime_confidence": confidence,
+        "runtime_pairs": runtime_pairs,
+        "champion_cached_runtime_pairs": cached_pairs,
+        "candidate_runtime_pair_evidence_count": candidate_pair_count,
+        "summary": (
+            "Aggregate runtime stats are excluded because champion runtime "
+            "evidence is low confidence, while per-pair candidate/runtime "
+            "evidence remains available for audit and proposal feedback."
+        ),
+    }
+
+
 def mechanism_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
     """Return compact, generic mechanism evidence from telemetry diagnostics."""
 
     existing = getattr(protocol, "mechanism_evidence", None)
     if isinstance(existing, Mapping) and existing:
-        return dict(existing)
+        payload = dict(existing)
+        primary_entry = {
+            "activation_status": payload.get("primary_activation_status"),
+            "effect_status": payload.get("primary_effect_status"),
+        }
+        payload.setdefault(
+            "activation_evidence_status",
+            _activation_evidence_status(primary_entry),
+        )
+        payload.setdefault(
+            "objective_effect_status",
+            _objective_effect_status(protocol, primary_entry),
+        )
+        return payload
     guard = telemetry_guard_for_protocol(protocol)
     diagnostics = guard.get("mechanism_diagnostics") if guard else None
     if not isinstance(diagnostics, list):
@@ -99,6 +145,8 @@ def mechanism_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
         "hook_activation_observed": hook_activation_observed,
         "primary_activation_status": primary_entry.get("activation_status"),
         "primary_effect_status": primary_entry.get("effect_status"),
+        "activation_evidence_status": _activation_evidence_status(primary_entry),
+        "objective_effect_status": _objective_effect_status(protocol, primary_entry),
         "primary_diagnostic_kind": primary_entry.get("diagnostic_kind"),
         "mechanisms": mechanisms,
     }
@@ -211,6 +259,48 @@ def no_objective_effect_for_protocol(protocol: Any) -> bool:
     )
 
 
+def _candidate_runtime_pair_count(summary: Any) -> int:
+    if not isinstance(summary, Mapping):
+        return 0
+    fields = summary.get("fields")
+    if not isinstance(fields, Mapping):
+        return 0
+    max_seen = 0
+    for field_summary in fields.values():
+        if not isinstance(field_summary, Mapping):
+            continue
+        present = _safe_int(field_summary.get("present"))
+        missing = _safe_int(field_summary.get("missing"))
+        empty = _safe_int(field_summary.get("empty"))
+        failed = _safe_int(field_summary.get("failed"))
+        max_seen = max(max_seen, present + missing + empty + failed)
+    return max_seen
+
+
+def _activation_evidence_status(entry: Mapping[str, Any]) -> str:
+    status = str(entry.get("activation_status") or "").strip()
+    if status == "observed":
+        return "activation_observed"
+    if status == "missing":
+        return "missing_activation"
+    if status == "zero":
+        return "zero_activation"
+    if status:
+        return status
+    return "missing_activation"
+
+
+def _objective_effect_status(protocol: Any, entry: Mapping[str, Any]) -> str:
+    effect_status = str(entry.get("effect_status") or "").strip()
+    if no_objective_effect_for_protocol(protocol):
+        return "zero_objective_effect"
+    if effect_status in {"observed", "missing", "zero"}:
+        return effect_status
+    if effect_status:
+        return effect_status
+    return "unknown"
+
+
 def _looks_like_wrapper_hook(mechanism: str) -> bool:
     text = mechanism.lower()
     return (
@@ -235,4 +325,3 @@ def _safe_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
-

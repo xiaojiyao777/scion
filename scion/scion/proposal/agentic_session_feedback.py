@@ -49,6 +49,131 @@ def _compact_feedback_observation_for_budget(
     return observation
 
 
+def _feedback_observation_canonical_scope(
+    observation: ProposalObservation,
+    *,
+    default_surface: str = "",
+) -> tuple[str, str, str] | None:
+    if observation.tool_name not in {
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }:
+        return None
+    payload = observation.structured_payload
+    payload = payload if isinstance(payload, Mapping) else {}
+    status = payload.get("runtime_observation_status")
+    if isinstance(status, Mapping):
+        scope = status.get("canonical_scope")
+        if isinstance(scope, Mapping):
+            return (
+                observation.tool_name,
+                str(scope.get("branch_id") or "").strip(),
+                str(scope.get("surface") or default_surface or "").strip(),
+            )
+    return (
+        observation.tool_name,
+        str(payload.get("branch_id") or "").strip(),
+        str(payload.get("surface") or default_surface or "").strip(),
+    )
+
+
+def _feedback_args_canonical_scope(
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    default_surface: str = "",
+) -> tuple[str, str, str] | None:
+    if tool_name not in {"feedback.query_screening", "feedback.query_runtime"}:
+        return None
+    return (
+        tool_name,
+        str(args.get("branch_id") or "").strip(),
+        str(args.get("surface") or default_surface or "").strip(),
+    )
+
+
+def _has_equivalent_feedback_observation(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    default_surface: str = "",
+) -> bool:
+    requested_scope = _feedback_args_canonical_scope(
+        tool_name,
+        args,
+        default_surface=default_surface,
+    )
+    if requested_scope is None:
+        return False
+    for observation in reversed(tuple(observations)):
+        if observation.tool_name != tool_name:
+            continue
+        if not _observation_satisfies_compact_requirement(None, observation):
+            continue
+        observed_scope = _feedback_observation_canonical_scope(
+            observation,
+            default_surface=default_surface,
+        )
+        if _feedback_scopes_equivalent(requested_scope, observed_scope):
+            return True
+    return False
+
+
+def _canonical_feedback_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    default_surface: str = "",
+) -> list[ProposalObservation]:
+    selected: list[ProposalObservation] = []
+    index_by_scope: dict[tuple[str, str, str], int] = {}
+    for observation in observations:
+        if observation.tool_name != "feedback.query_runtime":
+            selected.append(observation)
+            continue
+        scope = _feedback_observation_canonical_scope(
+            observation,
+            default_surface=default_surface,
+        )
+        if (
+            scope is None
+            or observation.is_error
+            or not _observation_satisfies_compact_requirement(None, observation)
+        ):
+            selected.append(observation)
+            continue
+        previous_index = index_by_scope.get(scope)
+        if previous_index is None:
+            index_by_scope[scope] = len(selected)
+            selected.append(observation)
+        else:
+            selected[previous_index] = observation
+    return selected
+
+
+def _feedback_scopes_equivalent(
+    requested: tuple[str, str, str] | None,
+    observed: tuple[str, str, str] | None,
+) -> bool:
+    if requested is None or observed is None:
+        return False
+    req_tool, req_branch, req_surface = requested
+    obs_tool, obs_branch, obs_surface = observed
+    if req_tool != obs_tool:
+        return False
+    if req_branch:
+        if obs_branch and obs_branch != req_branch:
+            return False
+    elif obs_branch:
+        return False
+    if req_surface:
+        if obs_surface and obs_surface != req_surface:
+            return False
+    elif obs_surface:
+        return False
+    return True
+
+
 def _compact_screening_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     rows = payload.get("screening_steps")
     compact_rows = []
@@ -114,6 +239,9 @@ def _compact_runtime_feedback_payload(payload: Mapping[str, Any]) -> dict[str, A
             ),
             "query_scope": _compact_feedback_value_for_budget(
                 payload.get("query_scope")
+            ),
+            "runtime_observation_status": _compact_feedback_value_for_budget(
+                payload.get("runtime_observation_status")
             ),
             "runtime_feedback": _limit_string(
                 payload.get("runtime_feedback"),
@@ -391,6 +519,7 @@ def _shrink_feedback_payload_to_target(payload: dict[str, Any]) -> dict[str, Any
                 "available_screening_step_count"
             ),
             "matched_screening_step_count": payload.get("matched_screening_step_count"),
+            "runtime_observation_status": payload.get("runtime_observation_status"),
             "screening_steps": _minimal_screening_rows_for_budget(
                 payload.get("screening_steps")
             ),
@@ -496,12 +625,18 @@ def _runtime_feedback_observation_has_content(
     payload = observation.structured_payload
     if not isinstance(payload, Mapping):
         return False
+    status = payload.get("runtime_observation_status")
+    if isinstance(status, Mapping) and status.get("usable") is True:
+        return True
     for key in ("runtime_feedback", "runtime_failure_guidance"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return True
     attribution = payload.get("screening_runtime_attribution")
     if isinstance(attribution, list) and bool(attribution):
+        return True
+    inactive_attribution = payload.get("inactive_reference_runtime_attribution")
+    if isinstance(inactive_attribution, list) and bool(inactive_attribution):
         return True
     diagnosis = payload.get("research_diagnosis")
     return isinstance(diagnosis, Mapping) and _research_diagnosis_has_signal(diagnosis)

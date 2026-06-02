@@ -19,6 +19,10 @@ from scion.core.branch_lifecycle_policy import (
     generic_evidence_signature,
 )
 from scion.core.models import Branch, BranchState, ProtocolResult
+from scion.core.screening_visibility import (
+    mechanism_evidence_for_protocol,
+    runtime_aggregate_exclusion_for_protocol,
+)
 
 
 def lifecycle_action(
@@ -141,6 +145,10 @@ def update_branch_screening_evidence_summary(
     if getattr(protocol_result.stage, "value", protocol_result.stage) != "screening":
         return
     stats = protocol_result.stats
+    mechanism_evidence = mechanism_evidence_for_protocol(protocol_result)
+    runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(
+        protocol_result
+    )
     summary = {
         "stage": "screening",
         "tier": str(getattr(screening_feedback, "tier", "") or "").strip()
@@ -174,6 +182,12 @@ def update_branch_screening_evidence_summary(
             "effect_status": str(
                 getattr(screening_feedback, "effect_status", "") or "unknown"
             ),
+            "activation_evidence_status": str(
+                mechanism_evidence.get("activation_evidence_status") or "unknown"
+            ),
+            "objective_effect_status": str(
+                mechanism_evidence.get("objective_effect_status") or "unknown"
+            ),
             "opportunity_status": str(
                 getattr(screening_feedback, "opportunity_status", "")
                 or getattr(protocol_result, "opportunity_status", "")
@@ -205,10 +219,14 @@ def update_branch_screening_evidence_summary(
             ),
         },
     }
+    if runtime_aggregate_exclusion:
+        summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
     branch.branch_evidence_summary = summary
     block = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
     block.setdefault("runtime_evidence_confidence", summary["runtime_evidence_confidence"])
     block.setdefault("phase_activation_summary", summary["phase_activation_summary"])
+    if runtime_aggregate_exclusion:
+        block.setdefault("runtime_aggregate_exclusion", runtime_aggregate_exclusion)
     block.setdefault("case_level_winners", summary["case_level_winners"])
     block.setdefault("case_level_losses", summary["case_level_losses"])
     branch.last_branch_lifecycle_policy_block = block

@@ -267,6 +267,43 @@ class AgenticSessionPlannerLoopMixin:
                         error_code="invalid_tool_selection",
                         tool_name=name,
                     )
+                if name == "feedback.query_runtime" and _has_equivalent_feedback_observation(
+                    observations,
+                    name,
+                    args,
+                    default_surface=str(context.forced_surface or "").strip(),
+                ):
+                    state.note(
+                        AgenticProposalPhase.DIAGNOSE,
+                        (
+                            "Planner selected runtime feedback already covered "
+                            "by an equivalent canonical observation."
+                        ),
+                        metadata={
+                            "status": "skipped",
+                            "tool_name": name,
+                            "error_code": "feedback_observation_satisfied",
+                            "selection_source": "planner_selected",
+                            "skip_reason": "equivalent_runtime_observation",
+                        },
+                    )
+                    missing = self._missing_planner_context_error(context, observations)
+                    if missing is None:
+                        self._record_loop_stop(
+                            state,
+                            "feedback_observation_satisfied",
+                            error_code="feedback_observation_satisfied",
+                            tool_name=name,
+                        )
+                        break
+                    return self._complete_required_context_after_planner_gap(
+                        context,
+                        state,
+                        observations,
+                        error_code="feedback_observation_satisfied",
+                        tool_name=name,
+                        detail=missing,
+                    )
                 fingerprint = _tool_call_fingerprint(name, args)
                 fuse_count = state.tool_call_fuse_counts.get(fingerprint, 0)
                 if fuse_count >= self._tool_loop_config.max_repeated_tool_calls:
@@ -615,14 +652,21 @@ class AgenticSessionPlannerLoopMixin:
                     context,
                     observations,
                 )
+                target_read_args = _forced_solver_design_target_file_read_args(
+                    context,
+                    observations=observations,
+                )
+                existing_target_file = str(
+                    (target_read_args or {}).get("file_path") or ""
+                ).strip()
                 forced_target_file = str(context.forced_target_file or "").strip()
                 recommended_file_path = _recommended_algorithm_file_path(
                     algorithm_file_guidance,
-                    preferred=forced_target_file,
+                    preferred=existing_target_file or forced_target_file,
                 )
                 map_context = _active_solver_map_context(
                     observations,
-                    target_file=context.forced_target_file,
+                    target_file=existing_target_file or context.forced_target_file,
                 )
                 recommended_registry_id = str(
                     map_context.get("recommended_registry_id")
@@ -655,13 +699,14 @@ class AgenticSessionPlannerLoopMixin:
                     "available_registry_ids": map_context.get("available_registry_ids"),
                     "available_slice_ids": map_context.get("available_slice_ids"),
                 }
-                if forced_target_file:
+                if forced_target_file or existing_target_file:
                     guidance["context.read_active_solver_map"][
                         "target_grounding_rule"
                     ] = (
-                        "When an existing forced target_file is present, use the "
-                        "map's recommended registry/slice or target owner source "
-                        "before drafting the first hypothesis."
+                        "When an existing target_file is forced or inferred from "
+                        "branch state, use the map's recommended registry/slice "
+                        "or target owner source before drafting the first "
+                        "hypothesis."
                     )
                 guidance["context.read_operator_registry"] = {
                     "recommended_args": {
@@ -741,11 +786,13 @@ class AgenticSessionPlannerLoopMixin:
                         "file only when exact source is needed."
                     ),
                     "existing_target_grounding_rule": (
-                        "If forced_action is modify and forced_target_file names an "
-                        "existing provider-declared active file, read that target "
-                        "source or a relevant provider-declared slice before "
-                        "returning stop=true or drafting the first hypothesis."
+                        "If forced_action is modify, or branch state identifies a "
+                        "single existing provider-declared active target candidate, "
+                        "read that target source or a relevant provider-declared "
+                        "slice before returning stop=true or drafting the first "
+                        "hypothesis."
                     ),
+                    "existing_target_candidate": existing_target_file or None,
                     "active_solver_map_context": map_context,
                 }
                 guidance["context.read_algorithm_symbol"] = {

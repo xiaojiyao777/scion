@@ -621,13 +621,17 @@ def _solver_design_broad_terms(
 def _code_prompt_observations(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
 ) -> list[ProposalObservation]:
+    from scion.proposal.agentic_session_feedback import (
+        _canonical_feedback_observations,
+    )
+
     selected: list[ProposalObservation] = []
     latest_surface: ProposalObservation | None = None
     algorithm_reads: list[ProposalObservation] = []
     algorithm_read_keys: set[tuple[str, str, str]] = set()
     receipt_reads: list[ProposalObservation] = []
     receipt_read_keys: set[tuple[str, str, str]] = set()
-    for observation in observations:
+    for observation in _canonical_feedback_observations(observations):
         if observation.tool_name == "context.read_surface":
             payload = observation.structured_payload
             if (

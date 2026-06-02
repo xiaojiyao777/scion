@@ -171,6 +171,32 @@ def test_active_branch_card_separates_proposal_blocks_from_algorithm_reasons() -
     assert "proposal_block_reason_codes=SCHEMA_QUALITY_BLOCK" in text
 
 
+def test_branch_card_uses_structured_decision_reason_codes_when_block_empty() -> None:
+    branch = Branch(
+        branch_id="structured-reasons",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_marginal",
+        branch_evidence_summary={
+            "decision_reason_codes": ["SCREENING_FAIL_LOW_WIN_RATE"],
+            "terminal_reason_codes": ["BRANCH_LIFECYCLE_PARK_LINEAGE"],
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["why_not_promoted_reason_codes"] == [
+        "SCREENING_FAIL_LOW_WIN_RATE",
+        "BRANCH_LIFECYCLE_PARK_LINEAGE",
+    ]
+    assert (
+        "why_not_promoted_reason_codes=SCREENING_FAIL_LOW_WIN_RATE,"
+        "BRANCH_LIFECYCLE_PARK_LINEAGE"
+    ) in text
+
+
 def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     branch = Branch(
         branch_id="case-card",
@@ -262,6 +288,74 @@ def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     assert "case_level_losses=case-b:loss:delta=-0.2:w0l2t1" in text
     assert "phase_activation_summary=stage:screening" in text
     assert "runtime_evidence_confidence=low_cached_champion" in text
+
+
+def test_branch_card_explains_low_confidence_runtime_aggregate_exclusion() -> None:
+    branch = Branch(
+        branch_id="runtime-exclusion-card",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=3,
+            wins=0,
+            losses=0,
+            ties=3,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_pairs=0,
+            statistical_metric="objective_delta",
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_LOW_WIN_RATE",),
+        exposed_summary="screening no effect",
+        raw_metrics_ref="/tmp/metrics.json",
+        runtime_confidence="low_cached_champion",
+        champion_cached_runtime_pairs=3,
+        mechanism_evidence={
+            "primary_activation_status": "zero",
+            "primary_effect_status": "zero",
+        },
+        candidate_surface_runtime_summary={
+            "fields": {
+                "candidate_elapsed_ms": {
+                    "present": 3,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                }
+            }
+        },
+    )
+    feedback = screening_feedback_summary(protocol)
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+    )
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    exclusion = payload["generic_evidence_summary"]["runtime_aggregate_exclusion"]
+    assert exclusion["reason"] == "low_cached_champion"
+    assert exclusion["candidate_runtime_pair_evidence_count"] == 3
+    assert payload["phase_activation_summary"]["activation_evidence_status"] == (
+        "zero_activation"
+    )
+    assert payload["phase_activation_summary"]["objective_effect_status"] == (
+        "zero_objective_effect"
+    )
+    assert "runtime_aggregate_excluded:low_cached_champion" in text
+    assert "activation_evidence_status:zero_activation" in text
+    assert "objective_effect_status:zero_objective_effect" in text
 
 
 def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> None:

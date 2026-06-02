@@ -10,6 +10,10 @@ from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.run_validity import build_run_validity, step_failure_categories
+from scion.core.screening_visibility import (
+    mechanism_evidence_for_protocol,
+    runtime_aggregate_exclusion_for_protocol,
+)
 from scion.core.status_reporter import (
     API_BALANCE_EXHAUSTED_STOP_REASON,
     PROVIDER_ERROR_CATEGORY_BALANCE_EXHAUSTED,
@@ -522,12 +526,19 @@ class CampaignSummaryMixin:
                 "secondary_observations",
                 "rejection_constraint",
                 "novelty_warnings",
+                "planner_loop_diagnostic",
+                "diagnostic_only",
+                "formal_round_succeeded",
             }
             step_data["proposal_session_ref"] = {
                 key: value
                 for key, value in dict(step.proposal_session_ref).items()
                 if key in allowed_ref_fields
             }
+            _annotate_proposal_session_ref_diagnostic(
+                step_data["proposal_session_ref"],
+                formal_round_succeeded=bool(step.protocol_result is not None),
+            )
             step_data["proposal_session_ref"] = redact_public_refs(
                 step_data["proposal_session_ref"],
                 base_dir=self.campaign_dir,
@@ -636,6 +647,9 @@ class CampaignSummaryMixin:
                     pr.candidate_surface_runtime_summary or {}
                 ),
                 "runtime_budget_diagnostic": _runtime_budget_diagnostic(pr),
+                "runtime_aggregate_exclusion": (
+                    runtime_aggregate_exclusion_for_protocol(pr)
+                ),
                 "telemetry_guard_failed": formal_telemetry_guard_failed(pr),
                 "telemetry_effect_zero_diagnostics": list(
                     telemetry_effect_zero_diagnostics(pr)
@@ -735,6 +749,51 @@ class CampaignSummaryMixin:
                 ]
         return step_data
 
+
+def _annotate_proposal_session_ref_diagnostic(
+    session_ref: dict[str, Any],
+    *,
+    formal_round_succeeded: bool,
+) -> None:
+    diagnostic = session_ref.get("planner_loop_diagnostic")
+    if isinstance(diagnostic, Mapping):
+        payload = dict(diagnostic)
+    else:
+        payload = _planner_loop_diagnostic_from_ref(session_ref)
+    if not payload:
+        return
+    payload["formal_round_succeeded"] = bool(formal_round_succeeded)
+    if formal_round_succeeded:
+        payload["diagnostic_only"] = True
+        session_ref["diagnostic_only"] = True
+        session_ref["formal_round_succeeded"] = True
+    session_ref["planner_loop_diagnostic"] = payload
+
+
+def _planner_loop_diagnostic_from_ref(
+    session_ref: Mapping[str, Any],
+) -> dict[str, Any]:
+    failure_category = str(session_ref.get("failure_category") or "").strip()
+    termination_reason = str(session_ref.get("termination_reason") or "").strip()
+    diagnostic_codes = {
+        "tool_budget_exhausted",
+        "tool_loop_limit",
+        "repeated_tool_call",
+    }
+    if failure_category not in diagnostic_codes and termination_reason not in diagnostic_codes:
+        return {}
+    code = failure_category if failure_category in diagnostic_codes else termination_reason
+    return {
+        "schema_version": "planner_loop_diagnostic.v1",
+        "category": "planner_loop_diagnostic",
+        "code": code,
+        "failure_category": failure_category,
+        "termination_reason": termination_reason,
+        "diagnostic_only": False,
+        "formal_round_succeeded": False,
+    }
+
+
 def _branch_cards_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [dict(row["branch_card"]) for row in rows if isinstance(row.get("branch_card"), Mapping)]
 
@@ -826,6 +885,9 @@ def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
     runtime_confidence = str(getattr(pr, "runtime_confidence", "") or "").strip()
     if runtime_confidence:
         evidence["runtime_evidence_confidence"] = runtime_confidence
+    runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(pr)
+    if runtime_aggregate_exclusion:
+        evidence["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
     return evidence
 
 def _step_case_outcomes(step: StepRecord, dominant_result: str) -> list[dict[str, Any]]:
@@ -899,11 +961,13 @@ def _step_phase_activation_summary(step: StepRecord) -> dict[str, Any]:
             "stage": str(step.failure_stage or "unknown"),
             "activation_status": "unknown",
             "effect_status": "unknown",
+            "activation_evidence_status": "unknown",
+            "objective_effect_status": "unknown",
             "opportunity_status": "unknown",
             "telemetry_outcome": None,
         }
     stats = pr.stats
-    mechanism_evidence = getattr(pr, "mechanism_evidence", {}) or {}
+    mechanism_evidence = mechanism_evidence_for_protocol(pr)
     return {
         "stage": _stage_value(pr.stage),
         "activation_status": str(
@@ -917,6 +981,12 @@ def _step_phase_activation_summary(step: StepRecord) -> dict[str, Any]:
                 or max(0, int(getattr(stats, "losses", 0) or 0))
                 else "not_observed"
             )
+        ),
+        "activation_evidence_status": str(
+            mechanism_evidence.get("activation_evidence_status") or "unknown"
+        ),
+        "objective_effect_status": str(
+            mechanism_evidence.get("objective_effect_status") or "unknown"
         ),
         "opportunity_status": str(getattr(pr, "opportunity_status", "") or "unknown"),
         "telemetry_outcome": "failed" if formal_telemetry_guard_failed(pr) else pr.gate_outcome,

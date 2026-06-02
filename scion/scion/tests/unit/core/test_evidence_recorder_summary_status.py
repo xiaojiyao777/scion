@@ -100,8 +100,10 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
 def test_campaign_summary_exposes_screening_visibility_fields(
     tmp_path: Path,
 ) -> None:
+    base_protocol = _protocol_result("/tmp/metrics-visibility.json")
     protocol = replace(
-        _protocol_result("/tmp/metrics-visibility.json"),
+        base_protocol,
+        stats=replace(base_protocol.stats, runtime_pairs=0),
         champion_cache_hits=2,
         champion_cache_misses=3,
         champion_cached_runtime_pairs=4,
@@ -112,6 +114,16 @@ def test_campaign_summary_exposes_screening_visibility_fields(
             "primary_mechanism": "candidate_list",
             "primary_activation_status": "missing",
             "primary_effect_status": "not_observed",
+        },
+        candidate_surface_runtime_summary={
+            "fields": {
+                "candidate_elapsed_ms": {
+                    "present": 2,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                }
+            }
         },
     )
     step = replace(_step("/tmp/metrics-visibility.json"), protocol_result=protocol)
@@ -137,6 +149,15 @@ def test_campaign_summary_exposes_screening_visibility_fields(
     assert protocol_summary["mechanism_evidence"]["primary_mechanism"] == (
         "candidate_list"
     )
+    assert protocol_summary["mechanism_evidence"]["activation_evidence_status"] == (
+        "missing_activation"
+    )
+    assert protocol_summary["runtime_aggregate_exclusion"]["reason"] == (
+        "low_cached_champion"
+    )
+    assert protocol_summary["runtime_aggregate_exclusion"][
+        "candidate_runtime_pair_evidence_count"
+    ] == 2
     assert protocol_summary["screening_feedback"]["runtime_confidence"] == (
         "low_cached_champion"
     )
@@ -144,6 +165,43 @@ def test_campaign_summary_exposes_screening_visibility_fields(
         "opportunity_poor"
     )
     assert protocol_summary["screening_feedback_digest"]
+
+
+def test_campaign_summary_marks_planner_loop_budget_as_diagnostic_after_formal_round(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = replace(
+        _step("/tmp/metrics-formal-success.json"),
+        proposal_session_ref={
+            "schema_version": "agentic-proposal-session.v1",
+            "session_id": "session-budget",
+            "termination_reason": "tool_loop_limit",
+            "status": "partial_hypothesis_only",
+            "failure_category": "tool_budget_exhausted",
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=3,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    session_ref = summary["steps"][0]["proposal_session_ref"]
+    assert session_ref["formal_round_succeeded"] is True
+    assert session_ref["diagnostic_only"] is True
+    assert session_ref["planner_loop_diagnostic"] == {
+        "schema_version": "planner_loop_diagnostic.v1",
+        "category": "planner_loop_diagnostic",
+        "code": "tool_budget_exhausted",
+        "failure_category": "tool_budget_exhausted",
+        "termination_reason": "tool_loop_limit",
+        "diagnostic_only": True,
+        "formal_round_succeeded": True,
+    }
+    assert summary["steps"][0]["protocol_result"]["gate_outcome"] == "pass"
 
 
 def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> None:
@@ -559,6 +617,8 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         "stage": "screening",
         "activation_status": "observed",
         "effect_status": "regressed",
+        "activation_evidence_status": "activation_observed",
+        "objective_effect_status": "regressed",
         "opportunity_status": "opportunity_poor",
         "telemetry_outcome": "fail",
     }

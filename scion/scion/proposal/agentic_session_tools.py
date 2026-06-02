@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from scion.core.models import HypothesisProposal
 from scion.proposal.agentic_session_feedback import (
+    _has_equivalent_feedback_observation,
     _observation_satisfies_compact_requirement,
 )
 from scion.proposal.agentic_utils import (
@@ -818,28 +819,12 @@ def _has_successful_reusable_observation(
     forced_surface: str | None = None,
 ) -> bool:
     if tool_name in {"feedback.query_screening", "feedback.query_runtime"}:
-        requested_surface = str(args.get("surface") or forced_surface or "").strip()
-        requested_branch = str(args.get("branch_id") or "").strip()
-        for observation in observations:
-            if observation.tool_name != tool_name:
-                continue
-            if not _observation_satisfies_compact_requirement(None, observation):
-                continue
-            payload = observation.structured_payload
-            if not isinstance(payload, Mapping):
-                continue
-            observed_surface = str(payload.get("surface") or "").strip()
-            if (
-                requested_surface
-                and observed_surface
-                and observed_surface != requested_surface
-            ):
-                continue
-            observed_branch = str(payload.get("branch_id") or "").strip()
-            if requested_branch and observed_branch != requested_branch:
-                continue
-            return True
-        return False
+        return _has_equivalent_feedback_observation(
+            observations,
+            tool_name,
+            args,
+            default_surface=str(forced_surface or "").strip(),
+        )
     if tool_name == "context.read_algorithm_file":
         return _has_successful_algorithm_file_read(observations, args)
     if tool_name == "context.read_algorithm_symbol":

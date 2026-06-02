@@ -42,11 +42,13 @@ def compact_observation_ledger_for_resume(
     raw_entries = value.get("observations")
     if not isinstance(raw_entries, (list, tuple)):
         raw_entries = ()
-    entries = [
-        compact_resume_entry(entry)
-        for entry in raw_entries
-        if isinstance(entry, Mapping)
-    ][:max_entries]
+    entries = _canonical_resume_entries(
+        [
+            compact_resume_entry(entry)
+            for entry in raw_entries
+            if isinstance(entry, Mapping)
+        ]
+    )[:max_entries]
     if not entries:
         return {}
     return _drop_empty_dict(
@@ -72,6 +74,39 @@ def compact_observation_ledger_for_resume(
                 "file/symbol read."
             ),
         }
+    )
+
+
+def _canonical_resume_entries(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    index_by_scope: dict[tuple[str, str, str], int] = {}
+    for entry in entries:
+        scope = _runtime_resume_entry_scope(entry)
+        if scope is None:
+            selected.append(entry)
+            continue
+        previous_index = index_by_scope.get(scope)
+        if previous_index is None:
+            index_by_scope[scope] = len(selected)
+            selected.append(entry)
+        else:
+            selected[previous_index] = entry
+    return selected
+
+
+def _runtime_resume_entry_scope(
+    entry: Mapping[str, Any],
+) -> tuple[str, str, str] | None:
+    if str(entry.get("tool_name") or "") != "feedback.query_runtime":
+        return None
+    args = entry.get("normalized_args")
+    args = args if isinstance(args, Mapping) else {}
+    return (
+        "feedback.query_runtime",
+        str(args.get("branch_id") or "").strip(),
+        str(args.get("surface") or "").strip(),
     )
 
 
