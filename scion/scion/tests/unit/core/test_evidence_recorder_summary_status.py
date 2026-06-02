@@ -647,6 +647,104 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     assert summary["rollback_events"][0]["rollback_count"] == 2
 
 
+def test_branch_history_card_text_rerenders_structured_reason_codes(
+    tmp_path: Path,
+) -> None:
+    active_protocol = replace(
+        _protocol_result("/tmp/active-metrics.json"),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_NEUTRAL_SIGNAL_CONTINUE",),
+    )
+    parked_protocol = replace(
+        _protocol_result("/tmp/parked-metrics.json"),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_SOFT_ABANDON_NON_POSITIVE_CI",),
+    )
+    abandoned_protocol = replace(
+        _protocol_result("/tmp/abandoned-metrics.json"),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN",),
+    )
+    active_step = replace(
+        _step("/tmp/active-metrics.json"),
+        branch_id="active-branch",
+        protocol_result=active_protocol,
+        decision=Decision.CONTINUE_EXPLORE,
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+        ),
+    )
+    parked_step = replace(
+        _step("/tmp/parked-metrics.json"),
+        branch_id="parked-branch",
+        protocol_result=parked_protocol,
+        decision=Decision.CONTINUE_EXPLORE,
+        decision_reason_codes=("BRANCH_LIFECYCLE_PARK_LINEAGE",),
+    )
+    abandoned_step = replace(
+        _step("/tmp/abandoned-metrics.json"),
+        branch_id="abandoned-branch",
+        protocol_result=abandoned_protocol,
+        decision=Decision.ABANDON,
+        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
+    )
+    stale_text = "branch_id={branch_id} why_not_promoted_reason_codes=none"
+    branch_cards = [
+        {
+            "branch_id": "active-branch",
+            "status": "explore",
+            "branch_card_text": stale_text.format(branch_id="active-branch"),
+        },
+        {
+            "branch_id": "parked-branch",
+            "status": "parked_lineage",
+            "branch_card_text": stale_text.format(branch_id="parked-branch"),
+        },
+        {
+            "branch_id": "abandoned-branch",
+            "status": "abandoned",
+            "branch_card_text": stale_text.format(branch_id="abandoned-branch"),
+        },
+    ]
+    recorder = EvidenceRecorder(
+        campaign_id="camp-branch-card-text",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "branches": [
+                {"id": card["branch_id"], "branch_card": card}
+                for card in branch_cards
+            ],
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[active_step, parked_step, abandoned_step],
+        round_num=3,
+        champion=_champion(),
+    )
+
+    history = {
+        card["branch_id"]: card for card in summary["branch_history_cards"]
+    }
+    active_text = history["active-branch"]["branch_card_text"]
+    parked_text = history["parked-branch"]["branch_card_text"]
+    abandoned_text = history["abandoned-branch"]["branch_card_text"]
+
+    assert history["active-branch"]["why_not_promoted_reason_codes"] == [
+        "SCREENING_FAIL_WIN_RATE",
+        "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+        "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    ]
+    assert "why_not_promoted_reason_codes=SCREENING_FAIL_WIN_RATE" in active_text
+    assert "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in active_text
+    assert "SCREENING_NEUTRAL_SIGNAL_CONTINUE" in active_text
+    assert "why_not_promoted_reason_codes=BRANCH_LIFECYCLE_PARK_LINEAGE" in parked_text
+    assert "SCREENING_SOFT_ABANDON_NON_POSITIVE_CI" in parked_text
+    assert "why_abandoned_reason_codes=SCREENING_FAIL_WIN_RATE" in abandoned_text
+    assert "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN" in abandoned_text
+
+
 def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     tmp_path: Path,
 ) -> None:

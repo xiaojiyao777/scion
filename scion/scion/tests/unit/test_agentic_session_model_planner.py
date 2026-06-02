@@ -366,8 +366,8 @@ def test_solver_design_planner_guidance_exposes_registry_and_slice_ids_after_map
         tool_loop_config=session._tool_loop_config.__dict__,
     )
 
-    session._run_initial_tool_loop(context, state)
-    guidance = creative.planner_contexts[0]["tool_arg_guidance"]
+    observations = session._run_initial_tool_loop(context, state)
+    guidance = session._tool_arg_guidance(context, observations)
     step_events = [
         event.metadata for event in state.transcript if event.metadata.get("step_id")
     ]
@@ -518,7 +518,7 @@ def test_solver_design_planner_status_requires_existing_target_source_before_sto
         for item in planner_status["next_required_tools"]
     )
     assert file_guidance["recommended_args"]["file_path"] == target_file
-    assert "provider-declared active target candidate" in file_guidance[
+    assert "provider-declared existing target candidates" in file_guidance[
         "existing_target_grounding_rule"
     ]
     assert any(
@@ -529,6 +529,127 @@ def test_solver_design_planner_status_requires_existing_target_source_before_sto
         observation.tool_name == "context.read_algorithm_slice"
         and observation.structured_payload.get("file_path") == target_file
         and observation.structured_payload.get("content")
+        for observation in observations
+    )
+
+
+def test_solver_design_planner_blocks_stop_until_feedback_target_owner_is_read(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/destroy_repair.py"
+    creative = PlanningCreative([{"stop": True}])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=18, max_steps=24),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-feedback-target-source-before-stop",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+        tool_loop_config=session._tool_loop_config.__dict__,
+    )
+    initial_observations = [
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.list_surfaces",
+            {},
+            selection_source="test_preface",
+        ),
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.read_problem",
+            {},
+            selection_source="test_preface",
+        ),
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.list_algorithm_files",
+            {"surface": "solver_design", "include_inactive": True},
+            selection_source="test_preface",
+        ),
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.read_active_solver_design",
+            {"surface": "solver_design"},
+            selection_source="test_preface",
+        ),
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.read_solver_call_graph",
+            {"surface": "solver_design"},
+            selection_source="test_preface",
+        ),
+        session._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.DIAGNOSE,
+            "context.read_active_solver_map",
+            {"surface": "solver_design"},
+            selection_source="test_preface",
+        ),
+        ProposalObservation(
+            observation_id="feedback-target",
+            session_id=state.session_id,
+            tool_name="feedback.query_screening",
+            tool_call_id="tool-feedback-target",
+            observation_type="screening_feedback",
+            summary="Returned compact screening feedback.",
+            structured_payload={
+                "surface": "solver_design",
+                "screening_steps": [
+                    {
+                        "round_num": 2,
+                        "surface": "solver_design",
+                        "action": "modify",
+                        "target_file": target_file,
+                        "reason_codes": ["SCREENING_FAIL_WIN_RATE"],
+                    }
+                ],
+            },
+        ),
+    ]
+
+    observations = session._run_bounded_planner_tools(
+        context,
+        state,
+        initial_observations=initial_observations,
+    )
+    planner_status = creative.planner_contexts[0]["required_context_status"]
+    file_guidance = creative.planner_contexts[0]["tool_arg_guidance"][
+        "context.read_algorithm_file"
+    ]
+
+    assert planner_status["stop_allowed"] is False
+    assert (
+        f"context.read_algorithm_file({target_file})"
+        in planner_status["missing_required_context"]
+    )
+    assert any(
+        item["tool_name"] == "context.read_algorithm_file"
+        and item["args"]["file_path"] == target_file
+        for item in planner_status["next_required_tools"]
+    )
+    assert file_guidance["recommended_args"]["file_path"] == target_file
+    assert target_file in file_guidance["existing_target_candidates"]
+    assert any(
+        observation.tool_name == "context.read_algorithm_file"
+        and observation.structured_payload.get("file_path") == target_file
         for observation in observations
     )
 
@@ -568,42 +689,40 @@ def test_solver_design_planner_reads_registry_slice_before_broad_file(
     )
 
     observations = session._run_initial_tool_loop(context, state)
-    step_events = [
-        event.metadata for event in state.transcript if event.metadata.get("step_id")
-    ]
-    tool_order = [event["tool_name"] for event in step_events]
+    ledger_entries = list(state.observation_ledger)
+    tool_order = [entry["tool_name"] for entry in ledger_entries]
     file_index = next(
         index
-        for index, event in enumerate(step_events)
-        if event["tool_name"] == "context.read_algorithm_file"
-        and event["selection_source"] == "planner_selected"
+        for index, entry in enumerate(ledger_entries)
+        if entry["tool_name"] == "context.read_algorithm_file"
+        and entry.get("file_path") == target_file
     )
     registry_index = next(
         index
-        for index, event in enumerate(step_events)
-        if event["tool_name"] == "context.read_operator_registry"
+        for index, entry in enumerate(ledger_entries)
+        if entry["tool_name"] == "context.read_operator_registry"
     )
     slice_index = next(
         index
-        for index, event in enumerate(step_events)
-        if event["tool_name"] == "context.read_algorithm_slice"
+        for index, entry in enumerate(ledger_entries)
+        if entry["tool_name"] == "context.read_algorithm_slice"
     )
 
     assert "context.read_active_solver_map" in tool_order
     assert registry_index < file_index
     assert slice_index < file_index
-    assert step_events[registry_index]["selection_source"] == (
+    assert ledger_entries[registry_index]["selection_source"] == (
         "planner_map_followup_required"
     )
-    assert step_events[slice_index]["selection_source"] == (
+    assert ledger_entries[slice_index]["selection_source"] == (
         "planner_map_followup_required"
     )
     assert not [
-        event
-        for event in step_events
-        if event["tool_name"]
+        entry
+        for entry in ledger_entries
+        if entry["tool_name"]
         in {"context.read_operator_registry", "context.read_algorithm_slice"}
-        and event["selection_source"] == "required_context_preface"
+        and entry["selection_source"] == "required_context_preface"
     ]
     assert any(
         entry.get("tool_name") == "context.read_operator_registry"

@@ -103,18 +103,17 @@ def _solver_design_file_hypothesis(
     )
 
 
-def test_solver_design_existing_target_file_is_read_then_redrafted(
+def test_solver_design_existing_target_file_is_visible_before_first_hypothesis(
     tmp_path: Path,
 ) -> None:
     first = _scheduler_hypothesis(
         "Add stagnation_repair_scheduler to the active solver scheduler."
     )
-    second = _scheduler_hypothesis(
-        "After reading scheduler.py, add stagnation_repair_scheduler as a "
-        "bounded repair-ordering change inside the existing scheduler."
+    creative = SequentialHypothesisCreative([first])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
     )
-    creative = SequentialHypothesisCreative([first, second])
-    context = _cvrp_context_with_champion(tmp_path)
     artifact_store = FileAgenticSessionArtifactStore(tmp_path / "artifacts")
     session = AgenticProposalSession(
         creative,
@@ -137,22 +136,14 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     )
 
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
-    assert output.hypothesis == second
-    assert len(creative.hypothesis_contexts) == 2
+    assert output.hypothesis == first
+    assert len(creative.hypothesis_contexts) == 1
     assert "agentic_hypothesis_grounding_rejections" not in creative.hypothesis_contexts[0]
 
-    retry_context = creative.hypothesis_contexts[1]
-    grounding_feedback = retry_context["agentic_hypothesis_grounding_rejections"][0]
-    assert grounding_feedback["failure_code"] == (
-        "solver_design_target_not_in_hypothesis_prompt"
-    )
-    assert grounding_feedback["target_file"] == "policies/baseline_modules/scheduler.py"
-    assert grounding_feedback["preserve_hypothesis"]["target_file"] == (
-        "policies/baseline_modules/scheduler.py"
-    )
+    first_context = creative.hypothesis_contexts[0]
     target_observations = [
         observation
-        for observation in retry_context["agentic_tool_observations"]
+        for observation in first_context["agentic_tool_observations"]
         if observation["tool_name"] == "context.read_algorithm_file"
         and observation["structured_payload"]["file_path"]
         == "policies/baseline_modules/scheduler.py"
@@ -168,19 +159,14 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
         for ref in output.tainted_artifact_refs
         if "api_visible_prompt_manifest" in str(ref)
     ]
-    assert [manifest["call_kind"] for manifest in manifests[:2]] == [
-        "hypothesis",
-        "hypothesis_grounding_retry",
-    ]
-    first_manifest, retry_manifest = manifests[:2]
+    assert manifests[0]["call_kind"] == "hypothesis"
     assert not any(
-        item.get("tool_name") == "context.read_algorithm_file"
-        and item.get("file_path") == "policies/baseline_modules/scheduler.py"
-        for item in first_manifest["included_observations"]
+        manifest["call_kind"] == "hypothesis_grounding_retry"
+        for manifest in manifests
     )
     retry_items = [
         item
-        for item in retry_manifest["included_observations"]
+        for item in manifests[0]["included_observations"]
         if item.get("tool_name") == "context.read_algorithm_file"
         and item.get("file_path") == "policies/baseline_modules/scheduler.py"
     ]
@@ -190,11 +176,11 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     assert retry_items[0]["full_content_visible_in_rendered_prompt"] is True
     assert retry_items[0]["full_content_visible_in_dedicated_source_section"] is True
     assert retry_items[0]["full_content_visible_anywhere_in_rendered_prompt"] is True
-    full_read_status = retry_manifest["section_statuses"][
+    full_read_status = manifests[0]["section_statuses"][
         "solver_design_full_algorithm_file_reads"
     ]
     assert full_read_status["status"] == "included"
-    assert "solver_design_full_algorithm_file_reads" not in retry_manifest[
+    assert "solver_design_full_algorithm_file_reads" not in manifests[0][
         "truncated_sections"
     ]
 
@@ -205,10 +191,92 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
         and receipt.get("file_path") == "policies/baseline_modules/scheduler.py"
     ]
     assert scheduler_receipts
-    assert scheduler_receipts[0]["included_in_prompt_for_call"] is False
-    assert scheduler_receipts[0]["prompt_inclusion_status"] == (
-        "not_asserted_by_read_receipt"
+    assert any(
+        receipt["selection_source"] == "required_context_preface"
+        for receipt in scheduler_receipts
     )
+
+
+@pytest.mark.parametrize(
+    ("target_file", "mechanism_id"),
+    (
+        ("policies/baseline_modules/local_search.py", "target_owner_probe_local"),
+        ("policies/baseline_modules/destroy_repair.py", "target_owner_probe_repair"),
+    ),
+)
+def test_solver_design_common_existing_targets_are_pregrounded_before_first_hypothesis(
+    tmp_path: Path,
+    target_file: str,
+    mechanism_id: str,
+) -> None:
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=mechanism_id,
+        text=f"Modify {target_file} after reading its owner source.",
+    )
+    creative = SequentialHypothesisCreative([hypothesis])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / f"artifacts-{mechanism_id}"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id=f"camp-{mechanism_id}",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": mechanism_id},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.hypothesis_contexts) == 1
+    assert "agentic_hypothesis_grounding_rejections" not in creative.hypothesis_contexts[0]
+
+    first_context = creative.hypothesis_contexts[0]
+    target_observations = [
+        observation
+        for observation in first_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_file
+    ]
+    assert target_observations
+    assert target_observations[0]["structured_payload"]["readable"] is True
+    assert target_observations[0]["structured_payload"]["truncated"] is False
+
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in str(ref)
+    ]
+    assert manifests[0]["call_kind"] == "hypothesis"
+    assert not any(
+        manifest["call_kind"] == "hypothesis_grounding_retry"
+        for manifest in manifests
+    )
+    target_items = [
+        item
+        for item in manifests[0]["included_observations"]
+        if item.get("tool_name") == "context.read_algorithm_file"
+        and item.get("file_path") == target_file
+    ]
+    assert target_items
+    assert target_items[0]["included_in_prompt_for_call"] is True
+    assert target_items[0]["full_content_visible_in_rendered_prompt"] is True
+    assert target_items[0]["full_content_visible_in_dedicated_source_section"] is True
 
 
 def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded(

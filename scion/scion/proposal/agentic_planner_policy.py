@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from scion.proposal.agentic_grounding import (
     _context_requires_solver_design_grounding,
-    _forced_solver_design_target_file_read_args,
+    _pre_hypothesis_solver_design_target_file_read_args,
     _required_context_tool_names,
 )
 from scion.proposal.agentic_session_feedback import (
@@ -129,39 +129,43 @@ def _planner_required_context_status(
         }
     ]
     map_followup_calls: list[tuple[str, Mapping[str, Any]]] = []
-    target_source_call: tuple[str, Mapping[str, Any]] | None = None
+    target_source_calls: list[tuple[str, Mapping[str, Any]]] = []
+    target_discovery_calls: list[tuple[str, Mapping[str, Any]]] = []
     if _context_requires_solver_design_grounding(context):
         map_followup_calls = _active_solver_map_followup_calls(
             observations,
             target_file=context.forced_target_file,
             surface="solver_design",
         )
-        target_args = _forced_solver_design_target_file_read_args(
+        target_read_args = _pre_hypothesis_solver_design_target_file_read_args(
             context,
             observations=observations,
         )
-        if target_args is not None and not _forced_target_context_visible(
-            context,
-            observations,
-            target_args,
-        ):
-            target_source_call = ("context.read_algorithm_file", target_args)
+        for target_args in target_read_args:
+            if not _forced_target_context_visible(context, observations, target_args):
+                target_source_calls.append(("context.read_algorithm_file", target_args))
+        if not target_read_args:
+            target_discovery_calls = _solver_design_target_discovery_calls(
+                observations,
+            )
 
     missing_required_context: list[str] = []
     missing_required_context.extend(required_missing)
     missing_required_context.extend(compact_feedback_missing)
     missing_required_context.extend(name for name, _args in map_followup_calls)
-    if target_source_call is not None:
+    for target_source_call in target_source_calls:
         missing_required_context.append(
             f"context.read_algorithm_file({target_source_call[1].get('file_path')})"
         )
+    missing_required_context.extend(name for name, _args in target_discovery_calls)
     next_required_tools = [
         {"tool_name": name, "args": dict(args)}
         for name, args in [
             *[(name, {}) for name in required_missing],
             *[(name, {}) for name in compact_feedback_missing],
             *map_followup_calls,
-            *([target_source_call] if target_source_call is not None else []),
+            *target_source_calls,
+            *target_discovery_calls,
         ]
     ]
     missing_error = _missing_planner_context_error(
@@ -192,18 +196,30 @@ def _missing_forced_solver_design_target_context(
     context: ProposalToolContext,
     observations: list[ProposalObservation],
 ) -> str | None:
-    target_args = _forced_solver_design_target_file_read_args(
+    target_read_args = _pre_hypothesis_solver_design_target_file_read_args(
         context,
         observations=observations,
     )
-    if target_args is None:
+    if not target_read_args:
+        discovery_calls = _solver_design_target_discovery_calls(observations)
+        if discovery_calls:
+            return (
+                "missing generic solver_design target discovery context before "
+                "planner stop: "
+                + ", ".join(name for name, _args in discovery_calls)
+            )
         return None
-    if _forced_target_context_visible(context, observations, target_args):
+    missing: list[str] = []
+    for target_args in target_read_args:
+        if _forced_target_context_visible(context, observations, target_args):
+            continue
+        target_file = str(target_args.get("file_path") or "").strip()
+        missing.append(f"context.read_algorithm_file({target_file})")
+    if not missing:
         return None
-    target_file = str(target_args.get("file_path") or "").strip()
     return (
         "missing existing solver_design target source context before planner stop: "
-        f"context.read_algorithm_file({target_file})"
+        + ", ".join(missing)
     )
 
 
@@ -223,6 +239,55 @@ def _forced_target_context_visible(
         target_args,
         forced_surface=context.forced_surface or "solver_design",
     )
+
+
+def _solver_design_target_discovery_calls(
+    observations: list[ProposalObservation],
+) -> list[tuple[str, Mapping[str, Any]]]:
+    calls: list[tuple[str, Mapping[str, Any]]] = []
+    observed_ok = {
+        observation.tool_name
+        for observation in observations
+        if not observation.is_error
+    }
+    if "context.read_active_solver_map" not in observed_ok:
+        calls.append(("context.read_active_solver_map", {"surface": "solver_design"}))
+    if "context.read_branch_state" not in observed_ok:
+        calls.append(("context.read_branch_state", {}))
+    if not _has_target_preview_surface_read(observations):
+        calls.append(
+            (
+                "context.read_surface",
+                {
+                    "surface": "solver_design",
+                    "detail": "compact",
+                    "section": "target_preview",
+                    "include_code": False,
+                    "max_code_chars": 800,
+                },
+            )
+        )
+    return calls
+
+
+def _has_target_preview_surface_read(
+    observations: list[ProposalObservation],
+) -> bool:
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_surface":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        surface = payload.get("surface")
+        surface_name = ""
+        if isinstance(surface, Mapping):
+            surface_name = str(surface.get("name") or surface.get("id") or "").strip()
+        if surface_name != "solver_design":
+            continue
+        if str(payload.get("section") or "").strip() == "target_preview":
+            return True
+    return False
 
 
 def _available_compact_feedback_tools(

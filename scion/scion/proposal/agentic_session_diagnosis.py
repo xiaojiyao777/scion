@@ -359,37 +359,41 @@ class AgenticSessionDiagnosisMixin:
             *,
             selection_source: str,
         ) -> list[ProposalObservation]:
-            target_args = _forced_solver_design_target_file_read_args(
+            target_read_args = _pre_hypothesis_solver_design_target_file_read_args(
                 context,
                 observations=observations,
             )
-            if target_args is None:
+            if not target_read_args:
                 return []
-            if _has_relevant_algorithm_slice_read(
-                observations,
-                target_file=target_args.get("file_path"),
-            ):
-                return []
-            if _has_successful_reusable_observation(
-                observations,
-                "context.read_algorithm_file",
-                target_args,
-                forced_surface=context.forced_surface or "solver_design",
-            ):
-                return []
-            if self._tool_loop_limit_reached(state):
-                self._record_loop_stop(state, self._current_loop_stop_reason(state))
-                return []
-            return [
-                self._call_tool(
-                    context,
-                    state,
-                    AgenticProposalPhase.DIAGNOSE,
+            target_observations: list[ProposalObservation] = []
+            for target_args in target_read_args:
+                current = [*observations, *target_observations]
+                if _has_relevant_algorithm_slice_read(
+                    current,
+                    target_file=target_args.get("file_path"),
+                ):
+                    continue
+                if _has_successful_reusable_observation(
+                    current,
                     "context.read_algorithm_file",
                     target_args,
-                    selection_source=selection_source,
+                    forced_surface=context.forced_surface or "solver_design",
+                ):
+                    continue
+                if self._tool_loop_limit_reached(state):
+                    self._record_loop_stop(state, self._current_loop_stop_reason(state))
+                    break
+                target_observations.append(
+                    self._call_tool(
+                        context,
+                        state,
+                        AgenticProposalPhase.DIAGNOSE,
+                        "context.read_algorithm_file",
+                        target_args,
+                        selection_source=selection_source,
+                    )
                 )
-            ]
+            return target_observations
 
     def _required_context_satisfied(
             self,

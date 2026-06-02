@@ -373,6 +373,12 @@ def _active_solver_map_followup_calls(
             registry_args,
             forced_surface=effective_surface,
         )
+        and not _has_attempted_active_map_target_read(
+            observations,
+            "context.read_operator_registry",
+            registry_args,
+            id_key="registry_id",
+        )
     ):
         calls.append(
             (
@@ -396,6 +402,12 @@ def _active_solver_map_followup_calls(
             "context.read_algorithm_slice",
             slice_args,
             forced_surface=effective_surface,
+        )
+        and not _has_attempted_active_map_target_read(
+            observations,
+            "context.read_algorithm_slice",
+            slice_args,
+            id_key="slice_id",
         )
     ):
         calls.append(
@@ -854,6 +866,30 @@ def _has_successful_reusable_observation(
     if not requested_surface:
         return False
     return _has_successful_surface_read(observations, requested_surface)
+
+
+def _has_attempted_active_map_target_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    id_key: str,
+) -> bool:
+    requested_id = str(args.get(id_key) or "").strip()
+    if not requested_id:
+        return False
+    for observation in observations:
+        if observation.tool_name != tool_name:
+            continue
+        payload = observation.structured_payload
+        observed_id = ""
+        if isinstance(payload, Mapping):
+            observed_id = str(payload.get(id_key) or "").strip()
+        if observed_id == requested_id:
+            return True
+        if observation.is_error and not observed_id:
+            return True
+    return False
 
 
 def _has_successful_tool(

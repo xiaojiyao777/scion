@@ -36,39 +36,46 @@ from scion.core.scheduler import branch_counts_toward_active_slots
 def branch_prompt_card(branch: Branch | None) -> str:
     """Compact generic branch card for APS prompts and sibling summaries."""
     context = branch_hygiene_context(branch)
-    allowed = ",".join(context["allowed_next_actions"]) or "none"
-    forbidden = ",".join(context["forbidden_next_actions"]) or "none"
-    mechanism_ids = ",".join(context["mechanism_ids"]) or "none"
-    evidence = _format_evidence_summary(context["generic_evidence_summary"])
-    winners = _format_case_outcomes(context["case_level_winners"])
-    losses = _format_case_outcomes(context["case_level_losses"])
+    return branch_prompt_card_from_context(context)
+
+
+def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
+    """Render an already reconciled generic branch-card context."""
+    allowed = ",".join(_card_list(context.get("allowed_next_actions"))) or "none"
+    forbidden = ",".join(_card_list(context.get("forbidden_next_actions"))) or "none"
+    mechanism_ids = ",".join(_card_list(context.get("mechanism_ids"))) or "none"
+    evidence = _format_evidence_summary(_card_mapping(context.get("generic_evidence_summary")))
+    winners = _format_case_outcomes(_card_mapping_list(context.get("case_level_winners")))
+    losses = _format_case_outcomes(_card_mapping_list(context.get("case_level_losses")))
     activation = _format_phase_activation_summary(
-        context["phase_activation_summary"]
+        _card_mapping(context.get("phase_activation_summary"))
     )
-    runtime_confidence = context["runtime_evidence_confidence"] or "unknown"
+    runtime_confidence = context.get("runtime_evidence_confidence") or "unknown"
     why_not_promoted = (
-        ",".join(context["why_not_promoted_reason_codes"]) or "none"
+        ",".join(_card_list(context.get("why_not_promoted_reason_codes"))) or "none"
     )
     proposal_blocks = (
-        ",".join(context["proposal_block_reason_codes"]) or "none"
+        ",".join(_card_list(context.get("proposal_block_reason_codes"))) or "none"
     )
-    why_abandoned = ",".join(context["why_abandoned_reason_codes"]) or "none"
+    why_abandoned = (
+        ",".join(_card_list(context.get("why_abandoned_reason_codes"))) or "none"
+    )
     return (
-        f"branch_id={context['branch_id']} "
-        f"status={context['status']} "
-        f"direction={_compact_card_value(context['direction'])} "
+        f"branch_id={context.get('branch_id') or 'unknown'} "
+        f"status={context.get('status') or 'unknown'} "
+        f"direction={_compact_card_value(context.get('direction'))} "
         f"mechanism_ids={mechanism_ids} "
-        f"lineage_status={context['lineage_status']} "
-        f"current_head_status={context['current_head_status']} "
-        f"best_checkpoint_status={context['best_checkpoint_status']} "
-        f"best_quality_checkpoint_id={context['best_quality_checkpoint_id'] or 'none'} "
-        f"last_valid_checkpoint_id={context['last_valid_checkpoint_id'] or 'none'} "
-        f"rollback_count={context['rollback_count']} "
+        f"lineage_status={context.get('lineage_status') or 'unknown'} "
+        f"current_head_status={context.get('current_head_status') or 'unknown'} "
+        f"best_checkpoint_status={context.get('best_checkpoint_status') or 'none'} "
+        f"best_quality_checkpoint_id={context.get('best_quality_checkpoint_id') or 'none'} "
+        f"last_valid_checkpoint_id={context.get('last_valid_checkpoint_id') or 'none'} "
+        f"rollback_count={context.get('rollback_count') or 0} "
         f"allowed_next_actions={allowed} "
         f"forbidden_next_actions={forbidden} "
-        f"latest_head_failed={str(context['latest_head_failed']).lower()} "
+        f"latest_head_failed={str(bool(context.get('latest_head_failed'))).lower()} "
         "lineage_retained_checkpoint="
-        f"{str(context['lineage_retained_checkpoint']).lower()} "
+        f"{str(bool(context.get('lineage_retained_checkpoint'))).lower()} "
         f"generic_evidence_summary={evidence} "
         f"case_level_winners={winners} "
         f"case_level_losses={losses} "
@@ -78,6 +85,24 @@ def branch_prompt_card(branch: Branch | None) -> str:
         f"proposal_block_reason_codes={proposal_blocks} "
         f"why_abandoned_reason_codes={why_abandoned}"
     )
+
+
+def _card_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    if not isinstance(value, Iterable) or isinstance(value, Mapping):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
+def _card_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _card_mapping_list(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Iterable) or isinstance(value, (str, bytes, Mapping)):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
 
 
 def active_slot_inventory_from_branch_cards(

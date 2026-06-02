@@ -75,11 +75,10 @@ class AgenticSessionPlannerLoopMixin:
                     break
                 if (
                     self._diagnosis_budget_reserved(state)
-                    and self._missing_required_context_error(
+                    and self._planner_context_satisfied(
+                        context,
                         observations,
-                        context=context,
                     )
-                    is None
                 ):
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
@@ -652,13 +651,16 @@ class AgenticSessionPlannerLoopMixin:
                     context,
                     observations,
                 )
-                target_read_args = _forced_solver_design_target_file_read_args(
+                target_read_args = _pre_hypothesis_solver_design_target_file_read_args(
                     context,
                     observations=observations,
                 )
-                existing_target_file = str(
-                    (target_read_args or {}).get("file_path") or ""
-                ).strip()
+                existing_target_files = [
+                    str(args.get("file_path") or "").strip()
+                    for args in target_read_args
+                    if str(args.get("file_path") or "").strip()
+                ]
+                existing_target_file = existing_target_files[0] if existing_target_files else ""
                 forced_target_file = str(context.forced_target_file or "").strip()
                 recommended_file_path = _recommended_algorithm_file_path(
                     algorithm_file_guidance,
@@ -786,13 +788,14 @@ class AgenticSessionPlannerLoopMixin:
                         "file only when exact source is needed."
                     ),
                     "existing_target_grounding_rule": (
-                        "If forced_action is modify, or branch state identifies a "
-                        "single existing provider-declared active target candidate, "
-                        "read that target source or a relevant provider-declared "
-                        "slice before returning stop=true or drafting the first "
-                        "hypothesis."
+                        "If forced_action is modify, branch/feedback context, "
+                        "target preview, or the active solver map identifies "
+                        "provider-declared existing target candidates, read their "
+                        "owner source before returning stop=true or drafting the "
+                        "first hypothesis."
                     ),
                     "existing_target_candidate": existing_target_file or None,
+                    "existing_target_candidates": existing_target_files,
                     "active_solver_map_context": map_context,
                 }
                 guidance["context.read_algorithm_symbol"] = {

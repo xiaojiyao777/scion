@@ -31,6 +31,7 @@ _SOLVER_DESIGN_GROUNDING_TOOLS = (
 )
 _SOLVER_DESIGN_FILE_DISCOVERY_TOOLS = ("context.list_algorithm_files",)
 _APS_TARGET_ALGORITHM_FILE_READ_CHARS = 24000
+_APS_EXISTING_TARGET_PREGROUNDING_READ_LIMIT = 3
 
 
 def _required_context_tool_names(
@@ -196,6 +197,72 @@ def _forced_solver_design_target_file_read_args(
     }
 
 
+def _pre_hypothesis_solver_design_target_file_read_args(
+    context: ProposalToolContext | None,
+    *,
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation] = (),
+    limit: int = _APS_EXISTING_TARGET_PREGROUNDING_READ_LIMIT,
+) -> list[dict[str, Any]]:
+    if context is None or not _context_requires_solver_design_grounding(context):
+        return []
+
+    existing_paths = set(
+        _existing_algorithm_file_paths(context=context, observations=observations)
+    )
+    forced_action = str(context.forced_action or "").strip()
+    forced_target = _normalize_solver_design_target_file(context.forced_target_file)
+    branch_current_paths = {
+        _normalize_solver_design_target_file(path)
+        for path in getattr(context, "branch_current_file_sources", {}) or {}
+        if _normalize_solver_design_target_file(path)
+    }
+    non_map_observation_candidates = _solver_design_target_candidates_from_observations(
+        tuple(
+            observation
+            for observation in observations
+            if observation.tool_name != "context.read_active_solver_map"
+        )
+    )
+    if (
+        not forced_target
+        and forced_action in {"modify", "remove"}
+        and not branch_current_paths
+        and not non_map_observation_candidates
+        and not tuple(getattr(context, "step_history", ()) or ())
+    ):
+        return []
+    target_candidates = (
+        [forced_target]
+        if forced_target
+        else _solver_design_target_candidates(context, observations=observations)
+    )
+    read_args: list[dict[str, Any]] = []
+    for target_file in target_candidates:
+        if not _is_solver_design_algorithm_target(
+            target_file,
+            context=context,
+            surface=context.forced_surface or "solver_design",
+        ):
+            continue
+        if existing_paths and target_file not in existing_paths:
+            continue
+        if not existing_paths and not _target_declared_for_solver_design_surface(
+            context,
+            target_file,
+        ):
+            continue
+        read_args.append(
+            {
+                "surface": "solver_design",
+                "file_path": target_file,
+                "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
+            }
+        )
+        if len(read_args) >= max(1, int(limit)):
+            break
+    return read_args
+
+
 def _inferred_solver_design_target_file(
     context: ProposalToolContext | None,
     *,
@@ -205,7 +272,7 @@ def _inferred_solver_design_target_file(
 
     if context is None or not _context_requires_solver_design_grounding(context):
         return ""
-    candidates = _solver_design_target_candidates(context)
+    candidates = _solver_design_target_candidates(context, observations=observations)
     if not candidates:
         return ""
     existing_paths = set(
@@ -235,13 +302,19 @@ def _inferred_solver_design_target_file(
     return ""
 
 
-def _solver_design_target_candidates(context: ProposalToolContext) -> list[str]:
+def _solver_design_target_candidates(
+    context: ProposalToolContext,
+    *,
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation] = (),
+) -> list[str]:
     candidates: list[str] = []
 
     forced_action = str(context.forced_action or "").strip()
     forced_target = _normalize_solver_design_target_file(context.forced_target_file)
     if forced_target and (not forced_action or forced_action in {"modify", "remove"}):
         candidates.append(forced_target)
+
+    candidates.extend(_solver_design_target_candidates_from_observations(observations))
 
     branch_id = str(getattr(context, "branch_id", None) or "").strip()
     for step in reversed(tuple(getattr(context, "step_history", ()) or ())):
@@ -270,7 +343,166 @@ def _solver_design_target_candidates(context: ProposalToolContext) -> list[str]:
         _normalize_solver_design_target_file(path)
         for path in getattr(context, "branch_current_file_sources", {}) or {}
     )
+    candidates.extend(_active_map_owner_file_candidates(observations))
     return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _solver_design_target_candidates_from_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[str]:
+    candidates: list[str] = []
+    for observation in reversed(tuple(observations)):
+        if observation.is_error:
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if observation.tool_name == "context.read_active_solver_map":
+            candidates.extend(_active_map_owner_file_candidates([observation]))
+            continue
+        if observation.tool_name == "context.read_surface":
+            candidates.extend(_surface_target_candidates(payload))
+            continue
+        candidates.extend(_target_file_values_from_payload(payload))
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _surface_target_candidates(payload: Mapping[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    for value in (
+        payload.get("target_file"),
+        _mapping_path(payload.get("current_artifact"), "file_path"),
+        _mapping_path(payload.get("surface_contract"), "target_file"),
+    ):
+        target = _normalize_solver_design_target_file(value)
+        if target:
+            candidates.append(target)
+    return list(dict.fromkeys(candidates))
+
+
+def _target_file_values_from_payload(payload: Mapping[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    stack: list[Any] = [payload]
+    visited = 0
+    while stack and visited < 256:
+        visited += 1
+        current = stack.pop()
+        if isinstance(current, Mapping):
+            action = str(current.get("action") or "").strip()
+            if action in {"create", "create_new"}:
+                continue
+            for key in ("target_file", "hypothesis_target_file", "primary_target_file"):
+                target = _normalize_solver_design_target_file(current.get(key))
+                if target:
+                    candidates.append(target)
+            for value in current.values():
+                if isinstance(value, (Mapping, list, tuple)):
+                    stack.append(value)
+        elif isinstance(current, (list, tuple)):
+            stack.extend(current)
+    return list(dict.fromkeys(candidates))
+
+
+def _active_map_owner_file_candidates(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[str]:
+    payload: Mapping[str, Any] = {}
+    for observation in reversed(tuple(observations)):
+        if observation.is_error or observation.tool_name != "context.read_active_solver_map":
+            continue
+        if isinstance(observation.structured_payload, Mapping):
+            payload = observation.structured_payload
+            break
+    if not payload or payload.get("available") is False:
+        return []
+    weighted: list[tuple[tuple[int, int], str]] = []
+    order = 0
+    entrypoint_paths = {
+        _normalize_solver_design_target_file(entrypoint.get("file_path"))
+        for entrypoint in _mapping_items(payload.get("entrypoints"))
+        if _normalize_solver_design_target_file(entrypoint.get("file_path"))
+    }
+    operator_file_counts: dict[str, int] = {}
+    for registry in _mapping_items(payload.get("operator_registries")):
+        for item in _mapping_items(registry.get("operators")):
+            target = _normalize_solver_design_target_file(item.get("file_path"))
+            if target:
+                operator_file_counts[target] = operator_file_counts.get(target, 0) + 1
+    registry_owner_counts: dict[str, int] = {}
+    for registry in _mapping_items(payload.get("operator_registries")):
+        target = _normalize_solver_design_target_file(registry.get("owner_file"))
+        if target:
+            registry_owner_counts[target] = registry_owner_counts.get(target, 0) + len(
+                _mapping_items(registry.get("operators"))
+            )
+    for registry in _mapping_items(payload.get("operator_registries")):
+        target = _normalize_solver_design_target_file(registry.get("owner_file"))
+        if target:
+            weighted.append(
+                (
+                    (
+                        90 + registry_owner_counts.get(target, 0),
+                        -order,
+                    ),
+                    target,
+                )
+            )
+            order += 1
+        for item in _mapping_items(registry.get("operators")):
+            target = _normalize_solver_design_target_file(item.get("file_path"))
+            if target:
+                weighted.append(((100 + operator_file_counts.get(target, 0), -order), target))
+                order += 1
+    for slice_ref in _mapping_items(payload.get("algorithm_slices")):
+        target = _normalize_solver_design_target_file(slice_ref.get("file_path"))
+        if target:
+            base_score = 20 if target in entrypoint_paths else 70
+            weighted.append(
+                ((base_score + _slice_visibility_score(slice_ref), -order), target)
+            )
+            order += 1
+    for integration in _mapping_items(payload.get("scheduler_integrations")):
+        target = _normalize_solver_design_target_file(integration.get("file_path"))
+        if target:
+            weighted.append(((60, -order), target))
+            order += 1
+    for entrypoint in _mapping_items(payload.get("entrypoints")):
+        target = _normalize_solver_design_target_file(entrypoint.get("file_path"))
+        if target:
+            weighted.append(((50, -order), target))
+            order += 1
+    for editable in _mapping_items(payload.get("editable_files")):
+        target = _normalize_solver_design_target_file(editable.get("file_path"))
+        if target:
+            weighted.append(((40, -order), target))
+            order += 1
+    ordered = [target for _score, target in sorted(weighted, reverse=True)]
+    return list(dict.fromkeys(ordered))
+
+
+def _slice_visibility_score(slice_ref: Mapping[str, Any]) -> int:
+    exposure = str(
+        slice_ref.get("exposure_level") or slice_ref.get("slice_kind") or ""
+    ).strip()
+    if exposure in {"body", "symbol_body"}:
+        return 20
+    if exposure in {"excerpt", "symbol_excerpt", "registry_block", "integration_block"}:
+        return 12
+    if exposure == "signature":
+        return 4
+    return 0
+
+
+def _mapping_items(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _mapping_path(value: Any, key: str) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(key)
+    return None
 
 
 def _patch_changes_for_target_candidates(patch: Any) -> tuple[Any, ...]:
@@ -454,10 +686,6 @@ def _run_required_context_preface(
                 "required_context_preface",
             )
         )
-        forced_target_read_args = _forced_solver_design_target_file_read_args(context)
-    else:
-        forced_target_read_args = None
-
     observations: list[ProposalObservation] = []
     index = 0
     while index < len(calls):
@@ -491,26 +719,49 @@ def _run_required_context_preface(
         )
         if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
             break
-        if (
-            name == "context.read_active_solver_map"
-            and forced_target_read_args is not None
-        ):
+        if name == "context.read_active_solver_map":
             current_observations = [*observations]
-            followups = _active_solver_map_followup_calls(
-                current_observations,
-                target_file=forced_target_read_args.get("file_path"),
-                surface="solver_design",
-            )
-            calls[index:index] = [
-                *[
-                    (followup_name, followup_args, "planner_map_followup_required")
-                    for followup_name, followup_args in followups
-                ],
-                (
-                    "context.read_algorithm_file",
-                    forced_target_read_args,
-                    "required_context_preface",
+            remaining_chars = max(0, runner._remaining_observation_chars(state))
+            preground_limit = max(
+                1,
+                min(
+                    _APS_EXISTING_TARGET_PREGROUNDING_READ_LIMIT,
+                    remaining_chars // max(1, _APS_TARGET_ALGORITHM_FILE_READ_CHARS),
                 ),
+            )
+            target_read_args = _pre_hypothesis_solver_design_target_file_read_args(
+                context,
+                observations=current_observations,
+                limit=preground_limit,
+            )
+            exact_target_grounding = bool(
+                _normalize_solver_design_target_file(context.forced_target_file)
+                or getattr(context, "branch_current_file_sources", None)
+            )
+            followup_calls: list[tuple[str, Mapping[str, Any], str]] = []
+            if exact_target_grounding and len(target_read_args) == 1:
+                for followup_name, followup_args in _active_solver_map_followup_calls(
+                    current_observations,
+                    target_file=target_read_args[0].get("file_path"),
+                    surface="solver_design",
+                ):
+                    followup_calls.append(
+                        (
+                            followup_name,
+                            followup_args,
+                            "planner_map_followup_required",
+                        )
+                    )
+            calls[index:index] = [
+                *followup_calls,
+                *[
+                    (
+                        "context.read_algorithm_file",
+                        target_args,
+                        "required_context_preface",
+                    )
+                    for target_args in target_read_args
+                ],
             ]
 
     state.note(

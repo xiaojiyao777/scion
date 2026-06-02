@@ -5,7 +5,10 @@ import json
 import logging
 from typing import Any, Dict, Iterable, Mapping
 
-from scion.core.branch_cards import active_slot_inventory_from_branch_cards
+from scion.core.branch_cards import (
+    active_slot_inventory_from_branch_cards,
+    branch_prompt_card_from_context,
+)
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
 from scion.core.reason_code_groups import classify_reason_codes
@@ -833,6 +836,7 @@ def _branch_history_cards(steps: Iterable[StepRecord], active_cards: Iterable[Ma
             "why_not_promoted_reason_codes": card.get("why_not_promoted_reason_codes") or reason_codes,
             "why_abandoned_reason_codes": card.get("why_abandoned_reason_codes") or (reason_codes if status == "abandoned" else []),
         })
+        card["branch_card_text"] = branch_prompt_card_from_context(card)
         cards_by_branch[branch_id] = card
     return list(cards_by_branch.values())
 
