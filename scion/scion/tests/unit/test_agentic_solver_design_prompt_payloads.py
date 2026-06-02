@@ -415,7 +415,8 @@ def test_create_new_target_visibility_ledger_marks_create_mode() -> None:
     assert target["target_file_create_mode"] is True
     assert target["visibility_status"] == "create_new_target_no_current_source"
     assert target["prompt_visibility_status"] == "create_new_target_no_current_source"
-    assert target["source_status"] == "missing_current_source"
+    assert target["source_status"] == "new_file"
+    assert target["source_provenance"] == "new_file_placeholder"
 
 
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:

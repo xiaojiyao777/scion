@@ -1282,6 +1282,49 @@ def test_missing_branch_created_helper_is_not_marked_as_full_source(
     assert helper_record["full_content_visible_in_rendered_prompt"] is False
 
 
+def test_create_new_target_prompt_uses_new_file_placeholder_status() -> None:
+    target_rel = "policies/helpers/new_module.py"
+    target_placeholder = (
+        f"File: {target_rel}\n"
+        "Provenance: new_file_placeholder; readable=False; "
+        "source_status=new_file; visibility=new_file_placeholder\n"
+        "This target file does not currently exist and may be created by a "
+        "create_new proposal.\n"
+        f"```python\n# new file placeholder for {target_rel}\n```"
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "action": "create_new",
+        "target_file": target_rel,
+        "target_file_code": target_placeholder,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-new-file-placeholder",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "source_status=new_file" in rendered_system
+    assert "visibility=new_file_placeholder" in rendered_system
+    assert "visibility=not_visible" not in rendered_system
+    target_record = manifest["code_file_visibility_ledger"]["target_file"]
+    assert target_record["source_status"] == "new_file"
+    assert target_record["source_provenance"] == "new_file_placeholder"
+    assert target_record["visibility_status"] == "create_new_target_no_current_source"
+    assert target_record["prompt_visibility_status"] == (
+        "create_new_target_no_current_source"
+    )
+
+
 def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:
     target_source = (
         "File: policies/baseline_modules/local_search.py\n"

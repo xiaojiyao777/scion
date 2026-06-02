@@ -272,6 +272,14 @@ class AgenticSessionDiagnosisMixin:
                     target_file=context.forced_target_file,
                 )
             )
+            observations.extend(
+                self._run_forced_solver_design_target_source_tool(
+                    context,
+                    state,
+                    observations,
+                    selection_source="planner_map_followup_required",
+                )
+            )
             return observations + self._run_hypothesis_observation_tools(
                 context,
                 state,
@@ -312,6 +320,14 @@ class AgenticSessionDiagnosisMixin:
                     target_file=context.forced_target_file,
                 )
             )
+            observations.extend(
+                self._run_forced_solver_design_target_source_tool(
+                    context,
+                    state,
+                    observations,
+                    selection_source="framework_required_completion",
+                )
+            )
             completed = self._run_hypothesis_observation_tools(
                 context,
                 state,
@@ -334,6 +350,46 @@ class AgenticSessionDiagnosisMixin:
                 },
             )
             return observations
+
+    def _run_forced_solver_design_target_source_tool(
+            self,
+            context: ProposalToolContext,
+            state: AgenticProposalSessionState,
+            observations: list[ProposalObservation],
+            *,
+            selection_source: str,
+        ) -> list[ProposalObservation]:
+            target_args = _forced_solver_design_target_file_read_args(
+                context,
+                observations=observations,
+            )
+            if target_args is None:
+                return []
+            if _has_relevant_algorithm_slice_read(
+                observations,
+                target_file=target_args.get("file_path"),
+            ):
+                return []
+            if _has_successful_reusable_observation(
+                observations,
+                "context.read_algorithm_file",
+                target_args,
+                forced_surface=context.forced_surface or "solver_design",
+            ):
+                return []
+            if self._tool_loop_limit_reached(state):
+                self._record_loop_stop(state, self._current_loop_stop_reason(state))
+                return []
+            return [
+                self._call_tool(
+                    context,
+                    state,
+                    AgenticProposalPhase.DIAGNOSE,
+                    "context.read_algorithm_file",
+                    target_args,
+                    selection_source=selection_source,
+                )
+            ]
 
     def _required_context_satisfied(
             self,

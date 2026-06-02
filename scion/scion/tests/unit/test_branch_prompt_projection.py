@@ -194,6 +194,21 @@ def test_no_effect_branch_card_marks_unchanged_repeat_forbidden() -> None:
         assert forbidden not in rendered
 
 
+def test_parked_lineage_branch_card_uses_clean_fork_only_policy() -> None:
+    branch = _branch("parked123", branch_code_status="parked_lineage")
+    branch.branch_mechanism_ids = ("retained_probe",)
+
+    rendered = branch_hygiene_guidance(branch)
+
+    assert "lineage_status=parked" in rendered
+    assert "allowed_next_actions=clean_fork" in rendered
+    assert "forbidden_next_actions=consume_active_slot" in rendered
+    assert "branch_followup_policy=parked_lineage_clean_fork_only" in rendered
+    assert "clean_fork_policy=parked_lineage_clean_fork_required" in rendered
+    assert "hypothesis_generation_mode=clean_fork_only" in rendered
+    assert "branch_followup_policy=open_exploration_allowed" not in rendered
+
+
 def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
     branch = _branch("followup123", branch_code_status="active_no_effect")
     branch.last_telemetry_outcome = "no_objective_effect"

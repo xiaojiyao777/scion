@@ -102,6 +102,11 @@ class AgenticSessionPlannerLoopMixin:
                     "phase": state.phase.value,
                     "allowed_tools": self._planner_allowed_tools(context),
                     "allowed_tool_specs": self._planner_allowed_tool_specs(context),
+                    "required_context_status": _planner_required_context_status(
+                        self.tool_registry,
+                        context,
+                        observations,
+                    ),
                     "tool_arg_guidance": self._tool_arg_guidance(context, observations),
                     "active_algorithm_facts_anchor": (
                         self._planner_active_algorithm_facts_anchor(observations)
@@ -610,8 +615,10 @@ class AgenticSessionPlannerLoopMixin:
                     context,
                     observations,
                 )
+                forced_target_file = str(context.forced_target_file or "").strip()
                 recommended_file_path = _recommended_algorithm_file_path(
-                    algorithm_file_guidance
+                    algorithm_file_guidance,
+                    preferred=forced_target_file,
                 )
                 map_context = _active_solver_map_context(
                     observations,
@@ -648,6 +655,14 @@ class AgenticSessionPlannerLoopMixin:
                     "available_registry_ids": map_context.get("available_registry_ids"),
                     "available_slice_ids": map_context.get("available_slice_ids"),
                 }
+                if forced_target_file:
+                    guidance["context.read_active_solver_map"][
+                        "target_grounding_rule"
+                    ] = (
+                        "When an existing forced target_file is present, use the "
+                        "map's recommended registry/slice or target owner source "
+                        "before drafting the first hypothesis."
+                    )
                 guidance["context.read_operator_registry"] = {
                     "recommended_args": {
                         "surface": "solver_design",
@@ -724,6 +739,12 @@ class AgenticSessionPlannerLoopMixin:
                         "multiple broad full-file reads. Use read_operator_registry "
                         "or read_algorithm_slice first, then read a target owner "
                         "file only when exact source is needed."
+                    ),
+                    "existing_target_grounding_rule": (
+                        "If forced_action is modify and forced_target_file names an "
+                        "existing provider-declared active file, read that target "
+                        "source or a relevant provider-declared slice before "
+                        "returning stop=true or drafting the first hypothesis."
                     ),
                     "active_solver_map_context": map_context,
                 }

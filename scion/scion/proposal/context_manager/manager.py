@@ -128,6 +128,18 @@ def _render_missing_branch_current_target_file(target_file: str) -> str:
     )
 
 
+def _render_new_file_target_placeholder(target_file: str) -> str:
+    return (
+        f"File: {target_file}\n"
+        "Provenance: new_file_placeholder; readable=False; "
+        "source_status=new_file; visibility=new_file_placeholder\n"
+        "This target file does not currently exist and may be created by a "
+        "create_new proposal. Provide full file content for this new target; "
+        "do not use exact_replace against this placeholder.\n"
+        f"```python\n# new file placeholder for {target_file}\n```"
+    )
+
+
 class ContextManager:
     """Constructs context dicts for CreativeLayer calls.
 
@@ -589,7 +601,9 @@ class ContextManager:
                 normalized_target_file
             )
         elif hypothesis.action == "create_new" and not target_file_exists:
-            target_file_code = "(new file — will be created)"
+            target_file_code = _render_new_file_target_placeholder(
+                normalized_target_file
+            )
         else:
             target_file_code = _read_target_file_from_root(
                 source_root,

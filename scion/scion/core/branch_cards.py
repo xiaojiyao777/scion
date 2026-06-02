@@ -151,10 +151,14 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         status == "active_weak_positive"
         or last_screening_feedback_tier == "weak_positive"
     )
+    parked_lineage = branch_is_parked_lineage(branch)
     strict_same_mechanism_followup = (
         same_mechanism_followup_required and not weak_positive_followup
     )
     followup_policy = (
+        "parked_lineage_clean_fork_only"
+        if parked_lineage
+        else
         BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE
         if weak_positive_followup
         else
@@ -163,6 +167,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         else OPEN_EXPLORATION_ALLOWED
     )
     generation_mode = (
+        "clean_fork_only"
+        if parked_lineage
+        else
         BRANCH_LOCAL_FOLLOWUP_MODE
         if weak_positive_followup
         else
@@ -171,6 +178,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         else OPEN_EXPLORATION_MODE
     )
     clean_fork_policy = (
+        "parked_lineage_clean_fork_required"
+        if parked_lineage
+        else
         CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM
         if strict_same_mechanism_followup
         else None
@@ -184,7 +194,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     if repair_focus_required:
         baseline_policy = "champion_required_for_repair"
         repair_focus_reason = WIRING_SUSPECT_REQUIRES_REPAIR
-    elif branch_is_parked_lineage(branch):
+    elif parked_lineage:
         baseline_policy = "parked_lineage_clean_fork_required"
         repair_focus_reason = None
     elif weak_positive_followup:
@@ -382,6 +392,19 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             "telemetry_wiring to modify or integrate. "
             "If a different mechanism is needed, use a clean branch/fork "
             f"before drafting it.{reroute_suffix}"
+        )
+    if branch_is_parked_lineage(branch):
+        return (
+            f"{card}; "
+            f"branch_code_status={status}; telemetry_outcome={outcome}; "
+            f"screening_tier={tier}; baseline_policy="
+            f"{context['baseline_policy']}; branch_followup_policy="
+            f"{context['branch_followup_policy']}; clean_fork_policy="
+            f"{context['clean_fork_policy']}; hypothesis_generation_mode="
+            f"{context['hypothesis_generation_mode']}. "
+            "This lineage is parked and must not consume an active branch "
+            "slot or continue as open exploration. Start from a clean branch "
+            "or clean fork for any next research direction."
         )
     if status.startswith("active_"):
         reroute_suffix = _branch_lifecycle_guidance_suffix(context)

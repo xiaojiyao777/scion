@@ -344,6 +344,8 @@ def _code_file_visibility_record(
     if not file_path:
         return {}
     source_status = _source_status(source_metadata, content)
+    if target_file_create_mode and source_status == "missing_current_source":
+        source_status = "new_file"
     readable = source_status == "current_branch_source"
     content_visible = bool(
         readable
@@ -364,7 +366,11 @@ def _code_file_visibility_record(
         "section_status": section_status.get("status", "missing"),
         "section_char_count": section_status.get("char_count", 0),
         "source_status": source_status,
-        "source_provenance": _source_provenance(source_metadata),
+        "source_provenance": (
+            "new_file_placeholder"
+            if target_file_create_mode and source_status == "new_file"
+            else _source_provenance(source_metadata)
+        ),
         "readable": readable,
         "content_chars": len(content or ""),
         "content_hash": _text_digest(content, length=16) if content else "",
@@ -1377,6 +1383,8 @@ def _source_status(
 
 def _source_status_from_text(metadata: str, content: str | None) -> str:
     text = f"{metadata}\n{content or ''}".lower()
+    if "source_status=new_file" in text or "new_file_placeholder" in text:
+        return "new_file"
     if (
         "readable=false" in text
         or "missing_current_source" in text
@@ -1406,6 +1414,8 @@ def _looks_like_missing_source(value: Any) -> bool:
     return (
         not text
         or "will be created" in text
+        or "source_status=new_file" in text
+        or "new_file_placeholder" in text
         or text.startswith("(could not read ")
         or "could not read" in text
         or "missing_current_source" in text

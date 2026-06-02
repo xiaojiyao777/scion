@@ -1496,6 +1496,8 @@ def _is_existing_source_text(value: Any) -> bool:
     lowered = stripped.lower()
     return not (
         "will be created" in lowered
+        or "source_status=new_file" in lowered
+        or "new_file_placeholder" in lowered
         or "could not read" in lowered
         or "missing_current_source" in lowered
         or "readable=false" in lowered

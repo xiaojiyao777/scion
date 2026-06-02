@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from scion.proposal.agentic_grounding import (
     _context_requires_solver_design_grounding,
+    _forced_solver_design_target_file_read_args,
     _required_context_tool_names,
 )
 from scion.proposal.agentic_session_feedback import (
@@ -18,6 +19,9 @@ from scion.proposal.tools import (
     ProposalToolFailureCode,
 )
 from scion.proposal.agentic_session_tools import (
+    _active_solver_map_followup_calls,
+    _has_relevant_algorithm_slice_read,
+    _has_successful_reusable_observation,
     _missing_active_solver_map_followups,
 )
 
@@ -64,8 +68,6 @@ def _missing_planner_context_error(
     if required_error is not None:
         return required_error
     available_feedback = _available_compact_feedback_tools(tool_registry, context)
-    if not available_feedback:
-        return None
     observed_ok = {
         observation.tool_name
         for observation in observations
@@ -90,7 +92,137 @@ def _missing_planner_context_error(
                 "context.read_active_solver_map: "
                 + ", ".join(missing_map_followups)
             )
+        missing_target = _missing_forced_solver_design_target_context(
+            context,
+            observations,
+        )
+        if missing_target is not None:
+            return missing_target
     return None
+
+
+def _planner_required_context_status(
+    tool_registry: Any,
+    context: ProposalToolContext,
+    observations: list[ProposalObservation],
+) -> dict[str, Any]:
+    """Model-facing stop constraints for mandatory generic context."""
+
+    observed_ok = {
+        observation.tool_name
+        for observation in observations
+        if not observation.is_error
+    }
+    required_missing = [
+        name
+        for name in _required_context_tool_names(context)
+        if name not in observed_ok
+    ]
+    compact_feedback_missing = [
+        name
+        for name in _available_compact_feedback_tools(tool_registry, context)
+        if name
+        not in {
+            observation.tool_name
+            for observation in observations
+            if _observation_satisfies_compact_requirement(context, observation)
+        }
+    ]
+    map_followup_calls: list[tuple[str, Mapping[str, Any]]] = []
+    target_source_call: tuple[str, Mapping[str, Any]] | None = None
+    if _context_requires_solver_design_grounding(context):
+        map_followup_calls = _active_solver_map_followup_calls(
+            observations,
+            target_file=context.forced_target_file,
+            surface="solver_design",
+        )
+        target_args = _forced_solver_design_target_file_read_args(
+            context,
+            observations=observations,
+        )
+        if target_args is not None and not _forced_target_context_visible(
+            context,
+            observations,
+            target_args,
+        ):
+            target_source_call = ("context.read_algorithm_file", target_args)
+
+    missing_required_context: list[str] = []
+    missing_required_context.extend(required_missing)
+    missing_required_context.extend(compact_feedback_missing)
+    missing_required_context.extend(name for name, _args in map_followup_calls)
+    if target_source_call is not None:
+        missing_required_context.append(
+            f"context.read_algorithm_file({target_source_call[1].get('file_path')})"
+        )
+    next_required_tools = [
+        {"tool_name": name, "args": dict(args)}
+        for name, args in [
+            *[(name, {}) for name in required_missing],
+            *[(name, {}) for name in compact_feedback_missing],
+            *map_followup_calls,
+            *([target_source_call] if target_source_call is not None else []),
+        ]
+    ]
+    missing_error = _missing_planner_context_error(
+        tool_registry,
+        context,
+        observations,
+    )
+    if missing_error is None and missing_required_context:
+        missing_error = (
+            "missing required planner context before stop: "
+            + ", ".join(list(dict.fromkeys(missing_required_context)))
+        )
+    return {
+        "schema_version": "planner_required_context_status.v1",
+        "stop_allowed": missing_error is None,
+        "missing_required_context": list(dict.fromkeys(missing_required_context)),
+        "next_required_tools": next_required_tools,
+        "detail": missing_error,
+        "rule": (
+            "Do not return stop=true while stop_allowed=false. Call the next "
+            "required tool first; framework completion is only a fail-closed "
+            "fallback if the planner stops early."
+        ),
+    }
+
+
+def _missing_forced_solver_design_target_context(
+    context: ProposalToolContext,
+    observations: list[ProposalObservation],
+) -> str | None:
+    target_args = _forced_solver_design_target_file_read_args(
+        context,
+        observations=observations,
+    )
+    if target_args is None:
+        return None
+    if _forced_target_context_visible(context, observations, target_args):
+        return None
+    target_file = str(target_args.get("file_path") or "").strip()
+    return (
+        "missing existing solver_design target source context before planner stop: "
+        f"context.read_algorithm_file({target_file})"
+    )
+
+
+def _forced_target_context_visible(
+    context: ProposalToolContext,
+    observations: list[ProposalObservation],
+    target_args: Mapping[str, Any],
+) -> bool:
+    if _has_relevant_algorithm_slice_read(
+        observations,
+        target_file=target_args.get("file_path"),
+    ):
+        return True
+    return _has_successful_reusable_observation(
+        observations,
+        "context.read_algorithm_file",
+        target_args,
+        forced_surface=context.forced_surface or "solver_design",
+    )
 
 
 def _available_compact_feedback_tools(
