@@ -310,6 +310,21 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
     return True
 
 
+def branch_active_slot_release_reason(branch: Branch | None) -> str:
+    """Return why ``branch`` is excluded from active-slot accounting, if known."""
+    if branch is None:
+        return ""
+    if branch.state in _TERMINAL_STATES:
+        if branch_is_parked_lineage(branch):
+            return "parked_lineage"
+        return "terminal_state"
+    if branch_is_parked_lineage(branch):
+        return "parked_lineage"
+    if _retained_checkpoint_no_effect_current_head(branch):
+        return "retained_checkpoint_no_effect_current_head"
+    return ""
+
+
 def active_slot_branches(branches: Iterable[Branch]) -> list[Branch]:
     """Filter branches to the active-slot capacity pool."""
     return [

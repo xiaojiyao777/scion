@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from types import SimpleNamespace
+from typing import Callable
 
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
+from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
+    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+)
 from scion.core.models import Branch, BranchState, ChampionState
 from scion.core.scheduler import Scheduler, SchedulerAction, active_slot_inventory
 from scion.core.step_result import StepResult
@@ -38,6 +43,7 @@ def _runner(
     branch: Branch | None = None,
     recorded_scheduler_results: list[StepResult] | None = None,
     explore_result: StepResult | None = None,
+    run_explore_step: Callable[[Branch], StepResult] | None = None,
 ) -> BranchStepRunner:
     selected_branch = branch or _branch()
     recorded = (
@@ -85,7 +91,11 @@ def _runner(
         apply_decision_and_finalize=lambda **kwargs: StepResult(action="explore"),
         record_step=lambda step: None,
         decision_reason_codes_for=lambda branch_id, protocol_result: None,
-        run_explore_step=lambda branch: selected_explore_result,
+        run_explore_step=(
+            run_explore_step
+            if run_explore_step is not None
+            else lambda branch: selected_explore_result
+        ),
         run_eval_step_callback=lambda branch: StepResult(
             action="validate",
             branch_id=branch.branch_id,
@@ -122,17 +132,22 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
     assert result.branch_id == "new-branch"
     assert result.scheduler_slot == "explore_new"
     assert result.scheduler_reason == "clean_fork_required_for_new_mechanism"
-    assert result.scheduler_audit_metadata == {
-        "actual_branch_action": "explore_new_clean_fork",
-        "clean_fork_reason": "clean_fork_required_for_new_mechanism",
-        "clean_fork_selected": True,
-        "same_branch_refinement_not_selected_reason": (
-            "clean_fork_required_for_new_mechanism"
-        ),
-        "scheduler_action": "create_new",
-        "scheduler_reason": "clean_fork_required_for_new_mechanism",
-        "scheduler_slot": "explore_new",
-    }
+    metadata = result.scheduler_audit_metadata
+    assert metadata["scheduler_action"] == "create_new"
+    assert metadata["pre_finalizer_scheduler_action"] == "create_new"
+    assert metadata["pre_finalizer_scheduler_slot"] == "explore_new"
+    assert metadata["scheduler_slot_semantics"] == (
+        "pre_finalizer_scheduler_preference"
+    )
+    assert metadata["actual_branch_action"] == "explore_new_clean_fork"
+    assert metadata["post_finalizer_actual_branch_action"] == (
+        "explore_new_clean_fork"
+    )
+    assert metadata["post_finalizer_next_proposal_policy"] == "clean_fork_selected"
+    assert metadata["clean_fork_selected"] is True
+    assert metadata["same_branch_refinement_not_selected_reason"] == (
+        "clean_fork_required_for_new_mechanism"
+    )
     assert "improve the same branch" not in result.reason
     assert recorded == [result]
 
@@ -231,15 +246,88 @@ def test_run_existing_scheduler_metadata_reaches_result_and_callback() -> None:
     assert result.branch_id == "existing-branch"
     assert result.scheduler_slot == "refine_active"
     assert result.scheduler_reason == "existing_branch_selected"
-    assert result.scheduler_audit_metadata == {
-        "actual_branch_action": "continue_same_branch",
-        "post_refine_decision_reason": "screening complete",
-        "refined_branch_id": "existing-branch",
-        "same_branch_refinement_selected": True,
-        "scheduler_action": "run_existing",
-        "scheduler_reason": "existing_branch_selected",
-        "scheduler_slot": "refine_active",
-    }
+    metadata = result.scheduler_audit_metadata
+    assert metadata["scheduler_action"] == "run_existing"
+    assert metadata["pre_finalizer_scheduler_action"] == "run_existing"
+    assert metadata["pre_finalizer_scheduler_slot"] == "refine_active"
+    assert metadata["pre_finalizer_selected_branch_id"] == "existing-branch"
+    assert metadata["scheduler_slot_semantics"] == (
+        "pre_finalizer_scheduler_preference"
+    )
+    assert metadata["actual_branch_action"] == "continue_same_branch"
+    assert metadata["post_finalizer_actual_branch_action"] == "continue_same_branch"
+    assert metadata["post_finalizer_next_proposal_policy"] == (
+        "same_branch_eligible"
+    )
+    assert metadata["post_finalizer_branch_id"] == "existing-branch"
+    assert metadata["post_finalizer_branch_state"] == "explore"
+    assert metadata["post_finalizer_counts_toward_active_slots"] is True
+    assert metadata["same_branch_refinement_selected"] is True
+    assert metadata["pre_finalizer_same_branch_refinement_selected"] is True
+    assert metadata["post_refine_decision_reason"] == "screening complete"
+    assert recorded == [result]
+
+
+def test_parked_lineage_records_post_finalizer_release_not_continue_same_branch() -> None:
+    branch = _branch("parked-after-refine")
+    branch.best_quality_checkpoint_id = "checkpoint-best"
+    branch.last_valid_checkpoint_id = "checkpoint-best"
+    recorded: list[StepResult] = []
+
+    def park_lineage(selected: Branch) -> StepResult:
+        selected.state = BranchState.PARKED_LINEAGE
+        selected.branch_code_status = "parked_lineage"
+        selected.last_branch_lifecycle_policy_block = {
+            "lifecycle_action_reason_codes": [
+                BRANCH_LIFECYCLE_PARK_LINEAGE,
+                BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+            ],
+        }
+        return StepResult(
+            action="explore",
+            branch_id=selected.branch_id,
+            reason="CONTINUE_EXPLORE: park_lineage; improve the same branch",
+        )
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="run_existing",
+            branch=branch,
+            slot="refine_active",
+            reason="active_branch_refinement",
+        ),
+        branch=branch,
+        recorded_scheduler_results=recorded,
+        run_explore_step=park_lineage,
+    )
+
+    result = runner.run_one_step()
+    metadata = result.scheduler_audit_metadata
+    next_selection = Scheduler(max_active_branches=3).select_next([branch])
+
+    assert metadata["pre_finalizer_scheduler_slot"] == "refine_active"
+    assert metadata["pre_finalizer_selected_branch_id"] == "parked-after-refine"
+    assert metadata["scheduler_slot_semantics"] == (
+        "pre_finalizer_scheduler_preference"
+    )
+    assert metadata["actual_branch_action"] == "parked_lineage_released"
+    assert metadata["post_finalizer_actual_branch_action"] == (
+        "parked_lineage_released"
+    )
+    assert metadata["post_finalizer_actual_branch_action"] != (
+        "continue_same_branch"
+    )
+    assert metadata["same_branch_refinement_selected"] is False
+    assert metadata["pre_finalizer_same_branch_refinement_selected"] is True
+    assert metadata["post_finalizer_lifecycle_action"] == "park_lineage"
+    assert metadata["post_finalizer_active_slot_release_reason"] == "parked_lineage"
+    assert metadata["post_finalizer_counts_toward_active_slots"] is False
+    assert metadata["post_finalizer_next_proposal_policy"] == (
+        "clean_fork_or_other_branch_required"
+    )
+    assert "release the branch slot" in result.reason
+    assert next_selection.action == "create_new"
+    assert next_selection.branch is None
     assert recorded == [result]
 
 
@@ -271,18 +359,20 @@ def test_same_branch_repair_soft_abandon_metadata_and_reason_are_aligned() -> No
     assert result.branch_id == "repair-branch"
     assert "repair/refine the same branch" in result.reason
     assert "improve the same branch" not in result.reason
-    assert result.scheduler_audit_metadata == {
-        "actual_branch_action": "soft_abandon",
-        "post_refine_abandon_reason": (
-            "CONTINUE_EXPLORE: weak-positive screening signal; "
-            "repair/refine the same branch"
-        ),
-        "refined_branch_id": "repair-branch",
-        "same_branch_refinement_selected": True,
-        "scheduler_action": "run_existing",
-        "scheduler_reason": "effect_diagnostic_followup",
-        "scheduler_slot": "repair_diagnostic",
-    }
+    metadata = result.scheduler_audit_metadata
+    assert metadata["scheduler_action"] == "run_existing"
+    assert metadata["pre_finalizer_scheduler_slot"] == "repair_diagnostic"
+    assert metadata["actual_branch_action"] == "soft_abandon"
+    assert metadata["post_finalizer_actual_branch_action"] == "soft_abandon"
+    assert metadata["post_finalizer_next_proposal_policy"] == (
+        "same_branch_not_selected"
+    )
+    assert metadata["same_branch_refinement_selected"] is False
+    assert metadata["pre_finalizer_same_branch_refinement_selected"] is True
+    assert metadata["post_refine_abandon_reason"] == (
+        "CONTINUE_EXPLORE: weak-positive screening signal; "
+        "repair/refine the same branch"
+    )
     assert recorded == [result]
 
 

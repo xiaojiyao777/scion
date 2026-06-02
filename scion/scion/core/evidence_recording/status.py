@@ -285,6 +285,9 @@ class StatusWriterMixin:
                 ),
                 "scheduler_slot": getattr(last_result, "scheduler_slot", ""),
                 "scheduler_reason": getattr(last_result, "scheduler_reason", ""),
+                "scheduler_audit_metadata": dict(
+                    getattr(last_result, "scheduler_audit_metadata", None) or {}
+                ),
             }
             failure_stage = getattr(last_result, "failure_stage", None)
             failure_category = getattr(last_result, "failure_category", None)

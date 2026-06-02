@@ -20,9 +20,17 @@ from scion.core.models import (
 )
 from scion.core.scheduler import (
     Scheduler,
+    branch_active_slot_release_reason,
+    branch_counts_toward_active_slots,
     active_slot_capacity_block_metadata,
     reclaim_active_slot_for_new_branch,
     reconcile_active_slot_overflow,
+)
+from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
+    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+    BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
 )
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
@@ -534,13 +542,36 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
     result.scheduler_reason = str(getattr(sched, "reason", "") or "")
     scheduler_action = str(getattr(sched, "action", "") or "")
     scheduled_branch = getattr(sched, "branch", None)
+    scheduled_branch_id = str(getattr(scheduled_branch, "branch_id", "") or "")
     audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
     if scheduler_action:
         audit_metadata.setdefault("scheduler_action", scheduler_action)
+        audit_metadata.setdefault(
+            "pre_finalizer_scheduler_action",
+            scheduler_action,
+        )
     if result.scheduler_slot:
         audit_metadata.setdefault("scheduler_slot", result.scheduler_slot)
+        audit_metadata.setdefault(
+            "pre_finalizer_scheduler_slot",
+            result.scheduler_slot,
+        )
     if result.scheduler_reason:
         audit_metadata.setdefault("scheduler_reason", result.scheduler_reason)
+        audit_metadata.setdefault(
+            "pre_finalizer_scheduler_reason",
+            result.scheduler_reason,
+        )
+    if scheduled_branch_id:
+        audit_metadata.setdefault(
+            "pre_finalizer_selected_branch_id",
+            scheduled_branch_id,
+        )
+    if result.scheduler_slot:
+        audit_metadata.setdefault(
+            "scheduler_slot_semantics",
+            "pre_finalizer_scheduler_preference",
+        )
     aligned_reason = _scheduler_aligned_result_reason(
         result.reason,
         actual_branch_action=(
@@ -563,22 +594,32 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
                     or "scheduler_selected_clean_exploration_branch"
                 ),
                 "actual_branch_action": "explore_new_clean_fork",
+                "post_finalizer_actual_branch_action": "explore_new_clean_fork",
+                "post_finalizer_next_proposal_policy": "clean_fork_selected",
             }
         )
     elif scheduler_action == "run_existing" and scheduled_branch is not None:
         branch_id = str(
             getattr(scheduled_branch, "branch_id", "") or result.branch_id or ""
         )
-        actual_action = (
-            "soft_abandon"
-            if result.action == "soft_abandon"
-            else "continue_same_branch"
+        actual_action = _post_finalizer_actual_branch_action(
+            result,
+            scheduled_branch,
+        )
+        post_metadata = _post_finalizer_branch_metadata(
+            scheduled_branch,
+            actual_branch_action=actual_action,
         )
         audit_metadata.update(
             {
-                "same_branch_refinement_selected": True,
+                "same_branch_refinement_selected": (
+                    actual_action == "continue_same_branch"
+                ),
+                "pre_finalizer_same_branch_refinement_selected": True,
                 "refined_branch_id": branch_id,
                 "actual_branch_action": actual_action,
+                "post_finalizer_actual_branch_action": actual_action,
+                **post_metadata,
             }
         )
         aligned_reason = _scheduler_aligned_result_reason(
@@ -588,11 +629,103 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
         )
         if result.action == "soft_abandon":
             audit_metadata["post_refine_abandon_reason"] = aligned_reason
+        elif actual_action != "continue_same_branch":
+            audit_metadata["post_refine_release_reason"] = aligned_reason
         else:
             audit_metadata["post_refine_decision_reason"] = aligned_reason
     result.scheduler_audit_metadata = audit_metadata
     result.reason = aligned_reason
     return result
+
+
+def _post_finalizer_actual_branch_action(
+    result: StepResult,
+    branch: Branch,
+) -> str:
+    if result.action == "soft_abandon":
+        return "soft_abandon"
+    release_reason = branch_active_slot_release_reason(branch)
+    if release_reason:
+        return f"{release_reason}_released"
+    if not branch_counts_toward_active_slots(branch):
+        return "inactive_after_finalizer"
+    return "continue_same_branch"
+
+
+def _post_finalizer_branch_metadata(
+    branch: Branch,
+    *,
+    actual_branch_action: str,
+) -> dict[str, Any]:
+    release_reason = branch_active_slot_release_reason(branch)
+    counts_toward_active_slots = branch_counts_toward_active_slots(branch)
+    metadata: dict[str, Any] = {
+        "post_finalizer_branch_id": str(getattr(branch, "branch_id", "") or ""),
+        "post_finalizer_branch_state": _branch_state_value(branch),
+        "post_finalizer_branch_code_status": str(
+            getattr(branch, "branch_code_status", "") or ""
+        ),
+        "post_finalizer_counts_toward_active_slots": counts_toward_active_slots,
+        "post_finalizer_next_proposal_policy": (
+            "same_branch_eligible"
+            if actual_branch_action == "continue_same_branch"
+            else "same_branch_not_selected"
+            if actual_branch_action == "soft_abandon"
+            else "clean_fork_or_other_branch_required"
+        ),
+    }
+    if release_reason:
+        metadata["post_finalizer_active_slot_release_reason"] = release_reason
+    lifecycle_action = _post_finalizer_lifecycle_action(
+        branch,
+        release_reason=release_reason,
+    )
+    if lifecycle_action:
+        metadata["post_finalizer_lifecycle_action"] = lifecycle_action
+    lifecycle_codes = _branch_lifecycle_action_reason_codes(branch)
+    if lifecycle_codes:
+        metadata["post_finalizer_lifecycle_action_reason_codes"] = list(
+            lifecycle_codes
+        )
+    return metadata
+
+
+def _post_finalizer_lifecycle_action(
+    branch: Branch,
+    *,
+    release_reason: str,
+) -> str:
+    reason_set = set(_branch_lifecycle_action_reason_codes(branch))
+    if BRANCH_LIFECYCLE_ARCHIVE_LINEAGE in reason_set:
+        return "archive_lineage"
+    if BRANCH_LIFECYCLE_PARK_LINEAGE in reason_set:
+        return "park_lineage"
+    if BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT in reason_set:
+        return "rollback_to_checkpoint"
+    if BRANCH_LIFECYCLE_RETAIN_CHECKPOINT in reason_set:
+        return "retain_checkpoint"
+    if release_reason == "parked_lineage":
+        return "park_lineage"
+    if release_reason == "retained_checkpoint_no_effect_current_head":
+        return "retain_checkpoint"
+    return ""
+
+
+def _branch_lifecycle_action_reason_codes(branch: Branch) -> tuple[str, ...]:
+    block = getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
+    if not isinstance(block, dict):
+        return ()
+    codes = block.get("lifecycle_action_reason_codes")
+    if isinstance(codes, str):
+        return (codes,) if codes else ()
+    if not isinstance(codes, (list, tuple, set)):
+        return ()
+    return tuple(dict.fromkeys(str(code) for code in codes if str(code)))
+
+
+def _branch_state_value(branch: Branch) -> str:
+    state = getattr(branch, "state", "")
+    return str(getattr(state, "value", state) or "")
 
 
 def _scheduler_aligned_result_reason(
@@ -607,6 +740,8 @@ def _scheduler_aligned_result_reason(
         return text
     if actual_branch_action == "explore_new_clean_fork":
         replacement = "create a clean fork"
+    elif actual_branch_action.endswith("_released"):
+        replacement = "release the branch slot"
     elif scheduler_slot == "repair_diagnostic":
         replacement = "repair/refine the same branch"
     else:

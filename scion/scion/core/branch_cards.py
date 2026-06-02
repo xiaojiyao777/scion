@@ -31,7 +31,10 @@ from scion.core.branch_hygiene import (
     branch_requires_same_mechanism_followup,
 )
 from scion.core.models import Branch
-from scion.core.scheduler import branch_counts_toward_active_slots
+from scion.core.scheduler import (
+    branch_active_slot_release_reason,
+    branch_counts_toward_active_slots,
+)
 
 
 def branch_prompt_card(branch: Branch | None) -> str:
@@ -87,6 +90,18 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         optional_parts.append(
             "best_checkpoint_runtime_evidence_confidence="
             f"{best_checkpoint_runtime_confidence}"
+        )
+    current_head_release_reason = context.get(
+        "current_head_active_slot_release_reason"
+    )
+    if current_head_release_reason:
+        optional_parts.append(
+            "current_head_active_slot_release_reason="
+            f"{current_head_release_reason}"
+        )
+    if context.get("retained_checkpoint_no_effect_current_head_released"):
+        optional_parts.append(
+            "retained_checkpoint_no_effect_current_head_released=true"
         )
     if history_activation != "none":
         optional_parts.append(
@@ -275,6 +290,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     counts_toward_active_slots = (
         branch_counts_toward_active_slots(branch) if branch is not None else False
     )
+    current_head_active_slot_release_reason = (
+        branch_active_slot_release_reason(branch) if branch is not None else ""
+    )
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (
         max(0, int(getattr(branch, "rollback_count", 0) or 0))
@@ -322,6 +340,13 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
             else "inactive"
         ),
         "counts_toward_active_slots": counts_toward_active_slots,
+        "current_head_active_slot_release_reason": (
+            current_head_active_slot_release_reason
+        ),
+        "retained_checkpoint_no_effect_current_head_released": (
+            current_head_active_slot_release_reason
+            == "retained_checkpoint_no_effect_current_head"
+        ),
         "best_checkpoint_status": best_checkpoint_status,
         "best_quality_checkpoint_id": (
             getattr(branch, "best_quality_checkpoint_id", None)

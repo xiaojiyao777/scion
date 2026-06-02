@@ -375,6 +375,19 @@ class LineageRecorderMixin:
                 else getattr(step, "decision", None)
             ),
         }
+        for key in (
+            "pre_finalizer_scheduler_action",
+            "pre_finalizer_scheduler_slot",
+            "pre_finalizer_scheduler_reason",
+            "pre_finalizer_selected_branch_id",
+            "post_finalizer_lifecycle_action",
+            "post_finalizer_actual_branch_action",
+            "post_finalizer_active_slot_release_reason",
+            "post_finalizer_next_proposal_policy",
+            "post_finalizer_counts_toward_active_slots",
+        ):
+            if key in payload["scheduler_audit_metadata"]:
+                payload[key] = payload["scheduler_audit_metadata"][key]
         event = {
             "campaign_id": self.campaign_id,
             "branch_id": branch_id,

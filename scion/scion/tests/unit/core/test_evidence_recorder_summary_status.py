@@ -233,6 +233,10 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
             scheduler_reason="existing_branch_selected",
             scheduler_audit_metadata={
                 "scheduler_action": "run_existing",
+                "pre_finalizer_scheduler_action": "run_existing",
+                "pre_finalizer_scheduler_slot": "refine_active",
+                "post_finalizer_actual_branch_action": "continue_same_branch",
+                "post_finalizer_next_proposal_policy": "same_branch_eligible",
                 "same_branch_refinement_not_selected_reason": "",
             },
         ),
@@ -266,6 +270,10 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
     assert payload["scheduler_slot"] == "refine_active"
     assert payload["scheduler_reason"] == "existing_branch_selected"
     assert payload["scheduler_audit_metadata"]["scheduler_action"] == "run_existing"
+    assert payload["pre_finalizer_scheduler_action"] == "run_existing"
+    assert payload["pre_finalizer_scheduler_slot"] == "refine_active"
+    assert payload["post_finalizer_actual_branch_action"] == "continue_same_branch"
+    assert payload["post_finalizer_next_proposal_policy"] == "same_branch_eligible"
     assert payload["step_round"] == 1
 
 
@@ -1217,6 +1225,10 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
             counts_toward_max_rounds=False,
             scheduler_slot="repair_diagnostic",
             scheduler_reason="retry_branch_selected",
+            scheduler_audit_metadata={
+                "pre_finalizer_scheduler_slot": "repair_diagnostic",
+                "post_finalizer_actual_branch_action": "soft_abandon",
+            },
         )
     )
 
@@ -1225,6 +1237,10 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
     assert status["last_result"]["counts_toward_max_rounds"] is False
     assert status["last_result"]["scheduler_slot"] == "repair_diagnostic"
     assert status["last_result"]["scheduler_reason"] == "retry_branch_selected"
+    assert status["last_result"]["scheduler_audit_metadata"] == {
+        "pre_finalizer_scheduler_slot": "repair_diagnostic",
+        "post_finalizer_actual_branch_action": "soft_abandon",
+    }
 
 
 def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
