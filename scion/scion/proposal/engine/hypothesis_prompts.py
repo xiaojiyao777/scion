@@ -566,6 +566,7 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
     target_file = str(intent.get("target_file") or "").strip()
     mechanism_family = str(intent.get("mechanism_family") or "").strip()
     mechanism_id = str(intent.get("mechanism_id") or "").strip()
+    raw_mechanism_id = str(intent.get("raw_mechanism_id") or "").strip()
     lines = [
         "Selected target-intent binding: this formal hypothesis must keep "
         "`change_locus`, `action`, `target_file`, and mechanism family or "
@@ -580,9 +581,21 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
     if mechanism_id or mechanism_family:
         lines.append(
             "Use mechanism_changes / novelty_signature that continue selected "
-            f"mechanism_id `{mechanism_id or '<none>'}` or mechanism_family "
-            f"`{mechanism_family or '<none>'}`; do not switch to a different "
-            "mechanism in the formal hypothesis."
+            f"formal schema mechanism_id `{mechanism_id or '<none>'}` or "
+            f"mechanism_family `{mechanism_family or '<none>'}`; do not switch "
+            "to a different mechanism in the formal hypothesis."
+        )
+    if mechanism_id:
+        lines.append(
+            f"Write formal `mechanism_changes[].id` as `{mechanism_id}` "
+            "when this hypothesis declares mechanism_changes; it already "
+            "matches ^[a-z][a-z0-9_]{0,63}$."
+        )
+    if raw_mechanism_id and raw_mechanism_id != mechanism_id:
+        lines.append(
+            f"Raw mechanism id `{raw_mechanism_id}` is audit provenance only; "
+            "do not copy raw/provenance ids into formal mechanism_changes or "
+            "expected telemetry refs."
         )
     lines.append(
         "If the intended formal hypothesis needs a different target or "

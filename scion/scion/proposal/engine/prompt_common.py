@@ -126,7 +126,10 @@ def _agentic_research_context_block(
             "host-controlled target-intent reselect flow before formal "
             "hypothesis generation. Treat later schema, semantic, or grounding "
             "retry feedback as authoritative only when it keeps or explicitly "
-            "repairs that same selected intent.\n\n"
+            "repairs that same selected intent. Use `intent.mechanism_id` as "
+            "the formal schema-safe id when present. Any "
+            "`raw_mechanism_id` or provenance field is audit-only and must not "
+            "be copied into formal `mechanism_changes` or telemetry refs.\n\n"
             f"{_bounded_json(target_intent, 4000)}"
         )
     target_placeholder = context.get("agentic_hypothesis_target_placeholder")

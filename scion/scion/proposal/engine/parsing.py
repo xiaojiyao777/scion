@@ -25,6 +25,7 @@ from scion.proposal.edit_protocol import (
     PatchEditProtocolError,
     normalize_patch_typed_edits,
 )
+from scion.proposal.target_intent_binding import target_intent_mechanism_identity
 
 from .exceptions import ProposalValidationError
 
@@ -119,6 +120,11 @@ def _parse_hypothesis_target_intent(raw: Dict[str, Any]) -> Dict[str, Any]:
         raise ProposalValidationError(str(exc)) from exc
     change_locus = (validated.change_locus or validated.surface or "").strip()
     action = "create_new" if validated.action == "create" else validated.action
+    mechanism_identity = target_intent_mechanism_identity(
+        mechanism_id=validated.mechanism_id,
+        mechanism_family=validated.mechanism_family,
+        mechanism_sketch=validated.mechanism_sketch,
+    )
     return {
         key: value
         for key, value in {
@@ -126,8 +132,7 @@ def _parse_hypothesis_target_intent(raw: Dict[str, Any]) -> Dict[str, Any]:
             "surface": change_locus,
             "action": action,
             "target_file": validated.target_file,
-            "mechanism_id": validated.mechanism_id,
-            "mechanism_family": validated.mechanism_family,
+            **mechanism_identity,
             "mechanism_sketch": validated.mechanism_sketch,
             "confidence": validated.confidence,
             "notes": validated.notes,

@@ -3,16 +3,24 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.engine import (
+    _parse_hypothesis_target_intent,
+    _split_code_context,
+    _split_hypothesis_context,
+)
 from scion.proposal.context_manager.code_context import (
     _build_solver_design_branch_current_integration_files,
 )
 from scion.proposal.agentic_session_hypothesis import (
     _observations_include_sufficient_target_context,
 )
+from scion.proposal.engine.exceptions import ProposalValidationError
 from scion.proposal.agentic_observation_ledger.payloads import read_receipt_from_entry
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
-from scion.proposal.target_intent_binding import target_intent_binding_retry_feedback
+from scion.proposal.target_intent_binding import (
+    canonical_formal_mechanism_id,
+    target_intent_binding_retry_feedback,
+)
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -42,6 +50,29 @@ class TargetIntentCreative(SequentialHypothesisCreative):
     def generate_hypothesis_target_intent(self, context):
         self.target_intent_contexts.append(dict(context))
         return dict(self.intent)
+
+
+class SchemaErrorThenTargetIntentCreative(TargetIntentCreative):
+    def __init__(
+        self,
+        *,
+        intent: dict,
+        hypothesis: HypothesisProposal,
+    ) -> None:
+        super().__init__(intent=intent, hypotheses=[hypothesis])
+        self.failed_once = False
+
+    def generate_hypothesis(self, context):
+        self.hypothesis_contexts.append(dict(context))
+        if not self.failed_once:
+            self.failed_once = True
+            raise ProposalValidationError(
+                "1 validation error for HypothesisProposalInput\n"
+                "mechanism_changes.0.id\n"
+                "  Value error, mechanism id must match "
+                "^[a-z][a-z0-9_]{0,63}$"
+            )
+        return self.hypotheses.pop(0)
 
 
 class TargetIntentToolClient:
@@ -276,6 +307,28 @@ def test_target_intent_binding_allows_same_mechanism_refinement_suffix() -> None
             "target_file": "policies/baseline_modules/destroy_repair.py",
             "mechanism_id": "cvrp_route_count_aware_repair",
             "mechanism_family": "route_count_aware_repair",
+        },
+        hypothesis,
+        attempt=1,
+        manifest=None,
+    )
+
+    assert feedback is None
+
+
+def test_target_intent_binding_allows_raw_dotted_id_with_refinement_formal_id() -> None:
+    hypothesis = _solver_design_file_hypothesis(
+        target_file="policies/baseline_modules/local_search.py",
+        mechanism_id="intra_route_reinsertion_refine",
+        text="Refine the selected local-search reinsertion mechanism.",
+    )
+    feedback = target_intent_binding_retry_feedback(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_id": "cvrp.local_search.intra_route_reinsertion",
+            "mechanism_family": "local_search_reinsertion",
         },
         hypothesis,
         attempt=1,
@@ -586,6 +639,170 @@ def test_target_intent_preflight_grounds_non_top_existing_target_before_first_hy
     assert formal_ledger["formal_target"]["target_file"] == target_file
     assert formal_ledger["owner_source"]["file_path"] == target_file
     assert formal_ledger["visibility_status"] == "full_dedicated_source_visible"
+
+
+def test_target_intent_dotted_mechanism_id_is_canonicalized_for_formal_prompt(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    raw_mechanism_id = "cvrp.local_search.intra_route_reinsertion"
+    canonical_id = "cvrp_local_search_intra_route_reinsertion"
+    assert canonical_formal_mechanism_id(raw_mechanism_id) == canonical_id
+    parsed_intent = _parse_hypothesis_target_intent(
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": raw_mechanism_id,
+            "mechanism_sketch": "Refine intra-route reinsertion.",
+        }
+    )
+    assert parsed_intent["mechanism_id"] == canonical_id
+    assert parsed_intent["raw_mechanism_id"] == raw_mechanism_id
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=canonical_id,
+        text="Modify local_search.py with the selected canonical mechanism id.",
+    )
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": raw_mechanism_id,
+            "mechanism_sketch": "Refine intra-route reinsertion inside local_search.py.",
+            "confidence": 0.93,
+        },
+        hypotheses=[hypothesis],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-target-intent-canonical-id"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-intent-canonical-id",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "canonical-id"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    final_context = creative.hypothesis_contexts[0]
+    selected_intent = final_context["agentic_hypothesis_target_intent"]["intent"]
+    assert selected_intent["mechanism_id"] == canonical_id
+    assert selected_intent["raw_mechanism_id"] == raw_mechanism_id
+    assert selected_intent["mechanism_id_status"] == (
+        "canonicalized_from_raw_mechanism_id"
+    )
+    assert selected_intent["formal_schema_id_policy"].startswith(
+        "mechanism_id is canonical"
+    )
+
+    _system_blocks, prompt = _split_hypothesis_context(final_context)
+    assert f"formal schema mechanism_id `{canonical_id}`" in prompt
+    assert f"formal `mechanism_changes[].id` as `{canonical_id}`" in prompt
+    assert f"Raw mechanism id `{raw_mechanism_id}` is audit provenance only" in prompt
+    assert "do not copy raw/provenance ids into formal mechanism_changes" in prompt
+    assert f"formal schema mechanism_id `{raw_mechanism_id}`" not in prompt
+
+    intent_artifacts = _target_intent_artifacts(output)
+    assert intent_artifacts[0]["intent"]["intent"]["mechanism_id"] == canonical_id
+    assert intent_artifacts[0]["intent"]["intent"]["raw_mechanism_id"] == (
+        raw_mechanism_id
+    )
+    binding_artifacts = _target_binding_artifacts(output)
+    assert binding_artifacts[0]["binding_status"] == "bound"
+    assert binding_artifacts[0]["selected_target_intent"]["mechanism_id"] == (
+        canonical_id
+    )
+    assert binding_artifacts[0]["selected_target_intent"]["raw_mechanism_id"] == (
+        raw_mechanism_id
+    )
+    assert binding_artifacts[0]["formal_hypothesis_target"]["mechanism_ids"] == [
+        canonical_id
+    ]
+
+
+def test_invalid_mechanism_id_schema_retry_uses_canonical_target_intent_id(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    raw_mechanism_id = "cvrp.local_search.intra_route_reinsertion"
+    canonical_id = "cvrp_local_search_intra_route_reinsertion"
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=canonical_id,
+        text="Retry with the canonical formal mechanism id.",
+    )
+    creative = SchemaErrorThenTargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": raw_mechanism_id,
+            "mechanism_sketch": "Refine intra-route reinsertion inside local_search.py.",
+            "confidence": 0.89,
+        },
+        hypothesis=hypothesis,
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-target-intent-schema-retry"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-intent-schema-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "canonical-id-schema-retry"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.hypothesis_contexts) == 2
+    retry_context = creative.hypothesis_contexts[1]
+    retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
+    assert retry_feedback["failure_code"] == "invalid_mechanism_id"
+    assert retry_feedback["canonical_formal_mechanism_id"] == canonical_id
+    assert retry_feedback["raw_mechanism_id"] == raw_mechanism_id
+    assert "MECHANISM-ID SCHEMA RETRY" in retry_context[
+        "agentic_hypothesis_preview_retry_rule"
+    ]
+    assert "raw_mechanism_id/provenance fields are audit-only" in retry_context[
+        "agentic_hypothesis_preview_retry_rule"
+    ]
+    binding_artifacts = _target_binding_artifacts(output)
+    assert binding_artifacts[-1]["binding_status"] == "bound"
 
 
 def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded(

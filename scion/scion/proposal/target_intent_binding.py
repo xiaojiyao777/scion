@@ -7,6 +7,24 @@ from typing import Any, Mapping
 
 from scion.core.models import HypothesisProposal
 
+_REFINEMENT_SUFFIXES = frozenset(
+    {
+        "adjust",
+        "adjustment",
+        "extend",
+        "extension",
+        "guard",
+        "integrate",
+        "integration",
+        "polish",
+        "repair",
+        "refine",
+        "refinement",
+        "tune",
+        "tuning",
+    }
+)
+
 
 def target_intent_binding_retry_pending(
     preview_rejections: list[Mapping[str, Any]],
@@ -73,6 +91,7 @@ def target_intent_binding_retry_feedback(
                 "action": selected.get("action"),
                 "target_file": selected.get("target_file"),
                 "mechanism_id": selected.get("mechanism_id"),
+                "raw_mechanism_id": selected.get("raw_mechanism_id"),
                 "mechanism_family": selected.get("mechanism_family"),
             },
             "final_task": (
@@ -83,9 +102,12 @@ def target_intent_binding_retry_feedback(
                 "The selected target-intent is binding for this formal "
                 "hypothesis call. Keep change_locus, action, target_file, and "
                 "mechanism family/continuation consistent with "
-                "selected_target_intent. Do not silently choose another owner "
-                "or mechanism. A different target requires an explicit host "
-                "target-intent reselect flow before formal hypothesis "
+                "selected_target_intent. Use selected_target_intent.mechanism_id "
+                "as the formal schema-safe mechanism_changes id when present. "
+                "raw_mechanism_id is audit provenance only and must not be "
+                "copied into mechanism_changes. Do not silently choose another "
+                "owner or mechanism. A different target requires an explicit "
+                "host target-intent reselect flow before formal hypothesis "
                 "generation, not a schema retry."
             ),
             "proposal_failure_accounting": (
@@ -113,6 +135,65 @@ def target_intent_mechanism_family(
     return "optional_missing", "optional_missing"
 
 
+def canonical_formal_mechanism_id(value: Any) -> str:
+    """Return the formal-schema-safe id for a target-intent mechanism id."""
+
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[^a-z0-9_]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    if not text:
+        return ""
+    if not re.match(r"^[a-z]", text):
+        text = f"m_{text}"
+    text = text[:64].rstrip("_")
+    if not text:
+        return ""
+    if not re.match(r"^[a-z]", text):
+        text = f"m_{text}"
+    return text[:64].rstrip("_")
+
+
+def target_intent_mechanism_identity(
+    *,
+    mechanism_id: Any,
+    mechanism_family: Any,
+    mechanism_sketch: Any,
+) -> dict[str, Any]:
+    raw_id = str(mechanism_id or "").strip()
+    canonical_id = canonical_formal_mechanism_id(raw_id)
+    mechanism_family_value, mechanism_family_status = target_intent_mechanism_family(
+        mechanism_family=mechanism_family,
+        mechanism_id=raw_id or canonical_id,
+        mechanism_sketch=mechanism_sketch,
+    )
+    status = ""
+    if raw_id and canonical_id:
+        status = (
+            "schema_safe"
+            if raw_id == canonical_id
+            else "canonicalized_from_raw_mechanism_id"
+        )
+    elif raw_id:
+        status = "raw_mechanism_id_not_formal_schema_safe"
+    return _drop_empty(
+        {
+            "mechanism_id": canonical_id,
+            "raw_mechanism_id": raw_id if raw_id and raw_id != canonical_id else raw_id,
+            "mechanism_id_status": status,
+            "mechanism_family": mechanism_family_value,
+            "mechanism_family_status": mechanism_family_status,
+            "formal_schema_id_policy": (
+                "mechanism_id is canonical and safe for formal "
+                "mechanism_changes; raw_mechanism_id is audit provenance only"
+                if raw_id
+                else ""
+            ),
+        }
+    )
+
+
 def selected_target_intent_payload(
     target_intent: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
@@ -122,13 +203,21 @@ def selected_target_intent_payload(
     intent = raw_intent if isinstance(raw_intent, Mapping) else target_intent
     action = _normalize_action(intent.get("action"))
     surface = str(intent.get("change_locus") or intent.get("surface") or "").strip()
+    raw_mechanism_id = intent.get("raw_mechanism_id") or intent.get("mechanism_id")
+    canonical_mechanism_id = canonical_formal_mechanism_id(
+        intent.get("mechanism_id")
+    )
+    raw_canonical = canonical_formal_mechanism_id(raw_mechanism_id)
+    mechanism_id = canonical_mechanism_id or raw_canonical
     return _drop_empty(
         {
             "change_locus": surface,
             "surface": surface,
             "action": action,
             "target_file": _normalize_path(intent.get("target_file")),
-            "mechanism_id": intent.get("mechanism_id"),
+            "mechanism_id": mechanism_id,
+            "raw_mechanism_id": raw_mechanism_id,
+            "mechanism_id_status": intent.get("mechanism_id_status"),
             "mechanism_family": intent.get("mechanism_family"),
             "mechanism_family_status": intent.get("mechanism_family_status"),
             "mechanism_sketch": intent.get("mechanism_sketch"),
@@ -249,6 +338,7 @@ def _target_intent_mechanism_mismatch(
     formal: Mapping[str, Any],
 ) -> dict[str, Any]:
     selected_id = str(selected.get("mechanism_id") or "").strip()
+    selected_raw_id = str(selected.get("raw_mechanism_id") or "").strip()
     selected_family = str(selected.get("mechanism_family") or "").strip()
     formal_ids = [
         str(item).strip()
@@ -257,17 +347,27 @@ def _target_intent_mechanism_mismatch(
     ]
     formal_family = str(formal.get("mechanism_family") or "").strip()
     if selected_id and formal_ids:
-        selected_token = _mechanism_binding_token(selected_id)
+        selected_tokens = [
+            token
+            for token in (
+                _mechanism_binding_token(selected_id),
+                _mechanism_binding_token(selected_raw_id),
+            )
+            if token
+        ]
+        selected_tokens = list(dict.fromkeys(selected_tokens))
         formal_tokens = [_mechanism_binding_token(item) for item in formal_ids]
-        if selected_token and any(
+        if selected_tokens and any(
             _mechanism_tokens_compatible(selected_token, token)
+            for selected_token in selected_tokens
             for token in formal_tokens
         ):
             return {}
-        if selected_token:
+        if selected_tokens:
             return {
                 "field": "mechanism_id",
                 "selected": selected_id,
+                "raw_selected": selected_raw_id,
                 "formal": formal_ids,
             }
     if selected_family and formal_family:
@@ -306,8 +406,42 @@ def _mechanism_tokens_compatible(selected: str, formal: str) -> bool:
     formal_parts = [part for part in formal.split("_") if part]
     if not selected_parts or not formal_parts:
         return False
+    if _mechanism_part_sequences_compatible(selected_parts, formal_parts):
+        return True
+    selected_base = _drop_refinement_suffixes(selected_parts)
+    formal_base = _drop_refinement_suffixes(formal_parts)
+    if (
+        selected_base != selected_parts or formal_base != formal_parts
+    ) and _mechanism_part_sequences_compatible(selected_base, formal_base):
+        return True
     min_len = min(len(selected_parts), len(formal_parts), 3)
     return selected_parts[-min_len:] == formal_parts[-min_len:]
+
+
+def _mechanism_part_sequences_compatible(
+    selected_parts: list[str],
+    formal_parts: list[str],
+) -> bool:
+    if not selected_parts or not formal_parts:
+        return False
+    short, long = (
+        (selected_parts, formal_parts)
+        if len(selected_parts) <= len(formal_parts)
+        else (formal_parts, selected_parts)
+    )
+    if len(short) > len(long):
+        return False
+    for start in range(0, len(long) - len(short) + 1):
+        if long[start : start + len(short)] == short:
+            return True
+    return False
+
+
+def _drop_refinement_suffixes(parts: list[str]) -> list[str]:
+    trimmed = list(parts)
+    while trimmed and trimmed[-1] in _REFINEMENT_SUFFIXES:
+        trimmed.pop()
+    return trimmed
 
 
 def _mechanism_family_from_id(value: Any) -> str:
@@ -402,10 +536,12 @@ def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "canonical_formal_mechanism_id",
     "formal_hypothesis_target_payload",
     "formal_target_source_visibility_from_manifest",
     "selected_target_intent_payload",
     "target_intent_binding_retry_feedback",
     "target_intent_binding_retry_pending",
+    "target_intent_mechanism_identity",
     "target_intent_mechanism_family",
 ]

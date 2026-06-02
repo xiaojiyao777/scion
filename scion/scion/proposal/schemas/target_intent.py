@@ -73,7 +73,12 @@ HYPOTHESIS_TARGET_INTENT_SCHEMA: Dict[str, Any] = {
         },
         "mechanism_id": {
             "type": ["string", "null"],
-            "description": "Compact candidate mechanism id if known.",
+            "description": (
+                "Compact candidate mechanism id if known. Prefer lowercase "
+                "formal-safe ids matching ^[a-z][a-z0-9_]{0,63}$; host "
+                "normalization preserves any nonconforming raw id as audit "
+                "provenance and exposes a canonical formal id later."
+            ),
         },
         "mechanism_family": {
             "type": ["string", "null"],

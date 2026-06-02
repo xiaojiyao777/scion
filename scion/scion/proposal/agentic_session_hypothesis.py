@@ -15,12 +15,13 @@ from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.schemas import normalize_mechanism_changes_with_repair_attribution
 from scion.proposal.schemas import HypothesisTargetIntentInput
 from scion.proposal.target_intent_binding import (
+    canonical_formal_mechanism_id as _canonical_formal_mechanism_id,
     formal_hypothesis_target_payload as _formal_hypothesis_target_payload,
     formal_target_source_visibility_from_manifest as _formal_target_source_visibility_from_manifest,
     selected_target_intent_payload as _selected_target_intent_payload,
     target_intent_binding_retry_feedback as _target_intent_binding_retry_feedback,
     target_intent_binding_retry_pending as _target_intent_binding_retry_pending,
-    target_intent_mechanism_family as _target_intent_mechanism_family,
+    target_intent_mechanism_identity as _target_intent_mechanism_identity,
 )
 from scion.runtime.telemetry_guard import expected_telemetry_template
 
@@ -200,6 +201,44 @@ class AgenticSessionHypothesisMixin:
                     assert self._creative is not None
                     hypothesis = self._creative.generate_hypothesis(hypothesis_context)
                 except self._SESSION_ERROR_TYPES as exc:
+                    mechanism_id_feedback = (
+                        _mechanism_id_schema_output_retry_feedback(
+                            exc,
+                            target_intent=target_intent,
+                            attempt=attempt,
+                        )
+                    )
+                    if (
+                        mechanism_id_feedback is not None
+                        and len(preview_rejections) < _MAX_HYPOTHESIS_PREVIEW_RETRIES
+                    ):
+                        feedback_ref, feedback_digest = (
+                            self._record_schema_retry_feedback_audit(
+                                state,
+                                mechanism_id_feedback,
+                                attempt=attempt,
+                            )
+                        )
+                        preview_rejections.append(mechanism_id_feedback)
+                        state.note(
+                            AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                            "Formal hypothesis used an invalid mechanism id; retrying with the canonical schema-safe id.",
+                            metadata={
+                                "attempt": attempt,
+                                "failure_code": mechanism_id_feedback.get(
+                                    "failure_code"
+                                ),
+                                "canonical_formal_mechanism_id": (
+                                    mechanism_id_feedback.get(
+                                        "canonical_formal_mechanism_id"
+                                    )
+                                ),
+                                "feedback_ref": feedback_ref,
+                                "feedback_digest": feedback_digest,
+                                "schema_output_retry": True,
+                            },
+                        )
+                        continue
                     failure_category = _structured_output_failure_category(exc)
                     _record_failure_ledger_entry(
                         state,
@@ -891,6 +930,16 @@ class AgenticSessionHypothesisMixin:
                         "task is only to repair expected_telemetry/schema fields "
                         "for that same hypothesis; do not explore, rename, or "
                         "choose a different mechanism."
+                    )
+                elif _mechanism_id_schema_retry_pending(preview_rejections):
+                    hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
+                        "MECHANISM-ID SCHEMA RETRY. The previous formal "
+                        "hypothesis used a mechanism_changes id that is not "
+                        "legal for the formal schema. Use the canonical formal "
+                        "mechanism id from the feedback exactly in "
+                        "mechanism_changes and expected telemetry refs. "
+                        "raw_mechanism_id/provenance fields are audit-only and "
+                        "must not be copied into formal mechanism_changes."
                     )
                 elif _target_intent_binding_retry_pending(preview_rejections):
                     hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
@@ -2730,11 +2779,82 @@ def _drop_empty_identity_fields(value: dict[str, str]) -> dict[str, str]:
     }
 
 
+def _mechanism_id_schema_retry_pending(
+    preview_rejections: list[Mapping[str, Any]],
+) -> bool:
+    if not preview_rejections:
+        return False
+    return (
+        str(preview_rejections[-1].get("failure_code") or "").strip()
+        == "invalid_mechanism_id"
+    )
+
+
+def _mechanism_id_schema_output_retry_feedback(
+    exc: BaseException,
+    *,
+    target_intent: Mapping[str, Any] | None,
+    attempt: int,
+) -> dict[str, Any] | None:
+    detail = str(exc)
+    if "mechanism id must match ^[a-z][a-z0-9_]{0,63}$" not in detail:
+        return None
+    selected = _selected_target_intent_payload(target_intent)
+    canonical_id = _canonical_formal_mechanism_id(selected.get("mechanism_id"))
+    raw_id = str(selected.get("raw_mechanism_id") or "").strip()
+    if not canonical_id and raw_id:
+        canonical_id = _canonical_formal_mechanism_id(raw_id)
+    return _drop_empty_dict(
+        {
+            "attempt": attempt,
+            "attempt_kind": "schema_output_repair",
+            "repair_classification": "mechanism_id_schema_output_repair",
+            "source": "hypothesis_schema_output_parser",
+            "gate_name": "hypothesis_structured_output_schema",
+            "failure_code": "invalid_mechanism_id",
+            "check": "mechanism_changes_id_pattern",
+            "failure_category": AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE.value,
+            "reason": _limit_string(detail, 1000),
+            "canonical_formal_mechanism_id": canonical_id,
+            "raw_mechanism_id": raw_id,
+            "selected_target_intent": selected,
+            "protected_identity": {
+                "change_locus": selected.get("change_locus"),
+                "action": selected.get("action"),
+                "target_file": selected.get("target_file"),
+                "mechanism_id": canonical_id,
+                "raw_mechanism_id": raw_id,
+            },
+            "final_task": (
+                "Rewrite the same formal hypothesis using the canonical "
+                "schema-safe mechanism id."
+            ),
+            "retry_constraint": (
+                "Formal mechanism_changes[].id must match "
+                "^[a-z][a-z0-9_]{0,63}$. Use canonical_formal_mechanism_id "
+                "exactly when present. raw_mechanism_id is audit provenance "
+                "only and must not be copied into mechanism_changes or "
+                "expected telemetry refs."
+            ),
+            "proposal_failure_accounting": (
+                "pre_code_schema_retry; do_not_count_as_code_or_screening_failure"
+            ),
+        }
+    )
+
+
 def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
     if isinstance(raw, HypothesisTargetIntentInput):
         payload = raw.model_dump()
+        raw_mapping: Mapping[str, Any] = {}
     elif isinstance(raw, Mapping):
-        payload = dict(raw)
+        raw_mapping = raw
+        allowed_fields = set(HypothesisTargetIntentInput.model_fields)
+        payload = {
+            key: value
+            for key, value in dict(raw).items()
+            if key in allowed_fields
+        }
     else:
         raise ProposalValidationError(
             "hypothesis target-intent preflight must return a JSON object"
@@ -2742,9 +2862,9 @@ def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
     validated = HypothesisTargetIntentInput(**payload)
     change_locus = str(validated.change_locus or validated.surface or "").strip()
     action = _normalize_target_intent_action(validated.action)
-    mechanism_family, mechanism_family_status = _target_intent_mechanism_family(
+    mechanism_identity = _target_intent_mechanism_identity(
+        mechanism_id=raw_mapping.get("raw_mechanism_id") or validated.mechanism_id,
         mechanism_family=validated.mechanism_family,
-        mechanism_id=validated.mechanism_id,
         mechanism_sketch=validated.mechanism_sketch,
     )
     return _drop_empty_dict(
@@ -2753,9 +2873,7 @@ def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
             "surface": change_locus,
             "action": action,
             "target_file": _normalize_prompt_grounding_path(validated.target_file),
-            "mechanism_id": validated.mechanism_id,
-            "mechanism_family": mechanism_family,
-            "mechanism_family_status": mechanism_family_status,
+            **mechanism_identity,
             "mechanism_sketch": validated.mechanism_sketch,
             "confidence": validated.confidence,
             "notes": validated.notes,
