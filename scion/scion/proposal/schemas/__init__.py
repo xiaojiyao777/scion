@@ -24,6 +24,10 @@ from .patch import (
     PremiseCheck,
     preflight_patch_exact_replace_shape,
 )
+from .target_intent import (
+    HYPOTHESIS_TARGET_INTENT_SCHEMA,
+    HypothesisTargetIntentInput,
+)
 from .shared import (
     MECHANISM_DUPLICATE_ID_CONFLICT,
     MECHANISM_SCHEMA_QUALITY_BLOCK,
@@ -39,6 +43,7 @@ from .shared import (
 from .tools import (
     FIX_TOOL,
     HYPOTHESIS_TOOL,
+    HYPOTHESIS_TARGET_INTENT_TOOL,
     PATCH_TOOL,
     TOOL_SELECTION_SCHEMA,
     TOOL_SELECTION_TOOL,
@@ -51,8 +56,11 @@ __all__ = [
     "FIX_TOOL",
     "HYPOTHESIS_PROMPT_TEMPLATE",
     "HYPOTHESIS_PROPOSAL_SCHEMA",
+    "HYPOTHESIS_TARGET_INTENT_SCHEMA",
+    "HYPOTHESIS_TARGET_INTENT_TOOL",
     "HYPOTHESIS_TOOL",
     "HypothesisProposalInput",
+    "HypothesisTargetIntentInput",
     "MechanismChangeInput",
     "MechanismChangeType",
     "MECHANISM_DUPLICATE_ID_CONFLICT",

@@ -217,6 +217,131 @@ def _split_hypothesis_context(
     return system_blocks, user_prompt
 
 
+def _split_hypothesis_target_intent_context(
+    context: Dict[str, Any],
+) -> "tuple[list[dict], str]":
+    """Render the tainted preflight prompt used to select a target intent."""
+    D = _DefaultDict(context)
+    solver_mechanics = str(D["solver_mechanics"]).strip()
+    problem_object = str(D["problem_object"]).strip()
+    problem_object_text = (
+        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+    )
+    static_text = (
+        "You are a target-intent preflight worker for a governed research "
+        "proposal protocol.\n"
+        "Select only the likely target intent for the next hypothesis. Do not "
+        "write the formal hypothesis, telemetry contract, patch plan, or code.\n"
+        "Your output is tainted proposal context used only so the host can "
+        "deterministically expose the selected target source or a new-file "
+        "placeholder before the final hypothesis call.\n\n"
+        f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{problem_object_text}"
+        f"{D['research_surfaces']}\n\n"
+        f"{D['objective_policy_guidance']}\n\n"
+        f"## Solver Execution Model\n"
+        f"{solver_mechanics if solver_mechanics else 'Use the declared problem and surface context as the source of truth.'}"
+    )
+    champion_text = (
+        "## Current Champion Research Code\n"
+        "Use this only to identify the likely owner target; do not draft the "
+        "final proposal here.\n\n"
+        f"{D['champion_operators_code']}\n\n"
+        f"## Champion State\n{D['champion_stats']}"
+    )
+    branch_context_parts = []
+    for key, title in (
+        ("branch_followup_policy", "Branch Follow-up Policy"),
+        ("branch_dossier", "Branch Dossier"),
+        ("experiment_history", "Experiment History"),
+        ("blacklist_summary", "Globally Failed / Blacklisted Approaches"),
+        ("active_hyp_summary", "Currently Occupied"),
+        ("sibling_summary", "Sibling Branches"),
+    ):
+        value = str(D[key]).strip()
+        if value:
+            branch_context_parts.append(f"## {title}\n{value}")
+    agentic_context = _agentic_research_context_block(D)
+    cacheable_agentic_context = ""
+    dynamic_agentic_context = ""
+    if agentic_context:
+        cacheable_agentic_context, dynamic_agentic_context = (
+            _split_agentic_context_for_hypothesis_cache(agentic_context)
+        )
+    stable_prefix_parts = [static_text, champion_text]
+    if cacheable_agentic_context:
+        stable_prefix_parts.append(cacheable_agentic_context)
+    system_blocks = [
+        {
+            "type": "text",
+            "text": "\n\n".join(
+                part for part in stable_prefix_parts if str(part).strip()
+            ),
+            "cache_control": _CACHE_5M,
+        }
+    ]
+    if branch_context_parts:
+        system_blocks.append({"type": "text", "text": "\n\n".join(branch_context_parts)})
+
+    forced_surface = str(D["forced_surface"]).strip()
+    forced_action = str(D["forced_action"]).strip()
+    forced_target_file = str(D["forced_target_file"]).strip()
+    constraints = context.get("agentic_hypothesis_constraints")
+    active_boundary = str(D["active_problem_boundary_surfaces"]).strip()
+    if isinstance(constraints, Mapping):
+        forced_surface = (
+            forced_surface or str(constraints.get("forced_surface") or "").strip()
+        )
+        forced_action = (
+            forced_action or str(constraints.get("forced_action") or "").strip()
+        )
+        forced_target_file = (
+            forced_target_file
+            or str(constraints.get("forced_target_file") or "").strip()
+        )
+        if not active_boundary:
+            boundary_value = constraints.get("active_problem_boundary_surfaces")
+            if isinstance(boundary_value, (list, tuple)):
+                active_boundary = ", ".join(
+                    str(item).strip()
+                    for item in boundary_value
+                    if str(item).strip()
+                )
+            else:
+                active_boundary = str(boundary_value or "").strip()
+    targetable_files = str(D["targetable_files"]).strip()
+    task_lines = [
+        "## Target-Intent Preflight Task",
+        "Choose the likely target intent for the next formal hypothesis.",
+        "Return only structured fields. Do not include final hypothesis prose.",
+        "Use action `modify` or `remove` for an existing target; use `create_new` for a new target.",
+    ]
+    if forced_surface:
+        task_lines.append(f"Set `change_locus` exactly to `{forced_surface}`.")
+    elif active_boundary:
+        task_lines.append(f"Set `change_locus` to one of: {active_boundary}.")
+    if forced_action:
+        task_lines.append(f"Set `action` exactly to `{forced_action}`.")
+    if forced_target_file:
+        task_lines.append(f"Set `target_file` exactly to `{forced_target_file}`.")
+    elif targetable_files:
+        task_lines.append(
+            "For existing targets, choose `target_file` from declared active "
+            f"boundary files when applicable: {targetable_files}."
+        )
+    user_prompt = (
+        f"{dynamic_agentic_context + chr(10) + chr(10) if dynamic_agentic_context else ''}"
+        + "\n".join(task_lines)
+        + "\n\nRequired output fields:\n"
+        "- `change_locus` or `surface`\n"
+        "- `action`\n"
+        "- `target_file`\n"
+        "- `mechanism_id` or `mechanism_family` or `mechanism_sketch`\n"
+        "- `confidence` and `notes` when useful\n"
+    )
+    return system_blocks, user_prompt
+
+
 _AGENTIC_CONTEXT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _CACHEABLE_AGENTIC_CONTEXT_HEADINGS = frozenset(
     {

@@ -13,6 +13,7 @@ from scion.proposal.hypothesis_telemetry_retry import (
 from scion.proposal.session_trace_index import attach_agentic_trace_context
 from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.schemas import normalize_mechanism_changes_with_repair_attribution
+from scion.proposal.schemas import HypothesisTargetIntentInput
 from scion.runtime.telemetry_guard import expected_telemetry_template
 
 
@@ -117,6 +118,13 @@ class AgenticSessionHypothesisMixin:
             semantic_rejections: list[Mapping[str, Any]] = []
             preview_rejections: list[Mapping[str, Any]] = []
             grounding_rejections: list[Mapping[str, Any]] = []
+            target_intent = self._hypothesis_target_intent_preflight(
+                request=request,
+                state=state,
+                tool_context=tool_context,
+                observations=observations,
+                evidence=evidence,
+            )
             max_attempts = (
                 1
                 + _MAX_HYPOTHESIS_SEMANTIC_RETRIES
@@ -154,6 +162,7 @@ class AgenticSessionHypothesisMixin:
                             semantic_rejections=semantic_rejections,
                             preview_rejections=preview_rejections,
                             grounding_rejections=grounding_rejections,
+                            target_intent=target_intent,
                             attempt=attempt,
                         )
                     )
@@ -338,6 +347,236 @@ class AgenticSessionHypothesisMixin:
                 return hypothesis, None
             return None, None
 
+    def _hypothesis_target_intent_preflight(
+            self,
+            *,
+            request: AgenticProposalRequest,
+            state: AgenticProposalSessionState,
+            tool_context: ProposalToolContext | None,
+            observations: list[ProposalObservation],
+            evidence: list[AgenticEvidenceRef],
+        ) -> Mapping[str, Any] | None:
+            if tool_context is None or not _context_requires_solver_design_grounding(
+                tool_context
+            ):
+                return None
+            generator = getattr(
+                self._creative,
+                "generate_hypothesis_target_intent",
+                None,
+            )
+            if not callable(generator):
+                state.note(
+                    AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    "Hypothesis target-intent preflight unavailable; falling back to existing hypothesis flow.",
+                    metadata={
+                        "call_kind": "hypothesis_target_intent",
+                        "status": "skipped",
+                        "reason": "creative_layer_method_unavailable",
+                        "fallback_to_current_flow": True,
+                    },
+                )
+                return None
+
+            state.note(
+                AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                "Selecting hypothesis target intent before final hypothesis generation.",
+                metadata={"call_kind": "hypothesis_target_intent"},
+            )
+            try:
+                intent_context, prompt_observations = self._hypothesis_prompt_context(
+                    request=request,
+                    tool_context=tool_context,
+                    observations=observations,
+                    semantic_rejections=[],
+                    preview_rejections=[],
+                    grounding_rejections=[],
+                    target_intent=None,
+                    attempt=0,
+                )
+                intent_context = attach_agentic_trace_context(
+                    intent_context,
+                    session_id=state.session_id,
+                    request_id=state.request_id or state.session_id,
+                    branch_id=state.branch_id,
+                    campaign_id=state.campaign_id,
+                    request_kind="hypothesis",
+                    call_kind="hypothesis_target_intent",
+                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS.value,
+                    attempt_number=0,
+                )
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="hypothesis_target_intent",
+                    prompt_context=intent_context,
+                    observations=prompt_observations,
+                )
+                raw_intent = generator(intent_context)
+                intent = _normalize_hypothesis_target_intent(raw_intent)
+            except Exception as exc:
+                self._record_hypothesis_target_intent_audit(
+                    state,
+                    status="fallback",
+                    intent=None,
+                    diagnostics={
+                        "reason": "target_intent_preflight_failed",
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc)[:500],
+                        "fallback_to_current_flow": True,
+                    },
+                )
+                state.note(
+                    AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    "Hypothesis target-intent preflight failed; falling back to existing hypothesis flow.",
+                    metadata={
+                        "call_kind": "hypothesis_target_intent",
+                        "status": "fallback",
+                        "error_type": type(exc).__name__,
+                        "fallback_to_current_flow": True,
+                    },
+                )
+                return None
+
+            result: dict[str, Any] = {
+                "schema_version": "hypothesis-target-intent-context.v1",
+                "call_kind": "hypothesis_target_intent",
+                "tainted": True,
+                "formal_proposal": False,
+                "decision_input": False,
+                "intent": intent,
+            }
+            action = _normalize_target_intent_action(intent.get("action"))
+            if action in {"modify", "remove"}:
+                grounding = self._ground_hypothesis_target_intent(
+                    state=state,
+                    tool_context=tool_context,
+                    observations=observations,
+                    evidence=evidence,
+                    intent=intent,
+                )
+                if grounding:
+                    result["grounding"] = grounding
+            elif action == "create_new":
+                result["placeholder"] = _target_intent_placeholder(intent)
+
+            artifact_ref, digest = self._record_hypothesis_target_intent_audit(
+                state,
+                status="succeeded",
+                intent=result,
+                diagnostics={},
+            )
+            state.note(
+                AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                "Recorded hypothesis target-intent preflight.",
+                metadata={
+                    "call_kind": "hypothesis_target_intent",
+                    "status": "succeeded",
+                    "action": action,
+                    "target_file": intent.get("target_file"),
+                    "mechanism_id": intent.get("mechanism_id"),
+                    "artifact_ref": artifact_ref,
+                    "digest": digest,
+                },
+            )
+            return result
+
+    def _ground_hypothesis_target_intent(
+            self,
+            *,
+            state: AgenticProposalSessionState,
+            tool_context: ProposalToolContext,
+            observations: list[ProposalObservation],
+            evidence: list[AgenticEvidenceRef],
+            intent: Mapping[str, Any],
+        ) -> dict[str, Any]:
+            target_hypothesis = _target_intent_as_hypothesis(intent)
+            target_read_args = _solver_design_target_file_read_args(
+                target_hypothesis,
+                context=tool_context,
+                observations=observations,
+            )
+            if target_read_args is None:
+                return {
+                    "status": "not_grounded",
+                    "reason": "target_file_not_resolved_as_existing_algorithm_file",
+                    "target_file": intent.get("target_file"),
+                    "fallback_to_current_flow": True,
+                }
+            grounding_observations = self._run_solver_design_grounding_tools(
+                tool_context,
+                state,
+                observations,
+                selection_source="hypothesis_target_intent_grounding",
+                hypothesis=target_hypothesis,
+            )
+            observations.extend(grounding_observations)
+            evidence.extend(_evidence_from_observations(grounding_observations))
+            target_context = _target_context_summary_from_observations(
+                observations,
+                target_read_args,
+            )
+            sufficient = _observations_include_sufficient_target_context(
+                observations,
+                target_read_args,
+            )
+            return _drop_empty_dict(
+                {
+                    "status": "grounded" if sufficient else "grounding_incomplete",
+                    "target_file": target_read_args.get("file_path"),
+                    "target_context_key": _target_grounding_context_key(
+                        target_read_args,
+                        target_context,
+                    ),
+                    "target_context_digest": target_context.get("content_digest"),
+                    "source": target_context.get("source"),
+                    "coverage_status": target_context.get("coverage_status"),
+                    "api_visible_before_final_hypothesis": bool(sufficient),
+                    "observation_ids": [
+                        observation.observation_id
+                        for observation in grounding_observations
+                        if observation.observation_id
+                    ],
+                    "selection_source": "hypothesis_target_intent_grounding",
+                    "fallback_to_current_flow": False if sufficient else True,
+                }
+            )
+
+    def _record_hypothesis_target_intent_audit(
+            self,
+            state: AgenticProposalSessionState,
+            *,
+            status: str,
+            intent: Mapping[str, Any] | None,
+            diagnostics: Mapping[str, Any],
+        ) -> tuple[str | None, str]:
+            payload = {
+                "schema_version": "hypothesis-target-intent-artifact.v1",
+                "artifact_kind": "hypothesis_target_intent",
+                "call_kind": "hypothesis_target_intent",
+                "session_id": state.session_id,
+                "status": status,
+                "tainted": True,
+                "formal_proposal": False,
+                "decision_input": False,
+                "intent": _sanitize_agentic_value(intent or {}),
+                "diagnostics": _sanitize_agentic_value(dict(diagnostics or {})),
+                "trace_policy": (
+                    "This preflight artifact is proposal-layer target intent. "
+                    "It may guide deterministic context exposure, but it is not "
+                    "a formal hypothesis and is not read by Decision."
+                ),
+            }
+            digest = stable_digest(payload, length=64)
+            artifact_ref: str | None = None
+            if self._artifact_store is not None:
+                artifact_ref = self._artifact_store.write_scratch(
+                    state.session_id,
+                    "hypothesis_target_intent_0001.json",
+                    payload,
+                )
+                state.scratch_artifact_refs.append(artifact_ref)
+            return artifact_ref, digest
+
     def _hypothesis_preview_preservation_drift_or_retry(
             self,
             *,
@@ -424,6 +663,7 @@ class AgenticSessionHypothesisMixin:
             semantic_rejections: list[Mapping[str, Any]],
             preview_rejections: list[Mapping[str, Any]],
             grounding_rejections: list[Mapping[str, Any]],
+            target_intent: Mapping[str, Any] | None = None,
             attempt: int,
         ) -> tuple[dict[str, Any], list[ProposalObservation]]:
             hypothesis_context = dict(
@@ -438,6 +678,15 @@ class AgenticSessionHypothesisMixin:
                 hypothesis_context["agentic_hypothesis_constraints"] = (
                     _sanitize_agentic_value(constraints)
                 )
+            if target_intent:
+                hypothesis_context["agentic_hypothesis_target_intent"] = (
+                    _sanitize_agentic_value(target_intent)
+                )
+                placeholder = target_intent.get("placeholder")
+                if isinstance(placeholder, Mapping):
+                    hypothesis_context["agentic_hypothesis_target_placeholder"] = (
+                        _sanitize_agentic_value(placeholder)
+                    )
             telemetry_guidance = _expected_telemetry_guidance_for_hypothesis(
                 tool_context,
             )
@@ -2289,6 +2538,80 @@ def _drop_empty_identity_fields(value: dict[str, str]) -> dict[str, str]:
         for key, item in value.items()
         if item not in (None, "", [], {}, ())
     }
+
+
+def _normalize_hypothesis_target_intent(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, HypothesisTargetIntentInput):
+        payload = raw.model_dump()
+    elif isinstance(raw, Mapping):
+        payload = dict(raw)
+    else:
+        raise ProposalValidationError(
+            "hypothesis target-intent preflight must return a JSON object"
+        )
+    validated = HypothesisTargetIntentInput(**payload)
+    change_locus = str(validated.change_locus or validated.surface or "").strip()
+    action = _normalize_target_intent_action(validated.action)
+    return _drop_empty_dict(
+        {
+            "change_locus": change_locus,
+            "surface": change_locus,
+            "action": action,
+            "target_file": _normalize_prompt_grounding_path(validated.target_file),
+            "mechanism_id": validated.mechanism_id,
+            "mechanism_family": validated.mechanism_family,
+            "mechanism_sketch": validated.mechanism_sketch,
+            "confidence": validated.confidence,
+            "notes": validated.notes,
+        }
+    )
+
+
+def _normalize_target_intent_action(value: Any) -> str:
+    action = str(value or "").strip()
+    return "create_new" if action == "create" else action
+
+
+def _target_intent_as_hypothesis(intent: Mapping[str, Any]) -> HypothesisProposal:
+    action = _normalize_target_intent_action(intent.get("action"))
+    mechanism_id = str(intent.get("mechanism_id") or "").strip()
+    change_type = {
+        "create_new": "add",
+        "modify": "modify",
+        "remove": "remove",
+    }.get(action, "modify")
+    return HypothesisProposal(
+        hypothesis_text="Target-intent preflight grounding surrogate.",
+        change_locus=str(intent.get("change_locus") or intent.get("surface") or ""),
+        action=action,  # type: ignore[arg-type]
+        target_file=str(intent.get("target_file") or "") or None,
+        mechanism_changes=(
+            (MechanismChange(id=mechanism_id, change_type=change_type),)
+            if mechanism_id
+            else ()
+        ),
+    )
+
+
+def _target_intent_placeholder(intent: Mapping[str, Any]) -> dict[str, Any]:
+    target_file = _normalize_prompt_grounding_path(intent.get("target_file"))
+    return _drop_empty_dict(
+        {
+            "schema_version": "hypothesis-target-placeholder.v1",
+            "target_file": target_file,
+            "action": "create_new",
+            "owner_required": False,
+            "source_status": "new_file_placeholder",
+            "source_provenance": "target_intent_create_new",
+            "placeholder_visible": True,
+            "integration_context": (
+                "Use active solver facts, map receipts, declared surface "
+                "bounds, and branch context to describe how this new target "
+                "would integrate. No existing owner source is required for "
+                "this preflight target."
+            ),
+        }
+    )
 
 
 def _normalize_hypothesis_schema_shape(

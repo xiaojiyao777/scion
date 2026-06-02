@@ -8,14 +8,22 @@ from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.schemas import (
     FIX_TOOL,
     HYPOTHESIS_TOOL,
+    HYPOTHESIS_TARGET_INTENT_TOOL,
     PATCH_TOOL,
     TOOL_SELECTION_TOOL,
 )
 
 from .code_prompts import _split_code_context
 from .fix_context import _split_fix_context
-from .hypothesis_prompts import _split_hypothesis_context
-from .parsing import _parse_hypothesis, _parse_patch
+from .hypothesis_prompts import (
+    _split_hypothesis_context,
+    _split_hypothesis_target_intent_context,
+)
+from .parsing import (
+    _parse_hypothesis,
+    _parse_hypothesis_target_intent,
+    _parse_patch,
+)
 from .tool_selection import _parse_tool_selection, _split_tool_selection_context
 from .trace import _TraceWriter, _client_request_policy
 
@@ -53,6 +61,18 @@ class CreativeLayer:
             context=context,
         )
         return _parse_hypothesis(raw)
+
+    def generate_hypothesis_target_intent(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Select a tainted target intent before formal hypothesis generation."""
+        system_blocks, user_prompt = _split_hypothesis_target_intent_context(context)
+        raw = self._call_with_trace(
+            request_kind="hypothesis_target_intent",
+            prompt=user_prompt,
+            tool=HYPOTHESIS_TARGET_INTENT_TOOL,
+            system_blocks=system_blocks,
+            context=context,
+        )
+        return _parse_hypothesis_target_intent(raw)
 
     def generate_code(self, context: Dict[str, Any]) -> PatchProposal:
         """Generate a PatchProposal using tool_use (API handles JSON escape)."""

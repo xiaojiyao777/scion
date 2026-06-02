@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .hypothesis import HYPOTHESIS_PROPOSAL_SCHEMA
 from .patch import PATCH_PROPOSAL_SCHEMA
+from .target_intent import HYPOTHESIS_TARGET_INTENT_SCHEMA
 
 
 class ToolSelectionInput(BaseModel):
@@ -97,6 +98,19 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- Reinventing logic already present in an existing operator with different variable names."
     ),
     "input_schema": HYPOTHESIS_PROPOSAL_SCHEMA,
+}
+
+HYPOTHESIS_TARGET_INTENT_TOOL: Dict[str, Any] = {
+    "name": "select_hypothesis_target_intent",
+    "description": (
+        "Select the target intent for the next hypothesis before writing the "
+        "formal hypothesis.\n\n"
+        "This is a tainted preflight declaration, not a final proposal and not "
+        "a Decision input. Return only the likely surface, action, target_file, "
+        "and compact mechanism identity/sketch. Do not include hypothesis_text, "
+        "expected telemetry, implementation details, or code."
+    ),
+    "input_schema": HYPOTHESIS_TARGET_INTENT_SCHEMA,
 }
 
 PATCH_TOOL: Dict[str, Any] = {
@@ -196,6 +210,7 @@ TOOL_SELECTION_TOOL: Dict[str, Any] = {
 __all__ = [
     "FIX_TOOL",
     "HYPOTHESIS_TOOL",
+    "HYPOTHESIS_TARGET_INTENT_TOOL",
     "PATCH_TOOL",
     "TOOL_SELECTION_SCHEMA",
     "TOOL_SELECTION_TOOL",

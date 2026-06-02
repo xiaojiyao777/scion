@@ -34,6 +34,7 @@ _TOOL_REQUEST_KIND_BY_NAME = {
     "generate_patch": "code",
     "fix_patch": "fix",
     "generate_hypothesis": "hypothesis",
+    "select_hypothesis_target_intent": "hypothesis_target_intent",
     "plan_proposal_tool_call": "tool_selection",
 }
 

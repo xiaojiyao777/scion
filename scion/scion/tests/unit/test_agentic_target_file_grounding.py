@@ -27,6 +27,47 @@ class SequentialHypothesisCreative(FakeCreative):
         return self.hypotheses.pop(0)
 
 
+class TargetIntentCreative(SequentialHypothesisCreative):
+    def __init__(
+        self,
+        *,
+        intent: dict,
+        hypotheses: list[HypothesisProposal],
+    ) -> None:
+        super().__init__(hypotheses)
+        self.intent = dict(intent)
+        self.target_intent_contexts: list[dict] = []
+
+    def generate_hypothesis_target_intent(self, context):
+        self.target_intent_contexts.append(dict(context))
+        return dict(self.intent)
+
+
+class TargetIntentToolClient:
+    def __init__(self, *, intent: dict, hypothesis_payload: dict) -> None:
+        self.intent = dict(intent)
+        self.hypothesis_payload = dict(hypothesis_payload)
+        self.tool_names: list[str] = []
+
+    def call_with_tool(
+        self,
+        prompt,
+        tool,
+        model=None,
+        system_blocks=None,
+        request_kind=None,
+    ):
+        del prompt, model, system_blocks, request_kind
+        self.tool_names.append(tool["name"])
+        if tool["name"] == "select_hypothesis_target_intent":
+            return dict(self.intent)
+        if tool["name"] == "generate_hypothesis":
+            return dict(self.hypothesis_payload)
+        if tool["name"] == "plan_proposal_tool_call":
+            return {"intent": "stop"}
+        raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
 def _scheduler_hypothesis(text: str) -> HypothesisProposal:
     mechanism_id = "stagnation_repair_scheduler"
     return HypothesisProposal(
@@ -101,6 +142,27 @@ def _solver_design_file_hypothesis(
             },
         )
     )
+
+
+def _prompt_manifests(output: AgenticProposalOutput) -> list[dict]:
+    return [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in str(ref)
+    ]
+
+
+def _target_intent_artifacts(output: AgenticProposalOutput) -> list[dict]:
+    payloads = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "hypothesis_target_intent" in str(ref)
+    ]
+    return [
+        payload
+        for payload in payloads
+        if payload.get("artifact_kind") == "hypothesis_target_intent"
+    ]
 
 
 def test_solver_design_existing_target_file_is_visible_before_first_hypothesis(
@@ -279,6 +341,118 @@ def test_solver_design_common_existing_targets_are_pregrounded_before_first_hypo
     assert target_items[0]["full_content_visible_in_dedicated_source_section"] is True
 
 
+@pytest.mark.parametrize(
+    ("target_file", "mechanism_id"),
+    (
+        (
+            "policies/baseline_modules/construction.py",
+            "target_intent_probe_construction",
+        ),
+        (
+            "policies/baseline_modules/acceptance.py",
+            "target_intent_probe_acceptance",
+        ),
+    ),
+)
+def test_target_intent_preflight_grounds_non_top_existing_target_before_first_hypothesis(
+    tmp_path: Path,
+    target_file: str,
+    mechanism_id: str,
+) -> None:
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=mechanism_id,
+        text=f"Modify {target_file} after target-intent grounding.",
+    )
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": mechanism_id,
+            "mechanism_sketch": "Modify the selected owner with a bounded mechanism.",
+            "confidence": 0.91,
+            "notes": "preflight target owner selection",
+        },
+        hypotheses=[hypothesis],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / f"artifacts-target-intent-{mechanism_id}"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id=f"camp-{mechanism_id}",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": mechanism_id},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.target_intent_contexts) == 1
+    assert len(creative.hypothesis_contexts) == 1
+    final_context = creative.hypothesis_contexts[0]
+    assert "agentic_hypothesis_grounding_rejections" not in final_context
+    assert final_context["agentic_hypothesis_target_intent"]["intent"][
+        "target_file"
+    ] == target_file
+    target_reads = [
+        observation
+        for observation in final_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_file
+    ]
+    assert target_reads
+    assert target_reads[0]["structured_payload"]["readable"] is True
+    assert target_reads[0]["structured_payload"]["truncated"] is False
+
+    manifests = _prompt_manifests(output)
+    assert [manifest["call_kind"] for manifest in manifests[:2]] == [
+        "hypothesis_target_intent",
+        "hypothesis",
+    ]
+    assert not any(
+        manifest["call_kind"] == "hypothesis_grounding_retry"
+        for manifest in manifests
+    )
+    hypothesis_manifest = [
+        manifest for manifest in manifests if manifest["call_kind"] == "hypothesis"
+    ][0]
+    target_ledger = hypothesis_manifest["hypothesis_target_source_visibility_ledger"]
+    assert target_ledger["target_intent"]["target_file"] == target_file
+    assert target_ledger["target_source_required"] is True
+    assert target_ledger["visibility_status"] == "full_dedicated_source_visible"
+    assert target_ledger["owner_source"][
+        "full_content_visible_in_dedicated_source_section"
+    ] is True
+    assert any(
+        receipt.get("tool_name") == "context.read_algorithm_file"
+        and receipt.get("file_path") == target_file
+        and receipt.get("selection_source") == "hypothesis_target_intent_grounding"
+        for receipt in output.observation_ledger["read_receipts"]
+    )
+    intent_artifacts = _target_intent_artifacts(output)
+    assert intent_artifacts
+    assert intent_artifacts[0]["call_kind"] == "hypothesis_target_intent"
+    assert intent_artifacts[0]["formal_proposal"] is False
+    assert intent_artifacts[0]["intent"]["intent"]["target_file"] == target_file
+
+
 def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded(
     tmp_path: Path,
 ) -> None:
@@ -350,6 +524,266 @@ def test_solver_design_existing_target_inferred_from_branch_state_is_pregrounded
     assert prompt_items
     assert prompt_items[0]["included_in_prompt_for_call"] is True
     assert prompt_items[0]["full_content_visible_anywhere_in_rendered_prompt"] is True
+
+
+def test_target_intent_preflight_grounds_branch_current_existing_target(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/branch_current_target.py"
+    branch_source = (
+        "def branch_current_target(context):\n"
+        "    context.record_phase('branch_current_target')\n"
+        "    return None\n"
+    )
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id="branch_current_refinement",
+        text="Modify the branch-current target after reading its source.",
+    )
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": "branch_current_refinement",
+            "mechanism_sketch": "Refine an already accepted branch-current target.",
+            "confidence": 0.88,
+        },
+        hypotheses=[hypothesis],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        branch_current_file_sources={target_file: branch_source},
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-branch-current-target-intent"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-branch-current-target-intent",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "branch-current-target-intent"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    final_context = creative.hypothesis_contexts[0]
+    target_reads = [
+        observation
+        for observation in final_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_file
+    ]
+    assert target_reads
+    assert target_reads[0]["structured_payload"]["source"] == (
+        "branch_current_file_sources"
+    )
+    assert target_reads[0]["structured_payload"]["content_preview"].strip() == (
+        branch_source.strip()
+    )
+    manifests = _prompt_manifests(output)
+    assert not any(
+        manifest["call_kind"] == "hypothesis_grounding_retry"
+        for manifest in manifests
+    )
+    hypothesis_manifest = [
+        manifest for manifest in manifests if manifest["call_kind"] == "hypothesis"
+    ][0]
+    target_ledger = hypothesis_manifest["hypothesis_target_source_visibility_ledger"]
+    assert target_ledger["target_intent"]["target_file"] == target_file
+    assert target_ledger["visibility_status"] == "full_dedicated_source_visible"
+    assert target_ledger["owner_source"]["source_provenance"] == (
+        "branch_current_file_sources"
+    )
+
+
+def test_target_intent_preflight_writes_distinct_llm_trace_and_artifact(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/construction.py"
+    mechanism_id = "traceable_target_intent"
+    hypothesis_payload = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        action="modify",
+        target_file=target_file,
+        hypothesis_text="Modify the selected target after preflight grounding.",
+        target_weakness="The selected owner has a bounded improvement gap.",
+        expected_effect="Improve total_distance with a scoped mechanism.",
+        mechanism_changes=[{"id": mechanism_id, "change_type": "add"}],
+        novelty_signature={
+            "algorithm_family": "target_intent_trace_test",
+            "target_file": target_file,
+        },
+        expected_telemetry={
+            "activity": ["solver_algorithm_search_iterations"],
+            "activation": [
+                f"solver_algorithm_context_records.{mechanism_id}_iterations"
+            ],
+            "budget": [f"solver_algorithm_phase_runtime_ms.{mechanism_id}"],
+        },
+    )
+    client = TargetIntentToolClient(
+        intent={
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": target_file,
+            "mechanism_id": mechanism_id,
+            "mechanism_sketch": "Trace the selected target intent.",
+            "confidence": 0.83,
+        },
+        hypothesis_payload=hypothesis_payload,
+    )
+    creative = CreativeLayer(client, model="test-model", trace_dir=str(tmp_path / "traces"))
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-target-intent-trace"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-intent-trace",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "target-intent-trace"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    model_generation_tools = [
+        name
+        for name in client.tool_names
+        if name
+        in {
+            "select_hypothesis_target_intent",
+            "generate_hypothesis",
+        }
+    ]
+    assert model_generation_tools[:2] == [
+        "select_hypothesis_target_intent",
+        "generate_hypothesis",
+    ]
+    traces = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / "traces").glob("*.json")
+    ]
+    trace_call_kinds = [
+        trace["agentic_session"]["call_kind"]
+        for trace in traces
+        if "agentic_session" in trace
+    ]
+    assert "hypothesis_target_intent" in trace_call_kinds
+    assert "hypothesis" in trace_call_kinds
+    manifests = _prompt_manifests(output)
+    assert [manifest["call_kind"] for manifest in manifests[:2]] == [
+        "hypothesis_target_intent",
+        "hypothesis",
+    ]
+    intent_artifacts = _target_intent_artifacts(output)
+    assert intent_artifacts
+    assert intent_artifacts[0]["status"] == "succeeded"
+    assert intent_artifacts[0]["formal_proposal"] is False
+
+
+def test_target_intent_preflight_create_new_uses_visible_placeholder(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/new_target_intent_module.py"
+    mechanism_id = "new_target_intent_module"
+    hypothesis = _solver_design_file_hypothesis(
+        target_file=target_file,
+        mechanism_id=mechanism_id,
+        text="Create a new target file using the visible placeholder context.",
+    )
+    hypothesis.action = "create_new"
+    creative = TargetIntentCreative(
+        intent={
+            "change_locus": "solver_design",
+            "action": "create_new",
+            "target_file": target_file,
+            "mechanism_id": mechanism_id,
+            "mechanism_sketch": "Create a new bounded support target.",
+            "confidence": 0.74,
+        },
+        hypotheses=[hypothesis],
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(
+        tmp_path / "artifacts-create-new-target-intent"
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-create-new-target-intent",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "create-new-target-intent"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    final_context = creative.hypothesis_contexts[0]
+    placeholder = final_context["agentic_hypothesis_target_placeholder"]
+    assert placeholder["target_file"] == target_file
+    assert placeholder["owner_required"] is False
+    target_reads = [
+        observation
+        for observation in final_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"] == target_file
+    ]
+    assert not target_reads
+    manifests = _prompt_manifests(output)
+    assert not any(
+        manifest["call_kind"] == "hypothesis_grounding_retry"
+        for manifest in manifests
+    )
+    hypothesis_manifest = [
+        manifest for manifest in manifests if manifest["call_kind"] == "hypothesis"
+    ][0]
+    target_ledger = hypothesis_manifest["hypothesis_target_source_visibility_ledger"]
+    assert target_ledger["target_source_required"] is False
+    assert target_ledger["visibility_status"] == "create_new_placeholder_visible"
+    assert target_ledger["placeholder"]["visible"] is True
 
 
 def test_target_file_grounding_retry_resets_when_semantic_retry_changes_target(

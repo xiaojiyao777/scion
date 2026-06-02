@@ -433,6 +433,10 @@ def _render_prompt_for_manifest(
     prompt_context: Mapping[str, Any],
 ) -> tuple[list[Mapping[str, Any]], str]:
     """Render with the same prompt splitter used by the CreativeLayer."""
+    if str(call_kind) == "hypothesis_target_intent":
+        from scion.proposal.engine import _split_hypothesis_target_intent_context
+
+        return _split_hypothesis_target_intent_context(dict(prompt_context))
     if str(call_kind).startswith("hypothesis"):
         from scion.proposal.engine import _split_hypothesis_context
 

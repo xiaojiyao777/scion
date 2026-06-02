@@ -135,6 +135,15 @@ def build_api_visible_prompt_manifest(
         section_statuses=section_statuses,
         call_kind=call_kind,
     )
+    hypothesis_target_source_visibility_ledger = (
+        _hypothesis_target_source_visibility_ledger(
+            safe_context,
+            provider_prompt_text=provider_prompt_text if rendered_available else "",
+            included_observations=included_observations,
+            section_statuses=section_statuses,
+            call_kind=call_kind,
+        )
+    )
     system_chars = _system_text_chars(rendered_system_blocks)
     user_chars = len(rendered_user_prompt) if rendered_available else 0
     total_chars = system_chars + user_chars
@@ -213,6 +222,9 @@ def build_api_visible_prompt_manifest(
             if item.get("payload_digest")
         ],
         "code_file_visibility_ledger": code_file_visibility_ledger,
+        "hypothesis_target_source_visibility_ledger": (
+            hypothesis_target_source_visibility_ledger
+        ),
         "visibility_ledger": visibility_ledger,
         "visibility_ledger_summary": {
             "schema_version": visibility_ledger["schema_version"],
@@ -326,6 +338,136 @@ def _code_file_visibility_ledger(
             "target_file": target_record,
             "integration_files": integration_records,
             "algorithm_file_reads": algorithm_read_records,
+        }
+    )
+
+
+def _hypothesis_target_source_visibility_ledger(
+    context: Mapping[str, Any],
+    *,
+    provider_prompt_text: str,
+    included_observations: list[Mapping[str, Any]],
+    section_statuses: Mapping[str, Mapping[str, Any]],
+    call_kind: str,
+) -> dict[str, Any]:
+    if not str(call_kind).startswith("hypothesis"):
+        return {}
+    raw_intent = context.get("agentic_hypothesis_target_intent")
+    if not isinstance(raw_intent, Mapping):
+        return {}
+    intent_value = raw_intent.get("intent")
+    intent = intent_value if isinstance(intent_value, Mapping) else raw_intent
+    target_file = _normalize_path(intent.get("target_file"))
+    action = _normalize_action(intent.get("action"))
+    if not target_file:
+        return {}
+    target_source_required = action in {"modify", "remove"}
+    source_items = [
+        item
+        for item in included_observations
+        if item.get("tool_name") == "context.read_algorithm_file"
+        and _normalize_path(item.get("file_path")) == target_file
+    ]
+    best_source = _best_hypothesis_source_item(source_items)
+    placeholder = context.get("agentic_hypothesis_target_placeholder")
+    placeholder_visible = bool(
+        isinstance(placeholder, Mapping)
+        and _rendered_contains_text(provider_prompt_text, target_file)
+        and (
+            not target_source_required
+            or str(placeholder.get("owner_required") or "").lower() == "false"
+        )
+    )
+    section_status = section_statuses.get(
+        "hypothesis_target_intent_preflight",
+        {},
+    )
+    placeholder_section_status = section_statuses.get(
+        "hypothesis_target_placeholder",
+        {},
+    )
+    return _drop_empty(
+        {
+            "schema_version": "hypothesis-target-source-visibility-ledger.v1",
+            "call_kind": call_kind,
+            "prompt_contract": (
+                "For existing target intents, the first formal hypothesis "
+                "prompt should contain full or bounded dedicated source for "
+                "the selected target. For create-new intents, a visible "
+                "placeholder is sufficient and no owner source is required."
+            ),
+            "target_intent": _drop_empty(
+                {
+                    "change_locus": intent.get("change_locus")
+                    or intent.get("surface"),
+                    "action": action,
+                    "target_file": target_file,
+                    "mechanism_id": intent.get("mechanism_id"),
+                    "mechanism_family": intent.get("mechanism_family"),
+                    "confidence": intent.get("confidence"),
+                }
+            ),
+            "target_source_required": target_source_required,
+            "preflight_section_status": section_status.get("status"),
+            "owner_source": best_source,
+            "placeholder": _drop_empty(
+                {
+                    "visible": placeholder_visible,
+                    "section_status": placeholder_section_status.get("status"),
+                    "target_file": target_file if placeholder_visible else "",
+                    "owner_required": False if not target_source_required else None,
+                }
+            ),
+            "visibility_status": (
+                "full_dedicated_source_visible"
+                if best_source.get("full_content_visible_in_dedicated_source_section")
+                else "source_visible"
+                if best_source.get("content_preview_visible_in_rendered_prompt")
+                or best_source.get("full_content_visible_in_rendered_prompt")
+                else "create_new_placeholder_visible"
+                if placeholder_visible and not target_source_required
+                else "not_visible"
+            ),
+        }
+    )
+
+
+def _best_hypothesis_source_item(
+    items: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not items:
+        return {}
+    ranked = sorted(
+        items,
+        key=lambda item: (
+            bool(item.get("full_content_visible_in_dedicated_source_section")),
+            bool(item.get("full_content_visible_in_rendered_prompt")),
+            bool(item.get("content_preview_visible_in_rendered_prompt")),
+            int(item.get("visible_content_chars") or 0),
+        ),
+        reverse=True,
+    )
+    item = ranked[0]
+    return _drop_empty(
+        {
+            "observation_id": item.get("observation_id"),
+            "file_path": item.get("file_path"),
+            "source": item.get("source"),
+            "source_provenance": item.get("source_provenance"),
+            "visibility_status": item.get("prompt_visibility_status"),
+            "included_in_prompt_for_call": item.get("included_in_prompt_for_call"),
+            "full_content_included_in_prompt": item.get(
+                "full_content_included_in_prompt"
+            ),
+            "full_content_visible_in_rendered_prompt": item.get(
+                "full_content_visible_in_rendered_prompt"
+            ),
+            "full_content_visible_in_dedicated_source_section": item.get(
+                "full_content_visible_in_dedicated_source_section"
+            ),
+            "content_preview_visible_in_rendered_prompt": item.get(
+                "content_preview_visible_in_rendered_prompt"
+            ),
         }
     )
 
@@ -932,6 +1074,7 @@ def _observation_prompt_inclusion_fields(
     return {
         "file_path": payload.get("file_path"),
         "target_file": payload.get("target_file"),
+        "source_provenance": payload.get("source"),
         "symbol": payload.get("symbol"),
         "slice_id": payload.get("slice_id"),
         "readable": payload.get("readable"),
@@ -1428,6 +1571,11 @@ def _normalize_path(value: Any) -> str:
     while text.startswith("./"):
         text = text[2:]
     return text.lstrip("/")
+
+
+def _normalize_action(value: Any) -> str:
+    text = str(value or "").strip()
+    return "create_new" if text == "create" else text
 
 
 def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ from scion.core.models import (
 )
 from scion.proposal.schemas import (
     HypothesisProposalInput,
+    HypothesisTargetIntentInput,
     PatchSchemaPreflightError,
     PatchProposalInput,
     normalize_mechanism_changes_with_repair_attribution,
@@ -108,6 +109,31 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         ),
         schema_repair_attribution=repair_attribution,
     )
+
+
+def _parse_hypothesis_target_intent(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize a hypothesis target-intent preflight payload."""
+    try:
+        validated = HypothesisTargetIntentInput(**dict(raw))
+    except ValidationError as exc:
+        raise ProposalValidationError(str(exc)) from exc
+    change_locus = (validated.change_locus or validated.surface or "").strip()
+    action = "create_new" if validated.action == "create" else validated.action
+    return {
+        key: value
+        for key, value in {
+            "change_locus": change_locus,
+            "surface": change_locus,
+            "action": action,
+            "target_file": validated.target_file,
+            "mechanism_id": validated.mechanism_id,
+            "mechanism_family": validated.mechanism_family,
+            "mechanism_sketch": validated.mechanism_sketch,
+            "confidence": validated.confidence,
+            "notes": validated.notes,
+        }.items()
+        if value not in (None, "", [], {}, ())
+    }
 
 
 def _parse_patch(

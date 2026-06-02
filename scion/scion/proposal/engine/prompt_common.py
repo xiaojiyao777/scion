@@ -112,6 +112,27 @@ def _agentic_research_context_block(
             "section.\n\n"
             f"{_bounded_json(resume_context, _AGENTIC_RESUME_CONTEXT_CHARS)}"
         )
+    target_intent = context.get("agentic_hypothesis_target_intent")
+    if target_intent:
+        parts.append(
+            "## Hypothesis Target-Intent Preflight\n"
+            "This tainted preflight summary is not a formal hypothesis and not "
+            "a Decision input. It tells you which target source or placeholder "
+            "the host exposed before this final hypothesis call. Treat later "
+            "schema, semantic, or grounding retry feedback as authoritative if "
+            "it conflicts with this advisory intent.\n\n"
+            f"{_bounded_json(target_intent, 4000)}"
+        )
+    target_placeholder = context.get("agentic_hypothesis_target_placeholder")
+    if target_placeholder:
+        parts.append(
+            "## Hypothesis Target Placeholder\n"
+            "The selected target is a create-new intent, so no existing owner "
+            "source is required. Use this visible placeholder plus active "
+            "solver facts, map receipts, and declared surface context as "
+            "integration context for the final hypothesis.\n\n"
+            f"{_bounded_json(target_placeholder, 3000)}"
+        )
     diagnosis = _agentic_research_diagnosis_projection(
         context.get("agentic_research_diagnosis"),
         code_phase=code_phase,
