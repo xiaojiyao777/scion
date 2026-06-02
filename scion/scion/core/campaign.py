@@ -985,7 +985,7 @@ def _branch_state_row(branch: Branch) -> Dict[str, Any]:
             None,
         ),
         "last_branch_lifecycle_policy_block": dict(
-            getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
+            card.get("last_branch_lifecycle_policy_block") or {}
         ),
         "best_quality_checkpoint_id": getattr(
             branch,

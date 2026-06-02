@@ -676,7 +676,7 @@ def _checkpoint_tier_rank(tier: str | None) -> int:
 
 
 def _checkpoint_evidence(branch: Branch) -> BranchCheckpointEvidence:
-    source = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    source = _checkpoint_metadata_source(branch)
     return BranchCheckpointEvidence(
         wins=_int_value(source, "wins", "case_wins", "pair_wins"),
         losses=_int_value(source, "losses", "case_losses", "pair_losses"),
@@ -690,7 +690,7 @@ def _checkpoint_evidence(branch: Branch) -> BranchCheckpointEvidence:
 
 
 def _checkpoint_diagnostics(branch: Branch) -> BranchCheckpointDiagnostics:
-    source = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
+    source = _checkpoint_metadata_source(branch)
     gate_codes = _string_tuple(
         source.get("gate_observation_reason_codes")
         or source.get("decision_reason_codes")
@@ -706,6 +706,14 @@ def _checkpoint_diagnostics(branch: Branch) -> BranchCheckpointDiagnostics:
         lifecycle_action_reason_codes=lifecycle_codes,
         telemetry_outcome=getattr(branch, "last_telemetry_outcome", None),
     )
+
+
+def _checkpoint_metadata_source(branch: Branch) -> dict[str, Any]:
+    evidence = getattr(branch, "branch_evidence_summary", {}) or {}
+    if isinstance(evidence, dict) and evidence:
+        return dict(evidence)
+    block = getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
+    return dict(block) if isinstance(block, dict) else {}
 
 
 def _int_value(source: dict[str, Any], *keys: str) -> int:

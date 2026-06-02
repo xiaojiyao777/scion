@@ -19,6 +19,7 @@ from scion.core.branch_lifecycle_policy import (
     generic_evidence_signature,
 )
 from scion.core.models import Branch, BranchState, ProtocolResult
+from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     runtime_aggregate_exclusion_for_protocol,
@@ -160,6 +161,27 @@ def update_branch_screening_evidence_summary(
             if str(code).strip()
         )
     )
+    reason_code_groups = classify_reason_codes(
+        reason_codes,
+        protocol_reason_codes=getattr(protocol_result, "reason_codes", ()) or (),
+    )
+    gate_observation_reason_codes = _string_tuple(
+        getattr(screening_feedback, "gate_observation_reason_codes", None)
+    ) or tuple(reason_code_groups.gate_observation_reason_codes)
+    gate_observation_reason_codes = tuple(
+        dict.fromkeys(
+            tuple(gate_observation_reason_codes)
+            + tuple(_screening_gate_reason_codes(reason_codes))
+        )
+    )
+    lifecycle_action_reason_codes = _string_tuple(
+        getattr(screening_feedback, "lifecycle_action_reason_codes", None)
+    ) or tuple(reason_code_groups.lifecycle_action_reason_codes)
+    previous_summary = (
+        dict(getattr(branch, "branch_evidence_summary", {}) or {})
+        if isinstance(getattr(branch, "branch_evidence_summary", None), Mapping)
+        else {}
+    )
     summary = {
         "stage": "screening",
         "tier": str(getattr(screening_feedback, "tier", "") or "").strip()
@@ -234,21 +256,136 @@ def update_branch_screening_evidence_summary(
         summary["decision_reason_codes"] = list(reason_codes)
         summary["reason_codes"] = list(reason_codes)
         summary["why_not_promoted_reason_codes"] = list(reason_codes)
+    if gate_observation_reason_codes:
+        summary["gate_observation_reason_codes"] = list(
+            gate_observation_reason_codes
+        )
+    if lifecycle_action_reason_codes:
+        summary["lifecycle_action_reason_codes"] = list(
+            lifecycle_action_reason_codes
+        )
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    history_codes = _historical_reason_codes(previous_summary, reason_codes)
+    if history_codes:
+        summary["history_reason_codes"] = list(history_codes)
+    best_checkpoint_codes = _best_checkpoint_reason_codes(
+        branch,
+        previous_summary=previous_summary,
+        current_summary=summary,
+        current_reason_codes=reason_codes,
+    )
+    if best_checkpoint_codes:
+        summary["best_checkpoint_reason_codes"] = list(best_checkpoint_codes)
     branch.branch_evidence_summary = summary
-    block = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
-    if reason_codes:
-        block.setdefault("decision_reason_codes", list(reason_codes))
-        block.setdefault("reason_codes", list(reason_codes))
-        block.setdefault("why_not_promoted_reason_codes", list(reason_codes))
-    block.setdefault("runtime_evidence_confidence", summary["runtime_evidence_confidence"])
-    block.setdefault("phase_activation_summary", summary["phase_activation_summary"])
-    if runtime_aggregate_exclusion:
-        block.setdefault("runtime_aggregate_exclusion", runtime_aggregate_exclusion)
-    block.setdefault("case_level_winners", summary["case_level_winners"])
-    block.setdefault("case_level_losses", summary["case_level_losses"])
-    branch.last_branch_lifecycle_policy_block = block
+
+
+def _summary_reason_codes(summary: Mapping[str, Any]) -> tuple[str, ...]:
+    return _string_tuple(
+        summary.get("why_not_promoted_reason_codes")
+        or summary.get("decision_reason_codes")
+        or summary.get("reason_codes")
+    )
+
+
+def _historical_reason_codes(
+    previous_summary: Mapping[str, Any],
+    current_reason_codes: tuple[str, ...],
+) -> tuple[str, ...]:
+    previous_history = _string_tuple(previous_summary.get("history_reason_codes"))
+    previous_codes = _summary_reason_codes(previous_summary)
+    codes: list[str] = list(previous_history)
+    if previous_codes and previous_codes != current_reason_codes:
+        codes.extend(previous_codes)
+    return tuple(dict.fromkeys(codes))
+
+
+def _best_checkpoint_reason_codes(
+    branch: Branch,
+    *,
+    previous_summary: Mapping[str, Any],
+    current_summary: Mapping[str, Any],
+    current_reason_codes: tuple[str, ...],
+) -> tuple[str, ...]:
+    previous_best = _string_tuple(
+        previous_summary.get("best_checkpoint_reason_codes")
+    )
+    if previous_best:
+        return previous_best
+    previous_codes = _summary_reason_codes(previous_summary)
+    if not previous_codes or previous_codes == current_reason_codes:
+        return ()
+    if not getattr(branch, "best_quality_checkpoint_id", None):
+        return ()
+    if _screening_tier_rank(previous_summary.get("tier")) <= _screening_tier_rank(
+        current_summary.get("tier")
+    ):
+        return ()
+    return previous_codes
+
+
+def _screening_tier_rank(tier: Any) -> int:
+    return {
+        "promotable": 7,
+        "weak_positive": 6,
+        "marginal": 5,
+        "last_valid": 4,
+        "no_effect": 4,
+        "diagnostic": 3,
+        "regression": 2,
+        "quality_regression": 2,
+        "invalid": 1,
+    }.get(str(tier or ""), 0)
+
+
+def _screening_gate_reason_codes(reason_codes: Iterable[str]) -> tuple[str, ...]:
+    return tuple(
+        code
+        for code in _string_tuple(tuple(reason_codes or ()))
+        if _is_gate_observation_reason_code(code)
+    )
+
+
+def _is_gate_observation_reason_code(code: str) -> bool:
+    text = str(code or "").strip().upper()
+    if not text:
+        return False
+    if text.startswith("BRANCH_LIFECYCLE_"):
+        return False
+    if any(
+        token in text.lower()
+        for token in (
+            "proposal",
+            "schema",
+            "duplicate",
+            "c11",
+            "premise",
+            "agent_quality",
+            "agent_grounding",
+            "mechanism_novelty",
+        )
+    ):
+        return False
+    return text.startswith(
+        (
+            "SCREENING_",
+            "VALIDATION_",
+            "FROZEN_",
+            "CANARY_",
+            "TELEMETRY_",
+            "NO_SCREENING_STATS",
+        )
+    )
+
+
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(item) for item in value if str(item))
+    return (str(value),)
 
 
 def _compact_case_results(

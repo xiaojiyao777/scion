@@ -155,6 +155,41 @@ def branch_has_retained_checkpoint(branch: Branch | None) -> bool:
     )
 
 
+def is_branch_lifecycle_policy_block(block: Mapping[str, Any] | None) -> bool:
+    """Return true only for blocks created by lifecycle/reroute policy paths."""
+    if not isinstance(block, Mapping) or not block:
+        return False
+    reroute_reason = str(block.get("reroute_reason") or "")
+    if reroute_reason == BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK:
+        return True
+    if block.get("diagnostic_kind") == "branch_routing_diagnostic":
+        return True
+    if (
+        block.get("new_mechanism_ineligible_reason")
+        == BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE
+    ):
+        return True
+    if isinstance(block.get("active_slot_reconciliation"), Mapping):
+        return True
+    if block.get("clean_fork_signal") is True:
+        return True
+    for key in (
+        "lifecycle_action_reason_codes",
+        "decision_reason_codes",
+        "reason_codes",
+    ):
+        value = block.get(key)
+        if isinstance(value, str):
+            codes = (value,)
+        elif isinstance(value, Iterable) and not isinstance(value, Mapping):
+            codes = value
+        else:
+            codes = ()
+        if any(str(code).startswith("BRANCH_LIFECYCLE_") for code in codes):
+            return True
+    return False
+
+
 def branch_has_actionable_diagnostic(branch: Branch | None) -> bool:
     if branch is None:
         return False
@@ -279,7 +314,7 @@ def branch_lifecycle_reroute_context(branch: Branch | None) -> dict[str, Any]:
         else 0
     )
     ineligible = branch_lifecycle_new_mechanism_ineligible(branch)
-    last_block = (
+    raw_last_block = (
         dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
         if branch is not None
         and isinstance(
@@ -287,6 +322,9 @@ def branch_lifecycle_reroute_context(branch: Branch | None) -> dict[str, Any]:
             Mapping,
         )
         else {}
+    )
+    last_block = (
+        raw_last_block if is_branch_lifecycle_policy_block(raw_last_block) else {}
     )
     reroute_reason = (
         str(getattr(branch, "branch_lifecycle_reroute_reason", "") or "")
@@ -417,5 +455,6 @@ __all__ = [
     "branch_requires_same_mechanism_followup",
     "branch_workspace_for_proposal",
     "campaign_branch_lifecycle_reroute_status",
+    "is_branch_lifecycle_policy_block",
     "record_branch_lifecycle_policy_block",
 ]

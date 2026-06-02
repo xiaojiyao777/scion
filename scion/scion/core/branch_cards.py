@@ -22,6 +22,7 @@ from scion.core.branch_hygiene import (
     branch_code_status,
     branch_has_actionable_diagnostic,
     branch_has_retained_checkpoint,
+    is_branch_lifecycle_policy_block,
     branch_is_parked_lineage,
     branch_lifecycle_reroute_context,
     branch_lineage_status,
@@ -314,19 +315,12 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "case_level_losses": _branch_case_outcomes(branch, "case_level_losses"),
         "phase_activation_summary": _branch_phase_activation_summary(branch),
         "runtime_evidence_confidence": _branch_runtime_evidence_confidence(branch),
-        "gate_observation_reason_codes": _branch_block_codes(
-            branch,
-            "gate_observation_reason_codes",
-            "reason_codes",
-        ),
-        "lifecycle_action_reason_codes": _branch_block_codes(
-            branch,
-            "lifecycle_action_reason_codes",
-            "decision_reason_codes",
-            "reason_codes",
-        ),
+        "gate_observation_reason_codes": _current_gate_observation_codes(branch),
+        "lifecycle_action_reason_codes": _lifecycle_action_reason_codes(branch),
         "rollback_reason_codes": _branch_rollback_codes(branch),
         "why_not_promoted_reason_codes": _why_not_promoted_codes(branch),
+        "best_checkpoint_reason_codes": _best_checkpoint_reason_codes(branch),
+        "history_reason_codes": _history_reason_codes(branch),
         "proposal_block_reason_codes": _proposal_block_codes(branch),
         "why_abandoned_reason_codes": _why_abandoned_codes(branch),
         "last_screening_feedback_tier": last_screening_feedback_tier,
@@ -603,8 +597,18 @@ def _branch_block(branch: Branch | None) -> Mapping[str, Any]:
     return block if isinstance(block, Mapping) else {}
 
 
+def _branch_lifecycle_block(branch: Branch | None) -> Mapping[str, Any]:
+    block = _branch_block(branch)
+    return block if is_branch_lifecycle_policy_block(block) else {}
+
+
 def _branch_block_codes(branch: Branch | None, *keys: str) -> list[str]:
     block = _branch_block(branch)
+    return _mapping_codes(block, *keys)
+
+
+def _branch_lifecycle_block_codes(branch: Branch | None, *keys: str) -> list[str]:
+    block = _branch_lifecycle_block(branch)
     return _mapping_codes(block, *keys)
 
 
@@ -625,7 +629,7 @@ def _mapping_codes(source: Mapping[str, Any], *keys: str) -> list[str]:
 
 
 def _branch_rollback_codes(branch: Branch | None) -> list[str]:
-    codes = _branch_block_codes(branch, "rollback_reason_codes")
+    codes = _branch_lifecycle_block_codes(branch, "rollback_reason_codes")
     reason = (
         str(getattr(branch, "last_rollback_reason", "") or "")
         if branch is not None
@@ -731,30 +735,77 @@ def _branch_runtime_evidence_confidence(branch: Branch | None) -> str:
     return "unknown"
 
 
+def _current_reason_codes(branch: Branch | None) -> list[str]:
+    return _branch_evidence_codes(
+        branch,
+        "why_not_promoted_reason_codes",
+        "decision_reason_codes",
+        "effective_reason_codes",
+        "reason_codes",
+    )
+
+
+def _current_gate_observation_codes(branch: Branch | None) -> list[str]:
+    codes = _branch_evidence_codes(branch, "gate_observation_reason_codes")
+    codes.extend(
+        code
+        for code in _current_reason_codes(branch)
+        if _is_current_gate_observation_code(code)
+    )
+    return list(dict.fromkeys(codes))
+
+
+def _lifecycle_action_reason_codes(branch: Branch | None) -> list[str]:
+    codes = _branch_evidence_codes(branch, "lifecycle_action_reason_codes")
+    codes.extend(
+        _branch_lifecycle_block_codes(
+            branch,
+            "lifecycle_action_reason_codes",
+            "decision_reason_codes",
+            "reason_codes",
+        )
+    )
+    return list(dict.fromkeys(codes))
+
+
+def _best_checkpoint_reason_codes(branch: Branch | None) -> list[str]:
+    return _branch_evidence_codes(branch, "best_checkpoint_reason_codes")
+
+
+def _history_reason_codes(branch: Branch | None) -> list[str]:
+    codes = _branch_evidence_codes(branch, "history_reason_codes")
+    block = _branch_block(branch)
+    if block and not is_branch_lifecycle_policy_block(block):
+        current = set(_current_reason_codes(branch))
+        codes.extend(
+            code
+            for code in _mapping_codes(
+                block,
+                "gate_observation_reason_codes",
+                "why_not_promoted_reason_codes",
+                "decision_reason_codes",
+                "reason_codes",
+            )
+            if code not in current
+        )
+    return list(dict.fromkeys(codes))
+
+
 def _why_not_promoted_codes(branch: Branch | None) -> list[str]:
     if branch is None:
         return []
     codes = list(getattr(branch, "failure_codes", None) or ())
-    codes.extend(
-        _branch_evidence_codes(
-            branch,
-            "why_not_promoted_reason_codes",
-            "lifecycle_action_reason_codes",
-            "decision_reason_codes",
-            "terminal_reason_codes",
-            "effective_reason_codes",
-            "reason_codes",
+    codes.extend(_current_reason_codes(branch))
+    codes.extend(_branch_evidence_codes(branch, "terminal_reason_codes"))
+    if not codes:
+        codes.extend(
+            _branch_lifecycle_block_codes(
+                branch,
+                "lifecycle_action_reason_codes",
+                "decision_reason_codes",
+                "reason_codes",
+            )
         )
-    )
-    codes.extend(
-        _branch_block_codes(
-            branch,
-            "why_not_promoted_reason_codes",
-            "lifecycle_action_reason_codes",
-            "decision_reason_codes",
-            "reason_codes",
-        )
-    )
     return list(
         dict.fromkeys(
             str(code)
@@ -770,15 +821,6 @@ def _proposal_block_codes(branch: Branch | None) -> list[str]:
     codes = list(getattr(branch, "failure_codes", None) or ())
     codes.extend(
         _branch_evidence_codes(
-            branch,
-            "proposal_block_reason_codes",
-            "schema_reason_codes",
-            "proposal_quality_reason_codes",
-            "reason_codes",
-        )
-    )
-    codes.extend(
-        _branch_block_codes(
             branch,
             "proposal_block_reason_codes",
             "schema_reason_codes",
@@ -904,6 +946,28 @@ def _is_proposal_block_code(code: str) -> bool:
         "mechanism_changes_duplicate_id",
     )
     return any(token in text for token in tokens)
+
+
+def _is_lifecycle_action_code(code: str) -> bool:
+    return str(code or "").strip().upper().startswith("BRANCH_LIFECYCLE_")
+
+
+def _is_current_gate_observation_code(code: str) -> bool:
+    text = str(code or "").strip().upper()
+    if not text:
+        return False
+    if _is_lifecycle_action_code(text) or _is_proposal_block_code(text):
+        return False
+    return text.startswith(
+        (
+            "SCREENING_",
+            "VALIDATION_",
+            "FROZEN_",
+            "CANARY_",
+            "TELEMETRY_",
+            "NO_SCREENING_STATS",
+        )
+    )
 
 
 def _format_evidence_summary(summary: Mapping[str, Any]) -> str:

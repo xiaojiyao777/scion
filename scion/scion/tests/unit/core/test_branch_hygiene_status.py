@@ -140,7 +140,7 @@ def test_active_branch_card_separates_proposal_blocks_from_algorithm_reasons() -
             "PROPOSAL_PREMISE_CONTRADICTED",
             "SCREENING_FAIL_LOW_WIN_RATE",
         ],
-        last_branch_lifecycle_policy_block={
+        branch_evidence_summary={
             "reason_codes": [
                 "C11_EXPECTED_TELEMETRY",
                 "SCREENING_MARGINAL_SIGNAL_CONTINUE",
@@ -249,6 +249,102 @@ def test_active_branch_card_renders_latest_screening_decision_reason_codes() -> 
     assert "why_not_promoted_reason_codes=SCREENING_FAIL_WIN_RATE" in text
     assert "SCREENING_NEUTRAL_SIGNAL_CONTINUE" in text
     assert "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in text
+
+
+def test_branch_card_current_reason_codes_do_not_mix_prior_head() -> None:
+    branch = Branch(
+        branch_id="active-two-round-reasons",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+    weak_protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=4,
+            losses=2,
+            ties=6,
+            win_rate=1 / 3,
+            median_delta=0.2,
+            ci_low=0.1,
+            ci_high=0.6,
+        ),
+        gate_outcome="continue",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="weak positive screening",
+        raw_metrics_ref="/safe/weak.json",
+    )
+    weak_codes = (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_WEAK_SIGNAL_CONTINUE",
+    )
+    weak_feedback = screening_feedback_summary(
+        weak_protocol,
+        decision_reason_codes=weak_codes,
+    )
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=weak_protocol,
+        screening_feedback=weak_feedback,
+        decision_reason_codes=weak_codes,
+    )
+
+    branch.best_quality_checkpoint_id = "checkpoint-rn"
+    branch.last_branch_lifecycle_policy_block = {
+        "gate_observation_reason_codes": list(weak_codes),
+        "why_not_promoted_reason_codes": list(weak_codes),
+        "reason_codes": list(weak_codes),
+    }
+    branch.branch_code_status = "active_marginal"
+    branch.last_screening_feedback_tier = "marginal"
+    marginal_protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=12,
+            wins=3,
+            losses=3,
+            ties=6,
+            win_rate=0.25,
+            median_delta=0.0,
+            ci_low=-0.5,
+            ci_high=1.5,
+        ),
+        gate_outcome="continue",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="marginal follow-up screening",
+        raw_metrics_ref="/safe/marginal.json",
+    )
+    marginal_codes = (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_MARGINAL_SIGNAL_CONTINUE",
+    )
+    marginal_feedback = screening_feedback_summary(
+        marginal_protocol,
+        decision_reason_codes=marginal_codes,
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=marginal_protocol,
+        screening_feedback=marginal_feedback,
+        decision_reason_codes=marginal_codes,
+    )
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+    campaign_payload = campaign_branch_lifecycle_reroute_status([branch])
+
+    assert payload["gate_observation_reason_codes"] == list(marginal_codes)
+    assert payload["why_not_promoted_reason_codes"] == list(marginal_codes)
+    assert payload["best_checkpoint_reason_codes"] == list(weak_codes)
+    assert "SCREENING_WEAK_SIGNAL_CONTINUE" in payload["history_reason_codes"]
+    assert payload["last_branch_lifecycle_policy_block"] == {}
+    assert campaign_payload == {}
+    assert "SCREENING_MARGINAL_SIGNAL_CONTINUE" in text
+    assert "SCREENING_WEAK_SIGNAL_CONTINUE" not in text
+    assert branch.failure_codes == []
 
 
 def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
