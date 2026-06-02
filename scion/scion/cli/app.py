@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from scion.cli.commands.init_run import register_init_run_commands
+from scion.cli.commands.external_ingest import register_external_ingest_command
 from scion.cli.commands.inspect import register_inspect_commands
 from scion.cli.commands.postmortem import register_postmortem_command
 from scion.cli.commands.reports import register_report_commands
@@ -30,6 +31,7 @@ app.add_typer(inspect_app, name="inspect")
 app.add_typer(report_app, name="report")
 
 register_init_run_commands(app)
+register_external_ingest_command(app)
 register_weight_commands(app)
 register_postmortem_command(app)
 register_inspect_commands(inspect_app)
