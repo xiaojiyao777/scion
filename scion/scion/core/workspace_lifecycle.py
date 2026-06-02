@@ -315,6 +315,13 @@ class WorkspaceLifecycleService:
         self.branch_controller.record_candidate_code(branch.branch_id, code_hash)
         return AppliedPatch(workspace=workspace, code_hash=code_hash, patch=patch)
 
+    def capture_branch_checkpoint(self, branch: Branch) -> bool:
+        """Capture the current retained branch workspace for prompt/rollback metadata."""
+        workspace = self.branch_workspaces.get(branch.branch_id)
+        if not workspace:
+            return False
+        return self._capture_branch_checkpoint(branch, workspace)
+
     def record_verification_pass(self, branch: Branch, code_hash: str) -> None:
         self.branch_controller.record_verification_pass(branch.branch_id, code_hash)
 
@@ -425,12 +432,21 @@ class WorkspaceLifecycleService:
         except Exception as exc:
             logger.debug("_sync_pool_registry failed (non-fatal): %s", exc)
 
-    def _capture_branch_checkpoint(self, branch: Branch, workspace: str) -> None:
+    def _capture_branch_checkpoint(self, branch: Branch, workspace: str) -> bool:
         if not _should_checkpoint_branch(branch):
-            return
+            return False
         src = Path(workspace)
         if not src.is_dir():
-            return
+            return False
+        patch = self.branch_patches.get(branch.branch_id)
+        existing = _matching_current_checkpoint(
+            self.branch_checkpoint_registry,
+            branch,
+            patch=patch,
+        )
+        if existing is not None:
+            self._sync_branch_checkpoint_metadata(branch)
+            return True
         checkpoint_id = str(uuid.uuid4())
         dest = Path(f"{workspace}.checkpoint.{checkpoint_id[:8]}")
         try:
@@ -443,12 +459,12 @@ class WorkspaceLifecycleService:
                 branch.branch_id,
                 exc,
             )
-            return
+            return False
         record = _checkpoint_record(
             branch,
             checkpoint_id=checkpoint_id,
             workspace_ref=str(dest),
-            patch=self.branch_patches.get(branch.branch_id),
+            patch=patch,
         )
         checkpoint = BranchWorkspaceCheckpoint(
             record=record,
@@ -468,10 +484,15 @@ class WorkspaceLifecycleService:
             branch_mechanism_ids=tuple(
                 getattr(branch, "branch_mechanism_ids", ()) or ()
             ),
-            patch=self.branch_patches.get(branch.branch_id),
+            patch=patch,
         )
         evicted = self.branch_checkpoint_registry.put(checkpoint)
-        lineage_id = record.lineage_id
+        self._sync_branch_checkpoint_metadata(branch)
+        self._cleanup_evicted_checkpoints(evicted)
+        return True
+
+    def _sync_branch_checkpoint_metadata(self, branch: Branch) -> None:
+        lineage_id = _branch_lineage_id(branch)
         best_quality = self.branch_checkpoint_registry.best_quality_checkpoint(
             lineage_id
         )
@@ -482,8 +503,9 @@ class WorkspaceLifecycleService:
         branch.last_valid_checkpoint_id = (
             last_valid.record.checkpoint_id if last_valid else None
         )
-        self.branch_checkpoints[branch.branch_id] = best_quality or checkpoint
-        self._cleanup_evicted_checkpoints(evicted)
+        selected = best_quality or last_valid
+        if selected is not None:
+            self.branch_checkpoints[branch.branch_id] = selected
 
     def _cleanup_evicted_checkpoints(
         self,
@@ -522,6 +544,27 @@ def _should_checkpoint_branch(branch: Branch) -> bool:
 
 def _branch_lineage_id(branch: Branch) -> str:
     return str(getattr(branch, "lineage_id", None) or branch.branch_id)
+
+
+def _matching_current_checkpoint(
+    registry: BranchCheckpointRegistry,
+    branch: Branch,
+    *,
+    patch: PatchProposal | None,
+) -> BranchWorkspaceCheckpoint | None:
+    current_hash = getattr(branch, "current_code_hash", None)
+    if not current_hash:
+        return None
+    patch_digest = _patch_digest(patch)
+    for checkpoint in registry.records_for_lineage(_branch_lineage_id(branch)):
+        if checkpoint.record.branch_id != branch.branch_id:
+            continue
+        if checkpoint.record.code_hash != current_hash:
+            continue
+        if checkpoint.record.patch_digest != patch_digest:
+            continue
+        return checkpoint
+    return None
 
 
 def _checkpoint_record(

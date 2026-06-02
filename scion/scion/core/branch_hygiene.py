@@ -245,15 +245,20 @@ def record_branch_lifecycle_policy_block(
     ) + 1
     reason = _branch_lifecycle_reason(detail)
     block = {
+        "diagnostic_kind": "branch_routing_diagnostic",
         "reason": reason,
         "detail": _bounded_detail(detail),
         "recorded_at": now.isoformat(),
         "block_count": block_count,
+        "failure_accounting": "not_run_validity_failure",
         "reroute_reason": BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
         "next_selection": (
             "clean_branch_or_clean_fork_unless_same_mechanism_followup_forced"
         ),
     }
+    if "new_mechanism_requires_clean_fork" in str(detail or "").lower():
+        block["candidate_routing"] = "new_mechanism_requires_clean_fork_signal"
+        block["clean_fork_signal"] = True
     branch.branch_lifecycle_policy_blocks = block_count
     branch.branch_lifecycle_new_mechanism_ineligible = True
     branch.branch_lifecycle_reroute_reason = (

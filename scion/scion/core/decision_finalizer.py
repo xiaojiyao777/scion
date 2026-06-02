@@ -116,6 +116,7 @@ class DecisionFinalizer:
     persist_branch_state: Callable[[str], None]
     reset_recent_abandoned_count: Callable[[], None]
     restore_branch_checkpoint: Callable[..., bool] | None = None
+    capture_branch_checkpoint: Callable[[Branch], bool] | None = None
 
     def apply(
         self,
@@ -470,6 +471,15 @@ class DecisionFinalizer:
                 f"{(hypothesis.hypothesis_text or '')[:100]}"
             )
             logger.debug("Branch %s: direction set to %r", bid, branch.direction)
+        if preserve_workspace and self.capture_branch_checkpoint is not None:
+            try:
+                self.capture_branch_checkpoint(branch)
+            except Exception as exc:  # pragma: no cover - checkpoint audit best effort
+                logger.debug(
+                    "Branch %s: retained checkpoint capture failed: %s",
+                    bid,
+                    exc,
+                )
 
         if has_positive_signal:
             self.branch_zero_win_streaks[bid] = 0

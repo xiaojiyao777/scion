@@ -4,7 +4,13 @@ import threading
 from pathlib import Path
 
 from scion.core.branch import BranchController
-from scion.core.models import ChampionState, HypothesisProposal, OperatorConfig, PatchProposal
+from scion.core.branch_hygiene import branch_hygiene_guidance
+from scion.core.models import (
+    ChampionState,
+    HypothesisProposal,
+    OperatorConfig,
+    PatchProposal,
+)
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 
 
@@ -254,6 +260,58 @@ def test_last_valid_checkpoint_is_recorded_for_verified_branch(
     assert records[0].record.screening_tier == "last_valid"
     assert records[0].record.code_hash == "valid-hash"
     assert branch.last_valid_checkpoint_id == records[0].record.checkpoint_id
+
+
+def test_retained_checkpoint_capture_updates_branch_prompt_metadata_immediately(
+    tmp_path: Path,
+) -> None:
+    service, branch, ctrl, _, workspaces, patches = _service(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "operators").mkdir()
+    (workspace / "operators" / "existing.py").write_text(
+        "# weak-positive head\n",
+        encoding="utf-8",
+    )
+    workspaces[branch.branch_id] = str(workspace)
+    ctrl.record_candidate_code(branch.branch_id, "weak-positive-hash")
+    ctrl.record_verification_pass(branch.branch_id, "weak-positive-hash")
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.last_telemetry_outcome = "case_level_positive_signal"
+    branch.branch_mechanism_ids = ("bounded_probe",)
+    patches[branch.branch_id] = PatchProposal(
+        file_path="operators/existing.py",
+        action="modify",
+        code_content="# weak-positive head\n",
+    )
+
+    captured = service.capture_branch_checkpoint(branch)
+    records = service.branch_checkpoint_registry.records_for_lineage(
+        branch.lineage_id or branch.branch_id
+    )
+    rendered = branch_hygiene_guidance(branch)
+
+    assert captured is True
+    assert len(records) == 1
+    checkpoint_id = records[0].record.checkpoint_id
+    assert branch.best_quality_checkpoint_id == checkpoint_id
+    assert branch.last_valid_checkpoint_id == checkpoint_id
+    assert "best_checkpoint_status=best_quality_retained" in rendered
+    assert f"best_quality_checkpoint_id={checkpoint_id}" in rendered
+    assert f"last_valid_checkpoint_id={checkpoint_id}" in rendered
+    assert "best_quality_checkpoint_id=none" not in rendered
+
+    captured_again = service.capture_branch_checkpoint(branch)
+    records_after_second_capture = (
+        service.branch_checkpoint_registry.records_for_lineage(
+            branch.lineage_id or branch.branch_id
+        )
+    )
+
+    assert captured_again is True
+    assert len(records_after_second_capture) == 1
+    assert records_after_second_capture[0].record.checkpoint_id == checkpoint_id
 
 
 def test_checkpoint_registry_keeps_bounded_best_quality_and_last_valid(

@@ -182,6 +182,23 @@ def test_lifecycle_blocked_research_branches_do_not_create_clean_fork_at_capacit
     assert action.slot == "capacity_blocked"
 
 
+def test_lifecycle_blocked_research_branch_under_capacity_creates_clean_fork():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: established"
+    branch.branch_code_status = "active_no_effect"
+    branch.branch_lifecycle_new_mechanism_ineligible = True
+    branch.branch_lifecycle_reroute_reason = (
+        "clean_fork_after_branch_lifecycle_policy_block"
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "clean_fork_after_branch_lifecycle_policy_block"
+    assert action.slot == "repair_diagnostic"
+
+
 def test_no_effect_without_actionable_diagnostic_does_not_bypass_hard_cap():
     branch = _branch(BranchState.EXPLORE)
     branch.branch_code_status = "active_no_effect"

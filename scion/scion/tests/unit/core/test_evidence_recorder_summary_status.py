@@ -1331,6 +1331,84 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
 
 
+def test_branch_lifecycle_routing_diagnostic_does_not_enter_run_validity(
+    tmp_path: Path,
+) -> None:
+    detail = (
+        "branch_lifecycle_policy_violation: "
+        "new_mechanism_requires_clean_fork; "
+        "protected_mechanism_ids=bounded_probe; "
+        "proposed_mechanism_ids=different_probe"
+    )
+    lifecycle_step = replace(
+        _step("/tmp/metrics-lifecycle.json"),
+        round_num=2,
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal",
+        failure_detail=detail,
+        counts_toward_max_rounds=False,
+        attempt_kind="branch_lifecycle_policy",
+        repair_policy_reason=detail,
+        repair_mechanism_ids=("bounded_probe",),
+        proposal_session_ref={
+            "session_id": "branch-routing-session",
+            "primary_failure": {
+                "stage": "self_check",
+                "reason": "schema_or_target_preview_failed",
+                "category": "contract_boundary_failure",
+                "code": "same_mechanism_only_violation",
+                "detail": detail,
+            },
+            "failure_category": "contract_boundary_failure",
+            "failure_code": "same_mechanism_only_violation",
+        },
+    )
+    counted_step = replace(_step("/tmp/metrics-counted.json"), round_num=3)
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "n_experiments": 1,
+            "screened_experiments": 1,
+        },
+    )
+
+    status = recorder.write_status(
+        stopped_reason="max_rounds_exhausted",
+        loop_status={
+            "requested_rounds": 1,
+            "total_rounds": 2,
+            "proposal_attempts": 1,
+            "proposal_attempts_consumed": 1,
+            "effective_rounds_completed": 1,
+            "branch_lifecycle_policy_blocks": 1,
+            "non_counted_lifecycle_steps": 1,
+            "failure_categories": {},
+            "infra_failure_attempts": 0,
+            "noninfra_failure_attempts": 0,
+        },
+    )
+    summary = recorder.write_campaign_summary(
+        step_history=[lifecycle_step, counted_step],
+        round_num=3,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    assert status["run_validity"]["failure_categories"] == {}
+    assert status["run_validity"]["noninfra_failure_attempts"] == 0
+    assert summary["failure_categories"] == {}
+    assert summary["run_validity"]["failure_categories"] == {}
+    assert summary["run_validity"]["noninfra_failure_attempts"] == 0
+    assert summary["branch_lifecycle_policy_blocks"] == 1
+    assert summary["counted_experiment_steps"] == 1
+
+
 def test_status_and_summary_expose_proposal_accounting_fields(
     tmp_path: Path,
 ) -> None:

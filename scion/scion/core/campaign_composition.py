@@ -363,6 +363,9 @@ def compose_campaign_services(
         restore_branch_checkpoint=lambda branch: _workspace_service_for(
             owner
         ).restore_branch_checkpoint(branch),
+        capture_branch_checkpoint=lambda branch: _workspace_service_for(
+            owner
+        ).capture_branch_checkpoint(branch),
     )
     owner._evaluation_orchestrator = EvaluationOrchestrator(
         branch_controller=owner._branch_ctrl,

@@ -475,6 +475,10 @@ def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
     campaign_payload = campaign_branch_lifecycle_reroute_status([branch])
 
     assert block["reason"] == "new_mechanism_requires_clean_fork"
+    assert block["diagnostic_kind"] == "branch_routing_diagnostic"
+    assert block["failure_accounting"] == "not_run_validity_failure"
+    assert block["candidate_routing"] == "new_mechanism_requires_clean_fork_signal"
+    assert block["clean_fork_signal"] is True
     assert payload["branch_lifecycle_policy_blocks"] == 1
     assert payload["branch_lifecycle_new_mechanism_ineligible"] is True
     assert payload["branch_lifecycle_reroute_reason"] == (

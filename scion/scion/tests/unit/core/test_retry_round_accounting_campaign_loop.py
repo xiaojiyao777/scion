@@ -799,6 +799,12 @@ def test_campaign_loop_branch_lifecycle_policy_block_does_not_consume_proposal_a
             counts_toward_max_rounds=False,
             attempt_kind="branch_lifecycle_policy",
             repair_mechanism_ids=("bounded_probe",),
+            failure_stage="proposal",
+            failure_detail=(
+                "branch_lifecycle_policy_violation: "
+                "new_mechanism_requires_clean_fork"
+            ),
+            failure_category="contract_boundary_failure",
         ),
         StepResult(action="explore", branch_id="b2", reason="screening 1"),
     ]
@@ -849,6 +855,8 @@ def test_campaign_loop_branch_lifecycle_policy_block_does_not_consume_proposal_a
     assert loop_statuses[-1]["reconcile_lifecycle_steps"] == 0
     assert loop_statuses[-1]["non_counted_lifecycle_steps"] == 1
     assert loop_statuses[-1]["quality_blocks"] == 0
+    assert loop_statuses[-1]["failure_categories"] == {}
+    assert loop_statuses[-1]["noninfra_failure_attempts"] == 0
 
 
 def test_campaign_loop_reconcile_lifecycle_step_does_not_count_effective_round() -> None:

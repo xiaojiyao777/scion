@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
+
 RUN_VALIDITY_VALID = "valid"
 RUN_VALIDITY_VALID_BUT_INCOMPLETE = "valid_but_incomplete"
 RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED = "valid_partial_interrupted"
@@ -65,6 +67,12 @@ def failure_category_for_run_validity(
     session_ref: Mapping[str, Any] | None = None,
 ) -> str:
     """Return a coarse failure category suitable for run-validity accounting."""
+    if _is_branch_lifecycle_routing_diagnostic(
+        detail=detail,
+        failure_stage=failure_stage,
+        session_ref=session_ref,
+    ):
+        return ""
     explicit_category = _first_text(
         category,
         _nested(session_ref, "primary_failure", "category"),
@@ -110,6 +118,8 @@ def step_failure_categories(
             failure_stage=getattr(step, "failure_stage", None),
             session_ref=getattr(step, "proposal_session_ref", None),
         )
+        if not category:
+            continue
         counts[category] = counts.get(category, 0) + 1
     return counts
 
@@ -282,6 +292,29 @@ def _nested(mapping: Mapping[str, Any] | None, *keys: str) -> Any:
             return None
         current = current.get(key)
     return current
+
+
+def _is_branch_lifecycle_routing_diagnostic(
+    *,
+    detail: Any = None,
+    failure_stage: Any = None,
+    session_ref: Mapping[str, Any] | None = None,
+) -> bool:
+    if is_branch_lifecycle_policy_block_detail(detail):
+        return True
+    combined = " ".join(
+        part
+        for part in (
+            str(failure_stage or ""),
+            str(_nested(session_ref, "primary_failure", "reason") or ""),
+            str(_nested(session_ref, "primary_failure", "detail") or ""),
+            str(_nested(session_ref, "primary_failure", "code") or ""),
+            str(_nested(session_ref, "failure_code") or ""),
+            str(_nested(session_ref, "termination_reason") or ""),
+        )
+        if part
+    )
+    return is_branch_lifecycle_policy_block_detail(combined)
 
 
 def _coerce_int(value: Any, *, default: int) -> int:
