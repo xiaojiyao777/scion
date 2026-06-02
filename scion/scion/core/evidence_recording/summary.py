@@ -816,7 +816,9 @@ def _branch_history_cards(steps: Iterable[StepRecord], active_cards: Iterable[Ma
     for branch_id, branch_steps in grouped.items():
         latest, card = branch_steps[-1], dict(cards_by_branch.get(branch_id, {}))
         reason_codes, evidence = _step_reason_codes(latest), _step_generic_evidence(latest)
-        status = _step_status(latest)
+        status = _history_card_status(card, _step_status(latest))
+        gate_observation_reason_codes = _step_gate_observation_reason_codes(latest)
+        lifecycle_action_reason_codes = _step_lifecycle_action_reason_codes(latest)
         retained = bool(card.get("best_quality_checkpoint_id") or card.get("last_valid_checkpoint_id"))
         card.update({
             "branch_id": branch_id,
@@ -841,6 +843,10 @@ def _branch_history_cards(steps: Iterable[StepRecord], active_cards: Iterable[Ma
             or _step_phase_activation_summary(latest),
             "runtime_evidence_confidence": card.get("runtime_evidence_confidence")
             or _step_runtime_evidence_confidence(latest),
+            "gate_observation_reason_codes": card.get("gate_observation_reason_codes")
+            or gate_observation_reason_codes,
+            "lifecycle_action_reason_codes": card.get("lifecycle_action_reason_codes")
+            or lifecycle_action_reason_codes,
             "why_not_promoted_reason_codes": card.get("why_not_promoted_reason_codes") or reason_codes,
             "why_abandoned_reason_codes": card.get("why_abandoned_reason_codes") or (reason_codes if status == "abandoned" else []),
         })
@@ -879,6 +885,23 @@ def _step_reason_codes(step: StepRecord) -> list[str]:
     if detail:
         codes.append(detail.split(":", 1)[0].split()[0])
     return list(dict.fromkeys(str(code) for code in codes if str(code)))
+
+def _step_gate_observation_reason_codes(step: StepRecord) -> list[str]:
+    groups = _step_reason_code_groups(step)
+    return list(groups.gate_observation_reason_codes)
+
+def _step_lifecycle_action_reason_codes(step: StepRecord) -> list[str]:
+    groups = _step_reason_code_groups(step)
+    return list(groups.lifecycle_action_reason_codes)
+
+def _step_reason_code_groups(step: StepRecord):
+    protocol_reason_codes: Iterable[str] = ()
+    if step.protocol_result is not None:
+        protocol_reason_codes = step.protocol_result.reason_codes
+    return classify_reason_codes(
+        _step_reason_codes(step),
+        protocol_reason_codes=protocol_reason_codes,
+    )
 
 def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
     pr = step.protocol_result
@@ -1037,6 +1060,19 @@ def _median(values: list[float]) -> float:
 def _step_status(step: StepRecord) -> str:
     decision = step.decision.value if getattr(step.decision, "value", None) else None
     return "abandoned" if decision == "abandon" else str(step.failure_stage or decision or "screened")
+
+def _history_card_status(card: Mapping[str, Any], step_status: str) -> str:
+    card_status = str(card.get("status") or "").strip()
+    current_head_status = str(card.get("current_head_status") or "").strip()
+    branch_code_status = str(card.get("branch_code_status") or "").strip()
+    active_slot_status = str(card.get("active_slot_status") or "").strip()
+    terminal_statuses = {"abandoned", "archived", "parked_lineage", "promoted"}
+    for status in (card_status, current_head_status, branch_code_status, active_slot_status):
+        if status in terminal_statuses:
+            return status
+    if step_status == "abandoned":
+        return step_status
+    return card_status or step_status
 
 def _runtime_budget_diagnostic(protocol_result: Any) -> dict[str, Any] | None:
     surface_summary = getattr(protocol_result, "candidate_surface_runtime_summary", None)

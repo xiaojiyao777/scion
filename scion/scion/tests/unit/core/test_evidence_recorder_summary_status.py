@@ -643,6 +643,12 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
         "BRANCH_LIFECYCLE_PARK_LINEAGE",
         "SCREENING_REGRESSION",
     ]
+    assert abandoned_card["gate_observation_reason_codes"] == [
+        "SCREENING_REGRESSION"
+    ]
+    assert abandoned_card["lifecycle_action_reason_codes"] == [
+        "BRANCH_LIFECYCLE_PARK_LINEAGE"
+    ]
     assert summary["checkpoint_inventory"]["lineage-active"][
         "best_quality_checkpoint_id"
     ] == "checkpoint-best"
@@ -666,7 +672,10 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
     parked_protocol = replace(
         _protocol_result("/tmp/parked-metrics.json"),
         gate_outcome="fail",
-        reason_codes=("SCREENING_SOFT_ABANDON_NON_POSITIVE_CI",),
+        reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            "SCREENING_SOFT_ABANDON_NON_POSITIVE_CI",
+        ),
     )
     abandoned_protocol = replace(
         _protocol_result("/tmp/abandoned-metrics.json"),
@@ -707,6 +716,8 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
         {
             "branch_id": "parked-branch",
             "status": "parked_lineage",
+            "branch_code_status": "parked_lineage",
+            "current_head_status": "parked_lineage",
             "branch_card_text": stale_text.format(branch_id="parked-branch"),
         },
         {
@@ -743,6 +754,15 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
         "SCREENING_FAIL_WIN_RATE",
         "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
         "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    ]
+    assert history["parked-branch"]["status"] == "parked_lineage"
+    assert history["parked-branch"]["current_head_status"] == "parked_lineage"
+    assert history["parked-branch"]["gate_observation_reason_codes"] == [
+        "SCREENING_FAIL_WIN_RATE"
+    ]
+    assert history["parked-branch"]["lifecycle_action_reason_codes"] == [
+        "BRANCH_LIFECYCLE_PARK_LINEAGE",
+        "SCREENING_SOFT_ABANDON_NON_POSITIVE_CI",
     ]
     assert "why_not_promoted_reason_codes=SCREENING_FAIL_WIN_RATE" in active_text
     assert "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in active_text
