@@ -63,6 +63,82 @@ def _stagnation_object_model_markers(adapter: Any | None) -> tuple[str, ...]:
     return tuple(str(marker) for marker in markers if str(marker or "").strip())
 
 
+def _seed_external_mechanism_references(
+    search_memory: CampaignSearchMemory,
+    *,
+    problem_spec: Any,
+    adapter: Any | None,
+) -> None:
+    for owner in (adapter, problem_spec):
+        for entry in _external_mechanism_reference_entries(owner):
+            if not isinstance(entry, dict):
+                continue
+            search_memory.record_external_mechanism_reference(
+                source_ref=entry.get("source_ref", ""),
+                mechanism_label=entry.get("mechanism_label", ""),
+                surface=entry.get("surface", ""),
+                target_file=entry.get("target_file", ""),
+                evidence_scope=entry.get("evidence_scope", "external_control"),
+                positive_signals=_entry_string_list(entry.get("positive_signals")),
+                negative_boundaries=_entry_string_list(
+                    entry.get("negative_boundaries")
+                ),
+                required_observations=_entry_string_list(
+                    entry.get("required_observations")
+                ),
+                suggested_actions=_entry_string_list(entry.get("suggested_actions")),
+                confidence=entry.get("confidence", ""),
+                note=entry.get("note", ""),
+            )
+
+
+def _external_mechanism_reference_entries(owner: Any | None) -> tuple[dict, ...]:
+    if owner is None:
+        return ()
+    refs = _call_or_value(getattr(owner, "external_mechanism_references", None))
+    if refs:
+        return _normalize_reference_entries(refs)
+    provider = _call_or_value(
+        getattr(owner, "external_mechanism_reference_provider", None)
+    )
+    for attr in ("external_mechanism_references", "references", "entries"):
+        refs = _call_or_value(getattr(provider, attr, None))
+        if refs:
+            return _normalize_reference_entries(refs)
+    return ()
+
+
+def _call_or_value(value: Any) -> Any:
+    if callable(value):
+        try:
+            return value()
+        except TypeError:
+            return None
+    return value
+
+
+def _normalize_reference_entries(value: Any) -> tuple[dict, ...]:
+    if isinstance(value, dict):
+        raw_entries = value.get("references") or value.get("entries") or ()
+    else:
+        raw_entries = value
+    if not isinstance(raw_entries, (list, tuple)):
+        return ()
+    entries: list[dict] = []
+    for item in raw_entries:
+        if isinstance(item, dict):
+            entries.append(dict(item))
+    return tuple(entries)
+
+
+def _entry_string_list(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value.strip() else ()
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(str(item) for item in value if str(item or "").strip())
+
+
 def _mark_balance_exhausted(owner: Any) -> None:
     owner._balance_exhausted = True
     if not getattr(owner, "_external_stop_requested", False):
@@ -246,6 +322,11 @@ def compose_campaign_services(
     owner._circuit_breaker = CircuitBreaker()
     owner._balance_exhausted = False
     owner._search_memory = CampaignSearchMemory(family_taxonomy=family_taxonomy)
+    _seed_external_mechanism_references(
+        owner._search_memory,
+        problem_spec=problem_spec,
+        adapter=adapter,
+    )
     owner._research_log = CampaignResearchLog(str(campaign_dir))
     owner._saturation_analyzer = None
     owner._baseline_metrics = None
