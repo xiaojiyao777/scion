@@ -11,7 +11,12 @@ from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
 )
 from scion.core.models import Branch, BranchState, ChampionState
-from scion.core.scheduler import Scheduler, SchedulerAction, active_slot_inventory
+from scion.core.scheduler import (
+    ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH,
+    Scheduler,
+    SchedulerAction,
+    active_slot_inventory,
+)
 from scion.core.step_result import StepResult
 
 
@@ -220,6 +225,11 @@ def test_clean_fork_reclaims_low_value_slot_before_create_new() -> None:
     assert inventory["parked_lineage_ids"] == [stale_low_signal.branch_id]
     assert len(controller.get_reportable_branches()) == 2
     assert saved[0] == (stale_low_signal.branch_id, BranchState.PARKED_LINEAGE)
+    lifecycle_codes = stale_low_signal.last_branch_lifecycle_policy_block[
+        "lifecycle_action_reason_codes"
+    ]
+    assert lifecycle_codes == [BRANCH_LIFECYCLE_PARK_LINEAGE]
+    assert ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH not in lifecycle_codes
     assert result.scheduler_audit_metadata["active_slot_reconciliation"][
         "mode"
     ] == "new_branch_reclaim"

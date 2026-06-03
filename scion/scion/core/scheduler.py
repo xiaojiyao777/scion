@@ -15,6 +15,7 @@ from scion.core.branch_hygiene import (
     branch_requires_repair_focus,
     branch_requires_same_mechanism_followup,
 )
+from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
 
 
@@ -535,8 +536,8 @@ def _park_active_slot_branch(
         + 1
     )
     lifecycle_codes = list(existing.get("lifecycle_action_reason_codes") or ())
-    if reason not in lifecycle_codes:
-        lifecycle_codes.append(reason)
+    if BRANCH_LIFECYCLE_PARK_LINEAGE not in lifecycle_codes:
+        lifecycle_codes.append(BRANCH_LIFECYCLE_PARK_LINEAGE)
     existing.update(
         {
             "reason": reason,
