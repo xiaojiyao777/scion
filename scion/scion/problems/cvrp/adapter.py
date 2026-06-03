@@ -88,6 +88,13 @@ class CvrpAdapter:
 
         return CvrpActiveSolverMapProvider()
 
+    def external_mechanism_reference_provider(self) -> Any:
+        from scion.problems.cvrp.external_references import (
+            CvrpExternalMechanismReferenceProvider,
+        )
+
+        return CvrpExternalMechanismReferenceProvider()
+
     def solver_design_smoke_provider(self) -> Any:
         from scion.problems.cvrp.solver_design_provider import (
             CvrpSolverDesignProvider,
