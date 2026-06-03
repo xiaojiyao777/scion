@@ -47,7 +47,8 @@ The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces 
 - instance loading: `load_instance(instance_path)`;
 - solver output normalization: `deserialize_solver_output(raw_output, instance) -> SolverArtifact`;
 - verification: `check_solution_consistency()`, `check_feasibility()`, `recompute_objective()`;
-- optional lower-bound estimates for saturation analysis.
+- optional lower-bound estimates for saturation analysis;
+- optional external mechanism reference providers for tainted proposal guidance.
 
 `SolverArtifact` carries raw output, objective mapping, feasible boolean, and optional problem-native normalized solution. Core should treat normalized solution as opaque.
 
@@ -56,6 +57,13 @@ The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces 
 `ContextManager` and APS `context.read_problem` consume optional
 `render_problem_object()` when present. This is still adapter-owned prompt
 context; core does not interpret the problem semantics inside that text.
+
+Adapters or problem specs may also expose `external_mechanism_references` or
+`external_mechanism_reference_provider()`. Campaign construction copies those
+problem-owned records into `CampaignSearchMemory` as opaque strings for
+hypothesis generation only. CVRP/VRP facts in those records stay in the problem
+package; promotion, abandonment, verification, and decision features do not
+consume them.
 
 Problem-owned preview hooks may validate surface-specific contracts before
 candidate code reaches runtime, while still staying behind the adapter
