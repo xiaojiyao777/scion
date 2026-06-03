@@ -165,10 +165,29 @@ def test_branch_followup_policy_receipt_is_in_hypothesis_prompt() -> None:
 
     assert "## Branch Follow-up Policy" in rendered_prompt
     assert "excluded_from_decision_features" in rendered_prompt
+    assert "weak_positive_followups_are_allowed_as_bounded_research_probes" in rendered_prompt
+    assert "what evidence would justify another same-branch follow-up" in rendered_prompt
     assert "alpha_refinement" in rendered_prompt
     assert "policies/helpers/alpha_helper.py" in rendered_prompt
     assert "## Experiment History" not in user_prompt
     assert branch_created_files(branch, steps) == ("policies/helpers/alpha_helper.py",)
+
+
+def test_branch_followup_policy_keeps_followup_allowed_but_process_grounded() -> None:
+    policy = build_branch_followup_policy(_weak_branch(), [_prior_step()])
+
+    guidance = policy["research_process_guidance"]
+
+    assert guidance["not_a_hard_stop"] is True
+    assert (
+        guidance["principle"]
+        == "weak_positive_followups_are_allowed_as_bounded_research_probes"
+    )
+    assert "loss_guard_or_no_op_condition" in guidance["followup_should_change_at_least_one"]
+    assert "refine_prior_mechanism_ids" in policy["allowed_continuations"]
+    assert "adjust_trigger_schedule_composition_budget_allocation_or_activation" in (
+        policy["allowed_continuations"]
+    )
 
 
 def test_branch_current_file_sources_replay_latest_same_branch_patch_content() -> None:

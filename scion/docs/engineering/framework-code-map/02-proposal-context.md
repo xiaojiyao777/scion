@@ -370,7 +370,7 @@ campaign for diagnostic and forced surface smoke runs.
 
 ## Search Memory and Taxonomy
 
-`CampaignSearchMemory` is updated from every `StepRecord` by `EvidenceRecorder.record_step()`. It tracks family attempts, best screening win rate, exhausted families, promising families, coverage counts, recent hypothesis texts, and champion evolution. It can also be seeded at campaign construction with adapter/problem-owned external mechanism references. Those references are rendered only as tainted proposal guidance in the hypothesis context; they are not `DecisionFeatures`, do not relax gates, and generic core treats their contents as opaque strings.
+`CampaignSearchMemory` is updated from every `StepRecord` by `EvidenceRecorder.record_step()`. It tracks family attempts, best screening win rate, exhausted families, promising families, coverage counts, recent hypothesis texts, and champion evolution. Branch-local follow-up policy is a separate generic proposal guidance block: weak-positive follow-ups remain allowed, but the prompt requires a research-process plan for preserving prior signal, testing losses/tie patterns or missing effect, and deciding when another same-branch follow-up versus a clean branch is justified. This guidance is not `DecisionFeatures` and does not relax gates.
 
 Family labels are problem-taxonomy aware. `HypothesisFamilyClassifier` accepts `ProblemSpecV1.family_taxonomy` and falls back to keyword classification when LLM classification fails. The framework default taxonomy is intentionally domain-neutral; problem packages provide meaningful families and aliases.
 

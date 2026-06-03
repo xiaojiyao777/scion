@@ -130,6 +130,29 @@ def build_branch_followup_policy(
                 "use_branch_created_helpers",
                 "adjust_trigger_schedule_composition_budget_allocation_or_activation",
             ],
+            "research_process_guidance": {
+                "principle": (
+                    "weak_positive_followups_are_allowed_as_bounded_research_probes"
+                ),
+                "not_a_hard_stop": True,
+                "followup_should_change_at_least_one": [
+                    "trigger_or_activation_condition",
+                    "budget_or_schedule",
+                    "composition_or_integration_point",
+                    "observability_or_expected_telemetry",
+                    "loss_guard_or_no_op_condition",
+                ],
+                "must_state": [
+                    "which_prior_signal_or_checkpoint_is_preserved",
+                    "which prior loss, tie pattern, or missing effect is being tested",
+                    "what evidence would justify another same-branch follow-up",
+                    "what evidence would justify switching to a clean branch",
+                ],
+                "do_not": [
+                    "repeat_the_same_mechanism_without_a_new_evidence_plan",
+                    "treat_preview_or_tool_observations_as_promotion_evidence",
+                ],
+            },
             "bridge_required_when": [
                 "changing_target_file",
                 "adding_or_renaming_mechanism_family",

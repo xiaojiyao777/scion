@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from scion.core.models import StepRecord, HypothesisProposal
 from scion.proposal.mechanism_labels import extract_mechanism_label
-from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.screening_feedback import (
     ScreeningFeedbackSummary,
     screening_feedback_summary,
@@ -129,24 +128,6 @@ class BranchMechanismMemoryEntry:
 
 
 @dataclass
-class ExternalMechanismReferenceEntry:
-    """Problem-bound external reference rendered only as proposal guidance."""
-
-    source_ref: str
-    mechanism_label: str
-    surface: str = ""
-    target_file: str = ""
-    evidence_scope: str = "external_control"
-    positive_signals: tuple[str, ...] = ()
-    negative_boundaries: tuple[str, ...] = ()
-    required_observations: tuple[str, ...] = ()
-    suggested_actions: tuple[str, ...] = ()
-    confidence: str = ""
-    note: str = ""
-    reference_digest: str = ""
-
-
-@dataclass
 class CampaignSearchMemory:
     """Cross-branch search memory for the entire campaign.
 
@@ -160,9 +141,6 @@ class CampaignSearchMemory:
     agentic_grounding_blocks: List[str] = field(default_factory=list)
     branch_mechanism_memory: Dict[str, List[BranchMechanismMemoryEntry]] = field(
         default_factory=dict
-    )
-    external_mechanism_references: List[ExternalMechanismReferenceEntry] = field(
-        default_factory=list
     )
     family_taxonomy: Any = None
 
@@ -294,56 +272,6 @@ class CampaignSearchMemory:
         """Record a champion promotion event in evolution history."""
         self.champion_evolution.append(description)
 
-    def record_external_mechanism_reference(
-        self,
-        *,
-        source_ref: str,
-        mechanism_label: str,
-        surface: str = "",
-        target_file: str = "",
-        evidence_scope: str = "external_control",
-        positive_signals: tuple[str, ...] | list[str] = (),
-        negative_boundaries: tuple[str, ...] | list[str] = (),
-        required_observations: tuple[str, ...] | list[str] = (),
-        suggested_actions: tuple[str, ...] | list[str] = (),
-        confidence: str = "",
-        note: str = "",
-    ) -> None:
-        """Record an external mechanism-level reference for proposal context.
-
-        External references are tainted guidance. They can steer hypothesis
-        generation toward mechanisms or observability gaps found outside the
-        current Scion loop, but they are not DecisionFeatures and never change
-        promotion or abandonment decisions.
-        """
-        label = _clean_text(mechanism_label)
-        ref = _clean_text(source_ref)
-        if not label or not ref:
-            return
-        payload = {
-            "source_ref": ref,
-            "mechanism_label": label,
-            "surface": _clean_text(surface),
-            "target_file": _clean_text(target_file),
-            "evidence_scope": _clean_text(evidence_scope) or "external_control",
-            "positive_signals": _clean_text_tuple(positive_signals, limit=6),
-            "negative_boundaries": _clean_text_tuple(negative_boundaries, limit=6),
-            "required_observations": _clean_text_tuple(required_observations, limit=6),
-            "suggested_actions": _clean_text_tuple(suggested_actions, limit=6),
-            "confidence": _clean_text(confidence),
-            "note": _clean_text(note),
-        }
-        self.external_mechanism_references.append(
-            ExternalMechanismReferenceEntry(
-                **payload,
-                reference_digest=stable_digest(payload, length=12),
-            )
-        )
-        if len(self.external_mechanism_references) > 12:
-            self.external_mechanism_references = (
-                self.external_mechanism_references[-12:]
-            )
-
     # ---------------------------------------------------------------
     # Semantic loop detection
     # ---------------------------------------------------------------
@@ -456,10 +384,6 @@ class CampaignSearchMemory:
         mechanism_memory = self._render_branch_mechanism_memory(branch_id=branch_id)
         if mechanism_memory:
             sections.append(mechanism_memory)
-
-        external_references = self._render_external_mechanism_references()
-        if external_references:
-            sections.append(external_references)
 
         # Loop detection (before AVOID)
         loop_warning = self._detect_hypothesis_loop()
@@ -603,39 +527,6 @@ class CampaignSearchMemory:
         entries.sort(key=lambda item: item.round_num)
         return entries
 
-    def _render_external_mechanism_references(self) -> str:
-        if not self.external_mechanism_references:
-            return ""
-        lines = [
-            "### External Mechanism References (tainted proposal guidance)",
-            (
-                "These external-control references are mechanism-level guidance "
-                "for hypothesis generation only. Translate them through declared "
-                "problem surfaces, adapter-owned facts, and provider telemetry; "
-                "they are not Decision input and do not relax gates."
-            ),
-        ]
-        for entry in self.external_mechanism_references[-6:]:
-            line = (
-                f"- ref={entry.source_ref}; digest={entry.reference_digest}; "
-                f"scope={entry.evidence_scope}; "
-                f"mechanism={entry.mechanism_label}; "
-                f"surface={entry.surface or 'n/a'}; "
-                f"target={entry.target_file or 'n/a'}; "
-                f"positive_signals={_format_text_tuple(entry.positive_signals)}; "
-                f"negative_boundaries="
-                f"{_format_text_tuple(entry.negative_boundaries)}; "
-                f"required_observations="
-                f"{_format_text_tuple(entry.required_observations)}; "
-                f"suggested_actions={_format_text_tuple(entry.suggested_actions)}"
-            )
-            if entry.confidence:
-                line += f"; confidence={entry.confidence}"
-            if entry.note:
-                line += f"; note={entry.note[:200]}"
-            lines.append(line)
-        return "\n".join(lines)
-
     def estimate_tokens(self, level: Literal["full", "compact", "minimal"] = "full") -> int:
         """Estimate token count for different compression levels."""
         if level == "minimal":
@@ -751,20 +642,3 @@ def _clean_text(value: Any, *, max_chars: int = 240) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max(0, max_chars - 3)].rstrip() + "..."
-
-
-def _clean_text_tuple(
-    values: tuple[str, ...] | list[str],
-    *,
-    limit: int,
-) -> tuple[str, ...]:
-    cleaned = []
-    for value in values or ():
-        text = _clean_text(value)
-        if text:
-            cleaned.append(text)
-    return tuple(dict.fromkeys(cleaned[:limit]))
-
-
-def _format_text_tuple(values: tuple[str, ...]) -> str:
-    return ",".join(values) if values else "none"

@@ -258,65 +258,6 @@ class TestSearchMemoryUpdate:
         assert "cost_reduction" not in rendered
         assert "NEW_FAMILY/create_new/route_pair" in sm.families
 
-
-class TestExternalMechanismReferences:
-    def test_external_mechanism_reference_renders_as_tainted_guidance(self):
-        sm = CampaignSearchMemory()
-
-        sm.record_external_mechanism_reference(
-            source_ref="external-control:round10",
-            mechanism_label="phase_budgeted_portfolio",
-            surface="solver_design",
-            target_file="policies/search_phase.py",
-            positive_signals=(
-                "broad safety validation improved common rows",
-                "phase-level budget change preserved feasibility",
-            ),
-            negative_boundaries=(
-                "do not turn advisory metadata into hard constraints",
-                "quick screen alone missed unsafe variants",
-            ),
-            required_observations=(
-                "phase_time",
-                "variant_selected",
-                "common_row_improved_worsened",
-            ),
-            suggested_actions=(
-                "translate into adapter-owned telemetry",
-                "validate broad safety before promotion",
-            ),
-            confidence="external_control_broad",
-        )
-
-        rendered = sm.render(view="hypothesis")
-
-        assert "External Mechanism References" in rendered
-        assert "tainted proposal guidance" in rendered
-        assert "not Decision input" in rendered
-        assert "phase_budgeted_portfolio" in rendered
-        assert "adapter-owned telemetry" in rendered
-        assert "phase_time" in rendered
-        assert "common_row_improved_worsened" in rendered
-        assert "Champion 演化" not in rendered
-
-    def test_external_mechanism_references_keep_recent_entries_bounded(self):
-        sm = CampaignSearchMemory()
-
-        for index in range(14):
-            sm.record_external_mechanism_reference(
-                source_ref=f"external-control:round{index}",
-                mechanism_label=f"mechanism_{index}",
-            )
-
-        rendered = sm.render(view="hypothesis")
-
-        assert len(sm.external_mechanism_references) == 12
-        assert sm.external_mechanism_references[0].mechanism_label == "mechanism_2"
-        assert "mechanism=mechanism_7;" not in rendered
-        assert "mechanism=mechanism_8;" in rendered
-        assert "mechanism=mechanism_13;" in rendered
-
-
 class TestSearchMemoryRender:
     def test_render_empty(self):
         sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
