@@ -502,6 +502,20 @@ def test_agentic_session_index_refs_smoke_and_code_retry_failure_artifacts(
     assert retry_artifact["attempt_index"] == 1
     assert retry_artifact["session_index"] == 1
     assert retry_artifact["source"] == "proposal.algorithm_smoke"
+    assert retry_artifact["source_tool"] == "proposal.algorithm_smoke"
+    assert retry_artifact["source_phase"] == "draft_patch"
+    assert retry_artifact["request_kind"] == "code"
+    assert retry_artifact["request_id"] == output.request_id
+    assert retry_artifact["error_type"]
+    assert "algorithm smoke did not pass" in retry_artifact["error_message"]
+    assert retry_artifact["failure_detail"] == retry_artifact["reason"]
+    assert retry_artifact["detail"] == retry_artifact["reason"]
+    assert retry_artifact["message"] == retry_artifact["reason"]
+    assert retry_artifact["trace_id"] == ""
+    assert retry_artifact["trace_ref"] == ""
+    assert retry_artifact["observation_id"]
+    assert retry_artifact["observation_type"]
+    assert retry_artifact["observation_summary"]
     assert "algorithm smoke did not pass" in retry_artifact["reason"]
     context_failure_detail = creative.code_contexts[1][
         "agentic_code_retry_failure_detail"
@@ -511,6 +525,11 @@ def test_agentic_session_index_refs_smoke_and_code_retry_failure_artifacts(
     )
     assert context_failure_detail["attempt_index"] == 1
     assert context_failure_detail["session_index"] == 1
+    assert context_failure_detail["error_type"] == retry_artifact["error_type"]
+    assert context_failure_detail["error_message"] == retry_artifact["reason"]
+    assert context_failure_detail["failure_detail"] == retry_artifact["reason"]
+    assert context_failure_detail["request_kind"] == "code"
+    assert context_failure_detail["source_phase"] == "draft_patch"
     ledger_entry = next(
         item
         for item in artifact["failure_ledger"]["entries"]

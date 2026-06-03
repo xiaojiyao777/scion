@@ -60,6 +60,12 @@ class AgenticSessionRepairMixin:
                     "failure_kind": "preview_failure",
                     "reason": preview_detail,
                     "source": failed_preview.tool_name,
+                    "error_type": _code_retry_error_type(failed_preview),
+                    "error_message": preview_detail,
+                    "failure_detail": preview_detail,
+                    "trace_ref": "",
+                    "request_kind": "code",
+                    "source_phase": AgenticProposalPhase.DRAFT_PATCH.value,
                     "repair_attempt": repair_attempt,
                     "attempt_index": repair_attempt,
                     "session_index": getattr(
@@ -157,6 +163,12 @@ class AgenticSessionRepairMixin:
                     "failure_kind": "code_self_check_failure",
                     "reason": issue_detail,
                     "source": "agentic_code_self_check",
+                    "error_type": "agentic_code_self_check",
+                    "error_message": issue_detail,
+                    "failure_detail": issue_detail,
+                    "trace_ref": "",
+                    "request_kind": "code",
+                    "source_phase": AgenticProposalPhase.DRAFT_PATCH.value,
                     "repair_attempt": repair_attempt,
                     "attempt_index": repair_attempt,
                     "session_index": getattr(
@@ -233,6 +245,15 @@ class AgenticSessionRepairMixin:
             )
             if self._artifact_store is None:
                 return ""
+            diagnostic = _code_retry_diagnostic_payload(
+                state,
+                failure_kind=failure_kind,
+                reason=reason,
+                source_tool=source_tool,
+                repair_attempt=repair_attempt,
+                session_index=index,
+                observation=observation,
+            )
             payload = _drop_empty_dict(
                 {
                     "schema_version": "agentic-code-retry-failure-detail.v1",
@@ -247,6 +268,7 @@ class AgenticSessionRepairMixin:
                     "reason": reason,
                     "source": source_tool,
                     "tool_name": source_tool,
+                    **diagnostic,
                     "observation_id": getattr(observation, "observation_id", ""),
                     "observation_failure_code": _enum_value(
                         getattr(observation, "failure_code", "")
@@ -381,6 +403,52 @@ class AgenticSessionRepairMixin:
                     },
                 )
                 continue
+
+
+def _code_retry_diagnostic_payload(
+    state: AgenticProposalSessionState,
+    *,
+    failure_kind: str,
+    reason: str,
+    source_tool: str,
+    repair_attempt: int,
+    session_index: int,
+    observation: ProposalObservation | None,
+) -> dict[str, Any]:
+    error_type = _code_retry_error_type(observation) or str(failure_kind or "")
+    return {
+        "error_type": error_type,
+        "error_message": str(reason or ""),
+        "failure_detail": str(reason or ""),
+        "detail": str(reason or ""),
+        "message": str(reason or ""),
+        "trace_id": "",
+        "trace_ref": "",
+        "request_kind": "code",
+        "request_id": state.request_id or state.session_id,
+        "source_phase": AgenticProposalPhase.DRAFT_PATCH.value,
+        "source_tool": str(source_tool or ""),
+        "attempt_index": repair_attempt,
+        "session_index": session_index,
+        "observation_id": getattr(observation, "observation_id", ""),
+        "observation_artifact_ref": getattr(observation, "artifact_ref", "") or "",
+        "observation_tool_call_id": getattr(observation, "tool_call_id", "") or "",
+        "observation_type": getattr(observation, "observation_type", "") or "",
+        "observation_summary": getattr(observation, "summary", "") or "",
+        "observation_failure_code": _enum_value(
+            getattr(observation, "failure_code", "")
+        ) or "",
+    }
+
+
+def _code_retry_error_type(observation: ProposalObservation | None) -> str:
+    if observation is None:
+        return ""
+    failure_code = _enum_value(getattr(observation, "failure_code", ""))
+    if failure_code:
+        return str(failure_code)
+    tool_name = str(getattr(observation, "tool_name", "") or "")
+    return tool_name
 
 
 def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:

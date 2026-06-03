@@ -633,9 +633,70 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
             audit_metadata["post_refine_release_reason"] = aligned_reason
         else:
             audit_metadata["post_refine_decision_reason"] = aligned_reason
+    audit_metadata.setdefault(
+        "same_mechanism_clean_fork_justification",
+        _same_mechanism_clean_fork_justification(audit_metadata),
+    )
     result.scheduler_audit_metadata = audit_metadata
     result.reason = aligned_reason
     return result
+
+
+def _same_mechanism_clean_fork_justification(
+    audit_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    selected_policy = str(
+        audit_metadata.get("post_finalizer_next_proposal_policy")
+        or audit_metadata.get("scheduler_action")
+        or ""
+    )
+    clean_fork_selected = bool(audit_metadata.get("clean_fork_selected"))
+    not_selected_reason = str(
+        audit_metadata.get("same_branch_refinement_not_selected_reason") or ""
+    )
+    clean_fork_reason = str(audit_metadata.get("clean_fork_reason") or "")
+    active_branch_cap_context = {
+        "scheduler_slot": str(
+            audit_metadata.get("pre_finalizer_scheduler_slot")
+            or audit_metadata.get("scheduler_slot")
+            or ""
+        ),
+        "scheduler_reason": str(
+            audit_metadata.get("pre_finalizer_scheduler_reason")
+            or audit_metadata.get("scheduler_reason")
+            or ""
+        ),
+        "pre_finalizer_scheduler_action": str(
+            audit_metadata.get("pre_finalizer_scheduler_action")
+            or audit_metadata.get("scheduler_action")
+            or ""
+        ),
+    }
+    active_slot_hard_cap = audit_metadata.get("active_slot_hard_cap")
+    if isinstance(active_slot_hard_cap, dict):
+        active_branch_cap_context["active_slot_hard_cap"] = dict(
+            active_slot_hard_cap
+        )
+    active_slot_reconciliation = audit_metadata.get("active_slot_reconciliation")
+    if isinstance(active_slot_reconciliation, dict):
+        active_branch_cap_context["active_slot_reconciliation"] = dict(
+            active_slot_reconciliation
+        )
+    if not clean_fork_selected:
+        reason = "not_applicable"
+    elif not_selected_reason == "clean_fork_required_for_new_mechanism":
+        reason = "new_mechanism_requires_clean_fork"
+    elif not_selected_reason:
+        reason = "clean_fork_selected_instead_of_same_branch"
+    else:
+        reason = "no_active_same_mechanism_branch"
+    return {
+        "reason": reason,
+        "selected_policy": selected_policy,
+        "clean_fork_reason": clean_fork_reason,
+        "same_branch_refinement_not_selected_reason": not_selected_reason,
+        "active_branch_cap_context": active_branch_cap_context,
+    }
 
 
 def _post_finalizer_actual_branch_action(

@@ -122,6 +122,9 @@ def build_branch_followup_policy(
             "schema_version": "branch_followup_policy.v1",
             "taint": "proposal_guidance",
             "decision_input_policy": "excluded_from_decision_features",
+            "source": "research_process_guidance",
+            "guidance_ref": "branch_followup_policy.research_process_guidance",
+            "guidance_schema_key": "research_process_guidance",
             "mode": "weak_positive_branch_local_followup",
             "default_action": "continue_branch_local_refinement",
             "allowed_continuations": [

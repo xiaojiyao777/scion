@@ -134,6 +134,7 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
     result = runner.run_one_step()
 
     assert result.action == "create_branch"
+    assert result.decision is None
     assert result.branch_id == "new-branch"
     assert result.scheduler_slot == "explore_new"
     assert result.scheduler_reason == "clean_fork_required_for_new_mechanism"
@@ -153,8 +154,48 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
     assert metadata["same_branch_refinement_not_selected_reason"] == (
         "clean_fork_required_for_new_mechanism"
     )
+    justification = metadata["same_mechanism_clean_fork_justification"]
+    assert justification == {
+        "reason": "new_mechanism_requires_clean_fork",
+        "selected_policy": "clean_fork_selected",
+        "clean_fork_reason": "clean_fork_required_for_new_mechanism",
+        "same_branch_refinement_not_selected_reason": (
+            "clean_fork_required_for_new_mechanism"
+        ),
+        "active_branch_cap_context": {
+            "scheduler_slot": "explore_new",
+            "scheduler_reason": "clean_fork_required_for_new_mechanism",
+            "pre_finalizer_scheduler_action": "create_new",
+        },
+    }
     assert "improve the same branch" not in result.reason
     assert recorded == [result]
+
+
+def test_clean_fork_selected_instead_of_same_branch_has_explicit_justification() -> None:
+    branch = _branch("sibling-branch")
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            slot="explore_new",
+            reason="new_exploration_slot_available",
+        ),
+        branch=branch,
+    )
+
+    result = runner.run_one_step()
+
+    justification = result.scheduler_audit_metadata[
+        "same_mechanism_clean_fork_justification"
+    ]
+    assert result.action == "create_branch"
+    assert result.decision is None
+    assert justification["reason"] == "clean_fork_selected_instead_of_same_branch"
+    assert justification["selected_policy"] == "clean_fork_selected"
+    assert justification["clean_fork_reason"] == "new_exploration_slot_available"
+    assert justification["same_branch_refinement_not_selected_reason"] == (
+        "new_exploration_slot_available"
+    )
 
 
 def test_clean_fork_reclaims_low_value_slot_before_create_new() -> None:
@@ -274,6 +315,17 @@ def test_run_existing_scheduler_metadata_reaches_result_and_callback() -> None:
     assert metadata["post_finalizer_counts_toward_active_slots"] is True
     assert metadata["same_branch_refinement_selected"] is True
     assert metadata["pre_finalizer_same_branch_refinement_selected"] is True
+    assert metadata["same_mechanism_clean_fork_justification"] == {
+        "reason": "not_applicable",
+        "selected_policy": "same_branch_eligible",
+        "clean_fork_reason": "",
+        "same_branch_refinement_not_selected_reason": "",
+        "active_branch_cap_context": {
+            "scheduler_slot": "refine_active",
+            "scheduler_reason": "existing_branch_selected",
+            "pre_finalizer_scheduler_action": "run_existing",
+        },
+    }
     assert metadata["post_refine_decision_reason"] == "screening complete"
     assert recorded == [result]
 
@@ -403,4 +455,17 @@ def test_at_capacity_scheduler_metadata_reaches_result_and_callback() -> None:
     assert result.branch_id is None
     assert result.scheduler_slot == "capacity_blocked"
     assert result.scheduler_reason == "active_branch_limit_reached"
+    assert result.scheduler_audit_metadata[
+        "same_mechanism_clean_fork_justification"
+    ] == {
+        "reason": "not_applicable",
+        "selected_policy": "at_capacity",
+        "clean_fork_reason": "",
+        "same_branch_refinement_not_selected_reason": "",
+        "active_branch_cap_context": {
+            "scheduler_slot": "capacity_blocked",
+            "scheduler_reason": "active_branch_limit_reached",
+            "pre_finalizer_scheduler_action": "at_capacity",
+        },
+    }
     assert recorded == [result]

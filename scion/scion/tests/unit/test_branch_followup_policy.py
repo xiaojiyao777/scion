@@ -165,6 +165,12 @@ def test_branch_followup_policy_receipt_is_in_hypothesis_prompt() -> None:
 
     assert "## Branch Follow-up Policy" in rendered_prompt
     assert "excluded_from_decision_features" in rendered_prompt
+    assert '"source": "research_process_guidance"' in rendered_prompt
+    assert (
+        '"guidance_ref": "branch_followup_policy.research_process_guidance"'
+        in rendered_prompt
+    )
+    assert '"guidance_schema_key": "research_process_guidance"' in rendered_prompt
     assert "weak_positive_followups_are_allowed_as_bounded_research_probes" in rendered_prompt
     assert "what evidence would justify another same-branch follow-up" in rendered_prompt
     assert "alpha_refinement" in rendered_prompt
@@ -178,6 +184,9 @@ def test_branch_followup_policy_keeps_followup_allowed_but_process_grounded() ->
 
     guidance = policy["research_process_guidance"]
 
+    assert policy["source"] == "research_process_guidance"
+    assert policy["guidance_ref"] == "branch_followup_policy.research_process_guidance"
+    assert policy["guidance_schema_key"] == "research_process_guidance"
     assert guidance["not_a_hard_stop"] is True
     assert (
         guidance["principle"]
