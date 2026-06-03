@@ -11,6 +11,9 @@ from scion.core.branch_cards import (
 )
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.run_validity import build_run_validity, step_failure_categories
 from scion.core.screening_visibility import (
@@ -512,6 +515,14 @@ class CampaignSummaryMixin:
             step_data["primary_failure"] = primary_failure
         if secondary_observations:
             step_data["secondary_observations"] = secondary_observations
+        guidance_audit = (
+            extract_research_process_guidance_audit(step.proposal_session_ref)
+            or extract_research_process_guidance_audit(
+                getattr(step, "scheduler_audit_metadata", {}) or {}
+            )
+        )
+        if guidance_audit:
+            step_data["research_process_guidance_audit"] = guidance_audit
         if step.proposal_session_ref:
             allowed_ref_fields = {
                 "schema_version",
@@ -532,6 +543,7 @@ class CampaignSummaryMixin:
                 "planner_loop_diagnostic",
                 "diagnostic_only",
                 "formal_round_succeeded",
+                "research_process_guidance_audit",
             }
             step_data["proposal_session_ref"] = {
                 key: value

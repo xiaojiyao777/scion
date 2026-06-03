@@ -24,6 +24,9 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import AgenticProposalOutput
 from scion.proposal.engine import ProposalValidationError
@@ -178,6 +181,14 @@ class ProposalPipeline(
         )
         context["branch_hygiene"] = branch_hygiene_context(branch)
         context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
+        guidance_audit = extract_research_process_guidance_audit(
+            context.get("branch_followup_policy_payload")
+        )
+        if guidance_audit:
+            self.agentic_session_refs[bid] = {
+                "schema_version": "proposal-context-ref.v1",
+                "research_process_guidance_audit": guidance_audit,
+            }
         quality_feedback = self._agentic_quality_feedback_for_context(bid)
         if quality_feedback:
             context["agentic_prior_quality_blocks"] = quality_feedback

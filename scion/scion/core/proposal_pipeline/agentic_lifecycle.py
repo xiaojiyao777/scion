@@ -14,6 +14,9 @@ from scion.core.models import (
     HypothesisRecord,
     PatchProposal,
 )
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import (
     AgenticFailureCategory,
@@ -134,7 +137,12 @@ class AgenticLifecycleMixin:
                     },
                 )
         self._record_agentic_lineage_event(output)
-        self._record_agentic_session_ref(output)
+        self._record_agentic_session_ref(
+            output,
+            guidance_audit=extract_research_process_guidance_audit(
+                context.get("branch_followup_policy_payload")
+            ),
+        )
         self.agentic_outputs[bid] = output
         if output.status == AgenticProposalStatus.FAILED:
             return self._record_agentic_failure(

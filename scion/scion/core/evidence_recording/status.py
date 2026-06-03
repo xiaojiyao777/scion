@@ -7,6 +7,9 @@ from typing import Any, Dict, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
 from scion.core.public_refs import redact_public_refs
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.core.run_validity import build_run_validity
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
@@ -289,6 +292,13 @@ class StatusWriterMixin:
                     getattr(last_result, "scheduler_audit_metadata", None) or {}
                 ),
             }
+            guidance_audit = extract_research_process_guidance_audit(
+                getattr(last_result, "scheduler_audit_metadata", None) or {}
+            )
+            if guidance_audit:
+                self.last_status_result["research_process_guidance_audit"] = (
+                    guidance_audit
+                )
             failure_stage = getattr(last_result, "failure_stage", None)
             failure_category = getattr(last_result, "failure_category", None)
             failure_detail = getattr(last_result, "failure_detail", None)

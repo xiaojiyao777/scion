@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, MutableSequence
 
 from scion.core.models import StepRecord
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.core.status_reporter import StatusReporter
 
 from .common import StateProvider
@@ -62,9 +65,7 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         """Persist scheduler metadata on the latest matching step and lineage."""
         slot = str(getattr(result, "scheduler_slot", "") or "")
         reason = str(getattr(result, "scheduler_reason", "") or "")
-        audit_metadata = dict(
-            getattr(result, "scheduler_audit_metadata", None) or {}
-        )
+        audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
         if not (slot or reason):
             return
         step: StepRecord | None = None
@@ -85,6 +86,16 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
                 if audit_metadata:
                     candidate.scheduler_audit_metadata = audit_metadata
                 break
+        guidance_audit = extract_research_process_guidance_audit(audit_metadata)
+        if not guidance_audit and step is not None:
+            guidance_audit = extract_research_process_guidance_audit(
+                getattr(step, "proposal_session_ref", None)
+            )
+        if guidance_audit:
+            audit_metadata["research_process_guidance_audit"] = guidance_audit
+            result.scheduler_audit_metadata = audit_metadata
+            if step is not None:
+                step.scheduler_audit_metadata = audit_metadata
         self.record_scheduler_result_lineage(result=result, step=step)
 
     def attach_final_evidence_refs(self, refs: Mapping[str, Any]) -> None:

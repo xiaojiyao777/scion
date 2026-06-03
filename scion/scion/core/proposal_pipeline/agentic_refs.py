@@ -186,8 +186,16 @@ class AgenticRefsMixin:
         except Exception:
             logger.debug("agentic lineage event write failed", exc_info=True)
 
-    def _record_agentic_session_ref(self, output: AgenticProposalOutput) -> None:
-        self.agentic_session_refs[output.branch_id] = self._agentic_session_ref(output)
+    def _record_agentic_session_ref(
+        self,
+        output: AgenticProposalOutput,
+        *,
+        guidance_audit: Mapping[str, Any] | None = None,
+    ) -> None:
+        ref = self._agentic_session_ref(output)
+        if guidance_audit:
+            ref["research_process_guidance_audit"] = dict(guidance_audit)
+        self.agentic_session_refs[output.branch_id] = ref
 
     def pop_agentic_session_ref(self, branch_id: str) -> Mapping[str, Any] | None:
         return self.agentic_session_refs.pop(branch_id, None)

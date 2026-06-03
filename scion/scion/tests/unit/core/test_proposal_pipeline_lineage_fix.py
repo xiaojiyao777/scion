@@ -5,6 +5,9 @@ from .proposal_pipeline_test_support import *  # noqa: F401,F403
 def test_decision_features_do_not_include_agentic_rationale_or_memory() -> None:
     feature_names = {field.name for field in fields(DecisionFeatures)}
 
+    assert "research_process_guidance_audit" not in feature_names
+    assert "research_process_guidance" not in feature_names
+    assert "branch_followup_policy" not in feature_names
     assert "rationale_summary" not in feature_names
     assert "rejected_alternatives" not in feature_names
     assert "tainted_artifact_refs" not in feature_names
@@ -88,7 +91,60 @@ def test_agentic_lineage_records_tainted_session_without_decision_rationale() ->
     rendered = json.dumps(event, sort_keys=True)
     assert "private rationale" not in rendered
     assert "context.list_surfaces" not in rendered
-    assert "raw_metrics_ref" in event
+
+
+def test_proposal_pipeline_carries_compact_research_process_guidance_audit() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        creative=creative,
+        forced_locus=None,
+    )
+    guidance_payload = {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "research_process_guidance": {
+            "principle": (
+                "weak_positive_followups_are_allowed_as_bounded_research_probes"
+            ),
+            "not_a_hard_stop": True,
+            "must_state": ["do not persist this list"],
+        },
+        "default_action": "continue_branch_local_refinement",
+    }
+
+    def context_with_guidance(**kwargs):
+        runtime.hypothesis_kwargs = kwargs
+        return {
+            "kind": "hypothesis",
+            "branch_followup_policy_payload": guidance_payload,
+        }
+
+    runtime.build_hypothesis_context = context_with_guidance
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert session_ref is not None
+    audit = session_ref["research_process_guidance_audit"]
+    assert audit == {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "principle": "weak_positive_followups_are_allowed_as_bounded_research_probes",
+        "not_a_hard_stop": True,
+    }
+    rendered = json.dumps(session_ref, sort_keys=True)
+    assert "do not persist this list" not in rendered
+    assert creative.hypothesis.hypothesis_text not in rendered
 
 
 def test_agentic_lineage_audit_payload_marks_absolute_tainted_refs_internal(

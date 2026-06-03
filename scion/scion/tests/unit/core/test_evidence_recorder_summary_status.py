@@ -10,6 +10,20 @@ from scion.core.run_validity import (
 from scion.core.models import CaseAggregateFeedback, MechanismChange
 from scion.core.step_result import StepResult
 
+
+def _research_process_guidance_audit() -> dict:
+    return {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "principle": "weak_positive_followups_are_allowed_as_bounded_research_probes",
+        "not_a_hard_stop": True,
+    }
+
+
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
@@ -1261,6 +1275,72 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
         "pre_finalizer_scheduler_slot": "repair_diagnostic",
         "post_finalizer_actual_branch_action": "soft_abandon",
     }
+
+
+def test_research_process_guidance_audit_is_queryable_in_summary_and_status(
+    tmp_path: Path,
+) -> None:
+    audit = _research_process_guidance_audit()
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = replace(
+        _step("/tmp/metrics-guidance-audit.json"),
+        proposal_session_ref={
+            "schema_version": "proposal-context-ref.v1",
+            "session_id": "session-1",
+            "research_process_guidance_audit": audit,
+        },
+    )
+    step_history = [step]
+
+    summary = recorder.write_campaign_summary(
+        step_history=step_history,
+        round_num=3,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+    summary_step = summary["steps"][0]
+
+    assert summary_step["research_process_guidance_audit"] == audit
+    assert summary_step["proposal_session_ref"]["research_process_guidance_audit"] == (
+        audit
+    )
+    assert summary_step["research_process_guidance_audit"]["taint"] == (
+        "proposal_guidance"
+    )
+    assert summary_step["research_process_guidance_audit"][
+        "decision_input_policy"
+    ] == "excluded_from_decision_features"
+    rendered = json.dumps(summary_step["research_process_guidance_audit"])
+    assert "Improve route insertion" not in rendered
+    assert "hypothesis_text" not in rendered
+
+    result = StepResult(
+        action="explore",
+        branch_id="branch-1",
+        decision=Decision.CONTINUE_EXPLORE,
+        reason="decision=continue_explore; scheduler_slot=refine_active",
+        scheduler_slot="refine_active",
+        scheduler_reason="existing_branch_selected",
+        scheduler_audit_metadata={
+            "scheduler_action": "run_existing",
+        },
+    )
+    recorder.record_scheduler_result(result, step_history)
+    status = recorder.write_status(last_result=result)
+
+    assert status["last_result"]["scheduler_audit_metadata"][
+        "scheduler_action"
+    ] == "run_existing"
+    assert status["last_result"]["scheduler_audit_metadata"][
+        "research_process_guidance_audit"
+    ] == audit
+    assert status["last_result"]["research_process_guidance_audit"] == audit
+    assert status["last_result"]["research_process_guidance_audit"]["taint"] == (
+        "proposal_guidance"
+    )
+    assert status["last_result"]["research_process_guidance_audit"][
+        "decision_input_policy"
+    ] == "excluded_from_decision_features"
 
 
 def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
