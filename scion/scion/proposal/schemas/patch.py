@@ -31,8 +31,6 @@ class PatchSchemaPreflightError(ValueError):
 def preflight_patch_exact_replace_shape(raw: Mapping[str, Any]) -> None:
     """Reject malformed exact_replace edit selectors before normalization."""
 
-    if raw.get("premise_check") not in (None, "", "supported"):
-        return
     for change_pointer, change in _patch_change_slots(raw):
         if str(change.get("edit_intent") or "").strip() != "exact_replace":
             continue

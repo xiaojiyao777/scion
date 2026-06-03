@@ -147,6 +147,179 @@ def test_proposal_pipeline_carries_compact_research_process_guidance_audit() -> 
     assert creative.hypothesis.hypothesis_text not in rendered
 
 
+def test_agentic_code_session_ref_preserves_hypothesis_guidance_audit() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=None,
+    )
+    guidance_payload = {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "research_process_guidance": {
+            "principle": "bounded_branch_local_refinement",
+            "not_a_hard_stop": True,
+            "must_state": ["do not persist this full guidance list"],
+        },
+        "hypothesis_text": "do not persist this hypothesis text",
+    }
+    expected_audit = {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "principle": "bounded_branch_local_refinement",
+        "not_a_hard_stop": True,
+    }
+
+    def context_with_guidance(**kwargs):
+        runtime.hypothesis_kwargs = kwargs
+        return {
+            "kind": "hypothesis",
+            "branch_followup_policy_payload": guidance_payload,
+        }
+
+    class TwoStageSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            if request.approved_hypothesis is None:
+                return AgenticProposalOutput(
+                    status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                    session_id="session-hypothesis",
+                    request_id="request-hypothesis",
+                    idempotency_key="idempotency-hypothesis",
+                    transcript_digest="digest-hypothesis",
+                    campaign_id=request.campaign_id,
+                    branch_id=request.branch.branch_id,
+                    champion_version=(
+                        request.champion.version if request.champion else None
+                    ),
+                    problem_id=request.problem_id,
+                    problem_spec_hash=request.problem_spec_hash,
+                    hypothesis=creative.hypothesis,
+                    rationale_summary="private hypothesis rationale",
+                    tainted_artifact_refs=(
+                        "artifacts/session-hypothesis/output.json",
+                    ),
+                    termination_reason=(
+                        AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+                    ),
+                )
+
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.COMPLETED,
+                session_id="session-code",
+                request_id="request-code",
+                idempotency_key="idempotency-code",
+                transcript_digest="digest-code",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=(
+                    request.champion.version if request.champion else None
+                ),
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=request.approved_hypothesis,
+                patch=creative.patch,
+                rationale_summary="private code rationale",
+                tainted_artifact_refs=(
+                    "artifacts/session-code/transcript.json",
+                    "artifacts/session-code/output.json",
+                ),
+                termination_reason=AgenticTerminationReason.COMPLETED,
+            )
+
+    runtime.build_hypothesis_context = context_with_guidance
+    pipeline.agentic_session = TwoStageSession()
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    hypothesis_ref = pipeline.agentic_session_refs[branch.branch_id]
+    patch = pipeline.generate_code(branch, hypothesis)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert patch == creative.patch
+    assert failures == []
+    assert hypothesis_ref["research_process_guidance_audit"] == expected_audit
+    assert session_ref is not None
+    assert session_ref["session_id"] == "session-code"
+    assert session_ref["artifact_ref"] == "artifacts/session-code/output.json"
+    assert session_ref["research_process_guidance_audit"] == expected_audit
+    rendered = json.dumps(session_ref, sort_keys=True)
+    assert "do not persist this full guidance list" not in rendered
+    assert "do not persist this hypothesis text" not in rendered
+    assert creative.hypothesis.hypothesis_text not in rendered
+    assert "private hypothesis rationale" not in rendered
+    assert "private code rationale" not in rendered
+
+
+def test_agentic_session_ref_prefers_explicit_guidance_audit() -> None:
+    creative = FakeCreative()
+    pipeline, branch, _, _, _, _ = _pipeline(creative=creative)
+    pipeline.agentic_session_refs[branch.branch_id] = {
+        "schema_version": "proposal-context-ref.v1",
+        "research_process_guidance_audit": {
+            "schema_version": "branch_followup_policy.v1",
+            "taint": "proposal_guidance",
+            "decision_input_policy": "excluded_from_decision_features",
+            "source": "research_process_guidance",
+            "guidance_ref": "branch_followup_policy.research_process_guidance",
+            "guidance_schema_key": "research_process_guidance",
+            "principle": "stale-principle",
+            "not_a_hard_stop": False,
+        },
+    }
+    explicit_guidance = {
+        "schema_version": "branch_followup_policy.v1",
+        "taint": "proposal_guidance",
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "research_process_guidance",
+        "guidance_ref": "branch_followup_policy.research_process_guidance",
+        "guidance_schema_key": "research_process_guidance",
+        "research_process_guidance": {
+            "principle": "explicit-principle",
+            "not_a_hard_stop": True,
+            "must_state": ["do not persist explicit guidance list"],
+        },
+        "hypothesis_text": "do not persist explicit hypothesis text",
+    }
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-code",
+        request_id="request-code",
+        idempotency_key="idempotency-code",
+        transcript_digest="digest-code",
+        campaign_id="camp-1",
+        branch_id=branch.branch_id,
+        champion_version=1,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        tainted_artifact_refs=("artifacts/session-code/output.json",),
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    pipeline._record_agentic_session_ref(output, guidance_audit=explicit_guidance)
+
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+    assert session_ref is not None
+    assert session_ref["research_process_guidance_audit"]["principle"] == (
+        "explicit-principle"
+    )
+    assert session_ref["research_process_guidance_audit"]["not_a_hard_stop"] is True
+    rendered = json.dumps(session_ref, sort_keys=True)
+    assert "stale-principle" not in rendered
+    assert "do not persist explicit guidance list" not in rendered
+    assert "do not persist explicit hypothesis text" not in rendered
+
+
 def test_agentic_lineage_audit_payload_marks_absolute_tainted_refs_internal(
     tmp_path,
 ) -> None:

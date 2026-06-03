@@ -6,6 +6,9 @@ from dataclasses import replace
 from typing import Any, Mapping
 
 from scion.core.public_refs import contains_absolute_path, public_artifact_ref
+from scion.core.research_process_guidance_audit import (
+    extract_research_process_guidance_audit,
+)
 from scion.proposal.agentic_session import (
     AgenticProposalOutput,
     AgenticProposalRequest,
@@ -192,9 +195,17 @@ class AgenticRefsMixin:
         *,
         guidance_audit: Mapping[str, Any] | None = None,
     ) -> None:
+        existing_ref = self.agentic_session_refs.get(output.branch_id)
+        inherited_guidance_audit = extract_research_process_guidance_audit(
+            existing_ref
+        )
+        explicit_guidance_audit = extract_research_process_guidance_audit(
+            guidance_audit
+        )
         ref = self._agentic_session_ref(output)
-        if guidance_audit:
-            ref["research_process_guidance_audit"] = dict(guidance_audit)
+        merged_guidance_audit = explicit_guidance_audit or inherited_guidance_audit
+        if merged_guidance_audit:
+            ref["research_process_guidance_audit"] = merged_guidance_audit
         self.agentic_session_refs[output.branch_id] = ref
 
     def pop_agentic_session_ref(self, branch_id: str) -> Mapping[str, Any] | None:

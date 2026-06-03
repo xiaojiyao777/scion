@@ -99,8 +99,6 @@ def normalize_patch_typed_edits(
     """
 
     normalized = dict(raw)
-    if normalized.get("premise_check") not in (None, "", "supported"):
-        return normalized, ()
     try:
         preflight_patch_exact_replace_shape(normalized)
     except PatchSchemaPreflightError as exc:
@@ -1520,9 +1518,13 @@ def _edit_intent(change: Mapping[str, Any]) -> str:
 
 
 def _has_full_file_content(change: Mapping[str, Any]) -> bool:
-    return isinstance(change.get("content_after"), str) or isinstance(
-        change.get("code_content"), str
+    return _non_empty_text(change.get("content_after")) or _non_empty_text(
+        change.get("code_content")
     )
+
+
+def _non_empty_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _full_file_content_after(change: Mapping[str, Any]) -> str:

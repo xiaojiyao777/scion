@@ -813,6 +813,83 @@ def test_additional_changes_accept_typed_exact_replace() -> None:
     )
 
 
+def test_contradicted_patch_normalizes_typed_additional_changes_before_schema() -> None:
+    helper_before = "def helper():\n    return 'old'\n"
+    raw = {
+        "premise_check": "contradicted",
+        "premise_check_reason": (
+            "hard boundary: the approved premise is unsupported by visible facts"
+        ),
+        "file_path": "policies/main.py",
+        "action": "modify",
+        "additional_changes": [
+            {
+                "file_path": "policies/helper.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(helper_before),
+                "old_string": "return 'old'",
+                "new_string": "return 'new'",
+            }
+        ],
+    }
+
+    normalized, attribution = normalize_patch_typed_edits(
+        raw,
+        context={
+            "patch_source_files": {"policies/helper.py": helper_before},
+        },
+    )
+    patch = _parse_patch(
+        raw,
+        context={
+            "patch_source_files": {"policies/helper.py": helper_before},
+        },
+    )
+
+    assert normalized["premise_check"] == "contradicted"
+    assert normalized["additional_changes"][0]["code_content"] == (
+        "def helper():\n    return 'new'\n"
+    )
+    assert patch.premise_check == "contradicted"
+    assert "hard boundary" in patch.premise_check_reason
+    assert patch.additional_changes[0].code_content == (
+        "def helper():\n    return 'new'\n"
+    )
+    assert any(
+        item.get("json_pointer") == "/additional_changes/0"
+        and item.get("repair_kind") == "typed_edit_normalization"
+        for item in attribution
+    )
+    assert any(
+        item.get("json_pointer") == "/additional_changes/0"
+        and item.get("repair_kind") == "typed_edit_normalization"
+        for item in patch.repair_attribution
+    )
+
+
+def test_unsupported_premise_only_patch_remains_diagnostic_without_full_file_error() -> None:
+    raw = {
+        "premise_check": "duplicate",
+        "premise_check_reason": "visible facts already contain this mechanism",
+        "file_path": "",
+        "action": "modify",
+        "code_content": "",
+    }
+
+    normalized, attribution = normalize_patch_typed_edits(raw, context={})
+    patch = _parse_patch(raw, context={})
+
+    assert normalized == raw
+    assert attribution == ()
+    assert patch.premise_check == "duplicate"
+    assert patch.premise_check_reason == (
+        "visible facts already contain this mechanism"
+    )
+    assert patch.file_path == ""
+    assert patch.code_content == ""
+
+
 def test_additional_exact_replace_uses_full_algorithm_read_source() -> None:
     local_path = "policies/baseline_modules/local_search.py"
     local_source = "LOCAL_SEARCH_OPS = []\n"
