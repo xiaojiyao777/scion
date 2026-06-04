@@ -32,6 +32,7 @@ from scion.core.branch_hygiene import (
 )
 from scion.core.models import Branch
 from scion.core.scheduler import (
+    branch_runtime_evidence_clean_fork_pressure_summary,
     branch_active_slot_release_reason,
     branch_counts_toward_active_slots,
 )
@@ -113,6 +114,14 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     if runtime_pressure_count is not None:
         optional_parts.append(
             f"runtime_evidence_pressure_count={runtime_pressure_count}"
+        )
+    clean_fork_guidance = _card_mapping(
+        context.get("runtime_evidence_clean_fork_guidance")
+    )
+    if clean_fork_guidance:
+        optional_parts.append(
+            "runtime_evidence_clean_fork_guidance="
+            f"{clean_fork_guidance.get('reason') or 'clean_fork'}"
         )
     optional_suffix = (
         " " + " ".join(optional_parts)
@@ -301,6 +310,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         branch_active_slot_release_reason(branch) if branch is not None else ""
     )
     runtime_evidence_pressure_count = _branch_runtime_evidence_pressure_count(branch)
+    runtime_clean_fork_guidance = (
+        branch_runtime_evidence_clean_fork_pressure_summary(branch)
+    )
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (
         max(0, int(getattr(branch, "rollback_count", 0) or 0))
@@ -474,6 +486,8 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         context["current_head_runtime_evidence_pressure_count"] = (
             runtime_evidence_pressure_count
         )
+    if runtime_clean_fork_guidance:
+        context["runtime_evidence_clean_fork_guidance"] = runtime_clean_fork_guidance
     context.update(branch_lifecycle_reroute_context(branch))
     diversity_guidance = _runtime_saturated_diversity_guidance(context)
     if diversity_guidance:
@@ -537,6 +551,9 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         protected = _protected_mechanism_text(context)
         allowed_actions = _allowed_actions_text(context)
         if context.get("weak_positive_followup"):
+            runtime_guidance = _runtime_evidence_clean_fork_guidance_sentence(
+                context
+            )
             return (
                 f"{card}; "
                 f"branch_code_status={status}; telemetry_outcome={outcome}; "
@@ -557,6 +574,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
                 "bridge to the branch history: name which prior weak signal "
                 "is preserved, which branch-local failure is being tested, "
                 "and why the prior mechanism cannot be directly refined."
+                f"{runtime_guidance}"
                 f"{reroute_suffix}"
             )
         return (
@@ -669,6 +687,22 @@ def _diversity_guidance_sentence(context: Mapping[str, Any]) -> str:
         "homogeneous high-cost variant here; prefer changing mechanism family, "
         "trigger condition, budget allocation, or evaluation observability, "
         "or use a clean branch/fork for a new direction. "
+    )
+
+
+def _runtime_evidence_clean_fork_guidance_sentence(
+    context: Mapping[str, Any],
+) -> str:
+    guidance = context.get("runtime_evidence_clean_fork_guidance")
+    if not isinstance(guidance, Mapping) or not guidance:
+        return ""
+    reason = guidance.get("reason") or "runtime_evidence_completeness_clean_fork"
+    return (
+        " Runtime-evidence clean-fork pressure is active: prefer a clean "
+        "branch/fork unless the next same-branch follow-up preserves current "
+        "case-level positive signal without case loss and directly improves "
+        "runtime evidence completeness. This is tainted proposal guidance "
+        f"excluded from DecisionFeatures; reason={reason}."
     )
 
 
@@ -1187,6 +1221,8 @@ def _branch_card_allowed_actions(
     strict_same_mechanism_followup: bool,
     repair_focus_required: bool,
 ) -> list[str]:
+    if branch_runtime_evidence_clean_fork_pressure_summary(branch):
+        return ["clean_fork"]
     if branch_is_parked_lineage(branch):
         return ["clean_fork"]
     if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(

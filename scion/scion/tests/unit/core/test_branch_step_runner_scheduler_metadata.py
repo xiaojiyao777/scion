@@ -198,6 +198,44 @@ def test_clean_fork_selected_instead_of_same_branch_has_explicit_justification()
     )
 
 
+def test_scheduler_action_audit_metadata_reaches_result() -> None:
+    branch = _branch("weak-positive-branch")
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="run_existing",
+            branch=branch,
+            slot="exploit_weak_positive",
+            reason="weak_positive_signal_followup",
+            audit_metadata={
+                "runtime_evidence_clean_fork_suppression": (
+                    "weak_positive_exception"
+                ),
+                "runtime_evidence_clean_fork_reason": (
+                    "runtime_evidence_completeness_clean_fork"
+                ),
+                "runtime_evidence_pressure_count": 2,
+                "case_wins": 1,
+                "case_losses": 0,
+            },
+        ),
+        branch=branch,
+    )
+
+    result = runner.run_one_step()
+
+    metadata = result.scheduler_audit_metadata
+    assert metadata["runtime_evidence_clean_fork_suppression"] == (
+        "weak_positive_exception"
+    )
+    assert metadata["runtime_evidence_clean_fork_reason"] == (
+        "runtime_evidence_completeness_clean_fork"
+    )
+    assert metadata["runtime_evidence_pressure_count"] == 2
+    assert metadata["case_wins"] == 1
+    assert metadata["case_losses"] == 0
+    assert metadata["scheduler_action"] == "run_existing"
+
+
 def test_clean_fork_reclaims_low_value_slot_before_create_new() -> None:
     champion = _champion()
     controller = BranchController()

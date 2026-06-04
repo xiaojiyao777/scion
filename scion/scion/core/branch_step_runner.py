@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, MutableMapping, Optional
+from typing import Any, Callable, Mapping, MutableMapping, Optional
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.models import (
@@ -544,6 +544,10 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
     scheduled_branch = getattr(sched, "branch", None)
     scheduled_branch_id = str(getattr(scheduled_branch, "branch_id", "") or "")
     audit_metadata = dict(getattr(result, "scheduler_audit_metadata", None) or {})
+    scheduler_audit = getattr(sched, "audit_metadata", None)
+    if isinstance(scheduler_audit, Mapping):
+        for key, value in scheduler_audit.items():
+            audit_metadata.setdefault(str(key), value)
     if scheduler_action:
         audit_metadata.setdefault("scheduler_action", scheduler_action)
         audit_metadata.setdefault(

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import fields
+
 from scion.core.branch_hygiene import (
     branch_hygiene_context,
+    branch_hygiene_guidance,
     campaign_branch_lifecycle_reroute_status,
     record_branch_lifecycle_policy_block,
 )
@@ -14,6 +17,7 @@ from scion.core.models import (
     Branch,
     BranchState,
     CaseAggregateFeedback,
+    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     HypothesisProposal,
@@ -580,6 +584,54 @@ def test_branch_card_exposes_runtime_evidence_pressure_count() -> None:
     ] == 2
     assert "runtime_evidence_pressure_count:2" in text
     assert "runtime_evidence_pressure_count=2" in text
+
+
+def test_branch_card_and_prompt_guidance_include_runtime_clean_fork_pressure() -> None:
+    branch = Branch(
+        branch_id="runtime-clean-fork-card",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        branch_evidence_summary={
+            "tier": "weak_positive",
+            "wins": 1,
+            "losses": 1,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "insufficient",
+            "runtime_aggregate_exclusion": {"excluded": True},
+            "runtime_evidence_pressure_count": 2,
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    card = branch_prompt_card(branch)
+    guidance = branch_hygiene_guidance(branch)
+    decision_field_names = {field.name for field in fields(DecisionFeatures)}
+
+    assert payload["allowed_next_actions"] == ["clean_fork"]
+    assert payload["runtime_evidence_clean_fork_guidance"] == {
+        "reason": "runtime_evidence_completeness_clean_fork",
+        "policy": "prefer_clean_fork",
+        "runtime_evidence_pressure_count": 2,
+        "case_wins": 1,
+        "case_losses": 1,
+        "case_balance": "case_loss",
+        "runtime_evidence_confidence": "low_cached_champion",
+        "runtime_evidence_status": "insufficient",
+        "runtime_aggregate_excluded": True,
+        "tainted_proposal_guidance": True,
+        "decision_features_excluded": True,
+    }
+    assert (
+        "runtime_evidence_clean_fork_guidance="
+        "runtime_evidence_completeness_clean_fork"
+    ) in card
+    assert "Runtime-evidence clean-fork pressure is active" in guidance
+    assert "excluded from DecisionFeatures" in guidance
+    assert "runtime_evidence_clean_fork_guidance" not in decision_field_names
+    assert "runtime_evidence_clean_fork_reason" not in decision_field_names
 
 
 def test_branch_card_explains_low_confidence_runtime_aggregate_exclusion() -> None:

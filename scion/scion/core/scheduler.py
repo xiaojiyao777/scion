@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable, List, Literal, Mapping, Optional
 
@@ -31,6 +31,7 @@ class SchedulerAction:
         "refine_active",
         "capacity_blocked",
     ] = "refine_active"
+    audit_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 # High-priority tiers (index 0 = highest priority).
@@ -185,6 +186,11 @@ class Scheduler:
                     branch=selected,
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),
+                    audit_metadata=(
+                        _weak_positive_runtime_evidence_suppression_audit(
+                            selected
+                        )
+                    ),
                 )
             if (
                 len(active_for_slots) < self._max_active_branches
@@ -687,21 +693,141 @@ def _branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, Mapping):
         return False
-    try:
-        pressure_count = max(
-            0,
-            int(summary.get("runtime_evidence_pressure_count") or 0),
-        )
-    except (TypeError, ValueError):
-        return False
-    return pressure_count >= 2
+    return _runtime_evidence_pressure_count(summary) >= 2
+
+
+def branch_runtime_evidence_clean_fork_pressure_summary(
+    branch: Branch | None,
+) -> dict[str, Any]:
+    if branch is None or not _branch_is_weak_positive_lineage(branch):
+        return {}
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    pressure_count = _runtime_evidence_pressure_count(summary)
+    if pressure_count < 2 or not _runtime_evidence_low_or_incomplete(summary):
+        return {}
+    wins = _summary_nonnegative_int(summary, "wins")
+    losses = _summary_nonnegative_int(summary, "losses")
+    if wins > 0 and losses == 0:
+        return {}
+    return {
+        "reason": RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+        "policy": "prefer_clean_fork",
+        "runtime_evidence_pressure_count": pressure_count,
+        "case_wins": wins,
+        "case_losses": losses,
+        "case_balance": "case_loss" if losses > 0 else "no_case_win",
+        "runtime_evidence_confidence": _summary_text(
+            summary,
+            "runtime_evidence_confidence",
+            default="unknown",
+        ),
+        "runtime_evidence_status": _summary_text(
+            summary,
+            "runtime_evidence_status",
+            default="unknown",
+        ),
+        "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+        "tainted_proposal_guidance": True,
+        "decision_features_excluded": True,
+    }
+
+
+def _weak_positive_runtime_evidence_suppression_audit(
+    branch: Branch,
+) -> dict[str, Any]:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    pressure_count = _runtime_evidence_pressure_count(summary)
+    if pressure_count < 2 or not _runtime_evidence_low_or_incomplete(summary):
+        return {}
+    wins = _summary_nonnegative_int(summary, "wins")
+    losses = _summary_nonnegative_int(summary, "losses")
+    if wins <= 0 or losses != 0:
+        return {}
+    return {
+        "runtime_evidence_clean_fork_suppression": "weak_positive_exception",
+        "runtime_evidence_clean_fork_reason": (
+            RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+        ),
+        "runtime_evidence_pressure_count": pressure_count,
+        "case_wins": wins,
+        "case_losses": losses,
+        "runtime_evidence_confidence": _summary_text(
+            summary,
+            "runtime_evidence_confidence",
+            default="unknown",
+        ),
+        "runtime_evidence_status": _summary_text(
+            summary,
+            "runtime_evidence_status",
+            default="unknown",
+        ),
+        "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+    }
 
 
 def _branch_is_weak_positive_priority(branch: Branch) -> bool:
+    return (
+        _branch_is_weak_positive_lineage(branch)
+        and not branch_runtime_evidence_clean_fork_pressure_summary(branch)
+    )
+
+
+def _branch_is_weak_positive_lineage(branch: Branch) -> bool:
     return branch_lineage_status(branch) in {
         "active_weak_positive",
         "restored_weak_positive",
     }
+
+
+def _runtime_evidence_pressure_count(summary: Mapping[str, Any]) -> int:
+    try:
+        return max(0, int(summary.get("runtime_evidence_pressure_count") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _summary_nonnegative_int(summary: Mapping[str, Any], key: str) -> int:
+    try:
+        return max(0, int(summary.get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _summary_text(
+    summary: Mapping[str, Any],
+    key: str,
+    *,
+    default: str = "",
+) -> str:
+    value = str(summary.get(key) or "").strip()
+    return value if value else default
+
+
+def _runtime_evidence_low_or_incomplete(summary: Mapping[str, Any]) -> bool:
+    confidence = _summary_text(summary, "runtime_evidence_confidence").lower()
+    status = _summary_text(summary, "runtime_evidence_status").lower()
+    return (
+        _runtime_aggregate_excluded(summary)
+        or confidence.startswith("low")
+        or confidence
+        in {"incomplete", "insufficient", "missing", "none", "unknown"}
+        or status in {"incomplete", "insufficient", "missing", "none", "unknown"}
+        or "incomplete" in status
+        or "insufficient" in status
+    )
+
+
+def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
+    exclusion = summary.get("runtime_aggregate_exclusion")
+    if isinstance(exclusion, Mapping):
+        if "excluded" in exclusion:
+            return bool(exclusion.get("excluded"))
+        return bool(exclusion)
+    return bool(exclusion)
 
 
 def _branch_research_priority(branch: Branch) -> int:

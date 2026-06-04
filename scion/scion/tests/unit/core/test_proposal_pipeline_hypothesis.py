@@ -140,6 +140,39 @@ def test_generate_hypothesis_allows_active_no_effect_same_mechanism_followup() -
     ]
 
 
+def test_generate_hypothesis_context_includes_runtime_clean_fork_guidance() -> None:
+    creative = FakeCreative()
+    pipeline, branch, _, _, _, _ = _pipeline(creative=creative)
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.branch_evidence_summary = {
+        "tier": "weak_positive",
+        "wins": 0,
+        "losses": 0,
+        "runtime_evidence_confidence": "low_cached_champion",
+        "runtime_evidence_status": "incomplete",
+        "runtime_evidence_pressure_count": 2,
+    }
+
+    pipeline.generate_hypothesis(branch)
+
+    hygiene = creative.hypothesis_context["branch_hygiene"]
+    guidance = creative.hypothesis_context["branch_hygiene_guidance"]
+    decision_field_names = {field.name for field in fields(DecisionFeatures)}
+    assert hygiene["runtime_evidence_clean_fork_guidance"]["reason"] == (
+        "runtime_evidence_completeness_clean_fork"
+    )
+    assert hygiene["runtime_evidence_clean_fork_guidance"][
+        "tainted_proposal_guidance"
+    ] is True
+    assert hygiene["runtime_evidence_clean_fork_guidance"][
+        "decision_features_excluded"
+    ] is True
+    assert "runtime_evidence_clean_fork_guidance" in guidance
+    assert "excluded from DecisionFeatures" in guidance
+    assert "runtime_evidence_clean_fork_guidance" not in decision_field_names
+
+
 def test_generate_hypothesis_rejects_new_mechanism_on_active_no_effect_branch() -> None:
     creative = FakeCreative()
     creative.hypothesis = HypothesisProposal(

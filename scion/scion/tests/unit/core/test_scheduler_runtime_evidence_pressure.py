@@ -96,7 +96,13 @@ def test_weak_positive_branch_exploit_survives_runtime_evidence_pressure() -> No
         branch_code_status="active_weak_positive",
         last_screening_feedback_tier="weak_positive",
         direction="generic weak-positive research direction",
-        branch_evidence_summary={"runtime_evidence_pressure_count": 2},
+        branch_evidence_summary={
+            "wins": 1,
+            "losses": 0,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "insufficient",
+            "runtime_evidence_pressure_count": 2,
+        },
     )
 
     action = Scheduler(max_active_branches=2).select_next([branch])
@@ -105,3 +111,62 @@ def test_weak_positive_branch_exploit_survives_runtime_evidence_pressure() -> No
     assert action.branch is branch
     assert action.slot == "exploit_weak_positive"
     assert action.reason == "weak_positive_signal_followup"
+    assert action.audit_metadata["runtime_evidence_clean_fork_suppression"] == (
+        "weak_positive_exception"
+    )
+    assert action.audit_metadata["runtime_evidence_pressure_count"] == 2
+    assert action.audit_metadata["case_wins"] == 1
+    assert action.audit_metadata["case_losses"] == 0
+
+
+def test_weak_positive_runtime_pressure_with_loss_prefers_clean_fork() -> None:
+    branch = Branch(
+        branch_id="weak-positive-loss-runtime-pressure",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        direction="generic weak-positive research direction",
+        branch_evidence_summary={
+            "wins": 1,
+            "losses": 1,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "insufficient",
+            "runtime_aggregate_exclusion": {"excluded": True},
+            "runtime_evidence_pressure_count": 2,
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+
+
+def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() -> None:
+    branch = Branch(
+        branch_id="weak-positive-zero-win-runtime-pressure",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="restored_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        direction="generic weak-positive research direction",
+        branch_evidence_summary={
+            "wins": 0,
+            "losses": 0,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "incomplete",
+            "runtime_evidence_pressure_count": 2,
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
