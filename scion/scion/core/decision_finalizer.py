@@ -13,6 +13,7 @@ from scion.core.branch_hygiene import (
 )
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
+    SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
     SCREENING_MARGINAL_SIGNAL_CONTINUE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
@@ -780,6 +781,7 @@ def _preserve_low_signal_screening_workspace(
     ):
         return False
     lifecycle_codes = {
+        SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
         SCREENING_MARGINAL_SIGNAL_CONTINUE,
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         SCREENING_WEAK_SIGNAL_CONTINUE,

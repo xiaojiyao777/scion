@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from scion.core.branch import BranchController
-from scion.core.branch_lifecycle_policy import SCREENING_WEAK_SIGNAL_CONTINUE
+from scion.core.branch_lifecycle_policy import (
+    SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+    SCREENING_WEAK_SIGNAL_CONTINUE,
+)
 from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.models import (
     BranchState,
@@ -14,6 +17,7 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     MechanismChange,
+    PairwiseCaseFeedback,
     PatchProposal,
     ProtocolResult,
     VerificationResult,
@@ -133,6 +137,121 @@ def test_win_skewed_weak_positive_screening_workspace_reason_is_positive() -> No
     assert hyp_store.statuses == [
         ("h-weak-positive", "screening_weak_positive_retained")
     ]
+
+
+def test_pair_level_weak_positive_screening_workspace_is_retained() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Tune a bounded decision lever.",
+        change_locus="decision",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="bounded_decision_lever", change_type="modify"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-pair-weak-positive",
+        branch_id=branch.branch_id,
+        change_locus="decision",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    hyp_store = _HypothesisStore()
+    discarded: list[str] = []
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: patch},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            candidate_failed_pairs=0,
+            runtime_pairs=4,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="pair-level weak-positive follow-up",
+        raw_metrics_ref="/tmp/metrics.json",
+        pair_feedback=(
+            PairwiseCaseFeedback(case_id="case-a", seed=1, comparison="win", delta=1.0),
+            PairwiseCaseFeedback(case_id="case-b", seed=1, comparison="tie", delta=0.0),
+            PairwiseCaseFeedback(case_id="case-c", seed=1, comparison="tie", delta=0.0),
+            PairwiseCaseFeedback(case_id="case-d", seed=1, comparison="tie", delta=0.0),
+        ),
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+        ),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert "weak-positive screening signal" in result.reason
+    assert stored.branch_code_status == "active_weak_positive"
+    assert stored.last_screening_feedback_tier == "weak_positive"
+    assert stored.branch_evidence_summary["runtime_evidence_pressure_count"] == 0
+    assert discarded == []
+    assert hyp_store.statuses == [
+        ("h-pair-weak-positive", "screening_weak_positive_retained")
+    ]
+
 
 def test_continue_explore_discards_candidate_failed_screening_workspace() -> None:
     controller = BranchController()

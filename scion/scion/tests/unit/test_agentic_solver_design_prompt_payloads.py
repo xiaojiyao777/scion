@@ -207,6 +207,64 @@ def test_solver_design_code_prompt_default_stays_problem_agnostic() -> None:
     assert "CVRP" not in rendered_system
 
 
+def test_code_prompt_renders_generic_telemetry_identity_rules() -> None:
+    context = {
+        "problem_summary": "Synthetic scheduling problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "solver_body.py",
+        "action": "modify",
+        "hypothesis_implementation_brief": {
+            "hypothesis_text": "Add a declared bounded intensifier.",
+            "target_file": "solver_body.py",
+            "mechanism_changes": [
+                {"id": "bounded_intensifier", "change_type": "add"}
+            ],
+            "expected_telemetry": {
+                "activation": ["runtime_records.{mechanism}_selected"]
+            },
+        },
+        "target_file_code": (
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return None\n"
+        ),
+        "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+        "import_whitelist": "math, random, time",
+        "reference_operators": "",
+        "editable_patterns": "solver_body.py",
+        "frozen_patterns": "adapter.py",
+        "active_subject_taxonomy": {
+            "telemetry_identity_allowlist": ("setup_phase",)
+        },
+    }
+
+    system_blocks, user_prompt = _split_code_context(context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+
+    assert "Telemetry Identity Rules" in user_prompt
+    assert "`bounded_intensifier`" in user_prompt
+    assert "new or increased mechanism telemetry" in user_prompt
+    assert "approved/protected mechanism id(s)" in user_prompt
+    assert (
+        "Do not use a broad phase, baseline, structural, or aggregate id"
+        in user_prompt
+    )
+    assert "mechanism evidence for this hypothesis" in user_prompt
+    assert (
+        "Adapter allowlist for such non-mechanism phase ids: `setup_phase`"
+        in user_prompt
+    )
+    assert "diagnostic or accounting context only" in user_prompt
+    assert "Telemetry Identity Rules" not in rendered_system
+    assert "CVRP" not in user_prompt
+    assert "VRP" not in user_prompt
+    assert "route" not in user_prompt.lower()
+    assert "vehicle" not in user_prompt.lower()
+    assert "capacity" not in user_prompt.lower()
+    assert "demand" not in user_prompt.lower()
+
+
 def test_solver_design_code_prompt_uses_synthetic_provider_guidance() -> None:
     client = CapturingToolClient()
     creative = CreativeLayer(client)

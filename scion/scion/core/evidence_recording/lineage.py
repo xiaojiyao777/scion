@@ -397,7 +397,7 @@ class LineageRecorderMixin:
             "decision": decision_value,
             "scheduler_slot": slot,
             "scheduler_reason": reason,
-            "decision_features_json": json.dumps(payload, sort_keys=True),
+            "decision_features_json": "",
             "audit_payload_json": json.dumps(payload, sort_keys=True),
         }
         hypothesis_id = getattr(step, "hypothesis_id", None)

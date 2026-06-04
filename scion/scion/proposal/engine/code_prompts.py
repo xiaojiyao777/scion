@@ -206,6 +206,7 @@ def _split_code_context(
         D["previous_patch"],
         current_feedback=D["agentic_code_self_check_feedback"],
     )
+    telemetry_identity_section = _telemetry_identity_guidance_section(D)
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     cacheable_agentic_context = ""
     dynamic_agentic_context = ""
@@ -296,6 +297,7 @@ def _split_code_context(
         f"{dynamic_edit_source_section}"
         f"{dynamic_integration_files_section}"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
+        f"{telemetry_identity_section}"
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
@@ -376,6 +378,60 @@ def _split_code_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _telemetry_identity_guidance_section(context: Dict[str, Any]) -> str:
+    mechanism_ids = _approved_mechanism_ids(context)
+    if not mechanism_ids:
+        return ""
+    taxonomy = context.get("active_subject_taxonomy")
+    allowlist: list[str] = []
+    if isinstance(taxonomy, dict):
+        allowlist = sorted(_string_set(taxonomy.get("telemetry_identity_allowlist")))
+    allowlist_text = ", ".join(f"`{item}`" for item in allowlist) or "none declared"
+    mechanism_text = ", ".join(f"`{item}`" for item in mechanism_ids)
+    return (
+        "## Telemetry Identity Rules\n"
+        f"- Approved/protected mechanism id(s) for this code patch: {mechanism_text}.\n"
+        "- Any new or increased mechanism telemetry must use only those exact "
+        "approved/protected mechanism id(s). This applies to runtime telemetry "
+        "helpers such as `record_phase`, `record_iteration`, `record_move`, and "
+        "equivalent selected-surface telemetry helpers.\n"
+        "- Do not create, rename, copy, or increase telemetry under undeclared "
+        "mechanism ids. Do not use a broad phase, baseline, structural, or "
+        "aggregate id as mechanism evidence for this hypothesis.\n"
+        "- Baseline, structural, or aggregate phase telemetry may remain only "
+        "when it is unchanged from the visible source, or when the adapter "
+        "telemetry identity allowlist explicitly permits that id. Adapter "
+        f"allowlist for such non-mechanism phase ids: {allowlist_text}.\n"
+        "- Allowed baseline/structural/aggregate phase telemetry is diagnostic "
+        "or accounting context only; it is not activation/effect evidence for "
+        "the approved mechanism id(s).\n\n"
+    )
+
+
+def _approved_mechanism_ids(context: Dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for source in (
+        context.get("mechanism_changes"),
+        (
+            context.get("hypothesis_implementation_brief", {})
+            if isinstance(context.get("hypothesis_implementation_brief"), dict)
+            else {}
+        ).get("mechanism_changes"),
+    ):
+        if not isinstance(source, (list, tuple)):
+            continue
+        for change in source:
+            if not isinstance(change, dict):
+                continue
+            mechanism_id = str(change.get("id") or "").strip()
+            if mechanism_id and mechanism_id not in ids:
+                ids.append(mechanism_id)
+    for mechanism_id in sorted(_string_set(context.get("protected_mechanism_ids"))):
+        if mechanism_id not in ids:
+            ids.append(mechanism_id)
+    return ids
 
 
 def _code_implementation_brief(context: Dict[str, Any]) -> str:

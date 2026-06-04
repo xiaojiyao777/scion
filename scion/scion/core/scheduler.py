@@ -204,6 +204,10 @@ class Scheduler:
                     branch=None,
                     reason=RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
                     slot="explore_new",
+                    audit_metadata=_clean_fork_selection_audit(
+                        eligible_research,
+                        reason=RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+                    ),
                 )
             preferred_research = [
                 branch
@@ -238,6 +242,10 @@ class Scheduler:
                         branch=None,
                         reason=reason,
                         slot="explore_new",
+                        audit_metadata=_clean_fork_selection_audit(
+                            eligible_research,
+                            reason=reason,
+                        ),
                     )
                 return SchedulerAction(
                     action="at_capacity",
@@ -288,6 +296,11 @@ class Scheduler:
                     branch=None,
                     reason="established_branch_portfolio_expansion",
                     slot="explore_new",
+                    audit_metadata=_weak_positive_followup_suppression_audit(
+                        active,
+                        selected_policy="clean_fork_selected",
+                        selected_reason="established_branch_portfolio_expansion",
+                    ),
                 )
             selection_pool = clean_research or preferred_research or eligible_research
             selected = _select_budgeted(selection_pool)
@@ -312,6 +325,11 @@ class Scheduler:
             branch=None,
             reason="new_exploration_slot_available",
             slot="explore_new",
+            audit_metadata=_weak_positive_followup_suppression_audit(
+                active,
+                selected_policy="clean_fork_selected",
+                selected_reason="new_exploration_slot_available",
+            ),
         )
 
 
@@ -734,6 +752,66 @@ def branch_runtime_evidence_clean_fork_pressure_summary(
     }
 
 
+def _clean_fork_selection_audit(
+    branches: Iterable[Branch],
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    branch_list = list(branches)
+    audit = _weak_positive_followup_suppression_audit(
+        branch_list,
+        selected_policy="clean_fork_selected",
+        selected_reason=reason,
+    )
+    pressure_candidates: list[dict[str, Any]] = []
+    pressure_count_max = 0
+    for branch in branch_list:
+        summary = branch_runtime_evidence_clean_fork_pressure_summary(branch)
+        if not summary and not _branch_runtime_evidence_pressure_preferred(branch):
+            continue
+        evidence_summary = getattr(branch, "branch_evidence_summary", {}) or {}
+        if isinstance(evidence_summary, Mapping):
+            pressure_count = _runtime_evidence_pressure_count(evidence_summary)
+            pressure_count_max = max(pressure_count_max, pressure_count)
+        else:
+            pressure_count = 0
+        candidate = {
+            "branch_id": str(getattr(branch, "branch_id", "") or ""),
+            "lineage_status": branch_lineage_status(branch),
+            "runtime_evidence_pressure_count": pressure_count,
+        }
+        if summary:
+            candidate.update(
+                {
+                    "case_wins": summary.get("case_wins", 0),
+                    "case_losses": summary.get("case_losses", 0),
+                    "case_balance": summary.get("case_balance", "unknown"),
+                    "runtime_evidence_confidence": summary.get(
+                        "runtime_evidence_confidence",
+                        "unknown",
+                    ),
+                    "runtime_evidence_status": summary.get(
+                        "runtime_evidence_status",
+                        "unknown",
+                    ),
+                }
+            )
+        pressure_candidates.append(candidate)
+    if pressure_candidates:
+        audit.update(
+            {
+                "runtime_evidence_clean_fork_selected": True,
+                "runtime_evidence_clean_fork_reason": reason,
+                "runtime_evidence_clean_fork_candidate_count": len(
+                    pressure_candidates
+                ),
+                "runtime_evidence_pressure_count_max": pressure_count_max,
+                "runtime_evidence_clean_fork_candidates": pressure_candidates[:8],
+            }
+        )
+    return audit
+
+
 def _weak_positive_runtime_evidence_suppression_audit(
     branch: Branch,
 ) -> dict[str, Any]:
@@ -769,6 +847,83 @@ def _weak_positive_runtime_evidence_suppression_audit(
     }
 
 
+def _weak_positive_followup_suppression_audit(
+    branches: Iterable[Branch],
+    *,
+    selected_policy: str,
+    selected_reason: str,
+) -> dict[str, Any]:
+    suppressed: list[dict[str, Any]] = []
+    for branch in branches:
+        if not _branch_has_weak_positive_followup_signal(branch):
+            continue
+        suppression_reason = _weak_positive_followup_not_selected_reason(branch)
+        if not suppression_reason:
+            continue
+        suppressed.append(
+            {
+                "branch_id": str(getattr(branch, "branch_id", "") or ""),
+                "lineage_status": branch_lineage_status(branch),
+                "branch_state": _branch_state_value(branch),
+                "branch_code_status": str(
+                    getattr(branch, "branch_code_status", "") or ""
+                ),
+                "screening_tier": _branch_screening_tier(branch),
+                "reason": suppression_reason,
+                "runtime_evidence_pressure_count": _runtime_evidence_pressure_count(
+                    getattr(branch, "branch_evidence_summary", {}) or {}
+                )
+                if isinstance(getattr(branch, "branch_evidence_summary", None), Mapping)
+                else 0,
+            }
+        )
+    if not suppressed:
+        return {}
+    return {
+        "weak_positive_followup_suppressed": True,
+        "weak_positive_followup_suppression_reason": selected_reason,
+        "weak_positive_followup_suppression_selected_policy": selected_policy,
+        "weak_positive_followup_suppression_audit": suppressed[:8],
+    }
+
+
+def _branch_has_weak_positive_followup_signal(branch: Branch) -> bool:
+    if _branch_is_weak_positive_lineage(branch):
+        return True
+    if _branch_screening_tier(branch) == "weak_positive":
+        return True
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    return isinstance(summary, Mapping) and str(summary.get("tier") or "") == (
+        "weak_positive"
+    )
+
+
+def _weak_positive_followup_not_selected_reason(branch: Branch) -> str:
+    if branch.state in _TERMINAL_STATES:
+        return "terminal_or_parked"
+    if branch_is_parked_lineage(branch):
+        return "parked_lineage"
+    if branch.state != BranchState.EXPLORE:
+        return "not_research_state"
+    if getattr(branch, "pending_retry", False):
+        return "pending_retry_diagnostic_followup"
+    if _retained_checkpoint_no_effect_current_head(branch):
+        return "retained_checkpoint_no_effect_current_head"
+    if branch_lifecycle_new_mechanism_ineligible(branch):
+        return BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE
+    if _branch_lifecycle_budget_exhausted(branch):
+        return "branch_lifecycle_budget_exhausted"
+    if branch_runtime_evidence_clean_fork_pressure_summary(branch):
+        return RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    if _branch_plateau_reroute_preferred(branch):
+        return _PLATEAU_REROUTE_REASON
+    if branch_lineage_status(branch) == "diagnostic_repair":
+        return "diagnostic_repair_required"
+    if _branch_is_weak_positive_priority(branch):
+        return "lower_scheduler_priority_or_slot_reconciliation"
+    return "not_schedulable_as_weak_positive_followup"
+
+
 def _branch_is_weak_positive_priority(branch: Branch) -> bool:
     return (
         _branch_is_weak_positive_lineage(branch)
@@ -781,6 +936,15 @@ def _branch_is_weak_positive_lineage(branch: Branch) -> bool:
         "active_weak_positive",
         "restored_weak_positive",
     }
+
+
+def _branch_screening_tier(branch: Branch) -> str:
+    return str(getattr(branch, "last_screening_feedback_tier", "") or "")
+
+
+def _branch_state_value(branch: Branch) -> str:
+    state = getattr(branch, "state", "")
+    return str(getattr(state, "value", state) or "")
 
 
 def _runtime_evidence_pressure_count(summary: Mapping[str, Any]) -> int:

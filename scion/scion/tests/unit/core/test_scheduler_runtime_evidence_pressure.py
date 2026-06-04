@@ -85,6 +85,19 @@ def test_repeated_runtime_evidence_pressure_prefers_clean_fork_over_refine() -> 
     assert second.branch is None
     assert second.slot == "explore_new"
     assert second.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    assert second.audit_metadata["runtime_evidence_clean_fork_selected"] is True
+    assert (
+        second.audit_metadata["runtime_evidence_clean_fork_reason"]
+        == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    )
+    assert second.audit_metadata["runtime_evidence_pressure_count_max"] == 2
+    assert second.audit_metadata["runtime_evidence_clean_fork_candidates"] == [
+        {
+            "branch_id": "runtime-pressure",
+            "lineage_status": "active_marginal",
+            "runtime_evidence_pressure_count": 2,
+        }
+    ]
 
 
 def test_weak_positive_branch_exploit_survives_runtime_evidence_pressure() -> None:
@@ -144,6 +157,19 @@ def test_weak_positive_runtime_pressure_with_loss_prefers_clean_fork() -> None:
     assert action.branch is None
     assert action.slot == "explore_new"
     assert action.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    assert action.audit_metadata["runtime_evidence_clean_fork_selected"] is True
+    assert action.audit_metadata["weak_positive_followup_suppressed"] is True
+    assert action.audit_metadata["weak_positive_followup_suppression_audit"] == [
+        {
+            "branch_id": "weak-positive-loss-runtime-pressure",
+            "lineage_status": "active_weak_positive",
+            "branch_state": "explore",
+            "branch_code_status": "active_weak_positive",
+            "screening_tier": "weak_positive",
+            "reason": RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+            "runtime_evidence_pressure_count": 2,
+        }
+    ]
 
 
 def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() -> None:

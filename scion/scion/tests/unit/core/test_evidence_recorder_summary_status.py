@@ -280,6 +280,7 @@ def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> N
     event = scheduler_events[0]
     assert event["scheduler_slot"] == "refine_active"
     assert event["scheduler_reason"] == "existing_branch_selected"
+    assert event["decision_features_json"] == ""
     payload = json.loads(event["audit_payload_json"])
     assert payload["scheduler_slot"] == "refine_active"
     assert payload["scheduler_reason"] == "existing_branch_selected"
