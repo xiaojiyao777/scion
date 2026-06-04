@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, List, Literal, Optional
+from typing import Any, Iterable, List, Literal, Mapping, Optional
 
 from scion.core.branch_hygiene import (
     BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
@@ -57,6 +57,9 @@ _TERMINAL_STATES = frozenset({
 
 _DEFAULT_MAX_ACTIVE_BRANCHES = 3
 _PLATEAU_REROUTE_REASON = "plateau_reroute_clean_fork"
+RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON = (
+    "runtime_evidence_completeness_clean_fork"
+)
 ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
 ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH = "active_slot_reclaimed_for_new_branch"
 ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
@@ -169,6 +172,33 @@ class Scheduler:
                     reason="active_branch_limit_reached",
                     slot="capacity_blocked",
                 )
+            weak_positive_priority_candidates = [
+                branch
+                for branch in eligible_research
+                if _branch_is_weak_positive_priority(branch)
+                and not _branch_plateau_reroute_preferred(branch)
+            ]
+            if weak_positive_priority_candidates:
+                selected = _select_budgeted(weak_positive_priority_candidates)
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=selected,
+                    reason=_reason_for_branch(selected),
+                    slot=_slot_for_branch(selected),
+                )
+            if (
+                len(active_for_slots) < self._max_active_branches
+                and any(
+                    _branch_runtime_evidence_pressure_preferred(branch)
+                    for branch in eligible_research
+                )
+            ):
+                return SchedulerAction(
+                    action="create_new",
+                    branch=None,
+                    reason=RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+                    slot="explore_new",
+                )
             preferred_research = [
                 branch
                 for branch in eligible_research
@@ -188,11 +218,19 @@ class Scheduler:
                     slot=_slot_for_branch(selected),
                 )
             if not preferred_research:
+                reason = (
+                    RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+                    if any(
+                        _branch_runtime_evidence_pressure_preferred(branch)
+                        for branch in eligible_research
+                    )
+                    else _PLATEAU_REROUTE_REASON
+                )
                 if len(active_for_slots) < self._max_active_branches:
                     return SchedulerAction(
                         action="create_new",
                         branch=None,
-                        reason=_PLATEAU_REROUTE_REASON,
+                        reason=reason,
                         slot="explore_new",
                     )
                 return SchedulerAction(
@@ -617,6 +655,8 @@ def _marginal_loop_exhausted(branch: Branch) -> bool:
 
 
 def _branch_plateau_reroute_preferred(branch: Branch) -> bool:
+    if _branch_runtime_evidence_pressure_preferred(branch):
+        return True
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
     repeated = max(
@@ -639,6 +679,29 @@ def _branch_plateau_reroute_preferred(branch: Branch) -> bool:
     if status == "active_weak_positive" or tier == "weak_positive":
         return repeated >= 2
     return False
+
+
+def _branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
+    if _branch_is_weak_positive_priority(branch):
+        return False
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return False
+    try:
+        pressure_count = max(
+            0,
+            int(summary.get("runtime_evidence_pressure_count") or 0),
+        )
+    except (TypeError, ValueError):
+        return False
+    return pressure_count >= 2
+
+
+def _branch_is_weak_positive_priority(branch: Branch) -> bool:
+    return branch_lineage_status(branch) in {
+        "active_weak_positive",
+        "restored_weak_positive",
+    }
 
 
 def _branch_research_priority(branch: Branch) -> int:

@@ -278,6 +278,12 @@ def update_branch_screening_evidence_summary(
         )
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    runtime_pressure_count = _runtime_evidence_pressure_count(
+        previous_summary,
+        current_summary=summary,
+        reason_codes=reason_codes,
+    )
+    summary["runtime_evidence_pressure_count"] = runtime_pressure_count
     history_codes = _historical_reason_codes(previous_summary, reason_codes)
     if history_codes:
         summary["history_reason_codes"] = list(history_codes)
@@ -494,6 +500,52 @@ def _screening_gate_reason_codes(reason_codes: Iterable[str]) -> tuple[str, ...]
         for code in _string_tuple(tuple(reason_codes or ()))
         if _is_gate_observation_reason_code(code)
     )
+
+
+def _runtime_evidence_pressure_count(
+    previous_summary: Mapping[str, Any],
+    *,
+    current_summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> int:
+    if not _runtime_evidence_pressure_detected(current_summary, reason_codes):
+        return 0
+    return (
+        max(
+            0,
+            int(previous_summary.get("runtime_evidence_pressure_count") or 0),
+        )
+        + 1
+    )
+
+
+def _runtime_evidence_pressure_detected(
+    summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> bool:
+    confidence = str(
+        summary.get("runtime_evidence_confidence") or ""
+    ).strip().lower()
+    status = str(summary.get("runtime_evidence_status") or "").strip().lower()
+    if confidence.startswith("low") or "cached" in confidence:
+        return True
+    if status in {"insufficient", "fresh_champion_required"}:
+        return True
+    reason_set = {str(code).upper() for code in reason_codes}
+    if not (
+        "SCREENING_RUNTIME_BUDGET_SATURATION" in reason_set
+        or "TINY_RUNTIME_BUDGET_SATURATION" in reason_set
+        or "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC" in reason_set
+    ):
+        return False
+    wins = max(0, int(summary.get("wins") or 0))
+    pair_wins = max(0, int(summary.get("pair_wins") or 0))
+    median_delta = summary.get("median_delta")
+    try:
+        positive_delta = median_delta is not None and float(median_delta) > 1e-12
+    except (TypeError, ValueError):
+        positive_delta = False
+    return wins == 0 and pair_wins == 0 and not positive_delta
 
 
 def _is_gate_observation_reason_code(code: str) -> bool:

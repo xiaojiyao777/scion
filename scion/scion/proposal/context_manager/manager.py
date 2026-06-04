@@ -37,6 +37,10 @@ from scion.proposal.context.branch_followup import (
     build_branch_followup_policy,
     render_branch_followup_policy,
 )
+from scion.proposal.context.cross_branch_research import (
+    build_cross_branch_research_map,
+    render_cross_branch_research_map,
+)
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -455,6 +459,15 @@ class ContextManager:
             safe_hypothesis_steps,
         )
         branch_dossier = render_branch_dossier(branch_dossier_payload)
+        cross_branch_research_payload = build_cross_branch_research_map(
+            branch,
+            [branch, *(sibling_branches or [])],
+            safe_hypothesis_steps,
+            available_actions=effective_available_actions,
+        )
+        cross_branch_research = render_cross_branch_research_map(
+            cross_branch_research_payload
+        )
         branch_followup_policy_payload = build_branch_followup_policy(
             branch,
             safe_hypothesis_steps,
@@ -497,6 +510,8 @@ class ContextManager:
             "branch_direction": branch_direction,
             "branch_dossier": branch_dossier,
             "branch_dossier_payload": branch_dossier_payload,
+            "cross_branch_research": cross_branch_research,
+            "cross_branch_research_payload": cross_branch_research_payload,
             "branch_followup_policy": branch_followup_policy,
             "branch_followup_policy_payload": branch_followup_policy_payload,
             "exploration_coverage": exploration_coverage,

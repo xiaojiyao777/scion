@@ -23,6 +23,8 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_STALE_RESCREEN_FAIL,
     SCREENING_RUNTIME_SATURATION_DIAGNOSTIC,
     SCREENING_RUNTIME_SATURATION_REROUTE,
+    SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED,
+    SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,
     SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE,
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
@@ -311,6 +313,51 @@ def test_runtime_saturation_diagnostic_reroutes_before_generic_zero_win_limit() 
     assert keep.next_zero_win_streak == 1
     assert reroute.action == "park_lineage"
     assert reroute.reason_codes == (SCREENING_RUNTIME_SATURATION_REROUTE,)
+    assert reroute.next_zero_win_streak == 2
+
+
+def test_low_runtime_evidence_pair_signal_exhausts_before_generic_zero_win_limit() -> None:
+    policy = BranchLifecyclePolicy()
+
+    keep = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            pair_wins=5,
+            pair_losses=3,
+            pair_ties=8,
+            valid_pairs=16,
+            runtime_evidence_confidence="low_cached_champion",
+        ),
+        current_zero_win_streak=0,
+    )
+    reroute = policy.decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            pair_wins=5,
+            pair_losses=3,
+            pair_ties=8,
+            valid_pairs=16,
+            runtime_evidence_confidence="low_cached_champion",
+        ),
+        current_zero_win_streak=1,
+    )
+
+    assert keep.action == "retain_head"
+    assert keep.reason_codes == (
+        SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+        SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,
+    )
+    assert keep.next_zero_win_streak == 1
+    assert reroute.action == "park_lineage"
+    assert reroute.reason_codes == (
+        SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED,
+    )
     assert reroute.next_zero_win_streak == 2
 
 

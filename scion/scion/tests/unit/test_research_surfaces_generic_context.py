@@ -260,6 +260,13 @@ def test_weak_positive_branch_context_includes_branch_dossier_questions(
         last_telemetry_outcome="evaluated_no_effect",
         branch_mechanism_ids=("bounded_assignment_refine",),
     )
+    sibling = Branch(
+        branch_id="branch-sibling",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+        branch_mechanism_ids=("bounded_assignment_refine_variant",),
+    )
     step = StepRecord(
         round_num=1,
         branch_id=branch.branch_id,
@@ -313,6 +320,46 @@ def test_weak_positive_branch_context_includes_branch_dossier_questions(
         failure_detail=None,
         decision_reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
     )
+    sibling_step = StepRecord(
+        round_num=1,
+        branch_id=sibling.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Tune a sibling bounded assignment refinement.",
+            change_locus="assignment_policy",
+            action="modify",
+            target_file="policies/assignment.py",
+            mechanism_changes=(
+                MechanismChange(
+                    id="bounded_assignment_refine_variant",
+                    change_type="modify",
+                ),
+            ),
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=4,
+                wins=0,
+                losses=0,
+                ties=4,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="continue",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            exposed_summary="screening summary",
+            raw_metrics_ref="/private/sibling-screening.json",
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        decision_reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+    )
 
     ctx = ContextManager().build_hypothesis_context(
         branch=branch,
@@ -320,7 +367,8 @@ def test_weak_positive_branch_context_includes_branch_dossier_questions(
         problem_spec=legacy,
         active_hypotheses=[],
         blacklist=[],
-        step_history=[step],
+        sibling_branches=[sibling],
+        step_history=[step, sibling_step],
     )
     system_blocks, user_prompt = _split_hypothesis_context(ctx)
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
@@ -331,7 +379,19 @@ def test_weak_positive_branch_context_includes_branch_dossier_questions(
     assert '"zero_effect_streak"' in prompt_text
     assert "Which observed signal should this follow-up preserve?" in prompt_text
     assert "What minimal refinement should test the branch-local explanation?" in prompt_text
+    assert "## Cross-Branch Research Map" in prompt_text
+    assert "cross_branch_research.v1" in prompt_text
+    assert '"lesson_cards"' in prompt_text
+    assert '"novelty_pressure"' in prompt_text
+    assert '"portfolio_guidance"' in prompt_text
+    assert (
+        '"hint_type": "near_duplicate"' in prompt_text
+        or '"hint_type": "saturated_family"' in prompt_text
+    )
+    assert '"scope": "branch_local"' in prompt_text
+    assert '"scope": "cross_branch"' in prompt_text
     assert "excluded_from_decision_features" in prompt_text
+    assert "/private/sibling-screening.json" not in prompt_text
 
 
 def test_branch_created_helper_source_is_visible_in_hypothesis_context(

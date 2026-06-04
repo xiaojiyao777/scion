@@ -93,6 +93,10 @@ def _split_hypothesis_context(
         branch_context_parts.append(f"## Branch Direction\n{D['branch_direction']}")
     if D["branch_dossier"]:
         branch_context_parts.append(f"## Branch Dossier\n{D['branch_dossier']}")
+    if D["cross_branch_research"]:
+        branch_context_parts.append(
+            f"## Cross-Branch Research Map\n{D['cross_branch_research']}"
+        )
     if D["branch_followup_policy"]:
         branch_context_parts.append(
             f"## Branch Follow-up Policy\n{D['branch_followup_policy']}"
@@ -264,6 +268,7 @@ def _split_hypothesis_target_intent_context(
         ("branch_hygiene_guidance", "Branch Same-Mechanism / Clean-Fork Guidance"),
         ("branch_followup_policy", "Branch Follow-up Policy"),
         ("branch_dossier", "Branch Dossier"),
+        ("cross_branch_research", "Cross-Branch Research Map"),
         ("experiment_history", "Experiment History"),
         ("blacklist_summary", "Globally Failed / Blacklisted Approaches"),
         ("active_hyp_summary", "Currently Occupied"),
@@ -512,6 +517,9 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         return "\n".join(lines) + "\n"
     if active_boundary:
         targetable_files = str(context.get("targetable_files") or "")
+        available_actions = str(
+            context.get("available_actions") or "create_new, modify, remove"
+        )
         lines = [
             "## Task",
             (
@@ -524,7 +532,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 "policies may be referenced only as implementation hooks or "
                 "attribution evidence inside the problem-level solver design."
             ),
-            "Set `action` to one legal action for the active boundary.",
+            f"Set `action` to one of the legal active-boundary actions: {available_actions}.",
         ]
         if targetable_files:
             lines.append(

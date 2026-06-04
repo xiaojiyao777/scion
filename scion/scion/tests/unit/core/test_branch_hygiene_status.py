@@ -554,6 +554,34 @@ def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     assert "runtime_evidence_confidence=low_cached_champion" in text
 
 
+def test_branch_card_exposes_runtime_evidence_pressure_count() -> None:
+    branch = Branch(
+        branch_id="runtime-pressure-card",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_marginal",
+        last_screening_feedback_tier="marginal",
+        branch_evidence_summary={
+            "tier": "marginal",
+            "wins": 1,
+            "losses": 1,
+            "runtime_evidence_pressure_count": "2",
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["runtime_evidence_pressure_count"] == 2
+    assert payload["current_head_runtime_evidence_pressure_count"] == 2
+    assert payload["generic_evidence_summary"][
+        "runtime_evidence_pressure_count"
+    ] == 2
+    assert "runtime_evidence_pressure_count:2" in text
+    assert "runtime_evidence_pressure_count=2" in text
+
+
 def test_branch_card_explains_low_confidence_runtime_aggregate_exclusion() -> None:
     branch = Branch(
         branch_id="runtime-exclusion-card",

@@ -64,6 +64,9 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         _card_mapping_list(context.get("history_phase_activation_summaries"))
     )
     runtime_confidence = context.get("runtime_evidence_confidence") or "unknown"
+    runtime_pressure_count = _optional_int(
+        context.get("runtime_evidence_pressure_count")
+    )
     why_not_promoted = (
         ",".join(_card_list(context.get("why_not_promoted_reason_codes"))) or "none"
     )
@@ -106,6 +109,10 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     if history_activation != "none":
         optional_parts.append(
             f"history_phase_activation_summaries={history_activation}"
+        )
+    if runtime_pressure_count is not None:
+        optional_parts.append(
+            f"runtime_evidence_pressure_count={runtime_pressure_count}"
         )
     optional_suffix = (
         " " + " ".join(optional_parts)
@@ -293,6 +300,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     current_head_active_slot_release_reason = (
         branch_active_slot_release_reason(branch) if branch is not None else ""
     )
+    runtime_evidence_pressure_count = _branch_runtime_evidence_pressure_count(branch)
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (
         max(0, int(getattr(branch, "rollback_count", 0) or 0))
@@ -461,6 +469,11 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         else {},
         "baseline_policy": baseline_policy,
     }
+    if runtime_evidence_pressure_count is not None:
+        context["runtime_evidence_pressure_count"] = runtime_evidence_pressure_count
+        context["current_head_runtime_evidence_pressure_count"] = (
+            runtime_evidence_pressure_count
+        )
     context.update(branch_lifecycle_reroute_context(branch))
     diversity_guidance = _runtime_saturated_diversity_guidance(context)
     if diversity_guidance:
@@ -841,6 +854,14 @@ def _branch_runtime_evidence_confidence(branch: Branch | None) -> str:
     return "unknown"
 
 
+def _branch_runtime_evidence_pressure_count(branch: Branch | None) -> int | None:
+    value = _branch_evidence_summary(branch).get("runtime_evidence_pressure_count")
+    count = _optional_int(value)
+    if count is None:
+        return None
+    return max(0, count)
+
+
 def _current_reason_codes(branch: Branch | None) -> list[str]:
     return _branch_evidence_codes(
         branch,
@@ -985,6 +1006,9 @@ def _branch_generic_evidence_summary(
     runtime_confidence = _branch_runtime_evidence_confidence(branch)
     if runtime_confidence != "unknown":
         summary["runtime_evidence_confidence"] = runtime_confidence
+    runtime_pressure_count = _branch_runtime_evidence_pressure_count(branch)
+    if runtime_pressure_count is not None:
+        summary["runtime_evidence_pressure_count"] = runtime_pressure_count
     runtime_aggregate_exclusion = source.get("runtime_aggregate_exclusion")
     if isinstance(runtime_aggregate_exclusion, Mapping) and runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = dict(runtime_aggregate_exclusion)
@@ -1089,6 +1113,11 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
     runtime_confidence = summary.get("runtime_evidence_confidence")
     if runtime_confidence:
         parts.append(f"runtime_confidence:{runtime_confidence}")
+    runtime_pressure_count = _optional_int(
+        summary.get("runtime_evidence_pressure_count")
+    )
+    if runtime_pressure_count is not None:
+        parts.append(f"runtime_evidence_pressure_count:{runtime_pressure_count}")
     exclusion = summary.get("runtime_aggregate_exclusion")
     if isinstance(exclusion, Mapping) and exclusion.get("excluded"):
         reason = exclusion.get("reason") or exclusion.get("runtime_confidence")

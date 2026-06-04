@@ -125,6 +125,7 @@ def _build_runtime_feedback(
             "Recent screening runtime summary:\n" + "\n".join(reversed(summaries))
         )
     if runtime_budget_saturation_rounds:
+        recent_saturation_count = len(runtime_budget_saturation_rounds)
         sections.append(
             "Recent runtime budget saturation diagnostics:\n"
             + "- "
@@ -135,6 +136,17 @@ def _build_runtime_feedback(
             "budget allocation, or evaluation observability, and make the "
             "hypothesis explain how it reduces or redirects runtime pressure."
         )
+        if recent_saturation_count >= 3:
+            sections.append(
+                "Runtime-saturated plateau control:\n"
+                "- The next hypothesis must include a concrete "
+                "`runtime_budget_strategy` that either reduces candidate work, "
+                "moves work to a cheaper trigger, reallocates budget away from "
+                "a saturated path, or adds bounded observability before adding "
+                "more expensive search.\n"
+                "- Treat another homogeneous high-cost mechanism as low value "
+                "unless it changes the runtime-pressure pathway."
+            )
     if failure_cases:
         sections.append(
             "Recent screening runtime failure categories:\n"

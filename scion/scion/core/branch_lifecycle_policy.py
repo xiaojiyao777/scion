@@ -63,6 +63,12 @@ SCREENING_RUNTIME_SATURATION_DIAGNOSTIC = (
     "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC"
 )
 SCREENING_RUNTIME_SATURATION_REROUTE = "SCREENING_RUNTIME_SATURATION_REROUTE"
+SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE = (
+    "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE"
+)
+SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED = (
+    "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED"
+)
 SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC = (
     "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"
 )
@@ -521,6 +527,8 @@ class BranchLifecyclePolicy:
         reasons: list[str] = []
         if features.runtime_budget_saturation_diagnostic:
             reasons.append(SCREENING_RUNTIME_SATURATION_DIAGNOSTIC)
+        if _runtime_evidence_completeness_pressure(features):
+            reasons.append(SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE)
         if features.telemetry_effect_zero_diagnostic:
             reasons.append(SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC)
         return tuple(reasons)
@@ -532,6 +540,8 @@ class BranchLifecyclePolicy:
         reasons: list[str] = []
         if features.runtime_budget_saturation_diagnostic:
             reasons.append(SCREENING_RUNTIME_SATURATION_REROUTE)
+        if _runtime_evidence_completeness_pressure(features):
+            reasons.append(SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED)
         if features.telemetry_effect_zero_diagnostic:
             reasons.append(SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE)
         return tuple(reasons)
@@ -754,6 +764,18 @@ def _branch_evidence_tier(
     return ""
 
 
+def _runtime_evidence_completeness_pressure(features: DecisionFeatures) -> bool:
+    status = str(
+        getattr(features, "runtime_evidence_status", "") or ""
+    ).strip().lower()
+    if status in {"insufficient", "fresh_champion_required"}:
+        return True
+    confidence = str(
+        getattr(features, "runtime_evidence_confidence", "") or ""
+    ).strip().lower()
+    return confidence.startswith("low") or "cached" in confidence
+
+
 def _action_reason_code(action: BranchLifecycleAction) -> str:
     return {
         "retain_head": BRANCH_LIFECYCLE_RETAIN_HEAD,
@@ -794,6 +816,8 @@ __all__ = [
     "SCREENING_STALE_RESCREEN_FAIL",
     "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
     "SCREENING_RUNTIME_SATURATION_REROUTE",
+    "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE",
+    "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_EXHAUSTED",
     "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
     "SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE",
     "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY",

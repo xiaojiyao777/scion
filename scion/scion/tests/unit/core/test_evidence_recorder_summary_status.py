@@ -511,6 +511,46 @@ def test_status_and_summary_cap_active_slots_from_branch_cards(
         assert payload["active_slots"]["overflow_branch_ids"] == ["branch-c"]
 
 
+def test_campaign_summary_branch_cards_keep_runtime_evidence_pressure_count(
+    tmp_path: Path,
+) -> None:
+    branch_card = {
+        "branch_id": "runtime-pressure-card",
+        "status": "explore",
+        "active_slot_status": "active_slot",
+        "counts_toward_active_slots": True,
+        "runtime_evidence_pressure_count": 2,
+        "generic_evidence_summary": {
+            "tier": "marginal",
+            "runtime_evidence_pressure_count": 2,
+        },
+    }
+    recorder = EvidenceRecorder(
+        campaign_id="camp-runtime-pressure",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_experiments": 0,
+            "proposal_attempts": 0,
+            "screened_experiments": 0,
+            "n_active_branches": 1,
+            "branches": [{"id": "branch-1", "branch_card": branch_card}],
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=0,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    [summary_card] = summary["branch_cards"]
+    assert summary_card["runtime_evidence_pressure_count"] == 2
+    assert summary_card["generic_evidence_summary"][
+        "runtime_evidence_pressure_count"
+    ] == 2
+
+
 def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     tmp_path: Path,
 ) -> None:
