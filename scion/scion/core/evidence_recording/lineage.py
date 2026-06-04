@@ -37,6 +37,20 @@ from .artifact_refs import (
 logger = logging.getLogger(__name__)
 
 
+def _runtime_guard_decision_features(
+    runtime_guard: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return the non-text runtime guard subset allowed in decision features."""
+    if not runtime_guard:
+        return {}
+    features: Dict[str, Any] = {}
+    if "passed" in runtime_guard:
+        features["runtime_guard_passed"] = bool(runtime_guard["passed"])
+    if "elapsed_ms" in runtime_guard:
+        features["runtime_guard_elapsed_ms"] = runtime_guard["elapsed_ms"]
+    return features
+
+
 class LineageRecorderMixin:
     def build_step_lineage_event(
         self,
@@ -81,6 +95,9 @@ class LineageRecorderMixin:
             tuple(decision_reason_codes or ()) + tuple(protocol_reason_codes),
             protocol_reason_codes=protocol_reason_codes,
         )
+        verification_checks = _serialize_verification_checks(verification_result)
+        runtime_guard = _extract_runtime_guard_evidence(verification_result)
+        telemetry_feedback = telemetry_validation_feedback(protocol_result)
         internal_audit_payload = {
             "schema": "scion.internal_audit_refs.v1",
             "internal_only": True,
@@ -98,6 +115,10 @@ class LineageRecorderMixin:
                 "protocol_raw_metrics_ref_scope": "public_artifact_ref",
                 "raw_metrics_internal_only": True,
             },
+            "verification_checks": verification_checks,
+            "runtime_guard": runtime_guard,
+            "telemetry_failure_details": telemetry_details,
+            "telemetry_validation_feedback": telemetry_feedback,
         }
         evidence_metadata = {
             "branch_state": branch.state.value,
@@ -121,25 +142,9 @@ class LineageRecorderMixin:
             ),
             "current_champion_version": champion.version,
             "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
-            "protocol_raw_metrics_ref": raw_metrics_public_ref,
-            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
-            "raw_metrics_public_ref": raw_metrics_public_ref,
-            "raw_metrics_ref_scope": "public_artifact_ref",
-            "raw_metrics_internal_only": True,
-            "internal_audit_payload": "experiment_events.audit_payload_json",
-            "metrics_refs": {
-                "raw_metrics_ref": raw_metrics_public_ref,
-                "raw_metrics_ref_scope": "public_artifact_ref",
-                "protocol_raw_metrics_ref": raw_metrics_public_ref,
-                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
-                "raw_metrics_internal_only": True,
-                "audit_payload_stored_in": "experiment_events.audit_payload_json",
-            },
             "selected_surface": (
                 protocol_result.selected_surface if protocol_result else None
             ),
-            "verification_checks": _serialize_verification_checks(verification_result),
-            "runtime_guard": _extract_runtime_guard_evidence(verification_result),
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
             "gate_observation_reason_codes": list(
@@ -156,11 +161,8 @@ class LineageRecorderMixin:
             "telemetry_failure_categories": list(
                 telemetry_failure_categories(protocol_result)
             ),
-            "telemetry_failure_details": telemetry_details,
-            "telemetry_validation_feedback": telemetry_validation_feedback(
-                protocol_result
-            ),
         }
+        evidence_metadata.update(_runtime_guard_decision_features(runtime_guard))
         event = {
             "campaign_id": self.campaign_id,
             "branch_id": branch.branch_id,
@@ -216,7 +218,6 @@ class LineageRecorderMixin:
         """Build the append-only decision payload for LineageRegistry.record_decision."""
         stats = protocol_result.stats if protocol_result else None
         runtime_stats = _extract_protocol_runtime_stats(protocol_result)
-        telemetry_details = list(telemetry_decision_details(protocol_result))
         protocol_reason_codes = (
             list(protocol_result.reason_codes) if protocol_result else []
         )
@@ -224,61 +225,58 @@ class LineageRecorderMixin:
             tuple(decision_reason_codes or ()) + tuple(protocol_reason_codes),
             protocol_reason_codes=protocol_reason_codes,
         )
-        features_json = json.dumps(
-            {
-                "branch_id": branch.branch_id,
-                "stage": protocol_result.stage.value if protocol_result else "",
-                "contract_passed": contract_result.passed,
-                "verification_passed": verification_result.passed,
-                "canary_passed": canary_result.passed,
-                "win_rate": stats.win_rate if stats else None,
-                "median_delta": stats.median_delta if stats else None,
-                "retry_count": branch.retry_count,
-                "failure_codes": branch.failure_codes,
-                "branch_code_status": getattr(branch, "branch_code_status", "clean"),
-                "last_screening_feedback_tier": getattr(
-                    branch,
-                    "last_screening_feedback_tier",
-                    None,
-                ),
-                "last_telemetry_outcome": getattr(
-                    branch,
-                    "last_telemetry_outcome",
-                    None,
-                ),
-                "branch_mechanism_ids": list(
-                    getattr(branch, "branch_mechanism_ids", ()) or ()
-                ),
-                "telemetry_repair_mechanism_ids": list(
-                    getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
-                ),
-                "telemetry_repair_attempts": dict(
-                    getattr(branch, "telemetry_repair_attempts", {}) or {}
-                ),
-                "runtime_guard": _extract_runtime_guard_evidence(verification_result),
-                "runtime_stats": runtime_stats,
-                "auxiliary_protocol_reason_codes": protocol_reason_codes,
-                "gate_observation_reason_codes": list(
-                    reason_code_groups.gate_observation_reason_codes
-                ),
-                "lifecycle_action_reason_codes": list(
-                    reason_code_groups.lifecycle_action_reason_codes
-                ),
-                "screened_experiment_effective": screened_experiment_effective(
-                    protocol_result
-                ),
-                "telemetry_guard_failed": formal_telemetry_guard_failed(
-                    protocol_result
-                ),
-                "telemetry_failure_categories": list(
-                    telemetry_failure_categories(protocol_result)
-                ),
-                "telemetry_failure_details": telemetry_details,
-                "telemetry_validation_feedback": telemetry_validation_feedback(
-                    protocol_result
-                ),
-            }
+        features = {
+            "branch_id": branch.branch_id,
+            "stage": protocol_result.stage.value if protocol_result else "",
+            "contract_passed": contract_result.passed,
+            "verification_passed": verification_result.passed,
+            "canary_passed": canary_result.passed,
+            "win_rate": stats.win_rate if stats else None,
+            "median_delta": stats.median_delta if stats else None,
+            "retry_count": branch.retry_count,
+            "failure_codes": branch.failure_codes,
+            "branch_code_status": getattr(branch, "branch_code_status", "clean"),
+            "last_screening_feedback_tier": getattr(
+                branch,
+                "last_screening_feedback_tier",
+                None,
+            ),
+            "last_telemetry_outcome": getattr(
+                branch,
+                "last_telemetry_outcome",
+                None,
+            ),
+            "branch_mechanism_ids": list(
+                getattr(branch, "branch_mechanism_ids", ()) or ()
+            ),
+            "telemetry_repair_mechanism_ids": list(
+                getattr(branch, "telemetry_repair_mechanism_ids", ()) or ()
+            ),
+            "telemetry_repair_attempts": dict(
+                getattr(branch, "telemetry_repair_attempts", {}) or {}
+            ),
+            "runtime_stats": runtime_stats,
+            "auxiliary_protocol_reason_codes": protocol_reason_codes,
+            "gate_observation_reason_codes": list(
+                reason_code_groups.gate_observation_reason_codes
+            ),
+            "lifecycle_action_reason_codes": list(
+                reason_code_groups.lifecycle_action_reason_codes
+            ),
+            "screened_experiment_effective": screened_experiment_effective(
+                protocol_result
+            ),
+            "telemetry_guard_failed": formal_telemetry_guard_failed(protocol_result),
+            "telemetry_failure_categories": list(
+                telemetry_failure_categories(protocol_result)
+            ),
+        }
+        features.update(
+            _runtime_guard_decision_features(
+                _extract_runtime_guard_evidence(verification_result)
+            )
         )
+        features_json = json.dumps(features)
         return {
             "branch_id": branch.branch_id,
             "features_json": features_json,

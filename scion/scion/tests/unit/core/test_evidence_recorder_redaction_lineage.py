@@ -1,5 +1,7 @@
 """Focused tests split from test_evidence_recorder.py."""
 
+from dataclasses import replace
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 
 def test_public_summary_and_status_redact_nested_diagnostics_and_branches(
@@ -150,6 +152,27 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
             "comparison_equal": True,
         },
     )
+    protocol_result = replace(
+        _protocol_result("/tmp/promotion-metrics.json"),
+        candidate_surface_runtime_summary={
+            "telemetry_guard": {
+                "passed": False,
+                "candidate_runs": 4,
+                "failures": [
+                    {
+                        "severity": "fail",
+                        "code": "TELEMETRY_ACTIVITY_ZERO",
+                        "category": "activity",
+                        "field": "activation_probe",
+                        "candidate_missing": 16,
+                        "candidate_present": 4,
+                        "candidate_positive": 0,
+                        "repairable": True,
+                    }
+                ],
+            }
+        },
+    )
     event = recorder.build_step_lineage_event(
         branch=_branch(),
         hypothesis=_hypothesis(),
@@ -167,7 +190,7 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
             ),
         ),
         canary_result=CanaryResult(passed=True),
-        protocol_result=_protocol_result("/tmp/promotion-metrics.json"),
+        protocol_result=protocol_result,
         decision=Decision.PROMOTE,
         champion=_champion(version=8),
         hypothesis_id="hyp-1",
@@ -191,20 +214,6 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert not event["raw_metrics_ref"].startswith("/")
     assert "promotion-metrics.json" in event["raw_metrics_ref"]
     assert metadata["current_champion_version"] == 8
-    assert metadata["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert metadata["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert metadata["raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert metadata["raw_metrics_internal_only"] is True
-    assert metadata["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert metadata["metrics_refs"]["raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert metadata["metrics_refs"]["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert metadata["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
-        "public_artifact_ref"
-    )
-    assert metadata["metrics_refs"]["raw_metrics_internal_only"] is True
-    assert metadata["metrics_refs"]["audit_payload_stored_in"] == (
-        "experiment_events.audit_payload_json"
-    )
     audit_payload = json.loads(event["audit_payload_json"])
     assert audit_payload["internal_only"] is True
     assert audit_payload["raw_metrics_internal_only"] is True
@@ -224,17 +233,41 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     )
     assert not contains_absolute_path(audit_payload)
     assert metadata["decision_reason_codes"] == ["frozen_positive", "runtime_ok"]
-    assert metadata["runtime_guard"]["metadata"]["ratio"] == 1.2
+    audit_only_keys = {
+        "protocol_raw_metrics_ref",
+        "raw_metrics_public_ref",
+        "metrics_refs",
+        "raw_metrics_ref_scope",
+        "raw_metrics_internal_only",
+        "internal_audit_payload",
+        "verification_checks",
+        "runtime_guard",
+        "telemetry_failure_details",
+        "telemetry_validation_feedback",
+    }
+    assert audit_only_keys.isdisjoint(metadata)
+    assert "perf ok:" not in event["decision_features_json"]
+    assert "activation_probe" not in event["decision_features_json"]
+    assert "candidate_missing=16" not in event["decision_features_json"]
+    assert metadata["runtime_guard_passed"] is True
+    assert metadata["runtime_guard_elapsed_ms"] == 7
     assert metadata["runtime_stats"]["runtime_ratio_median"] == 1.18
     assert metadata["runtime_stats"]["runtime_pairs"] == 4
-    assert metadata["verification_checks"][1]["name"] == "V8_nondeterminism"
-    assert metadata["verification_checks"][1]["metadata"]["comparison_mode"] == (
+    assert audit_payload["runtime_guard"]["metadata"]["ratio"] == 1.2
+    assert audit_payload["verification_checks"][1]["name"] == "V8_nondeterminism"
+    assert audit_payload["verification_checks"][1]["metadata"]["comparison_mode"] == (
         "adapter_canonical_signature"
     )
-    assert metadata["verification_checks"][1]["metadata"]["adapter_backed"] is True
-    assert metadata["verification_checks"][2]["name"] == "V9_perf_guard"
+    assert audit_payload["verification_checks"][1]["metadata"]["adapter_backed"] is True
+    assert audit_payload["verification_checks"][2]["name"] == "V9_perf_guard"
+    assert audit_payload["telemetry_failure_details"][0]["surface_field_id"] == (
+        "activation_probe"
+    )
+    assert "candidate_missing=16" in audit_payload["telemetry_validation_feedback"]
     payload_features = json.loads(decision_payload["features_json"])
-    assert payload_features["runtime_guard"]["metadata"]["case_id"] == "case-1"
+    assert audit_only_keys.isdisjoint(payload_features)
+    assert payload_features["runtime_guard_passed"] is True
+    assert payload_features["runtime_guard_elapsed_ms"] == 7
     assert payload_features["runtime_stats"]["runtime_regression_rate"] == 0.5
     assert reason_codes == ["frozen_positive", "runtime_ok"]
 
