@@ -23,6 +23,7 @@ from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     opportunity_diagnostics_for_protocol,
     opportunity_status_for_diagnostics,
+    runtime_evidence_policy_summary,
 )
 from scion.protocol.gates import GateResult, frozen_gate, screening_gate, validation_gate
 from scion.protocol.stats import compute_eval_stats
@@ -164,6 +165,25 @@ def run_experiment(
     )
 
     def _write_metrics_snapshot(*, complete: bool) -> None:
+        runtime_stats_snapshot = _build_runtime_stats(
+            runtime_ratios,
+            runtime_deltas_ms,
+        )
+        runtime_confidence_snapshot = (
+            "low_cached_champion"
+            if champion_cached_runtime_pairs
+            else "high"
+        )
+        runtime_evidence_policy = runtime_evidence_policy_summary(
+            runtime_confidence=runtime_confidence_snapshot,
+            runtime_evidence_status=runtime_evidence_status,
+            runtime_pairs=runtime_stats_snapshot["runtime_pairs"],
+            champion_cached_runtime_pairs=champion_cached_runtime_pairs,
+            runtime_aggregate_excluded=(
+                champion_cached_runtime_pairs > 0
+                and runtime_stats_snapshot["runtime_pairs"] <= 0
+            ),
+        )
         with open(raw_ref, "w") as f:
             json.dump(
                 {
@@ -177,16 +197,10 @@ def run_experiment(
                     "failed_pairs": failed_pairs,
                     "candidate_failed_pairs": candidate_failed_pairs,
                     "champion_failed_pairs": champion_failed_pairs,
-                    "runtime_stats": _build_runtime_stats(
-                        runtime_ratios,
-                        runtime_deltas_ms,
-                    ),
-                    "runtime_confidence": (
-                        "low_cached_champion"
-                        if champion_cached_runtime_pairs
-                        else "high"
-                    ),
+                    "runtime_stats": runtime_stats_snapshot,
+                    "runtime_confidence": runtime_confidence_snapshot,
                     "runtime_evidence_status": runtime_evidence_status,
+                    "runtime_evidence_policy": runtime_evidence_policy,
                     "champion_cache_hits": champion_cache_hits,
                     "champion_cache_misses": champion_cache_misses,
                     "champion_cache_writes": champion_cache_writes,
@@ -877,6 +891,23 @@ def run_experiment(
         f" runtime_confidence={runtime_confidence}"
         f" runtime_evidence_status={runtime_evidence_status}"
     )
+    runtime_evidence_policy = runtime_evidence_policy_summary(
+        runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_evidence_status,
+        runtime_pairs=stats.runtime_pairs,
+        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
+        runtime_aggregate_excluded=(
+            champion_cached_runtime_pairs > 0 and stats.runtime_pairs <= 0
+        ),
+    )
+    champion_cache_summary += (
+        " runtime_signal_role="
+        f"{runtime_evidence_policy.get('runtime_signal_role', 'unknown')}"
+        " runtime_standalone_optimization_signal="
+        f"{str(runtime_evidence_policy.get('standalone_optimization_signal')).lower()}"
+    )
+    if runtime_evidence_policy.get("fresh_champion_required"):
+        champion_cache_summary += " fresh_champion_required=true"
 
     # Exposure control
     if stage == ExperimentStage.SCREENING:

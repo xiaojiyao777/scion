@@ -19,6 +19,7 @@ from scion.core.models import (
     StepRecord,
     mechanism_changes,
 )
+from scion.core.screening_visibility import runtime_evidence_policy_summary
 from scion.proposal.context.cross_branch_research_support import (
     append_unique as _append_unique,
     append_unique_dict as _append_unique_dict,
@@ -408,6 +409,22 @@ def _evidence_profile(branch: Branch | None, step: StepRecord | None) -> dict[st
     )
     runtime_status = _runtime_evidence_status(protocol, stats, reason_codes)
     runtime_confidence = _runtime_evidence_confidence(protocol, reason_codes)
+    runtime_policy = runtime_evidence_policy_summary(
+        runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_status,
+        runtime_pairs=getattr(stats, "runtime_pairs", 0) if stats is not None else 0,
+        champion_cached_runtime_pairs=(
+            getattr(protocol, "champion_cached_runtime_pairs", 0)
+            if protocol is not None
+            else 0
+        ),
+        runtime_aggregate_excluded=_runtime_evidence_quality(
+            runtime_confidence,
+            runtime_status,
+            reason_codes,
+        )
+        == "low_or_incomplete",
+    )
     return _drop_empty(
         {
             "outcome_pattern": pattern,
@@ -421,6 +438,7 @@ def _evidence_profile(branch: Branch | None, step: StepRecord | None) -> dict[st
                 runtime_status,
                 reason_codes,
             ),
+            "runtime_evidence_policy": runtime_policy,
         }
     )
 
@@ -1171,9 +1189,11 @@ def _avoid_bridge_guidance(
                     cluster=cluster,
                     reason_codes=["GUIDANCE_BRIDGE_LOW_RUNTIME_EVIDENCE"],
                     proposal_guidance=(
-                        "Treat low or incomplete runtime evidence as planning "
-                        "uncertainty; bridge with clearer activation, effect, "
-                        "or measurement evidence before optimizing solely from it."
+                        "Treat low, cached, excluded, or fresh-required runtime "
+                        "evidence as planning uncertainty. Do not use it as a "
+                        "standalone optimization signal; bridge with fresh "
+                        "measurement, objective, activation, or effect evidence "
+                        "before planning from this runtime signal."
                     ),
                     confidence=0.7,
                 ),
@@ -1238,6 +1258,7 @@ def _coverage_guidance_item(
     proposal_guidance: str,
     confidence: float,
 ) -> dict[str, Any]:
+    runtime_guidance = "runtime" in guidance_type
     return _drop_empty(
         {
             "guidance_type": guidance_type,
@@ -1250,6 +1271,10 @@ def _coverage_guidance_item(
             "activation_statuses": cluster.get("activation_statuses", {}),
             "effect_statuses": cluster.get("effect_statuses", {}),
             "runtime_evidence_quality": cluster.get("runtime_evidence_quality", {}),
+            "runtime_signal_role": (
+                "audit_or_proposal_guidance_only" if runtime_guidance else None
+            ),
+            "standalone_optimization_signal": False if runtime_guidance else None,
             "reason_codes": reason_codes,
             "proposal_guidance": proposal_guidance,
             "confidence": confidence,
@@ -1401,9 +1426,10 @@ def _opportunity_gaps(
                 },
                 reason_codes=["GAP_RUNTIME_EVIDENCE_CONFIDENCE"],
                 proposal_guidance=(
-                    "Do not treat low or incomplete runtime evidence as a "
-                    "standalone optimization signal; first bridge through "
-                    "clearer evidence or a different non-runtime signal."
+                    "Do not treat low, cached, excluded, or fresh-required "
+                    "runtime evidence as a standalone optimization signal; "
+                    "first bridge through fresh measurement, clearer evidence, "
+                    "or a different non-runtime signal."
                 ),
                 confidence=0.72,
             )
@@ -1438,6 +1464,7 @@ def _gap_item(
     proposal_guidance: str,
     confidence: float,
 ) -> dict[str, Any]:
+    runtime_gap = "runtime" in gap_type
     return _drop_empty(
         {
             "gap_type": gap_type,
@@ -1445,6 +1472,10 @@ def _gap_item(
             "recommended_action": recommended_action,
             "priority": priority,
             "basis": basis,
+            "runtime_signal_role": (
+                "audit_or_proposal_guidance_only" if runtime_gap else None
+            ),
+            "standalone_optimization_signal": False if runtime_gap else None,
             "reason_codes": reason_codes,
             "proposal_guidance": proposal_guidance,
             "confidence": confidence,

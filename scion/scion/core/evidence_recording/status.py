@@ -40,6 +40,10 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "case",
     "seed",
     "selected_surface",
+    "runtime_confidence",
+    "runtime_evidence_status",
+    "runtime_evidence_policy",
+    "champion_cached_runtime_pairs",
     "runtime_budget_diagnostic",
     "runtime_budget_diagnostic_code",
 )
@@ -410,6 +414,10 @@ class StatusWriterMixin:
             "failed_pairs",
             "candidate_failed_pairs",
             "champion_failed_pairs",
+            "runtime_confidence",
+            "runtime_evidence_status",
+            "runtime_evidence_policy",
+            "champion_cached_runtime_pairs",
             "runtime_budget_diagnostic",
             "runtime_budget_diagnostic_code",
         ):

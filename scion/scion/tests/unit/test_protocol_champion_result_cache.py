@@ -8,6 +8,7 @@ import pytest
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.config.protocol_config import ScreeningConfig
+from scion.core.evidence_recording.artifact_refs import _read_partial_metrics_snapshot
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.cache import ChampionResultCache
@@ -89,12 +90,36 @@ def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
     assert "runtime_evidence_status=fresh_champion_required" in (
         second.exposed_summary
     )
+    assert "runtime_signal_role=audit_or_proposal_guidance_only" in (
+        second.exposed_summary
+    )
+    assert "runtime_standalone_optimization_signal=false" in (
+        second.exposed_summary
+    )
+    assert "fresh_champion_required=true" in second.exposed_summary
     assert runner.call_count(str(champion_ws)) == 1
 
     raw = json.loads(Path(second.raw_metrics_ref).read_text(encoding="utf-8"))
     assert raw["runtime_evidence_status"] == "fresh_champion_required"
     assert raw["runtime_stats"]["runtime_pairs"] == 0
     assert raw["pairs"][0]["champion_result_source"] == "cached"
+    policy = raw["runtime_evidence_policy"]
+    assert policy["schema_version"] == "runtime_evidence_policy.v1"
+    assert policy["runtime_evidence_confidence"] == "low_cached_champion"
+    assert policy["runtime_evidence_status"] == "fresh_champion_required"
+    assert policy["fresh_champion_required"] is True
+    assert policy["runtime_aggregate_excluded"] is True
+    assert policy["standalone_optimization_signal"] is False
+    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert policy["proposal_guidance_only"] is True
+    assert policy["decision_features_excluded"] is True
+    assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in (
+        policy["policy_reason_codes"]
+    )
+    status_snapshot = _read_partial_metrics_snapshot(second.raw_metrics_ref)
+    assert status_snapshot["runtime_evidence_status"] == "fresh_champion_required"
+    assert status_snapshot["runtime_evidence_policy"] == policy
+    assert status_snapshot["champion_cached_runtime_pairs"] == 1
 
 
 @pytest.mark.parametrize(

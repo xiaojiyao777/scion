@@ -36,6 +36,10 @@ def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
             "failed_pairs",
             "candidate_failed_pairs",
             "champion_failed_pairs",
+            "runtime_confidence",
+            "runtime_evidence_status",
+            "runtime_evidence_policy",
+            "champion_cached_runtime_pairs",
         )
         if key in data
     }

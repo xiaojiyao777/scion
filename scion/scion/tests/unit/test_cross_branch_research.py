@@ -357,10 +357,10 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
             change_locus="activation_policy",
             reason_codes=(
                 "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
-                "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE",
+                "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
             ),
             runtime_confidence="low",
-            runtime_evidence_status="insufficient",
+            runtime_evidence_status="fresh_champion_required",
             mechanism_evidence={
                 "activation": {"status": "observed"},
                 "effect": {"status": "zero"},
@@ -435,6 +435,14 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     assert "avoid_repeated_non_positive_cluster" in guidance_types
     assert "bridge_low_confidence_runtime_evidence" in guidance_types
     assert "bridge_repeated_zero_effect" in guidance_types
+    runtime_guidance = {
+        item["guidance_type"]: item for item in payload["avoid_bridge_guidance"]
+    }["bridge_low_confidence_runtime_evidence"]
+    assert runtime_guidance["runtime_signal_role"] == (
+        "audit_or_proposal_guidance_only"
+    )
+    assert runtime_guidance["standalone_optimization_signal"] is False
+    assert "standalone optimization signal" in runtime_guidance["proposal_guidance"]
 
     gap_types = {item["gap_type"] for item in payload["opportunity_gaps"]}
     assert "action_diversity_gap" in gap_types
@@ -442,6 +450,12 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     assert "target_diversity_gap" in gap_types
     assert "observability_path_gap" in gap_types
     assert "runtime_evidence_confidence_gap" in gap_types
+    runtime_gap = {
+        item["gap_type"]: item for item in payload["opportunity_gaps"]
+    }["runtime_evidence_confidence_gap"]
+    assert runtime_gap["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert runtime_gap["standalone_optimization_signal"] is False
+    assert "standalone optimization signal" in runtime_gap["proposal_guidance"]
 
     current_summary = {
         item["branch_id"]: item for item in payload["branches"]
@@ -451,6 +465,16 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     assert current_summary["research_descriptors"][0]["mechanism_family"] == (
         "bounded_signal"
     )
+    low_summary = {item["branch_id"]: item for item in payload["branches"]}[
+        "branch-low-a"
+    ]
+    low_policy = low_summary["evidence_profile"]["runtime_evidence_policy"]
+    assert low_policy["schema_version"] == "runtime_evidence_policy.v1"
+    assert low_policy["fresh_champion_required"] is True
+    assert low_policy["standalone_optimization_signal"] is False
+    assert low_policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert low_policy["proposal_guidance_only"] is True
+    assert low_policy["decision_features_excluded"] is True
 
     assert "excluded_from_decision_features" in rendered
     assert "raw_metrics_ref" not in rendered
@@ -519,6 +543,7 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "lesson_cards" not in decision_fields
     assert "novelty_pressure" not in decision_fields
     assert "portfolio_guidance" not in decision_fields
+    assert "runtime_evidence_policy" not in decision_fields
     assert "portfolio_coverage" not in decision_fields
     assert "avoid_bridge_guidance" not in decision_fields
     assert "opportunity_gaps" not in decision_fields

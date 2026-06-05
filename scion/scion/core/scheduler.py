@@ -64,6 +64,9 @@ RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON = (
 ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
 ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH = "active_slot_reclaimed_for_new_branch"
 ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
+QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON = (
+    "quality_regression_without_actionable_diagnostic_slot_release"
+)
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,7 @@ class Scheduler:
             and not branch_is_parked_lineage(b)
             and not _retained_checkpoint_no_effect_current_head(b)
             and not _no_effect_slot_release_preferred(b)
+            and not _quality_regression_slot_release_preferred(b)
             and not _branch_lifecycle_budget_exhausted(b)
         ]
 
@@ -297,10 +301,13 @@ class Scheduler:
                     branch=None,
                     reason="established_branch_portfolio_expansion",
                     slot="explore_new",
-                    audit_metadata=_weak_positive_followup_suppression_audit(
-                        active,
-                        selected_policy="clean_fork_selected",
-                        selected_reason="established_branch_portfolio_expansion",
+                    audit_metadata=_merge_audit_metadata(
+                        _weak_positive_followup_suppression_audit(
+                            active,
+                            selected_policy="clean_fork_selected",
+                            selected_reason="established_branch_portfolio_expansion",
+                        ),
+                        _low_value_active_slot_release_audit(active),
                     ),
                 )
             selection_pool = clean_research or preferred_research or eligible_research
@@ -326,10 +333,13 @@ class Scheduler:
             branch=None,
             reason="new_exploration_slot_available",
             slot="explore_new",
-            audit_metadata=_weak_positive_followup_suppression_audit(
-                active,
-                selected_policy="clean_fork_selected",
-                selected_reason="new_exploration_slot_available",
+            audit_metadata=_merge_audit_metadata(
+                _weak_positive_followup_suppression_audit(
+                    active,
+                    selected_policy="clean_fork_selected",
+                    selected_reason="new_exploration_slot_available",
+                ),
+                _low_value_active_slot_release_audit(active),
             ),
         )
 
@@ -353,6 +363,14 @@ def _select_budgeted(candidates: List[Branch]) -> Branch:
     )[0]
 
 
+def _merge_audit_metadata(*items: Mapping[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for item in items:
+        if item:
+            merged.update(dict(item))
+    return merged
+
+
 def _established_branch(branch: Branch) -> bool:
     return bool(branch.direction)
 
@@ -373,6 +391,8 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
         return False
     if _no_effect_slot_release_preferred(branch):
         return False
+    if _quality_regression_slot_release_preferred(branch):
+        return False
     return True
 
 
@@ -390,6 +410,8 @@ def branch_active_slot_release_reason(branch: Branch | None) -> str:
         return "retained_checkpoint_no_effect_current_head"
     if _no_effect_slot_release_preferred(branch):
         return "repeated_no_effect_zero_effect_slot_release"
+    if _quality_regression_slot_release_preferred(branch):
+        return QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON
     return ""
 
 
@@ -543,6 +565,7 @@ def _eligible_new_branch_slot_reclaim(branch: Branch) -> bool:
         or branch_lifecycle_new_mechanism_ineligible(branch)
         or _no_effect_slot_release_preferred(branch)
         or _no_effect_without_actionable_diagnostic(branch)
+        or _quality_regression_slot_release_preferred(branch)
         or _branch_plateau_reroute_preferred(branch)
     )
 
@@ -553,14 +576,16 @@ def _active_slot_reclaim_sort_key(branch: Branch) -> tuple[Any, ...]:
         bucket = 0
     elif branch_lifecycle_new_mechanism_ineligible(branch):
         bucket = 1
-    elif _no_effect_without_actionable_diagnostic(branch):
+    elif _quality_regression_slot_release_preferred(branch):
         bucket = 2
-    elif _branch_plateau_reroute_preferred(branch):
+    elif _no_effect_without_actionable_diagnostic(branch):
         bucket = 3
-    elif status == "active_no_effect":
+    elif _branch_plateau_reroute_preferred(branch):
         bucket = 4
-    elif status == "active_marginal":
+    elif status == "active_no_effect":
         bucket = 5
+    elif status == "active_marginal":
+        bucket = 6
     elif branch.state == BranchState.BLOCKED_INFRA:
         bucket = 10
     elif branch.state in _RESEARCH_STATES:
@@ -826,6 +851,50 @@ def _clean_fork_selection_audit(
     return audit
 
 
+def _low_value_active_slot_release_audit(
+    branches: Iterable[Branch],
+) -> dict[str, Any]:
+    candidates = [
+        summary
+        for branch in branches
+        for summary in (_low_value_active_slot_release_summary(branch),)
+        if summary
+    ]
+    if not candidates:
+        return {}
+    return {
+        "low_value_active_slot_release": True,
+        "low_value_active_slot_release_policy": (
+            "exclude_low_value_current_head_from_active_slot_pool"
+        ),
+        "low_value_active_slot_release_candidate_count": len(candidates),
+        "low_value_active_slot_release_candidates": candidates[:8],
+        "proposal_guidance_only": True,
+        "decision_features_excluded": True,
+    }
+
+
+def _low_value_active_slot_release_summary(branch: Branch) -> dict[str, Any]:
+    reason = branch_active_slot_release_reason(branch)
+    if not reason:
+        return {}
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    return {
+        "branch_id": str(getattr(branch, "branch_id", "") or ""),
+        "lineage_status": branch_lineage_status(branch),
+        "branch_state": _branch_state_value(branch),
+        "branch_code_status": str(getattr(branch, "branch_code_status", "") or ""),
+        "screening_tier": _branch_screening_tier(branch)
+        or _summary_text(evidence, "tier", default="unknown"),
+        "release_reason": reason,
+        "case_wins": _summary_nonnegative_int(evidence, "wins"),
+        "case_losses": _summary_nonnegative_int(evidence, "losses"),
+        "activation_zero_effect_streak": _activation_zero_effect_streak(branch),
+        "runtime_evidence_pressure_count": _runtime_evidence_pressure_count(evidence),
+    }
+
+
 def _weak_positive_runtime_evidence_suppression_audit(
     branch: Branch,
 ) -> dict[str, Any]:
@@ -1072,6 +1141,42 @@ def _no_effect_without_actionable_diagnostic(branch: Branch) -> bool:
     return (
         (status == "active_no_effect" or tier == "no_effect")
         and not branch_has_actionable_diagnostic(branch)
+    )
+
+
+def _quality_regression_slot_release_preferred(branch: Branch) -> bool:
+    if branch.state not in _RESEARCH_STATES:
+        return False
+    if getattr(branch, "pending_retry", False):
+        return False
+    if branch_requires_repair_focus(branch):
+        return False
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return False
+    if branch_has_retained_checkpoint(branch):
+        return False
+    if _branch_has_weak_positive_followup_signal(branch):
+        return False
+    if not _quality_regression_without_actionable_diagnostic(branch):
+        return False
+    return True
+
+
+def _quality_regression_without_actionable_diagnostic(branch: Branch) -> bool:
+    if branch_has_actionable_diagnostic(branch):
+        return False
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    summary_tier = (
+        str(summary.get("tier") or "")
+        if isinstance(summary, Mapping)
+        else ""
+    )
+    return (
+        status in {"active_quality_regression", "quality_regression"}
+        or tier == "quality_regression"
+        or summary_tier == "quality_regression"
     )
 
 

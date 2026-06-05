@@ -19,6 +19,7 @@ from scion.core.run_validity import build_run_validity, step_failure_categories
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     runtime_aggregate_exclusion_for_protocol,
+    runtime_evidence_policy_for_protocol,
 )
 from scion.core.status_reporter import (
     API_BALANCE_EXHAUSTED_STOP_REASON,
@@ -601,6 +602,7 @@ class CampaignSummaryMixin:
                 base_dir=self.campaign_dir,
                 kind="metrics",
             )
+            runtime_evidence_policy = runtime_evidence_policy_for_protocol(pr)
             step_data["protocol_result"] = {
                 "stage": pr.stage.value if hasattr(pr.stage, "value") else str(pr.stage),
                 "win_rate": stats.win_rate,
@@ -688,6 +690,7 @@ class CampaignSummaryMixin:
                 "runtime_aggregate_exclusion": (
                     runtime_aggregate_exclusion_for_protocol(pr)
                 ),
+                "runtime_evidence_policy": runtime_evidence_policy,
                 "telemetry_guard_failed": formal_telemetry_guard_failed(pr),
                 "telemetry_effect_zero_diagnostics": list(
                     telemetry_effect_zero_diagnostics(pr)
@@ -953,6 +956,9 @@ def _step_generic_evidence(step: StepRecord) -> dict[str, Any]:
     runtime_aggregate_exclusion = runtime_aggregate_exclusion_for_protocol(pr)
     if runtime_aggregate_exclusion:
         evidence["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    runtime_evidence_policy = runtime_evidence_policy_for_protocol(pr)
+    if runtime_evidence_policy:
+        evidence["runtime_evidence_policy"] = runtime_evidence_policy
     return evidence
 
 def _step_case_outcomes(step: StepRecord, dominant_result: str) -> list[dict[str, Any]]:

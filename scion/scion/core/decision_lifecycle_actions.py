@@ -23,6 +23,7 @@ from scion.core.reason_code_groups import classify_reason_codes
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     runtime_aggregate_exclusion_for_protocol,
+    runtime_evidence_policy_summary,
 )
 
 
@@ -278,6 +279,25 @@ def update_branch_screening_evidence_summary(
         )
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    runtime_policy = runtime_evidence_policy_summary(
+        runtime_confidence=summary["runtime_evidence_confidence"],
+        runtime_evidence_status=summary["runtime_evidence_status"],
+        runtime_pairs=summary["runtime_pairs"],
+        champion_cached_runtime_pairs=summary["runtime_cache"][
+            "champion_cached_runtime_pairs"
+        ],
+        runtime_aggregate_excluded=_runtime_aggregate_excluded(summary),
+        candidate_runtime_pair_evidence_count=(
+            runtime_aggregate_exclusion.get(
+                "candidate_runtime_pair_evidence_count",
+                0,
+            )
+            if isinstance(runtime_aggregate_exclusion, Mapping)
+            else 0
+        ),
+    )
+    if runtime_policy:
+        summary["runtime_evidence_policy"] = runtime_policy
     zero_effect_summary = _activation_zero_effect_summary(
         previous_summary,
         current_phase=summary["phase_activation_summary"],
@@ -591,6 +611,8 @@ def _runtime_evidence_pressure_observation(
         "runtime_evidence_confidence": confidence or "unknown",
         "runtime_evidence_status": status or "unknown",
         "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+        "runtime_signal_role": "audit_or_proposal_guidance_only",
+        "standalone_optimization_signal": False,
     }
 
 

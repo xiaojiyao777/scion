@@ -11,6 +11,25 @@ _RUNTIME_CONFIDENCE_MIN_PAIRS = 4
 _RUNTIME_SEVERE_SLOW_RATIO = 1.50
 _RUNTIME_SEVERE_SLOW_DELTA_MS = 100.0
 _RUNTIME_REGRESSION_RATE = 0.90
+_FRESH_RUNTIME_STATUSES = {"fresh_champion_required", "fresh_required"}
+_LOW_RUNTIME_STATUSES = {
+    "fresh_champion_required",
+    "fresh_required",
+    "incomplete",
+    "insufficient",
+    "missing",
+    "none",
+    "unknown_low",
+}
+_LOW_RUNTIME_CONFIDENCES = {
+    "incomplete",
+    "insufficient",
+    "low",
+    "low_cached_champion",
+    "missing",
+    "none",
+    "unknown_low",
+}
 
 
 def runtime_confidence_for_protocol(
@@ -76,6 +95,114 @@ def runtime_aggregate_exclusion_for_protocol(protocol: Any) -> dict[str, Any]:
             "evidence remains available for audit and proposal feedback."
         ),
     }
+
+
+def runtime_evidence_policy_summary(
+    *,
+    runtime_confidence: Any = "",
+    runtime_evidence_status: Any = "",
+    runtime_pairs: Any = 0,
+    champion_cached_runtime_pairs: Any = 0,
+    runtime_aggregate_excluded: Any = False,
+    candidate_runtime_pair_evidence_count: Any = 0,
+) -> dict[str, Any]:
+    """Return generic policy metadata for interpreting runtime evidence.
+
+    The payload is proposal/audit visibility only. It does not change formal
+    gate semantics and must not be copied into DecisionFeatures.
+    """
+
+    confidence = str(runtime_confidence or "").strip().lower() or "unknown"
+    status = str(runtime_evidence_status or "").strip().lower() or "unknown"
+    runtime_pair_count = _safe_int(runtime_pairs)
+    cached_pair_count = _safe_int(champion_cached_runtime_pairs)
+    candidate_pair_count = _safe_int(candidate_runtime_pair_evidence_count)
+    aggregate_excluded = bool(runtime_aggregate_excluded)
+    fresh_required = status in _FRESH_RUNTIME_STATUSES
+    low_confidence = (
+        confidence in _LOW_RUNTIME_CONFIDENCES
+        or confidence.startswith("low")
+        or "cached" in confidence
+    )
+    incomplete_status = (
+        status in _LOW_RUNTIME_STATUSES
+        or "incomplete" in status
+        or "insufficient" in status
+    )
+    low_or_incomplete = bool(
+        fresh_required
+        or low_confidence
+        or incomplete_status
+        or aggregate_excluded
+    )
+    reason_codes: list[str] = []
+    if low_confidence:
+        reason_codes.append("RUNTIME_EVIDENCE_LOW_OR_CACHED_CONFIDENCE")
+    if fresh_required:
+        reason_codes.append("RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED")
+    elif incomplete_status:
+        reason_codes.append("RUNTIME_EVIDENCE_INCOMPLETE")
+    if aggregate_excluded:
+        reason_codes.append("RUNTIME_AGGREGATE_EXCLUDED")
+    if not reason_codes:
+        reason_codes.append("RUNTIME_EVIDENCE_SUPPORTING_SIGNAL_ONLY")
+    return _drop_empty(
+        {
+            "schema_version": "runtime_evidence_policy.v1",
+            "runtime_evidence_confidence": confidence,
+            "runtime_evidence_status": status,
+            "runtime_pairs": runtime_pair_count,
+            "champion_cached_runtime_pairs": cached_pair_count,
+            "candidate_runtime_pair_evidence_count": candidate_pair_count,
+            "fresh_champion_required": fresh_required,
+            "runtime_aggregate_excluded": aggregate_excluded,
+            "standalone_optimization_signal": False,
+            "runtime_signal_role": (
+                "audit_or_proposal_guidance_only"
+                if low_or_incomplete
+                else "tie_break_supporting_signal"
+            ),
+            "policy_reason_codes": reason_codes,
+            "proposal_guidance": (
+                "Do not use runtime evidence as a standalone optimization "
+                "signal; require fresh or non-runtime objective evidence before "
+                "planning from this runtime signal."
+                if low_or_incomplete
+                else "Runtime evidence is supporting tie-break evidence, not a "
+                "standalone optimization signal."
+            ),
+            "proposal_guidance_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def runtime_evidence_policy_for_protocol(protocol: Any) -> dict[str, Any]:
+    """Return generic runtime evidence policy metadata for a protocol result."""
+
+    stats = getattr(protocol, "stats", None)
+    if protocol is None or stats is None:
+        return {}
+    exclusion = runtime_aggregate_exclusion_for_protocol(protocol)
+    return runtime_evidence_policy_summary(
+        runtime_confidence=getattr(protocol, "runtime_confidence", ""),
+        runtime_evidence_status=getattr(
+            protocol,
+            "runtime_evidence_status",
+            getattr(stats, "runtime_evidence_status", ""),
+        ),
+        runtime_pairs=getattr(stats, "runtime_pairs", 0),
+        champion_cached_runtime_pairs=getattr(
+            protocol,
+            "champion_cached_runtime_pairs",
+            getattr(stats, "champion_cached_runtime_pairs", 0),
+        ),
+        runtime_aggregate_excluded=bool(exclusion.get("excluded")),
+        candidate_runtime_pair_evidence_count=exclusion.get(
+            "candidate_runtime_pair_evidence_count",
+            0,
+        ),
+    )
 
 
 def mechanism_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
@@ -325,3 +452,11 @@ def _safe_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _drop_empty(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if value is not None and value != {} and value != []
+    }

@@ -89,6 +89,27 @@ def test_repeated_runtime_evidence_pressure_prefers_clean_fork_over_refine() -> 
     assert branch.branch_evidence_summary["runtime_evidence_pressure"][
         "decision_features_excluded"
     ] is True
+    policy = branch.branch_evidence_summary["runtime_evidence_policy"]
+    assert policy["schema_version"] == "runtime_evidence_policy.v1"
+    assert policy["runtime_evidence_confidence"] == "low_cached_champion"
+    assert policy["runtime_evidence_status"] == "insufficient"
+    assert policy["runtime_aggregate_excluded"] is True
+    assert policy["standalone_optimization_signal"] is False
+    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert policy["proposal_guidance_only"] is True
+    assert policy["decision_features_excluded"] is True
+    assert "RUNTIME_EVIDENCE_LOW_OR_CACHED_CONFIDENCE" in (
+        policy["policy_reason_codes"]
+    )
+    assert (
+        branch.branch_evidence_summary["runtime_evidence_pressure"][
+            "runtime_signal_role"
+        ]
+        == "audit_or_proposal_guidance_only"
+    )
+    assert branch.branch_evidence_summary["runtime_evidence_pressure"][
+        "standalone_optimization_signal"
+    ] is False
     assert first.action == "run_existing"
     assert first.branch is branch
     assert first.slot == "refine_active"

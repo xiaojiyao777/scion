@@ -6,8 +6,10 @@ import pytest
 
 from scion.core.models import Branch, BranchState
 from scion.core.scheduler import (
+    QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON,
     Scheduler,
     active_slot_inventory,
+    branch_active_slot_release_reason,
     reclaim_active_slot_for_new_branch,
 )
 
@@ -273,6 +275,90 @@ def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
     assert action.branch is branch
     assert action.slot == "repair_diagnostic"
     assert action.reason == "effect_diagnostic_followup"
+
+
+def test_quality_regression_without_actionable_diagnostic_releases_active_slot():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "generic quality-regression follow-up"
+    branch.branch_code_status = "active_quality_regression"
+    branch.last_screening_feedback_tier = "quality_regression"
+    branch.branch_mechanism_ids = ("quality_probe",)
+    branch.branch_evidence_summary = {
+        "tier": "quality_regression",
+        "wins": 0,
+        "losses": 1,
+        "ties": 7,
+        "runtime_evidence_pressure_count": 1,
+    }
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert branch_active_slot_release_reason(branch) == (
+        QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON
+    )
+    assert inventory["used"] == 0
+    assert inventory["available"] == 1
+    assert inventory["branch_ids"] == []
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
+    assert action.audit_metadata["low_value_active_slot_release"] is True
+    assert action.audit_metadata["low_value_active_slot_release_candidates"] == [
+        {
+            "branch_id": branch.branch_id,
+            "lineage_status": "diagnostic_repair",
+            "branch_state": "explore",
+            "branch_code_status": "active_quality_regression",
+            "screening_tier": "quality_regression",
+            "release_reason": QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON,
+            "case_wins": 0,
+            "case_losses": 1,
+            "activation_zero_effect_streak": 0,
+            "runtime_evidence_pressure_count": 1,
+        }
+    ]
+
+
+def test_quality_regression_actionable_diagnostic_runs_existing_branch():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "generic quality-regression diagnostic"
+    branch.branch_code_status = "active_quality_regression"
+    branch.last_screening_feedback_tier = "quality_regression"
+    branch.branch_mechanism_ids = ("quality_probe",)
+    branch.failure_codes = ["diagnostic_requires_repair"]
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert branch_active_slot_release_reason(branch) == ""
+    assert inventory["used"] == 1
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "effect_diagnostic_followup"
+
+
+def test_quality_regression_with_weak_positive_signal_is_not_slot_released():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "generic weak-positive quality diagnostic"
+    branch.branch_code_status = "active_quality_regression"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.branch_mechanism_ids = ("quality_probe",)
+    branch.branch_evidence_summary = {
+        "tier": "weak_positive",
+        "wins": 1,
+        "losses": 0,
+    }
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert branch_active_slot_release_reason(branch) == ""
+    assert inventory["used"] == 1
+    assert action.action == "at_capacity"
+    assert action.slot == "capacity_blocked"
 
 
 def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
