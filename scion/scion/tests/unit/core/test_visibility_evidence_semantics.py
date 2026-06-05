@@ -127,7 +127,12 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
         stopped_reason="max_rounds",
     )
 
-    assert summary["candidate_intent_counts"]["diagnostic_candidate"] == 1
+    assert summary["candidate_intent_counts"] == {
+        "quality_candidate": 1,
+        "observability_candidate": 0,
+        "diagnostic_candidate": 0,
+        "unknown": 0,
+    }
     counts = summary["runtime_evidence_policy_counts"]
     assert summary["fresh_champion_required_count"] == 1
     assert summary["runtime_aggregate_excluded_count"] == 1
@@ -143,7 +148,10 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
         "runtime_evidence_policy"
     ]
     assert summary["steps"][0]["protocol_result"]["candidate_intent"] == (
-        "diagnostic_candidate"
+        "quality_candidate"
+    )
+    assert summary["steps"][0]["protocol_result"]["quality_search_interpretation"] == (
+        "quality_candidate_evidence"
     )
     assert protocol_policy["standalone_optimization_signal"] is False
     assert protocol_policy["runtime_signal_role"] == (

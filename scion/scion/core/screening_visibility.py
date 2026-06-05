@@ -290,17 +290,17 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
             no_effect = no_objective_effect_for_protocol(protocol)
         except Exception:  # pragma: no cover - defensive visibility only
             no_effect = False
-    if quality_hits:
-        intent = "quality_candidate"
-        reason_codes = [
-            f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}"
-            for hit in quality_hits[:4]
-        ]
-    elif observability_hits:
+    if observability_hits:
         intent = "observability_candidate"
         reason_codes = [
             f"CANDIDATE_INTENT_OBSERVABILITY_{_reason_suffix(hit)}"
             for hit in observability_hits[:4]
+        ]
+    elif quality_hits:
+        intent = "quality_candidate"
+        reason_codes = [
+            f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}"
+            for hit in quality_hits[:4]
         ]
     elif diagnostic_hits:
         intent = "diagnostic_candidate"
@@ -630,12 +630,6 @@ def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
                     "gate_outcome": getattr(protocol, "gate_outcome", ""),
                     "reason_codes": getattr(protocol, "reason_codes", ()),
                     "selected_surface": getattr(protocol, "selected_surface", ""),
-                    "runtime_confidence": getattr(protocol, "runtime_confidence", ""),
-                    "runtime_evidence_status": getattr(
-                        protocol,
-                        "runtime_evidence_status",
-                        "",
-                    ),
                     "opportunity_status": getattr(
                         protocol,
                         "opportunity_status",
@@ -659,9 +653,6 @@ def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
                 }
             )
         )
-        policy = runtime_evidence_policy_for_protocol(protocol)
-        if policy:
-            tokens.extend(_structured_tokens(policy))
     return tuple(dict.fromkeys(token for token in tokens if token))
 
 
