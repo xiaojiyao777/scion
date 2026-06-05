@@ -273,6 +273,9 @@ def test_campaign_summary_and_status_write_observability_payload(
     )
 
     status_payload = status["cross_branch_research_observability"]
+    assert status_payload["observable_step_count"] == 2
+    assert status_payload["cross_branch_map_seen_count"] == 2
+    assert status_payload["status_scope"] == "loop_accounting_inferred"
     assert status_payload["near_duplicate_count"] == 1
     assert status_payload["saturated_signature_count"] == 1
     assert status_payload["same_branch_refinement_not_selected_count"] == 1

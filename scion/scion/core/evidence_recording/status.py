@@ -365,6 +365,7 @@ class StatusWriterMixin:
                     scheduler_records=scheduler_records,
                 )
             )
+            _merge_status_cross_branch_map_coverage(payload)
         except Exception as exc:  # pragma: no cover - status is best-effort
             logger.debug("cross-branch observability status failed: %s", exc)
         payload = normalize_status_payload(payload)
@@ -450,3 +451,27 @@ class StatusWriterMixin:
         self.in_flight_protocol = _in_flight_protocol_snapshot(progress)
         self.write_status()
         return progress
+
+
+def _merge_status_cross_branch_map_coverage(payload: Dict[str, Any]) -> None:
+    """Infer status-level map coverage from stable loop counters when needed."""
+    observability = payload.get("cross_branch_research_observability")
+    if not isinstance(observability, dict):
+        return
+    if observability.get("observable_step_count"):
+        return
+    completed = payload.get("effective_rounds_completed") or payload.get(
+        "screened_experiments"
+    )
+    try:
+        count = max(0, int(completed))
+    except (TypeError, ValueError):
+        return
+    if count <= 0:
+        return
+    observability["observable_step_count"] = count
+    observability["cross_branch_map_seen_count"] = max(
+        int(observability.get("cross_branch_map_seen_count") or 0),
+        count,
+    )
+    observability["status_scope"] = "loop_accounting_inferred"
