@@ -427,6 +427,68 @@ def test_repeated_no_effect_clean_fork_requires_material_difference_without_plat
     assert "generic no-effect direction" not in str(requirement)
 
 
+def test_retained_checkpoint_no_effect_clean_fork_requires_material_difference() -> None:
+    branch = Branch(
+        branch_id="retained-no-effect-clean-fork",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        direction="generic retained checkpoint direction",
+        branch_mechanism_ids=("generic_retained_probe",),
+        best_quality_checkpoint_id="checkpoint-best",
+        last_valid_checkpoint_id="checkpoint-last",
+        branch_evidence_summary={
+            "tier": "no_effect",
+            "wins": 0,
+            "losses": 0,
+            "ties": 4,
+            "plateau_gate": {
+                "schema_version": "plateau_gate.v1",
+                "tier": "no_effect",
+                "threshold_met": False,
+                "effective_screened_no_effect_count": 1,
+                "runtime_evidence_pressure_count": 0,
+                "proposal_guidance_only": True,
+                "audit_only": True,
+                "decision_features_excluded": True,
+            },
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason == "new_exploration_slot_available"
+    assert action.audit_metadata["low_value_active_slot_release"] is True
+    assert (
+        action.audit_metadata["low_value_active_slot_release_candidates"][0][
+            "release_reason"
+        ]
+        == "retained_checkpoint_no_effect_current_head"
+    )
+    assert action.audit_metadata["material_difference_required"] is True
+    requirement = action.audit_metadata["material_difference_requirement"]
+    assert requirement["schema_version"] == "material_difference_requirement.v1"
+    assert requirement["record_type"] == "material_difference_requirement"
+    assert requirement["record_id"].startswith("material_difference_requirement:")
+    assert requirement["record_digest"].startswith("sha256:")
+    assert requirement["proposal_visibility_only"] is True
+    assert requirement["decision_features_excluded"] is True
+    assert requirement["requirement_source"] == "low_value_clean_fork_pressure"
+    assert requirement["candidate_branch_ids"] == [
+        "retained-no-effect-clean-fork"
+    ]
+    assert action.audit_metadata["material_difference_audit_records"] == [
+        requirement
+    ]
+    assert "LOW_VALUE_CLEAN_FORK_PRESSURE" in requirement["reason_codes"]
+    assert "generic retained checkpoint direction" not in str(requirement)
+
+
 def test_low_confidence_runtime_branch_gets_same_branch_sample_once() -> None:
     branch = Branch(
         branch_id="runtime-low-confidence-sample",

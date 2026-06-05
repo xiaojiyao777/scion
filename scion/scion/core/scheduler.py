@@ -81,6 +81,12 @@ PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON = (
 LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON = (
     "low_value_clean_fork_material_difference_required"
 )
+_LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_RELEASE_REASONS = frozenset(
+    {
+        "repeated_no_effect_zero_effect_slot_release",
+        "retained_checkpoint_no_effect_current_head",
+    }
+)
 _PLATEAU_GATE_THRESHOLD = 2
 
 
@@ -1035,11 +1041,16 @@ def _low_value_clean_fork_material_difference_candidates(
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for branch in branches:
-        if branch_active_slot_release_reason(branch) != (
-            "repeated_no_effect_zero_effect_slot_release"
+        release_reason = branch_active_slot_release_reason(branch)
+        if (
+            release_reason
+            not in _LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_RELEASE_REASONS
         ):
             continue
-        if _branch_same_branch_refinement_sampling_candidate(branch):
+        if (
+            release_reason != "retained_checkpoint_no_effect_current_head"
+            and _branch_same_branch_refinement_sampling_candidate(branch)
+        ):
             continue
         summary = _low_value_active_slot_release_summary(branch)
         if summary:
