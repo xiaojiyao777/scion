@@ -177,6 +177,58 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     )
 
 
+def test_quality_candidate_with_expected_telemetry_stays_quality(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-generic", campaign_dir=tmp_path)
+    step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=2,
+                wins=0,
+                losses=0,
+                ties=2,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=-0.01,
+                ci_high=0.01,
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "SCREENING_FAIL_WIN_RATE",
+                "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+            ),
+        ),
+        predicted_direction="improve",
+        target_objectives=("objective_alpha",),
+        expected_telemetry={
+            "activation": ["component_alpha_activation_count"],
+            "effect": ["component_alpha_effect_delta"],
+        },
+        mechanism_changes=(
+            MechanismChange(id="component_alpha_improvement", change_type="modify"),
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_generic_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    assert summary["candidate_intent_counts"] == {
+        "quality_candidate": 1,
+        "observability_candidate": 0,
+        "diagnostic_candidate": 0,
+        "unknown": 0,
+    }
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["candidate_intent"] == "quality_candidate"
+    assert protocol["quality_search_interpretation"] == "quality_candidate_evidence"
+    assert protocol["candidate_intent_visibility"]["decision_features_excluded"] is True
+
+
 def _generic_step(
     *,
     protocol: ProtocolResult,
@@ -184,6 +236,8 @@ def _generic_step(
     decision_reason_codes: tuple[str, ...] = (),
     expected_telemetry: dict | None = None,
     mechanism_changes: tuple[MechanismChange, ...] = (),
+    predicted_direction: str = "exploratory",
+    target_objectives: tuple[str, ...] = (),
 ) -> StepRecord:
     return StepRecord(
         round_num=1,
@@ -193,7 +247,8 @@ def _generic_step(
             change_locus="component_alpha",
             action="modify",
             target_file="components/component_alpha.py",
-            predicted_direction="exploratory",
+            predicted_direction=predicted_direction,  # type: ignore[arg-type]
+            target_objectives=target_objectives,
             expected_telemetry=expected_telemetry or {},
             mechanism_changes=mechanism_changes,
         ),

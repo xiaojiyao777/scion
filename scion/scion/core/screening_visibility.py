@@ -38,15 +38,14 @@ _CANDIDATE_INTENT_COUNT_KEYS = (
 )
 _OBSERVABILITY_INTENT_TERMS = {
     "observability",
-    "observable",
-    "observe",
     "instrument",
     "instrumentation",
     "visibility",
-    "telemetry",
-    "bridge",
-    "map",
+    "telemetry_bridge",
+    "telemetry_probe",
     "coverage",
+    "coverage_probe",
+    "probe",
 }
 _DIAGNOSTIC_INTENT_TERMS = {
     "audit",
@@ -63,15 +62,6 @@ _DIAGNOSTIC_INTENT_TERMS = {
     "tool_budget",
     "tool_loop",
 }
-_QUALITY_INTENT_TERMS = {
-    "improve",
-    "improvement",
-    "optimization",
-    "positive",
-    "quality",
-    "screening_positive",
-    "validation_positive",
-}
 _STRUCTURED_TEXT_EXCLUDE_KEYS = {
     "detail",
     "detail_summary",
@@ -79,6 +69,7 @@ _STRUCTURED_TEXT_EXCLUDE_KEYS = {
     "exposed_summary",
     "hypothesis_text",
     "prompt",
+    "proposal_guidance",
     "rationale",
     "raw_text",
     "summary",
@@ -286,20 +277,26 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
     protocol = getattr(step, "protocol_result", None)
     tokens = list(_candidate_intent_tokens_for_step(step))
     token_text = " ".join(tokens).lower()
+    quality_hits = _quality_intent_hits_for_step(step)
     observability_hits = sorted(
         term for term in _OBSERVABILITY_INTENT_TERMS if term in token_text
     )
     diagnostic_hits = sorted(
         term for term in _DIAGNOSTIC_INTENT_TERMS if term in token_text
     )
-    quality_hits = sorted(term for term in _QUALITY_INTENT_TERMS if term in token_text)
     no_effect = False
     if protocol is not None:
         try:
             no_effect = no_objective_effect_for_protocol(protocol)
         except Exception:  # pragma: no cover - defensive visibility only
             no_effect = False
-    if observability_hits:
+    if quality_hits:
+        intent = "quality_candidate"
+        reason_codes = [
+            f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}"
+            for hit in quality_hits[:4]
+        ]
+    elif observability_hits:
         intent = "observability_candidate"
         reason_codes = [
             f"CANDIDATE_INTENT_OBSERVABILITY_{_reason_suffix(hit)}"
@@ -311,12 +308,9 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
             f"CANDIDATE_INTENT_DIAGNOSTIC_{_reason_suffix(hit)}"
             for hit in diagnostic_hits[:4]
         ]
-    elif protocol is not None or quality_hits:
+    elif protocol is not None:
         intent = "quality_candidate"
-        reason_codes = (
-            [f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}" for hit in quality_hits[:4]]
-            or ["CANDIDATE_INTENT_QUALITY_FORMAL_PROTOCOL"]
-        )
+        reason_codes = ["CANDIDATE_INTENT_QUALITY_FORMAL_PROTOCOL"]
     else:
         intent = "unknown"
         reason_codes = ["CANDIDATE_INTENT_UNKNOWN"]
@@ -669,6 +663,21 @@ def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
         if policy:
             tokens.extend(_structured_tokens(policy))
     return tuple(dict.fromkeys(token for token in tokens if token))
+
+
+def _quality_intent_hits_for_step(step: Any) -> list[str]:
+    hits: list[str] = []
+    hypothesis = getattr(step, "hypothesis", None)
+    if hypothesis is None:
+        return hits
+    predicted_direction = str(
+        getattr(hypothesis, "predicted_direction", "") or ""
+    ).strip()
+    if predicted_direction == "improve":
+        hits.append("predicted_direction_improve")
+    if tuple(getattr(hypothesis, "target_objectives", ()) or ()):
+        hits.append("target_objectives")
+    return list(dict.fromkeys(hits))
 
 
 def _structured_tokens(value: Any, *, key: str = "") -> tuple[str, ...]:
