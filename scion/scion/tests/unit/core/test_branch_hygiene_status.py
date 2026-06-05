@@ -621,6 +621,11 @@ def test_branch_card_and_prompt_guidance_include_runtime_clean_fork_pressure() -
         "runtime_evidence_confidence": "low_cached_champion",
         "runtime_evidence_status": "insufficient",
         "runtime_aggregate_excluded": True,
+        "runtime_evidence_pressure_triggers": [
+            "low_or_cached_runtime_confidence",
+            "runtime_evidence_status:insufficient",
+            "runtime_aggregate_excluded",
+        ],
         "tainted_proposal_guidance": True,
         "decision_features_excluded": True,
     }

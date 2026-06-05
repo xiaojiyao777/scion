@@ -13,7 +13,10 @@ from scion.core.research_process_guidance_audit import (
 from scion.core.run_validity import build_run_validity
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
-from .accounting import proposal_accounting_fields
+from .accounting import (
+    accounting_reconciliation_fields,
+    proposal_accounting_fields,
+)
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
 
 logger = logging.getLogger(__name__)
@@ -253,13 +256,23 @@ class StatusWriterMixin:
                 state=payload,
                 screened_rounds=payload.get("screened_experiments"),
             )
+            accounting_reconciliation = accounting_reconciliation_fields(
+                loop_status=self.campaign_loop_status,
+                state=payload,
+                screened_rounds=payload.get("screened_experiments"),
+                effective_rounds_completed=payload.get(
+                    "effective_rounds_completed"
+                ),
+            )
             payload.update(accounting)
+            payload["accounting_reconciliation"] = accounting_reconciliation
             payload["proposal_accounting"] = {
                 "proposal_attempts": payload.get("proposal_attempts"),
                 "proposal_attempts_consumed": payload.get(
                     "proposal_attempts_consumed"
                 ),
                 **accounting,
+                "accounting_reconciliation": accounting_reconciliation,
             }
         if last_result is not None:
             self.last_status_result = {

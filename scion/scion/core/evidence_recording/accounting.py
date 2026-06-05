@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from scion.core.models import StepRecord
+from scion.core.models import Decision, StepRecord
 from scion.core.public_refs import public_artifact_ref
 from scion.proposal.session_trace_index import SESSION_TRACE_INDEX_NAME
 
@@ -27,6 +27,7 @@ def proposal_accounting_fields(
 ) -> dict[str, Any]:
     """Return explicit counters that disambiguate legacy proposal attempts."""
     step_list = list(steps)
+    has_step_history = bool(step_list)
     loop = loop_status if isinstance(loop_status, Mapping) else {}
     state_map = state if isinstance(state, Mapping) else {}
     request_counts = llm_request_kind_counts(campaign_dir)
@@ -93,6 +94,223 @@ def proposal_accounting_fields(
     return fields
 
 
+def accounting_reconciliation_fields(
+    *,
+    steps: Iterable[StepRecord] = (),
+    loop_status: Mapping[str, Any] | None = None,
+    state: Mapping[str, Any] | None = None,
+    round_num: int | None = None,
+    screened_rounds: int | None = None,
+    effective_rounds_completed: int | None = None,
+    counted_experiment_steps: int | None = None,
+    telemetry_failed_experiments: int | None = None,
+) -> dict[str, Any]:
+    """Return a compact audit trail explaining run-level counter differences."""
+    step_list = list(steps)
+    has_step_history = bool(step_list)
+    loop = loop_status if isinstance(loop_status, Mapping) else {}
+    state_map = state if isinstance(state, Mapping) else {}
+    failure_categories = _merged_failure_categories(loop, state_map)
+
+    requested_rounds = _first_int(
+        loop.get("requested_rounds"),
+        state_map.get("requested_rounds"),
+        default=0,
+    )
+    total_rounds = _first_int(
+        loop.get("total_rounds"),
+        state_map.get("total_rounds"),
+        round_num,
+        default=0,
+    )
+    proposal_attempts = _first_int(
+        loop.get("proposal_attempts_consumed"),
+        loop.get("proposal_attempts"),
+        state_map.get("proposal_attempts_consumed"),
+        state_map.get("proposal_attempts"),
+        round_num,
+        default=0,
+    )
+    campaign_steps = _first_int(
+        loop.get("campaign_steps"),
+        loop.get("loop_steps"),
+        state_map.get("campaign_steps"),
+        state_map.get("n_steps"),
+        len(step_list) if step_list else None,
+        default=0,
+    )
+    screened = _first_int(
+        screened_rounds,
+        state_map.get("screened_rounds"),
+        state_map.get("screened_experiments"),
+        default=0,
+    )
+    counted = _first_int(
+        counted_experiment_steps,
+        loop.get("effective_rounds_completed") if not has_step_history else None,
+        state_map.get("effective_rounds_completed") if not has_step_history else None,
+        default=(
+            sum(1 for step in step_list if _step_counts_effective(step))
+            if has_step_history
+            else 0
+        ),
+    )
+    effective = _first_int(
+        effective_rounds_completed,
+        loop.get("effective_rounds_completed"),
+        state_map.get("effective_rounds_completed"),
+        counted,
+        default=0,
+    )
+    accepted = _first_int(
+        state_map.get("accepted_experiments") if not has_step_history else None,
+        default=sum(1 for step in step_list if _step_accepted(step)),
+    )
+    accepted_screening = _first_int(
+        state_map.get("accepted_screening_experiments")
+        if not has_step_history
+        else None,
+        default=sum(1 for step in step_list if _step_accepted_screening(step)),
+    )
+    promoted = _first_int(
+        state_map.get("promoted_experiments") if not has_step_history else None,
+        default=sum(
+            1
+            for step in step_list
+            if _decision_value(step) == Decision.PROMOTE.value
+        ),
+    )
+    telemetry_repair_attempts = _first_int(
+        loop.get("telemetry_repair_attempts"),
+        state_map.get("telemetry_repair_attempts"),
+        default=sum(
+            1
+            for step in step_list
+            if _attempt_kind(step)
+            in {
+                "telemetry_repair",
+                "telemetry_repairable",
+                "validation_repair_required",
+            }
+        ),
+    )
+    telemetry_repairable_attempts = _first_int(
+        loop.get("telemetry_repairable_attempts"),
+        state_map.get("telemetry_repairable_attempts"),
+        default=sum(
+            1 for step in step_list if _attempt_kind(step) == "telemetry_repairable"
+        ),
+    )
+    validation_repair_required_attempts = _first_int(
+        loop.get("validation_repair_required_attempts"),
+        state_map.get("validation_repair_required_attempts"),
+        default=sum(
+            1
+            for step in step_list
+            if _attempt_kind(step) == "validation_repair_required"
+        ),
+    )
+    model_repair_attempts = _first_int(
+        loop.get("model_repair_attempts"),
+        loop.get("code_repair_attempts"),
+        state_map.get("model_repair_attempts"),
+        state_map.get("code_repair_attempts"),
+        default=0,
+    )
+    model_repair_failures = _model_repair_failures(failure_categories)
+    quality_blocks = _first_int(
+        loop.get("quality_blocks"),
+        loop.get("proposal_quality_blocks_consumed"),
+        state_map.get("quality_blocks"),
+        default=sum(
+            1 for step in step_list if _attempt_kind(step) in _QUALITY_BLOCK_KINDS
+        ),
+    )
+    branch_lifecycle_blocks = _first_int(
+        loop.get("branch_lifecycle_policy_blocks"),
+        state_map.get("branch_lifecycle_policy_blocks"),
+        default=sum(
+            1 for step in step_list if _attempt_kind(step) == "branch_lifecycle_policy"
+        ),
+    )
+    reconcile_lifecycle_steps = _first_int(
+        loop.get("reconcile_lifecycle_steps"),
+        state_map.get("reconcile_lifecycle_steps"),
+        default=sum(
+            1 for step in step_list if _attempt_kind(step) == "reconcile_lifecycle"
+        ),
+    )
+    non_counted_lifecycle_steps = _first_int(
+        loop.get("non_counted_lifecycle_steps"),
+        state_map.get("non_counted_lifecycle_steps"),
+        branch_lifecycle_blocks + reconcile_lifecycle_steps,
+        default=0,
+    )
+    telemetry_failed = _first_int(
+        telemetry_failed_experiments,
+        state_map.get("telemetry_failed_experiments"),
+        default=0,
+    )
+    screened_not_effective = max(0, screened - effective)
+    loop_counted_delta = (
+        effective - counted
+        if has_step_history or counted_experiment_steps is not None
+        else 0
+    )
+    state_screened_delta = (
+        max(0, screened - sum(1 for step in step_list if _step_screened(step)))
+        if has_step_history
+        else 0
+    )
+    reconciliation_notes = _reconciliation_notes(
+        screened_not_effective=screened_not_effective,
+        loop_counted_delta=loop_counted_delta,
+        state_screened_delta=state_screened_delta,
+        telemetry_failed=telemetry_failed,
+        quality_blocks=quality_blocks,
+        non_counted_lifecycle_steps=non_counted_lifecycle_steps,
+    )
+    return {
+        "schema_version": "campaign_accounting_reconciliation.v1",
+        "requested_rounds": requested_rounds,
+        "total_rounds": total_rounds,
+        "campaign_steps": campaign_steps,
+        "proposal_attempts": proposal_attempts,
+        "proposal_attempts_consumed": proposal_attempts,
+        "effective_rounds_completed": effective,
+        "screened_rounds": screened,
+        "screened_experiments": screened,
+        "counted_experiment_steps": counted,
+        "accepted_experiments": accepted,
+        "accepted_screening_experiments": accepted_screening,
+        "promoted_experiments": promoted,
+        "screened_minus_effective": screened_not_effective,
+        "effective_minus_counted_step_records": loop_counted_delta,
+        "state_screened_minus_step_screened": state_screened_delta,
+        "model_repair_attempts": model_repair_attempts,
+        "model_repair_failures": model_repair_failures,
+        "telemetry_repair_attempts": telemetry_repair_attempts,
+        "telemetry_repairable_attempts": telemetry_repairable_attempts,
+        "validation_repair_required_attempts": validation_repair_required_attempts,
+        "quality_blocks": quality_blocks,
+        "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
+        "reconcile_lifecycle_steps": reconcile_lifecycle_steps,
+        "non_counted_lifecycle_steps": non_counted_lifecycle_steps,
+        "telemetry_failed_experiments": telemetry_failed,
+        "attempt_breakdown": {
+            "effective_screenings": effective,
+            "screened_not_effective": screened_not_effective,
+            "accepted": accepted,
+            "model_repair": model_repair_attempts,
+            "model_repair_failures": model_repair_failures,
+            "quality_blocks": quality_blocks,
+            "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
+            "reconcile_lifecycle_steps": reconcile_lifecycle_steps,
+        },
+        "reconciliation": reconciliation_notes,
+    }
+
+
 def llm_request_kind_counts(campaign_dir: str | Path) -> dict[str, int]:
     """Count LLM trace records by normalized request kind."""
     llm_dir = Path(campaign_dir) / "llm_traces"
@@ -114,6 +332,134 @@ def llm_request_kind_counts(campaign_dir: str | Path) -> dict[str, int]:
             continue
         counts[kind] = counts.get(kind, 0) + 1
     return counts
+
+
+_QUALITY_BLOCK_KINDS = frozenset({"proposal_block", "schema_quality_block"})
+
+
+def _merged_failure_categories(
+    loop: Mapping[str, Any],
+    state_map: Mapping[str, Any],
+) -> dict[str, int]:
+    merged: dict[str, int] = {}
+    for source in (state_map.get("failure_categories"), loop.get("failure_categories")):
+        if not isinstance(source, Mapping):
+            continue
+        for key, value in source.items():
+            try:
+                count = max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+            name = str(key or "").strip()
+            if not name:
+                continue
+            merged[name] = max(merged.get(name, 0), count)
+    return merged
+
+
+def _model_repair_failures(failure_categories: Mapping[str, int]) -> int:
+    return sum(
+        count
+        for category, count in failure_categories.items()
+        if "model_repair" in str(category or "")
+    )
+
+
+def _reconciliation_notes(
+    *,
+    screened_not_effective: int,
+    loop_counted_delta: int,
+    state_screened_delta: int,
+    telemetry_failed: int,
+    quality_blocks: int,
+    non_counted_lifecycle_steps: int,
+) -> list[dict[str, Any]]:
+    notes: list[dict[str, Any]] = []
+    if screened_not_effective > 0:
+        notes.append(
+            {
+                "relation": "screened_rounds_minus_effective_rounds",
+                "delta": screened_not_effective,
+                "primary_reason": (
+                    "screened_formal_results_excluded_from_effective_rounds"
+                ),
+                "telemetry_failed_experiments": telemetry_failed,
+            }
+        )
+    if loop_counted_delta:
+        notes.append(
+            {
+                "relation": "loop_effective_rounds_minus_step_effective_records",
+                "delta": loop_counted_delta,
+                "primary_reason": "loop_status_and_step_history_reconciliation",
+            }
+        )
+    if state_screened_delta > 0:
+        notes.append(
+            {
+                "relation": "state_screened_rounds_minus_step_screened_records",
+                "delta": state_screened_delta,
+                "primary_reason": "state_provider_has_additional_screening_events",
+            }
+        )
+    if quality_blocks > 0:
+        notes.append(
+            {
+                "relation": "quality_blocks",
+                "count": quality_blocks,
+                "primary_reason": "proposal_or_schema_quality_blocks",
+            }
+        )
+    if non_counted_lifecycle_steps > 0:
+        notes.append(
+            {
+                "relation": "non_counted_lifecycle_steps",
+                "count": non_counted_lifecycle_steps,
+                "primary_reason": "scheduler_lifecycle_or_reconcile_steps",
+            }
+        )
+    return notes
+
+
+def _decision_value(step: StepRecord) -> str:
+    decision = getattr(step, "decision", None)
+    return str(getattr(decision, "value", decision) or "")
+
+
+def _stage_value(step: StepRecord) -> str:
+    protocol = getattr(step, "protocol_result", None)
+    stage = getattr(protocol, "stage", "") if protocol is not None else ""
+    return str(getattr(stage, "value", stage) or "")
+
+
+def _attempt_kind(step: StepRecord) -> str:
+    return str(getattr(step, "attempt_kind", "") or "").strip()
+
+
+def _step_screened(step: StepRecord) -> bool:
+    protocol = getattr(step, "protocol_result", None)
+    return protocol is not None and _stage_value(step) == "screening"
+
+
+def _step_counts_effective(step: StepRecord) -> bool:
+    protocol = getattr(step, "protocol_result", None)
+    return protocol is not None and bool(
+        getattr(step, "counts_toward_max_rounds", True)
+    )
+
+
+def _step_accepted(step: StepRecord) -> bool:
+    if getattr(step, "protocol_result", None) is None:
+        return False
+    return _decision_value(step) in {
+        Decision.QUEUE_VALIDATE.value,
+        Decision.QUEUE_FROZEN.value,
+        Decision.PROMOTE.value,
+    }
+
+
+def _step_accepted_screening(step: StepRecord) -> bool:
+    return _step_accepted(step) and _stage_value(step) == "screening"
 
 
 def agentic_session_count(

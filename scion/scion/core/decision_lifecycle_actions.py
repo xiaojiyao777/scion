@@ -278,12 +278,34 @@ def update_branch_screening_evidence_summary(
         )
     if runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = runtime_aggregate_exclusion
+    zero_effect_summary = _activation_zero_effect_summary(
+        previous_summary,
+        current_phase=summary["phase_activation_summary"],
+    )
+    if zero_effect_summary:
+        summary["activation_zero_effect_summary"] = zero_effect_summary
+        summary["activation_zero_effect_streak"] = zero_effect_summary["streak"]
     runtime_pressure_count = _runtime_evidence_pressure_count(
         previous_summary,
         current_summary=summary,
         reason_codes=reason_codes,
     )
     summary["runtime_evidence_pressure_count"] = runtime_pressure_count
+    runtime_pressure = _runtime_evidence_pressure_observation(
+        summary,
+        reason_codes,
+    )
+    if runtime_pressure:
+        runtime_pressure["count"] = runtime_pressure_count
+        runtime_pressure["clean_fork_threshold"] = 2
+        runtime_pressure["proposal_guidance_only"] = True
+        runtime_pressure["decision_features_excluded"] = True
+        summary["runtime_evidence_pressure"] = runtime_pressure
+        pressure_history = _historical_runtime_pressure(
+            previous_summary,
+        )
+        if pressure_history:
+            summary["history_runtime_evidence_pressure"] = pressure_history
     history_codes = _historical_reason_codes(previous_summary, reason_codes)
     if history_codes:
         summary["history_reason_codes"] = list(history_codes)
@@ -523,29 +545,137 @@ def _runtime_evidence_pressure_detected(
     summary: Mapping[str, Any],
     reason_codes: tuple[str, ...],
 ) -> bool:
+    return bool(_runtime_evidence_pressure_observation(summary, reason_codes))
+
+
+def _runtime_evidence_pressure_observation(
+    summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> dict[str, Any]:
     confidence = str(
         summary.get("runtime_evidence_confidence") or ""
     ).strip().lower()
     status = str(summary.get("runtime_evidence_status") or "").strip().lower()
+    triggers: list[str] = []
     if confidence.startswith("low") or "cached" in confidence:
-        return True
-    if status in {"insufficient", "fresh_champion_required"}:
-        return True
+        triggers.append("low_or_cached_runtime_confidence")
+    if status in {
+        "insufficient",
+        "fresh_champion_required",
+        "fresh_required",
+        "incomplete",
+    }:
+        triggers.append(f"runtime_evidence_status:{status}")
+    if _runtime_aggregate_excluded(summary):
+        triggers.append("runtime_aggregate_excluded")
     reason_set = {str(code).upper() for code in reason_codes}
-    if not (
+    saturation_reason = (
         "SCREENING_RUNTIME_BUDGET_SATURATION" in reason_set
         or "TINY_RUNTIME_BUDGET_SATURATION" in reason_set
         or "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC" in reason_set
+    )
+    if saturation_reason:
+        wins = max(0, int(summary.get("wins") or 0))
+        pair_wins = max(0, int(summary.get("pair_wins") or 0))
+        median_delta = summary.get("median_delta")
+        try:
+            positive_delta = median_delta is not None and float(median_delta) > 1e-12
+        except (TypeError, ValueError):
+            positive_delta = False
+        if wins == 0 and pair_wins == 0 and not positive_delta:
+            triggers.append("runtime_saturation_without_objective_signal")
+    if not triggers:
+        return {}
+    return {
+        "triggers": list(dict.fromkeys(triggers)),
+        "runtime_evidence_confidence": confidence or "unknown",
+        "runtime_evidence_status": status or "unknown",
+        "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+    }
+
+
+def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
+    exclusion = summary.get("runtime_aggregate_exclusion")
+    if isinstance(exclusion, Mapping):
+        if "excluded" in exclusion:
+            return bool(exclusion.get("excluded"))
+        return bool(exclusion)
+    return bool(exclusion)
+
+
+def _historical_runtime_pressure(
+    previous_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    history = [
+        dict(item)
+        for item in previous_summary.get("history_runtime_evidence_pressure") or ()
+        if isinstance(item, Mapping)
+    ]
+    previous = previous_summary.get("runtime_evidence_pressure")
+    if isinstance(previous, Mapping) and previous:
+        history.append(dict(previous))
+    return _unique_mapping_history(history)[-6:]
+
+
+def _activation_zero_effect_summary(
+    previous_summary: Mapping[str, Any],
+    *,
+    current_phase: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not _activation_observed_zero_effect(current_phase):
+        return {}
+    previous_streak = 0
+    previous_zero = previous_summary.get("activation_zero_effect_summary")
+    if isinstance(previous_zero, Mapping):
+        try:
+            previous_streak = max(0, int(previous_zero.get("streak") or 0))
+        except (TypeError, ValueError):
+            previous_streak = 0
+    elif _activation_observed_zero_effect(
+        previous_summary.get("phase_activation_summary")
+        if isinstance(previous_summary.get("phase_activation_summary"), Mapping)
+        else {}
     ):
-        return False
-    wins = max(0, int(summary.get("wins") or 0))
-    pair_wins = max(0, int(summary.get("pair_wins") or 0))
-    median_delta = summary.get("median_delta")
-    try:
-        positive_delta = median_delta is not None and float(median_delta) > 1e-12
-    except (TypeError, ValueError):
-        positive_delta = False
-    return wins == 0 and pair_wins == 0 and not positive_delta
+        previous_streak = 1
+    return {
+        "streak": previous_streak + 1,
+        "activation_status": str(current_phase.get("activation_status") or "unknown"),
+        "effect_status": str(current_phase.get("effect_status") or "unknown"),
+        "activation_evidence_status": str(
+            current_phase.get("activation_evidence_status") or "unknown"
+        ),
+        "objective_effect_status": str(
+            current_phase.get("objective_effect_status") or "unknown"
+        ),
+        "slot_health": "low_value_after_repeated_zero_effect",
+        "proposal_guidance_only": True,
+        "decision_features_excluded": True,
+    }
+
+
+def _activation_observed_zero_effect(phase: Mapping[str, Any]) -> bool:
+    activation = str(phase.get("activation_status") or "").strip().lower()
+    activation_evidence = str(
+        phase.get("activation_evidence_status") or ""
+    ).strip().lower()
+    effect = str(phase.get("effect_status") or "").strip().lower()
+    objective_effect = str(
+        phase.get("objective_effect_status") or ""
+    ).strip().lower()
+    activation_observed = activation == "observed" or activation_evidence in {
+        "activation_observed",
+        "observed",
+    }
+    zero_effect = effect in {
+        "no_objective_effect",
+        "telemetry_effect_zero",
+        "runtime_budget_no_objective_effect",
+        "zero",
+    } or objective_effect in {
+        "no_objective_effect",
+        "zero",
+    }
+    return activation_observed and zero_effect
 
 
 def _is_gate_observation_reason_code(code: str) -> bool:

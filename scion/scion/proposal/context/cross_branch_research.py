@@ -15,6 +15,7 @@ from scion.core.models import (
     BranchState,
     ExperimentStage,
     PatchFileChange,
+    ProtocolResult,
     StepRecord,
     mechanism_changes,
 )
@@ -65,6 +66,34 @@ _SIMILARITY_BASIS = (
     "change_locus",
     "action",
 )
+_COVERAGE_DIMENSIONS = (
+    "mechanism_family",
+    "target_file",
+    "action",
+    "outcome_pattern",
+    "effect_tier",
+    "activation_status",
+    "effect_status",
+    "runtime_evidence_confidence",
+    "runtime_evidence_status",
+)
+_NON_POSITIVE_PATTERNS = {
+    "abandoned",
+    "blocked",
+    "no_effect",
+    "parked",
+    "pre_protocol_failure",
+    "regression",
+}
+_LOW_RUNTIME_STATUSES = {
+    "fresh_champion_required",
+    "incomplete",
+    "insufficient",
+    "low",
+    "low_or_incomplete",
+    "unknown_low",
+}
+_LOW_RUNTIME_CONFIDENCES = {"low", "medium", "unknown_low"}
 
 
 def build_cross_branch_research_map(
@@ -116,15 +145,30 @@ def build_cross_branch_research_map(
         max_lessons=max_lessons,
     )
     lessons = _lessons_from_cards(lesson_cards, max_lessons=max_lessons)
+    portfolio_coverage = _portfolio_coverage(branch_summaries)
+    avoid_bridge_guidance = _avoid_bridge_guidance(
+        branch_summaries,
+        similarity_hints,
+        portfolio_coverage,
+    )
     novelty_pressure = _novelty_pressure(
         branch_summaries,
         similarity_hints,
+        available_actions=available_actions,
+    )
+    opportunity_gaps = _opportunity_gaps(
+        branch_summaries,
+        portfolio_coverage,
+        novelty_pressure,
         available_actions=available_actions,
     )
     portfolio_guidance = _portfolio_guidance(
         branch_summaries,
         lesson_cards,
         novelty_pressure,
+        portfolio_coverage,
+        avoid_bridge_guidance,
+        opportunity_gaps,
     )
 
     return _drop_empty(
@@ -138,6 +182,9 @@ def build_cross_branch_research_map(
             "similarity_hints": similarity_hints,
             "lesson_cards": lesson_cards,
             "lessons": lessons,
+            "portfolio_coverage": portfolio_coverage,
+            "avoid_bridge_guidance": avoid_bridge_guidance,
+            "opportunity_gaps": opportunity_gaps,
             "novelty_pressure": novelty_pressure,
             "portfolio_guidance": portfolio_guidance,
         }
@@ -170,6 +217,7 @@ def _build_branch_summary(
     lifecycle = _lifecycle_summary(branch, steps)
     touched_files = _touched_files(steps)
     mechanism_ids = _mechanism_ids(branch, steps)
+    evidence_profile = _evidence_profile(branch, latest_step)
 
     return _drop_empty(
         {
@@ -184,11 +232,24 @@ def _build_branch_summary(
             "mechanism_signatures": [
                 item["mechanism_signature"] for item in descriptors
             ][:8],
+            "research_descriptors": [
+                _drop_empty(
+                    {
+                        "mechanism_family": item.get("mechanism_family"),
+                        "change_locus": item.get("change_locus"),
+                        "action": item.get("action"),
+                        "target_file": item.get("target_file"),
+                        "change_type": item.get("change_type"),
+                    }
+                )
+                for item in descriptors
+            ][:8],
             "similarity_keys": [
                 item["similarity_key"] for item in descriptors
             ][:8],
             "touched_files": touched_files,
             "outcome_summary": outcome,
+            "evidence_profile": evidence_profile,
             "recent_attempts": [
                 _attempt_summary(step) for step in recent_steps
             ],
@@ -333,6 +394,155 @@ def _outcome_summary(branch: Branch | None, step: StepRecord | None) -> dict[str
             ),
         }
     )
+
+
+def _evidence_profile(branch: Branch | None, step: StepRecord | None) -> dict[str, Any]:
+    pattern = _outcome_pattern(branch, step)
+    protocol = step.protocol_result if step is not None else None
+    stats = getattr(protocol, "stats", None) if protocol is not None else None
+    reason_codes = _reason_codes(step)
+    mechanism_evidence = (
+        getattr(protocol, "mechanism_evidence", {})
+        if protocol is not None
+        else {}
+    )
+    runtime_status = _runtime_evidence_status(protocol, stats, reason_codes)
+    runtime_confidence = _runtime_evidence_confidence(protocol, reason_codes)
+    return _drop_empty(
+        {
+            "outcome_pattern": pattern,
+            "effect_tier": _effect_tier(pattern),
+            "activation_status": _activation_status(reason_codes, mechanism_evidence),
+            "effect_status": _effect_status(pattern, reason_codes, mechanism_evidence),
+            "runtime_evidence_confidence": runtime_confidence,
+            "runtime_evidence_status": runtime_status,
+            "runtime_evidence_quality": _runtime_evidence_quality(
+                runtime_confidence,
+                runtime_status,
+                reason_codes,
+            ),
+        }
+    )
+
+
+def _effect_tier(pattern: str) -> str:
+    if pattern in {"positive", "weak_positive"}:
+        return pattern
+    if pattern == "no_effect":
+        return "zero_effect"
+    if pattern in {"regression", "abandoned"}:
+        return "negative"
+    if pattern in {"blocked", "pre_protocol_failure", "parked"}:
+        return "blocked_or_paused"
+    return "unknown"
+
+
+def _activation_status(
+    reason_codes: tuple[str, ...],
+    mechanism_evidence: Any,
+) -> str:
+    reason_text = " ".join(reason_codes).upper()
+    evidence_text = _mechanism_evidence_text(mechanism_evidence)
+    if "ACTIVATION" in reason_text and any(
+        marker in reason_text for marker in ("ABSENT", "MISSING", "ZERO")
+    ):
+        return "missing_or_zero"
+    if "ACTIVATION" in reason_text:
+        return "observed"
+    if "ACTIVATION" in evidence_text and any(
+        marker in evidence_text for marker in ("ABSENT", "MISSING")
+    ):
+        return "missing_or_zero"
+    if "ACTIVATION" in evidence_text:
+        return "observed"
+    if mechanism_evidence:
+        return "reported"
+    return "unknown"
+
+
+def _effect_status(
+    pattern: str,
+    reason_codes: tuple[str, ...],
+    mechanism_evidence: Any,
+) -> str:
+    text = _evidence_text(reason_codes, mechanism_evidence)
+    if pattern == "no_effect" or "NO_EFFECT" in text or "EFFECT_ZERO" in text:
+        return "zero"
+    if pattern in {"regression", "abandoned"}:
+        return "negative"
+    if pattern in {"positive", "weak_positive"}:
+        return "positive_or_weak"
+    if "EFFECT" in text:
+        return "reported"
+    return "unknown"
+
+
+def _runtime_evidence_status(
+    protocol: ProtocolResult | None,
+    stats: Any,
+    reason_codes: tuple[str, ...],
+) -> str:
+    value = _clean_token(getattr(protocol, "runtime_evidence_status", ""))
+    if not value:
+        value = _clean_token(getattr(stats, "runtime_evidence_status", ""))
+    if value:
+        return value
+    reason_text = " ".join(reason_codes).upper()
+    if "RUNTIME" in reason_text and any(
+        marker in reason_text
+        for marker in ("EXCLUDED", "INCOMPLETE", "INSUFFICIENT", "LOW")
+    ):
+        return "incomplete"
+    return "unknown"
+
+
+def _runtime_evidence_confidence(
+    protocol: ProtocolResult | None,
+    reason_codes: tuple[str, ...],
+) -> str:
+    value = _clean_token(getattr(protocol, "runtime_confidence", ""))
+    if value:
+        return value
+    reason_text = " ".join(reason_codes).upper()
+    if "RUNTIME" in reason_text and "LOW" in reason_text:
+        return "low"
+    return "unknown"
+
+
+def _runtime_evidence_quality(
+    confidence: str,
+    status: str,
+    reason_codes: tuple[str, ...],
+) -> str:
+    confidence_key = _clean_token(confidence).lower()
+    status_key = _clean_token(status).lower()
+    reason_text = " ".join(reason_codes).upper()
+    if status_key in _LOW_RUNTIME_STATUSES or confidence_key in _LOW_RUNTIME_CONFIDENCES:
+        return "low_or_incomplete"
+    if "RUNTIME" in reason_text and any(
+        marker in reason_text
+        for marker in ("EXCLUDED", "INCOMPLETE", "INSUFFICIENT", "LOW")
+    ):
+        return "low_or_incomplete"
+    if status_key == "sufficient" and confidence_key == "high":
+        return "sufficient"
+    if status_key == "unknown" and confidence_key == "unknown":
+        return "unknown"
+    return "mixed"
+
+
+def _evidence_text(
+    reason_codes: tuple[str, ...],
+    mechanism_evidence: Any,
+) -> str:
+    return " ".join((*reason_codes, _mechanism_evidence_text(mechanism_evidence))).upper()
+
+
+def _mechanism_evidence_text(mechanism_evidence: Any) -> str:
+    evidence_text = ""
+    if mechanism_evidence:
+        evidence_text = json.dumps(mechanism_evidence, sort_keys=True, default=str)
+    return evidence_text.upper()
 
 
 def _attempt_summary(step: StepRecord) -> dict[str, Any]:
@@ -626,6 +836,622 @@ def _lessons_from_cards(
     return lessons
 
 
+def _portfolio_coverage(
+    branch_summaries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    records = _coverage_records(branch_summaries)
+    if not records:
+        return {}
+    clusters = [
+        _dimension_clusters(records, dimension)
+        for dimension in _COVERAGE_DIMENSIONS
+    ]
+    return _drop_empty(
+        {
+            "policy": "proposal_only",
+            "cluster_dimensions": list(_COVERAGE_DIMENSIONS),
+            "dimension_coverage": {
+                dimension: values
+                for dimension, values in zip(_COVERAGE_DIMENSIONS, clusters)
+                if values
+            },
+            "combined_clusters": _combined_coverage_clusters(records),
+            "outcome_mix": dict(
+                sorted(Counter(record["outcome_pattern"] for record in records).items())
+            ),
+            "low_confidence_runtime_clusters": _low_runtime_clusters(records),
+        }
+    )
+
+
+def _coverage_records(
+    branch_summaries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    for summary in branch_summaries:
+        profile = summary.get("evidence_profile", {}) or {}
+        outcome = summary.get("outcome_summary", {}) or {}
+        branch_id = _clean_token(summary.get("branch_id"))
+        descriptors = summary.get("research_descriptors") or [
+            {
+                "mechanism_family": next(
+                    iter(summary.get("mechanism_families", ()) or ()),
+                    "unknown",
+                ),
+                "target_file": next(
+                    iter(summary.get("touched_files", ()) or ()),
+                    "unknown",
+                ),
+                "action": next(
+                    (
+                        attempt.get("action")
+                        for attempt in summary.get("recent_attempts", ()) or ()
+                        if attempt.get("action")
+                    ),
+                    "unknown",
+                ),
+                "change_locus": next(
+                    (
+                        attempt.get("change_locus")
+                        for attempt in summary.get("recent_attempts", ()) or ()
+                        if attempt.get("change_locus")
+                    ),
+                    "unknown",
+                ),
+            }
+        ]
+        for descriptor in descriptors:
+            mechanism_family = _clean_token(
+                descriptor.get("mechanism_family")
+            ) or "unknown"
+            target_file = _clean_path(descriptor.get("target_file")) or "unknown"
+            action = _clean_token(descriptor.get("action")) or "unknown"
+            change_locus = _clean_token(descriptor.get("change_locus")) or "unknown"
+            key = (branch_id, mechanism_family, target_file, action, change_locus)
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(
+                {
+                    "branch_id": branch_id,
+                    "final_or_active_state": summary.get("final_or_active_state", ""),
+                    "mechanism_family": mechanism_family,
+                    "target_file": target_file,
+                    "action": action,
+                    "change_locus": change_locus,
+                    "outcome_pattern": (
+                        _clean_token(profile.get("outcome_pattern"))
+                        or _clean_token(outcome.get("outcome_pattern"))
+                        or "unknown"
+                    ),
+                    "effect_tier": _clean_token(profile.get("effect_tier"))
+                    or "unknown",
+                    "activation_status": _clean_token(
+                        profile.get("activation_status")
+                    )
+                    or "unknown",
+                    "effect_status": _clean_token(profile.get("effect_status"))
+                    or "unknown",
+                    "runtime_evidence_confidence": _clean_token(
+                        profile.get("runtime_evidence_confidence")
+                    )
+                    or "unknown",
+                    "runtime_evidence_status": _clean_token(
+                        profile.get("runtime_evidence_status")
+                    )
+                    or "unknown",
+                    "runtime_evidence_quality": _clean_token(
+                        profile.get("runtime_evidence_quality")
+                    )
+                    or "unknown",
+                }
+            )
+    return records
+
+
+def _dimension_clusters(
+    records: list[dict[str, Any]],
+    dimension: str,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        grouped[_clean_token(record.get(dimension)) or "unknown"].append(record)
+    items = [
+        _coverage_cluster(dimension, value, group)
+        for value, group in grouped.items()
+    ]
+    return sorted(
+        items,
+        key=lambda item: (
+            -int(item.get("branch_count", 0)),
+            str(item.get("value", "")),
+        ),
+    )[:10]
+
+
+def _combined_coverage_clusters(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        grouped[
+            (
+                record["mechanism_family"],
+                record["target_file"],
+                record["action"],
+            )
+        ].append(record)
+    items: list[dict[str, Any]] = []
+    for (family, target_file, action), group in grouped.items():
+        cluster = _coverage_cluster("family_target_action", "", group)
+        cluster["signature"] = {
+            "mechanism_family": family,
+            "target_file": target_file,
+            "action": action,
+        }
+        cluster.pop("value", None)
+        items.append(cluster)
+    return sorted(
+        items,
+        key=lambda item: (
+            -int(item.get("branch_count", 0)),
+            item.get("signature", {}).get("mechanism_family", ""),
+            item.get("signature", {}).get("target_file", ""),
+            item.get("signature", {}).get("action", ""),
+        ),
+    )[:12]
+
+
+def _coverage_cluster(
+    dimension: str,
+    value: str,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    branch_ids = _unique(record.get("branch_id", "") for record in records)
+    outcome_patterns = Counter(record["outcome_pattern"] for record in records)
+    runtime_quality = Counter(record["runtime_evidence_quality"] for record in records)
+    activation_statuses = Counter(record["activation_status"] for record in records)
+    effect_statuses = Counter(record["effect_status"] for record in records)
+    return _drop_empty(
+        {
+            "dimension": dimension,
+            "value": value,
+            "branch_count": len(branch_ids),
+            "attempt_count": len(records),
+            "branch_ids": branch_ids,
+            "outcome_patterns": dict(sorted(outcome_patterns.items())),
+            "effect_tiers": dict(
+                sorted(Counter(record["effect_tier"] for record in records).items())
+            ),
+            "activation_statuses": dict(sorted(activation_statuses.items())),
+            "effect_statuses": dict(sorted(effect_statuses.items())),
+            "runtime_evidence_confidences": dict(
+                sorted(
+                    Counter(
+                        record["runtime_evidence_confidence"] for record in records
+                    ).items()
+                )
+            ),
+            "runtime_evidence_statuses": dict(
+                sorted(
+                    Counter(record["runtime_evidence_status"] for record in records).items()
+                )
+            ),
+            "runtime_evidence_quality": dict(sorted(runtime_quality.items())),
+            "coverage_signal": _coverage_signal(
+                outcome_patterns=outcome_patterns,
+                activation_statuses=activation_statuses,
+                effect_statuses=effect_statuses,
+                runtime_quality=runtime_quality,
+            ),
+            "recommended_action": _coverage_recommended_action(
+                outcome_patterns=outcome_patterns,
+                activation_statuses=activation_statuses,
+                effect_statuses=effect_statuses,
+                runtime_quality=runtime_quality,
+            ),
+            "reason_codes": _coverage_reason_codes(
+                dimension=dimension,
+                outcome_patterns=outcome_patterns,
+                runtime_quality=runtime_quality,
+            ),
+        }
+    )
+
+
+def _coverage_signal(
+    *,
+    outcome_patterns: Counter[str],
+    activation_statuses: Counter[str],
+    effect_statuses: Counter[str],
+    runtime_quality: Counter[str],
+) -> str:
+    if runtime_quality.get("low_or_incomplete", 0) > 0:
+        return "low_runtime_evidence"
+    if _non_positive_count(outcome_patterns) >= 2:
+        return "non_positive_cluster"
+    if outcome_patterns.get("weak_positive", 0) > 0:
+        return "weak_positive_cluster"
+    if (
+        activation_statuses.get("missing_or_zero", 0) > 0
+        or effect_statuses.get("zero", 0) > 0
+    ):
+        return "observability_gap"
+    if outcome_patterns.get("positive", 0) > 0:
+        return "positive_cluster"
+    return "mixed_or_unknown"
+
+
+def _coverage_recommended_action(
+    *,
+    outcome_patterns: Counter[str],
+    activation_statuses: Counter[str],
+    effect_statuses: Counter[str],
+    runtime_quality: Counter[str],
+) -> str:
+    if runtime_quality.get("low_or_incomplete", 0) > 0:
+        return "bridge"
+    if outcome_patterns.get("regression", 0) or outcome_patterns.get("abandoned", 0):
+        return "avoid"
+    if _non_positive_count(outcome_patterns) >= 2:
+        return "diversify"
+    if (
+        activation_statuses.get("missing_or_zero", 0) > 0
+        or effect_statuses.get("zero", 0) > 0
+    ):
+        return "observe"
+    if outcome_patterns.get("weak_positive", 0) or outcome_patterns.get("positive", 0):
+        return "refine"
+    return "observe"
+
+
+def _coverage_reason_codes(
+    *,
+    dimension: str,
+    outcome_patterns: Counter[str],
+    runtime_quality: Counter[str],
+) -> list[str]:
+    reason_codes = [f"COVERAGE_CLUSTER_{dimension.upper()}"]
+    if _non_positive_count(outcome_patterns) >= 2:
+        _append_unique(reason_codes, "COVERAGE_NON_POSITIVE_CLUSTER")
+    if runtime_quality.get("low_or_incomplete", 0) > 0:
+        _append_unique(reason_codes, "COVERAGE_LOW_RUNTIME_EVIDENCE")
+    return reason_codes
+
+
+def _low_runtime_clusters(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    low_records = [
+        record
+        for record in records
+        if record.get("runtime_evidence_quality") == "low_or_incomplete"
+    ]
+    if not low_records:
+        return []
+    return [
+        cluster
+        for cluster in _dimension_clusters(low_records, "target_file")
+        if cluster.get("branch_count", 0) >= 1
+    ][:6]
+
+
+def _avoid_bridge_guidance(
+    branch_summaries: list[dict[str, Any]],
+    similarity_hints: list[dict[str, Any]],
+    portfolio_coverage: dict[str, Any],
+) -> list[dict[str, Any]]:
+    guidance: list[dict[str, Any]] = []
+    combined = portfolio_coverage.get("combined_clusters", []) or []
+    for cluster in combined:
+        patterns = Counter(cluster.get("outcome_patterns", {}) or {})
+        if int(cluster.get("branch_count", 0)) >= 2 and _non_positive_count(patterns) >= 2:
+            _append_guidance_once(
+                guidance,
+                _coverage_guidance_item(
+                    guidance_type="avoid_repeated_non_positive_cluster",
+                    recommended_action="diversify",
+                    priority="high",
+                    cluster=cluster,
+                    reason_codes=["GUIDANCE_AVOID_NON_POSITIVE_CLUSTER"],
+                    proposal_guidance=(
+                        "Avoid another proposal in this same generic family, "
+                        "target, and action cluster unless at least one "
+                        "dimension changes materially."
+                    ),
+                    confidence=0.76,
+                ),
+            )
+        if _cluster_has_low_runtime_evidence(cluster):
+            _append_guidance_once(
+                guidance,
+                _coverage_guidance_item(
+                    guidance_type="bridge_low_confidence_runtime_evidence",
+                    recommended_action="bridge",
+                    priority="high",
+                    cluster=cluster,
+                    reason_codes=["GUIDANCE_BRIDGE_LOW_RUNTIME_EVIDENCE"],
+                    proposal_guidance=(
+                        "Treat low or incomplete runtime evidence as planning "
+                        "uncertainty; bridge with clearer activation, effect, "
+                        "or measurement evidence before optimizing solely from it."
+                    ),
+                    confidence=0.7,
+                ),
+            )
+
+    for hint in similarity_hints:
+        if hint.get("hint_type") != "saturated_family":
+            continue
+        _append_guidance_once(
+            guidance,
+            _drop_empty(
+                {
+                    "guidance_type": "avoid_saturated_similarity_signature",
+                    "source": "proposal_only",
+                    "recommended_action": "diversify",
+                    "priority": "high",
+                    "shared_signature": hint.get("shared_signature", {}),
+                    "branch_ids": hint.get("branch_ids", []),
+                    "outcome_patterns": hint.get("outcome_patterns", {}),
+                    "reason_codes": ["GUIDANCE_AVOID_SATURATED_SIGNATURE"],
+                    "proposal_guidance": (
+                        "A near signature is already saturated by non-positive "
+                        "evidence; choose a different family, target, action, "
+                        "or observability path."
+                    ),
+                    "confidence": 0.74,
+                }
+            ),
+        )
+
+    no_effect_branches = _branch_ids_with_pattern(branch_summaries, "no_effect")
+    if len(no_effect_branches) >= 2:
+        _append_guidance_once(
+            guidance,
+            _drop_empty(
+                {
+                    "guidance_type": "bridge_repeated_zero_effect",
+                    "source": "proposal_only",
+                    "recommended_action": "bridge",
+                    "priority": "medium",
+                    "branch_ids": no_effect_branches,
+                    "reason_codes": ["GUIDANCE_BRIDGE_REPEATED_ZERO_EFFECT"],
+                    "proposal_guidance": (
+                        "Repeated zero-effect outcomes need a bridge proposal "
+                        "that changes activation, effect observability, target, "
+                        "or family before more local refinement."
+                    ),
+                    "confidence": 0.66,
+                }
+            ),
+        )
+    return guidance[:10]
+
+
+def _coverage_guidance_item(
+    *,
+    guidance_type: str,
+    recommended_action: str,
+    priority: str,
+    cluster: dict[str, Any],
+    reason_codes: list[str],
+    proposal_guidance: str,
+    confidence: float,
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "guidance_type": guidance_type,
+            "source": "proposal_only",
+            "recommended_action": recommended_action,
+            "priority": priority,
+            "signature": cluster.get("signature"),
+            "branch_ids": cluster.get("branch_ids", []),
+            "outcome_patterns": cluster.get("outcome_patterns", {}),
+            "activation_statuses": cluster.get("activation_statuses", {}),
+            "effect_statuses": cluster.get("effect_statuses", {}),
+            "runtime_evidence_quality": cluster.get("runtime_evidence_quality", {}),
+            "reason_codes": reason_codes,
+            "proposal_guidance": proposal_guidance,
+            "confidence": confidence,
+        }
+    )
+
+
+def _append_guidance_once(
+    guidance: list[dict[str, Any]],
+    item: dict[str, Any],
+) -> None:
+    key = (
+        item.get("guidance_type"),
+        json.dumps(item.get("signature", item.get("shared_signature", {})), sort_keys=True),
+        tuple(item.get("branch_ids", []) or ()),
+    )
+    for existing in guidance:
+        existing_key = (
+            existing.get("guidance_type"),
+            json.dumps(
+                existing.get("signature", existing.get("shared_signature", {})),
+                sort_keys=True,
+            ),
+            tuple(existing.get("branch_ids", []) or ()),
+        )
+        if existing_key == key:
+            return
+    guidance.append(item)
+
+
+def _cluster_has_low_runtime_evidence(cluster: dict[str, Any]) -> bool:
+    quality = Counter(cluster.get("runtime_evidence_quality", {}) or {})
+    statuses = Counter(cluster.get("runtime_evidence_statuses", {}) or {})
+    confidences = Counter(cluster.get("runtime_evidence_confidences", {}) or {})
+    return (
+        quality.get("low_or_incomplete", 0) > 0
+        or any(status in _LOW_RUNTIME_STATUSES for status in statuses)
+        or any(confidence in _LOW_RUNTIME_CONFIDENCES for confidence in confidences)
+    )
+
+
+def _opportunity_gaps(
+    branch_summaries: list[dict[str, Any]],
+    portfolio_coverage: dict[str, Any],
+    novelty_pressure: dict[str, Any],
+    *,
+    available_actions: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    records = _coverage_records(branch_summaries)
+    if not records:
+        return []
+    gaps: list[dict[str, Any]] = []
+    allowed_actions = _available_action_set(available_actions)
+    action_counts = Counter(record["action"] for record in records)
+    target_counts = Counter(record["target_file"] for record in records)
+    family_counts = Counter(record["mechanism_family"] for record in records)
+    outcome_counts = Counter(record["outcome_pattern"] for record in records)
+    runtime_quality = Counter(record["runtime_evidence_quality"] for record in records)
+    effect_statuses = Counter(record["effect_status"] for record in records)
+    activation_statuses = Counter(record["activation_status"] for record in records)
+
+    unexplored_actions = sorted(
+        action for action in allowed_actions if action not in action_counts
+    )
+    if unexplored_actions:
+        gaps.append(
+            _gap_item(
+                gap_type="action_diversity_gap",
+                recommended_action="diversify",
+                priority="medium",
+                basis={
+                    "observed_actions": sorted(action_counts),
+                    "unexplored_actions": unexplored_actions,
+                },
+                reason_codes=["GAP_UNEXPLORED_ACTION"],
+                proposal_guidance=(
+                    "Consider an allowed action that has not yet been tried, "
+                    "or explain why the same action changes a different "
+                    "family, target, or observability path."
+                ),
+                confidence=0.5,
+            )
+        )
+
+    for dimension, counts, gap_type in (
+        ("mechanism_family", family_counts, "family_diversity_gap"),
+        ("target_file", target_counts, "target_diversity_gap"),
+    ):
+        value, count = counts.most_common(1)[0]
+        if count >= 2 and _non_positive_count(outcome_counts) > 0:
+            gaps.append(
+                _gap_item(
+                    gap_type=gap_type,
+                    recommended_action="diversify",
+                    priority="high" if count >= 3 else "medium",
+                    basis={
+                        "dominant_dimension": dimension,
+                        "dominant_value": value,
+                        "dominant_count": count,
+                        "distinct_values": sorted(counts),
+                    },
+                    reason_codes=[f"GAP_OVERUSED_{dimension.upper()}"],
+                    proposal_guidance=(
+                        "The current map is concentrated on one generic "
+                        "dimension with weak or non-positive evidence; change "
+                        "that dimension before another nearby attempt."
+                    ),
+                    confidence=min(0.78, 0.48 + count * 0.06),
+                )
+            )
+
+    if (
+        outcome_counts.get("no_effect", 0) >= 2
+        or effect_statuses.get("zero", 0) >= 2
+        or activation_statuses.get("missing_or_zero", 0) > 0
+    ):
+        gaps.append(
+            _gap_item(
+                gap_type="observability_path_gap",
+                recommended_action="bridge",
+                priority="high",
+                basis={
+                    "outcome_patterns": dict(sorted(outcome_counts.items())),
+                    "activation_statuses": dict(sorted(activation_statuses.items())),
+                    "effect_statuses": dict(sorted(effect_statuses.items())),
+                },
+                reason_codes=["GAP_OBSERVABILITY_PATH"],
+                proposal_guidance=(
+                    "Before another same-neighborhood refinement, propose a "
+                    "generic bridge that makes activation and effect evidence "
+                    "clearer or changes where that evidence is collected."
+                ),
+                confidence=0.68,
+            )
+        )
+
+    if runtime_quality.get("low_or_incomplete", 0) > 0:
+        gaps.append(
+            _gap_item(
+                gap_type="runtime_evidence_confidence_gap",
+                recommended_action="bridge",
+                priority="high",
+                basis={
+                    "runtime_evidence_quality": dict(sorted(runtime_quality.items())),
+                    "low_confidence_clusters": portfolio_coverage.get(
+                        "low_confidence_runtime_clusters",
+                        [],
+                    )[:3],
+                },
+                reason_codes=["GAP_RUNTIME_EVIDENCE_CONFIDENCE"],
+                proposal_guidance=(
+                    "Do not treat low or incomplete runtime evidence as a "
+                    "standalone optimization signal; first bridge through "
+                    "clearer evidence or a different non-runtime signal."
+                ),
+                confidence=0.72,
+            )
+        )
+
+    saturated = novelty_pressure.get("saturated_signatures", []) or []
+    if saturated:
+        gaps.append(
+            _gap_item(
+                gap_type="signature_bridge_gap",
+                recommended_action="bridge",
+                priority="high",
+                basis={"saturated_signatures": saturated[:4]},
+                reason_codes=["GAP_SIGNATURE_BRIDGE"],
+                proposal_guidance=(
+                    "A saturated signature should not receive another local "
+                    "variant; bridge by changing one or more generic dimensions."
+                ),
+                confidence=0.7,
+            )
+        )
+    return gaps[:8]
+
+
+def _gap_item(
+    *,
+    gap_type: str,
+    recommended_action: str,
+    priority: str,
+    basis: dict[str, Any],
+    reason_codes: list[str],
+    proposal_guidance: str,
+    confidence: float,
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "gap_type": gap_type,
+            "source": "proposal_only",
+            "recommended_action": recommended_action,
+            "priority": priority,
+            "basis": basis,
+            "reason_codes": reason_codes,
+            "proposal_guidance": proposal_guidance,
+            "confidence": confidence,
+        }
+    )
+
+
 def _novelty_pressure(
     branch_summaries: list[dict[str, Any]],
     similarity_hints: list[dict[str, Any]],
@@ -821,6 +1647,9 @@ def _portfolio_guidance(
     branch_summaries: list[dict[str, Any]],
     lesson_cards: list[dict[str, Any]],
     novelty_pressure: dict[str, Any],
+    portfolio_coverage: dict[str, Any],
+    avoid_bridge_guidance: list[dict[str, Any]],
+    opportunity_gaps: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     guidance: list[dict[str, Any]] = []
     active_weak = _branch_ids_with_pattern(
@@ -926,6 +1755,72 @@ def _portfolio_guidance(
             )
         )
 
+    coverage_signals = _coverage_signals(portfolio_coverage)
+    if "non_positive_cluster" in coverage_signals:
+        guidance.append(
+            _guidance_item(
+                guidance_type="use_coverage_clusters_for_layout",
+                recommended_action="diversify",
+                branch_ids=_unique(
+                    branch_id
+                    for item in portfolio_coverage.get("combined_clusters", []) or []
+                    if item.get("coverage_signal") == "non_positive_cluster"
+                    for branch_id in item.get("branch_ids", [])
+                ),
+                priority="high",
+                reason_codes=["PORTFOLIO_USE_COVERAGE_CLUSTERS"],
+                proposal_guidance=(
+                    "Use the coverage clusters as a global layout map: avoid "
+                    "adding another candidate to a non-positive cluster unless "
+                    "family, target, action, or observability changes."
+                ),
+                confidence=0.7,
+            )
+        )
+
+    if avoid_bridge_guidance:
+        guidance.append(
+            _guidance_item(
+                guidance_type="apply_avoid_bridge_guidance",
+                recommended_action="bridge",
+                branch_ids=_unique(
+                    branch_id
+                    for item in avoid_bridge_guidance
+                    for branch_id in item.get("branch_ids", [])
+                ),
+                priority="high",
+                reason_codes=["PORTFOLIO_APPLY_AVOID_BRIDGE_GUIDANCE"],
+                proposal_guidance=(
+                    "Before another local follow-up, apply the avoid/bridge "
+                    "guidance from repeated non-positive or low-confidence "
+                    "evidence clusters."
+                ),
+                confidence=0.69,
+            )
+        )
+
+    if opportunity_gaps:
+        guidance.append(
+            _guidance_item(
+                guidance_type="close_opportunity_gaps",
+                recommended_action="diversify",
+                branch_ids=_unique(
+                    branch_id
+                    for summary in branch_summaries
+                    for branch_id in (summary.get("branch_id"),)
+                    if branch_id
+                ),
+                priority="medium",
+                reason_codes=["PORTFOLIO_CLOSE_OPPORTUNITY_GAPS"],
+                proposal_guidance=(
+                    "Use opportunity gaps to select a generic missing "
+                    "dimension: action, target, family, observability path, "
+                    "or evidence-confidence path."
+                ),
+                confidence=0.6,
+            )
+        )
+
     if not guidance and lesson_cards:
         guidance.append(
             _guidance_item(
@@ -946,6 +1841,15 @@ def _portfolio_guidance(
             )
         )
     return guidance[:6]
+
+
+def _coverage_signals(portfolio_coverage: dict[str, Any]) -> set[str]:
+    signals: set[str] = set()
+    for item in portfolio_coverage.get("combined_clusters", []) or []:
+        signal = _clean_token(item.get("coverage_signal"))
+        if signal:
+            signals.add(signal)
+    return signals
 
 
 def _branch_ids_with_pattern(

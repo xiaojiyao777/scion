@@ -1667,6 +1667,94 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert trace_index["trace_count"] == 3
 
 
+def test_campaign_summary_reconciles_screened_and_effective_rounds(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "screened_experiments": 2,
+            "n_steps": 3,
+            "n_active_branches": 1,
+            "branches": [],
+            "telemetry_failed_experiments": 1,
+        },
+    )
+    accepted_step = _step("/tmp/accounting-accepted.json")
+    repair_step = replace(
+        _step("/tmp/accounting-repair.json"),
+        round_num=4,
+        decision=Decision.CONTINUE_EXPLORE,
+        decision_reason_codes=("TELEMETRY_VALIDATION_REPAIRABLE",),
+        counts_toward_max_rounds=False,
+        attempt_kind="telemetry_repairable",
+    )
+    repair_step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=replace(accepted_step.protocol_result.stats, wins=0, losses=0, ties=6),
+        gate_outcome="fail",
+        reason_codes=(
+            "TELEMETRY_VALIDATION_REPAIRABLE",
+            "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+        ),
+        exposed_summary="screening telemetry repairable",
+        raw_metrics_ref="/tmp/accounting-repair.json",
+        candidate_surface_runtime_summary={
+            "telemetry_guard": {
+                "passed": False,
+                "failures": [
+                    {
+                        "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "category": "activation",
+                        "mechanism": "generic_probe",
+                    }
+                ],
+            }
+        },
+    )
+    recorder.campaign_loop_status = {
+        "requested_rounds": 2,
+        "total_rounds": 3,
+        "campaign_steps": 3,
+        "proposal_attempts": 2,
+        "proposal_attempts_consumed": 2,
+        "effective_rounds_completed": 1,
+        "telemetry_repairable_attempts": 1,
+        "telemetry_repair_attempts": 1,
+        "failure_categories": {"model_repair_failed": 1},
+        "quality_blocks": 1,
+    }
+
+    summary = recorder.write_campaign_summary(
+        step_history=[accepted_step, repair_step],
+        round_num=3,
+        champion=_champion(),
+    )
+
+    reconciliation = summary["accounting_reconciliation"]
+    assert reconciliation["requested_rounds"] == 2
+    assert reconciliation["screened_rounds"] == 2
+    assert reconciliation["effective_rounds_completed"] == 1
+    assert reconciliation["screened_minus_effective"] == 1
+    assert reconciliation["accepted_experiments"] == 1
+    assert reconciliation["accepted_screening_experiments"] == 1
+    assert reconciliation["model_repair_attempts"] == 0
+    assert reconciliation["model_repair_failures"] == 1
+    assert reconciliation["telemetry_repairable_attempts"] == 1
+    assert reconciliation["quality_blocks"] == 1
+    assert {
+        "relation": "screened_rounds_minus_effective_rounds",
+        "delta": 1,
+        "primary_reason": "screened_formal_results_excluded_from_effective_rounds",
+        "telemetry_failed_experiments": 1,
+    } in reconciliation["reconciliation"]
+    assert summary["proposal_accounting"]["accounting_reconciliation"] == (
+        reconciliation
+    )
+
+
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(
     tmp_path: Path,
 ) -> None:

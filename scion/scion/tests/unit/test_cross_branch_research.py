@@ -53,6 +53,9 @@ def _screening_step(
     reason_codes: tuple[str, ...] = (),
     gate_outcome: str = "continue",
     stage: ExperimentStage = ExperimentStage.SCREENING,
+    runtime_confidence: str = "high",
+    runtime_evidence_status: str = "sufficient",
+    mechanism_evidence: dict | None = None,
 ) -> StepRecord:
     stats = EvalStats(
         n_cases=4,
@@ -86,6 +89,9 @@ def _screening_step(
             reason_codes=reason_codes,
             exposed_summary="filtered screening summary",
             raw_metrics_ref="/internal/raw-metrics.json",
+            runtime_confidence=runtime_confidence,
+            runtime_evidence_status=runtime_evidence_status,
+            mechanism_evidence=mechanism_evidence or {},
         ),
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
@@ -317,6 +323,140 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
     )
 
 
+def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
+    current = _branch(
+        "branch-current",
+        mechanism_ids=("bounded_signal_refine",),
+    )
+    low_a = _branch(
+        "branch-low-a",
+        mechanism_ids=("flat_probe",),
+    )
+    low_b = _branch(
+        "branch-low-b",
+        mechanism_ids=("flat_probe_variant",),
+    )
+    steps = [
+        _screening_step(
+            "branch-current",
+            round_num=1,
+            mechanism_id="bounded_signal_refine",
+            target_file="policies/current.py",
+            wins=1,
+            reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "weak"},
+            },
+        ),
+        _screening_step(
+            "branch-low-a",
+            round_num=2,
+            mechanism_id="flat_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=(
+                "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+                "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE",
+            ),
+            runtime_confidence="low",
+            runtime_evidence_status="insufficient",
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+        _screening_step(
+            "branch-low-b",
+            round_num=3,
+            mechanism_id="flat_probe_variant",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=(
+                "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+                "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE",
+            ),
+            runtime_confidence="low",
+            runtime_evidence_status="insufficient",
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+    ]
+
+    payload = build_cross_branch_research_map(
+        current,
+        [current, low_a, low_b],
+        steps,
+    )
+    rendered = render_cross_branch_research_map(payload)
+
+    coverage = payload["portfolio_coverage"]
+    assert coverage["policy"] == "proposal_only"
+    assert set(coverage["cluster_dimensions"]) >= {
+        "mechanism_family",
+        "target_file",
+        "outcome_pattern",
+        "effect_tier",
+        "activation_status",
+        "effect_status",
+        "runtime_evidence_confidence",
+        "runtime_evidence_status",
+    }
+
+    target_clusters = {
+        item["value"]: item
+        for item in coverage["dimension_coverage"]["target_file"]
+    }
+    shared_target = target_clusters["policies/shared.py"]
+    assert shared_target["branch_count"] == 2
+    assert shared_target["outcome_patterns"] == {"no_effect": 2}
+    assert shared_target["runtime_evidence_quality"] == {
+        "low_or_incomplete": 2
+    }
+
+    combined = [
+        item
+        for item in coverage["combined_clusters"]
+        if item["signature"] == {
+            "mechanism_family": "flat",
+            "target_file": "policies/shared.py",
+            "action": "modify",
+        }
+    ][0]
+    assert combined["branch_count"] == 2
+    assert combined["recommended_action"] == "bridge"
+    assert combined["effect_statuses"] == {"zero": 2}
+
+    guidance_types = {
+        item["guidance_type"] for item in payload["avoid_bridge_guidance"]
+    }
+    assert "avoid_repeated_non_positive_cluster" in guidance_types
+    assert "bridge_low_confidence_runtime_evidence" in guidance_types
+    assert "bridge_repeated_zero_effect" in guidance_types
+
+    gap_types = {item["gap_type"] for item in payload["opportunity_gaps"]}
+    assert "action_diversity_gap" in gap_types
+    assert "family_diversity_gap" in gap_types
+    assert "target_diversity_gap" in gap_types
+    assert "observability_path_gap" in gap_types
+    assert "runtime_evidence_confidence_gap" in gap_types
+
+    current_summary = {
+        item["branch_id"]: item for item in payload["branches"]
+    }["branch-current"]
+    assert current_summary["evidence_profile"]["effect_tier"] == "weak_positive"
+    assert current_summary["evidence_profile"]["activation_status"] == "observed"
+    assert current_summary["research_descriptors"][0]["mechanism_family"] == (
+        "bounded_signal"
+    )
+
+    assert "excluded_from_decision_features" in rendered
+    assert "raw_metrics_ref" not in rendered
+    assert "/internal/raw-metrics.json" not in rendered
+
+
 def test_cross_branch_research_filters_unavailable_actions() -> None:
     current = _branch(
         "branch-a",
@@ -379,6 +519,9 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "lesson_cards" not in decision_fields
     assert "novelty_pressure" not in decision_fields
     assert "portfolio_guidance" not in decision_fields
+    assert "portfolio_coverage" not in decision_fields
+    assert "avoid_bridge_guidance" not in decision_fields
+    assert "opportunity_gaps" not in decision_fields
     assert "hypothesis_text" not in decision_fields
 
 

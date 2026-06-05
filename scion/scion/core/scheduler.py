@@ -127,6 +127,7 @@ class Scheduler:
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
             and not _retained_checkpoint_no_effect_current_head(b)
+            and not _no_effect_slot_release_preferred(b)
             and not _branch_lifecycle_budget_exhausted(b)
         ]
 
@@ -370,6 +371,8 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
         return False
     if _retained_checkpoint_no_effect_current_head(branch):
         return False
+    if _no_effect_slot_release_preferred(branch):
+        return False
     return True
 
 
@@ -385,6 +388,8 @@ def branch_active_slot_release_reason(branch: Branch | None) -> str:
         return "parked_lineage"
     if _retained_checkpoint_no_effect_current_head(branch):
         return "retained_checkpoint_no_effect_current_head"
+    if _no_effect_slot_release_preferred(branch):
+        return "repeated_no_effect_zero_effect_slot_release"
     return ""
 
 
@@ -536,6 +541,7 @@ def _eligible_new_branch_slot_reclaim(branch: Branch) -> bool:
     return (
         _branch_lifecycle_budget_exhausted(branch)
         or branch_lifecycle_new_mechanism_ineligible(branch)
+        or _no_effect_slot_release_preferred(branch)
         or _no_effect_without_actionable_diagnostic(branch)
         or _branch_plateau_reroute_preferred(branch)
     )
@@ -747,6 +753,9 @@ def branch_runtime_evidence_clean_fork_pressure_summary(
             default="unknown",
         ),
         "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+        "runtime_evidence_pressure_triggers": _runtime_evidence_pressure_triggers(
+            summary
+        ),
         "tainted_proposal_guidance": True,
         "decision_features_excluded": True,
     }
@@ -779,6 +788,11 @@ def _clean_fork_selection_audit(
             "branch_id": str(getattr(branch, "branch_id", "") or ""),
             "lineage_status": branch_lineage_status(branch),
             "runtime_evidence_pressure_count": pressure_count,
+            "runtime_evidence_pressure_triggers": (
+                _runtime_evidence_pressure_triggers(evidence_summary)
+                if isinstance(evidence_summary, Mapping)
+                else []
+            ),
         }
         if summary:
             candidate.update(
@@ -844,6 +858,9 @@ def _weak_positive_runtime_evidence_suppression_audit(
             default="unknown",
         ),
         "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+        "runtime_evidence_pressure_triggers": _runtime_evidence_pressure_triggers(
+            summary
+        ),
     }
 
 
@@ -979,7 +996,16 @@ def _runtime_evidence_low_or_incomplete(summary: Mapping[str, Any]) -> bool:
         or confidence.startswith("low")
         or confidence
         in {"incomplete", "insufficient", "missing", "none", "unknown"}
-        or status in {"incomplete", "insufficient", "missing", "none", "unknown"}
+        or status
+        in {
+            "fresh_required",
+            "fresh_champion_required",
+            "incomplete",
+            "insufficient",
+            "missing",
+            "none",
+            "unknown",
+        }
         or "incomplete" in status
         or "insufficient" in status
     )
@@ -992,6 +1018,31 @@ def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
             return bool(exclusion.get("excluded"))
         return bool(exclusion)
     return bool(exclusion)
+
+
+def _runtime_evidence_pressure_triggers(summary: Mapping[str, Any]) -> list[str]:
+    pressure = summary.get("runtime_evidence_pressure")
+    if isinstance(pressure, Mapping):
+        triggers = pressure.get("triggers")
+        if isinstance(triggers, list):
+            return [str(item) for item in triggers if str(item).strip()]
+    triggers: list[str] = []
+    confidence = _summary_text(summary, "runtime_evidence_confidence").lower()
+    status = _summary_text(summary, "runtime_evidence_status").lower()
+    if confidence.startswith("low") or "cached" in confidence:
+        triggers.append("low_or_cached_runtime_confidence")
+    if status in {
+        "fresh_required",
+        "fresh_champion_required",
+        "incomplete",
+        "insufficient",
+        "missing",
+        "unknown",
+    }:
+        triggers.append(f"runtime_evidence_status:{status}")
+    if _runtime_aggregate_excluded(summary):
+        triggers.append("runtime_aggregate_excluded")
+    return list(dict.fromkeys(triggers))
 
 
 def _branch_research_priority(branch: Branch) -> int:
@@ -1022,6 +1073,40 @@ def _no_effect_without_actionable_diagnostic(branch: Branch) -> bool:
         (status == "active_no_effect" or tier == "no_effect")
         and not branch_has_actionable_diagnostic(branch)
     )
+
+
+def _no_effect_slot_release_preferred(branch: Branch) -> bool:
+    if getattr(branch, "pending_retry", False):
+        return False
+    if branch_requires_repair_focus(branch):
+        return False
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return False
+    if not _no_effect_without_actionable_diagnostic(branch):
+        return False
+    if _activation_zero_effect_streak(branch) >= 2:
+        return True
+    no_effect_followups = max(
+        0,
+        int(getattr(branch, "lifecycle_no_effect_diagnostic_followups", 0) or 0),
+    )
+    return no_effect_followups >= 2
+
+
+def _activation_zero_effect_streak(branch: Branch) -> int:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return 0
+    zero_summary = summary.get("activation_zero_effect_summary")
+    if isinstance(zero_summary, Mapping):
+        try:
+            return max(0, int(zero_summary.get("streak") or 0))
+        except (TypeError, ValueError):
+            return 0
+    try:
+        return max(0, int(summary.get("activation_zero_effect_streak") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _retained_checkpoint_no_effect_current_head(branch: Branch) -> bool:

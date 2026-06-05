@@ -38,7 +38,10 @@ from scion.core.telemetry_validation import (
 from scion.evidence.formal_readiness import validate_formal_readiness
 
 from .artifact_refs import _screening_rate_fields
-from .accounting import proposal_accounting_fields
+from .accounting import (
+    accounting_reconciliation_fields,
+    proposal_accounting_fields,
+)
 from .common import _stage_value
 from .failure_summary import (
     _contract_not_run_reason,
@@ -380,11 +383,23 @@ class CampaignSummaryMixin:
             round_num=round_num,
             screened_rounds=screened_experiments,
         )
+        accounting_reconciliation = accounting_reconciliation_fields(
+            steps=steps,
+            loop_status=self.campaign_loop_status,
+            state=summary,
+            round_num=round_num,
+            screened_rounds=screened_experiments,
+            effective_rounds_completed=effective_rounds_completed,
+            counted_experiment_steps=counted_experiment_steps,
+            telemetry_failed_experiments=telemetry_failed_experiments,
+        )
         summary.update(accounting)
+        summary["accounting_reconciliation"] = accounting_reconciliation
         summary["proposal_accounting"] = {
             "proposal_attempts": summary.get("proposal_attempts"),
             "proposal_attempts_consumed": summary.get("proposal_attempts_consumed"),
             **accounting,
+            "accounting_reconciliation": accounting_reconciliation,
         }
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
