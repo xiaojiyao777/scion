@@ -295,6 +295,47 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
 
     novelty = payload["novelty_pressure"]
     assert novelty["saturated_signatures"]
+    avoid = novelty["avoid_signature_set"][0]
+    assert avoid["priority"] == "high"
+    assert avoid["pressure_type"] == "repeated_zero_effect_signature"
+    assert avoid["shared_signature"] == {
+        "mechanism_family": "flat",
+        "target_file": "policies/shared.py",
+        "action": "modify",
+        "change_locus": "activation_policy",
+    }
+    assert avoid["sibling_duplication_allowed"] is False
+    assert avoid["same_branch_refinement_allowed"] is False
+    requirements = avoid["material_difference_requirements"]
+    assert requirements["minimum_requirement"] == (
+        "change_one_or_more_generic_dimensions"
+    )
+    assert requirements["required_change_dimensions"] == [
+        "mechanism_family",
+        "target_file",
+        "action",
+        "change_locus",
+        "effect_path",
+    ]
+    assert requirements["evidence_status_dimensions"] == [
+        "activation_status",
+        "effect_status",
+        "runtime_evidence_confidence",
+        "runtime_evidence_status",
+    ]
+    blocked = novelty["blocked_signature_pressure"][0]
+    assert blocked["deterministic_screening_block"] is False
+    assert blocked["counted_screening_pressure"] == (
+        "avoid_nearby_counted_screening_without_material_difference"
+    )
+    assert novelty["material_difference_requirements"][0] == requirements
+    weak_allowance = {
+        item["branch_id"]: item
+        for item in novelty["same_branch_refinement_allowances"]
+    }["branch-weak"]
+    assert weak_allowance["same_branch_refinement_allowed"] is True
+    assert weak_allowance["sibling_duplication_allowed"] is False
+    assert weak_allowance["recommended_action"] == "refine"
     assert any(
         item["dimension"] == "action"
         and item["pressure"] == "overused_action"
@@ -533,6 +574,105 @@ def test_cross_branch_research_filters_unavailable_actions() -> None:
     )
 
 
+def test_cross_branch_research_keeps_active_weak_positive_refinement_allowed() -> None:
+    current = _branch(
+        "branch-current",
+        mechanism_ids=("bounded_signal_refine",),
+    )
+    sibling_a = _branch(
+        "branch-sibling-a",
+        mechanism_ids=("bounded_signal_probe",),
+    )
+    sibling_b = _branch(
+        "branch-sibling-b",
+        mechanism_ids=("bounded_signal_variant",),
+    )
+    steps = [
+        _screening_step(
+            "branch-current",
+            round_num=1,
+            mechanism_id="bounded_signal_refine",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            wins=1,
+            reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "weak"},
+            },
+        ),
+        _screening_step(
+            "branch-sibling-a",
+            round_num=2,
+            mechanism_id="bounded_signal_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+        _screening_step(
+            "branch-sibling-b",
+            round_num=3,
+            mechanism_id="bounded_signal_variant",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+    ]
+
+    payload = build_cross_branch_research_map(
+        current,
+        [current, sibling_a, sibling_b],
+        steps,
+    )
+
+    novelty = payload["novelty_pressure"]
+    avoid = novelty["avoid_signature_set"][0]
+    assert avoid["shared_signature"] == {
+        "mechanism_family": "bounded_signal",
+        "target_file": "policies/shared.py",
+        "action": "modify",
+        "change_locus": "activation_policy",
+    }
+    assert avoid["same_branch_refinement_allowed"] is True
+    assert avoid["same_branch_refinement_allowed_branch_ids"] == [
+        "branch-current"
+    ]
+    assert set(avoid["sibling_branch_ids"]) == {
+        "branch-sibling-a",
+        "branch-sibling-b",
+    }
+    assert avoid["material_difference_required_for"] == "sibling_nearby_attempt"
+    assert avoid["material_difference_requirements"][
+        "same_branch_refinement_allowed"
+    ] is True
+    assert avoid["material_difference_requirements"][
+        "sibling_duplication_allowed"
+    ] is False
+
+    blocked = novelty["blocked_signature_pressure"][0]
+    assert blocked["deterministic_screening_block"] is False
+    assert blocked["same_branch_refinement_allowed_branch_ids"] == [
+        "branch-current"
+    ]
+
+    allowance = {
+        item["branch_id"]: item
+        for item in novelty["same_branch_refinement_allowances"]
+    }["branch-current"]
+    assert allowance["is_current_branch"] is True
+    assert allowance["same_branch_refinement_allowed"] is True
+    assert allowance["sibling_duplication_allowed"] is False
+    assert allowance["signatures"][0]["mechanism_family"] == "bounded_signal"
+
+
 def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     decision_fields = {field.name for field in fields(DecisionFeatures)}
 
@@ -547,6 +687,10 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "portfolio_coverage" not in decision_fields
     assert "avoid_bridge_guidance" not in decision_fields
     assert "opportunity_gaps" not in decision_fields
+    assert "avoid_signature_set" not in decision_fields
+    assert "blocked_signature_pressure" not in decision_fields
+    assert "material_difference_requirements" not in decision_fields
+    assert "same_branch_refinement_allowances" not in decision_fields
     assert "hypothesis_text" not in decision_fields
 
 

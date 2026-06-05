@@ -8,6 +8,7 @@ from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
 )
+from scion.core.repeated_contract_failures import REPEATED_CONTRACT_FAILURE_CODE
 from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_detected
 from scion.core.screening_visibility import runtime_confidence_for_protocol
 from scion.core.telemetry_validation import (
@@ -34,6 +35,7 @@ _NORMALIZED_CODES = frozenset({
     "FEASIBILITY", "OBJECTIVE", "SOLUTION_CONSISTENCY", "STATE_LEAK",
     "WALL_CLOCK", "NONDETERMINISM",
     "CANARY_FAIL", "SCREENING_FAIL", "VALIDATION_FAIL", "FROZEN_FAIL",
+    REPEATED_CONTRACT_FAILURE_CODE,
 })
 KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 

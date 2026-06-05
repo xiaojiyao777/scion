@@ -1,7 +1,8 @@
 """Support utilities for generic cross-branch proposal feedback."""
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
+import json
 import re
 from typing import Any, Iterable
 
@@ -131,6 +132,19 @@ LESSON_CONFIDENCE = {
 }
 
 GENERIC_PROPOSAL_ACTIONS = ("modify", "create_new", "remove")
+MATERIAL_DIFFERENCE_DIMENSIONS = (
+    "mechanism_family",
+    "target_file",
+    "action",
+    "change_locus",
+    "effect_path",
+)
+MATERIAL_DIFFERENCE_EVIDENCE_STATUSES = (
+    "activation_status",
+    "effect_status",
+    "runtime_evidence_confidence",
+    "runtime_evidence_status",
+)
 
 
 def branch_lesson_text(lesson_type: str) -> str:
@@ -180,6 +194,273 @@ def lesson_transferability(scope: str, lesson_type: str) -> str:
 
 def generic_proposal_actions() -> tuple[str, ...]:
     return GENERIC_PROPOSAL_ACTIONS
+
+
+def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        grouped[
+            (
+                record["mechanism_family"],
+                record["target_file"],
+                record["action"],
+                record["change_locus"],
+            )
+        ].append(record)
+
+    items: list[dict[str, Any]] = []
+    for (family, target_file, action, change_locus), group in grouped.items():
+        branch_ids = unique(record.get("branch_id", "") for record in group)
+        if len(branch_ids) < 2:
+            continue
+        outcome_patterns = Counter(record["outcome_pattern"] for record in group)
+        effect_statuses = Counter(record["effect_status"] for record in group)
+        repeated_zero = (
+            outcome_patterns.get("no_effect", 0) >= 2
+            or effect_statuses.get("zero", 0) >= 2
+        )
+        non_positive = non_positive_count(outcome_patterns)
+        if non_positive < 2 and not repeated_zero:
+            continue
+        activation_statuses = Counter(record["activation_status"] for record in group)
+        runtime_confidences = Counter(
+            record["runtime_evidence_confidence"] for record in group
+        )
+        runtime_statuses = Counter(record["runtime_evidence_status"] for record in group)
+        active_weak_positive = unique(
+            record.get("branch_id", "")
+            for record in group
+            if record.get("final_or_active_state") == "active"
+            and record.get("outcome_pattern") == "weak_positive"
+        )
+        current_branch_ids = unique(
+            record.get("branch_id", "")
+            for record in group
+            if record.get("is_current_branch")
+        )
+        sibling_branch_ids = [
+            branch_id for branch_id in branch_ids if branch_id not in current_branch_ids
+        ]
+        pressure_type = (
+            "repeated_zero_effect_signature"
+            if repeated_zero
+            else "non_positive_signature"
+        )
+        signature = {
+            "mechanism_family": family,
+            "target_file": target_file,
+            "action": action,
+            "change_locus": change_locus,
+        }
+        requirements = material_difference_requirement(
+            signature,
+            required_for=(
+                "sibling_nearby_attempt"
+                if active_weak_positive
+                else "another_nearby_attempt"
+            ),
+            same_branch_refinement_allowed=bool(active_weak_positive),
+        )
+        items.append(
+            drop_empty(
+                {
+                    "pressure_type": pressure_type,
+                    "source": "proposal_only",
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "priority": "high",
+                    "shared_signature": signature,
+                    "branch_ids": branch_ids,
+                    "current_branch_ids": current_branch_ids,
+                    "sibling_branch_ids": sibling_branch_ids,
+                    "active_weak_positive_branch_ids": active_weak_positive,
+                    "same_branch_refinement_allowed": bool(active_weak_positive),
+                    "same_branch_refinement_allowed_branch_ids": (
+                        active_weak_positive
+                    ),
+                    "sibling_duplication_allowed": False,
+                    "material_difference_required_for": requirements.get(
+                        "required_for"
+                    ),
+                    "material_difference_requirements": requirements,
+                    "outcome_patterns": dict(sorted(outcome_patterns.items())),
+                    "activation_statuses": dict(sorted(activation_statuses.items())),
+                    "effect_statuses": dict(sorted(effect_statuses.items())),
+                    "runtime_evidence_confidences": dict(
+                        sorted(runtime_confidences.items())
+                    ),
+                    "runtime_evidence_statuses": dict(
+                        sorted(runtime_statuses.items())
+                    ),
+                    "reason_codes": avoid_signature_reason_codes(
+                        repeated_zero=repeated_zero,
+                        non_positive=non_positive,
+                    ),
+                    "proposal_guidance": (
+                        "Avoid another sibling or nearby proposal with this "
+                        "generic signature unless it changes family, target, "
+                        "action, locus, or effect path. Same-branch "
+                        "weak-positive refinement remains allowed only for "
+                        "listed active branches."
+                    ),
+                    "confidence": min(0.88, 0.68 + len(branch_ids) * 0.04),
+                }
+            )
+        )
+    return sorted(
+        items,
+        key=lambda item: (
+            str(item.get("priority", "")) != "high",
+            -len(item.get("branch_ids", []) or []),
+            item.get("shared_signature", {}).get("mechanism_family", ""),
+            item.get("shared_signature", {}).get("target_file", ""),
+            item.get("shared_signature", {}).get("action", ""),
+            item.get("shared_signature", {}).get("change_locus", ""),
+        ),
+    )[:8]
+
+
+def avoid_signature_reason_codes(
+    *,
+    repeated_zero: bool,
+    non_positive: int,
+) -> list[str]:
+    reason_codes = ["NOVELTY_AVOID_SIGNATURE_PRESSURE"]
+    if non_positive >= 2:
+        append_unique(reason_codes, "NOVELTY_REPEATED_NON_POSITIVE_SIGNATURE")
+    if repeated_zero:
+        append_unique(reason_codes, "NOVELTY_REPEATED_ZERO_EFFECT_SIGNATURE")
+    return reason_codes
+
+
+def blocked_signature_pressure(
+    avoid_signatures: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        drop_empty(
+            {
+                "pressure_type": "blocked_signature_pressure",
+                "source": "proposal_only",
+                "decision_input_policy": "excluded_from_decision_features",
+                "deterministic_screening_block": False,
+                "priority": item.get("priority", "high"),
+                "shared_signature": item.get("shared_signature", {}),
+                "branch_ids": item.get("branch_ids", []),
+                "sibling_branch_ids": item.get("sibling_branch_ids", []),
+                "same_branch_refinement_allowed_branch_ids": item.get(
+                    "same_branch_refinement_allowed_branch_ids",
+                    [],
+                ),
+                "recommended_action": "diversify",
+                "counted_screening_pressure": (
+                    "avoid_nearby_counted_screening_without_material_difference"
+                ),
+                "material_difference_required_for": item.get(
+                    "material_difference_required_for"
+                ),
+                "material_difference_requirements": item.get(
+                    "material_difference_requirements",
+                    {},
+                ),
+                "reason_codes": item.get("reason_codes", []),
+            }
+        )
+        for item in avoid_signatures
+    ]
+
+
+def material_difference_requirements_for_avoidance(
+    avoid_signatures: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    requirements: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in avoid_signatures:
+        requirement = item.get("material_difference_requirements", {})
+        if not requirement:
+            continue
+        key = json.dumps(requirement.get("signature", {}), sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        requirements.append(requirement)
+    return requirements
+
+
+def material_difference_requirement(
+    signature: dict[str, str],
+    *,
+    required_for: str,
+    same_branch_refinement_allowed: bool,
+) -> dict[str, Any]:
+    return drop_empty(
+        {
+            "signature": signature,
+            "required_for": required_for,
+            "minimum_requirement": "change_one_or_more_generic_dimensions",
+            "required_change_dimensions": list(MATERIAL_DIFFERENCE_DIMENSIONS),
+            "evidence_status_dimensions": list(
+                MATERIAL_DIFFERENCE_EVIDENCE_STATUSES
+            ),
+            "same_branch_refinement_allowed": same_branch_refinement_allowed,
+            "sibling_duplication_allowed": False,
+            "proposal_guidance": (
+                "A nearby sibling attempt needs at least one changed generic "
+                "dimension: mechanism family, target file, action, change "
+                "locus, or effect path. Evidence-status fields may justify "
+                "the material difference but remain proposal guidance only."
+            ),
+        }
+    )
+
+
+def same_branch_refinement_allowances(
+    branch_summaries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    allowances: list[dict[str, Any]] = []
+    for summary in branch_summaries:
+        outcome = summary.get("outcome_summary", {}) or {}
+        if outcome.get("outcome_pattern") != "weak_positive":
+            continue
+        if summary.get("final_or_active_state") != "active":
+            continue
+        descriptors = summary.get("research_descriptors", []) or []
+        signatures = [
+            drop_empty(
+                {
+                    "mechanism_family": descriptor.get("mechanism_family"),
+                    "target_file": descriptor.get("target_file"),
+                    "action": descriptor.get("action"),
+                    "change_locus": descriptor.get("change_locus"),
+                }
+            )
+            for descriptor in descriptors
+        ]
+        allowances.append(
+            drop_empty(
+                {
+                    "branch_id": summary.get("branch_id"),
+                    "is_current_branch": bool(summary.get("is_current_branch")),
+                    "source": "proposal_only",
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "same_branch_refinement_allowed": True,
+                    "sibling_duplication_allowed": False,
+                    "recommended_action": "refine",
+                    "priority": "high",
+                    "signatures": signatures[:4],
+                    "evidence_profile": summary.get("evidence_profile", {}),
+                    "reason_codes": [
+                        "NOVELTY_SAME_BRANCH_WEAK_POSITIVE_REFINEMENT_ALLOWED"
+                    ],
+                    "proposal_guidance": (
+                        "Continue the active weak-positive branch through "
+                        "same-branch refinement when the proposal explains the "
+                        "follow-up. Do not copy this as a sibling duplicate "
+                        "without a material signature or effect-path change."
+                    ),
+                    "confidence": 0.68,
+                }
+            )
+        )
+    return allowances[:6]
 
 
 def non_positive_count(patterns: Counter[str]) -> int:
@@ -335,6 +616,8 @@ def drop_empty(value: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "append_unique",
     "append_unique_dict",
+    "avoid_signature_set",
+    "blocked_signature_pressure",
     "branch_lesson_text",
     "clean_path",
     "clean_token",
@@ -349,10 +632,12 @@ __all__ = [
     "lesson_failure_mode",
     "lesson_recommended_action",
     "lesson_transferability",
+    "material_difference_requirements_for_avoidance",
     "mechanism_family",
     "mechanism_signature",
     "non_positive_count",
     "parse_similarity_key",
+    "same_branch_refinement_allowances",
     "similarity_key",
     "unique",
 ]

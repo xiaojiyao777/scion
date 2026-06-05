@@ -32,6 +32,11 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_REROUTE_REASON,
+    RepeatedContractRecord,
+    record_contract_failure_attempt,
+)
 from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 from scion.core.verification_call import run_verification_gate
@@ -177,6 +182,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         branch,
                         FailureEvent(category=category, detail=reason),
                     )
+                repeated_contract = self._record_repeated_contract_failure(
+                    branch,
+                    failure_detail,
+                    hypothesis,
+                    session_ref,
+                    failure_stage="hypothesis_contract",
+                )
                 self.hypothesis_store.mark_status(
                     h_record.hypothesis_id,
                     "rejected" if quality_blocked else "contract_failed",
@@ -195,6 +207,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         failure_detail=failure_detail,
                         hypothesis_id=h_record.hypothesis_id,
                         proposal_session_ref=session_ref,
+                        attempt_kind=(
+                            "branch_lifecycle_policy"
+                            if repeated_contract.threshold_reached
+                            else "screening"
+                        ),
+                        repair_policy_reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else None
+                        ),
                     )
                 )
                 return self._finish_status_progress(
@@ -202,11 +224,24 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         action="explore",
                         branch_id=bid,
                         reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else
                             _AGENT_QUALITY_BLOCKED
                             if quality_blocked
                             else "pending hypothesis re-failed contract gate"
                         ),
                         counts_toward_max_rounds=False,
+                        attempt_kind=(
+                            "branch_lifecycle_policy"
+                            if repeated_contract.threshold_reached
+                            else "screening"
+                        ),
+                        repair_policy_reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else ""
+                        ),
                     )
                 )
             self.branch_hypotheses[bid] = hypothesis
@@ -348,6 +383,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         h_record.hypothesis_id,
                         "contract_failed",
                     )
+                repeated_contract = self._record_repeated_contract_failure(
+                    branch,
+                    failure_detail,
+                    hypothesis,
+                    session_ref,
+                    failure_stage="hypothesis_contract",
+                )
                 self.record_step(
                     StepRecord(
                         round_num=rnum,
@@ -362,6 +404,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         failure_detail=failure_detail,
                         hypothesis_id=h_record.hypothesis_id,
                         proposal_session_ref=session_ref,
+                        attempt_kind=(
+                            "branch_lifecycle_policy"
+                            if repeated_contract.threshold_reached
+                            else "screening"
+                        ),
+                        repair_policy_reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else None
+                        ),
                     )
                 )
                 return self._finish_status_progress(
@@ -369,11 +421,24 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         action="explore",
                         branch_id=bid,
                         reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else
                             _AGENT_QUALITY_BLOCKED
                             if quality_blocked
                             else "hypothesis contract failed"
                         ),
                         counts_toward_max_rounds=False,
+                        attempt_kind=(
+                            "branch_lifecycle_policy"
+                            if repeated_contract.threshold_reached
+                            else "screening"
+                        ),
+                        repair_policy_reason=(
+                            REPEATED_CONTRACT_REROUTE_REASON
+                            if repeated_contract.threshold_reached
+                            else ""
+                        ),
                     )
                 )
 
@@ -406,27 +471,25 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             detailed_failure = self.proposal_failure_detail_for(bid)
             session_timeout = _is_agentic_control_timeout_detail(detailed_failure)
             quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
+            status = "code_failed"
+            queue_pending_retry = False
             if session_timeout:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
                 failure_detail = detailed_failure or _AGENTIC_SESSION_TIMEOUT
-                self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
             elif quality_blocked:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
-                self.hypothesis_store.mark_status(
-                    h_record.hypothesis_id,
-                    (
-                        "smoke_failed"
-                        if _is_algorithm_smoke_failure_detail(detailed_failure)
-                        else "rejected"
-                    ),
+                status = (
+                    "smoke_failed"
+                    if _is_algorithm_smoke_failure_detail(detailed_failure)
+                    else "rejected"
                 )
                 failure_detail = detailed_failure or _AGENT_QUALITY_BLOCKED
             elif prior_failure is not None:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
-                self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+                status = "rejected"
                 failure_detail = (
                     f"{detailed_failure} (retry - hypothesis rejected)"
                     if detailed_failure
@@ -434,12 +497,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 )
             else:
                 failure_detail = detailed_failure or "LLM code generation failed"
-                self.pending_hypotheses[bid] = (
-                    hypothesis,
-                    h_record,
-                    failure_detail,
-                )
-                self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
+                queue_pending_retry = True
             session_ref = self._proposal_session_ref(
                 bid,
                 retry_attempt=retry_attempt,
@@ -460,9 +518,31 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail,
                     session_ref,
                 )
+            repeated_contract = self._record_repeated_contract_failure(
+                branch,
+                failure_detail,
+                hypothesis,
+                session_ref,
+                failure_stage=failure_stage,
+            )
+            if repeated_contract.threshold_reached:
+                queue_pending_retry = False
+                self.pending_hypotheses.pop(bid, None)
+                if status == "code_failed":
+                    status = "rejected"
+            if queue_pending_retry:
+                self.pending_hypotheses[bid] = (
+                    hypothesis,
+                    h_record,
+                    failure_detail,
+                )
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, status)
             attempt_kind, repair_ids, repair_policy_reason = (
                 self._repair_attempt_metadata(branch, failure_detail)
             )
+            if repeated_contract.threshold_reached:
+                attempt_kind = "branch_lifecycle_policy"
+                repair_policy_reason = REPEATED_CONTRACT_REROUTE_REASON
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -490,7 +570,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     reason=_proposal_failure_reason(
                         failure_detail,
                         "code generation failed",
-                    ),
+                    )
+                    if not repeated_contract.threshold_reached
+                    else REPEATED_CONTRACT_REROUTE_REASON,
                     counts_toward_max_rounds=False,
                     attempt_kind=attempt_kind,  # type: ignore[arg-type]
                     repair_mechanism_ids=repair_ids,
@@ -597,6 +679,18 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 branch,
                 FailureEvent(category="contract", detail=p_result.failure_reason or ""),
             )
+            session_ref = self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            repeated_contract = self._record_repeated_contract_failure(
+                branch,
+                p_result.failure_reason,
+                hypothesis,
+                session_ref,
+                failure_stage="patch_contract",
+            )
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "contract_failed")
             self.record_step(
                 StepRecord(
@@ -611,10 +705,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_stage="patch_contract",
                     failure_detail=p_result.failure_reason,
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self._proposal_session_ref(
-                        bid,
-                        retry_attempt=retry_attempt,
-                        prior_failure=prior_failure,
+                    proposal_session_ref=session_ref,
+                    attempt_kind=(
+                        "branch_lifecycle_policy"
+                        if repeated_contract.threshold_reached
+                        else "screening"
+                    ),
+                    repair_policy_reason=(
+                        REPEATED_CONTRACT_REROUTE_REASON
+                        if repeated_contract.threshold_reached
+                        else None
                     ),
                 )
             )
@@ -622,8 +722,22 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason="patch contract failed",
+                    reason=(
+                        REPEATED_CONTRACT_REROUTE_REASON
+                        if repeated_contract.threshold_reached
+                        else "patch contract failed"
+                    ),
                     counts_toward_max_rounds=not retry_attempt,
+                    attempt_kind=(
+                        "branch_lifecycle_policy"
+                        if repeated_contract.threshold_reached
+                        else "screening"
+                    ),
+                    repair_policy_reason=(
+                        REPEATED_CONTRACT_REROUTE_REASON
+                        if repeated_contract.threshold_reached
+                        else ""
+                    ),
                 )
             )
 
@@ -893,6 +1007,34 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 branch.branch_id,
                 exc_info=True,
             )
+
+    def _record_repeated_contract_failure(
+        self,
+        branch: Branch,
+        failure_detail: str | None,
+        hypothesis: HypothesisProposal | None,
+        session_ref: dict[str, Any] | None,
+        *,
+        failure_stage: str | None,
+    ) -> RepeatedContractRecord:
+        record = record_contract_failure_attempt(
+            branch,
+            failure_detail,
+            hypothesis,
+            session_ref,
+            failure_stage=failure_stage,
+        )
+        if record.signature is None:
+            return record
+        try:
+            self.persist_branch_state(branch.branch_id)
+        except Exception:  # pragma: no cover - diagnostic persistence is best effort
+            logger.debug(
+                "Failed to persist repeated-contract diagnostic marker for %s",
+                branch.branch_id,
+                exc_info=True,
+            )
+        return record
 
     def _emit_status_progress(
         self,

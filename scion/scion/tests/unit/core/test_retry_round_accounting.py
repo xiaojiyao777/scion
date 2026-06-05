@@ -10,9 +10,14 @@ from scion.core.models import (
     Decision,
     HypothesisProposal,
     HypothesisRecord,
+    MechanismChange,
     PatchProposal,
     VerificationResult,
     StepRecord,
+)
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_FAILURE_CODE,
+    REPEATED_CONTRACT_REROUTE_REASON,
 )
 from scion.core.step_result import StepResult
 from scion.tests.unit.core.retry_round_accounting_support import (
@@ -189,6 +194,69 @@ def test_new_hypothesis_attempt_increments_exploration_round() -> None:
         "forced code failure",
     )
     assert pipeline._test_store.statuses == [("hyp-1", "code_failed")]
+
+
+def test_repeated_contract_code_failure_reroutes_without_pending_retry() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    hypothesis.change_locus = "algorithm_design"
+    hypothesis.target_file = "policies/state.py"
+    hypothesis.mechanism_changes = (
+        MechanismChange("state_delta_cache", "modify"),
+    )
+    record = _hypothesis_record(branch.branch_id)
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "Contract preview failed: object_model_no_dynamic_private_attrs; "
+        "state.py prose says the private cache keeps mutable branch state"
+    )
+    session_ref = {
+        "session_id": "session-contract",
+        "failure_category": "contract_boundary_failure",
+        "failure_code": "object_model_no_dynamic_private_attrs",
+        "contract_preview_codes": [
+            "object_model_no_dynamic_private_attrs",
+        ],
+        "primary_failure": {
+            "stage": "self_check",
+            "reason": "contract_preview_failed",
+            "category": "contract_boundary_failure",
+            "code": "object_model_no_dynamic_private_attrs",
+        },
+    }
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        get_current_round=lambda: 1,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+    pipeline.proposal_session_ref_for = lambda branch_id: dict(session_ref)
+
+    first = pipeline.run(branch)
+    second = pipeline.run(branch)
+
+    assert first.reason == "code generation failed"
+    assert second.reason == REPEATED_CONTRACT_REROUTE_REASON
+    assert pending == {}
+    assert branch.pending_retry is False
+    assert branch.failure_codes == [REPEATED_CONTRACT_FAILURE_CODE]
+    assert branch.last_branch_lifecycle_policy_block["failure_code"] == (
+        REPEATED_CONTRACT_FAILURE_CODE
+    )
+    assert branch.last_branch_lifecycle_policy_block["same_hypothesis_retry"] == (
+        "blocked"
+    )
+    assert steps[1].attempt_kind == "branch_lifecycle_policy"
+    assert pipeline._test_store.statuses == [
+        ("hyp-1", "code_failed"),
+        ("hyp-1", "rejected"),
+    ]
 
 
 def test_explore_pipeline_emits_pre_protocol_status_progress() -> None:

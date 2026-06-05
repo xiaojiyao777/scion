@@ -23,6 +23,8 @@ from scion.core.screening_visibility import runtime_evidence_policy_summary
 from scion.proposal.context.cross_branch_research_support import (
     append_unique as _append_unique,
     append_unique_dict as _append_unique_dict,
+    avoid_signature_set as _avoid_signature_set,
+    blocked_signature_pressure as _blocked_signature_pressure,
     branch_lesson_text as _branch_lesson_text,
     clean_path as _clean_path,
     clean_token as _clean_token,
@@ -37,10 +39,12 @@ from scion.proposal.context.cross_branch_research_support import (
     lesson_failure_mode as _lesson_failure_mode,
     lesson_recommended_action as _lesson_recommended_action,
     lesson_transferability as _lesson_transferability,
+    material_difference_requirements_for_avoidance as _material_difference_requirements,
     mechanism_family as _mechanism_family,
     mechanism_signature as _signature,
     non_positive_count as _non_positive_count,
     parse_similarity_key as _parse_similarity_key,
+    same_branch_refinement_allowances as _same_branch_refinement_allowances,
     similarity_key as _similarity_key,
     unique as _unique,
 )
@@ -933,6 +937,7 @@ def _coverage_records(
             records.append(
                 {
                     "branch_id": branch_id,
+                    "is_current_branch": bool(summary.get("is_current_branch")),
                     "final_or_active_state": summary.get("final_or_active_state", ""),
                     "mechanism_family": mechanism_family,
                     "target_file": target_file,
@@ -1489,6 +1494,7 @@ def _novelty_pressure(
     *,
     available_actions: Iterable[str] | None = None,
 ) -> dict[str, Any]:
+    records = _coverage_records(branch_summaries)
     near_duplicates: list[dict[str, Any]] = []
     saturated_signatures: list[dict[str, Any]] = []
     for hint in similarity_hints:
@@ -1538,12 +1544,23 @@ def _novelty_pressure(
         for action in allowed_actions
         if action not in action_counts
     ]
+    avoid_signature_set = _avoid_signature_set(records)
     return _drop_empty(
         {
             "policy": "proposal_only",
             "allowed_actions": sorted(allowed_actions),
             "near_duplicates": near_duplicates,
             "saturated_signatures": saturated_signatures,
+            "avoid_signature_set": avoid_signature_set,
+            "blocked_signature_pressure": _blocked_signature_pressure(
+                avoid_signature_set
+            ),
+            "material_difference_requirements": (
+                _material_difference_requirements(avoid_signature_set)
+            ),
+            "same_branch_refinement_allowances": (
+                _same_branch_refinement_allowances(branch_summaries)
+            ),
             "overused_dimensions": _overused_dimensions(
                 action_counts=action_counts,
                 locus_counts=locus_counts,
