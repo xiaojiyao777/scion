@@ -78,6 +78,9 @@ PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON = (
 PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON = (
     "plateau_gate_material_difference_required"
 )
+LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON = (
+    "low_value_clean_fork_material_difference_required"
+)
 _PLATEAU_GATE_THRESHOLD = 2
 
 
@@ -376,10 +379,9 @@ class Scheduler:
             reason="new_exploration_slot_available",
             slot="explore_new",
             audit_metadata=_merge_audit_metadata(
-                _weak_positive_followup_suppression_audit(
+                _clean_fork_selection_audit(
                     active,
-                    selected_policy="clean_fork_selected",
-                    selected_reason="new_exploration_slot_available",
+                    reason="new_exploration_slot_available",
                 ),
                 _low_value_active_slot_release_audit(active),
             ),
@@ -921,6 +923,39 @@ def _clean_fork_selection_audit(
                 "plateau_gate_clean_fork_candidates": plateau_candidates[:8],
             }
         )
+    low_value_candidates = _low_value_clean_fork_material_difference_candidates(
+        branch_list
+    )
+    if low_value_candidates and not audit.get("material_difference_required"):
+        material_requirement = _material_difference_requirement_record(
+            reason=LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON,
+            source="low_value_clean_fork_pressure",
+            required_for="clean_fork_new_branch",
+            candidate_count=len(low_value_candidates),
+            candidate_branch_ids=[
+                str(candidate.get("branch_id") or "")
+                for candidate in low_value_candidates
+                if str(candidate.get("branch_id") or "").strip()
+            ],
+        )
+        audit.update(
+            {
+                "low_value_clean_fork_material_difference_selected": True,
+                "low_value_clean_fork_material_difference_reason": (
+                    LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON
+                ),
+                "material_difference_required": True,
+                "material_difference_required_for": "clean_fork_new_branch",
+                "material_difference_requirement": material_requirement,
+                "material_difference_audit_records": [material_requirement],
+                "low_value_clean_fork_material_difference_candidate_count": len(
+                    low_value_candidates
+                ),
+                "low_value_clean_fork_material_difference_candidates": (
+                    low_value_candidates[:8]
+                ),
+            }
+        )
     return audit
 
 
@@ -932,10 +967,16 @@ def _material_difference_requirement_record(
     candidate_count: int,
     candidate_branch_ids: Iterable[str],
 ) -> dict[str, Any]:
-    reason_codes = [
-        "PLATEAU_GATE_THRESHOLD_MET",
-        "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
-    ]
+    if source == "plateau_gate":
+        reason_codes = [
+            "PLATEAU_GATE_THRESHOLD_MET",
+            "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
+        ]
+    else:
+        reason_codes = [
+            "LOW_VALUE_CLEAN_FORK_PRESSURE",
+            "CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
+        ]
     stable_payload = {
         "schema_version": "material_difference_requirement.v1",
         "record_type": "material_difference_requirement",
@@ -987,6 +1028,23 @@ def _low_value_active_slot_release_audit(
         "proposal_guidance_only": True,
         "decision_features_excluded": True,
     }
+
+
+def _low_value_clean_fork_material_difference_candidates(
+    branches: Iterable[Branch],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for branch in branches:
+        if branch_active_slot_release_reason(branch) != (
+            "repeated_no_effect_zero_effect_slot_release"
+        ):
+            continue
+        if _branch_same_branch_refinement_sampling_candidate(branch):
+            continue
+        summary = _low_value_active_slot_release_summary(branch)
+        if summary:
+            candidates.append(summary)
+    return candidates
 
 
 def _plateau_gate_clean_fork_candidates(
