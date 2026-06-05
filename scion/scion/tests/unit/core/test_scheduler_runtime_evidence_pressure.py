@@ -161,10 +161,28 @@ def test_repeated_runtime_evidence_pressure_prefers_plateau_refinement_then_mate
         "schema_version"
     ] == "material_difference_requirement.v1"
     assert third.audit_metadata["material_difference_requirement"][
+        "record_type"
+    ] == "material_difference_requirement"
+    assert third.audit_metadata["material_difference_requirement"][
+        "record_id"
+    ].startswith("material_difference_requirement:")
+    assert third.audit_metadata["material_difference_requirement"][
+        "record_digest"
+    ].startswith("sha256:")
+    assert third.audit_metadata["material_difference_requirement"][
+        "proposal_visibility_only"
+    ] is True
+    assert third.audit_metadata["material_difference_requirement"][
         "decision_features_excluded"
     ] is True
+    assert third.audit_metadata["material_difference_audit_records"] == [
+        third.audit_metadata["material_difference_requirement"]
+    ]
     assert "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE" in (
         third.audit_metadata["material_difference_requirement"]["reason_codes"]
+    )
+    assert "generic established research direction" not in str(
+        third.audit_metadata["material_difference_requirement"]
     )
     assert third.audit_metadata["runtime_evidence_clean_fork_candidates"] == [
         {

@@ -237,6 +237,58 @@ def _branch_cards_from_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, 
     return cards
 
 
+def _status_scope_reconciliation(
+    *,
+    payload: Mapping[str, Any],
+    branch_rows: list[Mapping[str, Any]],
+    last_result: Mapping[str, Any] | None,
+    current_progress: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Describe which evidence sources are visible in status.json."""
+
+    last_counts = None
+    if isinstance(last_result, Mapping):
+        last_counts = bool(last_result.get("counts_toward_max_rounds", True))
+    loop = payload.get("campaign_loop")
+    loop_mapping = loop if isinstance(loop, Mapping) else {}
+    return {
+        "schema_version": "evidence_scope_reconciliation.v1",
+        "payload": "status",
+        "step_history_scope": "not_available",
+        "branch_state_scope": "branch_rows_snapshot" if branch_rows else "none",
+        "last_result_scope": (
+            "last_completed_result_only" if last_result is not None else "none"
+        ),
+        "protocol_progress_scope": (
+            "current_or_in_flight_protocol_progress"
+            if current_progress is not None or payload.get("in_flight_protocol")
+            else "none"
+        ),
+        "includes_failed_steps": bool(
+            isinstance(last_result, Mapping) and last_result.get("failure_stage")
+        ),
+        "includes_non_counted_steps": bool(last_counts is False),
+        "source_counts": {
+            "step_history_total": 0,
+            "branch_row_count": len(branch_rows),
+            "last_result_count": 1 if last_result is not None else 0,
+            "last_result_counts_toward_max_rounds": last_counts,
+            "current_progress_count": 1 if current_progress is not None else 0,
+            "in_flight_protocol_count": (
+                1 if payload.get("in_flight_protocol") else 0
+            ),
+            "screened_experiments": payload.get(
+                "screened_experiments",
+                loop_mapping.get("screened_experiments"),
+            ),
+            "effective_rounds_completed": payload.get(
+                "effective_rounds_completed",
+                loop_mapping.get("effective_rounds_completed"),
+            ),
+        },
+    }
+
+
 def _reconcile_active_slots_from_branch_cards(
     payload: Dict[str, Any],
     branch_rows: list[Mapping[str, Any]],
@@ -436,6 +488,18 @@ class StatusWriterMixin:
             _merge_status_cross_branch_map_coverage(payload)
         except Exception as exc:  # pragma: no cover - status is best-effort
             logger.debug("cross-branch observability status failed: %s", exc)
+        payload["evidence_scope_reconciliation"] = _status_scope_reconciliation(
+            payload=payload,
+            branch_rows=branch_rows,
+            last_result=(
+                self.last_status_result
+                if isinstance(self.last_status_result, Mapping)
+                else None
+            ),
+            current_progress=(
+                current_progress if isinstance(current_progress, Mapping) else None
+            ),
+        )
         payload = normalize_status_payload(payload)
         if payload.get("stopped_reason") is not None or payload.get("stopped") is True:
             loop = payload.get("campaign_loop")
@@ -545,4 +609,8 @@ def _merge_status_cross_branch_map_coverage(payload: Dict[str, Any]) -> None:
         int(observability.get("cross_branch_map_seen_count") or 0),
         count,
     )
+    source_counts = observability.get("source_counts")
+    if isinstance(source_counts, dict):
+        source_counts["observable_step_count"] = observability["observable_step_count"]
+        source_counts["status_loop_accounting_inferred_count"] = count
     observability["status_scope"] = "loop_accounting_inferred"

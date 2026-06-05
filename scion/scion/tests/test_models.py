@@ -161,6 +161,42 @@ def test_material_difference_required_blocks_empty_record_before_code():
     )
 
 
+def test_material_difference_requirement_record_in_branch_metadata_blocks_before_code():
+    requirement = {
+        "schema_version": "material_difference_requirement.v1",
+        "record_type": "material_difference_requirement",
+        "record_id": "material_difference_requirement:test",
+        "record_digest": "sha256:test",
+        "required_for": "clean_fork_new_branch",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
+    branch = Branch(
+        branch_id="b1-record",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={
+            "material_difference_required": True,
+            "material_difference_requirement": requirement,
+        },
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+    )
+
+    reason = material_difference_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "source=branch.branch_evidence_summary" in reason
+    assert "required_for=clean_fork_new_branch" in reason
+    hypothesis.material_difference = {"signature_digest": "abc123"}
+    assert material_difference_pre_code_block_reason(hypothesis, branch) is None
+
+
 def test_material_difference_not_required_or_present_does_not_block_code():
     branch = Branch(
         branch_id="b1",

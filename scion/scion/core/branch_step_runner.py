@@ -1,6 +1,7 @@
 """Branch-step execution boundary for CampaignManager."""
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, MutableMapping, Optional
@@ -153,6 +154,10 @@ class BranchStepRunner:
             with self.champion_lock:
                 champion = self.get_champion()
             branch = self.branch_controller.create_branch(champion)
+            _attach_material_difference_requirement_metadata(
+                branch,
+                getattr(sched, "audit_metadata", None),
+            )
             logger.info("Created new branch %s", branch.branch_id)
             try:
                 self.branch_store.save(branch)
@@ -826,3 +831,33 @@ def _finalize_scheduler_result(
         except Exception as exc:  # pragma: no cover - persistence must not stop a step
             logger.debug("record_scheduler_result failed: %s", exc)
     return result
+
+
+def _attach_material_difference_requirement_metadata(
+    branch: Branch,
+    scheduler_audit: Any,
+) -> None:
+    if not isinstance(scheduler_audit, Mapping):
+        return
+    requirement = scheduler_audit.get("material_difference_requirement")
+    if not isinstance(requirement, Mapping):
+        return
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    record = copy.deepcopy(dict(requirement))
+    summary["material_difference_required"] = True
+    summary["material_difference_required_for"] = str(
+        record.get("required_for")
+        or scheduler_audit.get("material_difference_required_for")
+        or "unspecified"
+    )
+    summary["material_difference_requirement"] = record
+    records = [
+        copy.deepcopy(dict(item))
+        for item in summary.get("material_difference_audit_records", []) or []
+        if isinstance(item, Mapping)
+    ]
+    record_id = str(record.get("record_id") or "")
+    if not any(str(item.get("record_id") or "") == record_id for item in records):
+        records.append(copy.deepcopy(record))
+    summary["material_difference_audit_records"] = records
+    branch.branch_evidence_summary = summary

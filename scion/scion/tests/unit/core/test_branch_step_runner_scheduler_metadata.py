@@ -172,6 +172,46 @@ def test_create_new_scheduler_metadata_reaches_result_and_callback() -> None:
     assert recorded == [result]
 
 
+def test_create_new_material_difference_requirement_reaches_branch_metadata() -> None:
+    branch = _branch("new-branch")
+    requirement = {
+        "schema_version": "material_difference_requirement.v1",
+        "record_type": "material_difference_requirement",
+        "record_id": "material_difference_requirement:test",
+        "record_digest": "sha256:test",
+        "required_for": "clean_fork_new_branch",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            slot="explore_new",
+            reason="plateau_gate_material_difference_required",
+            audit_metadata={
+                "material_difference_required": True,
+                "material_difference_required_for": "clean_fork_new_branch",
+                "material_difference_requirement": requirement,
+            },
+        ),
+        branch=branch,
+    )
+
+    result = runner.run_one_step()
+
+    assert result.action == "create_branch"
+    assert branch.branch_evidence_summary["material_difference_required"] is True
+    assert branch.branch_evidence_summary[
+        "material_difference_required_for"
+    ] == "clean_fork_new_branch"
+    assert branch.branch_evidence_summary[
+        "material_difference_requirement"
+    ] == requirement
+    assert branch.branch_evidence_summary["material_difference_audit_records"] == [
+        requirement
+    ]
+
+
 def test_clean_fork_selected_instead_of_same_branch_has_explicit_justification() -> None:
     branch = _branch("sibling-branch")
     runner = _runner(

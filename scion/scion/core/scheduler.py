@@ -1,4 +1,6 @@
 from __future__ import annotations
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable, List, Literal, Mapping, Optional
@@ -894,24 +896,25 @@ def _clean_fork_selection_audit(
         )
     plateau_candidates = _plateau_gate_clean_fork_candidates(branch_list)
     if plateau_candidates:
+        material_requirement = _material_difference_requirement_record(
+            reason=PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
+            source="plateau_gate",
+            required_for="clean_fork_new_branch",
+            candidate_count=len(plateau_candidates),
+            candidate_branch_ids=[
+                str(candidate.get("branch_id") or "")
+                for candidate in plateau_candidates
+                if str(candidate.get("branch_id") or "").strip()
+            ],
+        )
         audit.update(
             {
                 "plateau_gate_clean_fork_selected": True,
                 "plateau_gate_reason": PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
                 "material_difference_required": True,
-                "material_difference_requirement": {
-                    "schema_version": "material_difference_requirement.v1",
-                    "requirement_source": "plateau_gate",
-                    "reason": PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
-                    "reason_codes": [
-                        "PLATEAU_GATE_THRESHOLD_MET",
-                        "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
-                    ],
-                    "required_metadata_key": "material_difference_required",
-                    "proposal_guidance_only": True,
-                    "audit_only": True,
-                    "decision_features_excluded": True,
-                },
+                "material_difference_required_for": "clean_fork_new_branch",
+                "material_difference_requirement": material_requirement,
+                "material_difference_audit_records": [material_requirement],
                 "plateau_gate_clean_fork_candidate_count": len(
                     plateau_candidates
                 ),
@@ -919,6 +922,48 @@ def _clean_fork_selection_audit(
             }
         )
     return audit
+
+
+def _material_difference_requirement_record(
+    *,
+    reason: str,
+    source: str,
+    required_for: str,
+    candidate_count: int,
+    candidate_branch_ids: Iterable[str],
+) -> dict[str, Any]:
+    reason_codes = [
+        "PLATEAU_GATE_THRESHOLD_MET",
+        "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
+    ]
+    stable_payload = {
+        "schema_version": "material_difference_requirement.v1",
+        "record_type": "material_difference_requirement",
+        "requirement_source": str(source),
+        "reason": str(reason),
+        "reason_codes": reason_codes,
+        "required_for": str(required_for),
+        "required_metadata_key": "material_difference_required",
+        "candidate_count": max(0, int(candidate_count)),
+        "candidate_branch_ids": sorted(
+            str(branch_id)
+            for branch_id in candidate_branch_ids
+            if str(branch_id).strip()
+        ),
+        "proposal_visibility_only": True,
+        "proposal_guidance_only": True,
+        "audit_only": True,
+        "decision_features_excluded": True,
+    }
+    digest_input = json.dumps(
+        stable_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hashlib.sha256(digest_input).hexdigest()
+    stable_payload["record_digest"] = f"sha256:{digest}"
+    stable_payload["record_id"] = f"material_difference_requirement:{digest[:16]}"
+    return stable_payload
 
 
 def _low_value_active_slot_release_audit(

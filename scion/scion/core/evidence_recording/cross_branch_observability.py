@@ -58,11 +58,22 @@ def build_cross_branch_research_observability(
     proposal context, scheduler state, or DecisionFeatures.
     """
 
-    safe_steps = [_step for _step in steps if _is_safe_observability_step(_step)]
+    step_list = [step for step in steps if isinstance(step, StepRecord)]
+    step_scope = _step_scope_counts(step_list)
+    safe_steps = [
+        step
+        for step in step_list
+        if _is_safe_observability_step(step)
+        and _counts_toward_observability_scope(step)
+    ]
     branch_row_list = [row for row in branch_rows if isinstance(row, Mapping)]
-    scheduler_metadata = _scheduler_metadata(safe_steps, scheduler_records)
+    scheduler_record_list = [
+        row for row in scheduler_records if isinstance(row, Mapping)
+    ]
+    context_record_list = [row for row in context_records if isinstance(row, Mapping)]
+    scheduler_metadata = _scheduler_metadata(safe_steps, scheduler_record_list)
     material_difference_requirement_count = _material_difference_requirement_count(
-        context_records=context_records,
+        context_records=context_record_list,
         scheduler_metadata=scheduler_metadata,
         branch_rows=branch_row_list,
     )
@@ -104,6 +115,30 @@ def build_cross_branch_research_observability(
         "schema_version": _SCHEMA_VERSION,
         "policy": _POLICY,
         "decision_input_policy": _DECISION_INPUT_POLICY,
+        "step_history_scope": (
+            "screening_and_counted_pre_protocol_failures"
+            if step_list
+            else "none"
+        ),
+        "branch_state_scope": "branch_rows_snapshot" if branch_row_list else "none",
+        "scheduler_record_scope": (
+            "scheduler_audit_metadata" if scheduler_record_list else "none"
+        ),
+        "context_record_scope": (
+            "proposal_context_audit_records" if context_record_list else "none"
+        ),
+        "includes_failed_pre_protocol_steps": bool(
+            step_scope["counted_pre_protocol_failure_steps"]
+        ),
+        "includes_non_counted_steps": False,
+        "excludes_non_counted_steps": bool(step_scope["non_counted_steps"]),
+        "source_counts": {
+            **step_scope,
+            "observable_step_count": len(safe_steps),
+            "branch_row_count": len(branch_row_list),
+            "scheduler_record_count": len(scheduler_record_list),
+            "context_record_count": len(context_record_list),
+        },
         "observable_step_count": len(safe_steps),
         "near_duplicate_count": near_duplicate_count,
         "saturated_signature_count": saturated_signature_count,
@@ -128,6 +163,50 @@ def _is_safe_observability_step(step: StepRecord) -> bool:
         stage = getattr(protocol.stage, "value", protocol.stage)
         return str(stage) == "screening"
     return str(step.failure_stage or "") in _SAFE_PRE_PROTOCOL_FAILURE_STAGES
+
+
+def _counts_toward_observability_scope(step: StepRecord) -> bool:
+    return bool(getattr(step, "counts_toward_max_rounds", True))
+
+
+def _step_scope_counts(steps: Iterable[StepRecord]) -> dict[str, int]:
+    counts = {
+        "step_history_total": 0,
+        "protocol_screening_steps": 0,
+        "non_screening_protocol_steps": 0,
+        "counted_pre_protocol_failure_steps": 0,
+        "safe_pre_protocol_failure_steps": 0,
+        "unsafe_pre_protocol_failure_steps": 0,
+        "non_counted_steps": 0,
+        "non_counted_protocol_steps": 0,
+        "non_counted_pre_protocol_failure_steps": 0,
+    }
+    for step in steps:
+        counts["step_history_total"] += 1
+        counts_toward = _counts_toward_observability_scope(step)
+        if not counts_toward:
+            counts["non_counted_steps"] += 1
+        protocol = step.protocol_result
+        if protocol is not None:
+            stage = getattr(protocol.stage, "value", protocol.stage)
+            if str(stage) == "screening":
+                counts["protocol_screening_steps"] += 1
+            else:
+                counts["non_screening_protocol_steps"] += 1
+            if not counts_toward:
+                counts["non_counted_protocol_steps"] += 1
+            continue
+        if step.failure_stage:
+            failure_stage = str(step.failure_stage or "")
+            if failure_stage in _SAFE_PRE_PROTOCOL_FAILURE_STAGES:
+                counts["safe_pre_protocol_failure_steps"] += 1
+                if counts_toward:
+                    counts["counted_pre_protocol_failure_steps"] += 1
+                else:
+                    counts["non_counted_pre_protocol_failure_steps"] += 1
+            else:
+                counts["unsafe_pre_protocol_failure_steps"] += 1
+    return counts
 
 
 def _scheduler_metadata(
@@ -401,6 +480,10 @@ def _iter_material_difference_records(
 
 
 def _records_from_mapping(item: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
+    direct = item.get("material_difference_requirement")
+    if isinstance(direct, Mapping):
+        yield direct
+
     for key in (
         "material_difference_audit_records",
         "cross_branch_research_audit_records",

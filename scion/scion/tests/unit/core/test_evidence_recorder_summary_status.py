@@ -949,6 +949,30 @@ def test_campaign_summary_separates_primary_contract_and_session_observation(
             "failure_category": "agent_grounding_failure",
             "failure_code": "proposal_premise_contradicted",
             "agent_block_reason": "agent_quality_blocked",
+            "material_difference_requirement": {
+                "record_type": "material_difference_requirement",
+                "schema_version": "material_difference_requirement.v1",
+                "record_id": "mdr:session-3",
+                "record_digest": "digest:session-3",
+                "reason_codes": ["MATERIAL_DIFFERENCE_REQUIRED"],
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "summary": "raw proposal-facing detail must not be copied",
+            },
+            "cross_branch_research_payload": {
+                "cross_branch_research_audit_records": [
+                    {
+                        "record_type": "cross_branch_research_audit",
+                        "schema_version": "cross_branch_research_audit.v1",
+                        "record_id": "cbr:session-3",
+                        "record_digest": "digest:cbr-session-3",
+                        "proposal_visibility_only": True,
+                        "decision_features_excluded": True,
+                        "hypothesis_text": "raw proposal text must not be copied",
+                    }
+                ],
+                "hypothesis_text": "raw proposal text must not be copied",
+            },
         },
     )
 
@@ -970,6 +994,24 @@ def test_campaign_summary_separates_primary_contract_and_session_observation(
     assert (
         summary_step["proposal_session_ref"]["failure_code"]
         == "proposal_premise_contradicted"
+    )
+    assert summary_step["proposal_session_ref"]["material_difference_requirement"][
+        "record_id"
+    ] == "mdr:session-3"
+    assert "summary" not in summary_step["proposal_session_ref"][
+        "material_difference_requirement"
+    ]
+    session_payload = summary_step["proposal_session_ref"][
+        "cross_branch_research_payload"
+    ]
+    assert session_payload["cross_branch_research_audit_records"][0][
+        "record_id"
+    ] == "cbr:session-3"
+    assert "hypothesis_text" not in json.dumps(session_payload)
+    step_audit = summary_step["step_visibility_audit"]
+    assert step_audit["cross_branch_research_visibility"]["status"] == "available"
+    assert step_audit["material_difference_requirement_visibility"]["status"] == (
+        "available"
     )
 
 
