@@ -18,6 +18,7 @@ from .accounting import (
     proposal_accounting_fields,
 )
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
+from .cross_branch_observability import build_cross_branch_research_observability
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +353,20 @@ class StatusWriterMixin:
             )
             if self.last_status_result is not None:
                 payload["last_completed_result"] = self.last_status_result
+        try:
+            scheduler_records = (
+                [self.last_status_result]
+                if isinstance(self.last_status_result, Mapping)
+                else []
+            )
+            payload["cross_branch_research_observability"] = (
+                build_cross_branch_research_observability(
+                    branch_rows=branch_rows,
+                    scheduler_records=scheduler_records,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - status is best-effort
+            logger.debug("cross-branch observability status failed: %s", exc)
         payload = normalize_status_payload(payload)
         if payload.get("stopped_reason") is not None or payload.get("stopped") is True:
             loop = payload.get("campaign_loop")

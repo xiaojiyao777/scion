@@ -44,6 +44,7 @@ from .accounting import (
     proposal_accounting_fields,
 )
 from .common import _stage_value
+from .cross_branch_observability import build_cross_branch_research_observability
 from .failure_summary import (
     _contract_not_run_reason,
     _default_final_evidence_closure_refs,
@@ -449,6 +450,16 @@ class CampaignSummaryMixin:
                 summary["rollback_events"] = _rollback_events(steps, branch_cards)
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary failed: %s", exc)
+
+        try:
+            summary["cross_branch_research_observability"] = (
+                build_cross_branch_research_observability(
+                    steps=steps,
+                    branch_rows=summary.get("branches") or (),
+                )
+            )
+        except Exception as exc:  # pragma: no cover - observability is best-effort
+            logger.debug("cross-branch observability summary failed: %s", exc)
 
         for step in steps:
             summary["steps"].append(self._build_summary_step(step))
