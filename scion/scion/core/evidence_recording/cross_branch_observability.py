@@ -50,6 +50,7 @@ def build_cross_branch_research_observability(
     steps: Iterable[StepRecord] = (),
     branch_rows: Iterable[Mapping[str, Any]] = (),
     scheduler_records: Iterable[Mapping[str, Any]] = (),
+    context_records: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Return proposal-context counters without exposing proposal text.
 
@@ -60,6 +61,11 @@ def build_cross_branch_research_observability(
     safe_steps = [_step for _step in steps if _is_safe_observability_step(_step)]
     branch_row_list = [row for row in branch_rows if isinstance(row, Mapping)]
     scheduler_metadata = _scheduler_metadata(safe_steps, scheduler_records)
+    material_difference_requirement_count = _material_difference_requirement_count(
+        context_records=context_records,
+        scheduler_metadata=scheduler_metadata,
+        branch_rows=branch_row_list,
+    )
     signature_groups = _signature_groups(safe_steps, branch_row_list)
     near_duplicate_count = _near_duplicate_count(signature_groups)
     saturated_signature_count = _saturated_signature_count(signature_groups)
@@ -86,6 +92,7 @@ def build_cross_branch_research_observability(
             near_duplicate_count,
             saturated_signature_count,
             avoid_signature_count,
+            material_difference_requirement_count,
             same_branch_refinement_allowance_count,
             same_branch_refinement_not_selected_count,
         )
@@ -101,7 +108,7 @@ def build_cross_branch_research_observability(
         "near_duplicate_count": near_duplicate_count,
         "saturated_signature_count": saturated_signature_count,
         "avoid_signature_count": avoid_signature_count,
-        "material_difference_requirement_count": avoid_signature_count,
+        "material_difference_requirement_count": material_difference_requirement_count,
         "same_branch_refinement_allowance_count": (
             same_branch_refinement_allowance_count
         ),
@@ -345,6 +352,89 @@ def _repeated_contract_reroute_count(
         ):
             branch_ids.add(str(item.get("branch_id") or f"metadata:{len(branch_ids)}"))
     return len(branch_ids)
+
+
+def _material_difference_requirement_count(
+    *,
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> int:
+    record_ids: set[str] = set()
+    fallback_digests: set[str] = set()
+    for record in _iter_material_difference_records(
+        context_records,
+        scheduler_metadata,
+        branch_rows,
+    ):
+        if not _is_material_difference_record(record):
+            continue
+        record_id = str(record.get("record_id") or "").strip()
+        if record_id:
+            record_ids.add(record_id)
+            continue
+        digest = str(
+            record.get("record_digest")
+            or record.get("requirement_digest")
+            or ""
+        ).strip()
+        if digest:
+            fallback_digests.add(digest)
+    return len(record_ids) + len(fallback_digests)
+
+
+def _iter_material_difference_records(
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> Iterable[Mapping[str, Any]]:
+    for record in context_records:
+        if isinstance(record, Mapping):
+            yield record
+    for item in scheduler_metadata:
+        yield from _records_from_mapping(item)
+    for row in branch_rows:
+        yield from _records_from_mapping(row)
+        card = row.get("branch_card")
+        if isinstance(card, Mapping):
+            yield from _records_from_mapping(card)
+
+
+def _records_from_mapping(item: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
+    for key in (
+        "material_difference_audit_records",
+        "cross_branch_research_audit_records",
+    ):
+        values = item.get(key)
+        if isinstance(values, (list, tuple)):
+            for value in values:
+                if isinstance(value, Mapping):
+                    yield value
+
+    payload = item.get("cross_branch_research_payload")
+    if isinstance(payload, Mapping):
+        for value in payload.get("material_difference_audit_records", []) or []:
+            if isinstance(value, Mapping):
+                yield value
+        novelty = payload.get("novelty_pressure")
+        if isinstance(novelty, Mapping):
+            for value in novelty.get("material_difference_audit_records", []) or []:
+                if isinstance(value, Mapping):
+                    yield value
+
+    novelty = item.get("novelty_pressure")
+    if isinstance(novelty, Mapping):
+        for value in novelty.get("material_difference_audit_records", []) or []:
+            if isinstance(value, Mapping):
+                yield value
+
+
+def _is_material_difference_record(record: Mapping[str, Any]) -> bool:
+    if record.get("record_type") == "material_difference_requirement":
+        return True
+    if record.get("schema_version") == "material_difference_requirement.v1":
+        return bool(record.get("record_id") or record.get("record_digest"))
+    return False
 
 
 def _row_has_repeated_contract_reroute(row: Mapping[str, Any]) -> bool:

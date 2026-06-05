@@ -512,6 +512,18 @@ class ContextManager:
             "branch_dossier_payload": branch_dossier_payload,
             "cross_branch_research": cross_branch_research,
             "cross_branch_research_payload": cross_branch_research_payload,
+            "cross_branch_research_audit_records": (
+                cross_branch_research_payload.get(
+                    "material_difference_audit_records",
+                    [],
+                )
+            ),
+            "cross_branch_research_session_metadata": (
+                cross_branch_research_payload.get(
+                    "cross_branch_research_metadata",
+                    {},
+                )
+            ),
             "branch_followup_policy": branch_followup_policy,
             "branch_followup_policy_payload": branch_followup_policy_payload,
             "exploration_coverage": exploration_coverage,

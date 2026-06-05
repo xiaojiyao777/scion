@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 import inspect
+import json
 
 from scion.core.models import (
     Branch,
@@ -192,6 +193,10 @@ def test_cross_branch_research_map_is_tainted_and_finds_near_duplicates() -> Non
         "reason_codes",
     } <= set(first_card)
     assert payload["novelty_pressure"]["policy"] == "proposal_only"
+    assert payload["material_difference_audit_records"]
+    assert payload["cross_branch_research_metadata"][
+        "material_difference_requirement_count"
+    ] == len(payload["material_difference_audit_records"])
     assert payload["portfolio_guidance"]
 
     assert "excluded_from_decision_features" in rendered
@@ -307,6 +312,10 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
     assert avoid["sibling_duplication_allowed"] is False
     assert avoid["same_branch_refinement_allowed"] is False
     requirements = avoid["material_difference_requirements"]
+    assert requirements["requirement_id"].startswith("mdr:requirement:")
+    assert len(requirements["requirement_digest"]) == 64
+    assert requirements["proposal_visibility_only"] is True
+    assert requirements["decision_features_excluded"] is True
     assert requirements["minimum_requirement"] == (
         "change_one_or_more_generic_dimensions"
     )
@@ -329,6 +338,39 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
         "avoid_nearby_counted_screening_without_material_difference"
     )
     assert novelty["material_difference_requirements"][0] == requirements
+    records = novelty["material_difference_audit_records"]
+    assert len(records) == 1
+    record = records[0]
+    assert record["record_type"] == "material_difference_requirement"
+    assert record["record_id"].startswith("mdr:")
+    assert len(record["record_digest"]) == 64
+    assert record["generic_signature"] == avoid["shared_signature"]
+    assert record["requirement"] == requirements
+    assert record["proposal_visibility_only"] is True
+    assert record["decision_features_excluded"] is True
+    assert record["raw_branch_text_excluded"] is True
+    assert record["raw_hypothesis_excluded"] is True
+    assert record["llm_trace_excluded"] is True
+    assert "MATERIAL_DIFFERENCE_REQUIREMENT" in record["reason_codes"]
+    assert set(record["family_pressure"]["pressure_sources"]) == {
+        "avoid_signature_set",
+        "saturated_signatures",
+    }
+    assert "flat_probe" not in json.dumps(record, sort_keys=True)
+    assert "Tainted planning text" not in json.dumps(record, sort_keys=True)
+    assert payload["material_difference_audit_records"] == records
+    assert payload["cross_branch_research_metadata"][
+        "material_difference_record_ids"
+    ] == [record["record_id"]]
+
+    repeat_payload = build_cross_branch_research_map(
+        current,
+        [no_effect_b, abandoned, current, no_effect_a],
+        list(reversed(steps)),
+    )
+    repeat_record = repeat_payload["material_difference_audit_records"][0]
+    assert repeat_record["record_id"] == record["record_id"]
+    assert repeat_record["record_digest"] == record["record_digest"]
     weak_allowance = {
         item["branch_id"]: item
         for item in novelty["same_branch_refinement_allowances"]
@@ -690,6 +732,8 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "avoid_signature_set" not in decision_fields
     assert "blocked_signature_pressure" not in decision_fields
     assert "material_difference_requirements" not in decision_fields
+    assert "material_difference_audit_records" not in decision_fields
+    assert "cross_branch_research_session_metadata" not in decision_fields
     assert "same_branch_refinement_allowances" not in decision_fields
     assert "hypothesis_text" not in decision_fields
 

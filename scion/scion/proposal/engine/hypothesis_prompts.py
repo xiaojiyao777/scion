@@ -13,6 +13,15 @@ from .prompt_common import (
 from .solver_design_prompts import _solver_design_hypothesis_guidance
 
 
+_PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
+    "tune",
+    "integrate",
+    "repair",
+    "parameterize",
+    "telemetry_wiring",
+)
+
+
 def _split_hypothesis_context(
     context: Dict[str, Any],
 ) -> "tuple[list[dict], str]":
@@ -420,10 +429,7 @@ def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
     if "protected_mechanism_ids=" not in guidance:
         return ""
     protected = _extract_guidance_value(guidance, "protected_mechanism_ids")
-    allowed = (
-        _extract_guidance_value(guidance, "same_mechanism_allowed_actions")
-        or "tune, integrate, repair, parameterize, telemetry_wiring"
-    )
+    allowed = _prompt_same_mechanism_allowed_actions(guidance)
     clean_fork_policy = (
         _extract_guidance_value(guidance, "clean_fork_policy")
         or "clean_fork_required_for_new_mechanism"
@@ -451,6 +457,27 @@ def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
         "A new or unrelated mechanism requires a clean branch or clean fork "
         "before generation."
     )
+
+
+def _prompt_same_mechanism_allowed_actions(guidance: str) -> str:
+    raw_allowed = _extract_guidance_value(
+        guidance, "same_mechanism_allowed_actions"
+    )
+    if not raw_allowed:
+        return ",".join(_PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS)
+    raw_actions = {
+        item.strip()
+        for item in raw_allowed.split(",")
+        if item.strip()
+    }
+    prompt_actions = [
+        action
+        for action in _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS
+        if action in raw_actions
+    ]
+    if prompt_actions:
+        return ",".join(prompt_actions)
+    return raw_allowed
 
 
 def _extract_guidance_value(text: str, key: str) -> str:

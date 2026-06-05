@@ -730,6 +730,9 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
     assert payload["protected_mechanism_ids"] == ["bounded_probe"]
     assert payload["forbidden_mechanism_policy"] == "no_unrelated_mechanism_ids"
     assert payload["same_mechanism_allowed_actions"] == [
+        "diagnostic",
+        "observability",
+        "refine",
         "tune",
         "integrate",
         "repair",

@@ -36,6 +36,12 @@ _CANDIDATE_INTENT_COUNT_KEYS = (
     "diagnostic_candidate",
     "unknown",
 )
+_OBSERVABILITY_VALUE_COUNT_KEYS = (
+    "observability_value_observed",
+    "observability_value_partial",
+    "observability_value_missing",
+    "observability_value_not_applicable",
+)
 _OBSERVABILITY_INTENT_TERMS = {
     "observability",
     "instrument",
@@ -267,6 +273,128 @@ def candidate_intent_counts_for_steps(steps: Any) -> dict[str, int]:
     return counts
 
 
+def observability_value_counts_for_steps(steps: Any) -> dict[str, Any]:
+    """Return campaign counters for proposal/report-only observability value."""
+
+    counts = {key: 0 for key in _OBSERVABILITY_VALUE_COUNT_KEYS}
+    reason_counts: dict[str, int] = {}
+    applicable = 0
+    total = 0
+    decision_excluded_count = 0
+    for step in steps or ():
+        visibility = observability_value_visibility_for_step(step)
+        if not visibility:
+            continue
+        total += 1
+        status = str(
+            visibility.get("observability_value_status")
+            or "observability_value_missing"
+        )
+        if status not in counts:
+            status = "observability_value_missing"
+        counts[status] += 1
+        if status != "observability_value_not_applicable":
+            applicable += 1
+        for code in visibility.get("reason_codes") or ():
+            key = str(code)
+            reason_counts[key] = reason_counts.get(key, 0) + 1
+        if visibility.get("decision_features_excluded") is True:
+            decision_excluded_count += 1
+    return {
+        "schema_version": "observability_value_counts.v1",
+        "observability_value_total": total,
+        "observability_value_applicable_count": applicable,
+        **counts,
+        "reason_code_counts": reason_counts,
+        "decision_features_excluded_count": decision_excluded_count,
+    }
+
+
+def observability_value_visibility_for_step(step: Any) -> dict[str, Any]:
+    """Return report/proposal-only value visibility for diagnostic candidates.
+
+    This visibility records whether an observability/diagnostic candidate made
+    structured protocol evidence easier to inspect. It is intentionally not a
+    DecisionFeatures source and does not alter formal gates.
+    """
+
+    intent_visibility = candidate_intent_visibility_for_step(step)
+    intent = str(intent_visibility.get("candidate_intent") or "unknown")
+    protocol = getattr(step, "protocol_result", None)
+    if intent not in {"observability_candidate", "diagnostic_candidate"}:
+        return _observability_value_payload(
+            candidate_intent=intent,
+            status="observability_value_not_applicable",
+            reason_codes=("OBSERVABILITY_VALUE_NOT_APPLICABLE_TO_QUALITY_SEARCH",),
+            details={},
+        )
+    if protocol is None:
+        return _observability_value_payload(
+            candidate_intent=intent,
+            status="observability_value_missing",
+            reason_codes=("OBSERVABILITY_VALUE_MISSING_PROTOCOL_EVIDENCE",),
+            details={},
+        )
+    evidence = _observability_value_evidence_for_protocol(protocol)
+    return _observability_value_payload(
+        candidate_intent=intent,
+        status=evidence["status"],
+        reason_codes=tuple(evidence["reason_codes"]),
+        details=evidence["details"],
+    )
+
+
+def observability_value_visibility_from_payload(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Normalize a status/progress observability value payload.
+
+    ``record_protocol_progress`` does not have a full StepRecord, so this helper
+    accepts already-structured progress fields and uses the same output schema.
+    """
+
+    existing = payload.get("observability_value_visibility")
+    if isinstance(existing, Mapping):
+        base = dict(existing)
+        base.setdefault("schema_version", "observability_value_visibility.v1")
+        base.setdefault("proposal_visibility_only", True)
+        base.setdefault("decision_features_excluded", True)
+        return base
+    intent = str(payload.get("candidate_intent") or "").strip()
+    if not intent:
+        kind = str(payload.get("attempt_kind") or "").strip().lower()
+        intent = (
+            "diagnostic_candidate"
+            if "diagnostic" in kind
+            else "observability_candidate"
+            if "observability" in kind
+            else "unknown"
+        )
+    if intent not in {"observability_candidate", "diagnostic_candidate"}:
+        return {}
+    evidence = _observability_value_evidence_from_sources(
+        mechanism_evidence=payload.get("mechanism_evidence"),
+        surface_summary=payload.get("candidate_surface_runtime_summary"),
+        phase_summary=payload.get("candidate_phase_telemetry_summary"),
+        runtime_confidence=payload.get("runtime_confidence"),
+        runtime_evidence_status=payload.get("runtime_evidence_status"),
+        runtime_pairs=payload.get("runtime_pairs"),
+        champion_cached_runtime_pairs=payload.get("champion_cached_runtime_pairs"),
+        runtime_budget_diagnostic=payload.get("runtime_budget_diagnostic"),
+        telemetry_failure_details=payload.get("telemetry_failure_details"),
+        candidate_runtime_failure_categories=payload.get(
+            "candidate_runtime_failure_categories"
+        ),
+        candidate_first_runtime_failure=payload.get("candidate_first_runtime_failure"),
+    )
+    return _observability_value_payload(
+        candidate_intent=intent,
+        status=evidence["status"],
+        reason_codes=tuple(evidence["reason_codes"]),
+        details=evidence["details"],
+    )
+
+
 def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
     """Classify candidate intent from structured audit/protocol fields only.
 
@@ -330,6 +458,313 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
             "decision_features_excluded": True,
         }
     )
+
+
+def _observability_value_payload(
+    *,
+    candidate_intent: str,
+    status: str,
+    reason_codes: tuple[str, ...],
+    details: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "schema_version": "observability_value_visibility.v1",
+            "candidate_intent": candidate_intent or "unknown",
+            "observability_value_status": status,
+            "reason_codes": list(reason_codes),
+            "details": dict(details),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def _observability_value_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
+    return _observability_value_evidence_from_sources(
+        mechanism_evidence=mechanism_evidence_for_protocol(protocol),
+        surface_summary=getattr(protocol, "candidate_surface_runtime_summary", {}),
+        phase_summary=getattr(protocol, "candidate_phase_telemetry_summary", {}),
+        runtime_confidence=getattr(protocol, "runtime_confidence", ""),
+        runtime_evidence_status=getattr(protocol, "runtime_evidence_status", ""),
+        runtime_pairs=getattr(getattr(protocol, "stats", None), "runtime_pairs", 0),
+        champion_cached_runtime_pairs=getattr(
+            protocol,
+            "champion_cached_runtime_pairs",
+            getattr(
+                getattr(protocol, "stats", None),
+                "champion_cached_runtime_pairs",
+                0,
+            ),
+        ),
+        runtime_budget_diagnostic=_runtime_budget_diagnostic_from_protocol(protocol),
+        telemetry_failure_details=(),
+        candidate_runtime_failure_categories=getattr(
+            protocol,
+            "candidate_runtime_failure_categories",
+            {},
+        ),
+        candidate_first_runtime_failure=getattr(
+            protocol,
+            "candidate_first_runtime_failure",
+            None,
+        ),
+    )
+
+
+def _observability_value_evidence_from_sources(
+    *,
+    mechanism_evidence: Any,
+    surface_summary: Any,
+    phase_summary: Any,
+    runtime_confidence: Any,
+    runtime_evidence_status: Any,
+    runtime_pairs: Any,
+    champion_cached_runtime_pairs: Any,
+    runtime_budget_diagnostic: Any,
+    telemetry_failure_details: Any,
+    candidate_runtime_failure_categories: Any,
+    candidate_first_runtime_failure: Any,
+) -> dict[str, Any]:
+    mechanism = mechanism_evidence if isinstance(mechanism_evidence, Mapping) else {}
+    surface = surface_summary if isinstance(surface_summary, Mapping) else {}
+    phase = phase_summary if isinstance(phase_summary, Mapping) else {}
+    guard = surface.get("telemetry_guard") if isinstance(surface, Mapping) else None
+    if not isinstance(guard, Mapping):
+        guard = {}
+    field_coverage = _telemetry_field_coverage(surface, guard, phase)
+    telemetry_has_coverage = field_coverage["field_count"] > 0
+    activation_status = _status_value(
+        mechanism.get("primary_activation_status")
+        or mechanism.get("activation_evidence_status")
+    )
+    effect_status = _status_value(
+        mechanism.get("primary_effect_status")
+        or mechanism.get("objective_effect_status")
+    )
+    telemetry_outcome = _status_value(mechanism.get("telemetry_outcome"))
+    diagnostic_kind = _status_value(mechanism.get("primary_diagnostic_kind"))
+    runtime_status = _mechanism_runtime_status(mechanism, guard)
+    runtime_conf = _status_value(runtime_confidence)
+    runtime_status_value = _status_value(runtime_evidence_status)
+    runtime_pair_count = _safe_int(runtime_pairs)
+    cached_pair_count = _safe_int(champion_cached_runtime_pairs)
+    budget_diagnostic = (
+        runtime_budget_diagnostic
+        if isinstance(runtime_budget_diagnostic, Mapping)
+        else surface.get("runtime_budget_diagnostic")
+    )
+    budget_observable = isinstance(budget_diagnostic, Mapping) and bool(
+        budget_diagnostic
+    )
+    telemetry_detail_count = _telemetry_detail_count(telemetry_failure_details)
+    runtime_failure_observable = bool(
+        telemetry_detail_count
+        or (
+            isinstance(candidate_runtime_failure_categories, Mapping)
+            and candidate_runtime_failure_categories
+        )
+        or isinstance(candidate_first_runtime_failure, Mapping)
+        or _guard_failure_count(guard)
+    )
+    activation_or_effect_observed = any(
+        status in {"observed", "zero", "no_effect", "telemetry_effect_zero"}
+        for status in (activation_status, effect_status, telemetry_outcome)
+    )
+    activation_or_effect_diagnostic = any(
+        status
+        and status not in {"unknown", "none"}
+        for status in (
+            activation_status,
+            effect_status,
+            telemetry_outcome,
+            diagnostic_kind,
+        )
+    )
+    runtime_confidence_observable = bool(
+        (
+            runtime_conf
+            and runtime_conf not in {"unknown", "none", "missing", "high"}
+        )
+        or (
+            runtime_status_value
+            and runtime_status_value
+            not in {"unknown", "none", "missing", "sufficient"}
+        )
+        or runtime_pair_count > 0
+        or cached_pair_count > 0
+    )
+    observed_categories: list[str] = []
+    reason_codes: list[str] = []
+    if telemetry_has_coverage:
+        observed_categories.append("telemetry_coverage")
+        reason_codes.append("OBSERVABILITY_VALUE_TELEMETRY_COVERAGE_OBSERVED")
+    if activation_or_effect_observed:
+        observed_categories.append("activation_effect")
+        reason_codes.append("OBSERVABILITY_VALUE_ACTIVATION_OR_EFFECT_OBSERVABLE")
+    elif activation_or_effect_diagnostic:
+        reason_codes.append("OBSERVABILITY_VALUE_ACTIVATION_OR_EFFECT_DIAGNOSTIC")
+    if budget_observable or runtime_status not in {"", "unknown", "none"}:
+        observed_categories.append("budget")
+        reason_codes.append("OBSERVABILITY_VALUE_BUDGET_FIELD_OBSERVABLE")
+    if runtime_confidence_observable:
+        observed_categories.append("runtime_confidence")
+        reason_codes.append("OBSERVABILITY_VALUE_RUNTIME_CONFIDENCE_OBSERVABLE")
+    if runtime_failure_observable or diagnostic_kind:
+        observed_categories.append("failure_attribution")
+        reason_codes.append("OBSERVABILITY_VALUE_FAILURE_ATTRIBUTION_OBSERVABLE")
+    structured_signal_present = bool(
+        observed_categories
+        or activation_or_effect_diagnostic
+        or field_coverage["field_count"]
+        or guard
+        or mechanism
+        or phase
+    )
+    if telemetry_has_coverage and (
+        activation_or_effect_observed
+        or budget_observable
+        or runtime_confidence_observable
+        or runtime_failure_observable
+        or diagnostic_kind
+    ):
+        status = "observability_value_observed"
+    elif structured_signal_present:
+        status = "observability_value_partial"
+        if not reason_codes:
+            reason_codes.append("OBSERVABILITY_VALUE_STRUCTURED_DIAGNOSTIC_PARTIAL")
+    else:
+        status = "observability_value_missing"
+        reason_codes.append("OBSERVABILITY_VALUE_STRUCTURED_EVIDENCE_MISSING")
+    return {
+        "status": status,
+        "reason_codes": tuple(dict.fromkeys(reason_codes)),
+        "details": _drop_empty(
+            {
+                "observed_categories": sorted(set(observed_categories)),
+                "telemetry_field_coverage": field_coverage,
+                "activation_status": activation_status or None,
+                "effect_status": effect_status or None,
+                "runtime_status": runtime_status or None,
+                "runtime_confidence": runtime_conf or None,
+                "runtime_evidence_status": runtime_status_value or None,
+                "runtime_pairs": runtime_pair_count,
+                "champion_cached_runtime_pairs": cached_pair_count,
+                "runtime_budget_diagnostic_code": (
+                    str(budget_diagnostic.get("code") or "").strip()
+                    if isinstance(budget_diagnostic, Mapping)
+                    else None
+                ),
+                "diagnostic_kind": diagnostic_kind or None,
+                "telemetry_outcome": telemetry_outcome or None,
+                "telemetry_failure_detail_count": telemetry_detail_count,
+                "guard_failure_count": _guard_failure_count(guard),
+            }
+        ),
+    }
+
+
+def _telemetry_field_coverage(
+    surface_summary: Mapping[str, Any],
+    guard: Mapping[str, Any],
+    phase_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    field_count = 0
+    present = 0
+    missing = 0
+    positive = 0
+    zero = 0
+    categories: set[str] = set()
+    for category, category_payload in (
+        ("surface", surface_summary.get("fields")),
+        ("phase", phase_summary),
+        ("guard", guard.get("fields")),
+    ):
+        if isinstance(category_payload, Mapping):
+            for field_payload in category_payload.values():
+                if not isinstance(field_payload, Mapping):
+                    continue
+                field_count += 1
+                categories.add(category)
+                present += _safe_int(
+                    field_payload.get("present")
+                    or field_payload.get("candidate_present")
+                )
+                missing += _safe_int(
+                    field_payload.get("missing")
+                    or field_payload.get("candidate_missing")
+                )
+                positive += _safe_int(field_payload.get("candidate_positive"))
+                zero += _safe_int(field_payload.get("candidate_zero"))
+    for item in guard.get("mechanism_diagnostics") or ():
+        if not isinstance(item, Mapping):
+            continue
+        for category in ("activation", "effect", "runtime", "budget"):
+            category_payload = item.get(category)
+            if not isinstance(category_payload, Mapping):
+                continue
+            field_count += len(category_payload.get("fields") or ()) or 1
+            categories.add(category)
+            present += _safe_int(category_payload.get("candidate_present"))
+            missing += _safe_int(category_payload.get("candidate_missing"))
+            positive += _safe_int(category_payload.get("candidate_positive"))
+            zero += _safe_int(category_payload.get("candidate_zero"))
+    return {
+        "field_count": field_count,
+        "candidate_present": present,
+        "candidate_missing": missing,
+        "candidate_positive": positive,
+        "candidate_zero": zero,
+        "categories": sorted(categories),
+    }
+
+
+def _runtime_budget_diagnostic_from_protocol(protocol: Any) -> Mapping[str, Any]:
+    surface = getattr(protocol, "candidate_surface_runtime_summary", None)
+    if not isinstance(surface, Mapping):
+        return {}
+    diagnostic = surface.get("runtime_budget_diagnostic")
+    return diagnostic if isinstance(diagnostic, Mapping) else {}
+
+
+def _mechanism_runtime_status(
+    mechanism: Mapping[str, Any],
+    guard: Mapping[str, Any],
+) -> str:
+    for item in mechanism.get("mechanisms") or ():
+        if not isinstance(item, Mapping):
+            continue
+        status = _status_value(item.get("runtime_status"))
+        if status:
+            return status
+    for item in guard.get("mechanism_diagnostics") or ():
+        if not isinstance(item, Mapping):
+            continue
+        status = _status_value(item.get("runtime_status"))
+        if status:
+            return status
+    return ""
+
+
+def _telemetry_detail_count(value: Any) -> int:
+    if isinstance(value, Mapping):
+        return 1
+    if isinstance(value, (list, tuple)):
+        return sum(1 for item in value if isinstance(item, Mapping))
+    return 0
+
+
+def _guard_failure_count(guard: Mapping[str, Any]) -> int:
+    total = 0
+    for key in ("failures", "warnings"):
+        items = guard.get(key)
+        if isinstance(items, (list, tuple)):
+            total += sum(1 for item in items if isinstance(item, Mapping))
+    return total
+
+
+def _status_value(value: Any) -> str:
+    return str(value or "").strip().lower()
 
 
 def runtime_evidence_policy_counts_for_steps(steps: Any) -> dict[str, Any]:

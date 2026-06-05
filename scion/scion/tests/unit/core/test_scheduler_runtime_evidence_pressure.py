@@ -3,6 +3,7 @@ from __future__ import annotations
 from scion.core.branch_lifecycle_policy import (
     SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,
 )
+from scion.core.branch_hygiene import ACTIVATION_MISSING_OR_WIRING_SUSPECT
 from scion.core.decision_lifecycle_actions import (
     update_branch_screening_evidence_summary,
 )
@@ -14,6 +15,8 @@ from scion.core.models import (
     ProtocolResult,
 )
 from scion.core.scheduler import (
+    PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
+    PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON,
     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
     Scheduler,
 )
@@ -45,7 +48,7 @@ def _runtime_pressure_protocol() -> ProtocolResult:
     )
 
 
-def test_repeated_runtime_evidence_pressure_prefers_clean_fork_over_refine() -> None:
+def test_repeated_runtime_evidence_pressure_prefers_plateau_refinement_then_material_clean_fork() -> None:
     branch = Branch(
         branch_id="runtime-pressure",
         state=BranchState.EXPLORE,
@@ -76,8 +79,24 @@ def test_repeated_runtime_evidence_pressure_prefers_clean_fork_over_refine() -> 
         decision_reason_codes=(SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,),
     )
     second = Scheduler(max_active_branches=2).select_next([branch])
+    branch.branch_evidence_summary["same_branch_refinement_sampling"] = True
+    branch.branch_evidence_summary["plateau_gate"][
+        "same_branch_refinement_sampled"
+    ] = True
+    third = Scheduler(max_active_branches=2).select_next([branch])
 
     assert branch.branch_evidence_summary["runtime_evidence_pressure_count"] == 2
+    plateau_gate = branch.branch_evidence_summary["plateau_gate"]
+    assert plateau_gate["schema_version"] == "plateau_gate.v1"
+    assert plateau_gate["tier"] == "no_effect"
+    assert plateau_gate["effective_screened_no_effect_count"] == 2
+    assert plateau_gate["runtime_evidence_pressure_count"] == 2
+    assert plateau_gate["threshold_met"] is True
+    assert plateau_gate["proposal_guidance_only"] is True
+    assert plateau_gate["audit_only"] is True
+    assert plateau_gate["decision_features_excluded"] is True
+    assert "PLATEAU_GATE_THRESHOLD_MET" in plateau_gate["reason_codes"]
+    assert "generic established research direction" not in str(plateau_gate)
     assert branch.branch_evidence_summary["runtime_evidence_pressure"]["triggers"] == [
         "low_or_cached_runtime_confidence",
         "runtime_evidence_status:insufficient",
@@ -113,17 +132,41 @@ def test_repeated_runtime_evidence_pressure_prefers_clean_fork_over_refine() -> 
     assert first.action == "run_existing"
     assert first.branch is branch
     assert first.slot == "refine_active"
-    assert second.action == "create_new"
-    assert second.branch is None
-    assert second.slot == "explore_new"
-    assert second.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
-    assert second.audit_metadata["runtime_evidence_clean_fork_selected"] is True
+    assert second.action == "run_existing"
+    assert second.branch is branch
+    assert second.slot == "refine_active"
+    assert second.reason == PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON
+    assert second.audit_metadata["same_branch_refinement_selected"] is True
+    assert second.audit_metadata[
+        "plateau_gate_same_branch_refinement_selected"
+    ] is True
+    assert second.audit_metadata["same_branch_refinement_reason"] == (
+        "plateau_gate_diagnostic_refinement"
+    )
+    assert third.action == "create_new"
+    assert third.branch is None
+    assert third.slot == "explore_new"
+    assert third.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    assert third.audit_metadata["runtime_evidence_clean_fork_selected"] is True
     assert (
-        second.audit_metadata["runtime_evidence_clean_fork_reason"]
+        third.audit_metadata["runtime_evidence_clean_fork_reason"]
         == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
     )
-    assert second.audit_metadata["runtime_evidence_pressure_count_max"] == 2
-    assert second.audit_metadata["runtime_evidence_clean_fork_candidates"] == [
+    assert third.audit_metadata["runtime_evidence_pressure_count_max"] == 2
+    assert third.audit_metadata["material_difference_required"] is True
+    assert third.audit_metadata["plateau_gate_reason"] == (
+        PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON
+    )
+    assert third.audit_metadata["material_difference_requirement"][
+        "schema_version"
+    ] == "material_difference_requirement.v1"
+    assert third.audit_metadata["material_difference_requirement"][
+        "decision_features_excluded"
+    ] is True
+    assert "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE" in (
+        third.audit_metadata["material_difference_requirement"]["reason_codes"]
+    )
+    assert third.audit_metadata["runtime_evidence_clean_fork_candidates"] == [
         {
             "branch_id": "runtime-pressure",
             "lineage_status": "active_marginal",
@@ -342,6 +385,56 @@ def test_low_confidence_runtime_branch_gets_same_branch_sample_once() -> None:
     assert action.audit_metadata[
         "clean_fork_suppressed_for_same_branch_sample"
     ] is True
+
+
+def test_weak_signal_reason_code_gets_same_branch_refinement_sample() -> None:
+    branch = Branch(
+        branch_id="weak-signal-sample",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_marginal",
+        last_screening_feedback_tier="marginal",
+        direction="generic weak-signal direction",
+        branch_evidence_summary={
+            "tier": "marginal",
+            "wins": 0,
+            "losses": 0,
+            "reason_codes": ["SCREENING_WEAK_SIGNAL_CONTINUE"],
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.reason == "same_branch_low_signal_observation_sample"
+    assert action.audit_metadata["same_branch_refinement_reason"] == (
+        "weak_signal_refinement_observation"
+    )
+    assert action.audit_metadata[
+        "clean_fork_suppressed_for_same_branch_sample"
+    ] is True
+
+
+def test_activation_gap_branch_runs_same_branch_telemetry_diagnostic() -> None:
+    branch = Branch(
+        branch_id="activation-gap",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="clean",
+        last_telemetry_outcome=ACTIVATION_MISSING_OR_WIRING_SUSPECT,
+        branch_mechanism_ids=("generic_probe",),
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "telemetry_diagnostic_followup"
+    assert action.audit_metadata == {}
 
 
 def test_same_branch_sample_does_not_preempt_pending_retry() -> None:

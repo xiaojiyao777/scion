@@ -28,6 +28,9 @@ CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
 OPEN_EXPLORATION_ALLOWED = "open_exploration_allowed"
 NO_UNRELATED_MECHANISM_IDS = "no_unrelated_mechanism_ids"
 SAME_MECHANISM_ALLOWED_ACTIONS = (
+    "diagnostic",
+    "observability",
+    "refine",
     "tune",
     "integrate",
     "repair",

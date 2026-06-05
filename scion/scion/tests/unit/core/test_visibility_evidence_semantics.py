@@ -47,6 +47,25 @@ def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(
                 "primary_diagnostic_kind": "observability_bridge",
                 "telemetry_outcome": "observed",
             },
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "telemetry_bridge_activation_count": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                    },
+                    "telemetry_bridge_effect_delta": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                    },
+                },
+                "runtime_budget_diagnostic": {
+                    "code": "diagnostic_budget_visible",
+                },
+            },
         ),
         expected_telemetry={"intent": "observability_bridge"},
         mechanism_changes=(
@@ -69,6 +88,12 @@ def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(
         "diagnostic_candidate": 0,
         "unknown": 0,
     }
+    assert summary["observability_value_counts"][
+        "observability_value_observed"
+    ] == 1
+    assert summary["observability_value_counts"][
+        "observability_value_not_applicable"
+    ] == 0
     summary_step = summary["steps"][0]
     protocol = summary_step["protocol_result"]
     assert summary_step["decision"] == "abandon"
@@ -81,8 +106,26 @@ def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(
     assert (
         protocol["candidate_intent_visibility"]["decision_features_excluded"] is True
     )
+    visibility = protocol["observability_value_visibility"]
+    assert visibility["schema_version"] == "observability_value_visibility.v1"
+    assert visibility["candidate_intent"] == "observability_candidate"
+    assert visibility["observability_value_status"] == (
+        "observability_value_observed"
+    )
+    assert visibility["proposal_visibility_only"] is True
+    assert visibility["decision_features_excluded"] is True
+    assert "OBSERVABILITY_VALUE_TELEMETRY_COVERAGE_OBSERVED" in (
+        visibility["reason_codes"]
+    )
+    assert "OBSERVABILITY_VALUE_ACTIVATION_OR_EFFECT_OBSERVABLE" in (
+        visibility["reason_codes"]
+    )
+    assert "telemetry_coverage" in visibility["details"]["observed_categories"]
+    assert summary_step["observability_value_visibility"] == visibility
     assert "candidate_intent" not in DecisionFeatures.__dataclass_fields__
     assert "quality_search_interpretation" not in DecisionFeatures.__dataclass_fields__
+    assert "observability_value_visibility" not in DecisionFeatures.__dataclass_fields__
+    assert "observability_value_status" not in DecisionFeatures.__dataclass_fields__
 
 
 def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
@@ -184,6 +227,36 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
         progress["runtime_evidence_policy"]
     )
 
+    progress = recorder.record_protocol_progress(
+        branch_id="branch-beta",
+        stage="screening",
+        candidate_intent="diagnostic_candidate",
+        mechanism_evidence={
+            "primary_mechanism": "activation_probe",
+            "primary_activation_status": "observed",
+            "primary_effect_status": "zero",
+            "primary_diagnostic_kind": "activation_diagnostic",
+            "telemetry_outcome": "observed",
+        },
+        candidate_surface_runtime_summary={
+            "fields": {
+                "activation_probe_count": {
+                    "present": 1,
+                    "missing": 0,
+                }
+            }
+        },
+    )
+    status = json.loads((tmp_path / "status.json").read_text())
+    visibility = progress["observability_value_visibility"]
+    assert visibility["candidate_intent"] == "diagnostic_candidate"
+    assert visibility["observability_value_status"] == (
+        "observability_value_observed"
+    )
+    assert visibility["proposal_visibility_only"] is True
+    assert visibility["decision_features_excluded"] is True
+    assert status["current_progress"]["observability_value_visibility"] == visibility
+
 
 def test_quality_candidate_with_expected_telemetry_stays_quality(
     tmp_path: Path,
@@ -235,6 +308,16 @@ def test_quality_candidate_with_expected_telemetry_stays_quality(
     assert protocol["candidate_intent"] == "quality_candidate"
     assert protocol["quality_search_interpretation"] == "quality_candidate_evidence"
     assert protocol["candidate_intent_visibility"]["decision_features_excluded"] is True
+    visibility = protocol["observability_value_visibility"]
+    assert visibility["candidate_intent"] == "quality_candidate"
+    assert visibility["observability_value_status"] == (
+        "observability_value_not_applicable"
+    )
+    assert visibility["proposal_visibility_only"] is True
+    assert visibility["decision_features_excluded"] is True
+    assert summary["observability_value_counts"][
+        "observability_value_not_applicable"
+    ] == 1
 
 
 def _generic_step(

@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import hashlib
 import json
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 
 FAMILY_SUFFIXES = {
@@ -145,6 +146,8 @@ MATERIAL_DIFFERENCE_EVIDENCE_STATUSES = (
     "runtime_evidence_confidence",
     "runtime_evidence_status",
 )
+MATERIAL_DIFFERENCE_RECORD_SCHEMA = "material_difference_requirement.v1"
+_MATERIAL_DIFFERENCE_RECORD_PREFIX = "mdr"
 
 
 def branch_lesson_text(lesson_type: str) -> str:
@@ -385,15 +388,129 @@ def material_difference_requirements_for_avoidance(
     return requirements
 
 
+def material_difference_audit_records(
+    avoid_signatures: list[dict[str, Any]],
+    *,
+    saturated_signatures: Iterable[Mapping[str, Any]] = (),
+    near_duplicates: Iterable[Mapping[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def add_pressure(
+        *,
+        signature: Mapping[str, Any],
+        pressure_type: str,
+        pressure_source: str,
+        branch_ids: Iterable[Any],
+        reason_codes: Iterable[Any],
+        outcome_patterns: Mapping[str, Any] | None = None,
+        required_for: str = "another_nearby_attempt",
+        same_branch_refinement_allowed: bool = False,
+    ) -> None:
+        clean_signature = _clean_material_signature(signature)
+        if not clean_signature:
+            return
+        key = json.dumps(clean_signature, sort_keys=True, separators=(",", ":"))
+        item = grouped.setdefault(
+            key,
+            {
+                "signature": clean_signature,
+                "pressure_types": set(),
+                "pressure_sources": set(),
+                "branch_ids": set(),
+                "reason_codes": set(),
+                "outcome_patterns": Counter(),
+                "required_for": required_for,
+                "same_branch_refinement_allowed": same_branch_refinement_allowed,
+            },
+        )
+        item["pressure_types"].add(str(pressure_type))
+        item["pressure_sources"].add(str(pressure_source))
+        item["branch_ids"].update(str(branch_id) for branch_id in branch_ids if branch_id)
+        item["reason_codes"].update(str(code) for code in reason_codes if code)
+        if outcome_patterns:
+            for pattern, count in outcome_patterns.items():
+                try:
+                    item["outcome_patterns"][str(pattern)] += int(count)
+                except (TypeError, ValueError):
+                    item["outcome_patterns"][str(pattern)] += 1
+        if same_branch_refinement_allowed:
+            item["same_branch_refinement_allowed"] = True
+            item["required_for"] = "sibling_nearby_attempt"
+
+    for item in avoid_signatures:
+        requirement = item.get("material_difference_requirements", {})
+        signature = (
+            requirement.get("signature")
+            if isinstance(requirement, Mapping)
+            else None
+        ) or item.get("shared_signature", {})
+        add_pressure(
+            signature=signature,
+            pressure_type=str(item.get("pressure_type") or "avoid_signature_pressure"),
+            pressure_source="avoid_signature_set",
+            branch_ids=item.get("branch_ids", []) or [],
+            reason_codes=item.get("reason_codes", []) or [],
+            outcome_patterns=item.get("outcome_patterns", {}) or {},
+            required_for=str(
+                item.get("material_difference_required_for")
+                or "another_nearby_attempt"
+            ),
+            same_branch_refinement_allowed=bool(
+                item.get("same_branch_refinement_allowed")
+            ),
+        )
+
+    for item in saturated_signatures:
+        add_pressure(
+            signature=item.get("shared_signature", {}) if isinstance(item, Mapping) else {},
+            pressure_type="saturated_signature",
+            pressure_source="saturated_signatures",
+            branch_ids=item.get("branch_ids", []) if isinstance(item, Mapping) else [],
+            reason_codes=item.get("reason_codes", []) if isinstance(item, Mapping) else [],
+            outcome_patterns=(
+                item.get("outcome_patterns", {}) if isinstance(item, Mapping) else {}
+            ),
+        )
+
+    for item in near_duplicates:
+        add_pressure(
+            signature=item.get("shared_signature", {}) if isinstance(item, Mapping) else {},
+            pressure_type="near_duplicate_signature",
+            pressure_source="near_duplicates",
+            branch_ids=item.get("branch_ids", []) if isinstance(item, Mapping) else [],
+            reason_codes=item.get("reason_codes", []) if isinstance(item, Mapping) else [],
+            outcome_patterns=(
+                item.get("outcome_patterns", {}) if isinstance(item, Mapping) else {}
+            ),
+        )
+
+    records = [
+        _material_difference_audit_record(
+            signature=item["signature"],
+            pressure_types=sorted(item["pressure_types"]),
+            pressure_sources=sorted(item["pressure_sources"]),
+            branch_ids=sorted(item["branch_ids"]),
+            reason_codes=sorted(item["reason_codes"]),
+            outcome_patterns=dict(sorted(item["outcome_patterns"].items())),
+            required_for=item["required_for"],
+            same_branch_refinement_allowed=item["same_branch_refinement_allowed"],
+        )
+        for item in grouped.values()
+    ]
+    return sorted(records, key=lambda item: item["record_id"])[:12]
+
+
 def material_difference_requirement(
     signature: dict[str, str],
     *,
     required_for: str,
     same_branch_refinement_allowed: bool,
 ) -> dict[str, Any]:
-    return drop_empty(
+    payload = drop_empty(
         {
-            "signature": signature,
+            "schema_version": MATERIAL_DIFFERENCE_RECORD_SCHEMA,
+            "signature": _clean_material_signature(signature),
             "required_for": required_for,
             "minimum_requirement": "change_one_or_more_generic_dimensions",
             "required_change_dimensions": list(MATERIAL_DIFFERENCE_DIMENSIONS),
@@ -402,6 +519,9 @@ def material_difference_requirement(
             ),
             "same_branch_refinement_allowed": same_branch_refinement_allowed,
             "sibling_duplication_allowed": False,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "decision_input_policy": "excluded_from_decision_features",
             "proposal_guidance": (
                 "A nearby sibling attempt needs at least one changed generic "
                 "dimension: mechanism family, target file, action, change "
@@ -410,6 +530,91 @@ def material_difference_requirement(
             ),
         }
     )
+    digest = _stable_digest(payload)
+    return {
+        "requirement_id": f"{_MATERIAL_DIFFERENCE_RECORD_PREFIX}:requirement:{digest[:16]}",
+        "requirement_digest": digest,
+        **payload,
+    }
+
+
+def _material_difference_audit_record(
+    *,
+    signature: dict[str, str],
+    pressure_types: list[str],
+    pressure_sources: list[str],
+    branch_ids: list[str],
+    reason_codes: list[str],
+    outcome_patterns: dict[str, int],
+    required_for: str,
+    same_branch_refinement_allowed: bool,
+) -> dict[str, Any]:
+    requirement = material_difference_requirement(
+        signature,
+        required_for=required_for,
+        same_branch_refinement_allowed=same_branch_refinement_allowed,
+    )
+    body = drop_empty(
+        {
+            "record_type": "material_difference_requirement",
+            "schema_version": MATERIAL_DIFFERENCE_RECORD_SCHEMA,
+            "requirement": requirement,
+            "generic_signature": requirement["signature"],
+            "family_pressure": {
+                "mechanism_family": requirement["signature"].get(
+                    "mechanism_family",
+                    "unknown",
+                ),
+                "pressure_types": pressure_types,
+                "pressure_sources": pressure_sources,
+                "branch_count": len(branch_ids),
+                "outcome_patterns": outcome_patterns,
+            },
+            "branch_ids": branch_ids,
+            "reason_codes": list(
+                dict.fromkeys(
+                    [
+                        "MATERIAL_DIFFERENCE_REQUIREMENT",
+                        *reason_codes,
+                    ]
+                )
+            ),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "decision_input_policy": "excluded_from_decision_features",
+            "raw_branch_text_excluded": True,
+            "raw_hypothesis_excluded": True,
+            "llm_trace_excluded": True,
+        }
+    )
+    digest = _stable_digest(body)
+    return {
+        "record_id": f"{_MATERIAL_DIFFERENCE_RECORD_PREFIX}:{digest[:16]}",
+        "record_digest": digest,
+        **body,
+    }
+
+
+def _clean_material_signature(signature: Mapping[str, Any]) -> dict[str, str]:
+    cleaned = drop_empty(
+        {
+            "mechanism_family": clean_token(signature.get("mechanism_family")),
+            "target_file": clean_path(signature.get("target_file")),
+            "action": clean_token(signature.get("action")),
+            "change_locus": clean_token(signature.get("change_locus")),
+        }
+    )
+    return cleaned if any(cleaned.values()) else {}
+
+
+def _stable_digest(payload: Mapping[str, Any]) -> str:
+    rendered = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
 
 def same_branch_refinement_allowances(
@@ -632,6 +837,7 @@ __all__ = [
     "lesson_failure_mode",
     "lesson_recommended_action",
     "lesson_transferability",
+    "material_difference_audit_records",
     "material_difference_requirements_for_avoidance",
     "mechanism_family",
     "mechanism_signature",

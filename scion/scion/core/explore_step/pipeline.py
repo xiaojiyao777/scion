@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, MutableMapping, Optional, Tuple
+from typing import Any, Callable, Mapping, MutableMapping, Optional, Tuple
 
 from scion.core.branch_hygiene import (
     branch_hygiene_context,
@@ -61,6 +61,132 @@ from .verification import VerificationMixin
 
 logger = logging.getLogger(__name__)
 
+_MATERIAL_DIFFERENCE_REQUIRED_MISSING = (
+    "agent_quality_blocked:material_difference_required_missing"
+)
+
+
+def material_difference_requirement_metadata(
+    branch: Branch,
+    *,
+    session_ref: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return generic metadata indicating whether material_difference is required."""
+
+    sources: tuple[tuple[str, Any], ...] = (
+        (
+            "branch.branch_evidence_summary",
+            getattr(branch, "branch_evidence_summary", None),
+        ),
+        (
+            "branch.last_branch_lifecycle_policy_block",
+            getattr(branch, "last_branch_lifecycle_policy_block", None),
+        ),
+        ("proposal_session_ref", session_ref),
+    )
+    for source, payload in sources:
+        requirement = _find_material_difference_requirement(payload)
+        if requirement:
+            return {"required": True, "source": source, **requirement}
+    return {"required": False}
+
+
+def material_difference_pre_code_block_reason(
+    hypothesis: HypothesisProposal,
+    branch: Branch,
+    *,
+    session_ref: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Return a proposal-quality block reason before code generation, if any."""
+
+    metadata = material_difference_requirement_metadata(branch, session_ref=session_ref)
+    if not metadata.get("required"):
+        return None
+    if _material_difference_record_present(
+        getattr(hypothesis, "material_difference", None)
+    ):
+        return None
+    required_for = str(metadata.get("required_for") or "unspecified").strip()
+    source = str(metadata.get("source") or "metadata").strip()
+    return (
+        f"{_MATERIAL_DIFFERENCE_REQUIRED_MISSING}: structured "
+        "material_difference is required before code generation "
+        f"(source={source}, required_for={required_for}). Regenerate the "
+        "hypothesis with a compact material_difference record containing "
+        "changed generic dimensions, a signature digest, or evidence-status "
+        "differences. Do not use raw cross-branch text, LLM rationale, trace, "
+        "prompt, transcript, or repeated hypothesis prose."
+    )
+
+
+def _find_material_difference_requirement(
+    payload: Any,
+    *,
+    depth: int = 0,
+) -> dict[str, Any]:
+    if depth > 5 or payload in (None, "", [], {}, ()):
+        return {}
+    if isinstance(payload, Mapping):
+        requirements = (
+            payload.get("material_difference_requirements")
+            or payload.get("material_difference_requirement")
+        )
+        required_for = (
+            payload.get("material_difference_required_for")
+            or _material_requirement_required_for(requirements)
+        )
+        explicit_required = payload.get("material_difference_required") is True
+        if (
+            explicit_required
+            or _nonempty_material_requirement(requirements)
+            or required_for
+        ):
+            return {
+                key: value
+                for key, value in {
+                    "required_for": required_for or "unspecified",
+                    "requirements": requirements,
+                }.items()
+                if value not in (None, "", [], {}, ())
+            }
+        for value in payload.values():
+            found = _find_material_difference_requirement(value, depth=depth + 1)
+            if found:
+                return found
+    if isinstance(payload, (list, tuple)):
+        for item in payload:
+            found = _find_material_difference_requirement(item, depth=depth + 1)
+            if found:
+                return found
+    return {}
+
+
+def _nonempty_material_requirement(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return bool(value)
+    if isinstance(value, (list, tuple)):
+        return any(_nonempty_material_requirement(item) for item in value)
+    return bool(value)
+
+
+def _material_requirement_required_for(value: Any) -> str:
+    if isinstance(value, Mapping):
+        text = str(value.get("required_for") or "").strip()
+        if text:
+            return text
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            text = _material_requirement_required_for(item)
+            if text:
+                return text
+    return ""
+
+
+def _material_difference_record_present(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    return any(item not in (None, "", [], {}, ()) for item in value.values())
+
 
 @dataclass
 class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
@@ -109,6 +235,68 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     update_status_progress: Callable[[dict[str, Any] | None], None] = (
         lambda _payload: None
     )
+
+    def _block_missing_material_difference(
+        self,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        h_record: HypothesisRecord,
+        *,
+        round_num: int,
+        retry_attempt: bool,
+        prior_failure: str | None,
+    ) -> StepResult | None:
+        bid = branch.branch_id
+        session_ref = self._proposal_session_ref(
+            bid,
+            retry_attempt=retry_attempt,
+            prior_failure=prior_failure,
+        )
+        detail = material_difference_pre_code_block_reason(
+            hypothesis,
+            branch,
+            session_ref=session_ref,
+        )
+        if not detail:
+            return None
+        logger.info(
+            "Branch %s: material_difference pre-code block: %s",
+            bid,
+            detail,
+        )
+        self.handle_failure(
+            branch,
+            FailureEvent(category="proposal", detail=detail),
+        )
+        self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+        self.record_step(
+            StepRecord(
+                round_num=round_num,
+                branch_id=bid,
+                hypothesis=hypothesis,
+                patch=None,
+                contract_passed=True,
+                verification_passed=False,
+                protocol_result=None,
+                decision=None,
+                failure_stage="proposal",
+                failure_detail=detail,
+                hypothesis_id=h_record.hypothesis_id,
+                proposal_session_ref=session_ref,
+                counts_toward_max_rounds=False,
+                attempt_kind="proposal_block",
+            )
+        )
+        return StepResult(
+            action="explore",
+            branch_id=bid,
+            reason="material difference required before code generation",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            failure_stage="proposal",
+            failure_detail=detail,
+            failure_category="proposal",
+        )
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
@@ -244,6 +432,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         ),
                     )
                 )
+            blocked = self._block_missing_material_difference(
+                branch,
+                hypothesis,
+                h_record,
+                round_num=rnum,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            if blocked is not None:
+                return self._finish_status_progress(blocked)
             self.branch_hypotheses[bid] = hypothesis
         else:
             self._emit_status_progress(
@@ -445,6 +643,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             champion = self.get_champion()
             h_record.base_champion_version = champion.version if champion else 0
             self.hypothesis_store.save(h_record)
+            blocked = self._block_missing_material_difference(
+                branch,
+                hypothesis,
+                h_record,
+                round_num=rnum,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            if blocked is not None:
+                return self._finish_status_progress(blocked)
             self.branch_hypotheses[bid] = hypothesis
 
         self._emit_status_progress(

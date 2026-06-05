@@ -20,6 +20,8 @@ from scion.core.screening_visibility import (
     candidate_intent_counts_for_steps,
     candidate_intent_visibility_for_step,
     mechanism_evidence_for_protocol,
+    observability_value_counts_for_steps,
+    observability_value_visibility_for_step,
     runtime_aggregate_exclusion_for_protocol,
     runtime_evidence_policy_for_protocol,
     runtime_evidence_policy_counts_for_steps,
@@ -143,6 +145,7 @@ class CampaignSummaryMixin:
         telemetry_effect_zero_details = _telemetry_effect_zero_details(steps)
         runtime_budget_diagnostics = _runtime_budget_diagnostic_details(steps)
         candidate_intent_counts = candidate_intent_counts_for_steps(steps)
+        observability_value_counts = observability_value_counts_for_steps(steps)
         runtime_evidence_policy_counts = runtime_evidence_policy_counts_for_steps(
             steps
         )
@@ -287,6 +290,7 @@ class CampaignSummaryMixin:
             "runtime_budget_diagnostics": runtime_budget_diagnostics,
             "runtime_budget_diagnostic_count": len(runtime_budget_diagnostics),
             "candidate_intent_counts": candidate_intent_counts,
+            "observability_value_counts": observability_value_counts,
             "runtime_evidence_policy_counts": runtime_evidence_policy_counts,
             "fresh_champion_required_count": runtime_evidence_policy_counts[
                 "fresh_champion_required_count"
@@ -494,6 +498,7 @@ class CampaignSummaryMixin:
     def _build_summary_step(self, step: StepRecord) -> Dict[str, Any]:
         decision_reason_codes = list(step.decision_reason_codes or ())
         candidate_intent_visibility = candidate_intent_visibility_for_step(step)
+        observability_value_visibility = observability_value_visibility_for_step(step)
         code_archive_ref = public_artifact_ref(
             step.code_archive_ref,
             base_dir=self.campaign_dir,
@@ -561,6 +566,10 @@ class CampaignSummaryMixin:
                 step_data["quality_search_interpretation"] = (
                     candidate_intent_visibility["quality_search_interpretation"]
                 )
+        if observability_value_visibility:
+            step_data["observability_value_visibility"] = (
+                observability_value_visibility
+            )
         if contract_not_run_reason:
             step_data["contract_not_run_reason"] = contract_not_run_reason
         if primary_failure:
@@ -791,6 +800,9 @@ class CampaignSummaryMixin:
             )
             step_data["protocol_result"]["candidate_intent_visibility"] = (
                 candidate_intent_visibility
+            )
+            step_data["protocol_result"]["observability_value_visibility"] = (
+                observability_value_visibility
             )
             if candidate_intent_visibility.get("quality_search_interpretation"):
                 step_data["protocol_result"]["quality_search_interpretation"] = (

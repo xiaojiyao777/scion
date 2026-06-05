@@ -326,6 +326,13 @@ def update_branch_screening_evidence_summary(
         )
         if pressure_history:
             summary["history_runtime_evidence_pressure"] = pressure_history
+    plateau_gate = _plateau_gate_observation(
+        previous_summary,
+        current_summary=summary,
+        reason_codes=reason_codes,
+    )
+    if plateau_gate:
+        summary["plateau_gate"] = plateau_gate
     history_codes = _historical_reason_codes(previous_summary, reason_codes)
     if history_codes:
         summary["history_reason_codes"] = list(history_codes)
@@ -613,6 +620,111 @@ def _runtime_evidence_pressure_observation(
         "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
         "runtime_signal_role": "audit_or_proposal_guidance_only",
         "standalone_optimization_signal": False,
+    }
+
+
+def _plateau_gate_observation(
+    previous_summary: Mapping[str, Any],
+    *,
+    current_summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> dict[str, Any]:
+    tier = str(current_summary.get("tier") or "").strip().lower()
+    if tier not in {"no_effect", "marginal"}:
+        return {}
+    runtime_pressure = current_summary.get("runtime_evidence_pressure")
+    runtime_pressure_map = (
+        runtime_pressure if isinstance(runtime_pressure, Mapping) else {}
+    )
+    runtime_pressure_count = max(
+        0,
+        int(current_summary.get("runtime_evidence_pressure_count") or 0),
+    )
+    reason_set = {str(code).strip().upper() for code in reason_codes}
+    triggers = [f"tier:{tier}"]
+    triggers.extend(
+        str(item)
+        for item in runtime_pressure_map.get("triggers", ())
+        if str(item).strip()
+    )
+    if reason_set.intersection(
+        {
+            "SCREENING_RUNTIME_BUDGET_SATURATION",
+            "TINY_RUNTIME_BUDGET_SATURATION",
+            "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
+            "SCREENING_RUNTIME_SATURATION_REROUTE",
+            "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE",
+        }
+    ):
+        triggers.append("runtime_budget_or_completeness_pressure")
+    if reason_set.intersection(
+        {
+            "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+            "SCREENING_TELEMETRY_EFFECT_ZERO_REROUTE",
+            "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY",
+        }
+    ):
+        triggers.append("telemetry_or_activation_diagnostic")
+    if not runtime_pressure_count and len(triggers) <= 1:
+        return {}
+
+    previous_gate = previous_summary.get("plateau_gate")
+    previous_effective_count = 0
+    previous_sampled = False
+    if isinstance(previous_gate, Mapping):
+        previous_sampled = bool(previous_gate.get("same_branch_refinement_sampled"))
+        try:
+            previous_effective_count = max(
+                0,
+                int(previous_gate.get("effective_screened_no_effect_count") or 0),
+            )
+        except (TypeError, ValueError):
+            previous_effective_count = 0
+    threshold = 2
+    effective_count = previous_effective_count + 1
+    threshold_met = (
+        effective_count >= threshold
+        and runtime_pressure_count >= threshold
+        and tier in {"no_effect", "marginal"}
+    )
+    reason_codes_out = ["PLATEAU_GATE_LOW_SIGNAL_RUNTIME_PRESSURE"]
+    if threshold_met:
+        reason_codes_out.append("PLATEAU_GATE_THRESHOLD_MET")
+    if "telemetry_or_activation_diagnostic" in triggers:
+        reason_codes_out.append("PLATEAU_GATE_TELEMETRY_DIAGNOSTIC")
+    return {
+        "schema_version": "plateau_gate.v1",
+        "stage": "screening",
+        "tier": tier,
+        "effective_screened_no_effect_count": effective_count,
+        "effective_screened_no_effect_threshold": threshold,
+        "runtime_evidence_pressure_count": runtime_pressure_count,
+        "runtime_pressure_threshold": threshold,
+        "threshold_met": threshold_met,
+        "same_branch_refinement_sampled": previous_sampled,
+        "scheduler_preference": (
+            "same_branch_diagnostic_refinement"
+            if threshold_met and not previous_sampled and effective_count == threshold
+            else "clean_fork_material_difference_required"
+            if threshold_met
+            else "observe"
+        ),
+        "allowed_same_branch_actions": [
+            "diagnostic",
+            "observability",
+            "refine",
+            "repair",
+            "parameterize",
+            "telemetry_wiring",
+        ],
+        "clean_fork_metadata_requirement": (
+            "material_difference_required" if threshold_met else "not_required"
+        ),
+        "reason_codes": reason_codes_out,
+        "triggers": list(dict.fromkeys(triggers)),
+        "proposal_guidance_only": True,
+        "audit_only": True,
+        "decision_features_excluded": True,
     }
 
 

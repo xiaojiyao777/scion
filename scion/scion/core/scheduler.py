@@ -70,6 +70,13 @@ QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON = (
 SAME_BRANCH_REFINEMENT_SAMPLE_REASON = (
     "same_branch_low_signal_observation_sample"
 )
+PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON = (
+    "plateau_gate_same_branch_diagnostic_refinement"
+)
+PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON = (
+    "plateau_gate_material_difference_required"
+)
+_PLATEAU_GATE_THRESHOLD = 2
 
 
 @dataclass(frozen=True)
@@ -138,7 +145,10 @@ class Scheduler:
                 or _branch_same_branch_refinement_sampling_candidate(b)
             )
             and not _quality_regression_slot_release_preferred(b)
-            and not _branch_lifecycle_budget_exhausted(b)
+            and (
+                not _branch_lifecycle_budget_exhausted(b)
+                or _branch_plateau_gate_same_branch_candidate(b)
+            )
         ]
 
         for tier in _HIGH_PRIORITY_TIERS:
@@ -168,7 +178,10 @@ class Scheduler:
                 for branch in research
                 if not branch_lifecycle_new_mechanism_ineligible(branch)
                 and not branch_is_parked_lineage(branch)
-                and not _branch_lifecycle_budget_exhausted(branch)
+                and (
+                    not _branch_lifecycle_budget_exhausted(branch)
+                    or _branch_plateau_gate_same_branch_candidate(branch)
+                )
             ]
             if not eligible_research:
                 if len(active_for_slots) < self._max_active_branches:
@@ -203,24 +216,27 @@ class Scheduler:
                         )
                     ),
                 )
-            if len(active_for_slots) < self._max_active_branches:
-                same_branch_sample_candidates = [
-                    branch
-                    for branch in eligible_research
-                    if _branch_same_branch_refinement_sampling_candidate(branch)
-                ]
-                if same_branch_sample_candidates:
-                    selected = _select_budgeted(same_branch_sample_candidates)
-                    return SchedulerAction(
-                        action="run_existing",
-                        branch=selected,
-                        reason=SAME_BRANCH_REFINEMENT_SAMPLE_REASON,
-                        slot=_slot_for_branch(selected),
-                        audit_metadata=_same_branch_refinement_sampling_audit(
-                            selected,
-                            candidate_count=len(same_branch_sample_candidates),
-                        ),
-                    )
+            same_branch_sample_candidates = [
+                branch
+                for branch in eligible_research
+                if _branch_same_branch_refinement_sampling_candidate(branch)
+            ]
+            if same_branch_sample_candidates:
+                selected = _select_budgeted(same_branch_sample_candidates)
+                return SchedulerAction(
+                    action="run_existing",
+                    branch=selected,
+                    reason=(
+                        PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON
+                        if _branch_plateau_gate_same_branch_candidate(selected)
+                        else SAME_BRANCH_REFINEMENT_SAMPLE_REASON
+                    ),
+                    slot=_slot_for_branch(selected),
+                    audit_metadata=_same_branch_refinement_sampling_audit(
+                        selected,
+                        candidate_count=len(same_branch_sample_candidates),
+                    ),
+                )
             if (
                 len(active_for_slots) < self._max_active_branches
                 and any(
@@ -734,6 +750,8 @@ def _marginal_loop_exhausted(branch: Branch) -> bool:
 
 
 def _branch_plateau_reroute_preferred(branch: Branch) -> bool:
+    if _branch_plateau_gate_same_branch_candidate(branch):
+        return False
     if _branch_runtime_evidence_pressure_preferred(branch):
         return True
     status = str(getattr(branch, "branch_code_status", "") or "")
@@ -762,6 +780,8 @@ def _branch_plateau_reroute_preferred(branch: Branch) -> bool:
 
 def _branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
     if _branch_is_weak_positive_priority(branch):
+        return False
+    if _branch_plateau_gate_same_branch_candidate(branch):
         return False
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, Mapping):
@@ -872,6 +892,32 @@ def _clean_fork_selection_audit(
                 "runtime_evidence_clean_fork_candidates": pressure_candidates[:8],
             }
         )
+    plateau_candidates = _plateau_gate_clean_fork_candidates(branch_list)
+    if plateau_candidates:
+        audit.update(
+            {
+                "plateau_gate_clean_fork_selected": True,
+                "plateau_gate_reason": PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
+                "material_difference_required": True,
+                "material_difference_requirement": {
+                    "schema_version": "material_difference_requirement.v1",
+                    "requirement_source": "plateau_gate",
+                    "reason": PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
+                    "reason_codes": [
+                        "PLATEAU_GATE_THRESHOLD_MET",
+                        "PLATEAU_GATE_CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
+                    ],
+                    "required_metadata_key": "material_difference_required",
+                    "proposal_guidance_only": True,
+                    "audit_only": True,
+                    "decision_features_excluded": True,
+                },
+                "plateau_gate_clean_fork_candidate_count": len(
+                    plateau_candidates
+                ),
+                "plateau_gate_clean_fork_candidates": plateau_candidates[:8],
+            }
+        )
     return audit
 
 
@@ -896,6 +942,47 @@ def _low_value_active_slot_release_audit(
         "proposal_guidance_only": True,
         "decision_features_excluded": True,
     }
+
+
+def _plateau_gate_clean_fork_candidates(
+    branches: Iterable[Branch],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for branch in branches:
+        gate = _branch_plateau_gate(branch)
+        if not gate or not bool(gate.get("threshold_met")):
+            continue
+        if _branch_plateau_gate_same_branch_candidate(branch):
+            continue
+        candidates.append(
+            {
+                "branch_id": str(getattr(branch, "branch_id", "") or ""),
+                "lineage_status": branch_lineage_status(branch),
+                "branch_state": _branch_state_value(branch),
+                "branch_code_status": str(
+                    getattr(branch, "branch_code_status", "") or ""
+                ),
+                "screening_tier": _branch_screening_tier(branch)
+                or str(gate.get("tier") or "unknown"),
+                "effective_screened_no_effect_count": _gate_nonnegative_int(
+                    gate,
+                    "effective_screened_no_effect_count",
+                ),
+                "runtime_evidence_pressure_count": _gate_nonnegative_int(
+                    gate,
+                    "runtime_evidence_pressure_count",
+                ),
+                "scheduler_preference": str(
+                    gate.get("scheduler_preference") or ""
+                ),
+                "plateau_gate_reason_codes": [
+                    str(code)
+                    for code in gate.get("reason_codes", ())
+                    if str(code).strip()
+                ],
+            }
+        )
+    return candidates
 
 
 def _low_value_active_slot_release_summary(branch: Branch) -> dict[str, Any]:
@@ -965,7 +1052,8 @@ def _same_branch_refinement_sampling_audit(
     reason = _same_branch_refinement_sampling_signal(branch)
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     evidence = summary if isinstance(summary, Mapping) else {}
-    return {
+    gate = _branch_plateau_gate(branch)
+    audit = {
         "same_branch_refinement_selected": True,
         "same_branch_refinement_reason": (
             reason or SAME_BRANCH_REFINEMENT_SAMPLE_REASON
@@ -1002,6 +1090,45 @@ def _same_branch_refinement_sampling_audit(
             ),
         },
     }
+    if gate:
+        audit.update(
+            {
+                "plateau_gate_same_branch_refinement_selected": True,
+                "plateau_gate_reason": PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON,
+                "plateau_gate_reason_codes": [
+                    str(code)
+                    for code in gate.get("reason_codes", ())
+                    if str(code).strip()
+                ],
+                "plateau_gate": {
+                    "schema_version": str(
+                        gate.get("schema_version") or "plateau_gate.v1"
+                    ),
+                    "tier": str(gate.get("tier") or "unknown"),
+                    "threshold_met": bool(gate.get("threshold_met")),
+                    "effective_screened_no_effect_count": _gate_nonnegative_int(
+                        gate,
+                        "effective_screened_no_effect_count",
+                    ),
+                    "runtime_evidence_pressure_count": _gate_nonnegative_int(
+                        gate,
+                        "runtime_evidence_pressure_count",
+                    ),
+                    "scheduler_preference": str(
+                        gate.get("scheduler_preference") or ""
+                    ),
+                    "proposal_guidance_only": True,
+                    "audit_only": True,
+                    "decision_features_excluded": True,
+                },
+                "same_branch_refinement_allowed_actions": [
+                    str(item)
+                    for item in gate.get("allowed_same_branch_actions", ())
+                    if str(item).strip()
+                ],
+            }
+        )
+    return audit
 
 
 def _branch_same_branch_refinement_sampling_candidate(branch: Branch) -> bool:
@@ -1015,6 +1142,8 @@ def _branch_same_branch_refinement_sampling_candidate(branch: Branch) -> bool:
         return False
     if branch_lifecycle_new_mechanism_ineligible(branch):
         return False
+    if _branch_plateau_gate_same_branch_candidate(branch):
+        return True
     if branch_has_actionable_diagnostic(branch):
         return False
     if branch_requires_repair_focus(branch):
@@ -1030,13 +1159,65 @@ def _branch_same_branch_refinement_sampling_candidate(branch: Branch) -> bool:
     return bool(_same_branch_refinement_sampling_signal(branch))
 
 
+def _branch_plateau_gate(branch: Branch) -> Mapping[str, Any]:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    gate = summary.get("plateau_gate")
+    return gate if isinstance(gate, Mapping) else {}
+
+
+def _branch_plateau_gate_same_branch_candidate(branch: Branch) -> bool:
+    if branch.state not in _RESEARCH_STATES:
+        return False
+    if getattr(branch, "pending_retry", False):
+        return False
+    if branch.state == BranchState.BLOCKED_INFRA:
+        return False
+    if branch_is_parked_lineage(branch):
+        return False
+    if branch_lifecycle_new_mechanism_ineligible(branch):
+        return False
+    if _branch_has_weak_positive_followup_signal(branch):
+        return False
+    gate = _branch_plateau_gate(branch)
+    if not gate or not bool(gate.get("threshold_met")):
+        return False
+    if bool(gate.get("same_branch_refinement_sampled")):
+        return False
+    if _same_branch_refinement_marker_observed(branch):
+        return False
+    effective_count = _gate_nonnegative_int(
+        gate,
+        "effective_screened_no_effect_count",
+    )
+    runtime_pressure_count = _gate_nonnegative_int(
+        gate,
+        "runtime_evidence_pressure_count",
+    )
+    if effective_count != _PLATEAU_GATE_THRESHOLD:
+        return False
+    if runtime_pressure_count < _PLATEAU_GATE_THRESHOLD:
+        return False
+    preference = str(gate.get("scheduler_preference") or "")
+    return preference in {
+        "",
+        "same_branch_diagnostic_refinement",
+    }
+
+
+def _gate_nonnegative_int(gate: Mapping[str, Any], key: str) -> int:
+    try:
+        return max(0, int(gate.get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _same_branch_refinement_sample_already_observed(branch: Branch) -> bool:
+    if _same_branch_refinement_marker_observed(branch):
+        return True
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     evidence = summary if isinstance(summary, Mapping) else {}
-    if bool(evidence.get("same_branch_refinement_sampling")):
-        return True
-    if bool(evidence.get("same_branch_refinement_selected")):
-        return True
     if _no_effect_followup_count(branch) >= 2:
         return True
     if _activation_zero_effect_streak(branch) >= 2:
@@ -1054,6 +1235,19 @@ def _same_branch_refinement_sample_already_observed(branch: Branch) -> bool:
     return marginal_or_no_effect_streak >= 2 and repeated >= 2
 
 
+def _same_branch_refinement_marker_observed(branch: Branch) -> bool:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    if bool(evidence.get("same_branch_refinement_sampling")):
+        return True
+    if bool(evidence.get("same_branch_refinement_selected")):
+        return True
+    gate = evidence.get("plateau_gate")
+    if isinstance(gate, Mapping) and bool(gate.get("same_branch_refinement_sampled")):
+        return True
+    return False
+
+
 def _same_branch_refinement_sampling_signal(branch: Branch) -> str:
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     evidence = summary if isinstance(summary, Mapping) else {}
@@ -1061,6 +1255,9 @@ def _same_branch_refinement_sampling_signal(branch: Branch) -> str:
         return ""
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = _branch_screening_tier(branch) or _summary_text(evidence, "tier")
+    gate = _branch_plateau_gate(branch)
+    if gate and bool(gate.get("threshold_met")):
+        return "plateau_gate_diagnostic_refinement"
     if (status == "active_no_effect" or tier == "no_effect") and (
         _summary_text(evidence, "tier") == "no_effect"
         or any(key in evidence for key in ("wins", "losses", "ties"))
@@ -1071,6 +1268,14 @@ def _same_branch_refinement_sampling_signal(branch: Branch) -> str:
     reason_codes = _summary_reason_code_set(evidence)
     if "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in reason_codes:
         return "telemetry_effect_zero_observation"
+    if reason_codes.intersection(
+        {
+            "SCREENING_WEAK_SIGNAL_CONTINUE",
+            "SCREENING_MARGINAL_SIGNAL_CONTINUE",
+            "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+        }
+    ):
+        return "weak_signal_refinement_observation"
     runtime_triggers = _runtime_evidence_pressure_triggers(evidence)
     if any(
         trigger == "runtime_saturation_without_objective_signal"
@@ -1437,6 +1642,10 @@ def _slot_for_branch(
         return "refine_active"
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    if branch_requires_repair_focus(branch):
+        return "repair_diagnostic"
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return "repair_diagnostic"
     diagnostic_tiers = {
         "inactive",
         "invalid",
@@ -1471,7 +1680,11 @@ def _reason_for_branch(branch: Branch) -> str:
     if branch_lineage_status(branch) == "restored_checkpoint":
         return "restored_checkpoint_followup"
     if slot == "repair_diagnostic":
-        if status in {"telemetry_wiring_suspect", "telemetry_invalid"}:
+        if (
+            status in {"telemetry_wiring_suspect", "telemetry_invalid"}
+            or branch_requires_repair_focus(branch)
+            or (getattr(branch, "telemetry_repair_mechanism_ids", ()) or ())
+        ):
             return "telemetry_diagnostic_followup"
         if status == "active_runtime_regression" or tier == "runtime_regression":
             return "runtime_diagnostic_followup"

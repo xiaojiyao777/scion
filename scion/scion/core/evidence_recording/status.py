@@ -11,7 +11,10 @@ from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
 )
 from scion.core.run_validity import build_run_validity
-from scion.core.screening_visibility import runtime_evidence_policy_summary
+from scion.core.screening_visibility import (
+    observability_value_visibility_from_payload,
+    runtime_evidence_policy_summary,
+)
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
 from .accounting import (
@@ -48,6 +51,7 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "champion_cached_runtime_pairs",
     "runtime_budget_diagnostic",
     "runtime_budget_diagnostic_code",
+    "observability_value_visibility",
 )
 
 
@@ -175,6 +179,31 @@ def _ensure_runtime_evidence_policy(progress: Dict[str, Any]) -> None:
             "candidate_runtime_pair_evidence_count",
             0,
         ),
+    )
+
+
+def _ensure_observability_value_visibility(progress: Dict[str, Any]) -> None:
+    if not _progress_has_observability_value_source(progress):
+        return
+    visibility = observability_value_visibility_from_payload(progress)
+    if visibility:
+        progress["observability_value_visibility"] = visibility
+
+
+def _progress_has_observability_value_source(progress: Mapping[str, Any]) -> bool:
+    return any(
+        key in progress
+        for key in (
+            "observability_value_visibility",
+            "candidate_intent",
+            "attempt_kind",
+            "mechanism_evidence",
+            "candidate_surface_runtime_summary",
+            "candidate_phase_telemetry_summary",
+            "telemetry_failure_details",
+            "candidate_runtime_failure_categories",
+            "candidate_first_runtime_failure",
+        )
     )
 
 
@@ -475,6 +504,7 @@ class StatusWriterMixin:
             "champion_cached_runtime_pairs",
             "runtime_budget_diagnostic",
             "runtime_budget_diagnostic_code",
+            "observability_value_visibility",
         ):
             if key not in payload and key in metrics_snapshot:
                 progress[key] = metrics_snapshot[key]
@@ -482,6 +512,7 @@ class StatusWriterMixin:
         if "valid_pairs" not in progress and "completed_pairs" in progress:
             progress["valid_pairs"] = progress["completed_pairs"]
         _ensure_runtime_evidence_policy(progress)
+        _ensure_observability_value_visibility(progress)
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"
             progress["raw_metrics_internal_only"] = True

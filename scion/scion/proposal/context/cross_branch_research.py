@@ -39,6 +39,7 @@ from scion.proposal.context.cross_branch_research_support import (
     lesson_failure_mode as _lesson_failure_mode,
     lesson_recommended_action as _lesson_recommended_action,
     lesson_transferability as _lesson_transferability,
+    material_difference_audit_records as _material_difference_audit_records,
     material_difference_requirements_for_avoidance as _material_difference_requirements,
     mechanism_family as _mechanism_family,
     mechanism_signature as _signature,
@@ -191,6 +192,13 @@ def build_cross_branch_research_map(
             "avoid_bridge_guidance": avoid_bridge_guidance,
             "opportunity_gaps": opportunity_gaps,
             "novelty_pressure": novelty_pressure,
+            "material_difference_audit_records": novelty_pressure.get(
+                "material_difference_audit_records",
+                [],
+            ),
+            "cross_branch_research_metadata": (
+                _cross_branch_research_metadata(novelty_pressure)
+            ),
             "portfolio_guidance": portfolio_guidance,
         }
     )
@@ -1545,6 +1553,11 @@ def _novelty_pressure(
         if action not in action_counts
     ]
     avoid_signature_set = _avoid_signature_set(records)
+    material_difference_audit_records = _material_difference_audit_records(
+        avoid_signature_set,
+        saturated_signatures=saturated_signatures,
+        near_duplicates=near_duplicates,
+    )
     return _drop_empty(
         {
             "policy": "proposal_only",
@@ -1558,6 +1571,7 @@ def _novelty_pressure(
             "material_difference_requirements": (
                 _material_difference_requirements(avoid_signature_set)
             ),
+            "material_difference_audit_records": material_difference_audit_records,
             "same_branch_refinement_allowances": (
                 _same_branch_refinement_allowances(branch_summaries)
             ),
@@ -1687,6 +1701,32 @@ def _in_action_diversity_pressure(
                 "change at least one of target, generic mechanism family, "
                 "effect pathway, or runtime budget strategy."
             ),
+        }
+    )
+
+
+def _cross_branch_research_metadata(
+    novelty_pressure: dict[str, Any],
+) -> dict[str, Any]:
+    records = novelty_pressure.get("material_difference_audit_records", []) or []
+    return _drop_empty(
+        {
+            "schema_version": "cross_branch_research_context_metadata.v1",
+            "policy": "proposal_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "material_difference_requirement_count": len(records),
+            "material_difference_record_ids": [
+                item.get("record_id")
+                for item in records
+                if isinstance(item, dict) and item.get("record_id")
+            ],
+            "material_difference_record_digests": [
+                item.get("record_digest")
+                for item in records
+                if isinstance(item, dict) and item.get("record_digest")
+            ],
         }
     )
 

@@ -82,6 +82,17 @@ def _step(
     )
 
 
+def _material_difference_record(record_id: str) -> dict:
+    return {
+        "record_type": "material_difference_requirement",
+        "schema_version": "material_difference_requirement.v1",
+        "record_id": record_id,
+        "record_digest": f"{record_id}:digest",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
+
+
 def test_cross_branch_observability_counts_generic_proposal_context() -> None:
     steps = [
         _step(
@@ -89,6 +100,11 @@ def test_cross_branch_observability_counts_generic_proposal_context() -> None:
             round_num=1,
             mechanism_id="alpha_probe",
             reason_codes=("NOVELTY_AVOID_SIGNATURE_PRESSURE",),
+            scheduler_audit_metadata={
+                "cross_branch_research_audit_records": [
+                    _material_difference_record("mdr:alpha")
+                ]
+            },
         ),
         _step(
             "branch-b",
@@ -163,7 +179,7 @@ def test_cross_branch_observability_counts_generic_proposal_context() -> None:
     assert payload["same_branch_refinement_allowance_count"] == 1
     assert payload["same_branch_refinement_not_selected_count"] == 1
     assert payload["repeated_contract_reroute_count"] == 1
-    assert payload["novelty_pressure_seen_count"] == 5
+    assert payload["novelty_pressure_seen_count"] == 6
     assert payload["cross_branch_map_seen_count"] == 3
     assert payload["reason_code_counts"]["CROSS_BRANCH_NEAR_DUPLICATE"] == 1
     assert (
@@ -171,6 +187,27 @@ def test_cross_branch_observability_counts_generic_proposal_context() -> None:
     )
     assert "Sensitive proposal text" not in json.dumps(payload)
     assert "compact public result" not in json.dumps(payload)
+
+
+def test_cross_branch_observability_counts_material_requirements_from_records() -> None:
+    payload = build_cross_branch_research_observability(
+        steps=[
+            _step("branch-a", round_num=1, mechanism_id="alpha_probe"),
+            _step("branch-b", round_num=2, mechanism_id="alpha_variant"),
+        ],
+        scheduler_records=[
+            {
+                "cross_branch_research_audit_records": [
+                    _material_difference_record("mdr:alpha"),
+                    _material_difference_record("mdr:beta"),
+                ]
+            }
+        ],
+    )
+
+    assert payload["avoid_signature_count"] == 1
+    assert payload["saturated_signature_count"] == 1
+    assert payload["material_difference_requirement_count"] == 2
 
 
 def test_cross_branch_observability_counts_map_coverage_without_pressure() -> None:
@@ -186,6 +223,7 @@ def test_cross_branch_observability_counts_map_coverage_without_pressure() -> No
     assert payload["cross_branch_map_seen_count"] == 2
     assert payload["near_duplicate_count"] == 0
     assert payload["avoid_signature_count"] == 0
+    assert payload["material_difference_requirement_count"] == 0
     assert payload["novelty_pressure_seen_count"] == 0
 
 
@@ -204,6 +242,9 @@ def test_campaign_summary_and_status_write_observability_payload(
                 "target_files": ["components/common.py"],
                 "generic_evidence_summary": {"tier": "no_effect"},
             },
+            "cross_branch_research_audit_records": [
+                _material_difference_record("mdr:summary-alpha"),
+            ],
         },
         {
             "id": "branch-b",
@@ -216,6 +257,9 @@ def test_campaign_summary_and_status_write_observability_payload(
                 "target_files": ["components/common.py"],
                 "generic_evidence_summary": {"tier": "no_effect"},
             },
+            "cross_branch_research_audit_records": [
+                _material_difference_record("mdr:summary-beta"),
+            ],
         },
         {
             "id": "branch-rerouted",
@@ -252,6 +296,7 @@ def test_campaign_summary_and_status_write_observability_payload(
     payload = summary["cross_branch_research_observability"]
     assert payload["near_duplicate_count"] == 1
     assert payload["saturated_signature_count"] == 1
+    assert payload["material_difference_requirement_count"] == 2
     assert payload["repeated_contract_reroute_count"] == 1
     assert "cross_branch_research_observability" in json.loads(
         (tmp_path / "campaign_summary.json").read_text()
@@ -278,6 +323,7 @@ def test_campaign_summary_and_status_write_observability_payload(
     assert status_payload["status_scope"] == "loop_accounting_inferred"
     assert status_payload["near_duplicate_count"] == 1
     assert status_payload["saturated_signature_count"] == 1
+    assert status_payload["material_difference_requirement_count"] == 2
     assert status_payload["same_branch_refinement_not_selected_count"] == 1
     assert status_payload["repeated_contract_reroute_count"] == 1
     assert "cross_branch_research_observability" in json.loads(

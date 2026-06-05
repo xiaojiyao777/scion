@@ -76,6 +76,7 @@ class HypothesisProposal:
     runtime_budget_strategy: Optional[str] = None
     expected_telemetry: Dict[str, Any] = field(default_factory=dict)
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
+    material_difference: Dict[str, Any] = field(default_factory=dict)
     mechanism_changes: Tuple[MechanismChange, ...] = ()
     schema_repair_attribution: Tuple[Dict[str, Any], ...] = ()
 

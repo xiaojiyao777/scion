@@ -15,6 +15,76 @@ from .shared import (
     MechanismChangeInput,
 )
 
+_MATERIAL_DIFFERENCE_MAX_STRING = 120
+_MATERIAL_DIFFERENCE_MAX_LIST_ITEMS = 12
+_MATERIAL_DIFFERENCE_MAX_DICT_KEYS = 24
+_MATERIAL_DIFFERENCE_MAX_DEPTH = 3
+_MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS = (
+    "raw",
+    "rationale",
+    "reasoning",
+    "trace",
+    "transcript",
+    "prompt",
+    "observation",
+    "llm",
+    "hypothesis_text",
+    "cross_branch_text",
+)
+
+
+def normalize_material_difference(value: Any) -> Dict[str, Any]:
+    """Return a compact proposal-visible material-difference record.
+
+    This is tainted proposal/audit data. It intentionally keeps only bounded
+    structured facts and drops prose-like or raw provenance fields.
+    """
+
+    normalized = _normalize_material_difference_value(value, depth=0)
+    return normalized if isinstance(normalized, dict) else {}
+
+
+def _normalize_material_difference_value(value: Any, *, depth: int) -> Any:
+    if depth > _MATERIAL_DIFFERENCE_MAX_DEPTH:
+        return None
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or len(text) > _MATERIAL_DIFFERENCE_MAX_STRING:
+            return None
+        if "\n" in text or "\r" in text:
+            return None
+        return text
+    if isinstance(value, (list, tuple, set)):
+        items: list[Any] = []
+        for item in list(value)[:_MATERIAL_DIFFERENCE_MAX_LIST_ITEMS]:
+            normalized = _normalize_material_difference_value(item, depth=depth + 1)
+            if normalized not in (None, "", [], {}, ()):
+                items.append(normalized)
+        return items
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for raw_key, raw_item in list(value.items())[:_MATERIAL_DIFFERENCE_MAX_DICT_KEYS]:
+            key = str(raw_key or "").strip()
+            if not key or len(key) > _MATERIAL_DIFFERENCE_MAX_STRING:
+                continue
+            key_lower = key.lower()
+            if any(part in key_lower for part in _MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS):
+                continue
+            normalized = _normalize_material_difference_value(
+                raw_item,
+                depth=depth + 1,
+            )
+            if normalized not in (None, "", [], {}, ()):
+                out[key] = normalized
+        return out
+    return None
+
 
 class HypothesisProposalInput(BaseModel):
     hypothesis_text: str
@@ -38,6 +108,7 @@ class HypothesisProposalInput(BaseModel):
         description=_EXPECTED_TELEMETRY_DESCRIPTION,
     )
     novelty_signature: Dict[str, Any] = Field(default_factory=dict)
+    material_difference: Dict[str, Any] = Field(default_factory=dict)
     mechanism_changes: list[MechanismChangeInput] = Field(default_factory=list)
 
     @field_validator("mechanism_changes", mode="before")
@@ -49,6 +120,11 @@ class HypothesisProposalInput(BaseModel):
     @classmethod
     def normalize_novelty_signature(cls, value: Any) -> Any:
         return _normalize_novelty_signature(value)
+
+    @field_validator("material_difference", mode="before")
+    @classmethod
+    def normalize_material_difference(cls, value: Any) -> Dict[str, Any]:
+        return normalize_material_difference(value)
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -161,6 +237,19 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "additionalProperties": True,
             "description": "Structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Required when the selected surface declares novelty.strategy=semantic_signature. Use compact scalars, lists, or small objects; scalar strings must be <=120 characters. Do not put rationale prose here.",
         },
+        "material_difference": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": (
+                "Compact structured proposal/audit record explaining how this "
+                "hypothesis is materially different from nearby branch attempts "
+                "when required by branch metadata. Use short scalar strings "
+                "(<=120 chars), enums, small lists, changed dimension names, "
+                "signature digests, or compact evidence-status fields. Do not "
+                "include raw cross-branch text, LLM rationale, trace, prompt, "
+                "transcript, or hypothesis prose."
+            ),
+        },
         "mechanism_changes": _mechanism_changes_json_schema(),
     },
 }
@@ -209,6 +298,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `target_runtime_effect` to the expected runtime impact (improve/neutral/risk/unknown or short text)
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
+- If branch metadata says a material difference is required, set `material_difference` to a compact structured record of changed generic dimensions, signature digests, and evidence-status differences. Do not include raw cross-branch text, LLM rationale, trace, prompt, transcript, or repeated hypothesis prose.
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate. Branch `allowed_next_actions` labels such as tune, repair, parameterize, and telemetry_wiring are research action labels, not `mechanism_changes[].change_type` values; map tune/parameterize to modify and telemetry_wiring to modify or integrate.
 - Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific activity evidence, not objective/outcome fields. Aggregate outcome or activity fields show effect or activity, not activation. Declare best_delta/delta_sum effect fields only when the mechanism can emit a positive improvement delta through record_move; if it only proves activity or activation, use activity/activation telemetry instead. If you modify an existing phase or component, declare the changed lever as its own mechanism id and use that same id in expected telemetry.
 
@@ -225,6 +315,11 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
   "target_runtime_effect": "<expected runtime effect or null>",
   "complexity_claim": "<complexity/candidate-bound claim or null>",
   "runtime_budget_strategy": "<runtime budget strategy or null>",
+  "material_difference": {{
+    "changed_dimensions": ["<generic dimension id>"],
+    "signature_digest": "<short digest or id>",
+    "evidence_status_delta": ["<compact status enum>"]
+  }},
   "mechanism_changes": [
     {{"id": "<mechanism_id>", "change_type": "add" | "modify" | "replace" | "remove" | "integrate"}}
   ],
@@ -242,4 +337,5 @@ __all__ = [
     "HYPOTHESIS_PROMPT_TEMPLATE",
     "HYPOTHESIS_PROPOSAL_SCHEMA",
     "HypothesisProposalInput",
+    "normalize_material_difference",
 ]

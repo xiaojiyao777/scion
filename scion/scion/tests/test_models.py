@@ -1,7 +1,18 @@
 import pytest
 import uuid
 import re
-from scion.core.models import DecisionFeatures, Decision, DecisionOutcome, BranchState
+import dataclasses
+
+from scion.core.explore_step.pipeline import material_difference_pre_code_block_reason
+from scion.core.models import (
+    Branch,
+    Decision,
+    DecisionFeatures,
+    DecisionOutcome,
+    BranchState,
+    HypothesisProposal,
+)
+from scion.proposal.engine import _parse_hypothesis
 
 def test_decision_features_immutability():
     """验证 DecisionFeatures 是 frozen 的。"""
@@ -60,6 +71,7 @@ def test_decision_features_no_free_text_guard():
     # 检查所有 DecisionFeatures 的字段是否都在允许列表中
     import dataclasses
     fields = {f.name: f.type for f in dataclasses.fields(DecisionFeatures)}
+    assert "material_difference" not in fields
     
     for name, expected_type in allowed_fields.items():
         assert name in fields, f"Missing field: {name}"
@@ -73,3 +85,122 @@ def test_branch_state_enum():
                 "abandoned", "stale", "blocked_infra"]
     for s in expected:
         assert s in states
+
+
+def test_hypothesis_material_difference_round_trips_and_filters_raw_text():
+    proposal = _parse_hypothesis(
+        {
+            "hypothesis_text": "Change the generic search surface in a bounded way.",
+            "change_locus": "search_surface",
+            "action": "modify",
+            "target_file": "surfaces/search.py",
+            "material_difference": {
+                "changed_dimensions": ["target_file", "effect_path"],
+                "signature_digest": "abc123",
+                "evidence_status_delta": ["activation_changed"],
+                "raw_cross_branch_text": "do not persist raw context",
+                "rationale": "do not persist rationale",
+                "trace": {"tool": "do not persist trace"},
+                "hypothesis_text": "do not duplicate hypothesis prose",
+                "long_claim": "x" * 121,
+                "nested": {
+                    "status": "different",
+                    "trace_id": "drop-me",
+                },
+            },
+        }
+    )
+
+    assert proposal.material_difference == {
+        "changed_dimensions": ["target_file", "effect_path"],
+        "signature_digest": "abc123",
+        "evidence_status_delta": ["activation_changed"],
+        "nested": {"status": "different"},
+    }
+    round_tripped = HypothesisProposal(**dataclasses.asdict(proposal))
+    assert round_tripped.material_difference == proposal.material_difference
+
+
+def test_material_difference_required_blocks_empty_record_before_code():
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={
+            "material_difference_required": True,
+            "material_difference_required_for": "sibling_nearby_attempt",
+        },
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+    )
+
+    reason = material_difference_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "material_difference_required_missing" in reason
+    assert "before code generation" in reason
+
+    minimal_metadata_branch = Branch(
+        branch_id="b1-minimal",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={"material_difference_required": True},
+    )
+    assert (
+        material_difference_pre_code_block_reason(
+            hypothesis,
+            minimal_metadata_branch,
+        )
+        is not None
+    )
+
+
+def test_material_difference_not_required_or_present_does_not_block_code():
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+    )
+
+    assert material_difference_pre_code_block_reason(hypothesis, branch) is None
+
+    required_branch = Branch(
+        branch_id="b2",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    hypothesis.material_difference = {
+        "changed_dimensions": ["effect_path"],
+        "signature_digest": "abc123",
+    }
+    session_ref = {
+        "metadata": {
+            "material_difference_requirements": {
+                "required_for": "another_nearby_attempt",
+                "signature": {"change_locus": "search_surface"},
+            }
+        }
+    }
+
+    assert (
+        material_difference_pre_code_block_reason(
+            hypothesis,
+            required_branch,
+            session_ref=session_ref,
+        )
+        is None
+    )
