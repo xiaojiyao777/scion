@@ -30,6 +30,61 @@ _LOW_RUNTIME_CONFIDENCES = {
     "none",
     "unknown_low",
 }
+_CANDIDATE_INTENT_COUNT_KEYS = (
+    "quality_candidate",
+    "observability_candidate",
+    "diagnostic_candidate",
+    "unknown",
+)
+_OBSERVABILITY_INTENT_TERMS = {
+    "observability",
+    "observable",
+    "observe",
+    "instrument",
+    "instrumentation",
+    "visibility",
+    "telemetry",
+    "bridge",
+    "map",
+    "coverage",
+}
+_DIAGNOSTIC_INTENT_TERMS = {
+    "audit",
+    "cached_champion",
+    "diagnostic",
+    "fresh_champion",
+    "fresh_champion_required",
+    "low_cached_champion",
+    "low_sample_diagnostic",
+    "not_evaluated",
+    "not_triggered",
+    "runtime_aggregate_excluded",
+    "runtime_budget",
+    "tool_budget",
+    "tool_loop",
+}
+_QUALITY_INTENT_TERMS = {
+    "improve",
+    "improvement",
+    "optimization",
+    "positive",
+    "quality",
+    "screening_positive",
+    "validation_positive",
+}
+_STRUCTURED_TEXT_EXCLUDE_KEYS = {
+    "detail",
+    "detail_summary",
+    "expected_effect",
+    "exposed_summary",
+    "hypothesis_text",
+    "prompt",
+    "rationale",
+    "raw_text",
+    "summary",
+    "text",
+    "transcript",
+}
 
 
 def runtime_confidence_for_protocol(
@@ -203,6 +258,132 @@ def runtime_evidence_policy_for_protocol(protocol: Any) -> dict[str, Any]:
             0,
         ),
     )
+
+
+def candidate_intent_counts_for_steps(steps: Any) -> dict[str, int]:
+    """Return compact campaign counters for generic candidate intent labels."""
+
+    counts = {key: 0 for key in _CANDIDATE_INTENT_COUNT_KEYS}
+    for step in steps or ():
+        intent = candidate_intent_visibility_for_step(step).get(
+            "candidate_intent",
+            "unknown",
+        )
+        key = str(intent or "unknown")
+        if key not in counts:
+            key = "unknown"
+        counts[key] += 1
+    return counts
+
+
+def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
+    """Classify candidate intent from structured audit/protocol fields only.
+
+    This helper is reporting/proposal visibility. It deliberately avoids raw
+    proposal text and has no path into DecisionFeatures.
+    """
+
+    protocol = getattr(step, "protocol_result", None)
+    tokens = list(_candidate_intent_tokens_for_step(step))
+    token_text = " ".join(tokens).lower()
+    observability_hits = sorted(
+        term for term in _OBSERVABILITY_INTENT_TERMS if term in token_text
+    )
+    diagnostic_hits = sorted(
+        term for term in _DIAGNOSTIC_INTENT_TERMS if term in token_text
+    )
+    quality_hits = sorted(term for term in _QUALITY_INTENT_TERMS if term in token_text)
+    no_effect = False
+    if protocol is not None:
+        try:
+            no_effect = no_objective_effect_for_protocol(protocol)
+        except Exception:  # pragma: no cover - defensive visibility only
+            no_effect = False
+    if observability_hits:
+        intent = "observability_candidate"
+        reason_codes = [
+            f"CANDIDATE_INTENT_OBSERVABILITY_{_reason_suffix(hit)}"
+            for hit in observability_hits[:4]
+        ]
+    elif diagnostic_hits:
+        intent = "diagnostic_candidate"
+        reason_codes = [
+            f"CANDIDATE_INTENT_DIAGNOSTIC_{_reason_suffix(hit)}"
+            for hit in diagnostic_hits[:4]
+        ]
+    elif protocol is not None or quality_hits:
+        intent = "quality_candidate"
+        reason_codes = (
+            [f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}" for hit in quality_hits[:4]]
+            or ["CANDIDATE_INTENT_QUALITY_FORMAL_PROTOCOL"]
+        )
+    else:
+        intent = "unknown"
+        reason_codes = ["CANDIDATE_INTENT_UNKNOWN"]
+    interpretation = None
+    if intent in {"observability_candidate", "diagnostic_candidate"} and no_effect:
+        interpretation = "diagnostic_not_quality_failure"
+    elif intent == "quality_candidate":
+        interpretation = "quality_candidate_evidence"
+    return _drop_empty(
+        {
+            "schema_version": "candidate_intent_visibility.v1",
+            "candidate_intent": intent,
+            "candidate_intent_reason_codes": reason_codes,
+            "quality_search_interpretation": interpretation,
+            "formal_decision_unchanged": True,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def runtime_evidence_policy_counts_for_steps(steps: Any) -> dict[str, Any]:
+    """Return campaign-level counters for runtime evidence policy visibility."""
+
+    role_counts: dict[str, int] = {}
+    reason_counts: dict[str, int] = {}
+    total = 0
+    fresh_required_count = 0
+    aggregate_excluded_count = 0
+    low_cached_count = 0
+    standalone_false_count = 0
+    decision_excluded_count = 0
+    for step in steps or ():
+        protocol = getattr(step, "protocol_result", None)
+        if protocol is None:
+            continue
+        policy = runtime_evidence_policy_for_protocol(protocol)
+        if not policy:
+            continue
+        total += 1
+        role = str(policy.get("runtime_signal_role") or "unknown")
+        role_counts[role] = role_counts.get(role, 0) + 1
+        for code in policy.get("policy_reason_codes") or ():
+            key = str(code)
+            reason_counts[key] = reason_counts.get(key, 0) + 1
+        if policy.get("fresh_champion_required"):
+            fresh_required_count += 1
+        if policy.get("runtime_aggregate_excluded"):
+            aggregate_excluded_count += 1
+        confidence = str(policy.get("runtime_evidence_confidence") or "").lower()
+        if "cached" in confidence:
+            low_cached_count += 1
+        if policy.get("standalone_optimization_signal") is False:
+            standalone_false_count += 1
+        if policy.get("decision_features_excluded") is True:
+            decision_excluded_count += 1
+    return {
+        "schema_version": "runtime_evidence_policy_counts.v1",
+        "runtime_evidence_policy_total": total,
+        "runtime_signal_role_counts": role_counts,
+        "policy_reason_code_counts": reason_counts,
+        "fresh_champion_required_count": fresh_required_count,
+        "runtime_aggregate_excluded_count": aggregate_excluded_count,
+        "low_cached_champion_count": low_cached_count,
+        "standalone_optimization_signal_false_count": standalone_false_count,
+        "decision_features_excluded_count": decision_excluded_count,
+    }
 
 
 def mechanism_evidence_for_protocol(protocol: Any) -> dict[str, Any]:
@@ -384,6 +565,152 @@ def no_objective_effect_for_protocol(protocol: Any) -> bool:
         and median_delta is not None
         and abs(median_delta) <= _EPS
     )
+
+
+def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
+    tokens: list[str] = []
+    protocol = getattr(step, "protocol_result", None)
+    hypothesis = getattr(step, "hypothesis", None)
+    if hypothesis is not None:
+        tokens.extend(
+            _structured_tokens(
+                {
+                    "action": getattr(hypothesis, "action", ""),
+                    "change_locus": getattr(hypothesis, "change_locus", ""),
+                    "predicted_direction": getattr(
+                        hypothesis,
+                        "predicted_direction",
+                        "",
+                    ),
+                    "target_runtime_effect": getattr(
+                        hypothesis,
+                        "target_runtime_effect",
+                        "",
+                    ),
+                    "runtime_budget_strategy": getattr(
+                        hypothesis,
+                        "runtime_budget_strategy",
+                        "",
+                    ),
+                    "expected_telemetry": getattr(
+                        hypothesis,
+                        "expected_telemetry",
+                        {},
+                    ),
+                    "novelty_signature": getattr(
+                        hypothesis,
+                        "novelty_signature",
+                        {},
+                    ),
+                    "mechanism_changes": getattr(
+                        hypothesis,
+                        "mechanism_changes",
+                        (),
+                    ),
+                }
+            )
+        )
+    tokens.extend(_structured_tokens(getattr(step, "decision_reason_codes", ()) or ()))
+    tokens.extend(
+        _structured_tokens(
+            {
+                "attempt_kind": getattr(step, "attempt_kind", ""),
+                "repair_policy_reason": getattr(step, "repair_policy_reason", ""),
+                "repair_mechanism_ids": getattr(step, "repair_mechanism_ids", ()),
+                "scheduler_slot": getattr(step, "scheduler_slot", ""),
+                "scheduler_reason": getattr(step, "scheduler_reason", ""),
+                "scheduler_audit_metadata": getattr(
+                    step,
+                    "scheduler_audit_metadata",
+                    {},
+                ),
+                "proposal_session_ref": getattr(step, "proposal_session_ref", {}),
+            }
+        )
+    )
+    if protocol is not None:
+        tokens.extend(
+            _structured_tokens(
+                {
+                    "stage": getattr(protocol, "stage", ""),
+                    "gate_outcome": getattr(protocol, "gate_outcome", ""),
+                    "reason_codes": getattr(protocol, "reason_codes", ()),
+                    "selected_surface": getattr(protocol, "selected_surface", ""),
+                    "runtime_confidence": getattr(protocol, "runtime_confidence", ""),
+                    "runtime_evidence_status": getattr(
+                        protocol,
+                        "runtime_evidence_status",
+                        "",
+                    ),
+                    "opportunity_status": getattr(
+                        protocol,
+                        "opportunity_status",
+                        "",
+                    ),
+                    "mechanism_evidence": getattr(
+                        protocol,
+                        "mechanism_evidence",
+                        {},
+                    ),
+                    "candidate_surface_runtime_summary": getattr(
+                        protocol,
+                        "candidate_surface_runtime_summary",
+                        {},
+                    ),
+                    "candidate_phase_telemetry_summary": getattr(
+                        protocol,
+                        "candidate_phase_telemetry_summary",
+                        {},
+                    ),
+                }
+            )
+        )
+        policy = runtime_evidence_policy_for_protocol(protocol)
+        if policy:
+            tokens.extend(_structured_tokens(policy))
+    return tuple(dict.fromkeys(token for token in tokens if token))
+
+
+def _structured_tokens(value: Any, *, key: str = "") -> tuple[str, ...]:
+    key_lower = str(key or "").strip().lower()
+    if key_lower in _STRUCTURED_TEXT_EXCLUDE_KEYS:
+        return ()
+    if any(marker in key_lower for marker in ("prompt", "transcript", "text")):
+        return ()
+    if isinstance(value, Mapping):
+        tokens: list[str] = []
+        for item_key, item_value in value.items():
+            item_key_text = str(item_key or "").strip()
+            tokens.extend(_structured_tokens(item_value, key=item_key_text))
+        return tuple(tokens)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        tokens = []
+        for item in value:
+            tokens.extend(_structured_tokens(item, key=key_lower))
+        return tuple(tokens)
+    for attr in ("id", "change_type"):
+        if hasattr(value, attr):
+            return tuple(
+                token
+                for token in (
+                    str(getattr(value, "id", "") or "").strip(),
+                    str(getattr(value, "change_type", "") or "").strip(),
+                )
+                if token
+            )
+    if isinstance(value, bool):
+        return (f"{key_lower}_{str(value).lower()}",) if key_lower else ()
+    if isinstance(value, (int, float)):
+        return ()
+    text = str(value or "").strip()
+    if not text or len(text) > 120:
+        return ()
+    return (text,)
+
+
+def _reason_suffix(value: str) -> str:
+    suffix = "".join(ch if ch.isalnum() else "_" for ch in value.upper()).strip("_")
+    return suffix or "UNKNOWN"
 
 
 def _candidate_runtime_pair_count(summary: Any) -> int:

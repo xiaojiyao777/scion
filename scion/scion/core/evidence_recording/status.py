@@ -11,6 +11,7 @@ from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
 )
 from scion.core.run_validity import build_run_validity
+from scion.core.screening_visibility import runtime_evidence_policy_summary
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
 from .accounting import (
@@ -151,6 +152,44 @@ def _merge_runtime_budget_status(
         ).strip()
         if code:
             payload["runtime_budget_diagnostic_code"] = code
+
+
+def _ensure_runtime_evidence_policy(progress: Dict[str, Any]) -> None:
+    if not _progress_has_runtime_policy_source(progress):
+        return
+    if isinstance(progress.get("runtime_evidence_policy"), Mapping):
+        return
+    aggregate_excluded = progress.get("runtime_aggregate_excluded")
+    if isinstance(aggregate_excluded, Mapping):
+        aggregate_excluded = aggregate_excluded.get("excluded")
+    progress["runtime_evidence_policy"] = runtime_evidence_policy_summary(
+        runtime_confidence=progress.get("runtime_confidence", ""),
+        runtime_evidence_status=progress.get("runtime_evidence_status", ""),
+        runtime_pairs=progress.get("runtime_pairs", 0),
+        champion_cached_runtime_pairs=progress.get(
+            "champion_cached_runtime_pairs",
+            0,
+        ),
+        runtime_aggregate_excluded=bool(aggregate_excluded),
+        candidate_runtime_pair_evidence_count=progress.get(
+            "candidate_runtime_pair_evidence_count",
+            0,
+        ),
+    )
+
+
+def _progress_has_runtime_policy_source(progress: Mapping[str, Any]) -> bool:
+    return any(
+        key in progress
+        for key in (
+            "runtime_confidence",
+            "runtime_evidence_status",
+            "runtime_pairs",
+            "champion_cached_runtime_pairs",
+            "runtime_aggregate_excluded",
+            "candidate_runtime_pair_evidence_count",
+        )
+    )
 
 
 def _branch_rows(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -442,6 +481,7 @@ class StatusWriterMixin:
         _normalize_child_process_fields(progress, payload)
         if "valid_pairs" not in progress and "completed_pairs" in progress:
             progress["valid_pairs"] = progress["completed_pairs"]
+        _ensure_runtime_evidence_policy(progress)
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"
             progress["raw_metrics_internal_only"] = True

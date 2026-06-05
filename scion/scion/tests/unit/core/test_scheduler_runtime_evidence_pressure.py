@@ -239,6 +239,165 @@ def test_weak_positive_runtime_pressure_without_case_win_prefers_clean_fork() ->
     assert action.reason == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
 
 
+def test_no_effect_branch_gets_one_same_branch_sample_before_clean_fork() -> None:
+    branch = Branch(
+        branch_id="no-effect-sample",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        direction="generic no-effect research direction",
+        branch_mechanism_ids=("generic_probe",),
+        lifecycle_no_effect_diagnostic_followups=1,
+        branch_evidence_summary={
+            "tier": "no_effect",
+            "wins": 0,
+            "losses": 0,
+            "ties": 4,
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.slot == "repair_diagnostic"
+    assert action.reason == "same_branch_low_signal_observation_sample"
+    assert action.audit_metadata["same_branch_refinement_selected"] is True
+    assert action.audit_metadata["same_branch_refinement_sampling"] is True
+    assert action.audit_metadata["same_branch_refinement_reason"] == (
+        "no_effect_observation"
+    )
+    assert action.audit_metadata[
+        "clean_fork_suppressed_for_same_branch_sample"
+    ] is True
+    assert action.audit_metadata["same_branch_refinement_sampling_candidate"][
+        "lifecycle_no_effect_diagnostic_followups"
+    ] == 1
+
+
+def test_sampled_no_effect_branch_still_allows_clean_fork() -> None:
+    branch = Branch(
+        branch_id="sampled-no-effect",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        direction="generic no-effect research direction",
+        branch_mechanism_ids=("generic_probe",),
+        lifecycle_no_effect_diagnostic_followups=1,
+        branch_evidence_summary={
+            "tier": "no_effect",
+            "same_branch_refinement_sampling": True,
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.slot == "explore_new"
+    assert action.reason in {
+        "clean_fork_required_for_new_mechanism",
+        "plateau_reroute_clean_fork",
+    }
+    assert "same_branch_refinement_sampling" not in action.audit_metadata
+
+
+def test_low_confidence_runtime_branch_gets_same_branch_sample_once() -> None:
+    branch = Branch(
+        branch_id="runtime-low-confidence-sample",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_marginal",
+        last_screening_feedback_tier="marginal",
+        direction="generic runtime-low-confidence direction",
+        branch_evidence_summary={
+            "tier": "marginal",
+            "wins": 0,
+            "losses": 0,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "insufficient",
+            "runtime_evidence_pressure_count": 1,
+            "runtime_evidence_pressure": {
+                "triggers": [
+                    "low_or_cached_runtime_confidence",
+                    "runtime_evidence_status:insufficient",
+                ],
+            },
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "run_existing"
+    assert action.branch is branch
+    assert action.reason == "same_branch_low_signal_observation_sample"
+    assert action.audit_metadata["same_branch_refinement_reason"] == (
+        "runtime_low_confidence_observation"
+    )
+    assert action.audit_metadata[
+        "clean_fork_suppressed_for_same_branch_sample"
+    ] is True
+
+
+def test_same_branch_sample_does_not_preempt_pending_retry() -> None:
+    retry = Branch(
+        branch_id="pending-retry",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        pending_retry=True,
+    )
+    low_signal = Branch(
+        branch_id="low-signal",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        direction="generic low-signal direction",
+        lifecycle_no_effect_diagnostic_followups=1,
+    )
+
+    action = Scheduler(max_active_branches=3).select_next([low_signal, retry])
+
+    assert action.action == "run_existing"
+    assert action.branch is retry
+    assert action.reason == "pending_retry_diagnostic_followup"
+    assert action.audit_metadata == {}
+
+
+def test_same_branch_sample_does_not_preempt_validation_priority() -> None:
+    validate = Branch(
+        branch_id="validate-first",
+        state=BranchState.READY_VALIDATE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    low_signal = Branch(
+        branch_id="low-signal",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        direction="generic low-signal direction",
+        lifecycle_no_effect_diagnostic_followups=1,
+    )
+
+    action = Scheduler(max_active_branches=3).select_next([low_signal, validate])
+
+    assert action.action == "run_existing"
+    assert action.branch is validate
+    assert action.slot == "refine_active"
+    assert action.reason == "active_branch_refinement"
+    assert action.audit_metadata == {}
+
+
 def test_fresh_required_runtime_pressure_is_explained_in_scheduler_audit() -> None:
     branch = Branch(
         branch_id="fresh-required-runtime-pressure",

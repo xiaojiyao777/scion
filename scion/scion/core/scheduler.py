@@ -67,6 +67,9 @@ ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
 QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON = (
     "quality_regression_without_actionable_diagnostic_slot_release"
 )
+SAME_BRANCH_REFINEMENT_SAMPLE_REASON = (
+    "same_branch_low_signal_observation_sample"
+)
 
 
 @dataclass(frozen=True)
@@ -130,7 +133,10 @@ class Scheduler:
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
             and not _retained_checkpoint_no_effect_current_head(b)
-            and not _no_effect_slot_release_preferred(b)
+            and (
+                not _no_effect_slot_release_preferred(b)
+                or _branch_same_branch_refinement_sampling_candidate(b)
+            )
             and not _quality_regression_slot_release_preferred(b)
             and not _branch_lifecycle_budget_exhausted(b)
         ]
@@ -197,6 +203,24 @@ class Scheduler:
                         )
                     ),
                 )
+            if len(active_for_slots) < self._max_active_branches:
+                same_branch_sample_candidates = [
+                    branch
+                    for branch in eligible_research
+                    if _branch_same_branch_refinement_sampling_candidate(branch)
+                ]
+                if same_branch_sample_candidates:
+                    selected = _select_budgeted(same_branch_sample_candidates)
+                    return SchedulerAction(
+                        action="run_existing",
+                        branch=selected,
+                        reason=SAME_BRANCH_REFINEMENT_SAMPLE_REASON,
+                        slot=_slot_for_branch(selected),
+                        audit_metadata=_same_branch_refinement_sampling_audit(
+                            selected,
+                            candidate_count=len(same_branch_sample_candidates),
+                        ),
+                    )
             if (
                 len(active_for_slots) < self._max_active_branches
                 and any(
@@ -931,6 +955,169 @@ def _weak_positive_runtime_evidence_suppression_audit(
             summary
         ),
     }
+
+
+def _same_branch_refinement_sampling_audit(
+    branch: Branch,
+    *,
+    candidate_count: int,
+) -> dict[str, Any]:
+    reason = _same_branch_refinement_sampling_signal(branch)
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    return {
+        "same_branch_refinement_selected": True,
+        "same_branch_refinement_reason": (
+            reason or SAME_BRANCH_REFINEMENT_SAMPLE_REASON
+        ),
+        "same_branch_refinement_sampling": True,
+        "same_branch_refinement_sampling_reason": (
+            reason or SAME_BRANCH_REFINEMENT_SAMPLE_REASON
+        ),
+        "same_branch_refinement_sampling_candidate_count": max(
+            0,
+            int(candidate_count),
+        ),
+        "clean_fork_suppressed_for_same_branch_sample": True,
+        "same_branch_refinement_sampling_candidate": {
+            "branch_id": str(getattr(branch, "branch_id", "") or ""),
+            "lineage_status": branch_lineage_status(branch),
+            "branch_state": _branch_state_value(branch),
+            "branch_code_status": str(
+                getattr(branch, "branch_code_status", "") or ""
+            ),
+            "screening_tier": _branch_screening_tier(branch)
+            or _summary_text(evidence, "tier", default="unknown"),
+            "runtime_evidence_pressure_count": _runtime_evidence_pressure_count(
+                evidence
+            ),
+            "activation_zero_effect_streak": _activation_zero_effect_streak(
+                branch
+            ),
+            "lifecycle_no_effect_diagnostic_followups": _no_effect_followup_count(
+                branch
+            ),
+            "runtime_evidence_pressure_triggers": (
+                _runtime_evidence_pressure_triggers(evidence)
+            ),
+        },
+    }
+
+
+def _branch_same_branch_refinement_sampling_candidate(branch: Branch) -> bool:
+    if branch.state not in _RESEARCH_STATES:
+        return False
+    if getattr(branch, "pending_retry", False):
+        return False
+    if branch.state == BranchState.BLOCKED_INFRA:
+        return False
+    if branch_is_parked_lineage(branch):
+        return False
+    if branch_lifecycle_new_mechanism_ineligible(branch):
+        return False
+    if branch_has_actionable_diagnostic(branch):
+        return False
+    if branch_requires_repair_focus(branch):
+        return False
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return False
+    if _branch_lifecycle_budget_exhausted(branch):
+        return False
+    if _branch_has_weak_positive_followup_signal(branch):
+        return False
+    if _same_branch_refinement_sample_already_observed(branch):
+        return False
+    return bool(_same_branch_refinement_sampling_signal(branch))
+
+
+def _same_branch_refinement_sample_already_observed(branch: Branch) -> bool:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    if bool(evidence.get("same_branch_refinement_sampling")):
+        return True
+    if bool(evidence.get("same_branch_refinement_selected")):
+        return True
+    if _no_effect_followup_count(branch) >= 2:
+        return True
+    if _activation_zero_effect_streak(branch) >= 2:
+        return True
+    if _runtime_evidence_pressure_count(evidence) >= 2:
+        return True
+    repeated = max(
+        0,
+        int(getattr(branch, "lifecycle_signal_repeat_count", 0) or 0),
+    )
+    marginal_or_no_effect_streak = max(
+        0,
+        int(getattr(branch, "lifecycle_marginal_no_effect_streak", 0) or 0),
+    )
+    return marginal_or_no_effect_streak >= 2 and repeated >= 2
+
+
+def _same_branch_refinement_sampling_signal(branch: Branch) -> str:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    if not evidence:
+        return ""
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = _branch_screening_tier(branch) or _summary_text(evidence, "tier")
+    if (status == "active_no_effect" or tier == "no_effect") and (
+        _summary_text(evidence, "tier") == "no_effect"
+        or any(key in evidence for key in ("wins", "losses", "ties"))
+    ):
+        return "no_effect_observation"
+    if _activation_zero_effect_streak(branch) > 0:
+        return "telemetry_effect_zero_observation"
+    reason_codes = _summary_reason_code_set(evidence)
+    if "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC" in reason_codes:
+        return "telemetry_effect_zero_observation"
+    runtime_triggers = _runtime_evidence_pressure_triggers(evidence)
+    if any(
+        trigger == "runtime_saturation_without_objective_signal"
+        for trigger in runtime_triggers
+    ) or reason_codes.intersection(
+        {
+            "SCREENING_RUNTIME_BUDGET_SATURATION",
+            "TINY_RUNTIME_BUDGET_SATURATION",
+            "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
+            "SCREENING_RUNTIME_SATURATION_REROUTE",
+        }
+    ):
+        return "runtime_budget_saturation_observation"
+    if (
+        _runtime_evidence_pressure_count(evidence) > 0
+        or bool(runtime_triggers)
+    ) and _runtime_evidence_low_or_incomplete(evidence):
+        return "runtime_low_confidence_observation"
+    return ""
+
+
+def _summary_reason_code_set(summary: Mapping[str, Any]) -> set[str]:
+    codes: list[Any] = []
+    for key in (
+        "reason_codes",
+        "decision_reason_codes",
+        "why_not_promoted_reason_codes",
+        "gate_observation_reason_codes",
+        "lifecycle_action_reason_codes",
+        "history_reason_codes",
+    ):
+        value = summary.get(key)
+        if isinstance(value, str):
+            codes.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            codes.extend(value)
+    return {str(code).strip().upper() for code in codes if str(code).strip()}
+
+
+def _no_effect_followup_count(branch: Branch) -> int:
+    try:
+        return max(
+            0,
+            int(getattr(branch, "lifecycle_no_effect_diagnostic_followups", 0) or 0),
+        )
+    except (TypeError, ValueError):
+        return 0
 
 
 def _weak_positive_followup_suppression_audit(
