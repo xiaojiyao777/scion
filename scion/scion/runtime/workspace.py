@@ -35,7 +35,6 @@ _DEFAULT_FROZEN_PATTERNS = frozenset(
 )
 
 _LEGACY_RESEARCH_SURFACE_DIRS = ("operators", "policies")
-_SOURCE_IDENTITY_SUFFIXES = frozenset({".py", ".json", ".toml", ".yaml", ".yml"})
 _TRANSIENT_IDENTITY_DIRS = frozenset(
     {
         ".git",
@@ -77,7 +76,6 @@ class WorkspaceMaterializer:
         self._campaign_dir = Path(campaign_dir)
         self._workspaces_dir = self._campaign_dir / "workspaces"
         self._champions_dir = self._campaign_dir / "champions"
-        self._explicit_frozen_patterns = frozen_patterns is not None
         self._frozen_patterns = (
             _DEFAULT_FROZEN_PATTERNS if frozen_patterns is None else frozen_patterns
         )
@@ -213,7 +211,7 @@ class WorkspaceMaterializer:
         """Copy editable research-surface files into archive/<branch_id_short>/.
 
         Called before cleanup on ABANDON so generated files are preserved for
-        post-campaign analysis.  Legacy workspaces without explicit problem
+        post-campaign analysis.  Legacy workspaces without explicit editable
         patterns still archive the historical operators/ and policies/ trees.
 
         Args:
@@ -331,12 +329,10 @@ class WorkspaceMaterializer:
             return tuple(
                 _iter_pattern_matched_files(ws, self._editable_patterns, self._is_frozen)
             )
-        if self._explicit_frozen_patterns:
-            return tuple(_iter_non_frozen_source_files(ws, self._is_frozen))
         return tuple(_iter_legacy_surface_python_files(ws))
 
     def _uses_legacy_surface_dirs(self) -> bool:
-        return not self._editable_patterns and not self._explicit_frozen_patterns
+        return not self._editable_patterns
 
     def _archive_legacy_surface_dirs(self, ws: Path, branch_id: str) -> str | None:
         surface_sources = [
@@ -385,6 +381,42 @@ class WorkspaceMaterializer:
 
 
 # ---------------------------------------------------------------------------
+# Problem-spec identity helpers
+# ---------------------------------------------------------------------------
+
+
+def editable_identity_patterns_from_problem_spec(problem_spec: object) -> tuple[str, ...]:
+    """Return declared research-surface identity patterns for a problem spec.
+
+    v0.4 workspaces should derive code identity from explicit research-surface
+    target files.  Legacy/problem specs without surfaces fall back to
+    ``search_space.editable``.  The broad non-frozen-source scan is intentionally
+    avoided because real problem roots contain data, evidence, split manifests,
+    and test fixtures that are not candidate code identity.
+    """
+    surface_patterns = _research_surface_target_patterns(problem_spec)
+    if surface_patterns:
+        return _normalize_editable_patterns(surface_patterns)
+    search_space = getattr(problem_spec, "search_space", None)
+    editable = getattr(search_space, "editable", None)
+    return _normalize_editable_patterns(editable or ())
+
+
+def _research_surface_target_patterns(problem_spec: object) -> tuple[str, ...]:
+    patterns: list[str] = []
+    for surface in getattr(problem_spec, "research_surfaces", ()) or ():
+        targets = getattr(surface, "targets", None)
+        files = getattr(targets, "files", None) if targets is not None else None
+        if not files:
+            files = getattr(surface, "target_files", None)
+        for item in files or ():
+            text = str(item or "").strip()
+            if text:
+                patterns.append(text)
+    return tuple(dict.fromkeys(patterns))
+
+
+# ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
 
@@ -410,21 +442,6 @@ def _iter_pattern_matched_files(
             continue
         if any(_editable_pattern_matches(rel, pattern) for pattern in patterns):
             files.append(path)
-    return files
-
-
-def _iter_non_frozen_source_files(
-    ws: Path,
-    is_frozen: Callable[[str], bool],
-) -> list[Path]:
-    files: list[Path] = []
-    for path in _iter_workspace_files(ws):
-        rel = path.relative_to(ws).as_posix()
-        if is_frozen(rel):
-            continue
-        if path.suffix not in _SOURCE_IDENTITY_SUFFIXES:
-            continue
-        files.append(path)
     return files
 
 
