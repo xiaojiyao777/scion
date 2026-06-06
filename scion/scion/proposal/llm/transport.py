@@ -395,18 +395,22 @@ class TransportMixin:
         model: str,
         request_kind: str,
     ) -> None:
+        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+        cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
         self._last_usage_metadata = {
             "provider": "anthropic",
             "model": model,
             "request_kind": request_kind,
-            "input_tokens": int(getattr(usage, "input_tokens", 0) or 0),
-            "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
-            "cache_creation_input_tokens": int(
-                getattr(usage, "cache_creation_input_tokens", 0) or 0
-            ),
-            "cache_read_input_tokens": int(
-                getattr(usage, "cache_read_input_tokens", 0) or 0
-            ),
+            "cache_mode": "explicit_cache_control",
+            "cache_accounting_mode": "anthropic_explicit_cache_tokens",
+            "input_tokens": input_tokens,
+            "prompt_tokens_total": input_tokens + cache_create + cache_read,
+            "output_tokens": output_tokens,
+            "cache_creation_input_tokens": cache_create,
+            "cache_read_input_tokens": cache_read,
+            "cache_miss_input_tokens": input_tokens,
         }
 
     def _record_openai_usage(
@@ -417,20 +421,32 @@ class TransportMixin:
         request_kind: str,
     ) -> None:
         cache_read, cache_miss = self._openai_cache_usage(usage)
+        prompt_tokens_total = self._get_usage_int(usage, "prompt_tokens")
+        output_tokens = self._get_usage_int(usage, "completion_tokens")
         reasoning_tokens = self._get_usage_int(
             usage,
             "reasoning_tokens",
             parent="completion_tokens_details",
         )
+        if cache_read and not cache_miss and prompt_tokens_total > cache_read:
+            cache_miss = prompt_tokens_total - cache_read
         self._last_usage_metadata = {
             "provider": "openai_compatible",
             "model": model,
             "request_kind": request_kind,
-            "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
-            "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+            "cache_mode": (
+                "automatic_prefix_cache_observed"
+                if cache_read or cache_miss
+                else "automatic_prefix_cache_attempted"
+            ),
+            "cache_accounting_mode": "provider_prompt_tokens_include_cache_read",
+            "input_tokens": prompt_tokens_total,
+            "prompt_tokens_total": prompt_tokens_total,
+            "output_tokens": output_tokens,
             "reasoning_output_tokens": reasoning_tokens,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": cache_read,
+            "cache_miss_input_tokens": cache_miss,
             "prompt_cache_hit": bool(cache_read),
             "prompt_cache_miss": bool(cache_miss),
             "prompt_cache_hit_tokens": cache_read,

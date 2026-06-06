@@ -178,13 +178,44 @@ class PostmortemReport:
         cache_stats = self.summary.get("cache_stats", {})
         if not cache_stats:
             return []
-        return [
+        lines = [
             "## LLM Cache Statistics",
             f"- Total tokens: {cache_stats.get('total_tokens', 0)}",
             f"- Cache read tokens: {cache_stats.get('cache_read_tokens', 0)}",
             f"- Cache hit rate: {cache_stats.get('cache_hit_rate', 0.0):.1%}",
-            "",
         ]
+        modes = cache_stats.get("cache_accounting_modes", {})
+        if modes:
+            rendered = ", ".join(f"{key}={value}" for key, value in sorted(modes.items()))
+            lines.append(f"- Cache accounting modes: {rendered}")
+        detail_rows = cache_stats.get("by_request_kind_provider", [])
+        if detail_rows:
+            lines.append("- By request kind/provider:")
+            for row in detail_rows:
+                lines.append(
+                    "  - "
+                    f"{row.get('request_kind', '?')}/{row.get('provider', '?')}: "
+                    f"calls={row.get('calls', 0)}, "
+                    f"prompt_tokens_total={row.get('prompt_tokens_total', 0)}, "
+                    f"input_tokens={row.get('input_tokens', 0)}, "
+                    f"output_tokens={row.get('output_tokens', 0)}, "
+                    f"cache_read={row.get('cache_read_tokens', 0)}, "
+                    f"cache_miss={row.get('cache_miss_tokens', 0)}, "
+                    f"hit_rate={row.get('hit_rate', 0.0):.1%}, "
+                    f"pending_no_usage_traces={row.get('pending_no_usage_traces', 0)}"
+                )
+        no_read_groups = cache_stats.get("repeated_cache_key_no_read", [])
+        if no_read_groups:
+            lines.append("- Repeated cache keys without reads:")
+            for group in no_read_groups[:10]:
+                lines.append(
+                    "  - "
+                    f"{group.get('request_kind', '?')} "
+                    f"cache={group.get('cacheable_system_blocks_hash', '?')} "
+                    f"tool_schema={group.get('tool_schema_hash', '?')} "
+                    f"calls={group.get('calls', 0)}"
+                )
+        return lines + [""]
 
     def _stagnation_lines(self) -> list[str]:
         signals = self.summary.get("stagnation_signals", [])

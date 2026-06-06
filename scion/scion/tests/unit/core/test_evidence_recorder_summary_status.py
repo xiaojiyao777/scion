@@ -887,6 +887,145 @@ def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     assert "multiple cache writes without a read" in repeated[0]["diagnosis"]
 
 
+def test_campaign_summary_uses_provider_aware_openai_cache_accounting(
+    tmp_path: Path,
+) -> None:
+    trace_dir = tmp_path / "llm_traces"
+    trace_dir.mkdir()
+
+    def _write_trace(
+        name: str,
+        *,
+        request_kind: str,
+        prompt_total: int,
+        output_tokens: int,
+        cache_read: int,
+        cache_miss: int,
+        cache_hash: str,
+    ) -> None:
+        (trace_dir / name).write_text(
+            json.dumps(
+                {
+                    "request_kind": request_kind,
+                    "model": "gpt-5.5",
+                    "llm_usage": {
+                        "provider": "openai_compatible",
+                        "model": "gpt-5.5",
+                        "request_kind": request_kind,
+                        "cache_accounting_mode": (
+                            "provider_prompt_tokens_include_cache_read"
+                        ),
+                        "input_tokens": prompt_total,
+                        "prompt_tokens_total": prompt_total,
+                        "output_tokens": output_tokens,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": cache_read,
+                        "cache_miss_input_tokens": cache_miss,
+                    },
+                    "prompt_cache_audit": {
+                        "provider": "openai_compatible",
+                        "cacheable_system_blocks_hash": cache_hash,
+                        "tool_schema_hash": "schema-a",
+                        "cacheable_system_chars": 1000,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    _write_trace(
+        "0001_code.json",
+        request_kind="code",
+        prompt_total=100,
+        output_tokens=10,
+        cache_read=40,
+        cache_miss=60,
+        cache_hash="code-cache-key",
+    )
+    _write_trace(
+        "0002_code.json",
+        request_kind="code",
+        prompt_total=90,
+        output_tokens=9,
+        cache_read=0,
+        cache_miss=90,
+        cache_hash="code-cache-key",
+    )
+    _write_trace(
+        "0003_hypothesis.json",
+        request_kind="hypothesis",
+        prompt_total=50,
+        output_tokens=5,
+        cache_read=0,
+        cache_miss=50,
+        cache_hash="hypothesis-cache-key",
+    )
+    _write_trace(
+        "0004_hypothesis.json",
+        request_kind="hypothesis",
+        prompt_total=70,
+        output_tokens=7,
+        cache_read=0,
+        cache_miss=70,
+        cache_hash="hypothesis-cache-key",
+    )
+    (trace_dir / "0005_code_pending.json").write_text(
+        json.dumps(
+            {
+                "request_kind": "code",
+                "model": "gpt-5.5",
+                "prompt_cache_audit": {"provider": "openai_compatible"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    recorder = EvidenceRecorder(
+        campaign_id="camp-cache-openai",
+        campaign_dir=tmp_path,
+    )
+    summary = recorder.write_campaign_summary(
+        step_history=[_step("/tmp/metrics-round-3.json")],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    cache_stats = summary["cache_stats"]
+    assert cache_stats["source"] == "llm_traces"
+    assert cache_stats["calls"] == 4
+    assert cache_stats["total_tokens"] == 310
+    assert cache_stats["prompt_tokens_total"] == 310
+    assert cache_stats["cache_read_tokens"] == 40
+    assert cache_stats["cache_miss_tokens"] == 270
+    assert cache_stats["cache_create_tokens"] == 0
+    assert cache_stats["cache_hit_rate"] == 0.129
+    assert cache_stats["cache_accounting_modes"] == {
+        "provider_prompt_tokens_include_cache_read": 4
+    }
+
+    by_kind = {
+        (row["request_kind"], row["provider"]): row
+        for row in cache_stats["by_request_kind_provider"]
+    }
+    code = by_kind[("code", "openai_compatible")]
+    assert code["calls"] == 2
+    assert code["prompt_tokens_total"] == 190
+    assert code["cache_read_tokens"] == 40
+    assert code["cache_miss_tokens"] == 150
+    assert code["hit_rate"] == 0.2105
+    assert code["pending_no_usage_traces"] == 1
+    hypothesis = by_kind[("hypothesis", "openai_compatible")]
+    assert hypothesis["calls"] == 2
+    assert hypothesis["hit_rate"] == 0.0
+
+    no_read = cache_stats["repeated_cache_key_no_read"]
+    assert len(no_read) == 1
+    assert no_read[0]["request_kind"] == "hypothesis"
+    assert no_read[0]["calls"] == 2
+    assert no_read[0]["cache_read_calls"] == 0
+    assert no_read[0]["cacheable_system_blocks_hash"] == "hypothesis-cache-key"
+
+
 def test_campaign_summary_marks_agent_quality_block_contract_not_run(
     tmp_path: Path,
 ) -> None:

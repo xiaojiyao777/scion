@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
+from scion.proposal.llm.config import _is_openai_model
 from scion.proposal.session_trace_index import (
     record_trace_finish,
     record_trace_start,
@@ -66,6 +67,7 @@ class _TraceWriter:
                 prompt_manifest=prompt_manifest_context,
             ),
             "prompt_cache_audit": _prompt_cache_audit(
+                model=model,
                 system_blocks=system_blocks,
                 user_prompt=prompt,
                 tool_schema=tool.get("input_schema")
@@ -299,10 +301,18 @@ def _visibility_entries_from_text(
 
 def _prompt_cache_audit(
     *,
+    model: str,
     system_blocks: "list[dict]",
     user_prompt: str,
     tool_schema: Any,
 ) -> Dict[str, Any]:
+    is_openai_compatible = _is_openai_model(str(model or ""))
+    provider = "openai_compatible" if is_openai_compatible else "anthropic"
+    cache_mode = (
+        "automatic_prefix_cache_attempted"
+        if is_openai_compatible
+        else "explicit_cache_control"
+    )
     schema_blob = json.dumps(tool_schema or {}, sort_keys=True, default=str)
     block_records: list[dict[str, Any]] = []
     cacheable_chars = 0
@@ -323,12 +333,25 @@ def _prompt_cache_audit(
                 "hash": _short_hash(text),
                 "cacheable": cacheable,
                 "cache_control": cache_control,
+                "cache_control_forwarded_to_provider": (
+                    cacheable and not is_openai_compatible
+                ),
             }
         )
     cacheable_blocks = [record for record in block_records if record["cacheable"]]
     return {
+        "provider": provider,
+        "cache_mode": cache_mode,
+        "cache_accounting_mode": (
+            "provider_prompt_tokens_include_cache_read"
+            if is_openai_compatible
+            else "anthropic_explicit_cache_tokens"
+        ),
         "system_block_count": len(block_records),
         "cache_control_block_count": len(cacheable_blocks),
+        "cache_control_forwarded_to_provider": (
+            bool(cacheable_blocks) and not is_openai_compatible
+        ),
         "cacheable_system_chars": cacheable_chars,
         "system_blocks": block_records,
         "cacheable_system_blocks_hash": _short_hash(
@@ -341,11 +364,21 @@ def _prompt_cache_audit(
         "tool_schema_hash": _short_hash(schema_blob),
         "user_prompt_chars": len(user_prompt or ""),
         "user_prompt_hash": _short_hash(user_prompt or ""),
-        "cache_prefix_order": "tools -> system -> messages",
+        "cache_prefix_order": (
+            "messages[user_prefix(system text) + user_prompt] + tools"
+            if is_openai_compatible
+            else "tools -> system -> messages"
+        ),
         "cache_strategy_note": (
-            "Anthropic prompt caching matches the stable prefix through explicit "
-            "cache_control breakpoints; dynamic user prompt content is outside "
-            "the cacheable system blocks."
+            "OpenAI-compatible requests do not forward Anthropic cache_control "
+            "blocks; provider cache stats, when present, reflect automatic prefix "
+            "cache behavior over the provider-visible prompt."
+            if is_openai_compatible
+            else (
+                "Anthropic prompt caching matches the stable prefix through explicit "
+                "cache_control breakpoints; dynamic user prompt content is outside "
+                "the cacheable system blocks."
+            )
         ),
     }
 

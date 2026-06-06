@@ -529,15 +529,17 @@ def test_anthropic_tool_call_records_last_usage_metadata() -> None:
         client.call_with_tool("prompt", tool, model="claude-test")
 
     usage = client.get_last_usage_metadata()
-    assert usage == {
-        "provider": "anthropic",
-        "model": "claude-test",
-        "request_kind": "code",
-        "input_tokens": 100,
-        "output_tokens": 20,
-        "cache_creation_input_tokens": 70,
-        "cache_read_input_tokens": 30,
-    }
+    assert usage["provider"] == "anthropic"
+    assert usage["model"] == "claude-test"
+    assert usage["request_kind"] == "code"
+    assert usage["cache_mode"] == "explicit_cache_control"
+    assert usage["cache_accounting_mode"] == "anthropic_explicit_cache_tokens"
+    assert usage["input_tokens"] == 100
+    assert usage["prompt_tokens_total"] == 200
+    assert usage["output_tokens"] == 20
+    assert usage["cache_creation_input_tokens"] == 70
+    assert usage["cache_read_input_tokens"] == 30
+    assert usage["cache_miss_input_tokens"] == 100
 
 
 def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
@@ -568,9 +570,14 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
 
     usage = client.get_last_usage_metadata()
     assert usage["provider"] == "openai_compatible"
+    assert usage["cache_mode"] == "automatic_prefix_cache_observed"
+    assert usage["cache_accounting_mode"] == "provider_prompt_tokens_include_cache_read"
     assert usage["input_tokens"] == 120
+    assert usage["prompt_tokens_total"] == 120
     assert usage["output_tokens"] == 12
     assert usage["cache_read_input_tokens"] == 80
+    assert usage["cache_miss_input_tokens"] == 40
+    assert usage["cache_creation_input_tokens"] == 0
     assert usage["prompt_cache_hit"] is True
     assert usage["prompt_cache_miss"] is True
     assert usage["prompt_cache_hit_tokens"] == 80
@@ -605,6 +612,8 @@ def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:
 
     usage = client.get_last_usage_metadata()
     assert usage["cache_read_input_tokens"] == 80
+    assert usage["cache_miss_input_tokens"] == 40
+    assert usage["prompt_tokens_total"] == 120
     assert usage["prompt_cache_miss_tokens"] == 40
     assert usage["reasoning_output_tokens"] == 32
 
@@ -794,8 +803,57 @@ def test_creative_trace_records_llm_request_policy(tmp_path):
     assert payload["llm_usage"]["cache_creation_input_tokens"] == 5
     assert payload["llm_usage"]["cache_read_input_tokens"] == 3
     assert payload["prompt_cache_audit"]["user_prompt_chars"] > 0
+    assert payload["prompt_cache_audit"]["provider"] == "anthropic"
+    assert payload["prompt_cache_audit"]["cache_mode"] == "explicit_cache_control"
+    assert payload["prompt_cache_audit"]["cache_control_forwarded_to_provider"] is True
     assert payload["prompt_cache_audit"]["tool_schema_hash"]
     assert payload["prompt_cache_audit"]["system_blocks"]
     assert payload["prompt_cache_audit"]["cache_prefix_order"] == (
         "tools -> system -> messages"
     )
+
+
+def test_creative_trace_marks_openai_cache_as_automatic_prefix(tmp_path):
+    class PolicyClient:
+        def resolve_request_policy(self, *, request_kind=None, tool=None):
+            return {"request_kind": request_kind, "timeout_sec": 180.0, "max_retries": 0}
+
+        def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            return {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "create",
+                "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
+            }
+
+        def get_last_usage_metadata(self):
+            return {
+                "provider": "openai_compatible",
+                "cache_mode": "automatic_prefix_cache_observed",
+                "cache_accounting_mode": "provider_prompt_tokens_include_cache_read",
+                "input_tokens": 120,
+                "prompt_tokens_total": 120,
+                "output_tokens": 7,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 80,
+                "cache_miss_input_tokens": 40,
+            }
+
+    creative = CreativeLayer(
+        PolicyClient(),
+        model="gpt-5.5",
+        trace_dir=str(tmp_path),
+    )
+
+    creative.generate_code({"change_locus": "solver_design"})
+
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text())
+    audit = payload["prompt_cache_audit"]
+    assert audit["provider"] == "openai_compatible"
+    assert audit["cache_mode"] == "automatic_prefix_cache_attempted"
+    assert audit["cache_accounting_mode"] == "provider_prompt_tokens_include_cache_read"
+    assert audit["cache_control_forwarded_to_provider"] is False
+    assert all(
+        block["cache_control_forwarded_to_provider"] is False
+        for block in audit["system_blocks"]
+    )
+    assert "do not forward Anthropic cache_control" in audit["cache_strategy_note"]
