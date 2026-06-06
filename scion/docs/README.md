@@ -70,6 +70,7 @@ logs, old experiments, or source trees. Load them through the relevant profile.
 
 - [Evidence manifest](evidence/manifest.md)
 - [Scion v0.4 本地实验运行、回溯与复现手册](operations/experiment-runbook.zh.md)
+- [Post-run analysis handoff](operations/postrun-analysis-handoff.md)
 - [Experiment quick reference](operations/experiment-quickref.md)
 - [Experiment baseline management](operations/experiment-baseline-management.md)
 - [Metrics guide](reference/metrics-guide.md)
