@@ -10,7 +10,7 @@ from scion.core.public_refs import redact_public_refs
 from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
 )
-from scion.core.run_validity import build_run_validity
+from scion.core.run_validity import apply_run_completion_aliases, build_run_validity
 from scion.core.screening_visibility import (
     observability_value_visibility_from_payload,
     runtime_evidence_policy_summary,
@@ -574,6 +574,7 @@ class StatusWriterMixin:
                 partial_in_flight=bool(payload.get("in_flight_protocol")),
             )
             payload["run_validity_status"] = payload["run_validity"]["reason"]
+            payload = apply_run_completion_aliases(payload)
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:
             self.status_reporter.write(public_payload)

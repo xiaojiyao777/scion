@@ -236,6 +236,84 @@ def test_run_writes_wrapper_audit_status_and_exit_files(
     assert "RUN_PID:" in exit_text
 
 
+def test_run_returns_nonzero_for_incomplete_infra_stop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    campaign_dir = tmp_path / "campaign"
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            self.campaign_dir = Path(str(kwargs["campaign_dir"]))
+
+        def run(self, max_rounds: int = 1000) -> None:
+            self.campaign_dir.mkdir(parents=True, exist_ok=True)
+            (self.campaign_dir / "campaign_summary.json").write_text(
+                json.dumps(
+                    {
+                        "stopped_reason": "api_balance_exhausted",
+                        "last_stop_reason": "api_balance_exhausted",
+                        "requested_rounds": 12,
+                        "effective_rounds_completed": 6,
+                        "completed_requested_rounds": False,
+                        "run_complete": False,
+                        "stop_category": "provider_error",
+                        "run_validity_status": "valid_partial_interrupted",
+                        "run_validity": {
+                            "status": "valid",
+                            "reason": "valid_partial_interrupted",
+                            "valid": True,
+                            "requested_rounds": 12,
+                            "effective_rounds_completed": 6,
+                            "completed_requested_rounds": False,
+                            "complete": False,
+                            "interrupted": True,
+                            "completeness_status": "interrupted_incomplete",
+                            "stopped_reason": "api_balance_exhausted",
+                            "infra_failure_attempts": 1,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        def get_state(self) -> dict[str, object]:
+            raise AssertionError("incomplete infra exit should not read final state")
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "12",
+            "--campaign-dir",
+            str(campaign_dir),
+            "--problem",
+            str(problem_yaml),
+        ],
+    )
+
+    assert result.exit_code == 20, result.output
+    audit = json.loads((campaign_dir / "run_status.json").read_text(encoding="utf-8"))
+    exit_text = (campaign_dir / "exit.txt").read_text(encoding="utf-8")
+    assert audit["status"] == "incomplete"
+    assert audit["wrapper_exit_status"] == 20
+    assert audit["campaign_exit_status"] == "incomplete_infra_stop"
+    assert audit["run_validity_status"] == "valid_partial_interrupted"
+    assert audit["run_complete"] is False
+    assert audit["completed_requested_rounds"] is False
+    assert audit["last_stop_reason"] == "api_balance_exhausted"
+    assert "WRAPPER_EXIT_STATUS:20" in exit_text
+    assert "CAMPAIGN_EXIT_STATUS:incomplete_infra_stop" in exit_text
+    assert "LAST_STOP_REASON:api_balance_exhausted" in exit_text
+
+
 def test_run_force_surface_threads_validated_request_to_campaign_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

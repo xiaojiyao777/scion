@@ -1267,6 +1267,44 @@ def test_status_reports_balance_stop_consistently(tmp_path: Path) -> None:
     assert on_disk["stopped_reason"] == "api_balance_exhausted"
 
 
+def test_status_reports_api_balance_partial_run_completion_aliases(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-partial-balance",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-partial-balance",
+            "n_experiments": 6,
+            "screened_experiments": 6,
+        },
+    )
+
+    status = recorder.write_status(
+        stopped_reason="api_balance_exhausted",
+        loop_status={
+            "requested_rounds": 12,
+            "total_rounds": 7,
+            "proposal_attempts": 7,
+            "proposal_attempts_consumed": 7,
+            "effective_rounds_completed": 6,
+            "failure_categories": {"infra": 1},
+        },
+    )
+
+    validity = status["run_validity"]
+    assert validity["status"] == "valid"
+    assert validity["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+    assert validity["valid"] is True
+    assert validity["completed_requested_rounds"] is False
+    assert validity["complete"] is False
+    assert validity["stopped_reason"] == "api_balance_exhausted"
+    assert status["last_stop_reason"] == "api_balance_exhausted"
+    assert status["completed_requested_rounds"] is False
+    assert status["run_complete"] is False
+    assert status["run_completeness_status"] == validity["completeness_status"]
+
+
 def test_status_reports_infra_only_run_validity(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-infra",
@@ -1346,6 +1384,52 @@ def test_campaign_summary_reports_infra_only_run_validity(tmp_path: Path) -> Non
     assert summary["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
     assert summary["failure_categories"] == {"infra": 12}
     assert summary["stopped_reason"] == "proposal_attempt_limit_exhausted"
+
+
+def test_campaign_summary_reports_api_balance_partial_completion_aliases(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-partial-balance",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-partial-balance",
+            "n_experiments": 6,
+            "screened_experiments": 6,
+        },
+    )
+    recorder.write_status(
+        loop_status={
+            "requested_rounds": 12,
+            "total_rounds": 7,
+            "proposal_attempts": 7,
+            "proposal_attempts_consumed": 7,
+            "effective_rounds_completed": 6,
+            "failure_categories": {"infra": 1},
+        },
+    )
+    steps = [
+        replace(_step(f"/tmp/metrics-round-{idx}.json"), round_num=idx)
+        for idx in range(1, 7)
+    ]
+
+    summary = recorder.write_campaign_summary(
+        step_history=steps,
+        round_num=7,
+        champion=_champion(),
+        stopped_reason="api_balance_exhausted",
+    )
+
+    validity = summary["run_validity"]
+    assert summary["requested_rounds"] == 12
+    assert summary["effective_rounds_completed"] == 6
+    assert validity["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+    assert validity["completed_requested_rounds"] is False
+    assert validity["complete"] is False
+    assert summary["last_stop_reason"] == "api_balance_exhausted"
+    assert summary["completed_requested_rounds"] is False
+    assert summary["run_complete"] is False
+    assert summary["run_completeness_status"] == validity["completeness_status"]
 
 
 def test_status_reports_valid_partial_interrupted_run_completeness(

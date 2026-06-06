@@ -8,7 +8,7 @@ import signal
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import typer
 
@@ -107,16 +107,26 @@ class _RunAudit:
         exit_status: int,
         reason: str,
         signal_name: str | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> None:
+        status = "signal" if signal_name else "finished"
+        if (
+            not signal_name
+            and extra
+            and extra.get("campaign_exit_status") == "incomplete_infra_stop"
+        ):
+            status = "incomplete"
         self.payload.update(
             {
-                "status": "signal" if signal_name else "finished",
+                "status": status,
                 "ended_at": _utc_now_iso(),
                 "wrapper_exit_status": int(exit_status),
                 "wrapper_signal": signal_name,
                 "exit_reason": reason,
             }
         )
+        if extra:
+            self.payload.update(dict(extra))
         self._write()
         self._write_exit_txt()
 
@@ -138,6 +148,12 @@ class _RunAudit:
                 f"WRAPPER_EXIT_STATUS:{self.payload.get('wrapper_exit_status')}",
                 f"WRAPPER_SIGNAL:{self.payload.get('wrapper_signal') or ''}",
                 f"EXIT_REASON:{self.payload.get('exit_reason') or ''}",
+                f"CAMPAIGN_EXIT_STATUS:{self.payload.get('campaign_exit_status') or ''}",
+                f"RUN_VALIDITY_STATUS:{self.payload.get('run_validity_status') or ''}",
+                f"RUN_COMPLETE:{self.payload.get('run_complete')}",
+                "COMPLETED_REQUESTED_ROUNDS:"
+                f"{self.payload.get('completed_requested_rounds')}",
+                f"LAST_STOP_REASON:{self.payload.get('last_stop_reason') or ''}",
                 f"RUN_PID:{self.payload.get('run_pid')}",
                 f"STARTED_AT:{self.payload.get('started_at')}",
                 f"ENDED_AT:{self.payload.get('ended_at')}",
@@ -168,6 +184,107 @@ def _campaign_signal_handlers(manager):
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
+
+
+_INCOMPLETE_INFRA_STOP_EXIT_STATUS = 20
+
+
+def _wrapper_completion_from_campaign(
+    campaign_path: Path,
+) -> tuple[int, str, dict[str, Any]]:
+    for filename in ("campaign_summary.json", "status.json"):
+        payload = _read_json_mapping(campaign_path / filename)
+        if not payload:
+            continue
+        result = _wrapper_completion_from_payload(payload)
+        if result is not None:
+            return result
+    return 0, "command_returned", {"campaign_exit_status": "complete_or_unknown"}
+
+
+def _read_json_mapping(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _wrapper_completion_from_payload(
+    payload: Mapping[str, Any],
+) -> tuple[int, str, dict[str, Any]] | None:
+    raw_validity = payload.get("run_validity")
+    if not isinstance(raw_validity, Mapping):
+        return None
+    validity: Mapping[str, Any] = raw_validity
+    completed = _bool_value(
+        validity.get(
+            "completed_requested_rounds",
+            validity.get("complete", payload.get("run_complete")),
+        ),
+        default=False,
+    )
+    stopped_reason = str(
+        payload.get("last_stop_reason")
+        or payload.get("stopped_reason")
+        or validity.get("stopped_reason")
+        or ""
+    )
+    validity_reason = str(
+        validity.get("reason") or payload.get("run_validity_status") or ""
+    )
+    run_fields = {
+        "campaign_exit_status": "complete" if completed else "incomplete",
+        "run_validity_status": validity_reason,
+        "run_complete": completed,
+        "completed_requested_rounds": completed,
+        "last_stop_reason": stopped_reason,
+        "run_completeness_status": validity.get("completeness_status"),
+    }
+    if completed:
+        return 0, "command_returned", run_fields
+    if _is_incomplete_infra_stop(payload, validity, stopped_reason=stopped_reason):
+        run_fields["campaign_exit_status"] = "incomplete_infra_stop"
+        return (
+            _INCOMPLETE_INFRA_STOP_EXIT_STATUS,
+            f"incomplete_infra_stop:{validity_reason or stopped_reason}",
+            run_fields,
+        )
+    return 0, "command_returned", run_fields
+
+
+def _is_incomplete_infra_stop(
+    payload: Mapping[str, Any],
+    validity: Mapping[str, Any],
+    *,
+    stopped_reason: str,
+) -> bool:
+    if stopped_reason == "api_balance_exhausted":
+        return True
+    if str(payload.get("stop_category") or "") == "provider_error":
+        return True
+    provider_error = payload.get("provider_error")
+    if isinstance(provider_error, Mapping) and provider_error:
+        return True
+    try:
+        if int(validity.get("infra_failure_attempts") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
+def _bool_value(value: Any, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return True
+    if text in {"0", "false", "no", "n"}:
+        return False
+    return default
 
 
 def register_init_run_commands(app: typer.Typer) -> None:
@@ -625,7 +742,17 @@ def register_init_run_commands(app: typer.Typer) -> None:
             )
             raise
         else:
-            run_audit.finish(exit_status=0, reason="command_returned")
+            exit_status, exit_reason, exit_extra = _wrapper_completion_from_campaign(
+                campaign_path
+            )
+            run_audit.finish(
+                exit_status=exit_status,
+                reason=exit_reason,
+                extra=exit_extra,
+            )
+            if exit_status != 0:
+                typer.echo(f"Campaign incomplete: {exit_reason}", err=True)
+                raise typer.Exit(code=exit_status)
 
         state_data = mgr.get_state()
         typer.echo("Campaign finished.")

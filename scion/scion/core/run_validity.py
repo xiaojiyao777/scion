@@ -256,6 +256,35 @@ def build_run_validity(
     return record
 
 
+def apply_run_completion_aliases(
+    payload: Mapping[str, Any],
+    run_validity: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return ``payload`` with top-level aliases for run completion semantics."""
+    normalized = dict(payload)
+    validity = run_validity
+    if validity is None:
+        raw_validity = normalized.get("run_validity")
+        validity = raw_validity if isinstance(raw_validity, Mapping) else None
+    stopped_reason = normalized.get("stopped_reason")
+    if stopped_reason is None and validity is not None:
+        stopped_reason = validity.get("stopped_reason")
+    if stopped_reason is not None:
+        normalized["last_stop_reason"] = stopped_reason
+    if validity is None:
+        return normalized
+    completed = _coerce_bool(
+        validity.get("completed_requested_rounds"),
+        default=_coerce_bool(validity.get("complete"), default=False),
+    )
+    normalized["completed_requested_rounds"] = completed
+    normalized["run_complete"] = completed
+    completeness_status = validity.get("completeness_status")
+    if completeness_status is not None:
+        normalized["run_completeness_status"] = completeness_status
+    return normalized
+
+
 def _normalized_counts(value: Mapping[str, Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for key, raw_count in value.items():
@@ -362,6 +391,7 @@ __all__ = [
     "RUN_VALIDITY_VALID",
     "RUN_VALIDITY_VALID_BUT_INCOMPLETE",
     "RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED",
+    "apply_run_completion_aliases",
     "build_run_validity",
     "failure_category_for_run_validity",
     "step_failure_categories",

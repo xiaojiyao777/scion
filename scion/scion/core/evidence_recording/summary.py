@@ -18,7 +18,11 @@ from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
 )
 from scion.core.reason_code_groups import classify_reason_codes
-from scion.core.run_validity import build_run_validity, step_failure_categories
+from scion.core.run_validity import (
+    apply_run_completion_aliases,
+    build_run_validity,
+    step_failure_categories,
+)
 from scion.core.screening_visibility import (
     candidate_intent_counts_for_steps,
     candidate_intent_visibility_for_step,
@@ -562,6 +566,7 @@ class CampaignSummaryMixin:
                 value = self.campaign_loop_status.get(key)
                 if value is not None:
                     summary[key] = value
+        summary = apply_run_completion_aliases(summary)
         accounting = proposal_accounting_fields(
             campaign_dir=self.campaign_dir,
             steps=steps,
