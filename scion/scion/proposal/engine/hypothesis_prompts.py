@@ -367,6 +367,9 @@ def _split_hypothesis_target_intent_context(
             "hypothesis; it requires a clean branch/fork signal before formal "
             "hypothesis generation."
         )
+    task_lines.extend(
+        _material_difference_requirement_task_lines(context, preflight=True)
+    )
     user_prompt = (
         f"{dynamic_agentic_context + chr(10) + chr(10) if dynamic_agentic_context else ''}"
         + "\n".join(task_lines)
@@ -514,6 +517,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         if isinstance(raw_novelty_requirements, Mapping):
             novelty_requirements = raw_novelty_requirements
     target_intent_lines = _target_intent_binding_task_lines(context)
+    material_difference_lines = _material_difference_requirement_task_lines(context)
     if forced_surface:
         lines = [
             "## Task",
@@ -540,6 +544,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 "target_file declared by the forced surface."
             )
         lines.extend(target_intent_lines)
+        lines.extend(material_difference_lines)
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     if active_boundary:
@@ -570,6 +575,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         if "solver_design" in active_boundary:
             lines.extend(_solver_design_hypothesis_guidance(context))
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
+        lines.extend(material_difference_lines)
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")
     available_actions = str(
@@ -587,6 +593,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         ),
     ]
     lines.extend(target_intent_lines)
+    lines.extend(material_difference_lines)
     return "\n".join(lines) + "\n"
 
 
@@ -638,6 +645,47 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
         "before formal hypothesis generation."
     )
     return lines
+
+
+def _material_difference_requirement_task_lines(
+    context: Mapping[str, Any],
+    *,
+    preflight: bool = False,
+) -> list[str]:
+    requirement = context.get("material_difference_requirement")
+    if not isinstance(requirement, Mapping) or requirement.get("required") is False:
+        return []
+    if not (
+        requirement.get("required") is True
+        or str(requirement.get("record_id") or "").strip()
+        or str(requirement.get("required_for") or "").strip()
+    ):
+        return []
+    required_for = str(requirement.get("required_for") or "unspecified").strip()
+    source = str(requirement.get("requirement_source") or "scheduler_audit").strip()
+    if preflight:
+        return [
+            (
+                "Material-difference requirement is active for "
+                f"{required_for} from {source}. Select a target intent only "
+                "if the later formal hypothesis can state a concrete "
+                "material_difference against the listed nearby candidates."
+            )
+        ]
+    return [
+        (
+            "Material-difference requirement is active for "
+            f"{required_for} from {source}: the formal hypothesis must include "
+            "a non-empty `material_difference` object."
+        ),
+        (
+            "`material_difference` must contain compact generic changed "
+            "dimensions, a signature digest, or evidence-status deltas. "
+            "Do not satisfy it with generic phrases such as 'different "
+            "approach', 'new mechanism', 'materially different', or repeated "
+            "hypothesis prose."
+        ),
+    ]
 
 
 def _novelty_signature_task_lines(

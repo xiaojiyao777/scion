@@ -860,4 +860,66 @@ def _attach_material_difference_requirement_metadata(
     if not any(str(item.get("record_id") or "") == record_id for item in records):
         records.append(copy.deepcopy(record))
     summary["material_difference_audit_records"] = records
+    candidates = _material_difference_requirement_candidates(scheduler_audit)
+    if candidates:
+        summary["material_difference_requirement_candidates"] = candidates
     branch.branch_evidence_summary = summary
+
+
+def _material_difference_requirement_candidates(
+    scheduler_audit: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for key in (
+        "low_value_clean_fork_material_difference_candidates",
+        "plateau_gate_clean_fork_candidates",
+        "low_value_active_slot_release_candidates",
+    ):
+        values = scheduler_audit.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if not isinstance(value, Mapping):
+                continue
+            item = _material_difference_candidate_summary(value, source_key=key)
+            if not item:
+                continue
+            dedupe_key = (
+                str(item.get("branch_id") or ""),
+                str(
+                    item.get("release_reason")
+                    or item.get("scheduler_preference")
+                    or ""
+                ),
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            candidates.append(item)
+    return candidates
+
+
+def _material_difference_candidate_summary(
+    candidate: Mapping[str, Any],
+    *,
+    source_key: str,
+) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "branch_id": str(candidate.get("branch_id") or "").strip(),
+            "release_reason": str(candidate.get("release_reason") or "").strip(),
+            "scheduler_preference": str(
+                candidate.get("scheduler_preference") or ""
+            ).strip(),
+            "lineage_status": str(candidate.get("lineage_status") or "").strip(),
+            "branch_state": str(candidate.get("branch_state") or "").strip(),
+            "branch_code_status": str(
+                candidate.get("branch_code_status") or ""
+            ).strip(),
+            "screening_tier": str(candidate.get("screening_tier") or "").strip(),
+            "candidate_source": source_key,
+        }.items()
+        if value not in ("", None, [], {}, ())
+    }

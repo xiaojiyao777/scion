@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from scion.proposal.engine.telemetry_retry_projection import (
     schema_retry_feedback_json as _schema_retry_feedback_json,
@@ -25,6 +25,7 @@ _AGENTIC_ACTIVE_ALGORITHM_FACTS_CHARS = 16000
 _AGENTIC_ACTIVE_SOLVER_MECHANISMS_CHARS = 4000
 _AGENTIC_ACTIVE_SOLVER_MAP_RECEIPTS_CHARS = 48000
 _AGENTIC_RESUME_CONTEXT_CHARS = 16000
+_AGENTIC_MATERIAL_DIFFERENCE_REQUIREMENT_CHARS = 6000
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 96000
 _AGENTIC_FULL_ALGORITHM_FILE_READS_CHARS = 1_000_000
 _AGENTIC_CODE_FULL_ALGORITHM_FILE_READS_CHARS = 400_000
@@ -141,6 +142,25 @@ def _agentic_research_context_block(
             "solver facts, map receipts, and declared surface context as "
             "integration context for the final hypothesis.\n\n"
             f"{_bounded_json(target_placeholder, 3000)}"
+        )
+    material_requirement = _material_difference_requirement_projection(context)
+    if material_requirement:
+        rendered_material_requirement = _bounded_json(
+            material_requirement,
+            _AGENTIC_MATERIAL_DIFFERENCE_REQUIREMENT_CHARS,
+        )
+        parts.append(
+            "## Material Difference Requirement\n"
+            "Scheduler audit metadata requires the next hypothesis to make a "
+            "first-class material_difference claim before code generation. "
+            "This is proposal-visible governance context only, not a Decision "
+            "input. Use it to select or draft a hypothesis that is materially "
+            "different from the listed nearby branch candidates. The final "
+            "hypothesis must fill `material_difference` with compact generic "
+            "changed dimensions, signature digests, or evidence-status deltas; "
+            "generic phrases such as 'different approach', 'new mechanism', "
+            "or repeated hypothesis prose do not satisfy this requirement.\n\n"
+            f"{rendered_material_requirement}"
         )
     diagnosis = _agentic_research_diagnosis_projection(
         context.get("agentic_research_diagnosis"),
@@ -362,6 +382,84 @@ def _bounded_json(value: Any, max_chars: int) -> str:
     if len(rendered) <= max_chars:
         return rendered
     return rendered[: max(0, max_chars - 80)] + "\n... <truncated agentic context>"
+
+
+def _material_difference_requirement_projection(
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    value = context.get("material_difference_requirement")
+    if not isinstance(value, Mapping):
+        return {}
+    if value.get("required") is False:
+        return {}
+    if not (
+        value.get("required") is True
+        or str(value.get("record_id") or "").strip()
+        or str(value.get("required_for") or "").strip()
+    ):
+        return {}
+    return _drop_empty(
+        {
+            "schema_version": "proposal_material_difference_requirement.v1",
+            "required": True,
+            "record_id": value.get("record_id"),
+            "record_digest": value.get("record_digest"),
+            "record_type": value.get("record_type"),
+            "requirement_source": value.get("requirement_source"),
+            "reason": value.get("reason"),
+            "reason_codes": _bounded_string_list(value.get("reason_codes"), 12),
+            "required_for": value.get("required_for"),
+            "required_metadata_key": value.get("required_metadata_key"),
+            "candidate_count": value.get("candidate_count"),
+            "candidate_branch_ids": _bounded_string_list(
+                value.get("candidate_branch_ids"),
+                16,
+            ),
+            "candidate_release_reasons": _bounded_string_list(
+                value.get("candidate_release_reasons"),
+                16,
+            ),
+            "candidate_summaries": _bounded_candidate_summaries(
+                value.get("candidate_summaries")
+            ),
+            "required_output_field": "material_difference",
+            "required_output_contract": value.get("required_output_contract"),
+            "proposal_visibility_only": True,
+            "proposal_guidance_only": True,
+            "audit_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def _bounded_candidate_summaries(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in list(value)[:8]:
+        if not isinstance(item, Mapping):
+            continue
+        summaries.append(
+            _drop_empty(
+                {
+                    "branch_id": item.get("branch_id"),
+                    "release_reason": item.get("release_reason"),
+                    "scheduler_preference": item.get("scheduler_preference"),
+                    "lineage_status": item.get("lineage_status"),
+                    "branch_state": item.get("branch_state"),
+                    "branch_code_status": item.get("branch_code_status"),
+                    "screening_tier": item.get("screening_tier"),
+                    "candidate_source": item.get("candidate_source"),
+                }
+            )
+        )
+    return [item for item in summaries if item]
+
+
+def _bounded_string_list(value: Any, limit: int) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [str(item).strip() for item in list(value)[:limit] if str(item).strip()]
 
 
 def _preview_feedback_model_projection(value: Any, *, code_phase: bool) -> Any:

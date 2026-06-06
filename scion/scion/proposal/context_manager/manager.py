@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.forced_surface import validate_forced_surface_request
@@ -142,6 +142,107 @@ def _render_new_file_target_placeholder(target_file: str) -> str:
         "do not use exact_replace against this placeholder.\n"
         f"```python\n# new file placeholder for {target_file}\n```"
     )
+
+
+def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    raw_requirement = summary.get("material_difference_requirement")
+    if not isinstance(raw_requirement, Mapping):
+        return {}
+    candidates = [
+        _material_difference_candidate_projection(item)
+        for item in summary.get("material_difference_requirement_candidates", []) or []
+        if isinstance(item, Mapping)
+    ]
+    candidates = [item for item in candidates if item]
+    return {
+        key: value
+        for key, value in {
+            "schema_version": "proposal_material_difference_requirement.v1",
+            "required": True,
+            "record_id": str(raw_requirement.get("record_id") or "").strip(),
+            "record_digest": str(raw_requirement.get("record_digest") or "").strip(),
+            "record_type": str(raw_requirement.get("record_type") or "").strip(),
+            "requirement_source": str(
+                raw_requirement.get("requirement_source") or ""
+            ).strip(),
+            "reason": str(raw_requirement.get("reason") or "").strip(),
+            "reason_codes": _string_list(raw_requirement.get("reason_codes")),
+            "required_for": str(
+                raw_requirement.get("required_for")
+                or summary.get("material_difference_required_for")
+                or ""
+            ).strip(),
+            "required_metadata_key": str(
+                raw_requirement.get("required_metadata_key") or ""
+            ).strip(),
+            "candidate_count": _nonnegative_int(
+                raw_requirement.get("candidate_count")
+            ),
+            "candidate_branch_ids": _string_list(
+                raw_requirement.get("candidate_branch_ids")
+            ),
+            "candidate_release_reasons": sorted(
+                {
+                    str(item.get("release_reason") or "").strip()
+                    for item in candidates
+                    if str(item.get("release_reason") or "").strip()
+                }
+            ),
+            "candidate_summaries": candidates[:8],
+            "required_output_field": "material_difference",
+            "required_output_contract": (
+                "The next hypothesis must include a non-empty, non-boilerplate "
+                "material_difference object with compact generic dimensions, "
+                "signature digests, or evidence-status deltas."
+            ),
+            "proposal_visibility_only": True,
+            "proposal_guidance_only": True,
+            "audit_only": True,
+            "decision_features_excluded": True,
+        }.items()
+        if value not in ("", None, [], {}, ())
+    }
+
+
+def _material_difference_candidate_projection(
+    candidate: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "branch_id": str(candidate.get("branch_id") or "").strip(),
+            "release_reason": str(candidate.get("release_reason") or "").strip(),
+            "scheduler_preference": str(
+                candidate.get("scheduler_preference") or ""
+            ).strip(),
+            "lineage_status": str(candidate.get("lineage_status") or "").strip(),
+            "branch_state": str(candidate.get("branch_state") or "").strip(),
+            "branch_code_status": str(
+                candidate.get("branch_code_status") or ""
+            ).strip(),
+            "screening_tier": str(candidate.get("screening_tier") or "").strip(),
+            "candidate_source": str(candidate.get("candidate_source") or "").strip(),
+        }.items()
+        if value not in ("", None, [], {}, ())
+    }
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _nonnegative_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 class ContextManager:
@@ -475,6 +576,9 @@ class ContextManager:
         branch_followup_policy = render_branch_followup_policy(
             branch_followup_policy_payload
         )
+        material_difference_requirement = _proposal_material_difference_requirement(
+            branch
+        )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -524,6 +628,7 @@ class ContextManager:
                     {},
                 )
             ),
+            "material_difference_requirement": material_difference_requirement,
             "branch_followup_policy": branch_followup_policy,
             "branch_followup_policy_payload": branch_followup_policy_payload,
             "exploration_coverage": exploration_coverage,

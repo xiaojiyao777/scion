@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from scion.core.models import (
     CaseAggregateFeedback,
     ChampionState,
     Decision,
+    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     HypothesisProposal,
@@ -28,7 +30,11 @@ from scion.proposal.context.surfaces import (
     _build_research_surfaces_block,
 )
 from scion.proposal.context_manager import ContextManager
-from scion.proposal.engine import _split_hypothesis_context
+from scion.proposal.engine import (
+    _split_hypothesis_context,
+    _split_hypothesis_target_intent_context,
+)
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.research_surface_helpers import _problem_payload
 
 
@@ -214,6 +220,131 @@ def test_generic_v2_surface_prompt_has_no_cvrp_or_warehouse_core_terms(
         in code_ctx["operator_interface_spec"]
     )
     assert "problem-defined scalar values" in code_ctx["operator_interface_spec"]
+
+
+def test_branch_material_difference_requirement_reaches_context_prompt_and_manifest(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["description"] = "Generic allocation benchmark."
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "allocation_policy",
+            "kind": "policy",
+            "description": "Allocation choice policy.",
+            "targets": {
+                "files": ["policies/allocation.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+            "interface": {"required_functions": ["choose_allocation"]},
+        },
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "allocation.py").write_text(
+        "def choose_allocation(instance):\n    return None\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-current",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+        branch_evidence_summary={
+            "material_difference_required_for": "clean_fork_new_branch",
+            "material_difference_requirement": {
+                "schema_version": "material_difference_requirement.v1",
+                "record_type": "material_difference_requirement",
+                "record_id": "material_difference_requirement:generic-test",
+                "record_digest": "sha256:generic-test",
+                "requirement_source": "low_value_clean_fork_pressure",
+                "reason": "A clean fork must differ from a retained no-effect branch.",
+                "reason_codes": ["LOW_VALUE_CLEAN_FORK_PRESSURE"],
+                "required_for": "clean_fork_new_branch",
+                "required_metadata_key": "material_difference",
+                "candidate_count": 1,
+                "candidate_branch_ids": ["branch-retained"],
+            },
+            "material_difference_requirement_candidates": [
+                {
+                    "branch_id": "branch-retained",
+                    "release_reason": "retained_checkpoint_no_effect_current_head",
+                    "scheduler_preference": "clean_fork_requires_difference",
+                    "lineage_status": "retained",
+                    "branch_state": "explore",
+                    "branch_code_status": "current_head",
+                    "screening_tier": "no_effect",
+                    "candidate_source": "branch.branch_evidence_summary",
+                }
+            ],
+        },
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+    )
+
+    requirement = ctx["material_difference_requirement"]
+    assert requirement["schema_version"] == (
+        "proposal_material_difference_requirement.v1"
+    )
+    assert requirement["required"] is True
+    assert requirement["record_id"] == "material_difference_requirement:generic-test"
+    assert requirement["required_for"] == "clean_fork_new_branch"
+    assert requirement["candidate_release_reasons"] == [
+        "retained_checkpoint_no_effect_current_head"
+    ]
+    assert requirement["decision_features_excluded"] is True
+
+    target_blocks, target_user_prompt = _split_hypothesis_target_intent_context(ctx)
+    hypothesis_blocks, hypothesis_user_prompt = _split_hypothesis_context(ctx)
+    target_text = "\n\n".join(
+        str(block.get("text") or "") for block in target_blocks
+    ) + target_user_prompt
+    hypothesis_text = "\n\n".join(
+        str(block.get("text") or "") for block in hypothesis_blocks
+    ) + hypothesis_user_prompt
+
+    assert "## Material Difference Requirement" in target_text
+    assert "## Material Difference Requirement" in hypothesis_text
+    assert "material_difference_requirement:generic-test" in target_text
+    assert "retained_checkpoint_no_effect_current_head" in hypothesis_text
+    assert "non-empty `material_difference` object" in hypothesis_user_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-generic-material-difference",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=ctx,
+        observations=[],
+        call_index=1,
+        system_blocks=hypothesis_blocks,
+        user_prompt=hypothesis_user_prompt,
+    )
+
+    assert manifest["material_difference_requirement_visible"] is True
+    assert manifest["material_difference_requirement_visible_count"] == 1
+    assert (
+        manifest["material_difference_requirement_source"]
+        == "low_value_clean_fork_pressure"
+    )
+    assert "material_difference_requirement" not in {
+        field.name for field in fields(DecisionFeatures)
+    }
 
 
 def test_weak_positive_branch_context_includes_branch_dossier_questions(

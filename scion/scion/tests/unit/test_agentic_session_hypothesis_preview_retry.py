@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import fields
+
 from scion.core.models import (
     Decision,
+    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     MechanismChange,
@@ -16,6 +19,7 @@ from scion.proposal.engine import (
     _split_hypothesis_target_intent_context,
 )
 from scion.proposal.agentic_utils import _json_ready
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -53,6 +57,94 @@ class SequentialHypothesisToolClient:
                 raise AssertionError("generate_hypothesis called too many times")
             return self.payloads.pop(0)
         raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
+def test_material_difference_requirement_is_first_class_in_manifest() -> None:
+    requirement = {
+        "schema_version": "proposal_material_difference_requirement.v1",
+        "required": True,
+        "record_type": "material_difference_requirement",
+        "record_id": "material_difference_requirement:test123",
+        "record_digest": "sha256:test123",
+        "requirement_source": "low_value_clean_fork_pressure",
+        "reason_codes": [
+            "LOW_VALUE_CLEAN_FORK_PRESSURE",
+            "CLEAN_FORK_REQUIRES_MATERIAL_DIFFERENCE",
+        ],
+        "required_for": "clean_fork_new_branch",
+        "candidate_branch_ids": ["retained-no-effect"],
+        "candidate_release_reasons": [
+            "retained_checkpoint_no_effect_current_head"
+        ],
+        "candidate_summaries": [
+            {
+                "branch_id": "retained-no-effect",
+                "release_reason": (
+                    "retained_checkpoint_no_effect_current_head"
+                ),
+            }
+        ],
+        "required_output_contract": (
+            "The next hypothesis must include non-boilerplate material_difference."
+        ),
+        "decision_features_excluded": True,
+    }
+    context = {
+        "problem_summary": "Generic combinatorial optimization problem.",
+        "research_surfaces": "solver_design",
+        "champion_operators_code": "def solve(): pass",
+        "champion_stats": "champion v1",
+        "active_problem_boundary_surfaces": "solver_design",
+        "material_difference_requirement": requirement,
+    }
+
+    target_blocks, target_user = _split_hypothesis_target_intent_context(context)
+    hypothesis_blocks, hypothesis_user = _split_hypothesis_context(context)
+    target_text = "\n\n".join(
+        str(block.get("text") or "") for block in target_blocks
+    ) + target_user
+    hypothesis_text = "\n\n".join(
+        str(block.get("text") or "") for block in hypothesis_blocks
+    ) + hypothesis_user
+
+    assert "## Material Difference Requirement" in target_text
+    assert "## Material Difference Requirement" in hypothesis_text
+    assert "retained_checkpoint_no_effect_current_head" in target_text
+    assert "retained_checkpoint_no_effect_current_head" in hypothesis_text
+    assert "non-empty `material_difference` object" in hypothesis_user
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-material-difference",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=context,
+        observations=[],
+        call_index=1,
+        system_blocks=hypothesis_blocks,
+        user_prompt=hypothesis_user,
+    )
+
+    assert manifest["material_difference_requirement_visible"] is True
+    assert manifest["material_difference_requirement_visible_count"] == 1
+    assert (
+        manifest["material_difference_requirement_source"]
+        == "low_value_clean_fork_pressure"
+    )
+    requirement_ledger = manifest[
+        "material_difference_requirement_visibility_ledger"
+    ]
+    assert requirement_ledger["record_id"] == (
+        "material_difference_requirement:test123"
+    )
+    assert requirement_ledger["candidate_release_reason_count"] == 1
+    assert any(
+        entry.get("entry_kind") == "material_difference_requirement"
+        and entry.get("visibility_status") == "full"
+        for entry in manifest["visibility_ledger"]["entries"]
+    )
+    decision_fields = {field.name for field in fields(DecisionFeatures)}
+    assert "material_difference_requirement" not in decision_fields
+    assert "material_difference_requirement_visible" not in decision_fields
 
 
 def _vns_hypothesis(expected_telemetry: dict) -> HypothesisProposal:

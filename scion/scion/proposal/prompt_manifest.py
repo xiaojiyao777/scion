@@ -144,6 +144,14 @@ def build_api_visible_prompt_manifest(
             call_kind=call_kind,
         )
     )
+    material_difference_requirement_visibility_ledger = (
+        _material_difference_requirement_visibility_ledger(
+            safe_context,
+            provider_prompt_text=provider_prompt_text if rendered_available else "",
+            section_statuses=section_statuses,
+            call_kind=call_kind,
+        )
+    )
     system_chars = _system_text_chars(rendered_system_blocks)
     user_chars = len(rendered_user_prompt) if rendered_available else 0
     total_chars = system_chars + user_chars
@@ -152,6 +160,9 @@ def build_api_visible_prompt_manifest(
         section_records=section_records,
         included_observations=included_observations,
         code_file_visibility_ledger=code_file_visibility_ledger,
+        material_difference_requirement_visibility_ledger=(
+            material_difference_requirement_visibility_ledger
+        ),
     )
     projection_diagnostics = _projection_diagnostics(
         section_records=section_records,
@@ -228,6 +239,21 @@ def build_api_visible_prompt_manifest(
         "code_file_visibility_ledger": code_file_visibility_ledger,
         "hypothesis_target_source_visibility_ledger": (
             hypothesis_target_source_visibility_ledger
+        ),
+        "material_difference_requirement_visibility_ledger": (
+            material_difference_requirement_visibility_ledger
+        ),
+        "material_difference_requirement_visible": bool(
+            material_difference_requirement_visibility_ledger.get("visible")
+        ),
+        "material_difference_requirement_visible_count": (
+            1 if material_difference_requirement_visibility_ledger.get("visible") else 0
+        ),
+        "material_difference_requirement_source": (
+            material_difference_requirement_visibility_ledger.get(
+                "requirement_source",
+                "",
+            )
         ),
         "visibility_ledger": visibility_ledger,
         "visibility_ledger_summary": {
@@ -439,6 +465,74 @@ def _hypothesis_target_source_visibility_ledger(
                 if placeholder_visible and not target_source_required
                 else "not_visible"
             ),
+        }
+    )
+
+
+def _material_difference_requirement_visibility_ledger(
+    context: Mapping[str, Any],
+    *,
+    provider_prompt_text: str,
+    section_statuses: Mapping[str, Mapping[str, Any]],
+    call_kind: str,
+) -> dict[str, Any]:
+    if not str(call_kind).startswith("hypothesis"):
+        return {}
+    requirement = context.get("material_difference_requirement")
+    if not isinstance(requirement, Mapping) or requirement.get("required") is False:
+        return {}
+    if not (
+        requirement.get("required") is True
+        or str(requirement.get("record_id") or "").strip()
+        or str(requirement.get("required_for") or "").strip()
+    ):
+        return {}
+    section_name = "material_difference_requirement"
+    section_status = section_statuses.get(section_name, {})
+    record_id = str(requirement.get("record_id") or "").strip()
+    required_for = str(requirement.get("required_for") or "").strip()
+    requirement_source = str(requirement.get("requirement_source") or "").strip()
+    record_id_visible = bool(
+        record_id and _rendered_contains_literal(provider_prompt_text, record_id)
+    )
+    required_for_visible = bool(
+        required_for and _rendered_contains_literal(provider_prompt_text, required_for)
+    )
+    section_visible = section_status.get("status") == "included"
+    visible = bool(section_visible and (record_id_visible or required_for_visible))
+    candidate_release_reasons = _string_items(
+        requirement.get("candidate_release_reasons")
+    )
+    return _drop_empty(
+        {
+            "schema_version": (
+                "material-difference-requirement-visibility-ledger.v1"
+            ),
+            "call_kind": call_kind,
+            "required": True,
+            "source": "scheduler_audit_metadata",
+            "requirement_source": requirement_source,
+            "required_for": required_for,
+            "record_id": record_id,
+            "record_digest": requirement.get("record_digest"),
+            "reason_code_count": len(_string_items(requirement.get("reason_codes"))),
+            "candidate_count": requirement.get("candidate_count"),
+            "candidate_branch_count": len(
+                _string_items(requirement.get("candidate_branch_ids"))
+            ),
+            "candidate_release_reason_count": len(candidate_release_reasons),
+            "candidate_release_reasons": candidate_release_reasons,
+            "section_name": section_name,
+            "section_status": section_status.get("status", "missing"),
+            "section_char_count": section_status.get("char_count", 0),
+            "record_id_visible": record_id_visible,
+            "required_for_visible": required_for_visible,
+            "visible": visible,
+            "visibility_status": (
+                "first_class_section_visible" if visible else "not_visible"
+            ),
+            "decision_features_excluded": True,
+            "proposal_visibility_only": True,
         }
     )
 
@@ -823,6 +917,7 @@ def _visibility_ledger(
     section_records: list[Mapping[str, Any]],
     included_observations: list[Mapping[str, Any]],
     code_file_visibility_ledger: Mapping[str, Any],
+    material_difference_requirement_visibility_ledger: Mapping[str, Any],
 ) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     for section in section_records:
@@ -831,6 +926,12 @@ def _visibility_ledger(
         entries.append(_tool_visibility_ledger_entry(item))
     for record in _iter_code_visibility_records(code_file_visibility_ledger):
         entries.append(_code_file_visibility_ledger_entry(record))
+    if material_difference_requirement_visibility_ledger:
+        entries.append(
+            _material_difference_requirement_visibility_ledger_entry(
+                material_difference_requirement_visibility_ledger
+            )
+        )
 
     status_counts = {status: 0 for status in VISIBILITY_STATUS_VALUES}
     for entry in entries:
@@ -973,6 +1074,36 @@ def _code_file_visibility_ledger_entry(record: Mapping[str, Any]) -> dict[str, A
                 else ""
             ),
             "source_provenance": record.get("source_provenance"),
+        }
+    )
+
+
+def _material_difference_requirement_visibility_ledger_entry(
+    ledger: Mapping[str, Any],
+) -> dict[str, Any]:
+    section_name = str(ledger.get("section_name") or "material_difference_requirement")
+    visible = bool(ledger.get("visible"))
+    return _drop_empty(
+        {
+            "entry_kind": "material_difference_requirement",
+            "section_name": section_name,
+            "source": ledger.get("source") or "scheduler_audit_metadata",
+            "source_ref": ledger.get("record_id"),
+            "visibility_status": "full" if visible else "omitted",
+            "char_count": ledger.get("section_char_count", 0),
+            "token_estimate": _token_estimate(
+                _coerce_int(ledger.get("section_char_count")) or 0
+            ),
+            "digest": ledger.get("record_digest") or "",
+            "ref": ledger.get("record_id"),
+            "projected_to_section": section_name if visible else "",
+            "projection_ref": f"section:{section_name}" if visible else "",
+            "requirement_source": ledger.get("requirement_source"),
+            "required_for": ledger.get("required_for"),
+            "candidate_release_reason_count": ledger.get(
+                "candidate_release_reason_count"
+            ),
+            "decision_features_excluded": True,
         }
     )
 
@@ -1673,6 +1804,12 @@ def _normalize_path(value: Any) -> str:
 def _normalize_action(value: Any) -> str:
     text = str(value or "").strip()
     return "create_new" if text == "create" else text
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:

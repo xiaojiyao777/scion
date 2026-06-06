@@ -64,6 +64,82 @@ logger = logging.getLogger(__name__)
 _MATERIAL_DIFFERENCE_REQUIRED_MISSING = (
     "agent_quality_blocked:material_difference_required_missing"
 )
+_MATERIAL_DIFFERENCE_SIGNAL_FIELDS = frozenset(
+    {
+        "changed_dimension",
+        "changed_dimensions",
+        "dimension_delta",
+        "dimension_deltas",
+        "evidence_delta",
+        "evidence_deltas",
+        "evidence_status_delta",
+        "evidence_status_deltas",
+        "failure_signature_delta",
+        "failure_signature_deltas",
+        "intervention_type_delta",
+        "intervention_type_deltas",
+        "mechanism_family_delta",
+        "mechanism_family_deltas",
+        "signature",
+        "signature_digest",
+        "signature_digests",
+        "surface_delta",
+        "surface_deltas",
+        "weak_signal_delta",
+        "weak_signal_deltas",
+    }
+)
+_MATERIAL_DIFFERENCE_METADATA_FIELD_NAMES = frozenset(
+    {
+        "audit",
+        "audit_metadata",
+        "candidate_source",
+        "decision_features_excluded",
+        "llm_trace_excluded",
+        "metadata",
+        "policy",
+        "proposal_visibility_only",
+        "record_digest",
+        "record_id",
+        "record_type",
+        "required",
+        "required_for",
+        "required_metadata_key",
+        "required_output_contract",
+        "required_output_field",
+        "requirement_source",
+        "schema",
+        "schema_version",
+        "source",
+        "visibility",
+        "visibility_ledger",
+        "visibility_status",
+    }
+)
+_MATERIAL_DIFFERENCE_BOILERPLATE = frozenset(
+    {
+        "different",
+        "different approach",
+        "false",
+        "material difference",
+        "materially different",
+        "new mechanism",
+        "no change",
+        "novel",
+        "novel approach",
+        "required",
+        "same",
+        "true",
+        "unique",
+        "unchanged",
+        "not the same",
+        "tbd",
+        "unknown",
+        "yes",
+        "n/a",
+        "none",
+    }
+)
 
 
 def material_difference_requirement_metadata(
@@ -114,8 +190,10 @@ def material_difference_pre_code_block_reason(
         f"(source={source}, required_for={required_for}). Regenerate the "
         "hypothesis with a compact material_difference record containing "
         "changed generic dimensions, a signature digest, or evidence-status "
-        "differences. Do not use raw cross-branch text, LLM rationale, trace, "
-        "prompt, transcript, or repeated hypothesis prose."
+        "differences. Generic placeholders such as 'different approach' or "
+        "'new mechanism' do not satisfy the requirement. Do not use raw "
+        "cross-branch text, LLM rationale, trace, prompt, transcript, or "
+        "repeated hypothesis prose."
     )
 
 
@@ -185,7 +263,70 @@ def _material_requirement_required_for(value: Any) -> str:
 def _material_difference_record_present(value: Any) -> bool:
     if not isinstance(value, Mapping):
         return False
-    return any(item not in (None, "", [], {}, ()) for item in value.values())
+    return _material_difference_specific_signal_present(value)
+
+
+def _material_difference_specific_signal_present(
+    value: Any,
+    *,
+    depth: int = 0,
+    signal_context: bool = False,
+) -> bool:
+    if depth > 4:
+        return False
+    if isinstance(value, Mapping):
+        for raw_key, item in value.items():
+            key = _material_difference_key(raw_key)
+            if key in _MATERIAL_DIFFERENCE_SIGNAL_FIELDS:
+                if _material_difference_specific_signal_present(
+                    item,
+                    depth=depth + 1,
+                    signal_context=True,
+                ):
+                    return True
+                continue
+            if signal_context and not _material_difference_metadata_key(key):
+                if _material_difference_specific_signal_present(
+                    item,
+                    depth=depth + 1,
+                    signal_context=True,
+                ):
+                    return True
+            elif not signal_context:
+                if _material_difference_specific_signal_present(
+                    item,
+                    depth=depth + 1,
+                    signal_context=False,
+                ):
+                    return True
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(
+            _material_difference_specific_signal_present(
+                item,
+                depth=depth + 1,
+                signal_context=signal_context,
+            )
+            for item in value
+        )
+    if isinstance(value, str):
+        text = " ".join(value.strip().lower().split())
+        return bool(
+            signal_context
+            and text
+            and text not in _MATERIAL_DIFFERENCE_BOILERPLATE
+        )
+    return False
+
+
+def _material_difference_key(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _material_difference_metadata_key(key: str) -> bool:
+    if key in _MATERIAL_DIFFERENCE_METADATA_FIELD_NAMES:
+        return True
+    return key.endswith("_source") or key.endswith("_policy")
 
 
 @dataclass

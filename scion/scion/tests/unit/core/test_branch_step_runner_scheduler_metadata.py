@@ -192,6 +192,16 @@ def test_create_new_material_difference_requirement_reaches_branch_metadata() ->
                 "material_difference_required": True,
                 "material_difference_required_for": "clean_fork_new_branch",
                 "material_difference_requirement": requirement,
+                "low_value_clean_fork_material_difference_candidates": [
+                    {
+                        "branch_id": "retained-no-effect",
+                        "release_reason": (
+                            "retained_checkpoint_no_effect_current_head"
+                        ),
+                        "branch_code_status": "active_no_effect",
+                        "screening_tier": "no_effect",
+                    }
+                ],
             },
         ),
         branch=branch,
@@ -209,6 +219,19 @@ def test_create_new_material_difference_requirement_reaches_branch_metadata() ->
     ] == requirement
     assert branch.branch_evidence_summary["material_difference_audit_records"] == [
         requirement
+    ]
+    assert branch.branch_evidence_summary[
+        "material_difference_requirement_candidates"
+    ] == [
+        {
+            "branch_id": "retained-no-effect",
+            "release_reason": "retained_checkpoint_no_effect_current_head",
+            "branch_code_status": "active_no_effect",
+            "screening_tier": "no_effect",
+            "candidate_source": (
+                "low_value_clean_fork_material_difference_candidates"
+            ),
+        }
     ]
 
 

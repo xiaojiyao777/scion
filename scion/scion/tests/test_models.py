@@ -197,6 +197,118 @@ def test_material_difference_requirement_record_in_branch_metadata_blocks_before
     assert material_difference_pre_code_block_reason(hypothesis, branch) is None
 
 
+def test_material_difference_requirement_rejects_boilerplate_record_before_code():
+    branch = Branch(
+        branch_id="b1-boilerplate",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={
+            "material_difference_required": True,
+            "material_difference_required_for": "clean_fork_new_branch",
+        },
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+    )
+
+    hypothesis.material_difference = {"summary": "different approach"}
+    reason = material_difference_pre_code_block_reason(hypothesis, branch)
+    assert reason is not None
+    assert "material_difference_required_missing" in reason
+
+    hypothesis.material_difference = {
+        "changed_dimensions": ["search_budget_allocation"]
+    }
+    assert material_difference_pre_code_block_reason(hypothesis, branch) is None
+
+
+@pytest.mark.parametrize(
+    "material_difference",
+    [
+        {"schema_version": "material_difference.v1"},
+        {"required_for": "clean_fork_new_branch"},
+        {"decision_features_excluded": "true"},
+        {
+            "schema_version": "material_difference.v1",
+            "record_type": "material_difference",
+            "record_id": "material_difference:test",
+            "required_for": "clean_fork_new_branch",
+            "decision_features_excluded": True,
+            "proposal_visibility_only": True,
+        },
+    ],
+)
+def test_material_difference_requirement_rejects_metadata_only_record_before_code(
+    material_difference,
+):
+    branch = Branch(
+        branch_id="b1-metadata-only",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={
+            "material_difference_required": True,
+            "material_difference_required_for": "clean_fork_new_branch",
+        },
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+        material_difference=material_difference,
+    )
+
+    reason = material_difference_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "material_difference_required_missing" in reason
+
+
+@pytest.mark.parametrize(
+    "material_difference",
+    [
+        {"changed_dimension": "surface_selection"},
+        {"changed_dimensions": ["search_budget_allocation"]},
+        {"signature_digest": "abc123"},
+        {"signature": {"surface": "search_surface"}},
+        {"evidence_status_delta": ["activation_status_changed"]},
+        {"evidence_deltas": [{"status": "screening_effect_changed"}]},
+        {"mechanism_family_delta": "family_changed"},
+        {"intervention_type_delta": "intervention_changed"},
+        {"surface_delta": "search_surface_changed"},
+        {"failure_signature_delta": "failure_mode_changed"},
+        {"weak_signal_delta": "weak_activation_signal_changed"},
+    ],
+)
+def test_material_difference_requirement_accepts_whitelisted_signal_fields(
+    material_difference,
+):
+    branch = Branch(
+        branch_id="b1-whitelist",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_evidence_summary={
+            "material_difference_required": True,
+            "material_difference_required_for": "clean_fork_new_branch",
+        },
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a generic alternate surface behavior.",
+        change_locus="search_surface",
+        action="modify",
+        target_file="surfaces/search.py",
+        material_difference=material_difference,
+    )
+
+    assert material_difference_pre_code_block_reason(hypothesis, branch) is None
+
+
 def test_material_difference_not_required_or_present_does_not_block_code():
     branch = Branch(
         branch_id="b1",
