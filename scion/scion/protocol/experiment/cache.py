@@ -11,6 +11,10 @@ from typing import Any
 
 from scion.core.models import RunResult, SolverOutput
 
+_SOLVER_OUTPUT_FRAMEWORK_FIELDS = frozenset(
+    {"objective", "feasible", "runtime", "solution_payload"}
+)
+
 
 CHAMPION_RESULT_CACHE_KEY_SCHEMA = "scion.champion_result_cache.key.v1"
 CHAMPION_RESULT_CACHE_VALUE_SCHEMA = "scion.champion_result_cache.value.v1"
@@ -278,11 +282,19 @@ def _solver_output_to_payload(output: SolverOutput | None) -> dict[str, Any] | N
 
 
 def _solver_output_from_payload(payload: Mapping[str, Any]) -> SolverOutput:
-    normalized = dict(payload)
-    for key in ("assignment", "objective", "runtime"):
-        normalized[key] = dict(normalized.get(key) or {})
-    normalized["feasible"] = bool(normalized.get("feasible"))
-    return SolverOutput(**normalized)
+    solution_payload = payload.get("solution_payload")
+    if not isinstance(solution_payload, Mapping):
+        solution_payload = {
+            key: value
+            for key, value in payload.items()
+            if key not in _SOLVER_OUTPUT_FRAMEWORK_FIELDS
+        }
+    return SolverOutput(
+        objective=dict(payload.get("objective") or {}),
+        feasible=bool(payload.get("feasible")),
+        runtime=dict(payload.get("runtime") or {}),
+        solution_payload=dict(solution_payload),
+    )
 
 
 def _safe_file_digest(path: Path) -> str:

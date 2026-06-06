@@ -32,6 +32,7 @@ _SOLVER_WALL_CLOCK_GRACE_SEC = 2
 _ENV_PASSTHROUGH = {"PATH", "PYTHONPATH"}
 _ENV_PREFIX_PASSTHROUGH = ("SCION_",)
 _ENV_FIXED = {"PYTHONHASHSEED": "0"}
+_SOLVER_OUTPUT_FRAMEWORK_FIELDS = frozenset({"objective", "feasible", "runtime"})
 
 
 def _build_clean_env() -> dict[str, str]:
@@ -253,9 +254,9 @@ class LocalSubprocessRunner:
             try:
                 with open(out_path, 'r') as f:
                     raw = json.load(f)
+                if not isinstance(raw, dict):
+                    raise TypeError("solver output JSON must be an object")
                 solver_output = SolverOutput(
-                    vehicles=raw.get("vehicles", {}),
-                    assignment=raw.get("assignment", {}),
                     objective=raw.get("objective", {}),
                     feasible=raw.get("feasible", False),
                     runtime=(
@@ -263,6 +264,11 @@ class LocalSubprocessRunner:
                         if isinstance(raw.get("runtime", {}), dict)
                         else {}
                     ),
+                    solution_payload={
+                        key: value
+                        for key, value in raw.items()
+                        if key not in _SOLVER_OUTPUT_FRAMEWORK_FIELDS
+                    },
                 )
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 # JSON parse failure → treat as crash

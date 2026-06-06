@@ -119,10 +119,13 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
                 stderr="",
                 elapsed_ms=100,
                 output=SolverOutput(
-                    vehicles={},
-                    assignment={},
                     objective=raw["objective"],
                     feasible=True,
+                    solution_payload={
+                        key: value
+                        for key, value in raw.items()
+                        if key not in {"objective", "feasible", "runtime"}
+                    },
                 ),
                 output_path=output_path,
                 error_category=None,

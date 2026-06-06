@@ -578,11 +578,10 @@ class HypothesisRecord:
 @dataclass(frozen=True)
 class SolverOutput:
     """Parsed JSON output from a solver run."""
-    vehicles: Dict[str, Any]
-    assignment: Dict[str, str]
     objective: Dict[str, Any]
     feasible: bool
     runtime: Dict[str, Any] = field(default_factory=dict)
+    solution_payload: Dict[str, Any] = field(default_factory=dict)
 
 # --- Infrastructure ---
 

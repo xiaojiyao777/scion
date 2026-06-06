@@ -87,7 +87,6 @@ def _win_result(splits=1, cost=900, feasible=True) -> RunResult:
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
         ),
@@ -99,7 +98,6 @@ def _loss_result(splits=3, cost=1500, feasible=True) -> RunResult:
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
         ),
@@ -111,7 +109,6 @@ def _champ_result() -> RunResult:
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": 2, "total_cost": 1000},
             feasible=True,
         ),
@@ -126,8 +123,6 @@ def _solver_design_result(*, distance: float, elapsed_ms: int) -> RunResult:
         stderr="",
         elapsed_ms=elapsed_ms,
         output=SolverOutput(
-            vehicles={},
-            assignment={},
             objective={"fleet_violation": 0, "total_distance": distance},
             feasible=True,
             runtime={

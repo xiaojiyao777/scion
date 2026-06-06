@@ -170,6 +170,45 @@ def test_cache_key_changes_for_case_content_and_workspace_digest(tmp_path):
     assert cache.get(changed_workspace_key) is None
 
 
+def test_cache_preserves_solution_payload(tmp_path):
+    cache, base_key, _base_args = _primed_cache(tmp_path)
+    result = RunResult(
+        success=True,
+        exit_code=0,
+        stdout="out",
+        stderr="",
+        elapsed_ms=12,
+        output=SolverOutput(
+            objective={"score": 5},
+            feasible=True,
+            runtime={"observed": 5},
+            solution_payload={"artifact": {"items": [1, 2]}},
+        ),
+    )
+
+    assert cache.put(base_key, result)
+
+    cached = cache.get(base_key)
+    assert cached is not None
+    assert cached.output is not None
+    assert cached.output.solution_payload == {"artifact": {"items": [1, 2]}}
+
+
+def test_cache_restores_unknown_output_fields_as_solution_payload(tmp_path):
+    cache, base_key, _base_args = _primed_cache(tmp_path)
+    path = cache._entry_path(base_key["digest"])
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    output = payload["run_result"]["output"]
+    output.pop("solution_payload", None)
+    output["artifact"] = {"items": [3]}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    cached = cache.get(base_key)
+    assert cached is not None
+    assert cached.output is not None
+    assert cached.output.solution_payload == {"artifact": {"items": [3]}}
+
+
 def test_cache_source_files_stay_generic():
     terms = [
         "".join(("cv", "rp")),
@@ -260,8 +299,6 @@ def _run_result(*, score: int, elapsed_ms: int) -> RunResult:
         stderr="",
         elapsed_ms=elapsed_ms,
         output=SolverOutput(
-            vehicles={},
-            assignment={},
             objective={"score": score},
             feasible=True,
             runtime={"observed": score},

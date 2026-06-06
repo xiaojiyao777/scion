@@ -151,8 +151,6 @@ def _make_workspace(tmp_path):
 
 def _make_run_result(objective_dict):
     output = SolverOutput(
-        vehicles={},
-        assignment={},
         objective=objective_dict,
         feasible=True,
     )

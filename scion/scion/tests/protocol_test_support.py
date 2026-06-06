@@ -148,8 +148,6 @@ def _make_run_result(
         stderr="",
         elapsed_ms=elapsed_ms,
         output=SolverOutput(
-            vehicles={},
-            assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
             runtime=runtime or {},

@@ -232,8 +232,6 @@ def _mock_runner(
         with open(path, "w") as f:
             json.dump(data, f)
         sol_out = SolverOutput(
-            vehicles=data.get("vehicles", {}),
-            assignment=data.get("assignment", {}),
             objective=data.get("objective", {}),
             feasible=data.get("feasible", False),
             runtime=(
@@ -241,6 +239,11 @@ def _mock_runner(
                 if isinstance(data.get("runtime", {}), dict)
                 else {}
             ),
+            solution_payload={
+                key: value
+                for key, value in data.items()
+                if key not in {"objective", "feasible", "runtime"}
+            },
         )
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
@@ -272,8 +275,6 @@ def _sequential_runner(outputs: list[dict]) -> Any:
             stderr="",
             elapsed_ms=100,
             output=SolverOutput(
-                vehicles=data.get("vehicles", {}),
-                assignment=data.get("assignment", {}),
                 objective=data.get("objective", {}),
                 feasible=data.get("feasible", False),
                 runtime=(
@@ -281,6 +282,11 @@ def _sequential_runner(outputs: list[dict]) -> Any:
                     if isinstance(data.get("runtime", {}), dict)
                     else {}
                 ),
+                solution_payload={
+                    key: value
+                    for key, value in data.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
             ),
             output_path=path,
             error_category=None,

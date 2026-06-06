@@ -215,10 +215,13 @@ class TestStateleakCheck:
             with open(path, "w") as f:
                 json.dump(data, f)
             sol = SolverOutput(
-                vehicles=data["vehicles"],
-                assignment=data["assignment"],
                 objective=data["objective"],
                 feasible=True,
+                solution_payload={
+                    key: value
+                    for key, value in data.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
             )
             return RunResult(
                 success=True, exit_code=0, stdout="", stderr="",

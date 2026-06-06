@@ -60,7 +60,11 @@ class TestRunnerSuccess:
             p.add_argument("instance", nargs="?", default=""); p.add_argument("--seed"); p.add_argument("--time-limit")
             p.add_argument("--registry"); p.add_argument("--output")
             args = p.parse_args()
-            result = {"feasible": True, "objective": {"cost": 1.0}, "vehicles": {}, "assignment": {}}
+            result = {
+                "feasible": True,
+                "objective": {"cost": 1.0},
+                "solution": {"items": ["a"]},
+            }
             if args.output:
                 import pathlib
                 pathlib.Path(args.output).write_text(json.dumps(result))
@@ -73,6 +77,7 @@ class TestRunnerSuccess:
         assert result.error_category is None
         assert result.output is not None
         assert result.output.feasible is True
+        assert result.output.solution_payload == {"solution": {"items": ["a"]}}
         assert result.output_path is not None
         assert Path(result.output_path).exists()
 
@@ -87,7 +92,7 @@ class TestRunnerSuccess:
                 p.add_argument(name, default="")
             args = p.parse_args()
             with open(args.output, 'w') as f:
-                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+                json.dump({"solution":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
             """,
         )
@@ -106,7 +111,7 @@ class TestRunnerSuccess:
             args = p.parse_args()
             print("hello solver")
             with open(args.output, 'w') as f:
-                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+                json.dump({"solution":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
             """,
         )
@@ -200,8 +205,7 @@ class TestRunnerTimeout:
             pathlib.Path(args.output).write_text(json.dumps({
                 "feasible": True,
                 "objective": {"cost": 1.0},
-                "vehicles": {},
-                "assignment": {},
+                "solution": {},
             }))
             """,
         )
@@ -260,7 +264,7 @@ class TestEnvSanitization:
                 print("MISSING_DATA_ROOT", file=sys.stderr)
                 sys.exit(2)
             with open(args.output, 'w') as f:
-                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+                json.dump({"solution":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
             """,
         )
@@ -282,7 +286,7 @@ class TestEnvSanitization:
                 print("MISSING_SELECTED_SURFACE", file=sys.stderr)
                 sys.exit(1)
             with open(args.output, 'w') as f:
-                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+                json.dump({"solution":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
             """,
         )
@@ -312,7 +316,7 @@ class TestEnvSanitization:
                 print("LEAKED_SELECTED_SURFACE", file=sys.stderr)
                 sys.exit(1)
             with open(args.output, 'w') as f:
-                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+                json.dump({"solution":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
             """,
         )
