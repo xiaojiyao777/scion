@@ -2,6 +2,13 @@
 
 from .contract_test_support import *  # noqa: F401,F403
 
+
+def _gate_with_declared_complexity_terms(*terms: str) -> ContractGate:
+    spec = make_spec()
+    spec.complexity_scale_terms = list(terms)
+    return ContractGate(spec)
+
+
 class TestC9cComplexityBound:
     def test_pairwise_combinations_with_constant_k_pass(self, gate: ContractGate):
         code = (
@@ -82,6 +89,11 @@ class TestC9cComplexityBound:
         assert "permutations" in c9c.detail
 
     def test_product_over_two_problem_scale_iterables_fails(self, gate: ContractGate):
+        scale_gate = _gate_with_declared_complexity_terms(
+            "routes",
+            "customers",
+            "customer_ids",
+        )
         code = (
             "from itertools import product\n"
             "class Op:\n"
@@ -92,7 +104,7 @@ class TestC9cComplexityBound:
             "        return solution\n"
         )
         patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
-        result = gate.validate_patch(patch)
+        result = scale_gate.validate_patch(patch)
         c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
         assert not c9c.passed
         assert "product" in c9c.detail
@@ -123,6 +135,7 @@ class TestC9cComplexityBound:
         assert c9c.passed
 
     def test_itertools_module_alias_product_still_fails(self, gate: ContractGate):
+        scale_gate = _gate_with_declared_complexity_terms("routes", "customer_ids")
         code = (
             "import itertools as it\n"
             "class Op:\n"
@@ -132,7 +145,7 @@ class TestC9cComplexityBound:
             "        return solution\n"
         )
         patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
-        result = gate.validate_patch(patch)
+        result = scale_gate.validate_patch(patch)
         c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
         assert not c9c.passed
         assert "product" in c9c.detail
@@ -275,6 +288,11 @@ class TestC9cComplexityBound:
         assert c9c.passed
 
     def test_three_level_problem_scale_nested_loops_fail(self, gate: ContractGate):
+        scale_gate = _gate_with_declared_complexity_terms(
+            "routes",
+            "route",
+            "customer_ids",
+        )
         code = (
             "class Op:\n"
             "    def execute(self, solution, rng):\n"
@@ -285,7 +303,7 @@ class TestC9cComplexityBound:
             "        return solution\n"
         )
         patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
-        result = gate.validate_patch(patch)
+        result = scale_gate.validate_patch(patch)
         c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
         assert not c9c.passed
         assert "three-level" in c9c.detail

@@ -74,6 +74,68 @@ def test_c9c_uses_v2_surface_complexity_scale_terms_for_dummy_problem() -> None:
     assert unrelated.passed
 
 
+def test_c9c_default_generic_terms_do_not_embed_cvrp_vocabulary() -> None:
+    spec = ProblemSpec(
+        name="dummy",
+        root_dir="/tmp/dummy",
+        operator_categories=["dispatch_policy"],
+        search_space=SearchSpace(
+            editable=["policies/*.py"],
+            frozen=[],
+            import_whitelist=[],
+        ),
+    )
+    gate = ContractGate(spec)
+    patch = PatchProposal(
+        file_path="policies/dispatch.py",
+        action="modify",
+        code_content=(
+            "def select_limit(solution):\n"
+            "    for route in solution.routes:\n"
+            "        for customer in route:\n"
+            "            for other in solution.customer_ids:\n"
+            "                pass\n"
+            "    return 1\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch)
+
+    assert c9c.passed
+
+
+def test_c9c_reads_problem_spec_declared_complexity_scale_terms() -> None:
+    spec = ProblemSpec(
+        name="dummy",
+        root_dir="/tmp/dummy",
+        operator_categories=["dispatch_policy"],
+        complexity_scale_terms=["item_count"],
+        search_space=SearchSpace(
+            editable=["policies/*.py"],
+            frozen=[],
+            import_whitelist=[],
+        ),
+    )
+    gate = ContractGate(spec)
+    patch = PatchProposal(
+        file_path="policies/dispatch.py",
+        action="modify",
+        code_content=(
+            "def select_limit(item_count):\n"
+            "    for a in item_count:\n"
+            "        for b in item_count:\n"
+            "            for c in item_count:\n"
+            "                pass\n"
+            "    return 1\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch)
+
+    assert not c9c.passed
+    assert "three-level problem-scale nested loops" in c9c.detail
+
+
 def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_patterns() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     legacy = legacy_problem_spec_from_v1(spec_v1)

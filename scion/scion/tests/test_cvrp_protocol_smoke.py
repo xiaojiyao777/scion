@@ -7,12 +7,17 @@ from pathlib import Path
 
 import yaml
 
-from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
+from scion.config.problem import (
+    ProblemSpec,
+    ProtocolConfig,
+    SplitManifest,
+    SeedLedgerConfig,
+)
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
 from scion.core.termination import TerminationConfig
 from scion.core.models import ExperimentStage
-from scion.problem.bridge import bridge_problem_spec_v1
+from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
@@ -81,6 +86,14 @@ def test_cvrp_protocol_yaml_loads_and_is_disjoint() -> None:
     assert protocol.version == "0.4-cvrp-smoke"
     assert split_manifest.canary == ["data/tiny_canary.json"]
     assert seed_ledger.screening == [11, 29]
+
+
+def test_cvrp_smoke_problem_specs_keep_parameter_search_disabled() -> None:
+    legacy = ProblemSpec.from_yaml(CVRP_DIR / "problem.yaml")
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+
+    assert legacy.parameter_search.enabled is False
+    assert spec_v1.parameter_search.enabled is False
 
 
 def test_cvrp_local_subprocess_runner_outputs_route_objective() -> None:

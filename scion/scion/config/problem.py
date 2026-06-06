@@ -75,6 +75,8 @@ class ProblemSpec(_StrictBase):
     operator_categories: List[str]
     research_surfaces: List[Any] = Field(default_factory=list)
     runtime_failure_guidance: List[Any] = Field(default_factory=list)
+    complexity_scale_terms: List[str] = Field(default_factory=list)
+    legacy_complexity_scale_terms: List[str] = Field(default_factory=list)
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
     parameter_search: ParameterSearchConfig = Field(default_factory=ParameterSearchConfig)

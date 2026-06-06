@@ -58,23 +58,6 @@ from scion.problem.providers import (
     active_subject_policy_payload,
 )
 
-# Legacy fallback for pre-research_surfaces-v2 problem specs.  New v2 surfaces
-# should declare bounds.complexity_scale_terms instead of relying on these names.
-_LEGACY_PROBLEM_SCALE_NAMES = frozenset(
-    {
-        "routes",
-        "route",
-        "customers",
-        "customer_ids",
-        "nodes",
-        "node_ids",
-        "orders",
-        "vehicles",
-        "vehicle_ids",
-    }
-)
-
-
 def _normalize_source_overrides(
     source_overrides: Mapping[str, str] | None,
 ) -> dict[str, str]:
@@ -105,6 +88,12 @@ def _syntax_source_excerpt(source: str, *, max_lines: int = 5) -> str:
     if len(lines) > max_lines:
         excerpt.append("...")
     return " | ".join(excerpt)
+
+
+def _normalize_complexity_scale_terms(terms: Any) -> frozenset[str]:
+    if isinstance(terms, str):
+        terms = (terms,)
+    return frozenset(str(term).strip() for term in (terms or ()) if str(term).strip())
 
 
 class ContractGate:
@@ -640,16 +629,22 @@ class ContractGate:
             return frozenset(), surface_error
         bounds = getattr(surface, "bounds", None) if surface is not None else None
         if bounds is not None:
-            terms = getattr(bounds, "complexity_scale_terms", None)
-            return (
-                frozenset(
-                    str(term).strip()
-                    for term in (terms or ())
-                    if str(term).strip()
-                ),
-                None,
+            terms = _normalize_complexity_scale_terms(
+                getattr(bounds, "complexity_scale_terms", None)
             )
-        return _LEGACY_PROBLEM_SCALE_NAMES, None
+            if terms:
+                return terms, None
+        spec_terms = _normalize_complexity_scale_terms(
+            getattr(self._spec, "complexity_scale_terms", None)
+        )
+        if spec_terms:
+            return spec_terms, None
+        legacy_terms = _normalize_complexity_scale_terms(
+            getattr(self._spec, "legacy_complexity_scale_terms", None)
+        )
+        if legacy_terms:
+            return legacy_terms, None
+        return frozenset(), None
 
     @staticmethod
     def _selected_surface_name(
