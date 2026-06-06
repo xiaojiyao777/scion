@@ -669,7 +669,9 @@ def _material_difference_requirement_task_lines(
                 "Material-difference requirement is active for "
                 f"{required_for} from {source}. Select a target intent only "
                 "if the later formal hypothesis can state a concrete "
-                "material_difference against the listed nearby candidates."
+                "material_difference against the listed nearby candidates "
+                "using structural anchors such as `changed_dimensions`, "
+                "`signature_digest`, or `evidence_status_delta`."
             )
         ]
     return [
@@ -679,11 +681,13 @@ def _material_difference_requirement_task_lines(
             "a non-empty `material_difference` object."
         ),
         (
-            "`material_difference` must contain compact generic changed "
-            "dimensions, a signature digest, or evidence-status deltas. "
+            "`material_difference` must contain compact generic structural "
+            "anchors such as `changed_dimensions`, `signature_digest`, or "
+            "`evidence_status_delta`. "
             "Do not satisfy it with generic phrases such as 'different "
-            "approach', 'new mechanism', 'materially different', or repeated "
-            "hypothesis prose."
+            "approach', 'new mechanism', 'materially different', repeated "
+            "hypothesis prose, or descriptive-only fields such as "
+            "`differs_from` or `effect_path`."
         ),
     ]
 

@@ -221,6 +221,14 @@ def test_material_difference_requirement_rejects_boilerplate_record_before_code(
     assert "material_difference_required_missing" in reason
 
     hypothesis.material_difference = {
+        "differs_from": "nearby sibling attempt",
+        "effect_path": "different descriptive effect path",
+    }
+    reason = material_difference_pre_code_block_reason(hypothesis, branch)
+    assert reason is not None
+    assert "material_difference_required_missing" in reason
+
+    hypothesis.material_difference = {
         "changed_dimensions": ["search_budget_allocation"]
     }
     assert material_difference_pre_code_block_reason(hypothesis, branch) is None

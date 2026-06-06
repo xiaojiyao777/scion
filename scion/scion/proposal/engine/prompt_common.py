@@ -157,9 +157,13 @@ def _agentic_research_context_block(
             "input. Use it to select or draft a hypothesis that is materially "
             "different from the listed nearby branch candidates. The final "
             "hypothesis must fill `material_difference` with compact generic "
-            "changed dimensions, signature digests, or evidence-status deltas; "
+            "structural anchors such as `changed_dimensions`, "
+            "`signature_digest`, or `evidence_status_delta`; "
             "generic phrases such as 'different approach', 'new mechanism', "
-            "or repeated hypothesis prose do not satisfy this requirement.\n\n"
+            "or repeated hypothesis prose do not satisfy this requirement. "
+            "Descriptive-only fields such as `differs_from` or `effect_path` "
+            "are not enough unless accompanied by one of the structural "
+            "anchor fields.\n\n"
             f"{rendered_material_requirement}"
         )
     contract_preview_signature = context.get("contract_preview_failure_signature")

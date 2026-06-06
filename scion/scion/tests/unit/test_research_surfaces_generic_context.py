@@ -326,6 +326,15 @@ def test_branch_material_difference_requirement_reaches_context_prompt_and_manif
     assert "material_difference_requirement:generic-test" in target_text
     assert "retained_checkpoint_no_effect_current_head" in hypothesis_text
     assert "non-empty `material_difference` object" in hypothesis_user_prompt
+    for field_name in (
+        "changed_dimensions",
+        "signature_digest",
+        "evidence_status_delta",
+    ):
+        assert field_name in target_text
+        assert field_name in hypothesis_text
+    assert "differs_from" in hypothesis_text
+    assert "effect_path" in hypothesis_text
 
     manifest = build_api_visible_prompt_manifest(
         session_id="session-generic-material-difference",
@@ -349,7 +358,7 @@ def test_branch_material_difference_requirement_reaches_context_prompt_and_manif
     }
 
 
-def test_contract_preview_failure_signature_reaches_code_prompt_and_manifest(
+def test_contract_preview_failure_signature_replays_to_target_code_prompts_and_manifests(
     tmp_path: Path,
 ) -> None:
     payload = _problem_payload(str(tmp_path))
@@ -421,6 +430,61 @@ def test_contract_preview_failure_signature_reaches_code_prompt_and_manifest(
         failure_stage="code_generation",
     )
 
+    hypothesis_ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+    )
+    assert (
+        hypothesis_ctx["contract_preview_failure_signature"]["source"]
+        == "branch.repeated_contract_failures"
+    )
+
+    target_blocks, target_user_prompt = _split_hypothesis_target_intent_context(
+        hypothesis_ctx
+    )
+    hypothesis_blocks, hypothesis_user_prompt = _split_hypothesis_context(
+        hypothesis_ctx
+    )
+    target_text = "\n\n".join(
+        str(block.get("text") or "") for block in target_blocks
+    ) + target_user_prompt
+    hypothesis_text = "\n\n".join(
+        str(block.get("text") or "") for block in hypothesis_blocks
+    ) + hypothesis_user_prompt
+
+    for prompt_text in (target_text, hypothesis_text):
+        assert "## Contract Preview Failure Signature" in prompt_text
+        assert "hard negative proposal feedback only" in prompt_text
+        assert "object_model_no_dynamic_private_attrs" in prompt_text
+        assert "same_target_check_mechanism_signature" in prompt_text
+        assert "reselect the target" in prompt_text
+        assert "explicit repair of this signature" in prompt_text
+        assert "Do not repeat the same target/check/mechanism write pattern" in (
+            prompt_text
+        )
+        assert "raw trace mentions" not in prompt_text
+        assert "generated private runtime state" not in prompt_text
+
+    target_manifest = build_api_visible_prompt_manifest(
+        session_id="session-contract-preview-signature-target",
+        phase="hypothesis",
+        call_kind="hypothesis_target_intent",
+        prompt_context=hypothesis_ctx,
+        observations=[],
+        call_index=1,
+        system_blocks=target_blocks,
+        user_prompt=target_user_prompt,
+    )
+    assert (
+        target_manifest["section_statuses"]["contract_preview_failure_signature"][
+            "status"
+        ]
+        == "included"
+    )
+
     ctx = ContextManager().build_code_context(
         branch=branch,
         hypothesis=hypothesis,
@@ -447,6 +511,8 @@ def test_contract_preview_failure_signature_reaches_code_prompt_and_manifest(
     assert "hard negative proposal feedback only" in prompt_text
     assert "object_model_no_dynamic_private_attrs" in prompt_text
     assert "same_target_check_mechanism_signature" in prompt_text
+    assert "repair the implementation" in prompt_text
+    assert "forbidden pattern is absent" in prompt_text
     assert "raw trace mentions" not in prompt_text
     assert "generated private runtime state" not in prompt_text
 

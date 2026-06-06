@@ -189,11 +189,12 @@ def material_difference_pre_code_block_reason(
         "material_difference is required before code generation "
         f"(source={source}, required_for={required_for}). Regenerate the "
         "hypothesis with a compact material_difference record containing "
-        "changed generic dimensions, a signature digest, or evidence-status "
-        "differences. Generic placeholders such as 'different approach' or "
-        "'new mechanism' do not satisfy the requirement. Do not use raw "
-        "cross-branch text, LLM rationale, trace, prompt, transcript, or "
-        "repeated hypothesis prose."
+        "structural anchors such as `changed_dimensions`, "
+        "`signature_digest`, or `evidence_status_delta`. Generic "
+        "placeholders such as 'different approach' or 'new mechanism', and "
+        "descriptive-only fields such as `differs_from` or `effect_path`, do "
+        "not satisfy the requirement. Do not use raw cross-branch text, LLM "
+        "rationale, trace, prompt, transcript, or repeated hypothesis prose."
     )
 
 
