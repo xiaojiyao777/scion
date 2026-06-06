@@ -24,6 +24,30 @@ def _research_process_guidance_audit() -> dict:
     }
 
 
+def _run_validity_completion_projection(payload: dict) -> dict:
+    validity = payload["run_validity"]
+    return {
+        "status": validity["status"],
+        "reason": validity["reason"],
+        "valid": validity["valid"],
+        "requested_rounds": validity["requested_rounds"],
+        "effective_rounds_completed": validity["effective_rounds_completed"],
+        "completed_requested_rounds": validity["completed_requested_rounds"],
+        "complete": validity["complete"],
+        "interrupted": validity["interrupted"],
+        "partial_in_flight": validity["partial_in_flight"],
+        "completeness_status": validity["completeness_status"],
+        "stopped_reason": validity["stopped_reason"],
+        "failure_categories": validity["failure_categories"],
+        "infra_failure_attempts": validity["infra_failure_attempts"],
+        "noninfra_failure_attempts": validity["noninfra_failure_attempts"],
+        "top_run_validity_status": payload["run_validity_status"],
+        "top_completed_requested_rounds": payload["completed_requested_rounds"],
+        "top_run_complete": payload["run_complete"],
+        "top_run_completeness_status": payload["run_completeness_status"],
+    }
+
+
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
@@ -1332,6 +1356,8 @@ def test_status_reports_infra_only_run_validity(tmp_path: Path) -> None:
     assert status["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
     assert status["run_validity"]["infra_failure_attempts"] == 12
     assert status["run_validity_status"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+    assert status["run_validity"]["partial_in_flight"] is False
+    assert status["run_validity"]["completeness_status"] == "interrupted_incomplete"
 
 
 def test_campaign_summary_reports_infra_only_run_validity(tmp_path: Path) -> None:
@@ -1382,8 +1408,70 @@ def test_campaign_summary_reports_infra_only_run_validity(tmp_path: Path) -> Non
 
     assert summary["run_validity"]["status"] == "invalid"
     assert summary["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+    assert summary["run_validity"]["partial_in_flight"] is False
+    assert summary["run_validity"]["completeness_status"] == "interrupted_incomplete"
     assert summary["failure_categories"] == {"infra": 12}
     assert summary["stopped_reason"] == "proposal_attempt_limit_exhausted"
+
+
+def test_status_and_summary_consistent_for_zero_candidate_api_balance_infra_only(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-zero-candidate-balance",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-zero-candidate-balance",
+            "n_experiments": 0,
+            "screened_experiments": 0,
+        },
+    )
+    loop_status = {
+        "requested_rounds": 12,
+        "total_rounds": 1,
+        "proposal_attempts": 1,
+        "proposal_attempts_consumed": 1,
+        "effective_rounds_completed": 0,
+        "failure_categories": {"infra": 1},
+    }
+
+    status = recorder.write_status(
+        stopped_reason="api_balance_exhausted",
+        loop_status=loop_status,
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Provider quota failed before proposal completion."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal",
+        failure_detail=(
+            "agentic_proposal:hypothesis_generation_failed: Transient provider "
+            "error: Error code: 403 - account balance is insufficient"
+        ),
+        counts_toward_max_rounds=False,
+        attempt_kind="proposal_block",
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="api_balance_exhausted",
+    )
+
+    assert _run_validity_completion_projection(status) == (
+        _run_validity_completion_projection(summary)
+    )
+    assert status["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+    assert status["run_validity"]["partial_in_flight"] is False
+    assert status["run_validity"]["completeness_status"] == "interrupted_incomplete"
+    assert summary["run_validity"]["partial_in_flight"] is False
+    assert summary["run_completeness_status"] == "interrupted_incomplete"
 
 
 def test_campaign_summary_reports_api_balance_partial_completion_aliases(
@@ -1426,10 +1514,58 @@ def test_campaign_summary_reports_api_balance_partial_completion_aliases(
     assert validity["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
     assert validity["completed_requested_rounds"] is False
     assert validity["complete"] is False
+    assert validity["partial_in_flight"] is True
+    assert validity["completeness_status"] == "partial_interrupted"
     assert summary["last_stop_reason"] == "api_balance_exhausted"
     assert summary["completed_requested_rounds"] is False
     assert summary["run_complete"] is False
     assert summary["run_completeness_status"] == validity["completeness_status"]
+
+
+def test_status_and_summary_consistent_for_partial_api_balance_interrupted(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-partial-balance",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-partial-balance",
+            "n_experiments": 6,
+            "screened_experiments": 6,
+        },
+    )
+    loop_status = {
+        "requested_rounds": 12,
+        "total_rounds": 7,
+        "proposal_attempts": 7,
+        "proposal_attempts_consumed": 7,
+        "effective_rounds_completed": 6,
+        "failure_categories": {"infra": 1},
+    }
+
+    status = recorder.write_status(
+        stopped_reason="api_balance_exhausted",
+        loop_status=loop_status,
+    )
+    steps = [
+        replace(_step(f"/tmp/metrics-round-{idx}.json"), round_num=idx)
+        for idx in range(1, 7)
+    ]
+    summary = recorder.write_campaign_summary(
+        step_history=steps,
+        round_num=7,
+        champion=_champion(),
+        stopped_reason="api_balance_exhausted",
+    )
+
+    assert _run_validity_completion_projection(status) == (
+        _run_validity_completion_projection(summary)
+    )
+    assert status["run_validity"]["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
+    assert status["run_validity"]["partial_in_flight"] is True
+    assert status["run_validity"]["completeness_status"] == "partial_interrupted"
+    assert summary["run_validity"]["partial_in_flight"] is True
+    assert summary["run_completeness_status"] == "partial_interrupted"
 
 
 def test_status_reports_valid_partial_interrupted_run_completeness(

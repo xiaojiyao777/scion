@@ -170,7 +170,7 @@ def build_run_validity(
             "complete",
         }
     )
-    partial = _coerce_bool(
+    partial_hint = _coerce_bool(
         partial_in_flight,
         default=bool(not completed_requested and interrupted),
     )
@@ -206,6 +206,15 @@ def build_run_validity(
         reason = RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS
         status = "invalid"
         valid = False
+
+    if completed_requested:
+        partial = False
+    elif reason == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED:
+        partial = True
+    elif status == "invalid":
+        partial = False
+    else:
+        partial = partial_hint
 
     record: dict[str, Any] = {
         "schema_version": "run-validity.v1",
