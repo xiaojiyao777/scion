@@ -1,15 +1,16 @@
 """V5_solution_consistency: verify output solution is internally consistent.
 
-Runs the candidate solver on a canary case and checks that the output
-solution has correct internal structure (assignment ↔ vehicle membership).
-Classifies failures as ENV / CANDIDATE / UNKNOWN for diagnosis.
+Runs the candidate solver on a canary case and delegates problem-specific
+output consistency to the selected adapter or optional problem oracle hook.
 
 Semantic rename: was V5_solution_consistency in v0.2, now V5_solution_consistency (W11).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import sys
 import time
 from typing import TYPE_CHECKING, Literal, Optional
 
@@ -102,17 +103,7 @@ def check_state_mutation(
     if adapter is not None:
         return _check_via_adapter(adapter, raw, canary, t0)
 
-    issues = _check_solution_consistency(raw)
-    if issues:
-        diag = _classify_consistency_failure(issues)
-        detail = json.dumps({
-            "check": "solution_consistency",
-            "diagnosis": diag,
-            "issues": issues,
-        })
-        return _cr(False, detail, t0, diagnosis=diag)
-
-    return _cr(True, "solution internally consistent after solver run", t0)
+    return _check_via_oracle(problem_spec, raw, canary, t0)
 
 
 def _check_via_adapter(
@@ -143,69 +134,114 @@ def _check_via_adapter(
     )
 
 
-def _classify_consistency_failure(
-    issues: list[str],
+def _check_via_oracle(
+    problem_spec: ProblemSpec,
+    raw: dict,
+    canary: str,
+    t0: int,
+) -> CheckResult:
+    oracle_path = _oracle_file_path(problem_spec)
+    if not oracle_path or not os.path.isfile(oracle_path):
+        return _cr(
+            True,
+            "skipped: no adapter or oracle.check_solver_output_consistency hook configured",
+            t0,
+        )
+
+    try:
+        oracle = _import_oracle_file(oracle_path)
+    except Exception as exc:
+        return _cr(False, f"cannot import legacy oracle: {exc}", t0, diagnosis="ENV")
+
+    consistency_check = getattr(oracle, "check_solver_output_consistency", None)
+    if consistency_check is None:
+        return _cr(
+            True,
+            "skipped: no adapter or oracle.check_solver_output_consistency hook configured",
+            t0,
+        )
+
+    try:
+        consistency = consistency_check(raw, canary)
+    except Exception as exc:
+        return _cr(False, f"legacy consistency hook error: {exc}", t0, diagnosis="UNKNOWN")
+
+    if _legacy_result_passed(consistency):
+        return _cr(True, "oracle solution consistency ok", t0)
+
+    diagnosis = _legacy_result_diagnosis(consistency)
+    reasons = _legacy_result_reasons(consistency)
+    detail = json.dumps(
+        {
+            "check": "solution_consistency",
+            "diagnosis": diagnosis,
+            "issues": reasons or ["legacy consistency hook failed"],
+        }
+    )
+    return _cr(False, detail, t0, diagnosis=diagnosis)
+
+
+def _oracle_file_path(problem_spec: ProblemSpec) -> str:
+    oracle_path = getattr(problem_spec, "oracle_path", "") or ""
+    if not oracle_path:
+        return ""
+    if os.path.isabs(oracle_path):
+        return os.path.abspath(oracle_path)
+    return os.path.abspath(os.path.join(problem_spec.root_dir, oracle_path))
+
+
+def _import_oracle_file(oracle_path: str) -> object:
+    oracle_dir = os.path.dirname(oracle_path)
+    saved = list(sys.path)
+    if oracle_dir not in sys.path:
+        sys.path.insert(0, oracle_dir)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_scion_solution_consistency_oracle",
+            oracle_path,
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load oracle module from {oracle_path}")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_scion_solution_consistency_oracle"] = mod
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        sys.path[:] = saved
+
+
+def _legacy_result_passed(value: object) -> bool:
+    if isinstance(value, dict) and "passed" in value:
+        return bool(value["passed"])
+    return bool(getattr(value, "passed", value))
+
+
+def _legacy_result_reasons(value: object) -> list[str]:
+    if isinstance(value, dict):
+        raw_reasons = (
+            value.get("reasons")
+            or value.get("violations")
+            or value.get("issues")
+            or ()
+        )
+    else:
+        raw_reasons = (
+            getattr(value, "reasons", None)
+            or getattr(value, "violations", None)
+            or getattr(value, "issues", None)
+            or ()
+        )
+    return [str(reason) for reason in list(raw_reasons)[:3]]
+
+
+def _legacy_result_diagnosis(
+    value: object,
 ) -> Literal["ENV", "CANDIDATE", "UNKNOWN"]:
-    """Classify consistency failure into ENV / CANDIDATE / UNKNOWN.
-
-    - ENV: infrastructure issue (empty output, file read error)
-    - CANDIDATE: operator-induced corruption (duplicate assignments, consistency mismatch)
-    - UNKNOWN: can't determine root cause
-    """
-    candidate_patterns = ["multiple vehicles", "assignment says", "not in assignment", "not in any vehicle"]
-    for issue in issues:
-        if any(p in issue for p in candidate_patterns):
-            return "CANDIDATE"
-    env_patterns = ["empty vehicle"]
-    for issue in issues:
-        if any(p in issue for p in env_patterns):
-            return "ENV"
-    return "UNKNOWN"
-
-
-def _check_solution_consistency(raw: dict) -> list[str]:
-    """Check that the output solution is internally consistent."""
-    issues: list[str] = []
-
-    solution = raw.get("solution")
-    if not isinstance(solution, dict) or not (
-        "assignment" in solution or "vehicles" in solution
-    ):
-        solution = raw
-    assignment = solution.get("assignment", {})
-    vehicles = solution.get("vehicles", {})
-
-    if not assignment and not vehicles:
-        return issues
-
-    order_to_vehicle: dict[str, str] = {}
-    for vid, vehicle in vehicles.items():
-        for oid in vehicle.get("order_ids", []):
-            if oid in order_to_vehicle:
-                issues.append(
-                    f"order {oid} in multiple vehicles: "
-                    f"{order_to_vehicle[oid]} and {vid}"
-                )
-            order_to_vehicle[oid] = vid
-
-    for oid, vid in assignment.items():
-        if oid not in order_to_vehicle:
-            issues.append(f"order {oid} in assignment but not in any vehicle")
-        elif order_to_vehicle[oid] != vid:
-            issues.append(
-                f"order {oid}: assignment says {vid} but found in "
-                f"{order_to_vehicle[oid]}"
-            )
-
-    for oid, vid in order_to_vehicle.items():
-        if oid not in assignment:
-            issues.append(f"order {oid} in vehicle {vid} but not in assignment")
-
-    for vid, vehicle in vehicles.items():
-        if not vehicle.get("order_ids"):
-            issues.append(f"empty vehicle {vid} in output")
-
-    return issues
+    if isinstance(value, dict):
+        raw = value.get("diagnosis")
+    else:
+        raw = getattr(value, "diagnosis", None)
+    return raw if raw in {"ENV", "CANDIDATE", "UNKNOWN"} else "CANDIDATE"
 
 
 def _cr(

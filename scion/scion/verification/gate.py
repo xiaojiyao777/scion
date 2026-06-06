@@ -5,14 +5,14 @@ Checks (in order):
   V2_interface             light   Operator subclass + execute signature
   V3_unit_tests            light   pytest unit tests in candidate workspace
   V4_regression_tests      light   pytest regression/solver tests in candidate workspace
-  V5_solution_consistency  heavy   solver output assignment/vehicle integrity (W11)
+  V5_solution_consistency  heavy   solver output consistency hook (W11)
   V6_feasibility           heavy   oracle.check_feasibility on canary run
   V7_objective             heavy   oracle.recompute_objective matches solver output
   V8_nondeterminism        heavy   two identical-seed runs produce identical output
   V9_perf_guard            heavy   candidate ≤ champion × 5 wall-clock
 
 V5 and V8 are separate concerns:
-  - V5_solution_consistency: does the solver output have consistent assignment / vehicle_ids? (data integrity)
+  - V5_solution_consistency: does the solver output satisfy declared consistency checks?
   - V8_nondeterminism: is the solver deterministic? (uuid, set iteration, entropy)
 
 Runtime checks (V5–V9) are skipped when:

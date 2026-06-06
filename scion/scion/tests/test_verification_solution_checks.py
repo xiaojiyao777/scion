@@ -108,7 +108,29 @@ class TestSolutionConsistencyCheck:
     def test_top_level_assignment_vehicle_mismatch_fails(self, tmp_path):
         canary = str(tmp_path / "small.json")
         Path(canary).write_text("{}")
-        spec = _make_spec(canary=canary)
+        (tmp_path / "oracle.py").write_text(
+            "def check_solver_output_consistency(raw, canary):\n"
+            "    assignment = raw.get('assignment', {})\n"
+            "    vehicles = raw.get('vehicles', {})\n"
+            "    seen = {}\n"
+            "    for vehicle_id, vehicle in vehicles.items():\n"
+            "        for order_id in vehicle.get('order_ids', []):\n"
+            "            seen[order_id] = vehicle_id\n"
+            "    for order_id, vehicle_id in assignment.items():\n"
+            "        if seen.get(order_id) != vehicle_id:\n"
+            "            return {\n"
+            "                'passed': False,\n"
+            "                'diagnosis': 'CANDIDATE',\n"
+            "                'reasons': [\n"
+            "                    f'order {order_id}: assignment says {vehicle_id} '\n"
+            "                    f'but found in {seen.get(order_id)}'\n"
+            "                ],\n"
+            "            }\n"
+            "    return {'passed': True}\n"
+        )
+        spec = _make_spec(canary=canary).model_copy(
+            update={"root_dir": str(tmp_path), "oracle_path": "oracle.py"}
+        )
         output = _solver_output_dict()
         output["assignment"] = {"O1": "V_MISMATCH"}
         runner = _mock_runner(output_dict=output)
