@@ -63,18 +63,6 @@ LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
     ("core/scheduler.py", "capacity"): "branch portfolio capacity, not problem capacity",
     ("core/failure_lifecycle.py", "route"): "FailureRouter.route method name",
     (
-        "contract/gate.py",
-        "route",
-    ): "legacy complexity scale fallback for pre-v3 specs",
-    (
-        "contract/gate.py",
-        "customer",
-    ): "legacy complexity scale fallback for pre-v3 specs",
-    (
-        "contract/gate.py",
-        "vehicle",
-    ): "legacy complexity scale fallback for pre-v3 specs",
-    (
         "runtime/workspace.py",
         "vns",
     ): "legacy default frozen-file compatibility pattern",
