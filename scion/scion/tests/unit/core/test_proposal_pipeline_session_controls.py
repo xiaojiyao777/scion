@@ -219,6 +219,87 @@ def test_agentic_artifacts_record_campaign_id_and_context_profile(
     assert index_payload[0]["context_profile"] == "algorithm"
 
 
+def test_agentic_code_session_records_not_applicable_profile_and_anchor_indexes(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    session = AgenticProposalSession(
+        FakeCreative(),
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    pipeline, branch, _, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=session,
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    assert hypothesis is not None
+    assert record is not None
+    pipeline.generate_code(branch, hypothesis)
+    output_payloads = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in artifact_dir.glob("*/output.json")
+    ]
+    transcript_payloads = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in artifact_dir.glob("*/transcript.json")
+    ]
+    manifest_payloads = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in artifact_dir.glob("*/scratch/api_visible_prompt_manifest_*.json")
+    ]
+    session_index = json.loads(
+        (artifact_dir / "agentic_session_index.json").read_text(encoding="utf-8")
+    )
+    trace_index = json.loads(
+        (artifact_dir / "agentic_session_trace_index.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    hypothesis_output = next(
+        payload for payload in output_payloads if payload.get("patch") is None
+    )
+    code_output = next(
+        payload for payload in output_payloads if payload.get("patch") is not None
+    )
+    code_transcript = next(
+        payload
+        for payload in transcript_payloads
+        if payload["session_id"] == code_output["session_id"]
+    )
+    code_manifest = next(
+        payload for payload in manifest_payloads if payload["call_kind"] == "code"
+    )
+    code_index_entry = next(
+        item
+        for item in session_index
+        if item["session_id"] == code_output["session_id"]
+    )
+    code_trace_entry = next(
+        item
+        for item in trace_index["sessions"]
+        if item["session_id"] == code_output["session_id"]
+    )
+
+    assert hypothesis_output["context_profile"] == "algorithm"
+    assert code_output["context_profile"] == "not_applicable_code_phase"
+    assert code_output["context_profile"] != "algorithm"
+    assert code_transcript["context_profile"] == "not_applicable_code_phase"
+    assert code_manifest["context_profile"] == "not_applicable_code_phase"
+    assert code_index_entry["context_profile"] == "not_applicable_code_phase"
+    assert code_trace_entry["context_profile"] == "not_applicable_code_phase"
+    assert code_trace_entry["campaign_id"] == "camp-1"
+    assert code_output["campaign_id"] == "camp-1"
+    for payload in (code_output, code_index_entry, code_trace_entry):
+        assert payload["problem_id"] == "toy"
+        assert payload["problem_spec_hash"] == "spec-hash"
+        assert payload["split_manifest_hash"] == "split-hash"
+        assert payload["seed_ledger_hash"] == "seed-hash"
+
+
 def test_default_agentic_session_uses_configured_timeout() -> None:
     pipeline, _, _, _, _, _ = _pipeline(
         use_agentic_proposal=True,

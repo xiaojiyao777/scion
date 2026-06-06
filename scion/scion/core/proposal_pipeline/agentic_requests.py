@@ -11,6 +11,7 @@ from scion.core.branch_hygiene import (
 )
 from scion.core.models import Branch, ChampionState, HypothesisProposal
 from scion.proposal.agentic_session import (
+    AGENTIC_CODE_PHASE_CONTEXT_PROFILE,
     AgenticProposalRequest,
     AgenticProposalSession,
     AgenticToolLoopConfig,
@@ -104,8 +105,9 @@ class AgenticRequestMixin:
             problem_spec_hash=self.problem_spec_hash,
             split_manifest_hash=self.split_manifest_hash,
             seed_ledger_hash=self.seed_ledger_hash,
-            context_profile=_context_profile_from_hypothesis_context(
-                hypothesis_context
+            context_profile=_context_profile_for_request(
+                approved_hypothesis=approved_hypothesis,
+                hypothesis_context=hypothesis_context,
             ),
             prior_failure=prior_failure,
             approved_hypothesis=approved_hypothesis,
@@ -206,3 +208,13 @@ def _context_profile_from_hypothesis_context(
         if profile in {"algorithm", "repair"}:
             return profile
     return None
+
+
+def _context_profile_for_request(
+    *,
+    approved_hypothesis: HypothesisProposal | None,
+    hypothesis_context: Mapping[str, Any] | None,
+) -> str | None:
+    if approved_hypothesis is not None:
+        return AGENTIC_CODE_PHASE_CONTEXT_PROFILE
+    return _context_profile_from_hypothesis_context(hypothesis_context)

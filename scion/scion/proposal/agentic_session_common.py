@@ -33,6 +33,7 @@ from scion.proposal.agentic_artifacts import (
     _transcript_digest,
 )
 from scion.proposal.agentic_models import (
+    AGENTIC_CODE_PHASE_CONTEXT_PROFILE,
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticEvidenceRef,
     AgenticFailureCategory,
@@ -227,6 +228,7 @@ _MECHANISM_NOVELTY_GATE = MechanismNoveltyGate()
 # Keep this list deliberate: adding a dependency here means the split modules
 # are sharing it as session infrastructure, not incidentally leaking globals.
 __all__ = (
+    "AGENTIC_CODE_PHASE_CONTEXT_PROFILE",
     "AGENTIC_SESSION_SCHEMA_VERSION",
     "AgenticEvidenceRef",
     "AgenticFailureCategory",

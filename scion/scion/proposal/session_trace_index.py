@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from scion.core.public_refs import public_artifact_ref
+from scion.proposal.agentic_models import AGENTIC_CODE_PHASE_CONTEXT_PROFILE
 
 SESSION_TRACE_INDEX_SCHEMA_VERSION = "agentic-session-trace-index.v1"
 SESSION_TRACE_INDEX_NAME = "agentic_session_trace_index.json"
@@ -30,6 +31,10 @@ def attach_agentic_trace_context(
     call_kind: str,
     phase: str,
     attempt_number: int | None = None,
+    problem_id: str | None = None,
+    problem_spec_hash: str | None = None,
+    split_manifest_hash: str | None = None,
+    seed_ledger_hash: str | None = None,
 ) -> dict[str, Any]:
     """Return a prompt context copy with trace-only audit metadata attached."""
     updated = dict(context)
@@ -40,6 +45,14 @@ def attach_agentic_trace_context(
             "request_id": request_id,
             "branch_id": branch_id,
             "campaign_id": campaign_id,
+            "problem_id": problem_id or context.get("problem_id"),
+            "problem_spec_hash": (
+                problem_spec_hash or context.get("problem_spec_hash")
+            ),
+            "split_manifest_hash": (
+                split_manifest_hash or context.get("split_manifest_hash")
+            ),
+            "seed_ledger_hash": seed_ledger_hash or context.get("seed_ledger_hash"),
             "context_profile": context_profile,
             "request_kind": request_kind,
             "call_kind": call_kind,
@@ -134,6 +147,7 @@ def record_trace_start(
         request_id=str(trace_context.get("request_id") or session_id),
         branch_id=str(trace_context.get("branch_id") or ""),
         campaign_id=str(trace_context.get("campaign_id") or ""),
+        anchors=_trace_context_anchors(trace_context),
         trace_entry=entry,
     )
 
@@ -158,6 +172,7 @@ def record_trace_finish(
         request_id=str(trace_context.get("request_id") or session_id),
         branch_id=str(trace_context.get("branch_id") or ""),
         campaign_id=str(trace_context.get("campaign_id") or ""),
+        anchors=_trace_context_anchors(trace_context),
         trace_entry=_drop_empty(
             {
                 "trace_id": trace_id,
@@ -189,6 +204,10 @@ def record_session_final(
     final_artifact_ref: str,
     final_artifact_path: str,
     context_profile: str | None = None,
+    problem_id: str | None = None,
+    problem_spec_hash: str | None = None,
+    split_manifest_hash: str | None = None,
+    seed_ledger_hash: str | None = None,
 ) -> None:
     if not str(session_id or "").strip():
         return
@@ -199,6 +218,14 @@ def record_session_final(
         request_id=request_id or session_id,
         branch_id=branch_id,
         campaign_id=campaign_id,
+        anchors=_drop_empty(
+            {
+                "problem_id": problem_id,
+                "problem_spec_hash": problem_spec_hash,
+                "split_manifest_hash": split_manifest_hash,
+                "seed_ledger_hash": seed_ledger_hash,
+            }
+        ),
         final=_drop_empty(
             {
                 "phase": phase,
@@ -224,6 +251,13 @@ def trace_context_from_prompt_context(context: Mapping[str, Any]) -> dict[str, A
             "request_id": raw.get("request_id") or context.get("request_id"),
             "branch_id": raw.get("branch_id") or context.get("branch_id"),
             "campaign_id": raw.get("campaign_id") or context.get("campaign_id"),
+            "problem_id": raw.get("problem_id") or context.get("problem_id"),
+            "problem_spec_hash": raw.get("problem_spec_hash")
+            or context.get("problem_spec_hash"),
+            "split_manifest_hash": raw.get("split_manifest_hash")
+            or context.get("split_manifest_hash"),
+            "seed_ledger_hash": raw.get("seed_ledger_hash")
+            or context.get("seed_ledger_hash"),
             "context_profile": raw.get("context_profile")
             or _context_profile_from_context(context),
             "request_kind": raw.get("request_kind"),
@@ -243,14 +277,25 @@ def _prompt_manifest_context(context: Mapping[str, Any]) -> dict[str, Any]:
 
 def _context_profile_from_context(context: Mapping[str, Any]) -> str:
     profile = str(context.get("context_profile") or "").strip()
-    if profile in {"algorithm", "repair"}:
+    if profile in {"algorithm", "repair", AGENTIC_CODE_PHASE_CONTEXT_PROFILE}:
         return profile
     metadata = context.get("context_profile_metadata")
     if isinstance(metadata, Mapping):
         profile = str(metadata.get("profile") or "").strip()
-        if profile in {"algorithm", "repair"}:
+        if profile in {"algorithm", "repair", AGENTIC_CODE_PHASE_CONTEXT_PROFILE}:
             return profile
     return ""
+
+
+def _trace_context_anchors(trace_context: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "problem_id": trace_context.get("problem_id"),
+            "problem_spec_hash": trace_context.get("problem_spec_hash"),
+            "split_manifest_hash": trace_context.get("split_manifest_hash"),
+            "seed_ledger_hash": trace_context.get("seed_ledger_hash"),
+        }
+    )
 
 
 def _upsert_trace_record(
@@ -260,6 +305,7 @@ def _upsert_trace_record(
     request_id: str,
     branch_id: str,
     campaign_id: str,
+    anchors: Mapping[str, Any] | None = None,
     trace_entry: Mapping[str, Any],
 ) -> None:
     payload = _read_index(index_path)
@@ -277,6 +323,7 @@ def _upsert_trace_record(
     ):
         if value:
             session[key] = value
+    _merge_session_anchors(session, anchors)
     traces = [
         dict(item)
         for item in session.get("traces", [])
@@ -313,6 +360,7 @@ def _upsert_session_final(
     request_id: str,
     branch_id: str,
     campaign_id: str,
+    anchors: Mapping[str, Any] | None = None,
     final: Mapping[str, Any],
 ) -> None:
     payload = _read_index(index_path)
@@ -330,6 +378,7 @@ def _upsert_session_final(
     ):
         if value:
             session[key] = value
+    _merge_session_anchors(session, anchors)
     session.update(
         {key: value for key, value in final.items() if value not in (None, "")}
     )
@@ -362,6 +411,23 @@ def _new_session(
             "trace_ids_by_kind": {},
         }
     )
+
+
+def _merge_session_anchors(
+    session: dict[str, Any],
+    anchors: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(anchors, Mapping):
+        return
+    for key in (
+        "problem_id",
+        "problem_spec_hash",
+        "split_manifest_hash",
+        "seed_ledger_hash",
+    ):
+        value = anchors.get(key)
+        if value not in (None, ""):
+            session[key] = value
 
 
 def _refresh_session_trace_lists(session: dict[str, Any]) -> None:

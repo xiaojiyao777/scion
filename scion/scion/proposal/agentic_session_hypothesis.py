@@ -191,6 +191,10 @@ class AgenticSessionHypothesisMixin:
                         call_kind=call_kind,
                         phase=AgenticProposalPhase.DRAFT_HYPOTHESIS.value,
                         attempt_number=attempt,
+                        problem_id=request.problem_id,
+                        problem_spec_hash=request.problem_spec_hash,
+                        split_manifest_hash=request.split_manifest_hash,
+                        seed_ledger_hash=request.seed_ledger_hash,
                     )
                     self._record_prompt_manifest(
                         state,
@@ -560,6 +564,10 @@ class AgenticSessionHypothesisMixin:
                     call_kind="hypothesis_target_intent",
                     phase=AgenticProposalPhase.DRAFT_HYPOTHESIS.value,
                     attempt_number=0,
+                    problem_id=request.problem_id,
+                    problem_spec_hash=request.problem_spec_hash,
+                    split_manifest_hash=request.split_manifest_hash,
+                    seed_ledger_hash=request.seed_ledger_hash,
                 )
                 self._record_prompt_manifest(
                     state,

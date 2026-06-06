@@ -58,6 +58,11 @@ class AgenticSessionPatchFlowMixin:
                 code_context["agentic_resume_context"] = _sanitize_agentic_value(
                     request.resume_context
                 )
+            code_context["context_profile"] = AGENTIC_CODE_PHASE_CONTEXT_PROFILE
+            code_context["problem_id"] = request.problem_id
+            code_context["problem_spec_hash"] = request.problem_spec_hash
+            code_context["split_manifest_hash"] = request.split_manifest_hash
+            code_context["seed_ledger_hash"] = request.seed_ledger_hash
             if tool_context is not None:
                 state.note(
                     AgenticProposalPhase.INSPECT_INTERFACE,

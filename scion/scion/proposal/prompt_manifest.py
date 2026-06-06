@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any, Mapping
 
+from scion.proposal.agentic_models import AGENTIC_CODE_PHASE_CONTEXT_PROFILE
 from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
 
 
@@ -289,12 +290,12 @@ def build_api_visible_prompt_manifest(
 
 def _context_profile_from_safe_context(context: Mapping[str, Any]) -> str:
     profile = str(context.get("context_profile") or "").strip()
-    if profile in {"algorithm", "repair"}:
+    if profile in {"algorithm", "repair", AGENTIC_CODE_PHASE_CONTEXT_PROFILE}:
         return profile
     metadata = context.get("context_profile_metadata")
     if isinstance(metadata, Mapping):
         profile = str(metadata.get("profile") or "").strip()
-        if profile in {"algorithm", "repair"}:
+        if profile in {"algorithm", "repair", AGENTIC_CODE_PHASE_CONTEXT_PROFILE}:
             return profile
     return ""
 

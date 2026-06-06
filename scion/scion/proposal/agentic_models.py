@@ -13,6 +13,7 @@ from scion.proposal.agentic_preview import AgenticSelfCheck
 from scion.proposal.tools import ProposalToolContext
 
 AGENTIC_SESSION_SCHEMA_VERSION = "agentic-proposal-session.v1"
+AGENTIC_CODE_PHASE_CONTEXT_PROFILE = "not_applicable_code_phase"
 
 class AgenticProposalStatus(str, Enum):
     """Terminal status for one bounded proposal session."""
@@ -264,6 +265,10 @@ class AgenticSessionIndexEntry:
     code_retry_failure_count: int = 0
     session_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     context_profile: str = ""
+    problem_id: str = ""
+    problem_spec_hash: str = ""
+    split_manifest_hash: str = ""
+    seed_ledger_hash: str = ""
     failure_category: str = ""
     failure_detail: str = ""
     failure_reason: str = ""

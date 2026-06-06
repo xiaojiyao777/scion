@@ -416,6 +416,10 @@ class AgenticSessionStore:
             code_retry_failure_artifact_refs=code_retry_failure_refs,
             code_retry_failure_count=len(code_retry_failure_refs),
             session_artifact_refs=session_artifact_refs,
+            problem_id=str(output.problem_id or ""),
+            problem_spec_hash=str(output.problem_spec_hash or ""),
+            split_manifest_hash=str(output.split_manifest_hash or ""),
+            seed_ledger_hash=str(output.seed_ledger_hash or ""),
             **summary_fields,
         )
         kept.append(entry)
@@ -433,6 +437,10 @@ class AgenticSessionStore:
                 final_artifact_ref=public_ref,
                 final_artifact_path=public_ref,
                 context_profile=output.context_profile,
+                problem_id=output.problem_id,
+                problem_spec_hash=output.problem_spec_hash,
+                split_manifest_hash=output.split_manifest_hash,
+                seed_ledger_hash=output.seed_ledger_hash,
             )
         except Exception:
             pass
@@ -593,6 +601,12 @@ class AgenticSessionStore:
                             )
                         ),
                         session_artifact_refs=session_artifact_refs,
+                        problem_id=str(item.get("problem_id") or ""),
+                        problem_spec_hash=str(item.get("problem_spec_hash") or ""),
+                        split_manifest_hash=str(
+                            item.get("split_manifest_hash") or ""
+                        ),
+                        seed_ledger_hash=str(item.get("seed_ledger_hash") or ""),
                         **summary_fields,
                     )
                 )
