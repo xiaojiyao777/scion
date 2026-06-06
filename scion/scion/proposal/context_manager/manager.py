@@ -15,6 +15,9 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.repeated_contract_failures import (
+    contract_preview_failure_signature_feedback,
+)
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
     active_subject_taxonomy_payload,
@@ -579,6 +582,9 @@ class ContextManager:
         material_difference_requirement = _proposal_material_difference_requirement(
             branch
         )
+        contract_preview_failure_signature = (
+            contract_preview_failure_signature_feedback(branch)
+        )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -629,6 +635,9 @@ class ContextManager:
                 )
             ),
             "material_difference_requirement": material_difference_requirement,
+            "contract_preview_failure_signature": (
+                contract_preview_failure_signature
+            ),
             "branch_followup_policy": branch_followup_policy,
             "branch_followup_policy_payload": branch_followup_policy_payload,
             "exploration_coverage": exploration_coverage,
@@ -785,6 +794,13 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        contract_preview_failure_signature = (
+            contract_preview_failure_signature_feedback(branch)
+        )
+        if contract_preview_failure_signature:
+            ctx["contract_preview_failure_signature"] = (
+                contract_preview_failure_signature
+            )
         if branch_workspace and os.path.isdir(branch_workspace):
             ctx["branch_workspace"] = branch_workspace
         active_subject_taxonomy = active_subject_taxonomy_payload(

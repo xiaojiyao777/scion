@@ -17,6 +17,7 @@ from scion.core.models import (
 from scion.core.repeated_contract_failures import (
     REPEATED_CONTRACT_FAILURE_CODE,
     REPEATED_CONTRACT_REROUTE_REASON,
+    contract_preview_failure_signature_feedback,
     extract_contract_failure_signature,
     record_contract_failure_attempt,
 )
@@ -130,6 +131,53 @@ def test_repeated_contract_signature_marks_reroute_without_free_text_leak() -> N
     assert block["same_hypothesis_retry"] == "blocked"
     assert block["failure_signature"]["mechanism_ids"] == ["state_delta_cache"]
     assert "private cache keeps mutable branch state" not in str(block)
+
+    feedback = contract_preview_failure_signature_feedback(branch)
+    assert feedback["count"] == 2
+    assert feedback["threshold_reached"] is True
+    assert feedback["required_next_step"] == "reselect_target_or_clean_branch"
+    assert feedback["same_signature_retry_policy"] == "force_repair_or_reselect"
+
+
+def test_contract_preview_failure_signature_feedback_is_prompt_safe() -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        BranchState.EXPLORE,
+        1,
+        "champ",
+    )
+    detail = (
+        "Contract preview failed: object_model_no_dynamic_private_attrs; "
+        "raw trace says private mutable cache touched generated state"
+    )
+    record_contract_failure_attempt(
+        branch,
+        detail,
+        _hypothesis(),
+        _session_ref(),
+        failure_stage="code_generation",
+    )
+
+    feedback = contract_preview_failure_signature_feedback(branch)
+
+    assert feedback["schema_version"] == "contract-preview-failure-signature.v1"
+    assert feedback["feedback_class"] == "hard_negative"
+    assert feedback["check_id"] == "object_model_no_dynamic_private_attrs"
+    assert feedback["category_id"] == "contract_boundary_failure"
+    assert feedback["target_file"] == "policies/state.py"
+    assert feedback["count"] == 1
+    assert feedback["recent_branch_ids"]
+    assert feedback["proposal_visibility_only"] is True
+    assert feedback["decision_features_excluded"] is True
+    assert feedback["ordinary_retry_allowed"] is False
+    assert feedback["required_next_step"] == (
+        "repair_same_signature_or_reselect_target"
+    )
+    assert feedback["forbidden_write_pattern"]["pattern_id"] == (
+        "same_target_check_mechanism_signature"
+    )
+    assert "raw trace says" not in str(feedback)
+    assert "private mutable cache" not in str(feedback)
 
 
 def test_decision_features_keep_only_repeated_contract_enum() -> None:

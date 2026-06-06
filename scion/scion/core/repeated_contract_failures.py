@@ -1,6 +1,8 @@
 """Branch-local repeated contract failure routing signals."""
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -14,6 +16,9 @@ from scion.core.models import Branch, HypothesisProposal, mechanism_changes
 REPEATED_CONTRACT_FAILURE_CODE = "REPEATED_CONTRACT_FAILURE"
 REPEATED_CONTRACT_REROUTE_REASON = "repeated_contract_signature_reroute"
 REPEATED_CONTRACT_THRESHOLD = 2
+CONTRACT_PREVIEW_FAILURE_SIGNATURE_SCHEMA_VERSION = (
+    "contract-preview-failure-signature.v1"
+)
 
 _UNKNOWN = "unknown"
 _SAFE_TOKEN_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
@@ -215,6 +220,103 @@ def record_contract_failure_attempt(
     )
 
 
+def contract_preview_failure_signature_feedback(
+    branch: Branch | None,
+) -> dict[str, Any]:
+    """Return proposal-visible hard negative feedback for the latest signature."""
+    if branch is None:
+        return {}
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    repeated = summary.get("repeated_contract_failures")
+    if not isinstance(repeated, Mapping):
+        return {}
+    signature = repeated.get("last_signature")
+    if not isinstance(signature, Mapping):
+        return {}
+    signature_key = str(repeated.get("last_signature_key") or "").strip()
+    records = _records_by_key(repeated.get("records"))
+    record = dict(records.get(signature_key) or {})
+    count = _safe_int(
+        record.get("count"),
+        default=max(1, _safe_int(repeated.get("count"))),
+    )
+    threshold = _safe_int(
+        record.get("threshold"),
+        default=_safe_int(
+            repeated.get("threshold"),
+            default=REPEATED_CONTRACT_THRESHOLD,
+        ),
+    )
+    threshold_reached = bool(
+        record.get("threshold_reached")
+        or repeated.get("reroute_recommended")
+        or (count >= max(1, threshold))
+    )
+    target_file = _safe_path(signature.get("target_file"))
+    contract_check = _safe_token(
+        signature.get("contract_check"),
+        default="generic_contract_failure",
+    )
+    failure_category = _safe_token(
+        signature.get("failure_category"),
+        default="contract_boundary_failure",
+    )
+    selected_surface = _safe_token(
+        signature.get("selected_surface"),
+        default=_UNKNOWN,
+    )
+    mechanism_ids = _string_sequence(signature.get("mechanism_ids"))
+    digest_payload = {
+        "target_file": target_file,
+        "mechanism_ids": mechanism_ids,
+        "contract_check": contract_check,
+        "failure_category": failure_category,
+        "selected_surface": selected_surface,
+    }
+    failure_digest = _stable_digest(digest_payload)
+    return _drop_empty(
+        {
+            "schema_version": CONTRACT_PREVIEW_FAILURE_SIGNATURE_SCHEMA_VERSION,
+            "source": "branch.repeated_contract_failures",
+            "feedback_class": "hard_negative",
+            "failure_digest": failure_digest,
+            "signature_key_digest": _stable_digest(signature_key),
+            "check_id": contract_check,
+            "category_id": failure_category,
+            "contract_check": contract_check,
+            "failure_category": failure_category,
+            "target_file": target_file,
+            "target_path": target_file,
+            "selected_surface": selected_surface,
+            "mechanism_ids": list(mechanism_ids),
+            "count": count,
+            "signature_count": count,
+            "threshold": threshold,
+            "threshold_reached": threshold_reached,
+            "recent_branch_ids": _recent_branch_ids(branch),
+            "recent_failure_digests": _recent_failure_digests(records.values()),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "ordinary_retry_allowed": False,
+            "required_next_step": (
+                "reselect_target_or_clean_branch"
+                if threshold_reached
+                else "repair_same_signature_or_reselect_target"
+            ),
+            "same_signature_retry_policy": "force_repair_or_reselect",
+            "forbidden_write_pattern": {
+                "pattern_id": "same_target_check_mechanism_signature",
+                "target_file": target_file,
+                "check_id": contract_check,
+                "category_id": failure_category,
+                "mechanism_ids": list(mechanism_ids),
+            },
+        }
+    )
+
+
 def mark_repeated_contract_reroute(
     branch: Branch,
     signature: ContractFailureSignature,
@@ -403,12 +505,72 @@ def _drop_empty(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _safe_int(value: Any, *, default: int = 0) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return max(0, int(default))
+
+
+def _string_sequence(value: Any) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)):
+        items = [value]
+    else:
+        try:
+            items = list(value)
+        except TypeError:
+            items = []
+    safe = [
+        _safe_token(item, default="")
+        for item in items
+        if str(item or "").strip()
+    ]
+    safe = [item for item in safe if item]
+    return tuple(dict.fromkeys(safe)) or (_UNKNOWN,)
+
+
+def _stable_digest(value: Any, *, length: int = 16) -> str:
+    rendered = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:length]
+
+
+def _recent_branch_ids(branch: Branch) -> list[str]:
+    branch_id = str(getattr(branch, "branch_id", "") or "").strip()
+    if not branch_id:
+        return []
+    return [re.sub(r"[^A-Za-z0-9_.:-]+", "_", branch_id)[:128]]
+
+
+def _recent_failure_digests(records: Iterable[Mapping[str, Any]]) -> list[str]:
+    ordered = sorted(
+        (dict(record) for record in records if isinstance(record, Mapping)),
+        key=lambda item: str(item.get("last_seen_at") or ""),
+    )
+    digests: list[str] = []
+    for record in ordered[-4:]:
+        signature = record.get("signature")
+        if isinstance(signature, Mapping):
+            digest = _stable_digest(signature)
+        else:
+            digest = _stable_digest(record.get("signature_key") or "")
+        if digest not in digests:
+            digests.append(digest)
+    return digests
+
+
 __all__ = [
     "ContractFailureSignature",
     "RepeatedContractRecord",
+    "CONTRACT_PREVIEW_FAILURE_SIGNATURE_SCHEMA_VERSION",
     "REPEATED_CONTRACT_FAILURE_CODE",
     "REPEATED_CONTRACT_REROUTE_REASON",
     "REPEATED_CONTRACT_THRESHOLD",
+    "contract_preview_failure_signature_feedback",
     "extract_contract_failure_signature",
     "mark_repeated_contract_reroute",
     "record_contract_failure_attempt",

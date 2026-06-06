@@ -22,6 +22,7 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
+from scion.core.repeated_contract_failures import record_contract_failure_attempt
 from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
 from scion.proposal import context_manager as context_manager_module
@@ -31,6 +32,7 @@ from scion.proposal.context.surfaces import (
 )
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import (
+    _split_code_context,
     _split_hypothesis_context,
     _split_hypothesis_target_intent_context,
 )
@@ -345,6 +347,130 @@ def test_branch_material_difference_requirement_reaches_context_prompt_and_manif
     assert "material_difference_requirement" not in {
         field.name for field in fields(DecisionFeatures)
     }
+
+
+def test_contract_preview_failure_signature_reaches_code_prompt_and_manifest(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["description"] = "Generic allocation benchmark."
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "allocation_policy",
+            "kind": "policy",
+            "description": "Allocation choice policy.",
+            "targets": {
+                "files": ["policies/allocation.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+            "interface": {"required_functions": ["choose_allocation"]},
+        },
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "allocation.py").write_text(
+        "def choose_allocation(instance):\n    return None\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-contract-loop",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Use a bounded generic allocation state projection.",
+        change_locus="allocation_policy",
+        action="modify",
+        target_file="policies/allocation.py",
+        mechanism_changes=(
+            MechanismChange("state_projection_guard", "modify"),
+        ),
+    )
+    record_contract_failure_attempt(
+        branch,
+        (
+            "Contract preview failed: object_model_no_dynamic_private_attrs; "
+            "raw trace mentions generated private runtime state"
+        ),
+        hypothesis,
+        {
+            "session_id": "session-contract-loop",
+            "failure_category": "contract_boundary_failure",
+            "failure_code": "object_model_no_dynamic_private_attrs",
+            "contract_preview_codes": [
+                "object_model_no_dynamic_private_attrs",
+            ],
+            "primary_failure": {
+                "stage": "self_check",
+                "reason": "contract_preview_failed",
+                "category": "contract_boundary_failure",
+                "code": "object_model_no_dynamic_private_attrs",
+            },
+        },
+        failure_stage="code_generation",
+    )
+
+    ctx = ContextManager().build_code_context(
+        branch=branch,
+        hypothesis=hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+    )
+
+    signature = ctx["contract_preview_failure_signature"]
+    assert signature["schema_version"] == "contract-preview-failure-signature.v1"
+    assert signature["check_id"] == "object_model_no_dynamic_private_attrs"
+    assert signature["category_id"] == "contract_boundary_failure"
+    assert signature["target_path"] == "policies/allocation.py"
+    assert signature["count"] == 1
+    assert signature["recent_branch_ids"] == ["branch-contract-loop"]
+    assert signature["proposal_visibility_only"] is True
+    assert signature["decision_features_excluded"] is True
+    assert signature["ordinary_retry_allowed"] is False
+
+    system_blocks, user_prompt = _split_code_context(ctx)
+    prompt_text = "\n\n".join(
+        str(block.get("text") or "") for block in system_blocks
+    ) + user_prompt
+    assert "## Contract Preview Failure Signature" in prompt_text
+    assert "hard negative proposal feedback only" in prompt_text
+    assert "object_model_no_dynamic_private_attrs" in prompt_text
+    assert "same_target_check_mechanism_signature" in prompt_text
+    assert "raw trace mentions" not in prompt_text
+    assert "generated private runtime state" not in prompt_text
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-contract-preview-signature",
+        phase="code",
+        call_kind="code",
+        prompt_context=ctx,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "contract_preview_failure_signature" in manifest["section_names"]
+    assert (
+        manifest["section_statuses"]["contract_preview_failure_signature"][
+            "status"
+        ]
+        == "included"
+    )
+    decision_fields = {field.name for field in fields(DecisionFeatures)}
+    assert "contract_preview_failure_signature" not in decision_fields
+    assert "contract_preview_failure_signature_visible" not in decision_fields
 
 
 def test_weak_positive_branch_context_includes_branch_dossier_questions(

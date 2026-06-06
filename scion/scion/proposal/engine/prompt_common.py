@@ -162,6 +162,21 @@ def _agentic_research_context_block(
             "or repeated hypothesis prose do not satisfy this requirement.\n\n"
             f"{rendered_material_requirement}"
         )
+    contract_preview_signature = context.get("contract_preview_failure_signature")
+    if isinstance(contract_preview_signature, Mapping) and contract_preview_signature:
+        parts.append(
+            "## Contract Preview Failure Signature\n"
+            "This branch-local contract-preview signature is hard negative "
+            "proposal feedback only. It is excluded from DecisionFeatures. "
+            "Do not repeat the same target/check/mechanism write pattern. "
+            "For target-intent or hypothesis generation, reselect the target, "
+            "mechanism, or implementation path unless the next attempt is an "
+            "explicit repair of this signature. For code generation, repair "
+            "the implementation so the forbidden pattern is absent; if the "
+            "approved target cannot avoid the same boundary failure, report "
+            "`wrong_owner` instead of emitting the same pattern.\n\n"
+            f"{_bounded_json(contract_preview_signature, 6000)}"
+        )
     diagnosis = _agentic_research_diagnosis_projection(
         context.get("agentic_research_diagnosis"),
         code_phase=code_phase,
