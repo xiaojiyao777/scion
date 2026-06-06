@@ -1,6 +1,6 @@
 # Scion v0.4 本地实验运行、回溯与复现手册
 
-*Last updated: 2026-05-26*
+*Last updated: 2026-06-06*
 
 本文档面向需要自己在本地启动、监控、收尾、逐轮回溯、分析和复现
 Scion v0.4 实验的人。目标是让你能回答三个问题：怎么跑、每一轮输入输出
@@ -26,6 +26,7 @@ v0.2/v0.3 的仓配验证脚本或专项 launcher。
 | 目的 | 入口 |
 | --- | --- |
 | v0.4 CVRP real/VRP campaign | `python -m scion.cli.main run ...` |
+| 当前 CVRP/VRP agentic campaign 准备/后台启动 | `python scion/tools/launch_cvrp_agentic_campaign.py ...` |
 | v0.4 CVRP synthetic controlled E2E smoke，无 API | `python run_cvrp_controlled_e2e.py --output-dir <run_root>` |
 | 查看 campaign 概览 | `python -m scion.cli.main inspect campaign --campaign-dir <campaign>` |
 | 生成 bounded summary/report | `python -m scion.cli.main report summary --campaign-dir <campaign>` |
@@ -77,7 +78,7 @@ CVRP formal VRP 需要 repo-local `vrp` 数据根：
 export SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp
 ```
 
-真实 LLM campaign 需要：
+真实 LLM campaign 需要 API key；手动 CLI / 旧 Sonnet 复现实验可设：
 
 ```bash
 export SCION_MODEL=claude-sonnet-4-6
@@ -85,8 +86,12 @@ export SCION_API_KEY=<your-key>
 ```
 
 `LLMClient` 也支持 `SCION_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、
-`ANTHROPIC_API_KEY` 和 `ANTHROPIC_BASE_URL`。本项目当前文档里的 Sonnet
-实验默认走 `SCION_MODEL=claude-sonnet-4-6`。
+`ANTHROPIC_API_KEY` 和 `ANTHROPIC_BASE_URL`。旧 Sonnet 实验默认走
+`SCION_MODEL=claude-sonnet-4-6`。
+
+当前 CVRP/VRP agentic launcher 默认模型是 `gpt-5.5`。如果 shell 里已有
+`SCION_MODEL`，启动时把它显式传给 `--model "$SCION_MODEL"`；不要把 API key
+写入 `launch.env`。
 
 重试控制：
 
@@ -155,6 +160,17 @@ RUN_ROOT=/home/clawd/research/scion-experiments/v04-cvrp-controlled-manual-$(dat
 
 这个路径适合验证框架和 evidence plumbing，不适合声明 benchmark 质量。
 
+### 实验爬梯和有效轮次
+
+P1/P0 级修复后，短实验必须从有效 `4R` 重新开始，然后依次爬梯到
+`8R`、`12R`、`20R`。这些短跑稳定后，才进入 `40R`、`50R` 长跑。
+
+有效轮次的最低要求是：run 不是 infra-only，`effective_rounds_completed`
+达到请求轮数，并且至少有 formal screened candidates。`infra-only`、
+`api_balance_exhausted`、`0 formal screened candidates` 不算有效轮次；这种 run
+只能证明 provider、账户或运行环境状态，不能当作 Scion 行为分析。修好原因后必须
+用同一个 round count 重跑，不能直接晋级到下一档。
+
 ## 4. 前台启动一个 formal CVRP smoke
 
 适合 1-5 rounds 的手动调试。先创建 run root：
@@ -195,7 +211,32 @@ SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
 
 ## 5. 可复现后台启动模板
 
-长一点的手动实验建议后台跑，并显式写 `launch.env`、`pid.txt`、`pgid.txt`、
+当前 CVRP/VRP agentic campaign 优先用仓库内 launcher 准备 run root：
+
+```bash
+cd /home/clawd/research/or-autoresearch-agent
+/home/clawd/miniconda3/envs/claw/bin/python scion/tools/launch_cvrp_agentic_campaign.py \
+  --rounds 4 \
+  --label <label>
+```
+
+默认是 prepare-only，只写 `launch.env`、`run.sh`、`command.txt` 等启动文件，
+不启动实验。确认配置后，加 `--launch` 才会用 `nohup + setsid` detached 后台
+启动：
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python scion/tools/launch_cvrp_agentic_campaign.py \
+  --rounds 4 \
+  --label <label> \
+  --model "${SCION_MODEL:-gpt-5.5}" \
+  --launch
+```
+
+`--launch` 会写 `pid`，主要运行日志仍看 `run.log`。需要重启或复现时，优先
+复用这个工具生成的 `launch.env` 和 `command.txt`。
+
+手写模板只在需要特殊诊断时使用。长一点的手动实验建议后台跑，并显式写
+`launch.env`、`pid.txt`、`pgid.txt`、
 `run.log`、`exit.txt`。`pid.txt` 只记录 launcher PID，停止时必须 kill 整个
 process group，避免只杀掉 wrapper 而留下 `python -m scion.cli.main run`
 子进程继续发起 APS/LLM 调用。`launch.env` 是复现实验的最小入口记录：后续回溯
@@ -942,6 +983,26 @@ EXIT_CODE:0
 如果 `run_validity.reason` 是 `invalid_infra_only`、
 `invalid_no_effective_rounds` 或 `invalid_no_experiments`，不要把该 run 当作
 算法证据；先修 provider/proxy/account，再重跑。
+
+如果 `run_status`、`campaign_summary` 或 LLM trace 显示
+`api_balance_exhausted`，或者本次 run 的 formal screened candidates 为 `0`，也按
+无效轮次处理：记录原因、修复外部条件，然后用同一个 round count 重跑。不要把这类
+结果解释成 proposal、branch governance 或算法质量行为。
+
+跑后先生成 artifact/count inventory，再开始人工或子 agent 分析：
+
+```bash
+cd /home/clawd/research/or-autoresearch-agent
+/home/clawd/miniconda3/envs/claw/bin/python scion/tools/postrun_artifact_inventory.py \
+  --format markdown \
+  "$RUN_ROOT" > "$RUN_ROOT/postrun_artifact_inventory.md"
+```
+
+这个 inventory 只列 artifacts、counts、validity 和 branch/trace/event 概览，不判断
+研究质量。正式分析按
+[`postrun-analysis-handoff.md`](postrun-analysis-handoff.md) 分发给实验分析
+子 agent，逐分支、逐轮次、逐 LLM 调用检查，再由主线程决定修复、同 count 重跑，
+还是进入下一档轮数。
 
 读取 campaign 顶层摘要：
 
