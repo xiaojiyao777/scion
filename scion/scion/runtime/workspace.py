@@ -20,20 +20,8 @@ from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_surface_index import normalize_editable_identity_patterns
 
 
-# Frozen file patterns that can never be written via apply_patch
-_DEFAULT_FROZEN_PATTERNS = frozenset(
-    {
-        "solver.py",
-        "vns.py",
-        "pool.py",
-        "models.py",
-        "config.py",
-        "oracle.py",
-        "greedy_init.py",
-        "operators/base.py",
-        "operators/__init__.py",
-    }
-)
+# Generic runtime has no problem-specific frozen files by default.
+_DEFAULT_FROZEN_PATTERNS = frozenset()
 
 
 class FrozenFileError(Exception):
@@ -61,7 +49,11 @@ class WorkspaceMaterializer:
         self._campaign_dir = Path(campaign_dir)
         self._workspaces_dir = self._campaign_dir / "workspaces"
         self._champions_dir = self._campaign_dir / "champions"
-        self._frozen_patterns = frozen_patterns or _DEFAULT_FROZEN_PATTERNS
+        self._frozen_patterns = (
+            _DEFAULT_FROZEN_PATTERNS
+            if frozen_patterns is None
+            else frozen_patterns
+        )
         self._editable_patterns = (
             None
             if editable_patterns is None

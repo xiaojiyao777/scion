@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from scion.core.research_surface_index import editable_identity_patterns
-from scion.runtime.workspace import WorkspaceMaterializer
+from scion.core.models import PatchProposal
+from scion.runtime.workspace import FrozenFileError, WorkspaceMaterializer
 
 
 def test_editable_identity_patterns_prefer_research_surfaces() -> None:
@@ -88,6 +89,82 @@ def test_explicit_archive_copies_only_editable_non_frozen_files(tmp_path: Path) 
     ]
 
 
+def test_default_materializer_does_not_freeze_legacy_vrp_files(
+    tmp_path: Path,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(str(tmp_path / "campaign"))
+
+    for file_path in ("solver.py", "vns.py", "pool.py", "operators/base.py"):
+        materializer.apply_patch(
+            str(ws),
+            PatchProposal(
+                file_path=file_path,
+                action="modify",
+                code_content=f"# editable {file_path}\n",
+            ),
+        )
+
+    assert (ws / "solver.py").read_text(encoding="utf-8") == "# editable solver.py\n"
+    assert (ws / "vns.py").read_text(encoding="utf-8") == "# editable vns.py\n"
+    assert (ws / "pool.py").read_text(encoding="utf-8") == "# editable pool.py\n"
+    assert (ws / "operators" / "base.py").read_text(
+        encoding="utf-8"
+    ) == "# editable operators/base.py\n"
+
+
+def test_explicit_problem_frozen_patterns_still_reject_files(
+    tmp_path: Path,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        frozen_patterns=frozenset({"solver.py", "vns.py"}),
+    )
+
+    with pytest.raises(FrozenFileError):
+        materializer.apply_patch(
+            str(ws),
+            PatchProposal(
+                file_path="solver.py",
+                action="modify",
+                code_content="# rejected\n",
+            ),
+        )
+
+    with pytest.raises(FrozenFileError):
+        materializer.apply_patch(
+            str(ws),
+            PatchProposal(
+                file_path="vns.py",
+                action="modify",
+                code_content="# rejected\n",
+            ),
+        )
+
+
+def test_explicit_empty_frozen_patterns_do_not_reinstate_legacy_defaults(
+    tmp_path: Path,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        frozen_patterns=frozenset(),
+        editable_patterns=("solver.py", "vns.py"),
+    )
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    _write(ws / "operators" / "legacy.py", "VALUE = 2\n")
+    assert materializer.compute_code_hash(str(ws)) == code_hash
+
+    _write(ws / "solver.py", "VALUE = 2\n")
+    assert materializer.compute_code_hash(str(ws)) != code_hash
+
+    archive = materializer.archive_workspace(str(ws), branch_id="surface-branch")
+    assert archive is not None
+    assert _relative_files(Path(archive)) == ["solver.py", "vns.py"]
+
+
 def test_legacy_mode_keeps_operators_policies_identity(tmp_path: Path) -> None:
     ws = _workspace(tmp_path)
     materializer = WorkspaceMaterializer(str(tmp_path / "campaign"))
@@ -144,6 +221,9 @@ def _workspace(tmp_path: Path) -> Path:
     _write(ws / "data" / "case.json", "{}\n")
     _write(ws / "tests" / "test_surface.py", "def test_demo(): pass\n")
     _write(ws / "registry.yaml", "operators: []\n")
+    _write(ws / "solver.py", "VALUE = 1\n")
+    _write(ws / "vns.py", "VALUE = 1\n")
+    _write(ws / "pool.py", "VALUE = 1\n")
     return ws
 
 

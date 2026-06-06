@@ -135,7 +135,11 @@ class TestApplyPatch:
         mat.apply_patch(ws, patch)
         assert not target.exists()
 
-    def test_frozen_file_rejected(self, mat: WorkspaceMaterializer, code_base: Path):
+    def test_frozen_file_rejected(self, campaign_dir: Path, code_base: Path):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"solver.py"}),
+        )
         ws = mat.create_branch_workspace("b4", str(code_base))
         patch = PatchProposal(
             file_path="solver.py",
@@ -145,7 +149,11 @@ class TestApplyPatch:
         with pytest.raises(FrozenFileError):
             mat.apply_patch(ws, patch)
 
-    def test_frozen_oracle_rejected(self, mat: WorkspaceMaterializer, code_base: Path):
+    def test_frozen_oracle_rejected(self, campaign_dir: Path, code_base: Path):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"oracle.py"}),
+        )
         ws = mat.create_branch_workspace("b5", str(code_base))
         patch = PatchProposal(
             file_path="oracle.py",
