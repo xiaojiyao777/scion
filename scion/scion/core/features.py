@@ -7,6 +7,7 @@ from typing import Any, Optional, Tuple, get_args
 from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
+    DecisionLifecyclePriorEvidenceTier,
     DecisionRuntimeEvidenceConfidence, DecisionRuntimeEvidenceStatus,
 )
 from scion.core.repeated_contract_failures import REPEATED_CONTRACT_FAILURE_CODE
@@ -48,6 +49,9 @@ RUNTIME_EVIDENCE_CONFIDENCE_VALUES = frozenset(
     get_args(DecisionRuntimeEvidenceConfidence)
 )
 RUNTIME_EVIDENCE_STATUS_VALUES = frozenset(get_args(DecisionRuntimeEvidenceStatus))
+LIFECYCLE_PRIOR_EVIDENCE_TIER_VALUES = frozenset(
+    get_args(DecisionLifecyclePriorEvidenceTier)
+)
 
 
 class DecisionInputGuardError(Exception):
@@ -305,6 +309,12 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
             "runtime_evidence_status is not a known enum: "
             f"{features.runtime_evidence_status!r}"
         )
+    lifecycle_tier = str(features.lifecycle_prior_evidence_tier or "")
+    if lifecycle_tier not in LIFECYCLE_PRIOR_EVIDENCE_TIER_VALUES:
+        raise DecisionInputGuardError(
+            "lifecycle_prior_evidence_tier is not a known enum: "
+            f"{features.lifecycle_prior_evidence_tier!r}"
+        )
     for field_name in (
         "total_pairs",
         "attempted_pairs",
@@ -318,6 +328,14 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         "wins",
         "losses",
         "ties",
+        "screening_expand_count",
+        "validation_expand_count",
+        "lifecycle_zero_win_streak",
+        "lifecycle_telemetry_diagnostic_streak",
+        "lifecycle_marginal_no_effect_streak",
+        "lifecycle_no_effect_diagnostic_followups",
+        "lifecycle_previous_signal_repeat_count",
+        "lifecycle_rollback_count",
     ):
         value = getattr(features, field_name)
         if value < 0:

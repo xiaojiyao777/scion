@@ -76,6 +76,12 @@ class AgenticSessionOrchestrationMixin:
             problem_spec_hash=(
                 request.problem_spec_hash or request.tool_context.problem_spec_hash
             ),
+            split_manifest_hash=(
+                request.split_manifest_hash or request.tool_context.split_manifest_hash
+            ),
+            seed_ledger_hash=(
+                request.seed_ledger_hash or request.tool_context.seed_ledger_hash
+            ),
         )
         initial_observations = self._run_initial_tool_loop(tool_context, state)
         observations.extend(initial_observations)

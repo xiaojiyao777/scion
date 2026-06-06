@@ -287,6 +287,21 @@ def test_missing_canary_fails_closed_and_skips_protocol_experiment() -> None:
     assert "Canary split not configured" in (outcome.canary_result.reason or "")
 
 
+def test_required_experiment_protocol_none_fails_closed() -> None:
+    pipeline = EvaluationPipeline(
+        experiment_protocol=None,
+        require_experiment_protocol=True,
+    )
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is None
+    assert outcome.canary_result.passed is False
+    assert outcome.decision_features.canary_passed is False
+    assert "experiment_protocol is required" in (outcome.canary_result.reason or "")
+    assert "skeleton fallback disabled" in (outcome.canary_result.reason or "")
+
+
 @pytest.mark.parametrize(
     ("branch_state", "stage"),
     [

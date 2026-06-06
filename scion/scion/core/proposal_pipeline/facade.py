@@ -113,6 +113,8 @@ class ProposalPipeline(
     campaign_id: str = ""
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    split_manifest_hash: str | None = None
+    seed_ledger_hash: str | None = None
     persistent_forced_locus: str | None = None
     forced_surface_action: str | None = None
     forced_surface_target_file: str | None = None

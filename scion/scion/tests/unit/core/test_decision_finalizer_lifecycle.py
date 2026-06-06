@@ -31,6 +31,94 @@ from scion.tests.unit.core.decision_finalizer_lifecycle_test_support import (
 )
 
 
+def test_reconcile_continue_is_not_rewritten_to_abandon() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a bounded same-branch refinement.",
+        change_locus="repair",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-reconcile-continue",
+        branch_id=branch.branch_id,
+        change_locus="repair",
+        action="modify",
+        status="running",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    hyp_store = _HypothesisStore()
+    hard_abandons: list[tuple[str, str]] = []
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *args: hard_abandons.append(args),  # type: ignore[arg-type]
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: workspaces.pop(branch_id, None),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="reconcile continue",
+        raw_metrics_ref="/tmp/metrics.json",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="reconcile",
+        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+
+    assert result.action == "reconcile"
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert stored.state == BranchState.EXPLORE
+    assert hard_abandons == []
+
+
 def test_win_skewed_weak_positive_screening_workspace_reason_is_positive() -> None:
     controller = BranchController()
     branch = controller.create_branch(

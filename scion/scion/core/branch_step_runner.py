@@ -428,11 +428,18 @@ class BranchStepRunner:
 
         round_num = self.increment_round()
         self.increment_rounds_since_last_promote()
-        decision, protocol_result, canary_result = self.evaluate(
-            branch,
-            workspace,
-            hypothesis,
-        )
+        setattr(branch, "reconcile_rescreening", True)
+        try:
+            decision, protocol_result, canary_result = self.evaluate(
+                branch,
+                workspace,
+                hypothesis,
+            )
+        finally:
+            try:
+                delattr(branch, "reconcile_rescreening")
+            except AttributeError:
+                pass
         result = self.apply_decision_and_finalize(
             branch=branch,
             decision=decision,

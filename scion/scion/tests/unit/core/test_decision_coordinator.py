@@ -3,6 +3,14 @@ from __future__ import annotations
 import uuid
 
 from scion.config.problem import ProtocolConfig
+from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
+    SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
+    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
+    TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
+    VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
+)
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
 from scion.core.telemetry_validation import (
@@ -83,6 +91,7 @@ def test_telemetry_validation_repairable_preempts_win_rate_abandon() -> None:
     assert result.reason_codes == (
         TELEMETRY_VALIDATION_REPAIRABLE,
         SCREENING_TELEMETRY_REPAIRABLE,
+        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     )
     assert "SCREENING_FAIL_WIN_RATE" not in result.reason_codes
 
@@ -121,9 +130,61 @@ def test_validation_telemetry_repairable_has_stage_specific_reason() -> None:
     assert result.reason_codes == (
         VALIDATION_TELEMETRY_REPAIRABLE,
         TELEMETRY_VALIDATION_REPAIRABLE,
+        VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
     )
     assert result.rule == (
         "validation:VALIDATION_TELEMETRY_REPAIRABLE->validation_repair_required"
+    )
+
+
+def test_lifecycle_archive_abandon_is_decision_engine_output() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            win_rate=0.4,
+            wins=4,
+            losses=3,
+            ties=3,
+            median_delta=-0.01,
+            ci_low=-0.02,
+            ci_high=0.01,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        )
+    )
+
+    assert result.decision == Decision.ABANDON
+    assert result.reason_codes == (
+        "SCREENING_FAIL_WIN_RATE",
+        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+        SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
+    )
+    assert result.rule == "screening:SCREENING_FAIL_WIN_RATE->abandon"
+
+
+def test_lifecycle_park_lineage_is_decision_engine_reason_code() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            win_rate=0.0,
+            wins=0,
+            losses=0,
+            ties=8,
+            median_delta=0.0,
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            lifecycle_telemetry_diagnostic_streak=2,
+        )
+    )
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.reason_codes == (
+        TELEMETRY_VALIDATION_REPAIRABLE,
+        SCREENING_TELEMETRY_REPAIRABLE,
+        BRANCH_LIFECYCLE_PARK_LINEAGE,
+        TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
     )
 
 

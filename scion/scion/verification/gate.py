@@ -71,6 +71,7 @@ class VerificationGate:
         adapter: Optional[ProblemAdapter] = None,
         strict_runtime_checks: bool = False,
         require_adapter_for_runtime: bool = False,
+        allow_adapter_runtime_fallback: bool = False,
         operator_execute_signature: str | None = None,
         max_runtime_ratio: float | None = None,
     ) -> None:
@@ -78,7 +79,11 @@ class VerificationGate:
         self._runner = runner
         self._metrics_dir = metrics_dir
         self._adapter = adapter
-        spec_requires_adapter = requires_adapter_for_runtime(problem_spec)
+        spec_requires_adapter = (
+            False
+            if allow_adapter_runtime_fallback
+            else requires_adapter_for_runtime(problem_spec)
+        )
         self._strict_runtime_checks = strict_runtime_checks or spec_requires_adapter
         self._require_adapter_for_runtime = (
             require_adapter_for_runtime
@@ -257,6 +262,11 @@ def _validate_runtime_config(
         return _runtime_config_failure(f"canary file not found: {canary}")
     if not champion_workspace or not os.path.isdir(champion_workspace):
         return _runtime_config_failure("champion workspace is required")
+    if require_adapter_for_runtime and adapter is None:
+        return _runtime_config_failure(
+            "problem adapter is required for runtime verification; "
+            "legacy runtime fallback disabled"
+        )
     return None
 
 

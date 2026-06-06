@@ -151,7 +151,70 @@ class BranchLifecyclePolicy:
         branch_code_status: str = "",
         branch_screening_tier: str = "",
         has_checkpoint: bool = False,
+        prior_evidence_tier: str = "",
     ) -> BranchLifecycleDecision:
+        if current_zero_win_streak == 0:
+            current_zero_win_streak = max(
+                0,
+                int(getattr(features, "lifecycle_zero_win_streak", 0) or 0),
+            )
+        if current_telemetry_diagnostic_streak == 0:
+            current_telemetry_diagnostic_streak = max(
+                0,
+                int(
+                    getattr(
+                        features,
+                        "lifecycle_telemetry_diagnostic_streak",
+                        0,
+                    )
+                    or 0
+                ),
+            )
+        if current_marginal_no_effect_streak == 0:
+            current_marginal_no_effect_streak = max(
+                0,
+                int(
+                    getattr(
+                        features,
+                        "lifecycle_marginal_no_effect_streak",
+                        0,
+                    )
+                    or 0
+                ),
+            )
+        if current_no_effect_diagnostic_followups == 0:
+            current_no_effect_diagnostic_followups = max(
+                0,
+                int(
+                    getattr(
+                        features,
+                        "lifecycle_no_effect_diagnostic_followups",
+                        0,
+                    )
+                    or 0
+                ),
+            )
+        if current_signal_signature_repeat_count == 0:
+            current_signal_signature_repeat_count = max(
+                0,
+                int(
+                    getattr(
+                        features,
+                        "lifecycle_previous_signal_repeat_count",
+                        0,
+                    )
+                    or 0
+                ),
+            )
+        if rollback_count == 0:
+            rollback_count = max(
+                0,
+                int(getattr(features, "lifecycle_rollback_count", 0) or 0),
+            )
+        has_checkpoint = bool(
+            has_checkpoint or getattr(features, "lifecycle_has_checkpoint", False)
+        )
+
         if features.telemetry_validation_repairable:
             return self._decide_telemetry_diagnostic(
                 features,
@@ -177,15 +240,37 @@ class BranchLifecyclePolicy:
         pair_wins = max(0, int(getattr(features, "pair_wins", 0) or 0))
         pair_losses = max(0, int(getattr(features, "pair_losses", 0) or 0))
         next_zero_win_streak = 0 if wins > 0 else current_zero_win_streak + 1
-        prior_evidence_tier = _branch_evidence_tier(
-            branch_code_status,
-            branch_screening_tier,
+        prior_evidence_tier = (
+            str(
+                prior_evidence_tier
+                or getattr(features, "lifecycle_prior_evidence_tier", "")
+                or ""
+            )
+            or _branch_evidence_tier(
+                branch_code_status,
+                branch_screening_tier,
+            )
         )
         signal_signature = decision_features_signal_signature(features)
         previous_signature = str(last_signal_signature or "")
         next_signature_repeat_count = (
             max(0, int(current_signal_signature_repeat_count or 0)) + 1
-            if previous_signature and previous_signature == signal_signature
+            if (
+                (
+                    previous_signature
+                    and previous_signature == signal_signature
+                )
+                or (
+                    not previous_signature
+                    and bool(
+                        getattr(
+                            features,
+                            "lifecycle_signal_matches_previous",
+                            False,
+                        )
+                    )
+                )
+            )
             else 1
         )
         current_signal_tier = _screening_signal_tier(

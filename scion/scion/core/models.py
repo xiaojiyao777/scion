@@ -398,6 +398,12 @@ DecisionRuntimeEvidenceStatus = Literal[
     "insufficient",
     "fresh_champion_required",
 ]
+DecisionLifecyclePriorEvidenceTier = Literal[
+    "",
+    "weak_positive",
+    "marginal",
+    "no_effect",
+]
 
 @dataclass(frozen=True)
 class DecisionFeatures:
@@ -449,6 +455,15 @@ class DecisionFeatures:
     # hypothesis is generated for this branch.
     screening_expand_count: int = 0
     validation_expand_count: int = 0
+    lifecycle_zero_win_streak: int = 0
+    lifecycle_telemetry_diagnostic_streak: int = 0
+    lifecycle_marginal_no_effect_streak: int = 0
+    lifecycle_no_effect_diagnostic_followups: int = 0
+    lifecycle_previous_signal_repeat_count: int = 0
+    lifecycle_signal_matches_previous: bool = False
+    lifecycle_rollback_count: int = 0
+    lifecycle_prior_evidence_tier: DecisionLifecyclePriorEvidenceTier = ""
+    lifecycle_has_checkpoint: bool = False
 
 @dataclass(frozen=True)
 class DecisionOutcome:

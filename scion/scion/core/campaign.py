@@ -15,6 +15,7 @@ from scion.core.campaign_adapters import (
     _workspace_service_for,
 )
 from scion.core.campaign_governance import CampaignGovernanceService
+from scion.core.branch import StateTransitionError
 from scion.core.branch_hygiene import (
     branch_hygiene_context,
     branch_prompt_card,
@@ -97,6 +98,7 @@ class CampaignManager:
         use_objective_lower_bounds_for_early_stop: bool = False,
         force_continue_early_stop: bool = False,
         allow_non_strict_runtime_verification: bool = False,
+        allow_skeleton_mode: bool = False,
         use_agentic_proposal: bool = False,
         agentic_artifact_dir: Optional[str] = None,
         agentic_session_timeout_sec: Optional[float] = None,
@@ -140,6 +142,7 @@ class CampaignManager:
             use_objective_lower_bounds_for_early_stop=use_objective_lower_bounds_for_early_stop,
             force_continue_early_stop=force_continue_early_stop,
             allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
+            allow_skeleton_mode=allow_skeleton_mode,
             use_agentic_proposal=use_agentic_proposal,
             agentic_artifact_dir=agentic_artifact_dir,
             agentic_session_timeout_sec=agentic_session_timeout_sec,
@@ -677,7 +680,28 @@ class CampaignManager:
         champion but there was no framework failure. Does NOT increment
         _recent_abandoned_count (which tracks framework-level stagnation only).
         """
-        _evaluation_orchestrator_for(self).apply_soft_abandon(bid, branch, h_record)
+        workspace = self._branch_workspaces.pop(bid, None)
+        if workspace:
+            try:
+                self._materializer.archive_workspace(workspace, bid)
+            except Exception as exc:
+                logger.debug("Branch %s: soft_abandon archive failed: %s", bid, exc)
+            try:
+                self._materializer.cleanup(workspace)
+            except Exception:
+                pass
+
+        self._branch_hypotheses.pop(bid, None)
+        self._branch_telemetry_diagnostic_streaks.pop(bid, None)
+        if h_record is not None:
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+            self._branch_current_hypothesis.pop(bid, None)
+
+        try:
+            self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+        except StateTransitionError as exc:
+            logger.debug("Branch %s: soft_abandon apply_decision failed: %s", bid, exc)
+        self._persist_branch_state(bid)
 
     def _record_hard_abandon(self, branch_id: str, reason: str) -> None:
         """Count a non-T4 branch abandonment once for hard-stagnation logic."""

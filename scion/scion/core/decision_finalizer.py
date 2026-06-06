@@ -172,23 +172,6 @@ class DecisionFinalizer:
             )
 
         if decision in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED):
-            if action_label == "reconcile":
-                self._abandon(branch=branch, h_record=h_record)
-                try:
-                    self.branch_controller.apply_decision(bid, Decision.ABANDON)
-                except StateTransitionError as exc:
-                    logger.error(
-                        "Branch %s: reconcile abandon failed: %s",
-                        bid,
-                        exc,
-                    )
-                self._persist_current_branch(bid)
-                return StepResult(
-                    action="reconcile",
-                    branch_id=bid,
-                    decision=Decision.ABANDON,
-                    reason="reconcile screening failed",
-                )
             return self._continue_explore(
                 branch=branch,
                 hypothesis=hypothesis,
@@ -246,11 +229,16 @@ class DecisionFinalizer:
             )
 
         self._persist_current_branch(bid)
+        reason_suffix = (
+            f"; reasons={','.join(effective_reason_codes)}"
+            if effective_reason_codes
+            else ""
+        )
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
             branch_id=bid,
             decision=decision,
-            reason=f"decision={decision.value}",
+            reason=f"decision={decision.value}{reason_suffix}",
         )
 
     def _prepare_promotion(

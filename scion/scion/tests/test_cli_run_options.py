@@ -280,6 +280,7 @@ def test_run_force_surface_threads_validated_request_to_campaign_manager(
             str(tmp_path / "campaign"),
             "--problem",
             str(problem_yaml),
+            "--allow-skeleton",
             "--force-surface",
             "algorithm_blueprint",
         ],
@@ -390,6 +391,7 @@ def test_run_problem_v1_calls_runtime_preflight(
             str(tmp_path / "campaign"),
             "--problem",
             str(problem_yaml),
+            "--allow-skeleton",
         ],
     )
 

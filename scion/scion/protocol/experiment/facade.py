@@ -65,9 +65,10 @@ class ExperimentProtocol:
             if champion_result_cache_enabled
             else None
         )
-        if self._require_metric_specs and self._metric_specs is None:
+        if self._require_metric_specs and not _has_metric_specs(self._metric_specs):
             raise ValueError("metric_specs are required for production ExperimentProtocol")
-        if self._metric_specs is None:
+        if not _has_metric_specs(self._metric_specs):
+            self._metric_specs = None
             logger.warning(
                 "ExperimentProtocol initialized without metric_specs; using legacy "
                 "objective fallback"
@@ -243,3 +244,7 @@ class ExperimentProtocol:
 
 
 __all__ = ["ExperimentProtocol"]
+
+
+def _has_metric_specs(metric_specs: Sequence[Any] | None) -> bool:
+    return metric_specs is not None and len(metric_specs) > 0

@@ -226,6 +226,8 @@ def _agentic_output_artifact(
         "hypothesis_summary": hypothesis_summary,
         "problem_id": output.problem_id,
         "problem_spec_hash": output.problem_spec_hash,
+        "split_manifest_hash": output.split_manifest_hash,
+        "seed_ledger_hash": output.seed_ledger_hash,
         "champion_version": output.champion_version,
         "champion_weight_revision": output.champion_weight_revision,
         "hypothesis": (
@@ -402,6 +404,8 @@ def compute_agentic_idempotency_key(
         "problem": {
             "problem_id": request.problem_id,
             "problem_spec_hash": request.problem_spec_hash,
+            "split_manifest_hash": request.split_manifest_hash,
+            "seed_ledger_hash": request.seed_ledger_hash,
         },
         "request": {
             "kind": "code" if request.approved_hypothesis is not None else "hypothesis",

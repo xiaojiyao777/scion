@@ -31,6 +31,7 @@ class CampaignVerificationFactory:
         adapter: Any | None = None,
         operator_execute_signature: str | None = None,
         allow_non_strict_runtime_verification: bool = False,
+        allow_skeleton_mode: bool = False,
     ) -> Any:
         if verification_gate is not None:
             return verification_gate
@@ -41,11 +42,15 @@ class CampaignVerificationFactory:
 
         spec_requires_adapter = _problem_spec_requires_adapter(problem_spec)
         adapter_backed = adapter is not None or spec_requires_adapter
-        strict_runtime_checks = spec_requires_adapter or (
-            adapter_backed
-            and (runner is not None or not allow_non_strict_runtime_verification)
-        )
-        require_adapter_for_runtime = spec_requires_adapter or strict_runtime_checks
+        if allow_skeleton_mode:
+            strict_runtime_checks = False
+            require_adapter_for_runtime = False
+        else:
+            strict_runtime_checks = spec_requires_adapter or (
+                adapter_backed
+                and (runner is not None or not allow_non_strict_runtime_verification)
+            )
+            require_adapter_for_runtime = spec_requires_adapter or strict_runtime_checks
 
         return VerificationGate(
             problem_spec,
@@ -54,6 +59,7 @@ class CampaignVerificationFactory:
             adapter=adapter,
             strict_runtime_checks=strict_runtime_checks,
             require_adapter_for_runtime=require_adapter_for_runtime,
+            allow_adapter_runtime_fallback=allow_skeleton_mode,
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=max_runtime_ratio,
         )

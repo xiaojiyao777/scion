@@ -309,6 +309,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--agentic-session-timeout-sec",
             help="APS max wall time per session in seconds",
         ),
+        allow_skeleton: bool = typer.Option(
+            False,
+            "--allow-skeleton",
+            help=(
+                "Explicitly allow legacy skeleton/demo fallback when production "
+                "adapter/protocol evidence is incomplete"
+            ),
+        ),
     ) -> None:
         """Run the Scion main loop.
 
@@ -468,6 +476,10 @@ def register_init_run_commands(app: typer.Typer) -> None:
         from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
         from scion.verification.gate import VerificationGate
+        from scion.core.production_boundary import (
+            is_adapter_backed_production_spec,
+            validate_production_campaign_boundary,
+        )
 
         metrics_dir = str(campaign_path / "metrics")
         runner = LocalSubprocessRunner()
@@ -478,25 +490,48 @@ def register_init_run_commands(app: typer.Typer) -> None:
             if time_limit_sec is not None
             else getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
         )
-        experiment_protocol = ExperimentProtocol(
-            proto_cfg,
-            split_manager,
-            seed_ledger_obj,
-            runner,
-            time_limit_sec=effective_time_limit,
-            metrics_dir=metrics_dir,
-            metric_specs=metric_specs,
-            objective_policy=objective_policy,
-            require_metric_specs=metric_specs is not None,
-            problem_spec=spec,
+        require_metric_specs = (
+            is_adapter_backed_production_spec(spec) and not allow_skeleton
         )
+        effective_metric_specs = metric_specs if metric_specs else None
+        try:
+            experiment_protocol = ExperimentProtocol(
+                proto_cfg,
+                split_manager,
+                seed_ledger_obj,
+                runner,
+                time_limit_sec=effective_time_limit,
+                metrics_dir=metrics_dir,
+                metric_specs=effective_metric_specs,
+                objective_policy=objective_policy,
+                require_metric_specs=require_metric_specs,
+                problem_spec=spec,
+            )
+            validate_production_campaign_boundary(
+                problem_spec=spec,
+                experiment_protocol=experiment_protocol,
+                adapter=adapter,
+                split_manifest=split_manifest,
+                seed_ledger=seed_ledger,
+                allow_skeleton=allow_skeleton,
+            )
+        except ValueError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         verification_gate = VerificationGate(
             spec,
             runner,
             metrics_dir=metrics_dir,
             adapter=adapter,
-            strict_runtime_checks=adapter is not None,
-            require_adapter_for_runtime=adapter is not None,
+            strict_runtime_checks=(
+                is_adapter_backed_production_spec(spec) and not allow_skeleton
+            )
+            or adapter is not None,
+            require_adapter_for_runtime=(
+                is_adapter_backed_production_spec(spec) and not allow_skeleton
+            )
+            or adapter is not None,
+            allow_adapter_runtime_fallback=allow_skeleton,
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=proto_cfg.runtime.max_runtime_ratio,
         )
@@ -553,6 +588,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             use_agentic_proposal=agentic_proposal,
             agentic_artifact_dir=resolved_agentic_artifact_dir,
             agentic_session_timeout_sec=agentic_session_timeout_sec,
+            allow_skeleton_mode=allow_skeleton,
             force_surface=forced_request.surface if forced_request else None,
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,

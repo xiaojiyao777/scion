@@ -107,12 +107,14 @@ class EvaluationPipeline:
         contract_evaluator: ContractEvaluator | None = None,
         verification_evaluator: VerificationEvaluator | None = None,
         experiment_protocol: ExperimentProtocolLike | None = None,
+        require_experiment_protocol: bool = False,
         feature_extractor: SafeFeatureExtractor | None = None,
         budget_provider: BudgetProvider | None = None,
     ) -> None:
         self._contract_evaluator = contract_evaluator or _default_contract_evaluator
         self._verification_evaluator = verification_evaluator or _default_verification_evaluator
         self._experiment_protocol = experiment_protocol
+        self._require_experiment_protocol = require_experiment_protocol
         self._feature_extractor = feature_extractor or SafeFeatureExtractor()
         self._budget_provider = budget_provider or (lambda: BudgetState(total=0, used=0))
 
@@ -167,7 +169,19 @@ class EvaluationPipeline:
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
-                canary_result = CanaryResult(passed=True, reason="no protocol - auto-pass")
+                if self._require_experiment_protocol:
+                    canary_result = CanaryResult(
+                        passed=False,
+                        reason=(
+                            "experiment_protocol is required for production "
+                            "campaign; skeleton fallback disabled"
+                        ),
+                    )
+                else:
+                    canary_result = CanaryResult(
+                        passed=True,
+                        reason="no protocol - auto-pass",
+                    )
 
         features = self._feature_extractor.extract(
             branch=branch,

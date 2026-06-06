@@ -45,6 +45,9 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
         surfaces = _surface_list_for_context(context, declared_surfaces)
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
+            "problem_spec_hash": context.problem_spec_hash,
+            "split_manifest_hash": context.split_manifest_hash,
+            "seed_ledger_hash": context.seed_ledger_hash,
             "surface_count": len(surfaces),
             "total_declared_surface_count": len(declared_surfaces),
             "surfaces": [_surface_listing_payload(surface) for surface in surfaces],
@@ -79,6 +82,8 @@ class ContextReadProblemTool(_BaseReadOnlyTool):
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
             "problem_spec_hash": context.problem_spec_hash,
+            "split_manifest_hash": context.split_manifest_hash,
+            "seed_ledger_hash": context.seed_ledger_hash,
             "summary": _limit_text(summary, 12000),
             "summary_truncated": len(summary) > 12000,
             "problem_object": _limit_text(problem_object, 20000),

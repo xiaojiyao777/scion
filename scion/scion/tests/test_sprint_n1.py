@@ -158,6 +158,17 @@ class TestExperimentGenericPath:
                 require_metric_specs=True,
             )
 
+        with pytest.raises(ValueError, match="metric_specs"):
+            ExperimentProtocol(
+                ProtocolConfig(),
+                SplitManager(manifest),
+                SeedLedger(ledger),
+                MagicMock(),
+                metrics_dir=str(tmp_path / "metrics-empty"),
+                metric_specs=(),
+                require_metric_specs=True,
+            )
+
     def test_warehouse_production_stack_loads_strict_adapter_and_metrics(
         self, tmp_path
     ) -> None:

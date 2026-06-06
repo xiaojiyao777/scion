@@ -2,6 +2,8 @@
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 
+import pytest
+
 class TestEvalStepHypothesisLifecycle:
     def test_eval_step_reuses_original_hypothesis_id(self, tmp_path):
         """Validation/frozen steps must reuse the same hypothesis_id from screening."""
@@ -180,6 +182,32 @@ class TestFrozenBudgetLedger:
 
 
 class TestProgrammaticRuntimeVerificationDefault:
+    def _production_spec(self, base: ProblemSpec, canary_case_path: str = "") -> ProblemSpec:
+        return base.model_copy(
+            update={
+                "spec_version": "problem-v1",
+                "adapter_import_path": "scion.problems.demo.adapter:DemoAdapter",
+                "requires_adapter_for_runtime": True,
+                "canary_case_path": canary_case_path,
+            }
+        )
+
+    def _production_split(self) -> SplitManifest:
+        return SplitManifest(
+            screening=["screening-case"],
+            validation=["validation-case"],
+            frozen=["frozen-case"],
+            canary=["canary-case"],
+        )
+
+    def _production_seeds(self) -> SeedLedgerConfig:
+        return SeedLedgerConfig(
+            screening=[1],
+            validation=[2],
+            frozen=[3],
+            canary=[4],
+        )
+
     def test_adapter_protocol_runner_builds_strict_verification_gate(self, tmp_path):
         proto = _MockProtocol()
         proto.runner = object()
@@ -260,3 +288,74 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         assert result.passed is True
         assert cm._vgate._strict_runtime_checks is False
+
+    def test_production_campaign_requires_experiment_protocol(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(ValueError, match="experiment_protocol is required"):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-no-protocol"),
+                experiment_protocol=None,
+                adapter=object(),
+            )
+
+    def test_production_campaign_requires_split_seed_canary_evidence(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        proto = _MockProtocol()
+        proto.runner = object()
+        proto.config = ProtocolConfig()
+        proto._metric_specs = (object(),)
+        proto._require_metric_specs = True
+
+        with pytest.raises(ValueError, match="split_manifest.canary is required"):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=SplitManifest(
+                    screening=["screening-case"],
+                    validation=["validation-case"],
+                    frozen=["frozen-case"],
+                    canary=[],
+                ),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-no-canary"),
+                experiment_protocol=proto,
+                adapter=object(),
+            )
+
+    def test_allow_skeleton_mode_preserves_explicit_legacy_fallback(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        cm = CampaignManager(
+            problem_spec=self._production_spec(base._spec),
+            protocol_config=ProtocolConfig(),
+            split_manifest=SplitManifest(),
+            seed_ledger=SeedLedgerConfig(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "explicit-skeleton"),
+            experiment_protocol=None,
+            adapter=None,
+            allow_skeleton_mode=True,
+        )
+
+        assert cm._experiment_protocol is None
+        assert cm._vgate._strict_runtime_checks is False
+        assert cm._vgate._require_adapter_for_runtime is False

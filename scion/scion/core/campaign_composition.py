@@ -30,7 +30,12 @@ from scion.core.features import BudgetState
 from scion.core.frozen_budget import FrozenBudgetLedger
 from scion.core.models import ChampionState, OperatorConfig
 from scion.core.plateau_controller import PlateauController
+from scion.core.production_boundary import (
+    is_adapter_backed_production_spec,
+    validate_production_campaign_boundary,
+)
 from scion.core.problem_runtime import ProblemRuntime
+from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
 from scion.core.promotion_lifecycle import PromotionLifecycleService
 from scion.core.promotion_service import PromotionService
 from scion.core.proposal_pipeline import ProposalPipeline
@@ -110,6 +115,7 @@ def compose_campaign_services(
     use_objective_lower_bounds_for_early_stop: bool = False,
     force_continue_early_stop: bool = False,
     allow_non_strict_runtime_verification: bool = False,
+    allow_skeleton_mode: bool = False,
     use_agentic_proposal: bool = False,
     agentic_artifact_dir: str | None = None,
     agentic_session_timeout_sec: float | None = None,
@@ -120,6 +126,14 @@ def compose_campaign_services(
     proposal_attempt_limit: int | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
+    validate_production_campaign_boundary(
+        problem_spec=problem_spec,
+        experiment_protocol=experiment_protocol,
+        adapter=adapter,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        allow_skeleton=allow_skeleton_mode,
+    )
     owner._problem_runtime = ProblemRuntime(
         problem_spec=problem_spec,
         adapter=adapter,
@@ -183,6 +197,7 @@ def compose_campaign_services(
         adapter=adapter,
         operator_execute_signature=operator_execute_signature,
         allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
+        allow_skeleton_mode=allow_skeleton_mode,
     )
     if hasattr(owner._experiment_protocol, "set_progress_callback"):
         owner._experiment_protocol.set_progress_callback(owner._on_protocol_progress)
@@ -431,6 +446,10 @@ def compose_campaign_services(
             owner._soft_abandon_streak + 1,
         ),
         frozen_budget_ledger=owner._frozen_budget_ledger,
+        require_experiment_protocol=(
+            is_adapter_backed_production_spec(problem_spec)
+            and not allow_skeleton_mode
+        ),
     )
     owner._explore_step_pipeline = ExploreStepPipeline(
         branch_controller=owner._branch_ctrl,
@@ -530,6 +549,10 @@ def compose_campaign_services(
         lineage_registry=owner._registry,
         split_manifest=owner._split_manifest,
         seed_ledger=owner._seed_ledger,
+        problem_id=problem_id_anchor(problem_spec),
+        problem_spec_hash=stable_identity_hash(problem_spec),
+        split_manifest_hash=stable_identity_hash(owner._split_manifest),
+        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
         use_agentic_proposal=use_agentic_proposal,
         agentic_artifact_dir=agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,

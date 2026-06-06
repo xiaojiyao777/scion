@@ -197,6 +197,8 @@ def _pipeline(
     forced_surface_target_file: str | None = None,
     forced_surface_diagnostic: bool = False,
     problem_spec=None,
+    split_manifest_hash: str | None = None,
+    seed_ledger_hash: str | None = None,
 ):
     branch = _branch()
     sibling = _branch("sibling")
@@ -257,6 +259,8 @@ def _pipeline(
         campaign_id="camp-1",
         problem_id="toy",
         problem_spec_hash="spec-hash",
+        split_manifest_hash=split_manifest_hash,
+        seed_ledger_hash=seed_ledger_hash,
         persistent_forced_locus=persistent_forced_locus,
         forced_surface_action=forced_surface_action,
         forced_surface_target_file=forced_surface_target_file,

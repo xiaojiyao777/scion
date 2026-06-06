@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
-from scion.core.branch import StateTransitionError
 from scion.core.branch_lifecycle_policy import (
-    BranchLifecycleDecision,
-    BranchLifecyclePolicy,
+    decision_features_signal_signature,
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
+    BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+    BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
+    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
+    VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
+    TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
 )
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
@@ -21,6 +25,7 @@ from scion.core.models import (
     CanaryResult,
     ChampionState,
     Decision,
+    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     FailureEvent,
@@ -68,12 +73,10 @@ class EvaluationOrchestrator:
     increment_soft_abandon_streak: Callable[[], None]
     increment_telemetry_failed_count: Callable[[], None] = lambda: None
     frozen_budget_ledger: Any | None = None
+    require_experiment_protocol: bool = False
     branch_zero_win_streaks: MutableMapping[str, int] = field(default_factory=dict)
     branch_telemetry_diagnostic_streaks: MutableMapping[str, int] = field(
         default_factory=dict
-    )
-    branch_lifecycle_policy: BranchLifecyclePolicy = field(
-        default_factory=BranchLifecyclePolicy
     )
 
     def evaluate(
@@ -124,6 +127,7 @@ class EvaluationOrchestrator:
         )
         pipeline = EvaluationPipeline(
             experiment_protocol=protocol,
+            require_experiment_protocol=self.require_experiment_protocol,
             feature_extractor=self.feature_extractor,
             budget_provider=self.get_budget,
         )
@@ -159,7 +163,14 @@ class EvaluationOrchestrator:
 
         protocol_result = evaluation.protocol_result
         canary_result = evaluation.canary_result
-        features = evaluation.decision_features
+        features = _with_lifecycle_inputs(
+            evaluation.decision_features,
+            branch=branch,
+            current_zero_win_streak=self.branch_zero_win_streaks.get(bid, 0),
+            current_telemetry_diagnostic_streak=(
+                self.branch_telemetry_diagnostic_streaks.get(bid, 0)
+            ),
+        )
         coordinated = self.decision_coordinator.decide(features)
         self.decision_reason_codes[bid] = coordinated.reason_codes
         if features.telemetry_effect_zero_diagnostic:
@@ -173,7 +184,6 @@ class EvaluationOrchestrator:
                 self.decision_reason_codes[bid],
                 (runtime_budget_code,),
             )
-        base_reason_codes = self.decision_reason_codes[bid]
         logger.info(
             "Branch %s: features wr=%s md=%s stage=%s -> decision=%s rule=%s reasons=%s",
             bid,
@@ -190,173 +200,14 @@ class EvaluationOrchestrator:
             Decision.CONTINUE_EXPLORE,
             Decision.VALIDATION_REPAIR_REQUIRED,
         ):
-            lifecycle = self.branch_lifecycle_policy.decide(
-                features,
-                current_telemetry_diagnostic_streak=(
-                    self.branch_telemetry_diagnostic_streaks.get(bid, 0)
-                ),
-                current_marginal_no_effect_streak=getattr(
-                    branch,
-                    "lifecycle_marginal_no_effect_streak",
-                    0,
-                ),
-                current_no_effect_diagnostic_followups=getattr(
-                    branch,
-                    "lifecycle_no_effect_diagnostic_followups",
-                    0,
-                ),
-                last_signal_signature=getattr(
-                    branch,
-                    "lifecycle_last_signal_signature",
-                    None,
-                ),
-                current_signal_signature_repeat_count=getattr(
-                    branch,
-                    "lifecycle_signal_repeat_count",
-                    0,
-                ),
-                rollback_count=getattr(branch, "rollback_count", 0),
-                branch_code_status=getattr(branch, "branch_code_status", ""),
-                branch_screening_tier=getattr(
-                    branch,
-                    "last_screening_feedback_tier",
-                    "",
+            if _telemetry_lifecycle_reason_present(self.decision_reason_codes[bid]):
+                self.branch_telemetry_diagnostic_streaks[bid] = (
+                    features.lifecycle_telemetry_diagnostic_streak + 1
                 )
-                or "",
-                has_checkpoint=_branch_has_checkpoint(branch),
-            )
-            if lifecycle.reason_codes:
-                self.decision_reason_codes[bid] = _merge_reason_codes(
-                    base_reason_codes,
-                    _lifecycle_reason_codes(lifecycle),
-                )
-            self.branch_telemetry_diagnostic_streaks[bid] = (
-                lifecycle.next_telemetry_diagnostic_streak
-            )
-            if lifecycle.action == "archive_lineage":
-                logger.info(
-                    "Branch %s: telemetry diagnostic lifecycle=%s -> archive_lineage",
-                    bid,
-                    lifecycle.reason_codes,
-                )
-                self._record_soft_abandon_event(
-                    bid,
-                    features.win_rate or 0.0,
-                    lifecycle.reason_codes,
-                    lifecycle_action=lifecycle.action,
-                )
-                self.increment_soft_abandon_streak()
-                self.apply_soft_abandon(
-                    bid,
-                    branch,
-                    self.branch_current_hypothesis.get(bid),
-                )
-                return Decision.ABANDON, protocol_result, canary_result
         elif screened_experiment_effective(protocol_result):
             self.branch_telemetry_diagnostic_streaks.pop(bid, None)
 
-        if (
-            decision == Decision.CONTINUE_EXPLORE
-            and features.win_rate is not None
-            and not features.telemetry_validation_repairable
-        ):
-            lifecycle = self.branch_lifecycle_policy.decide(
-                features,
-                current_zero_win_streak=self.branch_zero_win_streaks.get(bid, 0),
-                current_marginal_no_effect_streak=getattr(
-                    branch,
-                    "lifecycle_marginal_no_effect_streak",
-                    0,
-                ),
-                current_no_effect_diagnostic_followups=getattr(
-                    branch,
-                    "lifecycle_no_effect_diagnostic_followups",
-                    0,
-                ),
-                last_signal_signature=getattr(
-                    branch,
-                    "lifecycle_last_signal_signature",
-                    None,
-                ),
-                current_signal_signature_repeat_count=getattr(
-                    branch,
-                    "lifecycle_signal_repeat_count",
-                    0,
-                ),
-                rollback_count=getattr(branch, "rollback_count", 0),
-                branch_code_status=getattr(branch, "branch_code_status", ""),
-                branch_screening_tier=getattr(
-                    branch,
-                    "last_screening_feedback_tier",
-                    "",
-                )
-                or "",
-                has_checkpoint=_branch_has_checkpoint(branch),
-            )
-            if lifecycle.reason_codes:
-                self.decision_reason_codes[bid] = _merge_reason_codes(
-                    base_reason_codes,
-                    _lifecycle_reason_codes(lifecycle),
-                )
-            if lifecycle.action == "archive_lineage":
-                logger.info(
-                    "Branch %s: win_rate=%.2f lifecycle=%s -> archive_lineage",
-                    bid,
-                    features.win_rate,
-                    lifecycle.reason_codes,
-                )
-                self.branch_zero_win_streaks[bid] = lifecycle.next_zero_win_streak
-                self._record_soft_abandon_event(
-                    bid,
-                    features.win_rate,
-                    lifecycle.reason_codes,
-                    lifecycle_action=lifecycle.action,
-                )
-                self.increment_soft_abandon_streak()
-                self.apply_soft_abandon(
-                    bid,
-                    branch,
-                    self.branch_current_hypothesis.get(bid),
-                )
-                return Decision.ABANDON, protocol_result, canary_result
-            elif features.win_rate > 0.6:
-                logger.info(
-                    "Branch %s: win_rate=%.2f > 0.6 -> high_potential (continue_explore)",
-                    bid,
-                    features.win_rate,
-                )
-
         return decision, protocol_result, canary_result
-
-    def apply_soft_abandon(
-        self,
-        branch_id: str,
-        branch: Branch,
-        h_record: Optional[HypothesisRecord],
-    ) -> None:
-        """Discard a no-signal branch without incrementing hard stagnation."""
-        workspace = self.branch_workspaces.pop(branch_id, None)
-        if workspace:
-            try:
-                self.materializer.archive_workspace(workspace, branch_id)
-            except Exception as exc:
-                logger.debug("Branch %s: soft_abandon archive failed: %s", branch_id, exc)
-            try:
-                self.materializer.cleanup(workspace)
-            except Exception:
-                pass
-
-        self.branch_hypotheses.pop(branch_id, None)
-        self.branch_telemetry_diagnostic_streaks.pop(branch_id, None)
-        if h_record is not None:
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-            self.branch_current_hypothesis.pop(branch_id, None)
-
-        try:
-            self.branch_controller.apply_decision(branch_id, Decision.ABANDON)
-        except StateTransitionError as exc:
-            logger.debug("Branch %s: soft_abandon apply_decision failed: %s", branch_id, exc)
-        self.persist_branch_state(branch_id)
 
     @staticmethod
     def _prepare_expand(branch: Branch, protocol: Any) -> tuple[bool, int]:
@@ -377,31 +228,6 @@ class EvaluationOrchestrator:
             expand_round = branch.validation_expand_count
         return expand, expand_round
 
-    def _record_soft_abandon_event(
-        self,
-        branch_id: str,
-        win_rate: float,
-        reason_codes: tuple[str, ...],
-        *,
-        lifecycle_action: str = "archive_lineage",
-    ) -> None:
-        try:
-            self.registry.record_event(
-                {
-                    "campaign_id": self.campaign_id,
-                    "branch_id": branch_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "event_kind": "abandon_fast",
-                    "reason": reason_codes[0] if reason_codes else "low_signal",
-                    "reason_codes": list(reason_codes),
-                    "win_rate": win_rate,
-                    "abandon_type": "soft_lifecycle",
-                    "lifecycle_action": lifecycle_action,
-                }
-            )
-        except Exception:
-            pass
-
 
 def _merge_reason_codes(
     first: tuple[str, ...],
@@ -410,18 +236,78 @@ def _merge_reason_codes(
     return tuple(dict.fromkeys([*first, *second]))
 
 
-def _lifecycle_reason_codes(
-    lifecycle: BranchLifecycleDecision,
-) -> tuple[str, ...]:
-    if lifecycle.action in {"retain_head", "keep_exploring", "archive_lineage"}:
-        return tuple(lifecycle.reason_codes or ())
-    return tuple(
-        dict.fromkeys(
-            (
-                lifecycle.action_reason_code,
-                *tuple(lifecycle.reason_codes or ()),
-            )
-        )
+def _with_lifecycle_inputs(
+    features: DecisionFeatures,
+    *,
+    branch: Branch,
+    current_zero_win_streak: int,
+    current_telemetry_diagnostic_streak: int,
+) -> DecisionFeatures:
+    return replace(
+        features,
+        stale=features.stale
+        or bool(getattr(branch, "reconcile_rescreening", False)),
+        lifecycle_zero_win_streak=max(0, int(current_zero_win_streak or 0)),
+        lifecycle_telemetry_diagnostic_streak=max(
+            0,
+            int(current_telemetry_diagnostic_streak or 0),
+        ),
+        lifecycle_marginal_no_effect_streak=max(
+            0,
+            int(getattr(branch, "lifecycle_marginal_no_effect_streak", 0) or 0),
+        ),
+        lifecycle_no_effect_diagnostic_followups=max(
+            0,
+            int(
+                getattr(branch, "lifecycle_no_effect_diagnostic_followups", 0)
+                or 0
+            ),
+        ),
+        lifecycle_previous_signal_repeat_count=max(
+            0,
+            int(getattr(branch, "lifecycle_signal_repeat_count", 0) or 0),
+        ),
+        lifecycle_signal_matches_previous=_signal_matches_previous(features, branch),
+        lifecycle_rollback_count=max(
+            0,
+            int(getattr(branch, "rollback_count", 0) or 0),
+        ),
+        lifecycle_prior_evidence_tier=_prior_evidence_tier(branch),  # type: ignore[arg-type]
+        lifecycle_has_checkpoint=_branch_has_checkpoint(branch),
+    )
+
+
+def _signal_matches_previous(features: DecisionFeatures, branch: Branch) -> bool:
+    previous = str(getattr(branch, "lifecycle_last_signal_signature", "") or "")
+    return bool(previous and previous == decision_features_signal_signature(features))
+
+
+def _prior_evidence_tier(branch: Branch) -> str:
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    if tier in {"weak_positive", "marginal", "no_effect"}:
+        return tier
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    if status == "active_weak_positive":
+        return "weak_positive"
+    if status == "active_marginal":
+        return "marginal"
+    if status == "active_no_effect":
+        return "no_effect"
+    return ""
+
+
+def _telemetry_lifecycle_reason_present(reason_codes: tuple[str, ...]) -> bool:
+    return bool(
+        {
+            SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
+            VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
+            TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
+            BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+            BRANCH_LIFECYCLE_PARK_LINEAGE,
+            BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
+            BRANCH_LIFECYCLE_ROLLBACK_TO_CHECKPOINT,
+        }
+        & set(reason_codes or ())
     )
 
 

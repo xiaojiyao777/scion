@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from scion.config.problem import ProtocolConfig
 from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
     BRANCH_LIFECYCLE_PARK_LINEAGE,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
@@ -757,9 +758,9 @@ def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_re
     )
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
-        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
         SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     )
     assert branch_controller.soft_abandoned is False
     assert branch.branch_id not in diagnostic_streaks
@@ -1023,15 +1024,15 @@ def test_runtime_budget_saturation_reaches_decision_reason_codes() -> None:
     assert SCREENING_RUNTIME_BUDGET_SATURATION in protocol_result.reason_codes
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
-        SCREENING_RUNTIME_BUDGET_SATURATION,
         "SCREENING_WEAK_SIGNAL_CONTINUE",
+        SCREENING_RUNTIME_BUDGET_SATURATION,
     )
     assert branch_controller.soft_abandoned is False
     assert experiment_count == 1
     assert budget_used == 1
 
 
-def test_low_mid_regressive_screening_soft_abandons_and_discards_workspace() -> None:
+def test_low_mid_regressive_screening_abandon_comes_from_decision_engine() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
     workspaces = {branch.branch_id: "/tmp/candidate"}
@@ -1076,15 +1077,75 @@ def test_low_mid_regressive_screening_soft_abandons_and_discards_workspace() -> 
 
     assert decision == Decision.ABANDON
     assert protocol_result is not None
-    assert branch_controller.soft_abandoned is True
-    assert branch.branch_id not in workspaces
+    assert branch_controller.soft_abandoned is False
+    assert branch.branch_id in workspaces
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
+        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
         "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
     )
 
 
-def test_low_mid_runtime_regression_soft_abandons_and_discards_workspace() -> None:
+def test_orchestrator_does_not_run_post_decision_lifecycle_policy() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    workspaces = {branch.branch_id: "/tmp/candidate"}
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    class ContinueCoordinator:
+        def decide(self, features):
+            return SimpleNamespace(
+                decision=Decision.CONTINUE_EXPLORE,
+                reason_codes=("SCREENING_FAIL_WIN_RATE",),
+                rule="test:forced_continue",
+                features_snapshot=features,
+            )
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces=workspaces,
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_RegressiveLowMidProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=ContinueCoordinator(),  # type: ignore[arg-type]
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+        branch_zero_win_streaks={},
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.CONTINUE_EXPLORE
+    assert protocol_result is not None
+    assert branch_controller.soft_abandoned is False
+    assert branch.branch_id in workspaces
+    assert decision_reason_codes[branch.branch_id] == ("SCREENING_FAIL_WIN_RATE",)
+
+
+def test_low_mid_runtime_regression_abandon_comes_from_decision_engine() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
     workspaces = {branch.branch_id: "/tmp/candidate"}
@@ -1129,10 +1190,11 @@ def test_low_mid_runtime_regression_soft_abandons_and_discards_workspace() -> No
 
     assert decision == Decision.ABANDON
     assert protocol_result is not None
-    assert branch_controller.soft_abandoned is True
-    assert branch.branch_id not in workspaces
+    assert branch_controller.soft_abandoned is False
+    assert branch.branch_id in workspaces
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
+        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
         "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN",
         "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",
     )

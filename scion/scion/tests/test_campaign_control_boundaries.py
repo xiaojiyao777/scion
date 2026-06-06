@@ -13,6 +13,7 @@ from scion.config.problem import (
 from scion.core.campaign import CampaignManager
 from scion.core.campaign_composition import required_service_names
 from scion.core.models import ChampionState
+from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -49,6 +50,55 @@ def test_campaign_composition_installs_key_services(tmp_path):
     for name in required_service_names():
         assert getattr(manager, name) is not None
     assert manager._ctx_manager._runtime_slow_threshold == protocol.runtime.max_runtime_ratio
+
+
+def test_campaign_composition_passes_problem_identity_anchors_to_proposal_pipeline(
+    tmp_path,
+):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    spec = ProblemSpec(
+        name="composition_test",
+        root_dir=str(code_dir),
+        operator_categories=["local_search"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=["solver.py"],
+            import_whitelist=["math", "random"],
+        ),
+    )
+    split_manifest = SplitManifest(
+        screening=["case-a"],
+        validation=["case-b"],
+        frozen=["case-c"],
+    )
+    seed_ledger = SeedLedgerConfig(
+        screening=[11],
+        validation=[17],
+        frozen=[23],
+    )
+
+    manager = CampaignManager(
+        problem_spec=spec,
+        protocol_config=ProtocolConfig(),
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        llm_client=MockLLMClient(),
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="x",
+            code_snapshot_path=str(code_dir),
+            code_snapshot_hash="y",
+        ),
+        campaign_dir=str(tmp_path / "campaign"),
+    )
+
+    pipeline = manager._proposal_pipeline
+    assert pipeline.problem_id == problem_id_anchor(spec)
+    assert pipeline.problem_spec_hash == stable_identity_hash(spec)
+    assert pipeline.split_manifest_hash == stable_identity_hash(split_manifest)
+    assert pipeline.seed_ledger_hash == stable_identity_hash(seed_ledger)
 
 
 def test_campaign_composition_persists_initial_champion(tmp_path):

@@ -113,8 +113,9 @@ class TestVerificationGateIntegration:
         result = gate.run(str(tmp_path), str(tmp_path), patch)
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
-        assert "problem adapter" in result.checks[-1].detail
+        assert result.first_failure == "V_runtime_config"
+        assert "problem adapter is required" in result.checks[-1].detail
+        assert "legacy runtime fallback disabled" in result.checks[-1].detail
 
     def test_adapter_backed_problem_v1_without_adapter_fails_v5(self, tmp_path):
         canary = tmp_path / "small.json"
@@ -126,9 +127,9 @@ class TestVerificationGateIntegration:
         result = gate.run(str(tmp_path), str(tmp_path), _make_patch(_VALID_CODE))
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
+        assert result.first_failure == "V_runtime_config"
         assert "problem adapter is required" in result.checks[-1].detail
-        assert "legacy solution consistency fallback disabled" in result.checks[-1].detail
+        assert "legacy runtime fallback disabled" in result.checks[-1].detail
 
     def test_selected_surface_runtime_fields_do_not_enable_legacy_v5_fallback(
         self,
@@ -170,9 +171,9 @@ class TestVerificationGateIntegration:
         )
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
+        assert result.first_failure == "V_runtime_config"
         assert "problem adapter is required" in result.checks[-1].detail
-        assert "legacy solution consistency fallback disabled" in result.checks[-1].detail
+        assert "legacy runtime fallback disabled" in result.checks[-1].detail
 
     def test_strict_adapter_backed_runtime_passes_toy_tsp(self, tmp_path):
         spec_v1, adapter = _load_toy_tsp_adapter()

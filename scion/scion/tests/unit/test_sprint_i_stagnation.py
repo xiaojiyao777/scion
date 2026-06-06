@@ -80,6 +80,7 @@ def _make_campaign(**overrides) -> CampaignManager:
         champion=champion,
         campaign_dir=tmpdir,
         termination_config=TerminationConfig(),
+        allow_skeleton_mode=True,
     )
     defaults.update(overrides)
     return CampaignManager(**defaults)

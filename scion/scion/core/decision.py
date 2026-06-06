@@ -1,6 +1,10 @@
 from __future__ import annotations
 from typing import List
 
+from scion.core.branch_lifecycle_policy import (
+    BranchLifecycleDecision,
+    BranchLifecyclePolicy,
+)
 from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
 from scion.core.telemetry_validation import (
     FROZEN_TELEMETRY_FAILED,
@@ -20,8 +24,14 @@ class DecisionEngine:
     Output: DecisionOutcome with Decision + reason codes.
     """
 
-    def __init__(self, config: ProtocolConfig) -> None:
+    def __init__(
+        self,
+        config: ProtocolConfig,
+        *,
+        lifecycle_policy: BranchLifecyclePolicy | None = None,
+    ) -> None:
         self.config = config
+        self.lifecycle_policy = lifecycle_policy or BranchLifecyclePolicy()
 
     def decide(self, features: DecisionFeatures) -> DecisionOutcome:
         from scion.core.features import _validate_no_free_text
@@ -51,7 +61,7 @@ class DecisionEngine:
 
         if features.telemetry_validation_repairable:
             if features.stage == "validation":
-                return self._out(
+                outcome = self._out(
                     features,
                     Decision.VALIDATION_REPAIR_REQUIRED,
                     [
@@ -59,6 +69,7 @@ class DecisionEngine:
                         TELEMETRY_VALIDATION_REPAIRABLE,
                     ],
                 )
+                return self._apply_lifecycle_policy(features, outcome)
             elif features.stage == "screening":
                 reason_codes = [
                     TELEMETRY_VALIDATION_REPAIRABLE,
@@ -70,11 +81,12 @@ class DecisionEngine:
                     Decision.ABANDON,
                     [FROZEN_TELEMETRY_FAILED],
                 )
-            return self._out(
+            outcome = self._out(
                 features,
                 Decision.CONTINUE_EXPLORE,
                 reason_codes,
             )
+            return self._apply_lifecycle_policy(features, outcome)
 
         if features.telemetry_guard_failed:
             return self._out(
@@ -85,12 +97,14 @@ class DecisionEngine:
 
         stage = features.stage
         if stage == "screening":
-            return self._decide_screening(features)
+            outcome = self._decide_screening(features)
         elif stage == "validation":
-            return self._decide_validation(features)
+            outcome = self._decide_validation(features)
         elif stage == "frozen":
-            return self._decide_frozen(features)
-        return self._out(features, Decision.ABANDON, ["UNKNOWN_STAGE"])
+            outcome = self._decide_frozen(features)
+        else:
+            return self._out(features, Decision.ABANDON, ["UNKNOWN_STAGE"])
+        return self._apply_lifecycle_policy(features, outcome)
 
     # ------------------------------------------------------------------
     # Per-stage sub-decisions
@@ -296,6 +310,42 @@ class DecisionEngine:
             features_snapshot=features,
         )
 
+    def _apply_lifecycle_policy(
+        self,
+        features: DecisionFeatures,
+        outcome: DecisionOutcome,
+    ) -> DecisionOutcome:
+        if outcome.decision not in (
+            Decision.CONTINUE_EXPLORE,
+            Decision.VALIDATION_REPAIR_REQUIRED,
+        ):
+            return outcome
+        if not (
+            features.telemetry_validation_repairable
+            or (
+                features.stage == "screening"
+                and features.win_rate is not None
+            )
+        ):
+            return outcome
+
+        lifecycle = self.lifecycle_policy.decide(features)
+        lifecycle_codes = _lifecycle_reason_codes(lifecycle)
+        if not lifecycle_codes:
+            return outcome
+        reason_codes = _merge_reason_codes(outcome.reason_codes, lifecycle_codes)
+        if lifecycle.action in {"archive_lineage", "soft_abandon"}:
+            return DecisionOutcome(
+                decision=Decision.ABANDON,
+                reason_codes=reason_codes,
+                features_snapshot=features,
+            )
+        return DecisionOutcome(
+            decision=outcome.decision,
+            reason_codes=reason_codes,
+            features_snapshot=features,
+        )
+
 
 def _telemetry_failed_reason_code(stage: str) -> str:
     if stage == "frozen":
@@ -303,3 +353,25 @@ def _telemetry_failed_reason_code(stage: str) -> str:
     if stage == "validation":
         return VALIDATION_TELEMETRY_FAILED
     return SCREENING_TELEMETRY_FAILED
+
+
+def _lifecycle_reason_codes(
+    lifecycle: BranchLifecycleDecision,
+) -> tuple[str, ...]:
+    if lifecycle.action in {"retain_head", "keep_exploring"}:
+        return tuple(lifecycle.reason_codes or ())
+    return tuple(
+        dict.fromkeys(
+            (
+                lifecycle.action_reason_code,
+                *tuple(lifecycle.reason_codes or ()),
+            )
+        )
+    )
+
+
+def _merge_reason_codes(
+    first: tuple[str, ...],
+    second: tuple[str, ...],
+) -> tuple[str, ...]:
+    return tuple(dict.fromkeys([*first, *second]))

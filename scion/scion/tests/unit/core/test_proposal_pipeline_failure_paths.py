@@ -112,6 +112,120 @@ def test_agentic_completed_output_with_mismatched_anchor_is_rejected(
     assert circuit.failures == [detail]
 
 
+def test_agentic_output_missing_problem_anchor_fails_closed() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash=None,
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=SimpleNamespace(run=lambda _request: output),
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    rejected = pipeline.agentic_outputs[branch.branch_id]
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert "agentic_proposal:anchor_validation_failed" in detail
+    assert "problem_spec_hash missing expected 'spec-hash'" in detail
+    assert rejected.patch is None
+    assert rejected.structured_rejection["failure_code"] == (
+        "agentic_problem_anchor_validation_failed"
+    )
+    assert rejected.structured_rejection["anchor_failures"][0]["reason_code"] == (
+        "agentic_problem_anchor_missing"
+    )
+    assert len(failures) == 1
+    assert circuit.failures == [detail]
+
+
+def test_agentic_output_mismatched_split_seed_anchor_fails_closed() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        split_manifest_hash="wrong-split",
+        seed_ledger_hash="seed-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    pipeline, branch, _, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=SimpleNamespace(run=lambda _request: output),
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    rejected = pipeline.agentic_outputs[branch.branch_id]
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert "split_manifest_hash expected 'split-hash' got 'wrong-split'" in detail
+    assert rejected.termination_reason == AgenticTerminationReason.ANCHOR_VALIDATION_FAILED
+    assert rejected.structured_rejection["anchor_failures"][0]["reason_code"] == (
+        "agentic_problem_anchor_mismatch"
+    )
+
+
+def test_agentic_output_matching_problem_anchors_passes() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+        hypothesis=creative.hypothesis,
+        patch=None,
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=SimpleNamespace(run=lambda _request: output),
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert failures == []
+    assert circuit.successes == 1
+
+
 def test_agentic_artifact_dir_without_agentic_proposal_does_not_create_files(
     tmp_path: Path,
 ) -> None:

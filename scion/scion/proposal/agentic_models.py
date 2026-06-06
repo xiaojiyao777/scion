@@ -154,6 +154,8 @@ class AgenticProposalOutput:
     champion_weight_revision: int | None = None
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    split_manifest_hash: str | None = None
+    seed_ledger_hash: str | None = None
     selected_surface: str | None = None
     action: str | None = None
     hypothesis: HypothesisProposal | None = None
@@ -196,6 +198,8 @@ class AgenticProposalRequest:
     approve_hypothesis: Callable[[HypothesisProposal], Any] | None = None
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    split_manifest_hash: str | None = None
+    seed_ledger_hash: str | None = None
     prior_failure: str | None = None
     approved_hypothesis: HypothesisProposal | None = None
     tool_context: ProposalToolContext | None = None
