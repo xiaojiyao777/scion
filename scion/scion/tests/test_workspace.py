@@ -204,8 +204,12 @@ class TestApplyPatch:
         assert not outside.exists()
 
     def test_hash_changes_on_new_content(
-        self, mat: WorkspaceMaterializer, code_base: Path
+        self, campaign_dir: Path, code_base: Path
     ):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            editable_patterns=("operators",),
+        )
         ws = mat.create_branch_workspace("b6", str(code_base))
         patch1 = PatchProposal(
             file_path="operators/op_a.py", action="create", code_content="x = 1\n"

@@ -165,9 +165,28 @@ def test_explicit_empty_frozen_patterns_do_not_reinstate_legacy_defaults(
     assert _relative_files(Path(archive)) == ["solver.py", "vns.py"]
 
 
-def test_legacy_mode_keeps_operators_policies_identity(tmp_path: Path) -> None:
+def test_default_materializer_has_empty_editable_identity(tmp_path: Path) -> None:
     ws = _workspace(tmp_path)
     materializer = WorkspaceMaterializer(str(tmp_path / "campaign"))
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    _write(ws / "surfaces" / "heuristic.py", "VALUE = 99\n")
+    _write(ws / "data" / "case.json", '{"changed": true}\n')
+    _write(ws / "operators" / "legacy.py", "VALUE = 2\n")
+    _write(ws / "policies" / "legacy_policy.py", "VALUE = 2\n")
+    assert materializer.compute_code_hash(str(ws)) == code_hash
+
+    assert materializer.archive_workspace(str(ws), branch_id="default-branch") is None
+
+
+def test_explicit_operators_policies_identity_keeps_legacy_behavior(
+    tmp_path: Path,
+) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        editable_patterns=("operators/*.py", "policies/*.py"),
+    )
 
     code_hash = materializer.compute_code_hash(str(ws))
     _write(ws / "surfaces" / "heuristic.py", "VALUE = 99\n")

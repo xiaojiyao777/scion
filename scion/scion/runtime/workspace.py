@@ -105,7 +105,7 @@ class WorkspaceMaterializer:
             patch: PatchProposal to apply.
 
         Returns:
-            SHA-256 hex string of operators/ directory after patch.
+            SHA-256 hex string of declared editable identity files after patch.
 
         Raises:
             FrozenFileError: If the patch targets a frozen file.
@@ -313,7 +313,7 @@ class WorkspaceMaterializer:
 
     def _identity_files(self, ws: Path) -> list[Path]:
         if self._editable_patterns is None:
-            return _legacy_identity_files(ws)
+            return []
         return _explicit_identity_files(
             ws,
             patterns=self._editable_patterns,
@@ -341,16 +341,6 @@ def _hash_files(ws: Path, files: Iterable[Path]) -> str:
         h.update(rel.as_posix().encode())
         h.update(file_path.read_bytes())
     return h.hexdigest()
-
-
-def _legacy_identity_files(ws: Path) -> list[Path]:
-    files: list[Path] = []
-    for surface_dir_name in ("operators", "policies"):
-        surface_dir = ws / surface_dir_name
-        if not surface_dir.exists():
-            continue
-        files.extend(surface_dir.rglob("*.py"))
-    return _dedupe_sorted_paths(files, ws)
 
 
 def _explicit_identity_files(
