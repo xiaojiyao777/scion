@@ -105,6 +105,7 @@ class AgenticProposalSessionState:
     session_id: str
     campaign_id: str
     branch_id: str
+    context_profile: str | None = None
     request_id: str = ""
     idempotency_key: str = ""
     phase: AgenticProposalPhase = AgenticProposalPhase.ORIENT
@@ -156,6 +157,7 @@ class AgenticProposalOutput:
     problem_spec_hash: str | None = None
     split_manifest_hash: str | None = None
     seed_ledger_hash: str | None = None
+    context_profile: str | None = None
     selected_surface: str | None = None
     action: str | None = None
     hypothesis: HypothesisProposal | None = None
@@ -200,6 +202,7 @@ class AgenticProposalRequest:
     problem_spec_hash: str | None = None
     split_manifest_hash: str | None = None
     seed_ledger_hash: str | None = None
+    context_profile: str | None = None
     prior_failure: str | None = None
     approved_hypothesis: HypothesisProposal | None = None
     tool_context: ProposalToolContext | None = None
@@ -260,6 +263,7 @@ class AgenticSessionIndexEntry:
     code_retry_failure_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
     code_retry_failure_count: int = 0
     session_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    context_profile: str = ""
     failure_category: str = ""
     failure_detail: str = ""
     failure_reason: str = ""

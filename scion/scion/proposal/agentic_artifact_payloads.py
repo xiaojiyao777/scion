@@ -110,6 +110,7 @@ def _compact_transcript(
         "failure_code",
         "schema_retry_feedback_digest",
         "schema_retry_feedback_ref",
+        "context_profile",
     }
     for event in transcript:
         metadata = {
@@ -148,6 +149,7 @@ def _agentic_transcript_artifact(
         "idempotency_key": state.idempotency_key,
         "campaign_id": state.campaign_id,
         "branch_id": state.branch_id,
+        "context_profile": state.context_profile,
         "phase": state.phase.value,
         "status": _enum_value(state.status),
         "termination_reason": state.loop_stop_reason,
@@ -228,6 +230,7 @@ def _agentic_output_artifact(
         "problem_spec_hash": output.problem_spec_hash,
         "split_manifest_hash": output.split_manifest_hash,
         "seed_ledger_hash": output.seed_ledger_hash,
+        "context_profile": output.context_profile,
         "champion_version": output.champion_version,
         "champion_weight_revision": output.champion_weight_revision,
         "hypothesis": (

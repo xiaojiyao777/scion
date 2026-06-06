@@ -19,10 +19,12 @@ class AgenticSessionOrchestrationMixin:
             campaign_id=request.campaign_id,
             branch_id=request.branch.branch_id,
             tool_loop_config=_tool_loop_config_payload(self._tool_loop_config),
+            context_profile=request.context_profile,
         )
         state.note(
             AgenticProposalPhase.ORIENT,
             "Loaded exposure-controlled proposal context.",
+            metadata={"context_profile": request.context_profile},
         )
         state.note(
             AgenticProposalPhase.DIAGNOSE,

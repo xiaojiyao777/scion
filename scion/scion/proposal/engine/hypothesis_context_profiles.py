@@ -48,6 +48,7 @@ _REPAIR_TRIGGER_KEYS = frozenset(
 )
 
 _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
+_PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
 
 
 def derive_hypothesis_context_profile(
@@ -77,6 +78,13 @@ def filter_hypothesis_context_for_prompt(
     """Project ContextManager output into the prompt-visible context."""
     profile = derive_hypothesis_context_profile(context)
     filtered = dict(context)
+    filtered["context_profile"] = profile
+    filtered["context_profile_metadata"] = {
+        "schema_version": _PROFILE_METADATA_SCHEMA,
+        "profile": profile,
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
 
     for key in _FULL_CONTEXT_KEYS:
         filtered.pop(key, None)

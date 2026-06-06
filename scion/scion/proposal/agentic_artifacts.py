@@ -253,6 +253,7 @@ def _agentic_index_summary_fields(
         "failure_category": str(_enum_value(output.failure_category) or ""),
         "failure_detail": failure_detail,
         "failure_reason": failure_detail,
+        "context_profile": str(output.context_profile or ""),
         "selected_surface": selected_surface,
         "action": action,
         "target_file": target_file,
@@ -277,6 +278,7 @@ def _agentic_index_summary_fields_from_item(
         "failure_category": str(item.get("failure_category") or ""),
         "failure_detail": failure_detail,
         "failure_reason": str(item.get("failure_reason") or failure_detail),
+        "context_profile": str(item.get("context_profile") or ""),
         "selected_surface": str(
             item.get("selected_surface")
             or hypothesis_summary.get("selected_surface")
@@ -430,6 +432,7 @@ class AgenticSessionStore:
                 termination_reason=entry.termination_reason,
                 final_artifact_ref=public_ref,
                 final_artifact_path=public_ref,
+                context_profile=output.context_profile,
             )
         except Exception:
             pass
@@ -806,6 +809,7 @@ def inspect_agentic_session_artifact(
         "failure_category": payload.get("failure_category"),
         "failure_detail": payload.get("failure_detail"),
         "failure_reason": payload.get("failure_reason") or payload.get("failure_detail"),
+        "context_profile": payload.get("context_profile"),
         "selected_surface": payload.get("selected_surface"),
         "action": payload.get("action"),
         "target_file": payload.get("target_file"),

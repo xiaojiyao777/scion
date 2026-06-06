@@ -156,6 +156,7 @@ def build_api_visible_prompt_manifest(
     user_chars = len(rendered_user_prompt) if rendered_available else 0
     total_chars = system_chars + user_chars
     raw_context_digest = stable_digest(safe_context, length=64)
+    context_profile = _context_profile_from_safe_context(safe_context)
     visibility_ledger = _visibility_ledger(
         section_records=section_records,
         included_observations=included_observations,
@@ -175,6 +176,8 @@ def build_api_visible_prompt_manifest(
         "phase": phase,
         "call_kind": call_kind,
         "call_index": call_index,
+        "context_profile": context_profile,
+        "context_profile_metadata": safe_context.get("context_profile_metadata"),
         "projection_source": (
             "rendered_provider_prompt" if rendered_available else "render_failed"
         ),
@@ -282,6 +285,18 @@ def build_api_visible_prompt_manifest(
         ),
         "raw_prompt_saved": False,
     }
+
+
+def _context_profile_from_safe_context(context: Mapping[str, Any]) -> str:
+    profile = str(context.get("context_profile") or "").strip()
+    if profile in {"algorithm", "repair"}:
+        return profile
+    metadata = context.get("context_profile_metadata")
+    if isinstance(metadata, Mapping):
+        profile = str(metadata.get("profile") or "").strip()
+        if profile in {"algorithm", "repair"}:
+            return profile
+    return ""
 
 
 def _code_file_visibility_ledger(

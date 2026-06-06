@@ -95,6 +95,8 @@ def test_campaign_composition_passes_problem_identity_anchors_to_proposal_pipeli
     )
 
     pipeline = manager._proposal_pipeline
+    assert manager._campaign_id
+    assert pipeline.campaign_id == manager._campaign_id
     assert pipeline.problem_id == problem_id_anchor(spec)
     assert pipeline.problem_spec_hash == stable_identity_hash(spec)
     assert pipeline.split_manifest_hash == stable_identity_hash(split_manifest)

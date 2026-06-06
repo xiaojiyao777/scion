@@ -49,6 +49,8 @@ def test_default_agentic_session_has_registry_and_requests_get_tool_context() ->
     assert hypothesis is not None
     assert record is not None
     assert len(captured) == 1
+    assert captured[0].campaign_id == "camp-1"
+    assert captured[0].context_profile == "algorithm"
     assert isinstance(captured[0].tool_context, ProposalToolContext)
     assert captured[0].tool_context.branch is branch
     assert captured[0].tool_context.problem_id == "toy"
@@ -109,7 +111,11 @@ def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
     pipeline.generate_hypothesis(branch)
 
     assert len(captured) == 1
+    assert captured[0].campaign_id == "camp-1"
+    assert captured[0].context_profile == "algorithm"
     prompt_context = captured[0].hypothesis_context
+    assert prompt_context["context_profile"] == "algorithm"
+    assert prompt_context["context_profile_metadata"]["profile"] == "algorithm"
     assert "branch_dossier" in raw_context
     assert "branch_dossier" not in prompt_context
     assert "research_log" not in prompt_context
@@ -120,6 +126,97 @@ def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
     )
     assert "cross_branch_research.v1" not in prompt_context["cross_branch_research"]
     assert "Compact agentic lesson." in prompt_context["cross_branch_research"]
+
+
+def test_agentic_hypothesis_request_records_repair_context_profile() -> None:
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="session-1",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                context_profile=request.context_profile,
+                hypothesis=FakeCreative().hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=CapturingSession(),
+    )
+    raw_context = {
+        "kind": "hypothesis",
+        "agentic_prior_quality_blocks": [
+            {"failure_code": "proposal_activation_diagnostic"}
+        ],
+        "agentic_prior_quality_block_rule": "repair cited issue",
+        "agentic_negative_fact_block": "negative fact",
+    }
+
+    def build_hypothesis_context(**kwargs):
+        runtime.hypothesis_kwargs = kwargs
+        return raw_context
+
+    runtime.build_hypothesis_context = build_hypothesis_context
+
+    pipeline.generate_hypothesis(branch)
+
+    assert len(captured) == 1
+    request = captured[0]
+    assert request.campaign_id == "camp-1"
+    assert request.context_profile == "repair"
+    assert request.hypothesis_context["context_profile"] == "repair"
+    assert request.hypothesis_context["context_profile_metadata"]["profile"] == (
+        "repair"
+    )
+    assert request.hypothesis_context["agentic_prior_quality_blocks"]
+
+
+def test_agentic_artifacts_record_campaign_id_and_context_profile(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    session = AgenticProposalSession(
+        FakeCreative(),
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    pipeline, branch, _, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=session,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    output_paths = list(artifact_dir.glob("*/output.json"))
+    manifest_paths = list(
+        artifact_dir.glob("*/scratch/api_visible_prompt_manifest_*.json")
+    )
+    transcript_paths = list(artifact_dir.glob("*/transcript.json"))
+    assert len(output_paths) == 1
+    assert manifest_paths
+    assert len(transcript_paths) == 1
+
+    output_payload = json.loads(output_paths[0].read_text(encoding="utf-8"))
+    manifest_payload = json.loads(manifest_paths[0].read_text(encoding="utf-8"))
+    transcript_payload = json.loads(transcript_paths[0].read_text(encoding="utf-8"))
+    index_payload = json.loads(
+        (artifact_dir / "agentic_session_index.json").read_text(encoding="utf-8")
+    )
+
+    assert output_payload["campaign_id"] == "camp-1"
+    assert output_payload["context_profile"] == "algorithm"
+    assert manifest_payload["context_profile"] == "algorithm"
+    assert manifest_payload["context_profile_metadata"]["profile"] == "algorithm"
+    assert transcript_payload["campaign_id"] == "camp-1"
+    assert transcript_payload["context_profile"] == "algorithm"
+    assert index_payload[0]["context_profile"] == "algorithm"
 
 
 def test_default_agentic_session_uses_configured_timeout() -> None:

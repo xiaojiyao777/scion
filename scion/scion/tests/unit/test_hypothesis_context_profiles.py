@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import fields
+
+from scion.core.models import DecisionFeatures
 from scion.proposal.engine.hypothesis_context_profiles import (
     derive_hypothesis_context_profile,
     filter_hypothesis_context_for_prompt,
@@ -142,6 +145,13 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     filtered = filter_hypothesis_context_for_prompt(context)
 
     assert derive_hypothesis_context_profile(context) == "algorithm"
+    assert filtered["context_profile"] == "algorithm"
+    assert filtered["context_profile_metadata"] == {
+        "schema_version": "hypothesis_context_profile.v1",
+        "profile": "algorithm",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
     assert "branch_dossier" not in filtered
     assert "branch_dossier_payload" not in filtered
     assert "research_log" not in filtered
@@ -210,6 +220,8 @@ def test_repair_profile_retains_concrete_repair_feedback():
     filtered = filter_hypothesis_context_for_prompt(context)
 
     assert derive_hypothesis_context_profile(context) == "repair"
+    assert filtered["context_profile"] == "repair"
+    assert filtered["context_profile_metadata"]["profile"] == "repair"
     assert filtered["agentic_prior_quality_blocks"]
     assert filtered["agentic_prior_quality_block_rule"] == "repair cited issue"
     assert filtered["agentic_negative_fact_block"] == "negative fact"
@@ -218,6 +230,13 @@ def test_repair_profile_retains_concrete_repair_feedback():
     assert filtered["failure_pattern_warning"] == "verification_heavy streak=3"
     assert filtered["runtime_failure_guidance"] == "repair runtime failure"
     assert filtered["branch_hygiene"]["repair_focus_required"] is True
+
+
+def test_context_profile_metadata_does_not_enter_decision_features():
+    decision_fields = {field.name for field in fields(DecisionFeatures)}
+
+    assert "context_profile" not in decision_fields
+    assert "context_profile_metadata" not in decision_fields
 
 
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():

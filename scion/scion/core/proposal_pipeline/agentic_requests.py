@@ -104,6 +104,9 @@ class AgenticRequestMixin:
             problem_spec_hash=self.problem_spec_hash,
             split_manifest_hash=self.split_manifest_hash,
             seed_ledger_hash=self.seed_ledger_hash,
+            context_profile=_context_profile_from_hypothesis_context(
+                hypothesis_context
+            ),
             prior_failure=prior_failure,
             approved_hypothesis=approved_hypothesis,
             resume_context=resume_context,
@@ -187,3 +190,19 @@ class AgenticRequestMixin:
             branch_hygiene=branch_hygiene_context(branch),
             branch_hygiene_guidance=branch_hygiene_guidance(branch),
         )
+
+
+def _context_profile_from_hypothesis_context(
+    context: Mapping[str, Any] | None,
+) -> str | None:
+    if not isinstance(context, Mapping):
+        return None
+    profile = str(context.get("context_profile") or "").strip()
+    if profile in {"algorithm", "repair"}:
+        return profile
+    metadata = context.get("context_profile_metadata")
+    if isinstance(metadata, Mapping):
+        profile = str(metadata.get("profile") or "").strip()
+        if profile in {"algorithm", "repair"}:
+            return profile
+    return None

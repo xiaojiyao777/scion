@@ -549,6 +549,7 @@ def compose_campaign_services(
         lineage_registry=owner._registry,
         split_manifest=owner._split_manifest,
         seed_ledger=owner._seed_ledger,
+        campaign_id=owner._campaign_id,
         problem_id=problem_id_anchor(problem_spec),
         problem_spec_hash=stable_identity_hash(problem_spec),
         split_manifest_hash=stable_identity_hash(owner._split_manifest),

@@ -33,12 +33,14 @@ def attach_agentic_trace_context(
 ) -> dict[str, Any]:
     """Return a prompt context copy with trace-only audit metadata attached."""
     updated = dict(context)
+    context_profile = _context_profile_from_context(updated)
     updated["_scion_trace_context"] = _drop_empty(
         {
             "session_id": session_id,
             "request_id": request_id,
             "branch_id": branch_id,
             "campaign_id": campaign_id,
+            "context_profile": context_profile,
             "request_kind": request_kind,
             "call_kind": call_kind,
             "phase": phase,
@@ -111,6 +113,7 @@ def record_trace_start(
             "call_kind": trace_context.get("call_kind") or request_kind,
             "attempt_number": _int_or_none(trace_context.get("attempt_number")),
             "phase": trace_context.get("phase") or request_kind,
+            "context_profile": trace_context.get("context_profile"),
             "model": model,
             "prompt_hash": prompt_hash,
             "prompt_manifest_artifact_ref": prompt_manifest_ref,
@@ -163,6 +166,7 @@ def record_trace_finish(
                 or context.get("request_kind"),
                 "attempt_number": _int_or_none(trace_context.get("attempt_number")),
                 "phase": trace_context.get("phase") or context.get("request_kind"),
+                "context_profile": trace_context.get("context_profile"),
                 "finished_at": finished_at,
                 "final_status": "ok" if ok else "error",
                 "ok": ok,
@@ -184,6 +188,7 @@ def record_session_final(
     termination_reason: str,
     final_artifact_ref: str,
     final_artifact_path: str,
+    context_profile: str | None = None,
 ) -> None:
     if not str(session_id or "").strip():
         return
@@ -199,6 +204,7 @@ def record_session_final(
                 "phase": phase,
                 "final_status": final_status,
                 "termination_reason": termination_reason,
+                "context_profile": context_profile,
                 "final_artifact_ref": final_artifact_ref,
                 "final_artifact_path": final_artifact_path,
                 "updated_at": datetime.now().isoformat(),
@@ -218,6 +224,8 @@ def trace_context_from_prompt_context(context: Mapping[str, Any]) -> dict[str, A
             "request_id": raw.get("request_id") or context.get("request_id"),
             "branch_id": raw.get("branch_id") or context.get("branch_id"),
             "campaign_id": raw.get("campaign_id") or context.get("campaign_id"),
+            "context_profile": raw.get("context_profile")
+            or _context_profile_from_context(context),
             "request_kind": raw.get("request_kind"),
             "call_kind": raw.get("call_kind"),
             "phase": raw.get("phase") or context.get("phase"),
@@ -231,6 +239,18 @@ def trace_context_from_prompt_context(context: Mapping[str, Any]) -> dict[str, A
 def _prompt_manifest_context(context: Mapping[str, Any]) -> dict[str, Any]:
     raw = context.get("_scion_prompt_manifest") if isinstance(context, Mapping) else {}
     return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def _context_profile_from_context(context: Mapping[str, Any]) -> str:
+    profile = str(context.get("context_profile") or "").strip()
+    if profile in {"algorithm", "repair"}:
+        return profile
+    metadata = context.get("context_profile_metadata")
+    if isinstance(metadata, Mapping):
+        profile = str(metadata.get("profile") or "").strip()
+        if profile in {"algorithm", "repair"}:
+            return profile
+    return ""
 
 
 def _upsert_trace_record(
