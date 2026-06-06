@@ -171,6 +171,12 @@ P1/P0 级修复后，短实验必须从有效 `4R` 重新开始，然后依次�
 只能证明 provider、账户或运行环境状态，不能当作 Scion 行为分析。修好原因后必须
 用同一个 round count 重跑，不能直接晋级到下一档。
 
+正式 agentic / production run 还必须有 `ExperimentProtocol` 证据。代码里保留的
+`no protocol - auto-pass` 只用于 legacy skeleton / 单元测试兼容，不代表
+Contract → Verification → Protocol → Decision 的正式实验闭环。除非显式声明
+`--allow-skeleton` 或 controlled skeleton smoke，否则任何 `experiment_protocol=None`
+的 run 都不能计入有效轮次，也不能作为算法质量或 Scion 行为证据。
+
 ## 4. 前台启动一个 formal CVRP smoke
 
 适合 1-5 rounds 的手动调试。先创建 run root：
