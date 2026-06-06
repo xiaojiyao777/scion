@@ -34,6 +34,7 @@ from scion.core.problem_runtime import ProblemRuntime
 from scion.core.promotion_lifecycle import PromotionLifecycleService
 from scion.core.promotion_service import PromotionService
 from scion.core.proposal_pipeline import ProposalPipeline
+from scion.core.research_surface_index import editable_identity_patterns
 from scion.core.scheduler import Scheduler
 from scion.core.status_reporter import StatusReporter
 from scion.core.stagnation import StagnationDetector
@@ -67,6 +68,25 @@ def _mark_balance_exhausted(owner: Any) -> None:
     owner._balance_exhausted = True
     if not getattr(owner, "_external_stop_requested", False):
         owner.request_stop("api_balance_exhausted")
+
+
+def _pattern_set(patterns: Any) -> frozenset[str] | None:
+    normalized = frozenset(
+        pattern
+        for pattern in (str(value).strip() for value in (patterns or ()))
+        if pattern
+    )
+    return normalized or None
+
+
+def _materializer_kwargs_from_problem_spec(
+    problem_spec: Any,
+) -> dict[str, Any]:
+    search_space = getattr(problem_spec, "search_space", None)
+    return {
+        "frozen_patterns": _pattern_set(getattr(search_space, "frozen", ())),
+        "editable_patterns": editable_identity_patterns(problem_spec),
+    }
 
 
 def compose_campaign_services(
@@ -151,9 +171,7 @@ def compose_campaign_services(
     )
     owner._materializer = WorkspaceMaterializer(
         campaign_dir,
-        frozen_patterns=frozenset(problem_spec.search_space.frozen)
-        if problem_spec.search_space.frozen
-        else None,
+        **_materializer_kwargs_from_problem_spec(problem_spec),
     )
     owner._experiment_protocol = experiment_protocol
     os.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)

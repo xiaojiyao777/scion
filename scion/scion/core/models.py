@@ -385,6 +385,20 @@ class BranchCheckpointRecord:
 
 # --- Decision Features (The "Safe" Boundary) ---
 
+DecisionRuntimeEvidenceConfidence = Literal[
+    "high",
+    "sufficient",
+    "low",
+    "low_cached_champion",
+    "low_sample_diagnostic",
+    "missing",
+]
+DecisionRuntimeEvidenceStatus = Literal[
+    "sufficient",
+    "insufficient",
+    "fresh_champion_required",
+]
+
 @dataclass(frozen=True)
 class DecisionFeatures:
     branch_id: str
@@ -412,8 +426,8 @@ class DecisionFeatures:
     runtime_delta_median_ms: Optional[float] = None
     runtime_regression_rate: Optional[float] = None
     runtime_pairs: int = 0
-    runtime_evidence_confidence: str = "high"
-    runtime_evidence_status: str = "sufficient"
+    runtime_evidence_confidence: DecisionRuntimeEvidenceConfidence = "high"
+    runtime_evidence_status: DecisionRuntimeEvidenceStatus = "sufficient"
     protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
     total_pairs: int = 0
     attempted_pairs: int = 0

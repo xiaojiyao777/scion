@@ -17,6 +17,7 @@ from scion.core.models import (
 from scion.core.repeated_contract_failures import (
     REPEATED_CONTRACT_FAILURE_CODE,
     REPEATED_CONTRACT_REROUTE_REASON,
+    contract_preview_failure_reroute_feedback,
     contract_preview_failure_signature_feedback,
     extract_contract_failure_signature,
     record_contract_failure_attempt,
@@ -178,6 +179,169 @@ def test_contract_preview_failure_signature_feedback_is_prompt_safe() -> None:
     )
     assert "raw trace says" not in str(feedback)
     assert "private mutable cache" not in str(feedback)
+
+
+def test_repeated_contract_preview_reroute_feedback_blocks_threshold_hit() -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        BranchState.EXPLORE,
+        1,
+        "champ",
+    )
+    detail = (
+        "Contract preview failed: object_model_no_dynamic_private_attrs; "
+        "raw trace says private mutable cache touched generated state"
+    )
+    record_contract_failure_attempt(
+        branch,
+        detail,
+        _hypothesis(),
+        _session_ref(),
+        failure_stage="code_generation",
+    )
+    preview_payload = {
+        "passed": False,
+        "patch": {
+            "target_file": "policies/state.py",
+            "contract": {
+                "passed": False,
+                "failed_checks": ["object_model_no_dynamic_private_attrs"],
+            },
+            "checks": [
+                {
+                    "name": "object_model_no_dynamic_private_attrs",
+                    "passed": False,
+                    "detail": "raw slotted/private prose must stay tainted",
+                }
+            ],
+        },
+    }
+
+    feedback = contract_preview_failure_reroute_feedback(
+        branch,
+        "contract preview did not pass: raw slotted/private prose",
+        _hypothesis(),
+        preview_payload,
+        source_tool="proposal.contract_preview",
+        failure_stage="code_generation",
+    )
+
+    assert feedback["reason_code"] == REPEATED_CONTRACT_REROUTE_REASON
+    assert feedback["failure_code"] == REPEATED_CONTRACT_FAILURE_CODE
+    assert feedback["check_id"] == "object_model_no_dynamic_private_attrs"
+    assert feedback["category_id"] == "contract_boundary_failure"
+    assert feedback["target_file"] == "policies/state.py"
+    assert feedback["prior_count"] == 1
+    assert feedback["count"] == 2
+    assert feedback["threshold"] == 2
+    assert feedback["counts_as_screened_round"] is False
+    assert feedback["counts_as_proposal_quality_attempt"] is True
+    assert feedback["decision_features_excluded"] is True
+    assert "raw slotted/private prose" not in str(feedback)
+
+
+def test_repeated_contract_preview_reroute_feedback_respects_threshold_three() -> None:
+    branch = Branch(
+        str(uuid.uuid4()),
+        BranchState.EXPLORE,
+        1,
+        "champ",
+    )
+    detail = "Contract preview failed: object_model_no_dynamic_private_attrs"
+    first = record_contract_failure_attempt(
+        branch,
+        detail,
+        _hypothesis(),
+        _session_ref(),
+        failure_stage="code_generation",
+        threshold=3,
+    )
+
+    too_early = contract_preview_failure_reroute_feedback(
+        branch,
+        detail,
+        _hypothesis(),
+        {
+            "passed": False,
+            "patch": {
+                "contract": {
+                    "passed": False,
+                    "failed_checks": ["object_model_no_dynamic_private_attrs"],
+                },
+            },
+        },
+        source_tool="proposal.contract_preview",
+        failure_stage="code_generation",
+        threshold=3,
+    )
+    second = record_contract_failure_attempt(
+        branch,
+        detail,
+        _hypothesis(),
+        _session_ref(),
+        failure_stage="code_generation",
+        threshold=3,
+    )
+    threshold_hit = contract_preview_failure_reroute_feedback(
+        branch,
+        detail,
+        _hypothesis(),
+        {
+            "passed": False,
+            "patch": {
+                "contract": {
+                    "passed": False,
+                    "failed_checks": ["object_model_no_dynamic_private_attrs"],
+                },
+            },
+        },
+        source_tool="proposal.contract_preview",
+        failure_stage="code_generation",
+        threshold=3,
+    )
+
+    assert first.threshold_reached is False
+    assert second.threshold_reached is False
+    assert too_early == {}
+    assert threshold_hit["count"] == 3
+    assert threshold_hit["threshold"] == 3
+    assert threshold_hit["threshold_reached"] is True
+
+
+def test_reroute_session_ref_signature_uses_original_check_id() -> None:
+    session_ref = {
+        "failure_category": "contract_boundary_failure",
+        "failure_code": REPEATED_CONTRACT_FAILURE_CODE,
+        "primary_failure": {
+            "stage": "agent_quality_blocked",
+            "reason": REPEATED_CONTRACT_REROUTE_REASON,
+            "category": "contract_boundary_failure",
+            "code": REPEATED_CONTRACT_REROUTE_REASON,
+        },
+        "rejection_constraint": {
+            "reason_code": REPEATED_CONTRACT_REROUTE_REASON,
+            "check_id": "object_model_no_dynamic_private_attrs",
+            "category_id": "contract_boundary_failure",
+            "target_file": "policies/state.py",
+            "threshold": 2,
+            "count": 2,
+        },
+    }
+
+    signature = extract_contract_failure_signature(
+        (
+            "agent_quality_blocked:repeated_contract_signature_reroute:"
+            "raw prose should not become the check id"
+        ),
+        _hypothesis(),
+        session_ref,
+        failure_stage="agent_quality_blocked",
+    )
+
+    assert signature is not None
+    assert signature.contract_check == "object_model_no_dynamic_private_attrs"
+    assert signature.failure_category == "contract_boundary_failure"
+    assert REPEATED_CONTRACT_REROUTE_REASON not in signature.key
 
 
 def test_decision_features_keep_only_repeated_contract_enum() -> None:

@@ -8,7 +8,7 @@ import signal
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 
@@ -17,6 +17,7 @@ from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
     validate_declared_problem_data_cases,
 )
+from scion.core.research_surface_index import editable_identity_patterns
 
 
 class _CampaignSignalStop(KeyboardInterrupt):
@@ -41,6 +42,40 @@ def _fd_target(fd: int) -> str:
         return os.readlink(proc_fd)
     except OSError:
         return f"fd:{fd}"
+
+
+def _pattern_set(patterns: Any) -> frozenset[str] | None:
+    normalized = frozenset(
+        pattern
+        for pattern in (str(value).strip() for value in (patterns or ()))
+        if pattern
+    )
+    return normalized or None
+
+
+def _materializer_kwargs_from_problem_spec(problem_spec: Any) -> dict[str, Any]:
+    search_space = getattr(problem_spec, "search_space", None)
+    return {
+        "frozen_patterns": _pattern_set(getattr(search_space, "frozen", ())),
+        "editable_patterns": editable_identity_patterns(problem_spec),
+    }
+
+
+def _build_workspace_materializer(campaign_path: Path, problem_spec: Any) -> Any:
+    from scion.runtime.workspace import WorkspaceMaterializer
+
+    return WorkspaceMaterializer(
+        str(campaign_path),
+        **_materializer_kwargs_from_problem_spec(problem_spec),
+    )
+
+
+def _compute_initial_champion_snapshot_hash(
+    campaign_path: Path,
+    problem_spec: Any,
+) -> str:
+    materializer = _build_workspace_materializer(campaign_path, problem_spec)
+    return materializer.compute_snapshot_hash(problem_spec.root_dir)
 
 
 class _RunAudit:
@@ -468,17 +503,8 @@ def register_init_run_commands(app: typer.Typer) -> None:
 
         from scion.core.models import ChampionState
         from scion.runtime.pool_manager import read_registry
-        from scion.runtime.workspace import WorkspaceMaterializer
 
-        materializer = WorkspaceMaterializer(
-            str(campaign_path),
-            frozen_patterns=(
-                frozenset(spec.search_space.frozen)
-                if spec.search_space.frozen
-                else None
-            ),
-        )
-        code_hash = materializer.compute_snapshot_hash(spec.root_dir)
+        code_hash = _compute_initial_champion_snapshot_hash(campaign_path, spec)
 
         registry_path = os.path.join(spec.root_dir, "registry.yaml")
         if os.path.exists(registry_path):

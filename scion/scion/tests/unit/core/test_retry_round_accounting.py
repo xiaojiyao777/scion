@@ -18,6 +18,7 @@ from scion.core.models import (
 from scion.core.repeated_contract_failures import (
     REPEATED_CONTRACT_FAILURE_CODE,
     REPEATED_CONTRACT_REROUTE_REASON,
+    record_contract_failure_attempt,
 )
 from scion.core.step_result import StepResult
 from scion.tests.unit.core.retry_round_accounting_support import (
@@ -257,6 +258,91 @@ def test_repeated_contract_code_failure_reroutes_without_pending_retry() -> None
         ("hyp-1", "code_failed"),
         ("hyp-1", "rejected"),
     ]
+
+
+def test_agentic_repeated_contract_block_returns_reroute_step_result() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    hypothesis.change_locus = "algorithm_design"
+    hypothesis.target_file = "policies/state.py"
+    hypothesis.mechanism_changes = (
+        MechanismChange("state_delta_cache", "modify"),
+    )
+    record = _hypothesis_record(branch.branch_id)
+    steps: list[StepRecord] = []
+    prior_ref = {
+        "session_id": "session-contract",
+        "failure_category": "contract_boundary_failure",
+        "failure_code": "object_model_no_dynamic_private_attrs",
+        "primary_failure": {
+            "stage": "self_check",
+            "reason": "contract_preview_failed",
+            "category": "contract_boundary_failure",
+            "code": "object_model_no_dynamic_private_attrs",
+        },
+    }
+    record_contract_failure_attempt(
+        branch,
+        "Contract preview failed: object_model_no_dynamic_private_attrs",
+        hypothesis,
+        prior_ref,
+        failure_stage="code_generation",
+    )
+    detail = (
+        "agentic_proposal:code_generation_failed:agent_quality_blocked:"
+        f"{REPEATED_CONTRACT_REROUTE_REASON}:"
+        f"{REPEATED_CONTRACT_FAILURE_CODE}:"
+        "object_model_no_dynamic_private_attrs:contract_boundary_failure:"
+        "target_file=policies/state.py:threshold=2:count=2"
+    )
+    session_ref = {
+        "session_id": "session-contract-block",
+        "failure_category": "contract_boundary_failure",
+        "failure_code": REPEATED_CONTRACT_FAILURE_CODE,
+        "primary_failure": {
+            "stage": "agent_quality_blocked",
+            "reason": REPEATED_CONTRACT_REROUTE_REASON,
+            "category": "contract_boundary_failure",
+            "code": REPEATED_CONTRACT_REROUTE_REASON,
+        },
+        "rejection_constraint": {
+            "reason_code": REPEATED_CONTRACT_REROUTE_REASON,
+            "check_id": "object_model_no_dynamic_private_attrs",
+            "category_id": "contract_boundary_failure",
+            "target_file": "policies/state.py",
+            "threshold": 2,
+            "count": 2,
+            "counts_as_screened_round": False,
+            "counts_as_proposal_quality_attempt": True,
+        },
+    }
+    pipeline = _pipeline(
+        pending={},
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        get_current_round=lambda: 1,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+    pipeline.proposal_session_ref_for = lambda branch_id: dict(session_ref)
+
+    result = pipeline.run(branch)
+
+    assert result.reason == REPEATED_CONTRACT_REROUTE_REASON
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "branch_lifecycle_policy"
+    assert result.repair_policy_reason == REPEATED_CONTRACT_REROUTE_REASON
+    assert steps[0].attempt_kind == "branch_lifecycle_policy"
+    assert steps[0].proposal_session_ref["rejection_constraint"]["check_id"] == (
+        "object_model_no_dynamic_private_attrs"
+    )
+    evidence = branch.branch_evidence_summary["repeated_contract_failures"]
+    assert evidence["last_signature"]["contract_check"] == (
+        "object_model_no_dynamic_private_attrs"
+    )
+    assert evidence["records"][-1]["count"] == 2
 
 
 def test_explore_pipeline_emits_pre_protocol_status_progress() -> None:

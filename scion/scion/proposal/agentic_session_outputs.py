@@ -90,6 +90,7 @@ class AgenticSessionOutputMixin:
             evidence_used: tuple[AgenticEvidenceRef, ...] = (),
             self_check: AgenticSelfCheck | None = None,
             failure_category: AgenticFailureCategory | str | None = None,
+            structured_rejection: Mapping[str, Any] | None = None,
         ) -> AgenticProposalOutput:
             return AgenticProposalOutput(
                 status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
@@ -113,6 +114,7 @@ class AgenticSessionOutputMixin:
                 termination_reason=termination_reason,
                 failure_detail=detail,
                 failure_category=failure_category,
+                structured_rejection=structured_rejection,
             )
 
     def _structured_rejection_output(
@@ -166,6 +168,7 @@ class AgenticSessionOutputMixin:
             evidence_used: tuple[AgenticEvidenceRef, ...] = (),
             self_check: AgenticSelfCheck | None = None,
             failure_category: AgenticFailureCategory | str | None = None,
+            structured_rejection: Mapping[str, Any] | None = None,
         ) -> AgenticProposalOutput:
             return AgenticProposalOutput(
                 status=AgenticProposalStatus.FAILED,
@@ -189,6 +192,7 @@ class AgenticSessionOutputMixin:
                 termination_reason=termination_reason,
                 failure_detail=detail,
                 failure_category=failure_category,
+                structured_rejection=structured_rejection,
             )
 
     def _idempotency_key_for_hypothesis(

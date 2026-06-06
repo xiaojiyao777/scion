@@ -1,6 +1,12 @@
 """Focused tests split from test_decision.py."""
 
+from dataclasses import replace
+
 from .decision_test_support import *  # noqa: F401,F403
+from scion.core.features import (
+    RUNTIME_EVIDENCE_CONFIDENCE_VALUES,
+    RUNTIME_EVIDENCE_STATUS_VALUES,
+)
 
 def test_extract_basic():
     branch = _branch()
@@ -175,6 +181,59 @@ def test_extract_protocol_runtime_confidence_from_cached_champion():
     _validate_no_free_text(features)
 
 
+def test_extract_protocol_declared_low_runtime_confidence_passes_guard():
+    branch = _branch()
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=_protocol(runtime_confidence="low"),
+        budget=BudgetState(total=100, used=0),
+    )
+
+    assert features.runtime_evidence_confidence == "low"
+    _validate_no_free_text(features)
+
+
+def test_extract_protocol_low_sample_runtime_confidence_passes_guard():
+    branch = _branch()
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=_protocol(
+            runtime_ratio_median=1.05,
+            runtime_delta_median_ms=10.0,
+            runtime_regression_rate=0.25,
+            runtime_pairs=2,
+        ),
+        budget=BudgetState(total=100, used=0),
+    )
+
+    assert features.runtime_evidence_confidence == "low_sample_diagnostic"
+    _validate_no_free_text(features)
+
+
+def test_extract_protocol_runtime_status_values_pass_guard():
+    for status in RUNTIME_EVIDENCE_STATUS_VALUES:
+        features = _extractor.extract(
+            branch=_branch(),
+            hypothesis_action="modify",
+            contract=_contract(),
+            verification=_verification(),
+            canary=_canary(),
+            protocol=_protocol(runtime_evidence_status=status),
+            budget=BudgetState(total=100, used=0),
+        )
+
+        assert features.runtime_evidence_status == status
+        _validate_no_free_text(features)
+
+
 def test_extract_legacy_continue_protocol_gate_outcome():
     branch = _branch()
     features = _extractor.extract(
@@ -276,6 +335,65 @@ def test_validate_statistical_metric_rejects_free_text_prose():
 
     with pytest.raises(DecisionInputGuardError):
         _validate_no_free_text(features)
+
+
+@pytest.mark.parametrize("confidence", sorted(RUNTIME_EVIDENCE_CONFIDENCE_VALUES))
+def test_validate_runtime_evidence_confidence_known_values(confidence):
+    features = _extractor.extract(
+        branch=_branch(),
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=None,
+        budget=BudgetState(total=100, used=0),
+    )
+
+    _validate_no_free_text(
+        replace(features, runtime_evidence_confidence=confidence)
+    )
+
+
+@pytest.mark.parametrize("status", sorted(RUNTIME_EVIDENCE_STATUS_VALUES))
+def test_validate_runtime_evidence_status_known_values(status):
+    features = _extractor.extract(
+        branch=_branch(),
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=None,
+        budget=BudgetState(total=100, used=0),
+    )
+
+    _validate_no_free_text(replace(features, runtime_evidence_status=status))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        (
+            "runtime_evidence_confidence",
+            "runtime evidence looked cached but acceptable",
+        ),
+        ("runtime_evidence_confidence", "new_runtime_confidence_code"),
+        ("runtime_evidence_status", "fresh runtime required by operator note"),
+        ("runtime_evidence_status", "fresh_required_v2"),
+    ],
+)
+def test_validate_runtime_evidence_unknown_values_fail_closed(field_name, value):
+    features = _extractor.extract(
+        branch=_branch(),
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=None,
+        budget=BudgetState(total=100, used=0),
+    )
+
+    with pytest.raises(DecisionInputGuardError):
+        _validate_no_free_text(replace(features, **{field_name: value}))
 
 
 def test_extractor_rejects_statistical_metric_not_declared_in_metric_stats():

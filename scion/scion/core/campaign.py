@@ -447,14 +447,18 @@ class CampaignManager:
         stopped_reason: str | None = None,
         loop_status: Dict[str, Any] | None = None,
     ) -> None:
+        effective_stopped_reason = stopped_reason
+        if effective_stopped_reason is None and self._last_stop_reason:
+            effective_stopped_reason = self._last_stop_reason
         self._evidence_recorder.current_status_progress = self._current_status_progress
         self._evidence_recorder.last_status_result = self._last_status_result
         self._evidence_recorder.write_status(
             last_result=last_result,
-            stopped_reason=stopped_reason,
+            stopped_reason=effective_stopped_reason,
             loop_status=loop_status,
         )
         self._last_status_result = self._evidence_recorder.last_status_result
+        self._current_status_progress = self._evidence_recorder.current_status_progress
 
     def _on_protocol_progress(self, **payload: Any) -> None:
         """Progress hook called by ExperimentProtocol during long stages."""

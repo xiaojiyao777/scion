@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from scion.core.research_surface_index import editable_identity_patterns
+from scion.runtime.workspace import WorkspaceMaterializer
+
+
+def test_editable_identity_patterns_prefer_research_surfaces() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                targets=SimpleNamespace(files=["surfaces/", "surfaces/*.py"])
+            ),
+            SimpleNamespace(target_files=["legacy_surface.py", "surfaces/*.py"]),
+        ],
+        search_space=SimpleNamespace(editable=["operators/*.py"]),
+    )
+
+    assert editable_identity_patterns(spec) == (
+        "surfaces",
+        "surfaces/*.py",
+        "legacy_surface.py",
+    )
+
+
+def test_editable_identity_patterns_fall_back_to_search_space() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[],
+        search_space=SimpleNamespace(editable=["operators/*.py", "policies/*.py"]),
+    )
+
+    assert editable_identity_patterns(spec) == ("operators/*.py", "policies/*.py")
+
+
+def test_editable_identity_patterns_reject_unsafe_paths() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(targets=SimpleNamespace(files=["../outside.py"]))
+        ],
+        search_space=SimpleNamespace(editable=["operators/*.py"]),
+    )
+
+    with pytest.raises(ValueError, match="glob pattern"):
+        editable_identity_patterns(spec)
+
+
+def test_explicit_surface_hash_tracks_non_legacy_surface_only(tmp_path: Path) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        editable_patterns=("surfaces/*.py",),
+    )
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    snapshot_hash = materializer.compute_snapshot_hash(str(ws))
+
+    _write(ws / "surfaces" / "heuristic.py", "VALUE = 2\n")
+    assert materializer.compute_code_hash(str(ws)) != code_hash
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    snapshot_hash = materializer.compute_snapshot_hash(str(ws))
+    _write(ws / "data" / "case.json", '{"changed": true}\n')
+    _write(ws / "tests" / "test_surface.py", "def test_changed(): pass\n")
+
+    assert materializer.compute_code_hash(str(ws)) == code_hash
+    assert materializer.compute_snapshot_hash(str(ws)) == snapshot_hash
+
+
+def test_explicit_archive_copies_only_editable_non_frozen_files(tmp_path: Path) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        frozen_patterns=frozenset({"surfaces/frozen.py"}),
+        editable_patterns=("surfaces",),
+    )
+
+    archive = materializer.archive_workspace(str(ws), branch_id="branch-abcdef")
+
+    assert archive is not None
+    archived_files = _relative_files(Path(archive))
+    assert archived_files == [
+        "surfaces/heuristic.py",
+        "surfaces/pkg/helper.py",
+    ]
+
+
+def test_legacy_mode_keeps_operators_policies_identity(tmp_path: Path) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(str(tmp_path / "campaign"))
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    _write(ws / "surfaces" / "heuristic.py", "VALUE = 99\n")
+    _write(ws / "data" / "case.json", '{"changed": true}\n')
+    assert materializer.compute_code_hash(str(ws)) == code_hash
+
+    _write(ws / "operators" / "legacy.py", "VALUE = 2\n")
+    assert materializer.compute_code_hash(str(ws)) != code_hash
+
+    archive = materializer.archive_workspace(str(ws), branch_id="legacy-branch")
+    assert archive is not None
+    archived_files = _relative_files(Path(archive))
+    assert archived_files == [
+        "operators/legacy.py",
+        "policies/legacy_policy.py",
+    ]
+
+
+def test_registry_identity_differs_for_code_and_snapshot_hashes(tmp_path: Path) -> None:
+    ws = _workspace(tmp_path)
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"),
+        editable_patterns=("surfaces/*.py",),
+    )
+
+    code_hash = materializer.compute_code_hash(str(ws))
+    snapshot_hash = materializer.compute_snapshot_hash(str(ws))
+    _write(ws / "registry.yaml", "operators:\n- name: changed\n")
+
+    assert materializer.compute_code_hash(str(ws)) == code_hash
+    assert materializer.compute_snapshot_hash(str(ws)) != snapshot_hash
+
+    registry_materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign-registry"),
+        editable_patterns=("surfaces/*.py", "registry.yaml"),
+    )
+    code_hash = registry_materializer.compute_code_hash(str(ws))
+    _write(ws / "registry.yaml", "operators:\n- name: changed_again\n")
+
+    assert registry_materializer.compute_code_hash(str(ws)) != code_hash
+
+
+def _workspace(tmp_path: Path) -> Path:
+    ws = tmp_path / "workspace"
+    _write(ws / "operators" / "legacy.py", "VALUE = 1\n")
+    _write(ws / "operators" / "notes.txt", "not code\n")
+    _write(ws / "policies" / "legacy_policy.py", "VALUE = 1\n")
+    _write(ws / "surfaces" / "heuristic.py", "VALUE = 1\n")
+    _write(ws / "surfaces" / "frozen.py", "VALUE = 1\n")
+    _write(ws / "surfaces" / "pkg" / "helper.py", "VALUE = 1\n")
+    _write(ws / "data" / "case.json", "{}\n")
+    _write(ws / "tests" / "test_surface.py", "def test_demo(): pass\n")
+    _write(ws / "registry.yaml", "operators: []\n")
+    return ws
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _relative_files(root: Path) -> list[str]:
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file()
+    )

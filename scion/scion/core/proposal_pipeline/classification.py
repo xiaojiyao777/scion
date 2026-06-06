@@ -4,6 +4,10 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_FAILURE_CODE,
+    REPEATED_CONTRACT_REROUTE_REASON,
+)
 from scion.proposal.agentic_session import (
     AgenticFailureCategory,
     AgenticProposalOutput,
@@ -122,6 +126,17 @@ def _agentic_quality_block_classification(
         return {
             "failure_class": ALGORITHM_SMOKE_FAILURE,
             "failure_code": ALGORITHM_SMOKE_FAILURE,
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
+    if (
+        failure_code
+        in {REPEATED_CONTRACT_REROUTE_REASON, REPEATED_CONTRACT_FAILURE_CODE}
+        or REPEATED_CONTRACT_REROUTE_REASON in detail
+        or REPEATED_CONTRACT_FAILURE_CODE.lower() in detail
+    ):
+        return {
+            "failure_class": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "failure_code": REPEATED_CONTRACT_REROUTE_REASON,
             "block_reason": AGENT_QUALITY_BLOCKED,
         }
     if (
@@ -310,7 +325,10 @@ def _agentic_primary_secondary_failures(
             "category": quality["failure_class"],
             "code": quality["failure_code"],
         }
-        if output.failure_detail:
+        if (
+            output.failure_detail
+            and quality["failure_code"] != REPEATED_CONTRACT_REROUTE_REASON
+        ):
             primary["detail"] = _bounded_agentic_failure_text(output.failure_detail)
         return primary, secondary
 
@@ -421,6 +439,16 @@ def _agentic_rejection_constraint(
             "allowed_variant_guidance": structured.get("allowed_variant_guidance"),
             "selected_surface": structured.get("selected_surface"),
             "target_file": structured.get("target_file"),
+            "reason_code": structured.get("reason_code"),
+            "check_id": structured.get("check_id"),
+            "category_id": structured.get("category_id"),
+            "threshold": structured.get("threshold"),
+            "count": structured.get("count"),
+            "prior_count": structured.get("prior_count"),
+            "counts_as_screened_round": structured.get("counts_as_screened_round"),
+            "counts_as_proposal_quality_attempt": structured.get(
+                "counts_as_proposal_quality_attempt"
+            ),
             "retry_constraint": (
                 "Acknowledge the existing mechanism and state the material "
                 "trigger, scoring, schedule, or behavior difference. Do not "

@@ -140,6 +140,19 @@ def _summary_scope_reconciliation(
     }
 
 
+def _summary_current_progress(
+    state: Mapping[str, Any],
+    *,
+    stopped: bool,
+) -> dict[str, Any] | None:
+    progress = state.get("current_progress")
+    if not isinstance(progress, Mapping):
+        return None
+    if stopped and progress.get("complete") is not True:
+        return None
+    return dict(progress)
+
+
 class CampaignSummaryMixin:
     def write_campaign_summary(
         self,
@@ -569,8 +582,16 @@ class CampaignSummaryMixin:
                 summary["branches"] = branch_rows
                 summary["branch_cards"] = branch_cards
                 summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
-                if isinstance(state.get("current_progress"), Mapping):
-                    summary["current_progress"] = dict(state["current_progress"])
+                current_progress = _summary_current_progress(
+                    state,
+                    stopped=bool(summary.get("stopped")),
+                )
+                if current_progress is not None:
+                    summary["current_progress"] = current_progress
+                if isinstance(state.get("weight_optimization"), Mapping):
+                    summary["weight_optimization"] = dict(
+                        state["weight_optimization"]
+                    )
                 if isinstance(state.get("checkpoint_inventory"), Mapping):
                     summary["checkpoint_inventory"] = dict(state["checkpoint_inventory"])
                 summary["rollback_events"] = _rollback_events(steps, branch_cards)

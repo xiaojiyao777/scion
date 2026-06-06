@@ -32,6 +32,7 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_surface_index import editable_identity_patterns
 from scion.lineage.registry import LineageRegistry
 from scion.runtime.workspace import WorkspaceMaterializer
 
@@ -84,6 +85,28 @@ SmokeRunner = Callable[
     [str, PatchProposal, HypothesisProposal, ExternalProposalManifest],
     MockSmokeResult,
 ]
+
+
+def _pattern_set(patterns: Any, *, empty_as_none: bool = True) -> frozenset[str] | None:
+    normalized = frozenset(
+        pattern
+        for pattern in (str(value).strip() for value in (patterns or ()))
+        if pattern
+    )
+    if normalized or not empty_as_none:
+        return normalized
+    return None
+
+
+def _materializer_kwargs_from_problem_spec(problem_spec: Any) -> dict[str, Any]:
+    search_space = getattr(problem_spec, "search_space", None)
+    return {
+        "frozen_patterns": _pattern_set(
+            getattr(search_space, "frozen", ()),
+            empty_as_none=False,
+        ),
+        "editable_patterns": editable_identity_patterns(problem_spec),
+    }
 
 
 class ExternalProposalIngestor:
@@ -388,7 +411,7 @@ class ExternalProposalIngestor:
     ) -> Path:
         materializer = WorkspaceMaterializer(
             str(ingest_dir),
-            frozen_patterns=frozenset(self.problem_spec.search_space.frozen or []),
+            **_materializer_kwargs_from_problem_spec(self.problem_spec),
         )
         workspace = Path(
             materializer.create_branch_workspace(ingest_id, str(base_workspace))

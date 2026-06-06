@@ -50,6 +50,16 @@ class WeightOptCompletionEvent:
     operator_pool: Optional[dict[str, "OperatorConfig"]] = None
 
 
+def _thread_weight_opt_version(name: str) -> int | None:
+    marker = "weight-opt-v"
+    if not name.startswith(marker):
+        return None
+    try:
+        return int(name[len(marker):])
+    except ValueError:
+        return None
+
+
 class AsyncWeightOptCoordinator:
     """Owns async weight-optimization thread lifecycle and the opt loop body."""
 
@@ -173,6 +183,41 @@ class AsyncWeightOptCoordinator:
                 "%d background weight opt thread(s) still running after wait timeout",
                 len(still_alive),
             )
+            self._mark_final_wait_timeout(still_alive, timeout=timeout)
+
+    def _mark_final_wait_timeout(
+        self,
+        still_alive: list[threading.Thread],
+        *,
+        timeout: Optional[float],
+    ) -> None:
+        alive_versions = {
+            version
+            for version in (
+                _thread_weight_opt_version(thread.name) for thread in still_alive
+            )
+            if version is not None
+        }
+        now = time.time()
+        with self._status_lock:
+            for version, run in list(self._active_status.items()):
+                if alive_versions and version not in alive_versions:
+                    continue
+                if not run.get("active"):
+                    continue
+                current = dict(run)
+                current.update(
+                    {
+                        "active": True,
+                        "phase": "final_wait_timeout",
+                        "detached": True,
+                        "final_wait_timeout": True,
+                        "final_wait_timeout_sec": timeout,
+                        "last_progress_at": now,
+                    }
+                )
+                self._active_status[version] = current
+        self._publish_status()
 
     def run_for_promoted_champion_sync(
         self,

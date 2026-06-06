@@ -3,6 +3,10 @@
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.models import ContractResult, HypothesisRecord, MechanismChange
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_FAILURE_CODE,
+    REPEATED_CONTRACT_REROUTE_REASON,
+)
 from scion.core.proposal_pipeline.classification import (
     _agentic_output_is_quality_blocked,
     _agentic_primary_secondary_failures,
@@ -100,6 +104,48 @@ def test_mechanism_novelty_warning_is_not_quality_block() -> None:
     )
 
     assert _agentic_output_is_quality_blocked(output) is False
+
+
+def test_repeated_contract_reroute_is_quality_block_without_raw_prose() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="repeated-contract-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+        failure_detail=(
+            "agent_quality_blocked:"
+            f"{REPEATED_CONTRACT_REROUTE_REASON}:"
+            f"{REPEATED_CONTRACT_FAILURE_CODE}:"
+            "object_model_no_dynamic_private_attrs:"
+            "contract_boundary_failure:target_file=policies/search_policy.py:"
+            "threshold=2:count=2"
+        ),
+        structured_rejection={
+            "reason_code": REPEATED_CONTRACT_REROUTE_REASON,
+            "failure_code": REPEATED_CONTRACT_FAILURE_CODE,
+            "check_id": "object_model_no_dynamic_private_attrs",
+            "category_id": "contract_boundary_failure",
+            "target_file": "policies/search_policy.py",
+            "threshold": 2,
+            "count": 2,
+            "counts_as_screened_round": False,
+            "counts_as_proposal_quality_attempt": True,
+        },
+    )
+
+    primary, _secondary = _agentic_primary_secondary_failures(output)
+
+    assert _agentic_output_is_quality_blocked(output) is True
+    assert primary["stage"] == "agent_quality_blocked"
+    assert primary["reason"] == REPEATED_CONTRACT_REROUTE_REASON
+    assert primary["code"] == REPEATED_CONTRACT_REROUTE_REASON
+    assert primary["category"] == "contract_boundary_failure"
+    assert "detail" not in primary
+    assert "raw private mutable cache prose" not in str(primary)
 
 
 def test_soft_novelty_detail_with_legacy_premise_code_is_not_quality_block() -> None:

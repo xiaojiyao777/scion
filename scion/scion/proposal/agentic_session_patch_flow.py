@@ -8,6 +8,10 @@ import re
 
 from scion.core.models import mechanism_changes, patch_file_changes
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_REROUTE_REASON,
+    contract_preview_failure_reroute_feedback,
+)
 from scion.proposal.agentic_session_common import *
 
 _SOURCE_FILE_RE = re.compile(
@@ -538,11 +542,35 @@ class AgenticSessionPatchFlowMixin:
         budget_message: str,
         repair_failure_message: str,
     ) -> tuple[PatchProposal, int, AgenticProposalOutput | None, bool]:
+        preview_detail = (
+            _latest_preview_failure_detail([failed_preview]) or failed_preview.summary
+        )
+        reroute_feedback = contract_preview_failure_reroute_feedback(
+            request.branch,
+            preview_detail,
+            hypothesis,
+            failed_preview.structured_payload,
+            source_tool=failed_preview.tool_name,
+            failure_stage="code_generation",
+        )
+        if reroute_feedback:
+            output = self._repeated_contract_reroute_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                hypothesis=hypothesis,
+                observations=observations,
+                evidence=evidence,
+                feedback=reroute_feedback,
+                failed_preview=failed_preview,
+                repair_attempts_used=repair_attempts_used,
+            )
+            return patch, repair_attempts_used, output, False
         _record_failure_ledger_entry(
             state,
             phase=AgenticProposalPhase.SELF_CHECK,
             category=_preview_failure_category([failed_preview]),
-            detail=_latest_preview_failure_detail([failed_preview]) or failed_preview.summary,
+            detail=preview_detail,
             source="preview_failure",
             tool_name=failed_preview.tool_name,
             observation=failed_preview,
@@ -645,6 +673,61 @@ class AgenticSessionPatchFlowMixin:
             repair_attempt=repair_attempts_used,
         )
         return patch, repair_attempts_used, output, False
+
+    def _repeated_contract_reroute_output(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        observations: list[ProposalObservation],
+        evidence: list[AgenticEvidenceRef],
+        feedback: Mapping[str, Any],
+        failed_preview: ProposalObservation,
+        repair_attempts_used: int,
+    ) -> AgenticProposalOutput:
+        detail = _repeated_contract_reroute_detail(feedback)
+        _record_failure_ledger_entry(
+            state,
+            phase=AgenticProposalPhase.SELF_CHECK,
+            category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+            detail=detail,
+            source=REPEATED_CONTRACT_REROUTE_REASON,
+            tool_name=failed_preview.tool_name,
+            observation=failed_preview,
+            repair_attempt=repair_attempts_used,
+        )
+        self_check = self._self_check_from_authoritative_previews(
+            observations,
+            state,
+        )
+        output = self._self_check_failed_output(
+            request=request,
+            session_id=session_id,
+            hypothesis=hypothesis,
+            detail=detail,
+            termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+            evidence_used=tuple(evidence),
+            self_check=self_check,
+            failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+            structured_rejection=feedback,
+        )
+        state.status = output.status
+        state.note(
+            AgenticProposalPhase.FINALIZE,
+            "Stopped patch preview repair after repeated contract signature reroute.",
+            metadata={
+                "reason_code": REPEATED_CONTRACT_REROUTE_REASON,
+                "check_id": feedback.get("check_id"),
+                "category_id": feedback.get("category_id"),
+                "target_file": feedback.get("target_file"),
+                "threshold": feedback.get("threshold"),
+                "count": feedback.get("count"),
+                "repair_attempts_used": repair_attempts_used,
+            },
+        )
+        return self._persist(output, state)
 
     def _premise_rejection_output_if_needed(
         self,
@@ -914,6 +997,20 @@ def _code_stage_identity_issue(
             f"{usage_detail}"
         )
     return None
+
+
+def _repeated_contract_reroute_detail(feedback: Mapping[str, Any]) -> str:
+    parts = [
+        "agent_quality_blocked",
+        REPEATED_CONTRACT_REROUTE_REASON,
+        str(feedback.get("failure_code") or ""),
+        str(feedback.get("check_id") or ""),
+        str(feedback.get("category_id") or ""),
+        f"target_file={feedback.get('target_file')}",
+        f"threshold={feedback.get('threshold')}",
+        f"count={feedback.get('count')}",
+    ]
+    return ":".join(part for part in parts if part)
 
 
 def _telemetry_identity_allowlist(

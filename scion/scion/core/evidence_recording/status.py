@@ -289,6 +289,18 @@ def _status_scope_reconciliation(
     }
 
 
+def _stopped_reason_preserves_partial_in_flight(reason: Any) -> bool:
+    text = str(reason or "").strip().lower()
+    return text.startswith("signal:") or text in {
+        "external_stop_requested",
+        "keyboard_interrupt",
+    }
+
+
+def _stopped_progress_is_complete(progress: Mapping[str, Any] | None) -> bool:
+    return isinstance(progress, Mapping) and progress.get("complete") is True
+
+
 def _reconcile_active_slots_from_branch_cards(
     payload: Dict[str, Any],
     branch_rows: list[Mapping[str, Any]],
@@ -454,9 +466,19 @@ class StatusWriterMixin:
                 balance_exhausted=bool(payload.get("balance_exhausted")),
                 circuit_breaker_tripped=bool(payload.get("circuit_breaker_tripped")),
             )
+        state_current_progress = payload.pop("current_progress", None)
+        state_in_flight_protocol = payload.pop("in_flight_protocol", None)
+        payload = normalize_status_payload(payload)
+        terminal_stopped = payload.get("stopped") is True
+        terminal_stopped_reason = payload.get("stopped_reason")
         branch_rows = _branch_rows(payload)
         _reconcile_active_slots_from_branch_cards(payload, branch_rows)
         current_progress = self.current_status_progress
+        if current_progress is None and isinstance(state_current_progress, Mapping):
+            current_progress = dict(state_current_progress)
+        if terminal_stopped and not _stopped_progress_is_complete(current_progress):
+            current_progress = None
+            self.current_status_progress = None
         if current_progress is not None:
             current_progress = _sync_branch_progress_from_rows(
                 current_progress,
@@ -465,9 +487,18 @@ class StatusWriterMixin:
             self.current_status_progress = current_progress
             payload["current_progress"] = current_progress
             _merge_runtime_budget_status(payload, current_progress)
-        if self.in_flight_protocol is not None:
+        in_flight_protocol = self.in_flight_protocol
+        if in_flight_protocol is None and isinstance(state_in_flight_protocol, Mapping):
+            in_flight_protocol = dict(state_in_flight_protocol)
+        if terminal_stopped and not _stopped_reason_preserves_partial_in_flight(
+            terminal_stopped_reason
+        ):
+            in_flight_protocol = None
+            self.in_flight_protocol = None
+        if in_flight_protocol is not None:
+            self.in_flight_protocol = dict(in_flight_protocol)
             payload["in_flight_protocol"] = _sync_in_flight_branch_fields(
-                self.in_flight_protocol,
+                in_flight_protocol,
                 current_progress,
                 branch_rows,
             )
@@ -500,7 +531,6 @@ class StatusWriterMixin:
                 current_progress if isinstance(current_progress, Mapping) else None
             ),
         )
-        payload = normalize_status_payload(payload)
         if payload.get("stopped_reason") is not None or payload.get("stopped") is True:
             loop = payload.get("campaign_loop")
             loop_mapping = loop if isinstance(loop, Mapping) else {}

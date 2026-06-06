@@ -2,11 +2,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, get_args
 
 from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
+    DecisionRuntimeEvidenceConfidence, DecisionRuntimeEvidenceStatus,
 )
 from scion.core.repeated_contract_failures import REPEATED_CONTRACT_FAILURE_CODE
 from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_detected
@@ -43,7 +44,10 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 _METRIC_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
-_RUNTIME_CONFIDENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
+RUNTIME_EVIDENCE_CONFIDENCE_VALUES = frozenset(
+    get_args(DecisionRuntimeEvidenceConfidence)
+)
+RUNTIME_EVIDENCE_STATUS_VALUES = frozenset(get_args(DecisionRuntimeEvidenceStatus))
 
 
 class DecisionInputGuardError(Exception):
@@ -290,17 +294,15 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
             f"runtime_pairs must be non-negative: {features.runtime_pairs!r}"
         )
     runtime_confidence = str(features.runtime_evidence_confidence or "")
-    if runtime_confidence and not _RUNTIME_CONFIDENCE_RE.fullmatch(
-        runtime_confidence
-    ):
+    if runtime_confidence not in RUNTIME_EVIDENCE_CONFIDENCE_VALUES:
         raise DecisionInputGuardError(
-            "runtime_evidence_confidence must be an enum-like id, not free text: "
+            "runtime_evidence_confidence is not a known enum: "
             f"{features.runtime_evidence_confidence!r}"
         )
     runtime_status = str(features.runtime_evidence_status or "")
-    if runtime_status and not _RUNTIME_CONFIDENCE_RE.fullmatch(runtime_status):
+    if runtime_status not in RUNTIME_EVIDENCE_STATUS_VALUES:
         raise DecisionInputGuardError(
-            "runtime_evidence_status must be an enum-like id, not free text: "
+            "runtime_evidence_status is not a known enum: "
             f"{features.runtime_evidence_status!r}"
         )
     for field_name in (

@@ -19,6 +19,9 @@ REPEATED_CONTRACT_THRESHOLD = 2
 CONTRACT_PREVIEW_FAILURE_SIGNATURE_SCHEMA_VERSION = (
     "contract-preview-failure-signature.v1"
 )
+REPEATED_CONTRACT_SIGNATURE_REROUTE_SCHEMA_VERSION = (
+    "repeated-contract-signature-reroute.v1"
+)
 
 _UNKNOWN = "unknown"
 _SAFE_TOKEN_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
@@ -114,12 +117,14 @@ def extract_contract_failure_signature(
     )
     failure_category = _safe_token(
         _mapping_value(primary, "category")
+        or _nested_value(session_ref, ("rejection_constraint", "category_id"))
         or _mapping_value(session_ref, "failure_category")
         or _infer_failure_category(failure_detail, failure_stage),
         default=_UNKNOWN,
     )
     contract_check = _safe_token(
         _first_present(
+            _nested_value(session_ref, ("rejection_constraint", "check_id")),
             _mapping_value(primary, "code"),
             _mapping_value(primary, "check"),
             _mapping_value(session_ref, "failure_code"),
@@ -317,6 +322,147 @@ def contract_preview_failure_signature_feedback(
     )
 
 
+def contract_preview_failure_reroute_feedback(
+    branch: Branch | None,
+    failure_detail: str | None,
+    hypothesis: HypothesisProposal | None,
+    preview_payload: Mapping[str, Any] | None,
+    *,
+    source_tool: str | None = None,
+    failure_stage: str | None = None,
+    threshold: int = REPEATED_CONTRACT_THRESHOLD,
+) -> dict[str, Any]:
+    """Return a safe reroute block when this preview repeats a hot signature.
+
+    This is intentionally read-only.  The campaign pipeline records the failed
+    attempt once after APS returns, so this helper only decides whether repair
+    should stop before spending another code attempt.
+    """
+    session_ref = _preview_failure_session_ref(
+        preview_payload,
+        source_tool=source_tool,
+    )
+    return repeated_contract_signature_reroute_feedback(
+        branch,
+        failure_detail,
+        hypothesis,
+        session_ref,
+        failure_stage=failure_stage,
+        threshold=threshold,
+    )
+
+
+def repeated_contract_signature_reroute_feedback(
+    branch: Branch | None,
+    failure_detail: str | None,
+    hypothesis: HypothesisProposal | None,
+    session_ref: Mapping[str, Any] | None,
+    *,
+    failure_stage: str | None = None,
+    threshold: int = REPEATED_CONTRACT_THRESHOLD,
+) -> dict[str, Any]:
+    """Return a structured hard stop for an already repeated signature."""
+    if branch is None:
+        return {}
+    signature = extract_contract_failure_signature(
+        failure_detail,
+        hypothesis,
+        session_ref,
+        failure_stage=failure_stage,
+    )
+    if signature is None:
+        return {}
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    repeated = summary.get("repeated_contract_failures")
+    if not isinstance(repeated, Mapping):
+        return {}
+    records = _records_by_key(repeated.get("records"))
+    record = dict(records.get(signature.key) or {})
+    last_key = str(repeated.get("last_signature_key") or "").strip()
+    if not record and last_key == signature.key:
+        record = {
+            "count": repeated.get("count"),
+            "threshold": repeated.get("threshold"),
+            "threshold_reached": repeated.get("reroute_recommended"),
+        }
+    prior_count = _safe_int(record.get("count"))
+    if prior_count <= 0:
+        return {}
+    effective_threshold = max(
+        1,
+        _safe_int(
+            record.get("threshold"),
+            default=_safe_int(repeated.get("threshold"), default=threshold),
+        ),
+    )
+    current_count = prior_count + 1
+    threshold_reached = bool(record.get("threshold_reached")) or current_count >= (
+        effective_threshold
+    )
+    if not threshold_reached:
+        return {}
+    return _repeated_contract_signature_reroute_payload(
+        signature,
+        prior_count=prior_count,
+        count=current_count,
+        threshold=effective_threshold,
+        threshold_reached_by_current_failure=current_count >= effective_threshold,
+    )
+
+
+def _repeated_contract_signature_reroute_payload(
+    signature: ContractFailureSignature,
+    *,
+    prior_count: int,
+    count: int,
+    threshold: int,
+    threshold_reached_by_current_failure: bool,
+) -> dict[str, Any]:
+    signature_payload = signature.as_dict()
+    return _drop_empty(
+        {
+            "schema_version": REPEATED_CONTRACT_SIGNATURE_REROUTE_SCHEMA_VERSION,
+            "source": "branch.repeated_contract_failures",
+            "feedback_class": "hard_negative",
+            "reason_code": REPEATED_CONTRACT_REROUTE_REASON,
+            "failure_code": REPEATED_CONTRACT_FAILURE_CODE,
+            "check_id": signature_payload.get("contract_check"),
+            "category_id": signature_payload.get("failure_category"),
+            "contract_check": signature_payload.get("contract_check"),
+            "failure_category": signature_payload.get("failure_category"),
+            "target_file": signature_payload.get("target_file"),
+            "target_path": signature_payload.get("target_file"),
+            "selected_surface": signature_payload.get("selected_surface"),
+            "mechanism_ids": signature_payload.get("mechanism_ids"),
+            "prior_count": max(0, prior_count),
+            "count": max(0, count),
+            "signature_count": max(0, count),
+            "threshold": max(1, threshold),
+            "threshold_reached": True,
+            "threshold_reached_by_current_failure": bool(
+                threshold_reached_by_current_failure
+            ),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "counts_as_screened_round": False,
+            "counts_as_proposal_quality_attempt": True,
+            "ordinary_retry_allowed": False,
+            "required_next_step": "reselect_target_or_clean_branch",
+            "same_signature_retry_policy": "block_same_signature_repair",
+            "repair_policy_reason": REPEATED_CONTRACT_REROUTE_REASON,
+            "forbidden_write_pattern": {
+                "pattern_id": "same_target_check_mechanism_signature",
+                "target_file": signature_payload.get("target_file"),
+                "check_id": signature_payload.get("contract_check"),
+                "category_id": signature_payload.get("failure_category"),
+                "mechanism_ids": signature_payload.get("mechanism_ids"),
+            },
+        }
+    )
+
+
 def mark_repeated_contract_reroute(
     branch: Branch,
     signature: ContractFailureSignature,
@@ -355,6 +501,132 @@ def mark_repeated_contract_reroute(
 def _primary_failure(ref: Mapping[str, Any] | None) -> Mapping[str, Any]:
     primary = _mapping_value(ref, "primary_failure")
     return primary if isinstance(primary, Mapping) else {}
+
+
+def _preview_failure_session_ref(
+    preview_payload: Mapping[str, Any] | None,
+    *,
+    source_tool: str | None,
+) -> dict[str, Any]:
+    payload = preview_payload if isinstance(preview_payload, Mapping) else {}
+    code = _first_present(*_preview_failure_codes(payload))
+    category = _preview_failure_category(payload, source_tool=source_tool)
+    target_file = _first_present(
+        *_preview_values_for_keys(
+            payload,
+            ("target_file", "target_path", "file_path"),
+        )
+    )
+    selected_surface = _first_present(
+        *_preview_values_for_keys(
+            payload,
+            ("selected_surface", "research_surface", "surface"),
+        )
+    )
+    return _drop_empty(
+        {
+            "failure_category": category,
+            "failure_code": code,
+            "contract_preview_codes": [code] if code else [],
+            "target_file": target_file,
+            "primary_failure": _drop_empty(
+                {
+                    "stage": "self_check",
+                    "reason": "contract_preview_failed",
+                    "category": category,
+                    "code": code,
+                    "target_file": target_file,
+                    "selected_surface": selected_surface,
+                }
+            ),
+        }
+    )
+
+
+def _preview_failure_category(
+    payload: Mapping[str, Any],
+    *,
+    source_tool: str | None,
+) -> str:
+    explicit = _first_present(
+        *_preview_values_for_keys(payload, ("failure_category", "category_id"))
+    )
+    if explicit:
+        return str(explicit)
+    if source_tool == "proposal.algorithm_smoke":
+        return "algorithm_smoke_failure"
+    return "contract_boundary_failure"
+
+
+def _preview_failure_codes(value: Any) -> list[str]:
+    codes: list[str] = []
+
+    def add(item: Any) -> None:
+        text = str(item or "").strip()
+        if text and text not in codes:
+            codes.append(text)
+
+    def visit(item: Any) -> None:
+        if isinstance(item, Mapping):
+            if item.get("failure_code"):
+                add(item.get("failure_code"))
+            if item.get("check_id"):
+                add(item.get("check_id"))
+            if item.get("code"):
+                add(item.get("code"))
+            if item.get("failure_class") and item.get("passed") is False:
+                add(item.get("failure_class"))
+            failed_checks = item.get("failed_checks")
+            if isinstance(failed_checks, Iterable) and not isinstance(
+                failed_checks,
+                (str, bytes, Mapping),
+            ):
+                for check in failed_checks:
+                    add(check)
+            contract = item.get("contract")
+            if isinstance(contract, Mapping):
+                visit(contract)
+            checks = item.get("checks")
+            if isinstance(checks, Iterable) and not isinstance(
+                checks,
+                (str, bytes, Mapping),
+            ):
+                for check in checks:
+                    if not isinstance(check, Mapping):
+                        continue
+                    if check.get("passed") is False:
+                        add(check.get("name") or check.get("check_id"))
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return codes
+
+
+def _preview_values_for_keys(value: Any, keys: tuple[str, ...]) -> list[Any]:
+    values: list[Any] = []
+
+    def add(item: Any) -> None:
+        if item in (None, "", (), [], {}):
+            return
+        if item not in values:
+            values.append(item)
+
+    def visit(item: Any) -> None:
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                if str(key) in keys:
+                    add(child)
+                visit(child)
+        elif isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return values
 
 
 def _mapping_value(mapping: Mapping[str, Any] | None, key: str) -> Any:
@@ -567,11 +839,14 @@ __all__ = [
     "ContractFailureSignature",
     "RepeatedContractRecord",
     "CONTRACT_PREVIEW_FAILURE_SIGNATURE_SCHEMA_VERSION",
+    "REPEATED_CONTRACT_SIGNATURE_REROUTE_SCHEMA_VERSION",
     "REPEATED_CONTRACT_FAILURE_CODE",
     "REPEATED_CONTRACT_REROUTE_REASON",
     "REPEATED_CONTRACT_THRESHOLD",
+    "contract_preview_failure_reroute_feedback",
     "contract_preview_failure_signature_feedback",
     "extract_contract_failure_signature",
     "mark_repeated_contract_reroute",
     "record_contract_failure_attempt",
+    "repeated_contract_signature_reroute_feedback",
 ]

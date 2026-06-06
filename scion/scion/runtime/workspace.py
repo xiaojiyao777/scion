@@ -5,8 +5,9 @@ import hashlib
 import os
 import shutil
 import stat
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from scion.core.models import (
     ChampionState,
@@ -14,7 +15,9 @@ from scion.core.models import (
     PatchProposal,
     patch_file_changes,
 )
+from scion.core.path_match import segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_surface_index import normalize_editable_identity_patterns
 
 
 # Frozen file patterns that can never be written via apply_patch
@@ -53,11 +56,17 @@ class WorkspaceMaterializer:
         self,
         campaign_dir: str,
         frozen_patterns: Optional[frozenset[str]] = None,
+        editable_patterns: Optional[Iterable[str]] = None,
     ) -> None:
         self._campaign_dir = Path(campaign_dir)
         self._workspaces_dir = self._campaign_dir / "workspaces"
         self._champions_dir = self._campaign_dir / "champions"
         self._frozen_patterns = frozen_patterns or _DEFAULT_FROZEN_PATTERNS
+        self._editable_patterns = (
+            None
+            if editable_patterns is None
+            else normalize_editable_identity_patterns(editable_patterns)
+        )
 
         self._workspaces_dir.mkdir(parents=True, exist_ok=True)
         self._champions_dir.mkdir(parents=True, exist_ok=True)
@@ -187,10 +196,10 @@ class WorkspaceMaterializer:
             shutil.rmtree(ws)
 
     def archive_workspace(self, workspace: str, branch_id: str) -> str | None:
-        """Copy editable research-surface dirs into archive/<branch_id_short>/.
+        """Copy editable identity files into archive/<branch_id_short>/.
 
-        Called before cleanup on ABANDON so generated .py files are preserved
-        for post-campaign analysis.
+        Called before cleanup on ABANDON so generated research-surface files are
+        preserved for post-campaign analysis.
 
         Args:
             workspace: Absolute path to the branch workspace.
@@ -201,12 +210,8 @@ class WorkspaceMaterializer:
             research-surface directories are present.
         """
         ws = Path(workspace)
-        surface_sources = [
-            source
-            for source in (ws / "operators", ws / "policies")
-            if source.exists()
-        ]
-        if not surface_sources:
+        files = self._identity_files(ws)
+        if not files:
             return None
 
         # Use first 8 chars of branch_id for readability
@@ -220,12 +225,11 @@ class WorkspaceMaterializer:
             archive_dest = self._archive_dir / f"{short_id}_{suffix}"
 
         archive_dest.mkdir(parents=True)
-        for source in surface_sources:
-            shutil.copytree(
-                source,
-                archive_dest / source.name,
-                symlinks=False,
-            )
+        for source in files:
+            rel = source.relative_to(ws)
+            dest = archive_dest / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, dest, follow_symlinks=False)
         import logging as _logging
         _logging.getLogger(__name__).info(
             "Archived research surfaces from branch %s → %s", branch_id, archive_dest
@@ -233,7 +237,7 @@ class WorkspaceMaterializer:
         return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of editable research-surface .py files.
+        """Compute SHA-256 of editable identity files.
 
         Args:
             workspace: Absolute path to the workspace.
@@ -241,26 +245,11 @@ class WorkspaceMaterializer:
         Returns:
             Hex-encoded SHA-256 string.
         """
-        h = hashlib.sha256()
-
         ws = Path(workspace)
-        for surface_dir_name in ("operators", "policies"):
-            surface_dir = ws / surface_dir_name
-            if not surface_dir.exists():
-                continue
-            py_files = sorted(
-                surface_dir.rglob("*.py"),
-                key=lambda p: str(p.relative_to(surface_dir)),
-            )
-            for py_file in py_files:
-                rel = py_file.relative_to(ws)
-                h.update(str(rel).encode())
-                h.update(py_file.read_bytes())
-
-        return h.hexdigest()
+        return _hash_files(ws, self._identity_files(ws))
 
     def compute_snapshot_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of research-surface Python files + registry.yaml.
+        """Compute SHA-256 of editable identity files + registry.yaml.
 
         Includes registry.yaml so weight changes affect the champion hash.
 
@@ -271,27 +260,13 @@ class WorkspaceMaterializer:
             Hex-encoded SHA-256 string.
         """
         ws = Path(workspace)
-        h = hashlib.sha256()
-
-        for surface_dir_name in ("operators", "policies"):
-            surface_dir = ws / surface_dir_name
-            if not surface_dir.exists():
-                continue
-            py_files = sorted(
-                surface_dir.rglob("*.py"),
-                key=lambda p: str(p.relative_to(surface_dir)),
-            )
-            for py_file in py_files:
-                rel = py_file.relative_to(ws)
-                h.update(str(rel).encode())
-                h.update(py_file.read_bytes())
+        files = self._identity_files(ws)
 
         registry_path = ws / "registry.yaml"
         if registry_path.exists():
-            h.update(b"registry.yaml")
-            h.update(registry_path.read_bytes())
+            files = _dedupe_sorted_paths([*files, registry_path], ws)
 
-        return h.hexdigest()
+        return _hash_files(ws, files)
 
     def create_mutable_staging(self, source_workspace: str) -> str:
         """Create a writable staging copy of source_workspace.
@@ -344,6 +319,15 @@ class WorkspaceMaterializer:
                 return True
         return False
 
+    def _identity_files(self, ws: Path) -> list[Path]:
+        if self._editable_patterns is None:
+            return _legacy_identity_files(ws)
+        return _explicit_identity_files(
+            ws,
+            patterns=self._editable_patterns,
+            is_frozen=self._is_frozen,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Filesystem helpers
@@ -356,6 +340,131 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _hash_files(ws: Path, files: Iterable[Path]) -> str:
+    h = hashlib.sha256()
+    for file_path in _dedupe_sorted_paths(files, ws):
+        rel = file_path.relative_to(ws)
+        h.update(rel.as_posix().encode())
+        h.update(file_path.read_bytes())
+    return h.hexdigest()
+
+
+def _legacy_identity_files(ws: Path) -> list[Path]:
+    files: list[Path] = []
+    for surface_dir_name in ("operators", "policies"):
+        surface_dir = ws / surface_dir_name
+        if not surface_dir.exists():
+            continue
+        files.extend(surface_dir.rglob("*.py"))
+    return _dedupe_sorted_paths(files, ws)
+
+
+def _explicit_identity_files(
+    ws: Path,
+    *,
+    patterns: Iterable[str],
+    is_frozen: Callable[[str], bool],
+) -> list[Path]:
+    files: list[Path] = []
+    resolved_ws = ws.resolve()
+    for pattern in patterns:
+        files.extend(
+            _files_for_editable_pattern(
+                ws=ws,
+                resolved_ws=resolved_ws,
+                pattern=pattern,
+                is_frozen=is_frozen,
+            )
+        )
+    return _dedupe_sorted_paths(files, ws)
+
+
+def _files_for_editable_pattern(
+    *,
+    ws: Path,
+    resolved_ws: Path,
+    pattern: str,
+    is_frozen: Callable[[str], bool],
+) -> list[Path]:
+    target = ws / pattern
+    if not _contains_glob(pattern):
+        if target.is_file():
+            return _allowed_identity_files(
+                (target,),
+                ws=ws,
+                resolved_ws=resolved_ws,
+                is_frozen=is_frozen,
+            )
+        if target.is_dir():
+            return _allowed_identity_files(
+                target.rglob("*"),
+                ws=ws,
+                resolved_ws=resolved_ws,
+                is_frozen=is_frozen,
+            )
+        return []
+
+    files: list[Path] = []
+    for match in ws.glob(pattern):
+        if match.is_dir():
+            files.extend(
+                _allowed_identity_files(
+                    match.rglob("*"),
+                    ws=ws,
+                    resolved_ws=resolved_ws,
+                    is_frozen=is_frozen,
+                )
+            )
+        else:
+            files.extend(
+                _allowed_identity_files(
+                    (match,),
+                    ws=ws,
+                    resolved_ws=resolved_ws,
+                    is_frozen=is_frozen,
+                    pattern=pattern,
+                )
+            )
+    return files
+
+
+def _allowed_identity_files(
+    candidates: Iterable[Path],
+    *,
+    ws: Path,
+    resolved_ws: Path,
+    is_frozen: Callable[[str], bool],
+    pattern: str | None = None,
+) -> list[Path]:
+    files: list[Path] = []
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        if not _is_relative_to(candidate.resolve(), resolved_ws):
+            continue
+        rel = candidate.relative_to(ws).as_posix()
+        if pattern is not None and not segment_glob_match(rel, pattern):
+            continue
+        if is_frozen(rel):
+            continue
+        files.append(candidate)
+    return files
+
+
+def _dedupe_sorted_paths(paths: Iterable[Path], ws: Path) -> list[Path]:
+    by_rel: dict[str, Path] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        rel = path.relative_to(ws).as_posix()
+        by_rel.setdefault(rel, path)
+    return [by_rel[rel] for rel in sorted(by_rel)]
+
+
+def _contains_glob(path: str) -> bool:
+    return any(char in path for char in "*?[")
 
 
 def _update_registry(ws: Path, file_rel: str, code_content: str) -> None:

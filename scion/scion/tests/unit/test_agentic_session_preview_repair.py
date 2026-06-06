@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from scion.core.models import MechanismChange
+from scion.core.repeated_contract_failures import (
+    REPEATED_CONTRACT_FAILURE_CODE,
+    REPEATED_CONTRACT_REROUTE_REASON,
+    record_contract_failure_attempt,
+)
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -128,6 +133,52 @@ class _RepairPathLedgerAlgorithmSmokeTool(_LedgerAlgorithmSmokeTool):
         )
 
 
+class _RepeatedContractBoundaryPreviewTool:
+    name = "proposal.contract_preview"
+    input_schema = ContractPreviewInput
+    permission = ProposalToolPermission.CONTRACT_PREVIEW
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 60000
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def call(self, args, context: ProposalToolContext) -> ProposalObservation:
+        del args
+        self.call_count += 1
+        return ProposalObservation(
+            observation_id=f"repeated-contract-boundary-{self.call_count}",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="",
+            observation_type="contract_preview",
+            summary=(
+                "Static contract preview found issues: "
+                "object_model_no_dynamic_private_attrs."
+            ),
+            structured_payload={
+                "passed": False,
+                "patch": {
+                    "target_file": "policies/search_policy.py",
+                    "contract": {
+                        "passed": False,
+                        "failed_checks": [
+                            "object_model_no_dynamic_private_attrs",
+                        ],
+                    },
+                    "checks": [
+                        {
+                            "name": "object_model_no_dynamic_private_attrs",
+                            "passed": False,
+                            "detail": "raw private mutable cache prose",
+                        }
+                    ],
+                },
+            },
+        )
+
+
 def test_agentic_session_contract_preview_failure_fails_closed(
     tmp_path: Path,
 ) -> None:
@@ -167,6 +218,110 @@ def test_agentic_session_contract_preview_failure_fails_closed(
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
     assert output.self_check.contract_preview_codes[0] in output.failure_detail
+
+
+def test_agentic_session_blocks_repeated_contract_preview_without_repair_attempt(
+    tmp_path: Path,
+) -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            target_file="policies/search_policy.py",
+            mechanism_changes=[
+                {"id": "state_delta_cache", "change_type": "modify"},
+            ],
+        )
+    )
+    prior_session_ref = {
+        "session_id": "session-contract",
+        "failure_category": "contract_boundary_failure",
+        "failure_code": "object_model_no_dynamic_private_attrs",
+        "contract_preview_codes": [
+            "object_model_no_dynamic_private_attrs",
+        ],
+        "primary_failure": {
+            "stage": "self_check",
+            "reason": "contract_preview_failed",
+            "category": "contract_boundary_failure",
+            "code": "object_model_no_dynamic_private_attrs",
+        },
+    }
+    patch_mechanism_changes = [
+        {"id": "state_delta_cache", "change_type": "modify"},
+    ]
+    first_patch = PatchProposal(
+        **_valid_policy_patch_payload(
+            mechanism_changes=patch_mechanism_changes,
+        )
+    )
+    repaired_patch = PatchProposal(
+        **_valid_policy_patch_payload(
+            code_content=_valid_policy_patch_payload()["code_content"].replace(
+                "return 0.35",
+                "return 0.36",
+            ),
+            mechanism_changes=patch_mechanism_changes,
+        )
+    )
+    creative = SequentialPatchCreative(
+        [first_patch, repaired_patch],
+        hypothesis=hypothesis,
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    record_contract_failure_attempt(
+        context.branch,
+        (
+            "Contract preview failed: object_model_no_dynamic_private_attrs; "
+            "raw private mutable cache prose"
+        ),
+        hypothesis,
+        prior_session_ref,
+        failure_stage="code_generation",
+    )
+    registry = ProposalToolRegistry.default_read_only()
+    contract_tool = _RepeatedContractBoundaryPreviewTool()
+    registry._tools["proposal.contract_preview"] = contract_tool
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=registry,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=3),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert len(creative.code_contexts) == 1
+    assert contract_tool.call_count == 1
+    assert output.structured_rejection is not None
+    assert output.structured_rejection["reason_code"] == (
+        REPEATED_CONTRACT_REROUTE_REASON
+    )
+    assert output.structured_rejection["failure_code"] == (
+        REPEATED_CONTRACT_FAILURE_CODE
+    )
+    assert output.structured_rejection["check_id"] == (
+        "object_model_no_dynamic_private_attrs"
+    )
+    assert output.structured_rejection["count"] == 2
+    assert output.structured_rejection["threshold"] == 2
+    assert output.structured_rejection["counts_as_screened_round"] is False
+    assert REPEATED_CONTRACT_REROUTE_REASON in output.failure_detail
+    assert "raw private mutable cache prose" not in output.failure_detail
 
 
 def test_agentic_session_writes_api_visible_prompt_manifest_artifacts(

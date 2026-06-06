@@ -298,6 +298,10 @@ class CampaignLoop:
         final_wait_timeout = self.get_final_wait_timeout()
         self.wait_weight_opt_all(final_wait_timeout)
         self.drain_weight_opt_events()
+        self.write_status(
+            stopped_reason=final_reason or "run_complete",
+            loop_status=loop_status(),
+        )
         self.write_campaign_summary()
         self.write_status(
             stopped_reason=final_reason or "run_complete",
