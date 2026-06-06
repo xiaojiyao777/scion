@@ -32,6 +32,69 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
     assert pipeline.agentic_outputs == {}
 
 
+def test_generate_hypothesis_passes_filtered_prompt_context_to_creative() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)
+    raw_context = {
+        "kind": "hypothesis",
+        "branch_dossier": "full Branch Dossier",
+        "branch_dossier_payload": {"schema_version": "branch_dossier.v1"},
+        "research_log": "full research log",
+        "cross_branch_research": "full cross_branch_research.v1 payload",
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "similarity_hints": [
+                {
+                    "hint_type": "near_duplicate",
+                    "branch_ids": ["branch-1", "sibling"],
+                    "shared_signature": {"change_locus": "local_search"},
+                    "summary": "Nearby branch already tried this generic shape.",
+                }
+            ],
+            "lesson_cards": [
+                {
+                    "scope": "cross_branch",
+                    "lesson_type": "near_duplicate",
+                    "recommended_action": "avoid repeating nearby structure",
+                    "summary": "Keep a compact lesson.",
+                }
+            ],
+            "material_difference_audit_records": [{"audit": "hidden"}],
+            "cross_branch_research_metadata": {"session_id": "hidden"},
+        },
+        "cross_branch_research_audit_records": [{"audit": "hidden"}],
+        "cross_branch_research_session_metadata": {"session_id": "hidden"},
+        "material_difference_requirement": {
+            "required": True,
+            "record_id": "material_difference_requirement:test",
+            "required_for": "branch-1",
+        },
+    }
+
+    def build_hypothesis_context(**kwargs):
+        runtime.hypothesis_kwargs = kwargs
+        return raw_context
+
+    runtime.build_hypothesis_context = build_hypothesis_context
+
+    pipeline.generate_hypothesis(branch)
+
+    prompt_context = creative.hypothesis_context
+    assert "branch_dossier" in raw_context
+    assert "branch_dossier" not in prompt_context
+    assert "branch_dossier_payload" not in prompt_context
+    assert "research_log" not in prompt_context
+    assert "cross_branch_research_payload" not in prompt_context
+    assert "cross_branch_research_audit_records" not in prompt_context
+    assert "cross_branch_research_session_metadata" not in prompt_context
+    assert "compact_cross_branch_learning.v1" in (
+        prompt_context["cross_branch_research"]
+    )
+    assert "cross_branch_research.v1" not in prompt_context["cross_branch_research"]
+    assert "Keep a compact lesson." in prompt_context["cross_branch_research"]
+    assert prompt_context["material_difference_requirement"]["required"] is True
+
+
 def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:
     creative = FakeCreative()
     creative.hypothesis = HypothesisProposal(

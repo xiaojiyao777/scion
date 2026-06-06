@@ -299,7 +299,7 @@ def test_scheduler_action_audit_metadata_reaches_result() -> None:
     assert metadata["scheduler_action"] == "run_existing"
 
 
-def test_clean_fork_reclaims_low_value_slot_before_create_new() -> None:
+def test_clean_fork_does_not_reclaim_low_value_slot_without_decision_marker() -> None:
     champion = _champion()
     controller = BranchController()
     stale_low_signal = controller.create_branch(champion)
@@ -307,6 +307,95 @@ def test_clean_fork_reclaims_low_value_slot_before_create_new() -> None:
     stale_low_signal.branch_code_status = "active_no_effect"
     stale_low_signal.last_screening_feedback_tier = "no_effect"
     stale_low_signal.branch_mechanism_ids = ("probe",)
+    recorded: list[StepResult] = []
+    saved: list[tuple[str, BranchState]] = []
+
+    def save_branch(branch: Branch) -> None:
+        saved.append((branch.branch_id, branch.state))
+
+    runner = BranchStepRunner(
+        branch_controller=controller,
+        scheduler=Scheduler(max_active_branches=1),
+        champion_lock=nullcontext(),
+        get_champion=lambda: champion,
+        branch_store=SimpleNamespace(save=save_branch),
+        branch_workspaces={},
+        branch_hypotheses={},
+        branch_patches={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=lambda: None,
+        contract_gate=None,
+        verification_gate=None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        tick_blocked_branches=lambda: None,
+        persist_branch_state=lambda branch_id: save_branch(
+            controller.get_branch(branch_id)
+        ),
+        record_hard_abandon=lambda branch_id, reason: None,
+        setup_workspace=lambda *args, **kwargs: None,
+        apply_patch=lambda *args, **kwargs: None,
+        record_verification_pass=lambda branch, code_hash: None,
+        evaluate=lambda branch, workspace, hypothesis: None,
+        apply_decision_and_finalize=lambda **kwargs: StepResult(action="explore"),
+        record_step=lambda step: None,
+        decision_reason_codes_for=lambda branch_id, protocol_result: None,
+        run_explore_step=lambda branch: StepResult(
+            action="explore",
+            branch_id=branch.branch_id,
+            reason="screening complete",
+        ),
+        run_eval_step_callback=lambda branch: StepResult(action="validate"),
+        run_reconcile_step_callback=lambda branch: StepResult(action="reconcile"),
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        hypothesis_store=None,
+        record_scheduler_result=recorded.append,
+    )
+
+    result = runner.run_one_step()
+    inventory = active_slot_inventory(
+        controller.get_reportable_branches(),
+        max_active_branches=1,
+    )
+
+    assert result.action == "skip"
+    assert result.reason == "max_active_branches reached"
+    assert stale_low_signal.state == BranchState.EXPLORE
+    assert inventory["used"] == 1
+    assert inventory["parked_lineage_ids"] == []
+    assert len(controller.get_reportable_branches()) == 1
+    assert saved == []
+    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
+        "mode"
+    ] == "new_branch_reclaim"
+    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
+        "decision_origin_marker_required"
+    ] is True
+    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
+        "marker_missing_branch_ids"
+    ] == [stale_low_signal.branch_id]
+    assert result.scheduler_audit_metadata["active_slot_hard_cap"][
+        "branch_ids"
+    ] == [stale_low_signal.branch_id]
+    assert recorded == [result]
+
+
+def test_clean_fork_reclaims_decision_marked_slot_before_create_new() -> None:
+    champion = _champion()
+    controller = BranchController()
+    stale_low_signal = controller.create_branch(champion)
+    stale_low_signal.direction = "solver: no-effect follow-up"
+    stale_low_signal.branch_code_status = "active_no_effect"
+    stale_low_signal.last_screening_feedback_tier = "no_effect"
+    stale_low_signal.branch_mechanism_ids = ("probe",)
+    stale_low_signal.last_branch_lifecycle_policy_block = {
+        "reason": "park_lineage",
+        "block_count": 1,
+        "lifecycle_action_reason_codes": [BRANCH_LIFECYCLE_PARK_LINEAGE],
+    }
+    stale_low_signal.branch_lifecycle_policy_blocks = 1
     recorded: list[StepResult] = []
     saved: list[tuple[str, BranchState]] = []
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_PARK_LINEAGE,
     SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,
 )
 from scion.core.branch_hygiene import ACTIVATION_MISSING_OR_WIRING_SUSPECT
@@ -19,6 +20,9 @@ from scion.core.scheduler import (
     PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON,
     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
     Scheduler,
+    active_slot_inventory,
+    reclaim_active_slot_for_new_branch,
+    reconcile_active_slot_overflow,
 )
 from scion.proposal.screening_feedback import screening_feedback_summary
 
@@ -46,6 +50,100 @@ def _runtime_pressure_protocol() -> ProtocolResult:
         runtime_evidence_status="insufficient",
         champion_cached_runtime_pairs=4,
     )
+
+
+def test_active_slot_reclaim_requires_decision_origin_park_marker() -> None:
+    branch = Branch(
+        branch_id="low-value-without-marker",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        lifecycle_no_effect_diagnostic_followups=1,
+    )
+
+    reconciliation = reclaim_active_slot_for_new_branch(
+        [branch],
+        max_active_branches=1,
+    )
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert reconciliation.changed is False
+    assert reconciliation.blocked is True
+    assert reconciliation.after_used == 1
+    assert reconciliation.candidate_branch_ids == (branch.branch_id,)
+    assert reconciliation.marker_missing_branch_ids == (branch.branch_id,)
+    assert branch.state == BranchState.EXPLORE
+    assert inventory["used"] == 1
+    assert inventory["parked_lineage_ids"] == []
+    audit = reconciliation.as_audit_metadata()
+    assert audit["decision_origin_marker_required"] is True
+    assert audit["blocked_reason"] == "decision_origin_lifecycle_marker_missing"
+
+
+def test_active_slot_reclaim_parks_branch_with_decision_origin_marker() -> None:
+    branch = Branch(
+        branch_id="decision-marked-low-value",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        lifecycle_no_effect_diagnostic_followups=1,
+        branch_lifecycle_policy_blocks=1,
+        last_branch_lifecycle_policy_block={
+            "reason": "park_lineage",
+            "block_count": 1,
+            "lifecycle_action_reason_codes": [BRANCH_LIFECYCLE_PARK_LINEAGE],
+        },
+    )
+
+    reconciliation = reclaim_active_slot_for_new_branch(
+        [branch],
+        max_active_branches=1,
+    )
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert reconciliation.changed is True
+    assert reconciliation.blocked is False
+    assert reconciliation.after_used == 0
+    assert reconciliation.parked_branch_ids == (branch.branch_id,)
+    assert branch.state == BranchState.PARKED_LINEAGE
+    assert branch.last_branch_lifecycle_policy_block[
+        "lifecycle_action_reason_codes"
+    ] == [BRANCH_LIFECYCLE_PARK_LINEAGE]
+    assert inventory["used"] == 0
+    assert inventory["parked_lineage_ids"] == [branch.branch_id]
+
+
+def test_active_slot_overflow_does_not_park_without_decision_marker() -> None:
+    branches = [
+        Branch(
+            branch_id=f"active-{index}",
+            state=BranchState.EXPLORE,
+            base_champion_id=1,
+            base_champion_hash="champion",
+        )
+        for index in range(2)
+    ]
+
+    reconciliation = reconcile_active_slot_overflow(
+        branches,
+        max_active_branches=1,
+    )
+
+    assert reconciliation.changed is False
+    assert reconciliation.blocked is True
+    assert reconciliation.after_used == 2
+    assert reconciliation.marker_missing_branch_ids == (
+        "active-0",
+        "active-1",
+    )
+    assert [branch.state for branch in branches] == [
+        BranchState.EXPLORE,
+        BranchState.EXPLORE,
+    ]
 
 
 def test_repeated_runtime_evidence_pressure_prefers_plateau_refinement_then_material_clean_fork() -> None:

@@ -54,6 +54,74 @@ def test_default_agentic_session_has_registry_and_requests_get_tool_context() ->
     assert captured[0].tool_context.problem_id == "toy"
 
 
+def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="session-1",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                hypothesis=FakeCreative().hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=CapturingSession(),
+    )
+    raw_context = {
+        "kind": "hypothesis",
+        "branch_dossier": "full Branch Dossier",
+        "research_log": "full research log",
+        "cross_branch_research": "full cross_branch_research.v1 payload",
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "similarity_hints": [
+                {
+                    "hint_type": "near_duplicate",
+                    "branch_ids": ["branch-1", "sibling"],
+                    "summary": "Nearby branch already tried this shape.",
+                }
+            ],
+            "lesson_cards": [
+                {
+                    "scope": "cross_branch",
+                    "lesson_type": "near_duplicate",
+                    "summary": "Compact agentic lesson.",
+                }
+            ],
+            "material_difference_audit_records": [{"audit": "hidden"}],
+        },
+        "cross_branch_research_audit_records": [{"audit": "hidden"}],
+    }
+
+    def build_hypothesis_context(**kwargs):
+        runtime.hypothesis_kwargs = kwargs
+        return raw_context
+
+    runtime.build_hypothesis_context = build_hypothesis_context
+
+    pipeline.generate_hypothesis(branch)
+
+    assert len(captured) == 1
+    prompt_context = captured[0].hypothesis_context
+    assert "branch_dossier" in raw_context
+    assert "branch_dossier" not in prompt_context
+    assert "research_log" not in prompt_context
+    assert "cross_branch_research_payload" not in prompt_context
+    assert "cross_branch_research_audit_records" not in prompt_context
+    assert "compact_cross_branch_learning.v1" in (
+        prompt_context["cross_branch_research"]
+    )
+    assert "cross_branch_research.v1" not in prompt_context["cross_branch_research"]
+    assert "Compact agentic lesson." in prompt_context["cross_branch_research"]
+
+
 def test_default_agentic_session_uses_configured_timeout() -> None:
     pipeline, _, _, _, _, _ = _pipeline(
         use_agentic_proposal=True,

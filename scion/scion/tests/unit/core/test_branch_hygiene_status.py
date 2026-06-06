@@ -431,12 +431,13 @@ def test_branch_card_telemetry_summaries_are_current_best_history_scoped() -> No
 
     assert payload["generic_evidence_summary"]["tier"] == "no_effect"
     assert payload["current_head_generic_evidence_summary"]["wins"] == 0
-    assert payload["active_slot_status"] == "inactive"
-    assert payload["counts_toward_active_slots"] is False
-    assert payload["current_head_active_slot_release_reason"] == (
-        "retained_checkpoint_no_effect_current_head"
+    assert payload["active_slot_status"] == "active_slot"
+    assert payload["counts_toward_active_slots"] is True
+    assert payload["current_head_active_slot_release_reason"] == ""
+    assert (
+        payload.get("retained_checkpoint_no_effect_current_head_released")
+        is not True
     )
-    assert payload["retained_checkpoint_no_effect_current_head_released"] is True
     assert payload["phase_activation_summary"]["effect_status"] == (
         "no_objective_effect"
     )
@@ -457,11 +458,8 @@ def test_branch_card_telemetry_summaries_are_current_best_history_scoped() -> No
     assert "generic_evidence_summary=tier:no_effect" in text
     assert "best_checkpoint_generic_evidence_summary=tier:weak_positive" in text
     assert "best_checkpoint_phase_activation_summary=stage:screening" in text
-    assert (
-        "current_head_active_slot_release_reason="
-        "retained_checkpoint_no_effect_current_head"
-    ) in text
-    assert "retained_checkpoint_no_effect_current_head_released=true" in text
+    assert "current_head_active_slot_release_reason=" not in text
+    assert "retained_checkpoint_no_effect_current_head_released=true" not in text
     assert "history_phase_activation_summaries=stage:screening" in text
 
 

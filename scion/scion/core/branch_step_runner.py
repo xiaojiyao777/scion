@@ -100,12 +100,13 @@ class BranchStepRunner:
                 active,
                 max_active_branches=max_active_branches,
             )
-            if reconciliation.changed:
+            if reconciliation.changed or reconciliation.blocked:
                 self._persist_active_slot_reconciliation(reconciliation)
                 active_slot_reconciliations.append(
                     reconciliation.as_audit_metadata()
                 )
-                active = self.branch_controller.get_active_branches()
+                if reconciliation.changed:
+                    active = self.branch_controller.get_active_branches()
 
         sched = self.scheduler.select_next(active)
         if sched.action == "at_capacity" and max_active_branches is not None:
@@ -113,13 +114,14 @@ class BranchStepRunner:
                 active,
                 max_active_branches=max_active_branches,
             )
-            if reconciliation.changed:
+            if reconciliation.changed or reconciliation.blocked:
                 self._persist_active_slot_reconciliation(reconciliation)
                 active_slot_reconciliations.append(
                     reconciliation.as_audit_metadata()
                 )
-                active = self.branch_controller.get_active_branches()
-                sched = self.scheduler.select_next(active)
+                if reconciliation.changed:
+                    active = self.branch_controller.get_active_branches()
+                    sched = self.scheduler.select_next(active)
 
         def finalize(
             result: StepResult,

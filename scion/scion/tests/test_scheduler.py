@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime, timedelta
 import pytest
 
+from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
 from scion.core.scheduler import (
-    QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON,
     Scheduler,
     active_slot_inventory,
     branch_active_slot_release_reason,
@@ -214,7 +214,7 @@ def test_no_effect_without_actionable_diagnostic_does_not_bypass_hard_cap():
     assert action.reason == "active_branch_limit_reached"
 
 
-def test_repeated_activation_zero_effect_releases_active_slot_for_clean_fork():
+def test_repeated_activation_zero_effect_without_marker_keeps_active_slot():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "solver: repeated zero-effect follow-up"
     branch.branch_code_status = "active_no_effect"
@@ -233,16 +233,16 @@ def test_repeated_activation_zero_effect_releases_active_slot_for_clean_fork():
     action = Scheduler(max_active_branches=1).select_next([branch])
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
-    assert inventory["branch_ids"] == []
-    assert action.action == "create_new"
+    assert inventory["used"] == 1
+    assert inventory["available"] == 0
+    assert inventory["branch_ids"] == [branch.branch_id]
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
 
 
-def test_no_effect_head_with_retained_checkpoint_releases_slot_for_clean_fork():
+def test_no_effect_head_with_retained_checkpoint_keeps_slot_for_clean_fork():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "solver: weakened checkpoint follow-up"
     branch.branch_code_status = "active_no_effect"
@@ -254,9 +254,9 @@ def test_no_effect_head_with_retained_checkpoint_releases_slot_for_clean_fork():
     action = Scheduler(max_active_branches=3).select_next([branch])
     inventory = active_slot_inventory([branch], max_active_branches=3)
 
-    assert inventory["used"] == 0
-    assert inventory["available"] == 3
-    assert inventory["branch_ids"] == []
+    assert inventory["used"] == 1
+    assert inventory["available"] == 2
+    assert inventory["branch_ids"] == [branch.branch_id]
     assert action.action == "create_new"
     assert action.branch is None
     assert action.slot == "explore_new"
@@ -277,7 +277,7 @@ def test_no_effect_with_actionable_diagnostic_runs_existing_branch():
     assert action.reason == "effect_diagnostic_followup"
 
 
-def test_quality_regression_without_actionable_diagnostic_releases_active_slot():
+def test_quality_regression_without_actionable_diagnostic_keeps_active_slot():
     branch = _branch(BranchState.EXPLORE)
     branch.direction = "generic quality-regression follow-up"
     branch.branch_code_status = "active_quality_regression"
@@ -294,31 +294,15 @@ def test_quality_regression_without_actionable_diagnostic_releases_active_slot()
     action = Scheduler(max_active_branches=1).select_next([branch])
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert branch_active_slot_release_reason(branch) == (
-        QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON
-    )
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
-    assert inventory["branch_ids"] == []
-    assert action.action == "create_new"
+    assert branch_active_slot_release_reason(branch) == ""
+    assert inventory["used"] == 1
+    assert inventory["available"] == 0
+    assert inventory["branch_ids"] == [branch.branch_id]
+    assert action.action == "at_capacity"
     assert action.branch is None
-    assert action.slot == "explore_new"
-    assert action.reason == "new_exploration_slot_available"
-    assert action.audit_metadata["low_value_active_slot_release"] is True
-    assert action.audit_metadata["low_value_active_slot_release_candidates"] == [
-        {
-            "branch_id": branch.branch_id,
-            "lineage_status": "diagnostic_repair",
-            "branch_state": "explore",
-            "branch_code_status": "active_quality_regression",
-            "screening_tier": "quality_regression",
-            "release_reason": QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON,
-            "case_wins": 0,
-            "case_losses": 1,
-            "activation_zero_effect_streak": 0,
-            "runtime_evidence_pressure_count": 1,
-        }
-    ]
+    assert action.slot == "capacity_blocked"
+    assert action.reason == "active_branch_limit_reached"
+    assert action.audit_metadata == {}
 
 
 def test_quality_regression_actionable_diagnostic_runs_existing_branch():
@@ -634,7 +618,7 @@ def test_repeated_weak_signal_does_not_bypass_hard_cap():
         ),
     ],
 )
-def test_low_value_branch_reclaim_parks_and_releases_active_slot(
+def test_low_value_branch_reclaim_without_marker_returns_blocked_audit(
     status: str,
     tier: str,
     extra: dict,
@@ -652,8 +636,42 @@ def test_low_value_branch_reclaim_parks_and_releases_active_slot(
     )
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
+    assert reconciliation.changed is False
+    assert reconciliation.blocked is True
+    assert reconciliation.candidate_branch_ids == (branch.branch_id,)
+    assert reconciliation.marker_missing_branch_ids == (branch.branch_id,)
+    assert reconciliation.after_used == 1
+    assert branch.state == BranchState.EXPLORE
+    assert branch.branch_code_status == status
+    audit = reconciliation.as_audit_metadata()
+    assert audit["blocked_reason"] == "decision_origin_lifecycle_marker_missing"
+    assert audit["decision_origin_marker_required"] is True
+    assert audit["marker_missing_branch_ids"] == [branch.branch_id]
+    assert inventory["used"] == 1
+    assert inventory["parked_lineage_ids"] == []
+
+
+def test_low_value_branch_reclaim_with_decision_marker_parks_and_releases_active_slot():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: decision-marked low signal"
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.branch_mechanism_ids = ("probe",)
+    branch.last_branch_lifecycle_policy_block = {
+        "reason": "park_lineage",
+        "lifecycle_action_reason_codes": [BRANCH_LIFECYCLE_PARK_LINEAGE],
+    }
+
+    reconciliation = reclaim_active_slot_for_new_branch(
+        [branch],
+        max_active_branches=1,
+    )
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
     assert reconciliation.changed is True
+    assert reconciliation.blocked is False
     assert reconciliation.parked_branch_ids == (branch.branch_id,)
+    assert reconciliation.after_used == 0
     assert branch.state == BranchState.PARKED_LINEAGE
     assert branch.branch_code_status == "parked_lineage"
     assert branch.last_branch_lifecycle_policy_block[
@@ -667,7 +685,7 @@ def test_parked_lineage_does_not_block_clean_fork_capacity():
     branches = []
     for offset in (0, 10, 20):
         branch = _branch(
-            BranchState.EXPLORE,
+            BranchState.PARKED_LINEAGE,
             created_offset_s=offset,
             updated_offset_s=offset,
         )

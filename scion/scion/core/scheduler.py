@@ -98,13 +98,19 @@ class ActiveSlotReconciliation:
     after_used: int
     max_active_branches: int
     parked_branch_ids: tuple[str, ...] = ()
+    candidate_branch_ids: tuple[str, ...] = ()
+    marker_missing_branch_ids: tuple[str, ...] = ()
 
     @property
     def changed(self) -> bool:
         return bool(self.parked_branch_ids)
 
+    @property
+    def blocked(self) -> bool:
+        return bool(self.marker_missing_branch_ids)
+
     def as_audit_metadata(self) -> dict[str, Any]:
-        return {
+        metadata: dict[str, Any] = {
             "mode": self.mode,
             "reason": self.reason,
             "before_used": self.before_used,
@@ -112,6 +118,21 @@ class ActiveSlotReconciliation:
             "max_active_branches": self.max_active_branches,
             "parked_branch_ids": list(self.parked_branch_ids),
         }
+        if self.candidate_branch_ids:
+            metadata["candidate_branch_ids"] = list(self.candidate_branch_ids)
+        if self.marker_missing_branch_ids:
+            metadata.update(
+                {
+                    "decision_origin_marker_required": True,
+                    "blocked_reason": (
+                        "decision_origin_lifecycle_marker_missing"
+                    ),
+                    "marker_missing_branch_ids": list(
+                        self.marker_missing_branch_ids
+                    ),
+                }
+            )
+        return metadata
 
 
 class Scheduler:
@@ -150,6 +171,7 @@ class Scheduler:
             for b in active
             if b.state != BranchState.BLOCKED_INFRA
             and not branch_is_parked_lineage(b)
+            and not _branch_has_decision_origin_park_marker(b)
             and not _retained_checkpoint_no_effect_current_head(b)
             and (
                 not _no_effect_slot_release_preferred(b)
@@ -430,18 +452,15 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
 
     Proposal scheduling may prefer a clean fork over a weak or exhausted
     follow-up, but active-slot accounting is the live lineage inventory:
-    non-terminal, non-parked branches consume slots until reconciliation parks
-    or otherwise terminalizes them.
+    non-terminal branches consume slots until the Decision layer marks them for
+    lifecycle parking and reconciliation persists that state.
     """
     if branch.state in _TERMINAL_STATES:
         return False
-    if branch_is_parked_lineage(branch):
-        return False
-    if _retained_checkpoint_no_effect_current_head(branch):
-        return False
-    if _no_effect_slot_release_preferred(branch):
-        return False
-    if _quality_regression_slot_release_preferred(branch):
+    if (
+        branch_is_parked_lineage(branch)
+        and _branch_has_decision_origin_park_marker(branch)
+    ):
         return False
     return True
 
@@ -454,7 +473,22 @@ def branch_active_slot_release_reason(branch: Branch | None) -> str:
         if branch_is_parked_lineage(branch):
             return "parked_lineage"
         return "terminal_state"
-    if branch_is_parked_lineage(branch):
+    if (
+        branch_is_parked_lineage(branch)
+        and _branch_has_decision_origin_park_marker(branch)
+    ):
+        return "parked_lineage"
+    return ""
+
+
+def _low_value_active_slot_candidate_reason(branch: Branch | None) -> str:
+    """Return Scheduler-only low-value candidate pressure without releasing slots."""
+    if branch is None or branch.state in _TERMINAL_STATES:
+        return ""
+    if (
+        branch_is_parked_lineage(branch)
+        and _branch_has_decision_origin_park_marker(branch)
+    ):
         return "parked_lineage"
     if _retained_checkpoint_no_effect_current_head(branch):
         return "retained_checkpoint_no_effect_current_head"
@@ -463,6 +497,78 @@ def branch_active_slot_release_reason(branch: Branch | None) -> str:
     if _quality_regression_slot_release_preferred(branch):
         return QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON
     return ""
+
+
+def _branch_has_decision_origin_park_marker(branch: Branch | None) -> bool:
+    return bool(_branch_decision_origin_park_reason_codes(branch))
+
+
+def _branch_decision_origin_park_reason_codes(
+    branch: Branch | None,
+) -> tuple[str, ...]:
+    if branch is None:
+        return ()
+    codes: list[str] = []
+    block = getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
+    if isinstance(block, Mapping):
+        codes.extend(_decision_origin_park_codes_from_block(block))
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if isinstance(summary, Mapping):
+        codes.extend(
+            _park_reason_codes_from_mapping(
+                summary,
+                include_lifecycle_action_codes=True,
+            )
+        )
+    return tuple(dict.fromkeys(codes))
+
+
+def _decision_origin_park_codes_from_block(block: Mapping[str, Any]) -> tuple[str, ...]:
+    codes = list(
+        _park_reason_codes_from_mapping(
+            block,
+            include_lifecycle_action_codes=False,
+        )
+    )
+    action = str(block.get("action") or block.get("reason") or "").strip()
+    if action == "park_lineage":
+        codes.extend(
+            _park_reason_codes_from_mapping(
+                block,
+                include_lifecycle_action_codes=True,
+            )
+        )
+    return tuple(dict.fromkeys(codes))
+
+
+def _park_reason_codes_from_mapping(
+    source: Mapping[str, Any],
+    *,
+    include_lifecycle_action_codes: bool,
+) -> tuple[str, ...]:
+    keys = ["decision_reason_codes", "terminal_reason_codes"]
+    if include_lifecycle_action_codes:
+        keys.append("lifecycle_action_reason_codes")
+    codes: list[str] = []
+    for key in keys:
+        for code in _structured_reason_codes(source.get(key)):
+            if code == BRANCH_LIFECYCLE_PARK_LINEAGE:
+                codes.append(code)
+    return tuple(dict.fromkeys(codes))
+
+
+def _structured_reason_codes(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        raw_values: Iterable[Any] = (value,)
+    elif isinstance(value, Iterable) and not isinstance(value, Mapping):
+        raw_values = value
+    else:
+        raw_values = ()
+    return tuple(
+        str(code).strip()
+        for code in raw_values
+        if str(code).strip()
+    )
 
 
 def active_slot_branches(branches: Iterable[Branch]) -> list[Branch]:
@@ -485,7 +591,7 @@ def active_slot_inventory(
     parked = [
         branch
         for branch in branch_list
-        if branch_is_parked_lineage(branch)
+        if branch_active_slot_release_reason(branch) == "parked_lineage"
     ]
     limit = max(0, int(max_active_branches))
     used = len(active)
@@ -504,7 +610,7 @@ def reconcile_active_slot_overflow(
     *,
     max_active_branches: int,
 ) -> ActiveSlotReconciliation:
-    """Park deterministic low-value lineages until live active slots fit the cap."""
+    """Persist Decision-marked parked lineages until active slots fit the cap."""
     branch_list = list(branches)
     limit = max(0, int(max_active_branches))
     return _reconcile_active_slots(
@@ -522,7 +628,7 @@ def reclaim_active_slot_for_new_branch(
     *,
     max_active_branches: int,
 ) -> ActiveSlotReconciliation:
-    """Release one low-value active slot before admitting a clean fork."""
+    """Persist one Decision-marked parked lineage before admitting a clean fork."""
     branch_list = list(branches)
     limit = max(0, int(max_active_branches))
     active = active_slot_branches(branch_list)
@@ -584,18 +690,24 @@ def _reconcile_active_slots(
         [branch for branch in active if reclaim_filter(branch)],
         key=_active_slot_reclaim_sort_key,
     )
+    candidate_ids = tuple(branch.branch_id for branch in candidates)
     parked: list[str] = []
+    marker_missing: list[str] = []
     for branch in candidates:
         if len(active_slot_branches(branches)) <= target:
             break
-        _park_active_slot_branch(
+        if not _branch_has_decision_origin_park_marker(branch):
+            marker_missing.append(branch.branch_id)
+            continue
+        parked_branch = _park_active_slot_branch(
             branch,
             reason=reason,
             mode=mode,
             max_active_branches=max_active_branches,
             before_used=before_used,
         )
-        parked.append(branch.branch_id)
+        if parked_branch:
+            parked.append(branch.branch_id)
     after_used = len(active_slot_branches(branches))
     return ActiveSlotReconciliation(
         mode=mode,
@@ -604,12 +716,16 @@ def _reconcile_active_slots(
         after_used=after_used,
         max_active_branches=max_active_branches,
         parked_branch_ids=tuple(parked),
+        candidate_branch_ids=candidate_ids,
+        marker_missing_branch_ids=tuple(marker_missing),
     )
 
 
 def _eligible_new_branch_slot_reclaim(branch: Branch) -> bool:
     if branch.state not in _RESEARCH_STATES:
         return False
+    if _branch_has_decision_origin_park_marker(branch):
+        return True
     return (
         _branch_lifecycle_budget_exhausted(branch)
         or branch_lifecycle_new_mechanism_ineligible(branch)
@@ -667,23 +783,27 @@ def _park_active_slot_branch(
     mode: str,
     max_active_branches: int,
     before_used: int,
-) -> None:
+) -> bool:
+    if not _branch_has_decision_origin_park_marker(branch):
+        return False
     now = datetime.now()
     existing = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
-    block_count = (
-        int(
-            existing.get("block_count")
-            or getattr(branch, "branch_lifecycle_policy_blocks", 0)
-            or 0
-        )
-        + 1
+    block_count = int(
+        existing.get("block_count")
+        or getattr(branch, "branch_lifecycle_policy_blocks", 0)
+        or 0
     )
-    lifecycle_codes = list(existing.get("lifecycle_action_reason_codes") or ())
-    if BRANCH_LIFECYCLE_PARK_LINEAGE not in lifecycle_codes:
-        lifecycle_codes.append(BRANCH_LIFECYCLE_PARK_LINEAGE)
+    lifecycle_codes = list(
+        dict.fromkeys(
+            [
+                *list(existing.get("lifecycle_action_reason_codes") or ()),
+                *_branch_decision_origin_park_reason_codes(branch),
+            ]
+        )
+    )
     existing.update(
         {
-            "reason": reason,
+            "reason": existing.get("reason") or "park_lineage",
             "detail": (
                 f"{reason}: active_slots.used={before_used} "
                 f"max_active_branches={max_active_branches}"
@@ -714,6 +834,7 @@ def _park_active_slot_branch(
     )
     branch.last_branch_lifecycle_policy_block = existing
     branch.updated_at = now
+    return True
 
 
 def _branch_lifecycle_budget_exhausted(branch: Branch) -> bool:
@@ -1027,7 +1148,7 @@ def _low_value_active_slot_release_audit(
     return {
         "low_value_active_slot_release": True,
         "low_value_active_slot_release_policy": (
-            "exclude_low_value_current_head_from_active_slot_pool"
+            "audit_low_value_current_head_without_scheduler_lifecycle_change"
         ),
         "low_value_active_slot_release_candidate_count": len(candidates),
         "low_value_active_slot_release_candidates": candidates[:8],
@@ -1041,7 +1162,7 @@ def _low_value_clean_fork_material_difference_candidates(
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for branch in branches:
-        release_reason = branch_active_slot_release_reason(branch)
+        release_reason = _low_value_active_slot_candidate_reason(branch)
         if (
             release_reason
             not in _LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_RELEASE_REASONS
@@ -1100,7 +1221,7 @@ def _plateau_gate_clean_fork_candidates(
 
 
 def _low_value_active_slot_release_summary(branch: Branch) -> dict[str, Any]:
-    reason = branch_active_slot_release_reason(branch)
+    reason = _low_value_active_slot_candidate_reason(branch)
     if not reason:
         return {}
     summary = getattr(branch, "branch_evidence_summary", {}) or {}

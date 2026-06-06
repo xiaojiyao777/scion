@@ -30,6 +30,9 @@ from scion.core.research_process_guidance_audit import (
 from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import AgenticProposalOutput
 from scion.proposal.engine import ProposalValidationError
+from scion.proposal.engine.hypothesis_context_profiles import (
+    filter_hypothesis_context_for_prompt,
+)
 from scion.proposal.context.branch_followup import (
     validate_weak_positive_followup_hypothesis,
 )
@@ -207,14 +210,15 @@ class ProposalPipeline(
             )
             if negative_fact_block:
                 context["agentic_negative_fact_block"] = negative_fact_block
+        prompt_context = filter_hypothesis_context_for_prompt(context)
         if self._agentic_enabled:
             return self._generate_agentic_hypothesis(
                 branch=branch,
                 champion=champ_snapshot,
-                context=context,
+                context=prompt_context,
             )
         try:
-            hypothesis = self.creative.generate_hypothesis(context)
+            hypothesis = self.creative.generate_hypothesis(prompt_context)
         except LLMBalanceError as exc:
             logger.critical(
                 "Branch %s: API balance exhausted - stopping campaign: %s",
