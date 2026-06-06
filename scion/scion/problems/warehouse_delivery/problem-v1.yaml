@@ -68,6 +68,28 @@ operator_interface:
     - name: vehicle_level
       description: "Operators that merge, split, or restructure entire vehicles"
 
+research_surfaces:
+  - name: order_level
+    kind: operator
+    description: "Warehouse operators that move or swap individual orders between vehicles."
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
+      singleton: false
+  - name: vehicle_level
+    kind: operator
+    description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
+      singleton: false
+
 objective_policy:
   mode: lexicographic
   expose_weights_to_llm: false

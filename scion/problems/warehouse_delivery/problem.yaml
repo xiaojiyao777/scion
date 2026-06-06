@@ -22,6 +22,27 @@ solver_path: solver.py
 operator_categories:
   - order_level
   - vehicle_level
+research_surfaces:
+  - name: order_level
+    kind: operator
+    description: "Warehouse operators that move or swap individual orders between vehicles."
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
+      singleton: false
+  - name: vehicle_level
+    kind: operator
+    description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
+      singleton: false
 search_space:
   # LLM may edit any .py file in operators/ except base.py and __init__.py
   editable:
