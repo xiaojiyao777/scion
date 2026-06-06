@@ -52,6 +52,13 @@ class CampaignLoop:
         same_family_retry_attempts = 0
         branch_lifecycle_policy_blocks = 0
         reconcile_lifecycle_steps = 0
+        formal_screened_candidates = 0
+        protocol_evaluated_candidates = 0
+        protocol_stage_counts: dict[str, int] = {
+            "screening": 0,
+            "validation": 0,
+            "frozen": 0,
+        }
         requested_rounds = max(1, int(max_rounds))
         proposal_quality_loop_limit = _proposal_quality_loop_limit(
             requested_rounds,
@@ -143,6 +150,9 @@ class CampaignLoop:
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
+                formal_screened_candidates=formal_screened_candidates,
+                protocol_evaluated_candidates=protocol_evaluated_candidates,
+                protocol_stage_counts=protocol_stage_counts,
                 failure_categories=failure_category_counts,
                 last_failure_category=last_failure_category,
             )
@@ -192,6 +202,14 @@ class CampaignLoop:
 
             self.write_status(loop_status=loop_status())
             result = self.run_one_step()
+            protocol_stage = _protocol_stage_for_result(result)
+            if protocol_stage:
+                protocol_evaluated_candidates += 1
+                protocol_stage_counts[protocol_stage] = (
+                    protocol_stage_counts.get(protocol_stage, 0) + 1
+                )
+                if _is_formal_screened_candidate_result(result, protocol_stage):
+                    formal_screened_candidates += 1
             result_failure_category = _result_failure_category(result)
             if result_failure_category:
                 last_failure_category = result_failure_category
@@ -341,6 +359,35 @@ def _attempt_kind(result: StepResult) -> str:
     return "proposal_block"
 
 
+def _protocol_stage_for_result(result: StepResult) -> str:
+    """Best-effort protocol stage classification for loop-only accounting."""
+    raw_kind = str(getattr(result, "attempt_kind", "") or "")
+    action = str(getattr(result, "action", "") or "")
+    if (
+        action == "explore"
+        and raw_kind in {"", "screening"}
+        and bool(getattr(result, "counts_toward_max_rounds", True))
+    ):
+        return "screening"
+    kind = _attempt_kind(result)
+    if action == "frozen":
+        return "frozen"
+    if action == "validate" or kind == "validation_repair_required":
+        return "validation"
+    if kind == "telemetry_repairable":
+        return "screening"
+    return ""
+
+
+def _is_formal_screened_candidate_result(result: StepResult, stage: str) -> bool:
+    raw_kind = str(getattr(result, "attempt_kind", "") or "")
+    return (
+        stage == "screening"
+        and raw_kind in {"", "screening"}
+        and bool(getattr(result, "counts_toward_max_rounds", True))
+    )
+
+
 def _is_soft_proposal_diagnostic(result: StepResult) -> bool:
     combined = " ".join(
         str(value or "")
@@ -479,6 +526,9 @@ def _campaign_loop_status(
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
+    formal_screened_candidates: int,
+    protocol_evaluated_candidates: int,
+    protocol_stage_counts: dict[str, int],
     failure_categories: dict[str, int],
     last_failure_category: str,
 ) -> dict[str, Any]:
@@ -492,6 +542,12 @@ def _campaign_loop_status(
     quality_blocks = max(0, int(proposal_quality_blocked_attempts))
     branch_lifecycle_blocks = max(0, int(branch_lifecycle_policy_blocks))
     reconcile_steps = max(0, int(reconcile_lifecycle_steps))
+    proposal_attempts_total = max(max(0, int(loop_steps)), attempts_value)
+    protocol_stage_counts_value = {
+        "screening": max(0, int(protocol_stage_counts.get("screening", 0))),
+        "validation": max(0, int(protocol_stage_counts.get("validation", 0))),
+        "frozen": max(0, int(protocol_stage_counts.get("frozen", 0))),
+    }
     return {
         "requested_rounds": max(1, int(requested_rounds)),
         "attempt_limit": max(0, int(attempt_limit)),
@@ -500,10 +556,22 @@ def _campaign_loop_status(
         "total_rounds": max(0, int(legacy_total_rounds)),
         "proposal_attempts": attempts_value,
         "proposal_attempts_consumed": attempts_value,
+        "proposal_attempts_total": proposal_attempts_total,
         "loop_steps": max(0, int(loop_steps)),
         "campaign_steps": max(0, int(loop_steps)),
         "loop_step_limit": max(0, int(loop_step_limit)),
         "effective_rounds_completed": effective_rounds,
+        "formal_screened_candidates": max(0, int(formal_screened_candidates)),
+        "protocol_evaluated_candidates": max(
+            0,
+            int(protocol_evaluated_candidates),
+        ),
+        "protocol_stage_counts": protocol_stage_counts_value,
+        "max_rounds_budget_counter": "effective_rounds_completed",
+        "max_rounds_semantics": (
+            "requested_rounds limits effective_rounds_completed; "
+            "proposal, repair, and lifecycle attempts use separate counters"
+        ),
         "telemetry_repairable_attempts": max(
             0,
             int(telemetry_repairable_attempts),

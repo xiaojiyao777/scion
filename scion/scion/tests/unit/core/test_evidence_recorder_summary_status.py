@@ -1811,6 +1811,14 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         "loop_steps": 7,
         "proposal_attempts": 5,
         "proposal_attempts_consumed": 5,
+        "proposal_attempts_total": 7,
+        "formal_screened_candidates": 2,
+        "protocol_evaluated_candidates": 2,
+        "protocol_stage_counts": {
+            "screening": 2,
+            "validation": 0,
+            "frozen": 0,
+        },
         "quality_blocks": 3,
     }
 
@@ -1828,12 +1836,23 @@ def test_status_and_summary_expose_proposal_accounting_fields(
     for payload in (status, summary):
         assert payload["campaign_steps"] == 7
         assert payload["screened_rounds"] == 2
+        assert payload["proposal_attempts_total"] == 7
+        assert payload["formal_screened_candidates"] == 2
+        assert payload["protocol_evaluated_candidates"] == 2
+        assert payload["protocol_stage_counts"] == {
+            "screening": 2,
+            "validation": 0,
+            "frozen": 0,
+        }
         assert payload["quality_blocks"] == 3
         assert payload["agentic_sessions"] == 2
         assert payload["hypothesis_calls"] == 1
         assert payload["code_calls"] == 2
         assert payload["proposal_accounting"]["campaign_steps"] == 7
         assert payload["proposal_accounting"]["screened_rounds"] == 2
+        assert payload["proposal_accounting"]["proposal_attempts_total"] == 7
+        assert payload["proposal_accounting"]["formal_screened_candidates"] == 2
+        assert payload["proposal_accounting"]["protocol_evaluated_candidates"] == 2
         assert payload["proposal_accounting"]["quality_blocks"] == 3
         assert payload["proposal_accounting"]["agentic_sessions"] == 2
         assert payload["proposal_accounting"]["hypothesis_calls"] == 1
@@ -1888,6 +1907,7 @@ def test_campaign_summary_reconciles_screened_and_effective_rounds(
                 "failures": [
                     {
                         "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "severity": "fail",
                         "category": "activation",
                         "mechanism": "generic_probe",
                     }
@@ -1917,6 +1937,13 @@ def test_campaign_summary_reconciles_screened_and_effective_rounds(
     reconciliation = summary["accounting_reconciliation"]
     assert reconciliation["requested_rounds"] == 2
     assert reconciliation["screened_rounds"] == 2
+    assert reconciliation["formal_screened_candidates"] == 1
+    assert reconciliation["protocol_evaluated_candidates"] == 2
+    assert reconciliation["protocol_stage_counts"] == {
+        "screening": 2,
+        "validation": 0,
+        "frozen": 0,
+    }
     assert reconciliation["effective_rounds_completed"] == 1
     assert reconciliation["screened_minus_effective"] == 1
     assert reconciliation["accepted_experiments"] == 1
@@ -1934,6 +1961,98 @@ def test_campaign_summary_reconciles_screened_and_effective_rounds(
     assert summary["proposal_accounting"]["accounting_reconciliation"] == (
         reconciliation
     )
+
+
+def test_campaign_summary_separates_formal_screening_from_holdout_protocol_counts(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    screening_step = replace(
+        _step("/tmp/accounting-screening.json"),
+        round_num=1,
+        decision=Decision.QUEUE_VALIDATE,
+    )
+    validation_step = replace(
+        _step("/tmp/accounting-validation.json"),
+        round_num=2,
+        decision=Decision.QUEUE_FROZEN,
+    )
+    validation_step.protocol_result = replace(
+        validation_step.protocol_result,
+        stage=ExperimentStage.VALIDATION,
+        raw_metrics_ref="/tmp/accounting-validation.json",
+    )
+    frozen_step = replace(
+        _step("/tmp/accounting-frozen.json"),
+        round_num=3,
+        decision=Decision.PROMOTE,
+    )
+    frozen_step.protocol_result = replace(
+        frozen_step.protocol_result,
+        stage=ExperimentStage.FROZEN,
+        raw_metrics_ref="/tmp/accounting-frozen.json",
+    )
+    repair_step = replace(
+        _step("/tmp/accounting-repairable.json"),
+        round_num=4,
+        decision=Decision.CONTINUE_EXPLORE,
+        decision_reason_codes=("TELEMETRY_VALIDATION_REPAIRABLE",),
+        counts_toward_max_rounds=False,
+        attempt_kind="telemetry_repairable",
+    )
+    repair_step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=replace(
+            screening_step.protocol_result.stats,
+            wins=0,
+            losses=0,
+            ties=6,
+        ),
+        gate_outcome="fail",
+        reason_codes=(
+            "TELEMETRY_VALIDATION_REPAIRABLE",
+            "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+        ),
+        exposed_summary="screening telemetry repairable",
+        raw_metrics_ref="/tmp/accounting-repairable.json",
+        candidate_surface_runtime_summary={
+            "telemetry_guard": {
+                "passed": False,
+                "failures": [
+                    {
+                        "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "severity": "fail",
+                        "category": "activation",
+                        "mechanism": "generic_probe",
+                    }
+                ],
+            }
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[screening_step, validation_step, frozen_step, repair_step],
+        round_num=4,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    assert summary["screened_experiments"] == 2
+    assert summary["effective_rounds_completed"] == 3
+    assert summary["formal_screened_candidates"] == 1
+    assert summary["protocol_evaluated_candidates"] == 4
+    assert summary["protocol_stage_counts"] == {
+        "screening": 2,
+        "validation": 1,
+        "frozen": 1,
+    }
+    assert summary["proposal_accounting"]["formal_screened_candidates"] == 1
+    assert summary["proposal_accounting"]["protocol_evaluated_candidates"] == 4
+    reconciliation = summary["accounting_reconciliation"]
+    assert reconciliation["formal_screened_candidates"] == 1
+    assert reconciliation["protocol_evaluated_candidates"] == 4
+    assert reconciliation["attempt_breakdown"]["formal_screened_candidates"] == 1
+    assert reconciliation["attempt_breakdown"]["protocol_evaluated_candidates"] == 4
 
 
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(

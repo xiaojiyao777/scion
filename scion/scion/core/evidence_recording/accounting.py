@@ -10,6 +10,7 @@ from typing import Any, Iterable, Mapping
 
 from scion.core.models import Decision, StepRecord
 from scion.core.public_refs import public_artifact_ref
+from scion.core.telemetry_validation import screened_experiment_effective
 from scion.proposal.session_trace_index import SESSION_TRACE_INDEX_NAME
 
 logger = logging.getLogger(__name__)
@@ -76,10 +77,20 @@ def proposal_accounting_fields(
     code_calls = _code_calls(request_counts)
     if code_calls == 0:
         code_calls = _first_int(state_map.get("code_calls"), default=0)
+    candidate_accounting = _candidate_accounting_fields(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        campaign_steps=campaign_steps,
+        round_num=round_num,
+        screened_rounds=screened,
+    )
     fields = {
+        "campaign_accounting_schema_version": "campaign_accounting.v1",
         "campaign_steps": campaign_steps,
         "screened_rounds": screened,
         "quality_blocks": quality_blocks,
+        **candidate_accounting,
         "agentic_sessions": agentic_sessions,
         "hypothesis_calls": hypothesis_calls,
         "code_calls": code_calls,
@@ -270,6 +281,14 @@ def accounting_reconciliation_fields(
         quality_blocks=quality_blocks,
         non_counted_lifecycle_steps=non_counted_lifecycle_steps,
     )
+    candidate_accounting = _candidate_accounting_fields(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        campaign_steps=campaign_steps,
+        round_num=round_num,
+        screened_rounds=screened,
+    )
     return {
         "schema_version": "campaign_accounting_reconciliation.v1",
         "requested_rounds": requested_rounds,
@@ -277,6 +296,7 @@ def accounting_reconciliation_fields(
         "campaign_steps": campaign_steps,
         "proposal_attempts": proposal_attempts,
         "proposal_attempts_consumed": proposal_attempts,
+        **candidate_accounting,
         "effective_rounds_completed": effective,
         "screened_rounds": screened,
         "screened_experiments": screened,
@@ -298,6 +318,15 @@ def accounting_reconciliation_fields(
         "non_counted_lifecycle_steps": non_counted_lifecycle_steps,
         "telemetry_failed_experiments": telemetry_failed,
         "attempt_breakdown": {
+            "proposal_attempts_total": candidate_accounting[
+                "proposal_attempts_total"
+            ],
+            "formal_screened_candidates": candidate_accounting[
+                "formal_screened_candidates"
+            ],
+            "protocol_evaluated_candidates": candidate_accounting[
+                "protocol_evaluated_candidates"
+            ],
             "effective_screenings": effective,
             "screened_not_effective": screened_not_effective,
             "accepted": accepted,
@@ -335,6 +364,135 @@ def llm_request_kind_counts(campaign_dir: str | Path) -> dict[str, int]:
 
 
 _QUALITY_BLOCK_KINDS = frozenset({"proposal_block", "schema_quality_block"})
+_PROTOCOL_STAGE_KEYS = ("screening", "validation", "frozen")
+
+
+def _candidate_accounting_fields(
+    *,
+    steps: list[StepRecord],
+    loop: Mapping[str, Any],
+    state_map: Mapping[str, Any],
+    campaign_steps: int,
+    round_num: int | None,
+    screened_rounds: int,
+) -> dict[str, Any]:
+    """Return stable run-level candidate counters with explicit semantics."""
+    has_step_history = bool(steps)
+    stage_counts = _merged_protocol_stage_counts(
+        _protocol_stage_counts_from_steps(steps),
+        _protocol_stage_counts_from_mapping(state_map.get("protocol_stage_counts")),
+        _protocol_stage_counts_from_mapping(loop.get("protocol_stage_counts")),
+    )
+    step_protocol_count = sum(_protocol_stage_counts_from_steps(steps).values())
+    step_formal_screened = _formal_screened_candidate_count_from_steps(steps)
+    legacy_attempts = _first_int(
+        loop.get("proposal_attempts_consumed"),
+        loop.get("proposal_attempts"),
+        state_map.get("proposal_attempts_consumed"),
+        state_map.get("proposal_attempts"),
+        round_num,
+        default=0,
+    )
+    proposal_attempts_total = _first_int(
+        loop.get("proposal_attempts_total"),
+        state_map.get("proposal_attempts_total"),
+        default=max(legacy_attempts, campaign_steps),
+    )
+    if has_step_history:
+        formal_default = step_formal_screened
+    else:
+        formal_default = screened_rounds
+    formal_screened_candidates = _first_int(
+        loop.get("formal_screened_candidates"),
+        state_map.get("formal_screened_candidates"),
+        default=formal_default,
+    )
+    protocol_default = (
+        max(step_protocol_count, formal_screened_candidates)
+        if has_step_history
+        else max(sum(stage_counts.values()), formal_screened_candidates)
+    )
+    protocol_evaluated_candidates = _first_int(
+        loop.get("protocol_evaluated_candidates"),
+        state_map.get("protocol_evaluated_candidates"),
+        default=protocol_default,
+    )
+    if protocol_evaluated_candidates > sum(stage_counts.values()):
+        inferred_screening = max(
+            stage_counts["screening"],
+            protocol_evaluated_candidates
+            - stage_counts["validation"]
+            - stage_counts["frozen"],
+        )
+        stage_counts["screening"] = inferred_screening
+    return {
+        "proposal_attempts_total": proposal_attempts_total,
+        "formal_screened_candidates": formal_screened_candidates,
+        "protocol_evaluated_candidates": protocol_evaluated_candidates,
+        "protocol_stage_counts": stage_counts,
+        "max_rounds_budget_counter": "effective_rounds_completed",
+        "max_rounds_semantics": (
+            "requested_rounds limits effective_rounds_completed; proposal, "
+            "repair, and lifecycle attempts are reported separately"
+        ),
+        "formal_screened_candidates_semantics": (
+            "screening-stage protocol results that count as formal candidates; "
+            "proposal blocks, repair attempts, validation, and frozen stages are "
+            "excluded"
+        ),
+        "protocol_evaluated_candidates_semantics": (
+            "completed protocol evaluations across screening, validation, and "
+            "frozen stages; proposal blocks are excluded"
+        ),
+    }
+
+
+def _protocol_stage_counts_from_steps(steps: Iterable[StepRecord]) -> dict[str, int]:
+    counts = _empty_protocol_stage_counts()
+    for step in steps:
+        if getattr(step, "protocol_result", None) is None:
+            continue
+        stage = _stage_value(step)
+        if stage in counts:
+            counts[stage] += 1
+    return counts
+
+
+def _formal_screened_candidate_count_from_steps(
+    steps: Iterable[StepRecord],
+) -> int:
+    count = 0
+    for step in steps:
+        protocol = getattr(step, "protocol_result", None)
+        if protocol is None or _stage_value(step) != "screening":
+            continue
+        if not bool(getattr(step, "counts_toward_max_rounds", True)):
+            continue
+        if not screened_experiment_effective(protocol):
+            continue
+        count += 1
+    return count
+
+
+def _protocol_stage_counts_from_mapping(value: Any) -> dict[str, int]:
+    counts = _empty_protocol_stage_counts()
+    if not isinstance(value, Mapping):
+        return counts
+    for stage in _PROTOCOL_STAGE_KEYS:
+        counts[stage] = _first_int(value.get(stage), default=0)
+    return counts
+
+
+def _merged_protocol_stage_counts(*items: Mapping[str, int]) -> dict[str, int]:
+    merged = _empty_protocol_stage_counts()
+    for item in items:
+        for stage in _PROTOCOL_STAGE_KEYS:
+            merged[stage] = max(merged[stage], _first_int(item.get(stage), default=0))
+    return merged
+
+
+def _empty_protocol_stage_counts() -> dict[str, int]:
+    return {stage: 0 for stage in _PROTOCOL_STAGE_KEYS}
 
 
 def _merged_failure_categories(
