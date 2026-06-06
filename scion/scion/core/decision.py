@@ -5,7 +5,12 @@ from scion.core.branch_lifecycle_policy import (
     BranchLifecycleDecision,
     BranchLifecyclePolicy,
 )
-from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
+from scion.core.models import (
+    Decision,
+    DecisionFeatures,
+    DecisionLifecycleAction,
+    DecisionOutcome,
+)
 from scion.core.telemetry_validation import (
     FROZEN_TELEMETRY_FAILED,
     SCREENING_TELEMETRY_FAILED,
@@ -330,20 +335,28 @@ class DecisionEngine:
             return outcome
 
         lifecycle = self.lifecycle_policy.decide(features)
+        lifecycle_action = _decision_lifecycle_action(lifecycle.action)
         lifecycle_codes = _lifecycle_reason_codes(lifecycle)
         if not lifecycle_codes:
-            return outcome
+            return DecisionOutcome(
+                decision=outcome.decision,
+                reason_codes=outcome.reason_codes,
+                features_snapshot=features,
+                lifecycle_action=lifecycle_action,
+            )
         reason_codes = _merge_reason_codes(outcome.reason_codes, lifecycle_codes)
         if lifecycle.action in {"archive_lineage", "soft_abandon"}:
             return DecisionOutcome(
                 decision=Decision.ABANDON,
                 reason_codes=reason_codes,
                 features_snapshot=features,
+                lifecycle_action=lifecycle_action,
             )
         return DecisionOutcome(
             decision=outcome.decision,
             reason_codes=reason_codes,
             features_snapshot=features,
+            lifecycle_action=lifecycle_action,
         )
 
 
@@ -368,6 +381,22 @@ def _lifecycle_reason_codes(
             )
         )
     )
+
+
+def _decision_lifecycle_action(action: str) -> DecisionLifecycleAction:
+    if action == "keep_exploring":
+        return "retain_head"
+    if action == "soft_abandon":
+        return "archive_lineage"
+    if action in {
+        "retain_head",
+        "retain_checkpoint",
+        "rollback_to_checkpoint",
+        "park_lineage",
+        "archive_lineage",
+    }:
+        return action  # type: ignore[return-value]
+    return ""
 
 
 def _merge_reason_codes(

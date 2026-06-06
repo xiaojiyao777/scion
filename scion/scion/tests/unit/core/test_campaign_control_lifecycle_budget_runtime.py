@@ -4,6 +4,12 @@ from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 
 import pytest
 
+
+class _StrictAlwaysPassVerification(_AlwaysPassVerification):
+    _strict_runtime_checks = True
+    _require_adapter_for_runtime = True
+
+
 class TestEvalStepHypothesisLifecycle:
     def test_eval_step_reuses_original_hypothesis_id(self, tmp_path):
         """Validation/frozen steps must reuse the same hypothesis_id from screening."""
@@ -208,6 +214,14 @@ class TestProgrammaticRuntimeVerificationDefault:
             canary=[4],
         )
 
+    def _production_protocol(self) -> _MockProtocol:
+        proto = _MockProtocol()
+        proto.runner = object()
+        proto.config = ProtocolConfig()
+        proto._metric_specs = (object(),)
+        proto._require_metric_specs = True
+        return proto
+
     def test_adapter_protocol_runner_builds_strict_verification_gate(self, tmp_path):
         proto = _MockProtocol()
         proto.runner = object()
@@ -359,3 +373,70 @@ class TestProgrammaticRuntimeVerificationDefault:
         assert cm._experiment_protocol is None
         assert cm._vgate._strict_runtime_checks is False
         assert cm._vgate._require_adapter_for_runtime is False
+
+    def test_production_campaign_rejects_custom_non_strict_gate(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(
+            ValueError,
+            match="verification_gate must enable strict runtime checks",
+        ):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-custom-non-strict"),
+                experiment_protocol=self._production_protocol(),
+                adapter=object(),
+                verification_gate=_AlwaysPassVerification(),
+            )
+
+    def test_production_campaign_accepts_custom_strict_gate(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        gate = _StrictAlwaysPassVerification()
+
+        cm = CampaignManager(
+            problem_spec=self._production_spec(base._spec),
+            protocol_config=ProtocolConfig(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "production-custom-strict"),
+            experiment_protocol=self._production_protocol(),
+            adapter=object(),
+            verification_gate=gate,
+        )
+
+        assert cm._vgate is gate
+
+    def test_production_campaign_without_custom_gate_builds_strict_gate(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        cm = CampaignManager(
+            problem_spec=self._production_spec(base._spec),
+            protocol_config=ProtocolConfig(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "production-default-strict"),
+            experiment_protocol=self._production_protocol(),
+            adapter=object(),
+            verification_gate=None,
+        )
+
+        assert cm._vgate._strict_runtime_checks is True
+        assert cm._vgate._require_adapter_for_runtime is True

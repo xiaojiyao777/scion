@@ -132,6 +132,7 @@ def compose_campaign_services(
         adapter=adapter,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
+        verification_gate=verification_gate,
         allow_skeleton=allow_skeleton_mode,
     )
     owner._problem_runtime = ProblemRuntime(

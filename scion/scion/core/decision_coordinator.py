@@ -5,7 +5,7 @@ from typing import Tuple
 
 from scion.config.problem import ProtocolConfig
 from scion.core.decision import DecisionEngine
-from scion.core.models import Decision, DecisionFeatures
+from scion.core.models import Decision, DecisionFeatures, DecisionLifecycleAction
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,7 @@ class CoordinatedDecision:
     reason_codes: Tuple[str, ...]
     rule: str
     features_snapshot: DecisionFeatures
+    lifecycle_action: DecisionLifecycleAction = ""
 
 
 class DecisionCoordinator:
@@ -40,6 +41,7 @@ class DecisionCoordinator:
             reason_codes=reason_codes,
             rule=_rule_name(features, outcome.decision, reason_codes),
             features_snapshot=outcome.features_snapshot,
+            lifecycle_action=outcome.lifecycle_action,
         )
 
 

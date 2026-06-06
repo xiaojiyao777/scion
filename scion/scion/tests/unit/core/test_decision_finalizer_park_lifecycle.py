@@ -508,9 +508,9 @@ def test_marginal_failed_followup_parks_lineage_without_archiving_branch() -> No
         action_label="screening",
         decision_reason_codes=(
             "SCREENING_FAIL_WIN_RATE",
-            BRANCH_LIFECYCLE_PARK_LINEAGE,
             SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
         ),
+        lifecycle_action="park_lineage",
     )
 
     stored = controller.get_branch(branch.branch_id)

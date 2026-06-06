@@ -36,6 +36,7 @@ from scion.core.models import (
     CanaryResult,
     ContractResult,
     Decision,
+    DecisionLifecycleAction,
     EvalStats,
     FailureEvent,
     HypothesisProposal,
@@ -132,12 +133,17 @@ class DecisionFinalizer:
         verification_result: VerificationResult,
         action_label: str,
         decision_reason_codes: Optional[tuple[str, ...]] = None,
+        lifecycle_action: DecisionLifecycleAction = "",
     ) -> StepResult:
         bid = branch.branch_id
         logger.info("Branch %s: decision=%s", bid, decision.value)
         effective_reason_codes = decision_reason_codes or self.decision_reason_codes_for(
             bid,
             protocol_result,
+        )
+        effective_lifecycle_action = _effective_lifecycle_action(
+            lifecycle_action,
+            effective_reason_codes,
         )
         patch = self.branch_patches.get(bid)
         if decision == Decision.ABANDON:
@@ -147,6 +153,7 @@ class DecisionFinalizer:
                 patch=patch,
                 protocol_result=protocol_result,
                 decision_reason_codes=effective_reason_codes,
+                lifecycle_action=effective_lifecycle_action,
             )
 
         promote_plan: PromotionPlan | None = None
@@ -181,6 +188,7 @@ class DecisionFinalizer:
                 action_label=action_label,
                 decision=decision,
                 decision_reason_codes=effective_reason_codes,
+                lifecycle_action=effective_lifecycle_action,
             )
 
         if decision == Decision.PROMOTE:
@@ -318,6 +326,7 @@ class DecisionFinalizer:
         action_label: str,
         decision: Decision,
         decision_reason_codes: Optional[tuple[str, ...]],
+        lifecycle_action: DecisionLifecycleAction,
     ) -> StepResult:
         bid = branch.branch_id
         telemetry_repair_stage = _telemetry_repair_stage(
@@ -328,7 +337,6 @@ class DecisionFinalizer:
         telemetry_effect_zero = TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in set(
             decision_reason_codes or ()
         )
-        lifecycle_action = _lifecycle_action(decision_reason_codes)
         park_lineage = lifecycle_action == "park_lineage"
         rollback_to_checkpoint = lifecycle_action == "rollback_to_checkpoint"
         retain_checkpoint = lifecycle_action == "retain_checkpoint"
@@ -788,6 +796,7 @@ def _sync_terminal_branch_evidence(
     patch: PatchProposal | None,
     protocol_result: Optional[ProtocolResult],
     decision_reason_codes: Iterable[str] | None,
+    lifecycle_action: DecisionLifecycleAction,
 ) -> None:
     """Keep abandoned branch rows useful when read without campaign_summary."""
 
@@ -829,6 +838,7 @@ def _sync_terminal_branch_evidence(
         branch.branch_code_status = _terminal_branch_code_status(
             protocol_result,
             reason_codes,
+            lifecycle_action=lifecycle_action,
         )
 
     if reason_codes:
@@ -908,8 +918,10 @@ def _stage_value(protocol_result: ProtocolResult) -> str:
 def _terminal_branch_code_status(
     protocol_result: Optional[ProtocolResult],
     reason_codes: tuple[str, ...],
+    *,
+    lifecycle_action: DecisionLifecycleAction = "",
 ) -> str:
-    if _lifecycle_action(reason_codes) == "archive_lineage":
+    if _effective_lifecycle_action(lifecycle_action, reason_codes) == "archive_lineage":
         return "discarded"
     if protocol_result is None or getattr(protocol_result, "stats", None) is None:
         return "abandoned_terminal"
@@ -921,6 +933,21 @@ def _terminal_branch_code_status(
     ):
         return "quality_regression"
     return "discarded"
+
+
+def _effective_lifecycle_action(
+    lifecycle_action: str | None,
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> DecisionLifecycleAction:
+    if lifecycle_action in {
+        "retain_head",
+        "retain_checkpoint",
+        "rollback_to_checkpoint",
+        "park_lineage",
+        "archive_lineage",
+    }:
+        return lifecycle_action  # type: ignore[return-value]
+    return _lifecycle_action(decision_reason_codes)  # legacy reason-code fallback
 
 
 def _merge_protocol_evidence_summary(

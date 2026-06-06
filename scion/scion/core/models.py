@@ -45,6 +45,15 @@ class Decision(Enum):
     PROMOTE = "promote"
     ABANDON = "abandon"
 
+DecisionLifecycleAction = Literal[
+    "",
+    "retain_head",
+    "retain_checkpoint",
+    "rollback_to_checkpoint",
+    "park_lineage",
+    "archive_lineage",
+]
+
 # --- Proposals (Tainted from LLM) ---
 
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
@@ -470,6 +479,7 @@ class DecisionOutcome:
     decision: Decision
     reason_codes: Tuple[str, ...]
     features_snapshot: DecisionFeatures
+    lifecycle_action: DecisionLifecycleAction = ""
 
 # --- Campaign & Branch State ---
 

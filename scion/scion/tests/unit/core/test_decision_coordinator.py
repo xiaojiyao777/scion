@@ -54,6 +54,7 @@ def test_decision_coordinator_returns_engine_decision_reason_codes_and_rule() ->
 
     assert result.decision == Decision.QUEUE_VALIDATE
     assert result.reason_codes == ("SCREENING_PASS",)
+    assert result.lifecycle_action == ""
     assert result.rule == "screening:SCREENING_PASS->queue_validate"
     assert result.features_snapshot.runtime_ratio_median == 1.25
 
@@ -163,7 +164,7 @@ def test_lifecycle_archive_abandon_is_decision_engine_output() -> None:
     assert result.rule == "screening:SCREENING_FAIL_WIN_RATE->abandon"
 
 
-def test_lifecycle_park_lineage_is_decision_engine_reason_code() -> None:
+def test_lifecycle_park_lineage_is_decision_engine_structured_action() -> None:
     coordinator = DecisionCoordinator(config=ProtocolConfig())
 
     result = coordinator.decide(
@@ -180,6 +181,7 @@ def test_lifecycle_park_lineage_is_decision_engine_reason_code() -> None:
     )
 
     assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.lifecycle_action == "park_lineage"
     assert result.reason_codes == (
         TELEMETRY_VALIDATION_REPAIRABLE,
         SCREENING_TELEMETRY_REPAIRABLE,

@@ -27,8 +27,9 @@ from scion.core.features import BudgetState
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.models import (
     Branch, CanaryResult, ChampionState, ContractResult,
-    Decision, ExperimentStage, FailureEvent, HypothesisProposal, HypothesisRecord,
-    PatchProposal, ProtocolResult, StepRecord, VerificationResult,
+    Decision, DecisionLifecycleAction, ExperimentStage, FailureEvent,
+    HypothesisProposal, HypothesisRecord, PatchProposal, ProtocolResult,
+    StepRecord, VerificationResult,
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.evidence_recording.accounting import proposal_accounting_fields
@@ -772,6 +773,15 @@ class CampaignManager:
     ) -> Optional[Tuple[str, ...]]:
         return _lookup_decision_reason_codes(self, branch_id, protocol_result)
 
+    def _decision_lifecycle_action_for(
+        self,
+        branch_id: str,
+        protocol_result: Optional[ProtocolResult],
+    ) -> DecisionLifecycleAction:
+        orchestrator = _evaluation_orchestrator_for(self)
+        actions = getattr(orchestrator, "decision_lifecycle_actions", {}) or {}
+        return actions.get(branch_id, "")
+
     def _increment_round(self) -> int:
         self._round_num += 1
         return self._round_num
@@ -795,6 +805,7 @@ class CampaignManager:
         verification_result: VerificationResult,
         action_label: str,
         decision_reason_codes: Optional[Tuple[str, ...]] = None,
+        lifecycle_action: DecisionLifecycleAction = "",
     ) -> StepResult:
         return self._decision_finalizer.apply(
             branch=branch,
@@ -807,6 +818,10 @@ class CampaignManager:
             verification_result=verification_result,
             action_label=action_label,
             decision_reason_codes=decision_reason_codes,
+            lifecycle_action=(
+                lifecycle_action
+                or self._decision_lifecycle_action_for(branch.branch_id, protocol_result)
+            ),
         )
 
     # ------------------------------------------------------------------

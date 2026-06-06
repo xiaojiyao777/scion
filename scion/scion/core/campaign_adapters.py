@@ -292,6 +292,10 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
     orchestrator = getattr(owner, "_evaluation_orchestrator", None)
     if orchestrator is not None:
         return orchestrator
+    decision_lifecycle_actions = getattr(owner, "_decision_lifecycle_actions", None)
+    if decision_lifecycle_actions is None:
+        decision_lifecycle_actions = {}
+        setattr(owner, "_decision_lifecycle_actions", decision_lifecycle_actions)
 
     def increment_experiment_count() -> None:
         setattr(owner, "_n_experiments", getattr(owner, "_n_experiments", 0) + 1)
@@ -340,4 +344,5 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         increment_budget_used=increment_budget_used,
         increment_soft_abandon_streak=increment_soft_abandon_streak,
         increment_telemetry_failed_count=increment_telemetry_failed_count,
+        decision_lifecycle_actions=decision_lifecycle_actions,
     )

@@ -26,6 +26,7 @@ from scion.core.models import (
     ChampionState,
     Decision,
     DecisionFeatures,
+    DecisionLifecycleAction,
     EvalStats,
     ExperimentStage,
     FailureEvent,
@@ -78,6 +79,9 @@ class EvaluationOrchestrator:
     branch_telemetry_diagnostic_streaks: MutableMapping[str, int] = field(
         default_factory=dict
     )
+    decision_lifecycle_actions: MutableMapping[str, DecisionLifecycleAction] = field(
+        default_factory=dict
+    )
 
     def evaluate(
         self,
@@ -86,6 +90,7 @@ class EvaluationOrchestrator:
         hypothesis: HypothesisProposal,
     ) -> Tuple[Decision, Optional[ProtocolResult], CanaryResult]:
         bid = branch.branch_id
+        self.decision_lifecycle_actions[bid] = ""
         stage = self.branch_controller.next_stage(bid)
 
         with self.champion_lock:
@@ -173,6 +178,11 @@ class EvaluationOrchestrator:
         )
         coordinated = self.decision_coordinator.decide(features)
         self.decision_reason_codes[bid] = coordinated.reason_codes
+        self.decision_lifecycle_actions[bid] = getattr(
+            coordinated,
+            "lifecycle_action",
+            "",
+        )
         if features.telemetry_effect_zero_diagnostic:
             self.decision_reason_codes[bid] = _merge_reason_codes(
                 self.decision_reason_codes[bid],
