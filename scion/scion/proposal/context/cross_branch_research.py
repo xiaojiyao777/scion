@@ -49,6 +49,7 @@ from scion.proposal.context.cross_branch_research_support import (
     similarity_key as _similarity_key,
     unique as _unique,
 )
+from scion.proposal.context.research_portfolio import build_portfolio_steering
 
 
 _SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
@@ -176,6 +177,10 @@ def build_cross_branch_research_map(
         avoid_bridge_guidance,
         opportunity_gaps,
     )
+    portfolio_steering = build_portfolio_steering(
+        branch_summaries,
+        opportunity_gaps=opportunity_gaps,
+    )
 
     return _drop_empty(
         {
@@ -200,6 +205,7 @@ def build_cross_branch_research_map(
                 _cross_branch_research_metadata(novelty_pressure)
             ),
             "portfolio_guidance": portfolio_guidance,
+            "portfolio_steering": portfolio_steering,
         }
     )
 

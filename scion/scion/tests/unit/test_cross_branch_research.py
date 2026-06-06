@@ -20,6 +20,7 @@ from scion.proposal.context import cross_branch_research as cross_branch_module
 from scion.proposal.context import (
     cross_branch_research_support as cross_branch_support_module,
 )
+from scion.proposal.context import research_portfolio as research_portfolio_module
 from scion.proposal.context.cross_branch_research import (
     build_cross_branch_research_map,
     render_cross_branch_research_map,
@@ -198,6 +199,9 @@ def test_cross_branch_research_map_is_tainted_and_finds_near_duplicates() -> Non
         "material_difference_requirement_count"
     ] == len(payload["material_difference_audit_records"])
     assert payload["portfolio_guidance"]
+    assert payload["portfolio_steering"]["schema_version"] == "portfolio_steering.v1"
+    assert payload["portfolio_steering"]["proposal_visibility_only"] is True
+    assert payload["portfolio_steering"]["decision_features_excluded"] is True
 
     assert "excluded_from_decision_features" in rendered
     assert "raw_metrics_ref" not in rendered
@@ -404,6 +408,162 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
         ]["recommended_action"]
         == "diversify"
     )
+
+
+def test_cross_branch_portfolio_steering_builds_signatures_and_no_effect_lessons() -> None:
+    current = _branch(
+        "branch-weak",
+        mechanism_ids=("bounded_signal_refine",),
+    )
+    no_effect_a = _branch("branch-flat-a", mechanism_ids=("flat_probe",))
+    no_effect_b = _branch(
+        "branch-flat-b",
+        mechanism_ids=("flat_probe_variant",),
+    )
+    steps = [
+        _screening_step(
+            "branch-weak",
+            round_num=1,
+            mechanism_id="bounded_signal_refine",
+            target_file="policies/current.py",
+            change_locus="selection_policy",
+            wins=1,
+            reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "weak"},
+            },
+        ),
+        _screening_step(
+            "branch-flat-a",
+            round_num=2,
+            mechanism_id="flat_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+        _screening_step(
+            "branch-flat-b",
+            round_num=3,
+            mechanism_id="flat_probe_variant",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        ),
+    ]
+
+    payload = build_cross_branch_research_map(
+        current,
+        [current, no_effect_a, no_effect_b],
+        steps,
+    )
+    repeat_payload = build_cross_branch_research_map(
+        current,
+        [no_effect_b, current, no_effect_a],
+        list(reversed(steps)),
+    )
+    portfolio = payload["portfolio_steering"]
+    repeat_portfolio = repeat_payload["portfolio_steering"]
+
+    assert portfolio["schema_version"] == "portfolio_steering.v1"
+    assert portfolio["taint"] == "proposal_research_feedback"
+    assert portfolio["proposal_visibility_only"] is True
+    assert portfolio["decision_features_excluded"] is True
+    assert portfolio["decision_input_policy"] == "excluded_from_decision_features"
+    assert portfolio["signature_schema_version"] == "branch_research_signature.v1"
+
+    required_signature_fields = {
+        "branch_id",
+        "surface",
+        "change_locus",
+        "target_file",
+        "action",
+        "intervention_type",
+        "mechanism_family",
+        "mechanism_ids",
+        "outcome_pattern",
+        "activation_status",
+        "effect_status",
+        "runtime_evidence_status",
+        "failure_signature",
+        "weak_signal_signature",
+        "rollback_reason",
+        "signature_digest",
+    }
+    for signature in portfolio["signatures"]:
+        assert required_signature_fields <= set(signature)
+        assert len(signature["signature_digest"]) == 64
+        assert signature["schema_version"] == "branch_research_signature.v1"
+
+    signatures_by_branch = {
+        signature["branch_id"]: signature for signature in portfolio["signatures"]
+    }
+    assert signatures_by_branch["branch-flat-a"]["surface"] == "activation_policy"
+    assert signatures_by_branch["branch-flat-a"]["outcome_pattern"] == "no_effect"
+    assert signatures_by_branch["branch-flat-a"]["failure_signature"][
+        "status"
+    ] == "present"
+    assert signatures_by_branch["branch-weak"]["weak_signal_signature"][
+        "status"
+    ] == "present"
+
+    repeat_digests = {
+        signature["branch_id"]: signature["signature_digest"]
+        for signature in repeat_portfolio["signatures"]
+    }
+    assert {
+        branch_id: signature["signature_digest"]
+        for branch_id, signature in signatures_by_branch.items()
+    } == repeat_digests
+
+    graph = portfolio["similarity_graph"]
+    assert graph["schema_version"] == "branch_similarity_graph.v1"
+    assert graph["proposal_visibility_only"] is True
+    assert graph["decision_features_excluded"] is True
+    assert graph["node_count"] == len(portfolio["signatures"])
+    assert graph["edge_count"] == len(graph["edges"])
+    assert "same_family_surface" in graph["edge_types"]
+
+    lesson = portfolio["no_effect_lessons"][0]
+    assert lesson["lesson_type"] == "no_effect_plateau"
+    assert set(lesson["branch_ids"]) == {"branch-flat-a", "branch-flat-b"}
+    assert lesson["source_signature"] == {
+        "mechanism_family": "flat",
+        "surface": "activation_policy",
+        "change_locus": "activation_policy",
+        "target_file": "policies/shared.py",
+        "action": "modify",
+        "intervention_type": "modify",
+    }
+    assert lesson["required_contrast_dimensions"] == [
+        "mechanism_family",
+        "target_file",
+        "surface",
+        "intervention_type",
+        "effect_path",
+    ]
+    assert lesson["recommended_action"] == "diversify"
+    assert lesson["sibling_duplication_allowed"] is False
+    assert "PORTFOLIO_NO_EFFECT_PLATEAU" in lesson["reason_codes"]
+
+    assert any(
+        cluster["cluster_signal"] == "no_effect_plateau"
+        and set(cluster["branch_ids"]) == {"branch-flat-a", "branch-flat-b"}
+        for cluster in portfolio["clusters"]
+    )
+    assert any(
+        gap["gap_type"] == "no_effect_contrast_gap"
+        for gap in portfolio["opportunity_gaps"]
+    )
+    assert "Tainted planning text" not in json.dumps(portfolio, sort_keys=True)
 
 
 def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
@@ -735,6 +895,10 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "material_difference_audit_records" not in decision_fields
     assert "cross_branch_research_session_metadata" not in decision_fields
     assert "same_branch_refinement_allowances" not in decision_fields
+    assert "portfolio_steering" not in decision_fields
+    assert "branch_research_signatures" not in decision_fields
+    assert "similarity_graph" not in decision_fields
+    assert "no_effect_lessons" not in decision_fields
     assert "hypothesis_text" not in decision_fields
 
 
@@ -742,6 +906,7 @@ def test_cross_branch_research_module_has_no_problem_specific_control_terms() ->
     source = (
         inspect.getsource(cross_branch_module)
         + inspect.getsource(cross_branch_support_module)
+        + inspect.getsource(research_portfolio_module)
     ).lower()
 
     for term in ("cvrp", "route", "alns", "vns", "capacity", "demand", "fleet"):

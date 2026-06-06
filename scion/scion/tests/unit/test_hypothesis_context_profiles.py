@@ -66,6 +66,76 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
             "portfolio_guidance": [
                 {"summary": "Keep portfolio coverage broad.", "audit": "hidden"}
             ],
+            "portfolio_steering": {
+                "schema_version": "portfolio_steering.v1",
+                "taint": "proposal_research_feedback",
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "summary": {
+                    "signature_count": 3,
+                    "branch_count": 3,
+                    "cluster_count": 1,
+                    "no_effect_lesson_count": 1,
+                    "outcome_patterns": {"no_effect": 2, "weak_positive": 1},
+                },
+                "signatures": [
+                    {
+                        "branch_id": "branch-a",
+                        "signature_digest": "hidden-full-signature",
+                    }
+                ],
+                "similarity_graph": {
+                    "edges": [{"edge_type": "same_family_surface"}]
+                },
+                "clusters": [
+                    {
+                        "cluster_id": "cluster-flat",
+                        "cluster_type": "family_surface_target_action",
+                        "branch_ids": ["branch-a", "branch-b"],
+                        "branch_count": 2,
+                        "shared_signature": {
+                            "mechanism_family": "flat",
+                            "surface": "activation_policy",
+                            "target_file": "policies/shared.py",
+                            "action": "modify",
+                        },
+                        "outcome_patterns": {"no_effect": 2},
+                        "activation_statuses": {"observed": 2},
+                        "effect_statuses": {"zero": 2},
+                        "runtime_evidence_statuses": {"sufficient": 2},
+                        "cluster_signal": "no_effect_plateau",
+                        "recommended_action": "diversify",
+                    }
+                ],
+                "no_effect_lessons": [
+                    {
+                        "lesson_type": "no_effect_plateau",
+                        "source_cluster_id": "cluster-flat",
+                        "source_signature": {"hidden": "full"},
+                        "branch_ids": ["branch-a", "branch-b"],
+                        "evidence_basis": {"outcome_patterns": {"no_effect": 2}},
+                        "required_contrast_dimensions": [
+                            "mechanism_family",
+                            "target_file",
+                            "surface",
+                        ],
+                        "recommended_action": "diversify",
+                        "same_branch_refinement_allowed": False,
+                        "sibling_duplication_allowed": False,
+                        "reason_codes": ["PORTFOLIO_NO_EFFECT_PLATEAU"],
+                    }
+                ],
+                "opportunity_gaps": [
+                    {
+                        "gap_type": "no_effect_contrast_gap",
+                        "recommended_action": "diversify",
+                        "priority": "high",
+                        "basis": {"lesson_count": 1},
+                        "reason_codes": ["PORTFOLIO_NO_EFFECT_CONTRAST_GAP"],
+                        "confidence": 0.7,
+                    }
+                ],
+            },
         },
     }
 
@@ -85,6 +155,14 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert "avoid same mechanism family" in compact
     assert "coverage_gap" in compact
     assert "Use a materially different structure." in compact
+    assert "compact_portfolio_steering.v1" in compact
+    assert "portfolio_steering.v1" in compact
+    assert "no_effect_plateau" in compact
+    assert "no_effect_contrast_gap" in compact
+    assert "activation_policy" in compact
+    assert "signature_digest" not in compact
+    assert "hidden-full-signature" not in compact
+    assert "same_family_surface" not in compact
     assert "hidden-audit" not in compact
     assert "hidden-session" not in compact
     assert "material_difference_requirements" not in compact

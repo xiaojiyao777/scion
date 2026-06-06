@@ -178,6 +178,9 @@ def _compact_cross_branch_research(payload: Any) -> str:
             "portfolio_guidance": _project_generic_value(
                 payload.get("portfolio_guidance")
             ),
+            "portfolio_steering": _compact_portfolio_steering(
+                payload.get("portfolio_steering")
+            ),
             "novelty_pressure": _project_mapping(
                 payload.get("novelty_pressure"),
                 fields=(
@@ -200,6 +203,91 @@ def _compact_cross_branch_research(payload: Any) -> str:
         "input.\n"
         f"{rendered}"
     )
+
+
+def _compact_portfolio_steering(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return _drop_empty(
+        {
+            "schema_version": "compact_portfolio_steering.v1",
+            "source_schema_version": value.get("schema_version"),
+            "taint": "proposal_research_feedback",
+            "proposal_visibility_only": value.get("proposal_visibility_only"),
+            "decision_features_excluded": value.get("decision_features_excluded"),
+            "summary": _project_mapping(
+                value.get("summary"),
+                fields=(
+                    "signature_count",
+                    "branch_count",
+                    "cluster_count",
+                    "no_effect_lesson_count",
+                    "outcome_patterns",
+                ),
+            ),
+            "top_no_effect_lessons": _project_items(
+                value.get("no_effect_lessons"),
+                fields=(
+                    "lesson_type",
+                    "source_cluster_id",
+                    "branch_ids",
+                    "evidence_basis",
+                    "required_contrast_dimensions",
+                    "recommended_action",
+                    "same_branch_refinement_allowed",
+                    "sibling_duplication_allowed",
+                    "reason_codes",
+                ),
+                accepted_types={"no_effect_plateau"},
+                limit=4,
+            ),
+            "avoid_clusters": _project_items(
+                _avoid_portfolio_clusters(value.get("clusters")),
+                fields=(
+                    "cluster_id",
+                    "cluster_type",
+                    "branch_ids",
+                    "branch_count",
+                    "shared_signature",
+                    "outcome_patterns",
+                    "activation_statuses",
+                    "effect_statuses",
+                    "runtime_evidence_statuses",
+                    "cluster_signal",
+                    "recommended_action",
+                ),
+                limit=4,
+            ),
+            "opportunity_gaps": _project_items(
+                value.get("opportunity_gaps"),
+                fields=(
+                    "gap_type",
+                    "recommended_action",
+                    "priority",
+                    "basis",
+                    "reason_codes",
+                    "confidence",
+                ),
+                limit=4,
+            ),
+        }
+    )
+
+
+def _avoid_portfolio_clusters(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    clusters: list[dict[str, Any]] = []
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            continue
+        if raw.get("cluster_signal") in {
+            "no_effect_plateau",
+            "non_positive_cluster",
+            "activation_gap",
+        } or raw.get("recommended_action") in {"avoid", "diversify", "bridge"}:
+            clusters.append(dict(raw))
+    return clusters
 
 
 def _project_items(
