@@ -993,6 +993,138 @@ def test_campaign_loop_exposes_candidate_accounting_without_counting_holdouts_as
     assert final_status["quality_blocks"] == 1
 
 
+def test_campaign_loop_counts_clean_fork_screening_as_formal_candidate() -> None:
+    results = [
+        StepResult(
+            action="create_branch",
+            branch_id="clean-1",
+            reason="clean fork screening complete",
+            attempt_kind="screening",
+            counts_toward_max_rounds=True,
+        ),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 1
+    assert "max_rounds_exhausted" in stopped_reasons
+    final_status = loop_statuses[-1]
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["protocol_evaluated_candidates"] == 1
+    assert final_status["protocol_stage_counts"] == {
+        "screening": 1,
+        "validation": 0,
+        "frozen": 0,
+    }
+
+
+def test_campaign_loop_clean_fork_screening_mixes_with_holdout_stages() -> None:
+    results = [
+        StepResult(
+            action="create_branch",
+            branch_id="clean-1",
+            reason="clean fork screening complete",
+            attempt_kind="screening",
+            counts_toward_max_rounds=True,
+        ),
+        StepResult(
+            action="validate",
+            branch_id="clean-1",
+            reason="validation complete",
+        ),
+        StepResult(
+            action="frozen",
+            branch_id="clean-1",
+            reason="frozen complete",
+        ),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=3)
+
+    assert calls == 3
+    assert "max_rounds_exhausted" in stopped_reasons
+    final_status = loop_statuses[-1]
+    assert final_status["effective_rounds_completed"] == 3
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["protocol_evaluated_candidates"] == 3
+    assert final_status["protocol_stage_counts"] == {
+        "screening": 1,
+        "validation": 1,
+        "frozen": 1,
+    }
+
+
 def test_campaign_loop_repeated_lifecycle_blocks_do_not_stop_before_effective_rounds() -> None:
     results = [
         StepResult(

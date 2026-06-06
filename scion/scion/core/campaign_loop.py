@@ -364,7 +364,7 @@ def _protocol_stage_for_result(result: StepResult) -> str:
     raw_kind = str(getattr(result, "attempt_kind", "") or "")
     action = str(getattr(result, "action", "") or "")
     if (
-        action == "explore"
+        action in {"explore", "create_branch"}
         and raw_kind in {"", "screening"}
         and bool(getattr(result, "counts_toward_max_rounds", True))
     ):
