@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.branch_cards import (
@@ -151,6 +154,45 @@ def _summary_current_progress(
     if stopped and progress.get("complete") is not True:
         return None
     return dict(progress)
+
+
+def _render_campaign_summary_json(summary: Mapping[str, Any]) -> str:
+    if not isinstance(summary, Mapping):
+        raise TypeError("campaign_summary.json payload must be a JSON object")
+    rendered = json.dumps(summary, indent=2, default=str)
+    decoder = json.JSONDecoder()
+    decoded, end = decoder.raw_decode(rendered)
+    if rendered[end:].strip():
+        raise ValueError("campaign_summary.json rendered multiple JSON values")
+    if not isinstance(decoded, dict):
+        raise TypeError("campaign_summary.json top-level payload must be an object")
+    return rendered + "\n"
+
+
+def _write_text_atomically(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp:
+            tmp_path = tmp.name
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+        os.replace(tmp_path, path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
 
 
 class CampaignSummaryMixin:
@@ -510,6 +552,10 @@ class CampaignSummaryMixin:
                 "branch_lifecycle_policy_blocks",
                 "reconcile_lifecycle_steps",
                 "non_counted_lifecycle_steps",
+                "scheduler_active_slot_blocked_attempts",
+                "active_slot_blocked_attempts",
+                "scheduler_active_slot_blocked_attempt_limit",
+                "active_slot_blocked_attempt_limit",
                 "quality_blocks",
                 "blocked_attempts",
             ):
@@ -623,11 +669,7 @@ class CampaignSummaryMixin:
         summary = redact_public_refs(summary, base_dir=self.campaign_dir)
         out_path = self.campaign_dir / "campaign_summary.json"
         try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(
-                json.dumps(summary, indent=2, default=str),
-                encoding="utf-8",
-            )
+            _write_text_atomically(out_path, _render_campaign_summary_json(summary))
         except Exception as exc:  # pragma: no cover
             logger.warning("Failed to write campaign_summary.json: %s", exc)
         return summary

@@ -37,6 +37,8 @@ FORBIDDEN_PATTERNS = {
     "solver_algorithm_total_distance": re.compile(
         r"solver_algorithm_total_distance"
     ),
+    "fleet_violation": re.compile(r"\bfleet_violation\b"),
+    "total_distance": re.compile(r"\btotal_distance\b"),
     "route_gap": re.compile(r"route_gap"),
     "bks_routes": re.compile(r"bks_routes"),
     "baseline_routes": re.compile(r"baseline_routes"),

@@ -335,6 +335,7 @@ def _runtime_algorithm_smoke_preview(
                     champion_raw=champion_raw,
                     champion_run=champion_run,
                     smoke_case=smoke_case,
+                    provider=provider,
                 )
                 champion_runtime = (
                     champion_raw.get("runtime")

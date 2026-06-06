@@ -869,6 +869,17 @@ class CvrpSolverDesignProvider:
             run_payload=run_payload,
         )
 
+    def solver_design_smoke_comparison(
+        self,
+        *,
+        candidate_raw: Mapping[str, Any],
+        champion_raw: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        return _compare_cvrp_solver_design_smoke_outputs(
+            candidate_raw=candidate_raw,
+            champion_raw=champion_raw,
+        )
+
     def solver_design_smoke_cases(
         self,
         *,
@@ -891,6 +902,71 @@ class CvrpSolverDesignProvider:
             }
             for label, case in selected
         )
+
+
+def _compare_cvrp_solver_design_smoke_outputs(
+    *,
+    candidate_raw: Mapping[str, Any],
+    champion_raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    candidate_obj = candidate_raw.get("objective")
+    champion_obj = champion_raw.get("objective")
+    if not isinstance(candidate_obj, Mapping) or not isinstance(champion_obj, Mapping):
+        return {"comparison": "incomparable"}
+
+    candidate_fleet = _float_or_none(candidate_obj.get("fleet_violation"))
+    champion_fleet = _float_or_none(champion_obj.get("fleet_violation"))
+    candidate_distance = _float_or_none(candidate_obj.get("total_distance"))
+    champion_distance = _float_or_none(champion_obj.get("total_distance"))
+
+    comparison = "tie"
+    delta = 0.0
+    decisive_metric = "total_distance"
+    if candidate_fleet is not None and champion_fleet is not None:
+        fleet_delta = champion_fleet - candidate_fleet
+        if abs(fleet_delta) > 1e-9:
+            comparison = "win" if fleet_delta > 0 else "loss"
+            delta = fleet_delta
+            decisive_metric = "fleet_violation"
+    if (
+        comparison == "tie"
+        and candidate_distance is not None
+        and champion_distance is not None
+    ):
+        distance_delta = champion_distance - candidate_distance
+        if abs(distance_delta) > 1e-9:
+            comparison = "win" if distance_delta > 0 else "loss"
+            delta = distance_delta
+        else:
+            delta = 0.0
+
+    return {
+        "comparison": comparison,
+        "delta": delta,
+        "decisive_metric": decisive_metric,
+        "candidate_objective": _cvrp_smoke_objective_payload(candidate_obj),
+        "champion_objective": _cvrp_smoke_objective_payload(champion_obj),
+    }
+
+
+def _cvrp_smoke_objective_payload(objective: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: objective.get(key)
+        for key in ("fleet_violation", "total_distance")
+        if key in objective
+    }
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if result != result:
+        return None
+    return result
 
 
 def _mechanism_ids(hypothesis: HypothesisProposal | None) -> tuple[str, ...]:

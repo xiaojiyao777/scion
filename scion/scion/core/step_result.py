@@ -36,6 +36,7 @@ class StepResult:
         "validation_repair_required",
         "same_family_retry",
         "reconcile_lifecycle",
+        "scheduler_active_slot_blocked",
         "other",
     ] = "screening"
     repair_mechanism_ids: Tuple[str, ...] = ()

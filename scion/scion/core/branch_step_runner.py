@@ -148,7 +148,12 @@ class BranchStepRunner:
                 else None
             )
             return finalize(
-                StepResult(action="skip", reason="max_active_branches reached"),
+                StepResult(
+                    action="skip",
+                    reason="max_active_branches reached",
+                    counts_toward_max_rounds=False,
+                    attempt_kind="scheduler_active_slot_blocked",
+                ),
                 capacity_block=capacity_block,
             )
 

@@ -643,6 +643,8 @@ def test_at_capacity_scheduler_metadata_reaches_result_and_callback() -> None:
 
     assert result.action == "skip"
     assert result.branch_id is None
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "scheduler_active_slot_blocked"
     assert result.scheduler_slot == "capacity_blocked"
     assert result.scheduler_reason == "active_branch_limit_reached"
     assert result.scheduler_audit_metadata[

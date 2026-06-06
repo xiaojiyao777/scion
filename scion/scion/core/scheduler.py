@@ -451,9 +451,10 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
     """Return whether ``branch`` consumes a reported active lineage slot.
 
     Proposal scheduling may prefer a clean fork over a weak or exhausted
-    follow-up, but active-slot accounting is the live lineage inventory:
-    non-terminal branches consume slots until the Decision layer marks them for
-    lifecycle parking and reconciliation persists that state.
+    follow-up.  Active-slot accounting tracks schedulable resource pressure,
+    so deterministic low-value heads that the scheduler already excludes can
+    release capacity without turning proposal text into a promotion/abandon
+    decision.
     """
     if branch.state in _TERMINAL_STATES:
         return False
@@ -461,6 +462,8 @@ def branch_counts_toward_active_slots(branch: Branch) -> bool:
         branch_is_parked_lineage(branch)
         and _branch_has_decision_origin_park_marker(branch)
     ):
+        return False
+    if _scheduler_owned_active_slot_release_reason(branch):
         return False
     return True
 
@@ -478,6 +481,33 @@ def branch_active_slot_release_reason(branch: Branch | None) -> str:
         and _branch_has_decision_origin_park_marker(branch)
     ):
         return "parked_lineage"
+    release_reason = _scheduler_owned_active_slot_release_reason(branch)
+    if release_reason:
+        return release_reason
+    return ""
+
+
+def _scheduler_owned_active_slot_release_reason(branch: Branch | None) -> str:
+    if branch is None or branch.state in _TERMINAL_STATES:
+        return ""
+    if branch.state != BranchState.EXPLORE:
+        return ""
+    if getattr(branch, "pending_retry", False):
+        return ""
+    if branch_requires_repair_focus(branch):
+        return ""
+    if getattr(branch, "telemetry_repair_mechanism_ids", ()) or ():
+        return ""
+    if branch_has_actionable_diagnostic(branch):
+        return ""
+    low_value_reason = _low_value_active_slot_candidate_reason(branch)
+    if (
+        low_value_reason == "retained_checkpoint_no_effect_current_head"
+        and not _branch_lifecycle_budget_exhausted(branch)
+    ):
+        return ""
+    if low_value_reason:
+        return low_value_reason
     return ""
 
 
@@ -593,6 +623,12 @@ def active_slot_inventory(
         for branch in branch_list
         if branch_active_slot_release_reason(branch) == "parked_lineage"
     ]
+    released = [
+        branch
+        for branch in branch_list
+        if branch_active_slot_release_reason(branch)
+        and branch_active_slot_release_reason(branch) != "parked_lineage"
+    ]
     limit = max(0, int(max_active_branches))
     used = len(active)
     return {
@@ -602,6 +638,12 @@ def active_slot_inventory(
         "branch_ids": [branch.branch_id for branch in active],
         "parked_lineages": len(parked),
         "parked_lineage_ids": [branch.branch_id for branch in parked],
+        "released_active_slots": len(released),
+        "released_active_slot_ids": [branch.branch_id for branch in released],
+        "released_active_slot_reasons": {
+            branch.branch_id: branch_active_slot_release_reason(branch)
+            for branch in released
+        },
     }
 
 

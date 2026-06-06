@@ -11,6 +11,9 @@ from scion.problem.providers import (
     resolve_solver_design_smoke_provider,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.proposal.solver_design_smoke.benchmark import (
+    _compare_solver_design_raw_outputs,
+)
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     validate_expected_telemetry_contract,
@@ -40,6 +43,76 @@ def test_cvrp_adapter_registers_solver_design_providers() -> None:
     assert smoke_provider.is_runtime_patch_path("policies/baseline_algorithm.py")
     assert smoke_provider.is_runtime_patch_path("policies/baseline_modules/config.py")
     assert not smoke_provider.is_runtime_patch_path("operators/local_search.py")
+
+
+def test_cvrp_smoke_provider_owns_solver_design_objective_comparison() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+
+    comparison = _compare_solver_design_raw_outputs(
+        {
+            "objective": {
+                "fleet_violation": 0,
+                "total_distance": 150.0,
+            }
+        },
+        {
+            "objective": {
+                "fleet_violation": 1,
+                "total_distance": 100.0,
+            }
+        },
+        provider=provider,
+    )
+
+    assert comparison == {
+        "comparison": "win",
+        "delta": 1.0,
+        "decisive_metric": "fleet_violation",
+        "candidate_objective": {
+            "fleet_violation": 0,
+            "total_distance": 150.0,
+        },
+        "champion_objective": {
+            "fleet_violation": 1,
+            "total_distance": 100.0,
+        },
+    }
+
+
+def test_cvrp_smoke_provider_compares_distance_after_fleet_tie() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+
+    comparison = provider.solver_design_smoke_comparison(
+        candidate_raw={
+            "objective": {
+                "fleet_violation": 0,
+                "total_distance": 103.5,
+            }
+        },
+        champion_raw={
+            "objective": {
+                "fleet_violation": 0,
+                "total_distance": 100.0,
+            }
+        },
+    )
+
+    assert comparison["comparison"] == "loss"
+    assert comparison["delta"] == -3.5
+    assert comparison["decisive_metric"] == "total_distance"
+
+
+def test_generic_smoke_comparison_without_problem_provider_is_incomparable() -> None:
+    comparison = _compare_solver_design_raw_outputs(
+        {"objective": {"fleet_violation": 0, "total_distance": 10.0}},
+        {"objective": {"fleet_violation": 1, "total_distance": 20.0}},
+    )
+
+    assert comparison == {"comparison": "incomparable"}
 
 
 def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:

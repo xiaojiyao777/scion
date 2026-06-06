@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol
 
 from .constants import _ALGORITHM_SMOKE_MAX_SCREENING_CASES
 from .models import _RuntimeSmokeCase
-from .utils import _float_or_none, _limit_text
+from .utils import _limit_text
+
+
+class _SolverDesignSmokeComparisonProvider(Protocol):
+    def solver_design_smoke_comparison(
+        self,
+        *,
+        candidate_raw: Mapping[str, Any],
+        champion_raw: Mapping[str, Any],
+    ) -> Mapping[str, Any] | None:
+        """Return a problem-owned candidate-vs-champion smoke comparison."""
 
 
 def _solver_design_micro_benchmark_result(
@@ -16,6 +26,7 @@ def _solver_design_micro_benchmark_result(
     champion_raw: Mapping[str, Any] | None,
     champion_run: Mapping[str, Any],
     smoke_case: _RuntimeSmokeCase,
+    provider: _SolverDesignSmokeComparisonProvider | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "case": smoke_case.rel_path,
@@ -38,7 +49,11 @@ def _solver_design_micro_benchmark_result(
         )
         return result
 
-    comparison = _compare_solver_design_raw_outputs(candidate_raw, champion_raw)
+    comparison = _compare_solver_design_raw_outputs(
+        candidate_raw,
+        champion_raw,
+        provider=provider,
+    )
     result.update(comparison)
     try:
         result["runtime_delta_ms"] = int(candidate_run.get("elapsed_ms") or 0) - int(
@@ -52,50 +67,38 @@ def _solver_design_micro_benchmark_result(
 def _compare_solver_design_raw_outputs(
     candidate_raw: Mapping[str, Any],
     champion_raw: Mapping[str, Any],
+    *,
+    provider: _SolverDesignSmokeComparisonProvider | None = None,
 ) -> dict[str, Any]:
-    candidate_obj = candidate_raw.get("objective")
-    champion_obj = champion_raw.get("objective")
-    if not isinstance(candidate_obj, Mapping) or not isinstance(champion_obj, Mapping):
+    if provider is None:
         return {"comparison": "incomparable"}
-    candidate_fleet = _float_or_none(candidate_obj.get("fleet_violation"))
-    champion_fleet = _float_or_none(champion_obj.get("fleet_violation"))
-    candidate_distance = _float_or_none(candidate_obj.get("total_distance"))
-    champion_distance = _float_or_none(champion_obj.get("total_distance"))
-    comparison = "tie"
-    delta = 0.0
-    decisive_metric = "total_distance"
-    if candidate_fleet is not None and champion_fleet is not None:
-        fleet_delta = champion_fleet - candidate_fleet
-        if abs(fleet_delta) > 1e-9:
-            comparison = "win" if fleet_delta > 0 else "loss"
-            delta = fleet_delta
-            decisive_metric = "fleet_violation"
-    if (
-        comparison == "tie"
-        and candidate_distance is not None
-        and champion_distance is not None
-    ):
-        distance_delta = champion_distance - candidate_distance
-        if abs(distance_delta) > 1e-9:
-            comparison = "win" if distance_delta > 0 else "loss"
-            delta = distance_delta
-        else:
-            delta = 0.0
-    return {
-        "comparison": comparison,
-        "delta": delta,
-        "decisive_metric": decisive_metric,
-        "candidate_objective": {
-            key: candidate_obj.get(key)
-            for key in ("fleet_violation", "total_distance")
-            if key in candidate_obj
-        },
-        "champion_objective": {
-            key: champion_obj.get(key)
-            for key in ("fleet_violation", "total_distance")
-            if key in champion_obj
-        },
-    }
+    hook = getattr(provider, "solver_design_smoke_comparison", None)
+    if hook is None:
+        return {"comparison": "incomparable"}
+    try:
+        raw_comparison = hook(
+            candidate_raw=candidate_raw,
+            champion_raw=champion_raw,
+        )
+    except Exception as exc:
+        return {
+            "comparison": "incomparable",
+            "comparison_error_category": "provider_exception",
+            "comparison_detail": _limit_text(str(exc), 320),
+        }
+    if not isinstance(raw_comparison, Mapping):
+        return {
+            "comparison": "incomparable",
+            "comparison_error_category": "provider_invalid_result",
+        }
+    comparison = str(raw_comparison.get("comparison") or "")
+    if comparison not in {"win", "loss", "tie", "incomparable"}:
+        return {
+            "comparison": "incomparable",
+            "comparison_error_category": "provider_invalid_comparison",
+            "comparison_detail": _limit_text(comparison, 120),
+        }
+    return dict(raw_comparison)
 
 
 def _solver_design_micro_benchmark_issue(

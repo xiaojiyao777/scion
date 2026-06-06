@@ -117,6 +117,14 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "branch_lifecycle_policy_blocks": "branch_lifecycle_policy_blocks",
         "reconcile_lifecycle_steps": "reconcile_lifecycle_steps",
         "non_counted_lifecycle_steps": "non_counted_lifecycle_steps",
+        "scheduler_active_slot_blocked_attempts": (
+            "scheduler_active_slot_blocked_attempts"
+        ),
+        "active_slot_blocked_attempts": "active_slot_blocked_attempts",
+        "scheduler_active_slot_blocked_attempt_limit": (
+            "scheduler_active_slot_blocked_attempt_limit"
+        ),
+        "active_slot_blocked_attempt_limit": "active_slot_blocked_attempt_limit",
         "quality_blocks": "quality_blocks",
         "blocked_attempts": "blocked_attempts",
         "infra_failure_attempts": "infra_failure_attempts",

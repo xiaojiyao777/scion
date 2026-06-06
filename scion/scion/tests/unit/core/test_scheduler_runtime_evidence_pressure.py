@@ -117,6 +117,31 @@ def test_active_slot_reclaim_parks_branch_with_decision_origin_marker() -> None:
     assert inventory["parked_lineage_ids"] == [branch.branch_id]
 
 
+def test_no_effect_exhausted_head_releases_active_slot_without_parking() -> None:
+    branch = Branch(
+        branch_id="no-effect-slot-release",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        lifecycle_no_effect_diagnostic_followups=2,
+    )
+
+    action = Scheduler(max_active_branches=1).select_next([branch])
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert action.action == "create_new"
+    assert action.reason == "new_exploration_slot_available"
+    assert branch.state == BranchState.EXPLORE
+    assert inventory["used"] == 0
+    assert inventory["released_active_slot_ids"] == [branch.branch_id]
+    assert inventory["released_active_slot_reasons"][branch.branch_id] == (
+        "repeated_no_effect_zero_effect_slot_release"
+    )
+    assert inventory["parked_lineage_ids"] == []
+
+
 def test_active_slot_overflow_does_not_park_without_decision_marker() -> None:
     branches = [
         Branch(

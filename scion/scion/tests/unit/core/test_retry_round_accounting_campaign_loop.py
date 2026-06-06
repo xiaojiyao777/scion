@@ -98,6 +98,111 @@ def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None
     assert "max_rounds_exhausted" in stopped_reasons
 
 
+def test_campaign_loop_does_not_count_active_slot_skip_against_max_rounds() -> None:
+    results = [
+        StepResult(
+            action="skip",
+            reason="max_active_branches reached",
+            counts_toward_max_rounds=False,
+            attempt_kind="scheduler_active_slot_blocked",
+            scheduler_slot="capacity_blocked",
+            scheduler_reason="active_branch_limit_reached",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: statuses.append(kwargs),
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]["loop_status"]
+    assert calls == 2
+    assert stopped_reasons == ["max_rounds_exhausted"]
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["protocol_evaluated_candidates"] == 1
+    assert final_status["active_slot_blocked_attempts"] == 1
+    assert final_status["scheduler_active_slot_blocked_attempts"] == 1
+
+
+def test_campaign_loop_active_slot_skip_has_independent_stop_budget() -> None:
+    calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        calls += 1
+        return StepResult(
+            action="skip",
+            reason="max_active_branches reached",
+            counts_toward_max_rounds=False,
+            attempt_kind="scheduler_active_slot_blocked",
+            scheduler_slot="capacity_blocked",
+            scheduler_reason="active_branch_limit_reached",
+        )
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: statuses.append(kwargs),
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=10,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]["loop_status"]
+    assert calls == 2
+    assert stopped_reasons == ["scheduler_active_slot_blocked"]
+    assert final_status["effective_rounds_completed"] == 0
+    assert final_status["formal_screened_candidates"] == 0
+    assert final_status["protocol_evaluated_candidates"] == 0
+    assert final_status["active_slot_blocked_attempts"] == 2
+    assert final_status["active_slot_blocked_attempt_limit"] == 2
+
+
 def test_campaign_loop_does_not_count_proposal_only_blocks_against_max_rounds() -> None:
     results = [
         StepResult(

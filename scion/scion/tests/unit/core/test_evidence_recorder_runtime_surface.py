@@ -2,6 +2,28 @@
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 
+def test_campaign_summary_file_is_single_top_level_json_object(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+
+    summary = recorder.write_campaign_summary(
+        step_history=[_step()],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    content = (tmp_path / "campaign_summary.json").read_text(encoding="utf-8")
+    loaded = json.loads(content)
+    decoded, end = json.JSONDecoder().raw_decode(content)
+    assert isinstance(loaded, dict)
+    assert isinstance(decoded, dict)
+    assert content[end:].strip() == ""
+    assert loaded == summary
+    assert loaded["campaign_id"] == "camp-1"
+    assert isinstance(loaded["steps"], list)
+
+
 def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
     tmp_path: Path,
 ) -> None:

@@ -52,6 +52,7 @@ class CampaignLoop:
         same_family_retry_attempts = 0
         branch_lifecycle_policy_blocks = 0
         reconcile_lifecycle_steps = 0
+        scheduler_active_slot_blocked_attempts = 0
         formal_screened_candidates = 0
         protocol_evaluated_candidates = 0
         protocol_stage_counts: dict[str, int] = {
@@ -77,6 +78,9 @@ class CampaignLoop:
         same_family_retry_limit = requested_rounds + 4
         branch_lifecycle_policy_block_limit = requested_rounds + 4
         reconcile_lifecycle_step_limit = requested_rounds + 4
+        scheduler_active_slot_blocked_attempt_limit = (
+            _scheduler_active_slot_blocked_attempt_limit(requested_rounds)
+        )
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  Ordinary
         # proposal attempts have a hard cap; telemetry repair/diagnostic
@@ -91,6 +95,7 @@ class CampaignLoop:
             + same_family_retry_limit
             + branch_lifecycle_policy_block_limit
             + reconcile_lifecycle_step_limit
+            + scheduler_active_slot_blocked_attempt_limit
         )
 
         proposal_attempts_consumed_count = _initial_proposal_attempts(
@@ -147,6 +152,12 @@ class CampaignLoop:
                 ),
                 reconcile_lifecycle_steps=reconcile_lifecycle_steps,
                 reconcile_lifecycle_step_limit=reconcile_lifecycle_step_limit,
+                scheduler_active_slot_blocked_attempts=(
+                    scheduler_active_slot_blocked_attempts
+                ),
+                scheduler_active_slot_blocked_attempt_limit=(
+                    scheduler_active_slot_blocked_attempt_limit
+                ),
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
@@ -253,6 +264,13 @@ class CampaignLoop:
                     reconcile_lifecycle_steps += 1
                     if reconcile_lifecycle_steps >= reconcile_lifecycle_step_limit:
                         final_reason = "reconcile_lifecycle_loop"
+                elif kind == "scheduler_active_slot_blocked":
+                    scheduler_active_slot_blocked_attempts += 1
+                    if (
+                        scheduler_active_slot_blocked_attempts
+                        >= scheduler_active_slot_blocked_attempt_limit
+                    ):
+                        final_reason = "scheduler_active_slot_blocked"
                 elif kind == "same_family_retry":
                     consume_proposal_attempt()
                     same_family_retry_attempts += 1
@@ -335,6 +353,8 @@ def _attempt_kind(result: StepResult) -> str:
         return kind
     if getattr(result, "action", None) == "reconcile":
         return "reconcile_lifecycle"
+    if _is_scheduler_active_slot_blocked(result):
+        return "scheduler_active_slot_blocked"
     reason = str(getattr(result, "reason", "") or "").lower()
     if "branch_lifecycle_policy_violation" in reason:
         return "branch_lifecycle_policy"
@@ -357,6 +377,19 @@ def _attempt_kind(result: StepResult) -> str:
     if _is_soft_proposal_diagnostic(result):
         return "proposal_diagnostic"
     return "proposal_block"
+
+
+def _is_scheduler_active_slot_blocked(result: StepResult) -> bool:
+    if str(getattr(result, "action", "") or "") != "skip":
+        return False
+    slot = str(getattr(result, "scheduler_slot", "") or "")
+    scheduler_reason = str(getattr(result, "scheduler_reason", "") or "")
+    reason = str(getattr(result, "reason", "") or "")
+    return (
+        slot == "capacity_blocked"
+        or scheduler_reason == "active_branch_limit_reached"
+        or "max_active_branches" in reason
+    )
 
 
 def _protocol_stage_for_result(result: StepResult) -> str:
@@ -492,6 +525,16 @@ def _telemetry_repair_attempt_limit(
     return 2
 
 
+def _scheduler_active_slot_blocked_attempt_limit(requested_rounds: int) -> int:
+    """Return the short cap for active-slot scheduler skips.
+
+    Active-slot skips are resource-pressure observations, not research rounds.
+    A tiny headroom lets slot reconciliation run without allowing a full
+    campaign invocation to spin on a saturated scheduler.
+    """
+    return max(2, min(3, max(1, int(requested_rounds))))
+
+
 def _initial_proposal_attempts(
     getter: Callable[[], int] | None,
     *,
@@ -523,6 +566,8 @@ def _campaign_loop_status(
     branch_lifecycle_policy_block_limit: int,
     reconcile_lifecycle_steps: int,
     reconcile_lifecycle_step_limit: int,
+    scheduler_active_slot_blocked_attempts: int,
+    scheduler_active_slot_blocked_attempt_limit: int,
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
@@ -542,6 +587,7 @@ def _campaign_loop_status(
     quality_blocks = max(0, int(proposal_quality_blocked_attempts))
     branch_lifecycle_blocks = max(0, int(branch_lifecycle_policy_blocks))
     reconcile_steps = max(0, int(reconcile_lifecycle_steps))
+    active_slot_blocks = max(0, int(scheduler_active_slot_blocked_attempts))
     proposal_attempts_total = max(max(0, int(loop_steps)), attempts_value)
     protocol_stage_counts_value = {
         "screening": max(0, int(protocol_stage_counts.get("screening", 0))),
@@ -570,7 +616,8 @@ def _campaign_loop_status(
         "max_rounds_budget_counter": "effective_rounds_completed",
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; "
-            "proposal, repair, and lifecycle attempts use separate counters"
+            "proposal, repair, lifecycle, and active-slot scheduler attempts use "
+            "separate counters"
         ),
         "telemetry_repairable_attempts": max(
             0,
@@ -600,6 +647,16 @@ def _campaign_loop_status(
             int(reconcile_lifecycle_step_limit),
         ),
         "non_counted_lifecycle_steps": branch_lifecycle_blocks + reconcile_steps,
+        "scheduler_active_slot_blocked_attempts": active_slot_blocks,
+        "active_slot_blocked_attempts": active_slot_blocks,
+        "scheduler_active_slot_blocked_attempt_limit": max(
+            1,
+            int(scheduler_active_slot_blocked_attempt_limit),
+        ),
+        "active_slot_blocked_attempt_limit": max(
+            1,
+            int(scheduler_active_slot_blocked_attempt_limit),
+        ),
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_blocks_consumed": quality_blocks,

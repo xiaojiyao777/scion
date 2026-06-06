@@ -61,6 +61,17 @@ def proposal_accounting_fields(
         state_map.get("quality_blocks"),
         default=0,
     )
+    active_slot_blocked_attempts = _first_int(
+        loop.get("active_slot_blocked_attempts"),
+        loop.get("scheduler_active_slot_blocked_attempts"),
+        state_map.get("active_slot_blocked_attempts"),
+        state_map.get("scheduler_active_slot_blocked_attempts"),
+        # Legacy names retained only for reading older artifacts.
+        loop.get("capacity_skip_attempts"),
+        loop.get("scheduler_capacity_blocked_attempts"),
+        state_map.get("scheduler_capacity_blocked_attempts"),
+        default=0,
+    )
     computed_agentic_sessions = agentic_session_count(
         campaign_dir=campaign_dir,
         steps=step_list,
@@ -90,6 +101,8 @@ def proposal_accounting_fields(
         "campaign_steps": campaign_steps,
         "screened_rounds": screened,
         "quality_blocks": quality_blocks,
+        "active_slot_blocked_attempts": active_slot_blocked_attempts,
+        "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
         **candidate_accounting,
         "agentic_sessions": agentic_sessions,
         "hypothesis_calls": hypothesis_calls,
@@ -237,6 +250,21 @@ def accounting_reconciliation_fields(
             1 for step in step_list if _attempt_kind(step) in _QUALITY_BLOCK_KINDS
         ),
     )
+    active_slot_blocked_attempts = _first_int(
+        loop.get("active_slot_blocked_attempts"),
+        loop.get("scheduler_active_slot_blocked_attempts"),
+        state_map.get("active_slot_blocked_attempts"),
+        state_map.get("scheduler_active_slot_blocked_attempts"),
+        # Legacy names retained only for reading older artifacts.
+        loop.get("capacity_skip_attempts"),
+        loop.get("scheduler_capacity_blocked_attempts"),
+        state_map.get("scheduler_capacity_blocked_attempts"),
+        default=sum(
+            1
+            for step in step_list
+            if _attempt_kind(step) == "scheduler_active_slot_blocked"
+        ),
+    )
     branch_lifecycle_blocks = _first_int(
         loop.get("branch_lifecycle_policy_blocks"),
         state_map.get("branch_lifecycle_policy_blocks"),
@@ -313,6 +341,8 @@ def accounting_reconciliation_fields(
         "telemetry_repairable_attempts": telemetry_repairable_attempts,
         "validation_repair_required_attempts": validation_repair_required_attempts,
         "quality_blocks": quality_blocks,
+        "active_slot_blocked_attempts": active_slot_blocked_attempts,
+        "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
         "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
         "reconcile_lifecycle_steps": reconcile_lifecycle_steps,
         "non_counted_lifecycle_steps": non_counted_lifecycle_steps,
@@ -333,6 +363,8 @@ def accounting_reconciliation_fields(
             "model_repair": model_repair_attempts,
             "model_repair_failures": model_repair_failures,
             "quality_blocks": quality_blocks,
+            "active_slot_blocked_attempts": active_slot_blocked_attempts,
+            "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
             "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
             "reconcile_lifecycle_steps": reconcile_lifecycle_steps,
         },
@@ -433,7 +465,8 @@ def _candidate_accounting_fields(
         "max_rounds_budget_counter": "effective_rounds_completed",
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; proposal, "
-            "repair, and lifecycle attempts are reported separately"
+            "repair, lifecycle, and active-slot scheduler attempts are reported "
+            "separately"
         ),
         "formal_screened_candidates_semantics": (
             "screening-stage protocol results that count as formal candidates; "
