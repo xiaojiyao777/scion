@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import os
 import shutil
 import stat
@@ -79,6 +80,8 @@ class WorkspaceMaterializer:
         self._frozen_patterns = (
             _DEFAULT_FROZEN_PATTERNS if frozen_patterns is None else frozen_patterns
         )
+        if editable_patterns is None:
+            editable_patterns = _infer_editable_patterns_from_problem_spec_stack()
         self._editable_patterns = _normalize_editable_patterns(editable_patterns)
 
         self._workspaces_dir.mkdir(parents=True, exist_ok=True)
@@ -389,8 +392,8 @@ def editable_identity_patterns_from_problem_spec(problem_spec: object) -> tuple[
     """Return declared research-surface identity patterns for a problem spec.
 
     v0.4 workspaces should derive code identity from explicit research-surface
-    target files.  Legacy/problem specs without surfaces fall back to
-    ``search_space.editable``.  The broad non-frozen-source scan is intentionally
+    target files. Legacy/problem specs without surfaces fall back to
+    ``search_space.editable``. The broad non-frozen-source scan is intentionally
     avoided because real problem roots contain data, evidence, split manifests,
     and test fixtures that are not candidate code identity.
     """
@@ -414,6 +417,39 @@ def _research_surface_target_patterns(problem_spec: object) -> tuple[str, ...]:
             if text:
                 patterns.append(text)
     return tuple(dict.fromkeys(patterns))
+
+
+def _infer_editable_patterns_from_problem_spec_stack() -> tuple[str, ...]:
+    """Compatibility bridge for existing constructor call sites.
+
+    New call sites should pass ``editable_patterns`` explicitly. This inference
+    keeps current campaign/CLI wiring from silently falling back to legacy
+    operators/policies-only identity while those constructors are migrated.
+    """
+    frame = inspect.currentframe()
+    try:
+        caller = frame.f_back if frame is not None else None
+        while caller is not None:
+            for name in ("problem_spec", "spec"):
+                candidate = caller.f_locals.get(name)
+                if _looks_like_problem_spec(candidate):
+                    patterns = editable_identity_patterns_from_problem_spec(candidate)
+                    if patterns:
+                        return patterns
+            caller = caller.f_back
+    finally:
+        del frame
+    return ()
+
+
+def _looks_like_problem_spec(value: object) -> bool:
+    if value is None:
+        return False
+    search_space = getattr(value, "search_space", None)
+    return bool(
+        getattr(value, "research_surfaces", None)
+        or getattr(search_space, "editable", None)
+    )
 
 
 # ---------------------------------------------------------------------------
