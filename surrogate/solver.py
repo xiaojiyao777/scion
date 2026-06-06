@@ -249,6 +249,8 @@ def main() -> None:
     cfg = Config()
     if args.max_iter is not None:
         cfg.max_iterations = args.max_iter
+    if args.time_limit is not None:
+        cfg.time_limit_seconds = args.time_limit
     if args.seed is not None:
         cfg.random_seed = args.seed
 

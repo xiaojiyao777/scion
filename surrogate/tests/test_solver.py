@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from random import Random
 
@@ -15,8 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from config import Config
 from models import Solution
+from operators.base import Operator
 from oracle import check_feasibility, recompute_objective
 from solver import load_instance, solve, solution_to_dict
+from vns import run_vns
 
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -152,6 +155,48 @@ class TestMediumInstance:
         assert final_obj is not None
         assert final_obj.as_tuple() <= init_obj.as_tuple(), \
             f"VNS 结果 {final_obj} 差于初始解 {init_obj}"
+
+
+class SlowNoopOperator(Operator):
+    """测试专用算子：制造可观测的 wall-clock 消耗。"""
+
+    def execute(self, solution: Solution, rng: Random) -> Solution:
+        time.sleep(0.01)
+        return solution.deep_copy()
+
+
+class TestTimeLimit:
+    def test_vns_respects_wall_clock_time_limit(self):
+        """极小时间预算应截断高迭代上限，并返回当前可行最优解。"""
+        from greedy_init import greedy_init
+
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        init_sol = greedy_init(inst, Random(42))
+        init_sol.objective = recompute_objective(init_sol, inst)
+        cfg = Config(
+            pool_size=5,
+            max_iterations=1000,
+            no_improve_limit=1000,
+            random_seed=42,
+            time_limit_seconds=0.03,
+        )
+        iterations: list[int] = []
+
+        t0 = time.monotonic()
+        sol = run_vns(
+            instance=inst,
+            initial_solutions=[init_sol],
+            operators=[SlowNoopOperator()],
+            operator_weights=[1.0],
+            cfg=cfg,
+            on_iteration=lambda iteration, best: iterations.append(iteration),
+        )
+        elapsed = time.monotonic() - t0
+
+        assert len(iterations) < cfg.max_iterations
+        assert elapsed < 0.25
+        result = check_feasibility(sol, inst, phase=1)
+        assert result.is_feasible, f"超时返回解不可行: {result.violations}"
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,9 @@ class Config:
     # 最大迭代轮次（每轮对 pool 内所有解各执行一次算子）
     max_iterations: int = 200
 
+    # 求解墙钟时间上限（秒）。None 或非正数表示仅按迭代/no-improve 停止。
+    time_limit_seconds: float | None = None
+
     # 连续多少轮无任何指标改进则提前退出
     no_improve_limit: int = 30
 
