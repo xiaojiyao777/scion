@@ -584,7 +584,7 @@ def test_branch_card_exposes_runtime_evidence_pressure_count() -> None:
     assert "runtime_evidence_pressure_count=2" in text
 
 
-def test_branch_card_and_prompt_guidance_include_runtime_clean_fork_pressure() -> None:
+def test_branch_card_and_prompt_guidance_include_runtime_low_confidence_advisory() -> None:
     branch = Branch(
         branch_id="runtime-clean-fork-card",
         state=BranchState.EXPLORE,
@@ -608,10 +608,11 @@ def test_branch_card_and_prompt_guidance_include_runtime_clean_fork_pressure() -
     guidance = branch_hygiene_guidance(branch)
     decision_field_names = {field.name for field in fields(DecisionFeatures)}
 
-    assert payload["allowed_next_actions"] == ["clean_fork"]
-    assert payload["runtime_evidence_clean_fork_guidance"] == {
+    assert "clean_fork" not in payload["allowed_next_actions"]
+    assert "refine_checkpoint" in payload["allowed_next_actions"]
+    assert payload["runtime_evidence_low_confidence_advisory"] == {
         "reason": "runtime_evidence_completeness_clean_fork",
-        "policy": "prefer_clean_fork",
+        "policy": "fresh_runtime_advisory",
         "runtime_evidence_pressure_count": 2,
         "case_wins": 1,
         "case_losses": 1,
@@ -624,15 +625,25 @@ def test_branch_card_and_prompt_guidance_include_runtime_clean_fork_pressure() -
             "runtime_evidence_status:insufficient",
             "runtime_aggregate_excluded",
         ],
+        "runtime_signal_role": "low_confidence_advisory",
+        "strong_branch_constraint": False,
+        "proposal_guidance": (
+            "Need fresh champion runtime before runtime-based conclusions; do not "
+            "treat runtime saturation/pressure as a strong diagnostic when "
+            "runtime aggregate evidence is excluded or low confidence."
+        ),
         "tainted_proposal_guidance": True,
         "decision_features_excluded": True,
     }
     assert (
-        "runtime_evidence_clean_fork_guidance="
+        "runtime_evidence_low_confidence_advisory="
         "runtime_evidence_completeness_clean_fork"
     ) in card
-    assert "Runtime-evidence clean-fork pressure is active" in guidance
+    assert "Low-confidence runtime evidence advisory is active" in guidance
+    assert "Need fresh champion runtime before runtime-based conclusions" in guidance
+    assert "prefer a clean branch/fork" not in guidance
     assert "excluded from DecisionFeatures" in guidance
+    assert "runtime_evidence_clean_fork_guidance" not in payload
     assert "runtime_evidence_clean_fork_guidance" not in decision_field_names
     assert "runtime_evidence_clean_fork_reason" not in decision_field_names
 

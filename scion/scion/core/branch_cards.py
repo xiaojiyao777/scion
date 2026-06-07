@@ -115,13 +115,14 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         optional_parts.append(
             f"runtime_evidence_pressure_count={runtime_pressure_count}"
         )
-    clean_fork_guidance = _card_mapping(
-        context.get("runtime_evidence_clean_fork_guidance")
+    runtime_advisory = _card_mapping(
+        context.get("runtime_evidence_low_confidence_advisory")
+        or context.get("runtime_evidence_clean_fork_guidance")
     )
-    if clean_fork_guidance:
+    if runtime_advisory:
         optional_parts.append(
-            "runtime_evidence_clean_fork_guidance="
-            f"{clean_fork_guidance.get('reason') or 'clean_fork'}"
+            "runtime_evidence_low_confidence_advisory="
+            f"{runtime_advisory.get('reason') or 'fresh_runtime_required'}"
         )
     optional_suffix = (
         " " + " ".join(optional_parts)
@@ -310,8 +311,10 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         branch_active_slot_release_reason(branch) if branch is not None else ""
     )
     runtime_evidence_pressure_count = _branch_runtime_evidence_pressure_count(branch)
-    runtime_clean_fork_guidance = (
-        branch_runtime_evidence_clean_fork_pressure_summary(branch)
+    runtime_low_confidence_advisory = (
+        _runtime_evidence_prompt_advisory_projection(
+            branch_runtime_evidence_clean_fork_pressure_summary(branch)
+        )
     )
     best_checkpoint_status = branch_checkpoint_status(branch)
     rollback_count = (
@@ -486,8 +489,10 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         context["current_head_runtime_evidence_pressure_count"] = (
             runtime_evidence_pressure_count
         )
-    if runtime_clean_fork_guidance:
-        context["runtime_evidence_clean_fork_guidance"] = runtime_clean_fork_guidance
+    if runtime_low_confidence_advisory:
+        context["runtime_evidence_low_confidence_advisory"] = (
+            runtime_low_confidence_advisory
+        )
     context.update(branch_lifecycle_reroute_context(branch))
     diversity_guidance = _runtime_saturated_diversity_guidance(context)
     if diversity_guidance:
@@ -551,7 +556,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
         protected = _protected_mechanism_text(context)
         allowed_actions = _allowed_actions_text(context)
         if context.get("weak_positive_followup"):
-            runtime_guidance = _runtime_evidence_clean_fork_guidance_sentence(
+            runtime_guidance = _runtime_evidence_low_confidence_advisory_sentence(
                 context
             )
             return (
@@ -690,20 +695,43 @@ def _diversity_guidance_sentence(context: Mapping[str, Any]) -> str:
     )
 
 
-def _runtime_evidence_clean_fork_guidance_sentence(
+def _runtime_evidence_low_confidence_advisory_sentence(
     context: Mapping[str, Any],
 ) -> str:
-    guidance = context.get("runtime_evidence_clean_fork_guidance")
+    guidance = (
+        context.get("runtime_evidence_low_confidence_advisory")
+        or context.get("runtime_evidence_clean_fork_guidance")
+    )
     if not isinstance(guidance, Mapping) or not guidance:
         return ""
     reason = guidance.get("reason") or "runtime_evidence_completeness_clean_fork"
     return (
-        " Runtime-evidence clean-fork pressure is active: prefer a clean "
-        "branch/fork unless the next same-branch follow-up preserves current "
-        "case-level positive signal without case loss and directly improves "
-        "runtime evidence completeness. This is tainted proposal guidance "
-        f"excluded from DecisionFeatures; reason={reason}."
+        " Low-confidence runtime evidence advisory is active: do not treat "
+        "runtime saturation/pressure as a strong conclusion or branch-routing "
+        "constraint. Need fresh champion runtime before runtime-based "
+        "conclusions; same-branch follow-up may focus on improving runtime "
+        "evidence completeness. This is tainted proposal guidance excluded "
+        f"from DecisionFeatures; reason={reason}."
     )
+
+
+def _runtime_evidence_prompt_advisory_projection(
+    guidance: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(guidance, Mapping) or not guidance:
+        return {}
+    projected = dict(guidance)
+    projected["policy"] = "fresh_runtime_advisory"
+    projected["runtime_signal_role"] = "low_confidence_advisory"
+    projected["strong_branch_constraint"] = False
+    projected["proposal_guidance"] = (
+        "Need fresh champion runtime before runtime-based conclusions; do not "
+        "treat runtime saturation/pressure as a strong diagnostic when "
+        "runtime aggregate evidence is excluded or low confidence."
+    )
+    projected["tainted_proposal_guidance"] = True
+    projected["decision_features_excluded"] = True
+    return projected
 
 
 def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
@@ -1221,8 +1249,6 @@ def _branch_card_allowed_actions(
     strict_same_mechanism_followup: bool,
     repair_focus_required: bool,
 ) -> list[str]:
-    if branch_runtime_evidence_clean_fork_pressure_summary(branch):
-        return ["clean_fork"]
     if branch_is_parked_lineage(branch):
         return ["clean_fork"]
     if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(

@@ -6,6 +6,7 @@ from typing import Any, List
 
 from scion.core.models import ExperimentStage, StepRecord
 from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
+from scion.core.screening_visibility import runtime_evidence_policy_for_protocol
 from scion.proposal.context.feedback import (
     _filter_hypothesis_prompt_steps,
     _first_line,
@@ -31,6 +32,8 @@ def _build_runtime_feedback(
     failure_causes: list[str] = []
     contract_failures: list[str] = []
     runtime_budget_saturation_rounds: list[str] = []
+    low_confidence_runtime_rounds: list[str] = []
+    strong_runtime_actionable = False
     for step in reversed(steps):
         detail = step.verification_detail or step.failure_detail or ""
         target = (
@@ -51,17 +54,40 @@ def _build_runtime_feedback(
         if "V9_perf_guard" in detail and len(items) < max_items:
             check_line = _extract_runtime_guard_line(detail)
             items.append(f"- R{step.round_num} target={target}: {check_line}")
+            strong_runtime_actionable = True
         if (
             step.protocol_result is not None
             and step.protocol_result.stage == ExperimentStage.SCREENING
         ):
+            runtime_policy = runtime_evidence_policy_for_protocol(
+                step.protocol_result
+            )
+            low_confidence_runtime = _runtime_evidence_low_confidence_or_excluded(
+                runtime_policy
+            )
+            if (
+                low_confidence_runtime
+                and len(low_confidence_runtime_rounds) < max_items
+            ):
+                low_confidence_runtime_rounds.append(
+                    _low_confidence_runtime_advisory_line(
+                        step,
+                        target=target,
+                        runtime_policy=runtime_policy,
+                    )
+                )
             runtime_budget_code = runtime_budget_diagnostic_code(
                 step.protocol_result
             )
-            if runtime_budget_code and len(runtime_budget_saturation_rounds) < max_items:
+            if (
+                runtime_budget_code
+                and not low_confidence_runtime
+                and len(runtime_budget_saturation_rounds) < max_items
+            ):
                 runtime_budget_saturation_rounds.append(
                     f"R{step.round_num}:{runtime_budget_code}"
                 )
+                strong_runtime_actionable = True
             if step.protocol_result.stats.runtime_pairs > 0 and len(summaries) < max_items:
                 st = step.protocol_result.stats
                 summaries.append(
@@ -71,6 +97,8 @@ def _build_runtime_feedback(
                     f"regression_rate={_fmt_runtime(st.runtime_regression_rate)} "
                     f"pairs={st.runtime_pairs}"
                 )
+                if not low_confidence_runtime:
+                    strong_runtime_actionable = True
             (
                 raw_failures,
                 raw_slow_cases,
@@ -84,18 +112,23 @@ def _build_runtime_feedback(
             for line in raw_failure_causes:
                 if len(failure_causes) < max_items:
                     failure_causes.append(line)
+                    if not low_confidence_runtime:
+                        strong_runtime_actionable = True
             for line in raw_failures:
                 if len(failure_cases) < max_items:
                     failure_cases.append(line)
+                    strong_runtime_actionable = True
             for line in raw_slow_cases:
                 if len(slow_cases) < max_items:
                     slow_cases.append(line)
+                    strong_runtime_actionable = True
         if (
             len(items) >= max_items
             and len(summaries) >= max_items
             and len(failure_causes) >= max_items
             and len(contract_failures) >= max_items
             and len(runtime_budget_saturation_rounds) >= max_items
+            and len(low_confidence_runtime_rounds) >= max_items
             and len(slow_cases) >= max_items
             and len(failure_cases) >= max_items
         ):
@@ -108,9 +141,15 @@ def _build_runtime_feedback(
         and not failure_causes
         and not contract_failures
         and not runtime_budget_saturation_rounds
+        and not low_confidence_runtime_rounds
     ):
         return ""
     sections: list[str] = []
+    if low_confidence_runtime_rounds:
+        sections.append(
+            "Low-confidence runtime evidence advisory:\n"
+            + "\n".join(reversed(low_confidence_runtime_rounds))
+        )
     if failure_causes:
         sections.append(
             "Recent screening failure causes:\n"
@@ -158,10 +197,64 @@ def _build_runtime_feedback(
         )
     if items:
         sections.append("Recent runtime guard failures:\n" + "\n".join(reversed(items)))
-    sections.append(
-        "Prefer bounded neighborhoods, top-k candidate filters, and early no-op exits."
-    )
+    if strong_runtime_actionable:
+        sections.append(
+            "Prefer bounded neighborhoods, top-k candidate filters, and early no-op exits."
+        )
     return "\n".join(sections)
+
+
+def _runtime_evidence_low_confidence_or_excluded(
+    runtime_policy: dict[str, Any],
+) -> bool:
+    if not runtime_policy:
+        return False
+    if runtime_policy.get("fresh_champion_required") is True:
+        return True
+    if runtime_policy.get("runtime_aggregate_excluded") is True:
+        return True
+    reason_codes = {
+        str(code)
+        for code in runtime_policy.get("policy_reason_codes", ())
+        if str(code).strip()
+    }
+    return bool(
+        reason_codes.intersection(
+            {
+                "RUNTIME_EVIDENCE_LOW_OR_CACHED_CONFIDENCE",
+                "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED",
+                "RUNTIME_EVIDENCE_INCOMPLETE",
+                "RUNTIME_AGGREGATE_EXCLUDED",
+            }
+        )
+    )
+
+
+def _low_confidence_runtime_advisory_line(
+    step: StepRecord,
+    *,
+    target: str,
+    runtime_policy: dict[str, Any],
+) -> str:
+    confidence = runtime_policy.get("runtime_evidence_confidence") or "unknown"
+    status = runtime_policy.get("runtime_evidence_status") or "unknown"
+    aggregate_excluded = str(
+        bool(runtime_policy.get("runtime_aggregate_excluded"))
+    ).lower()
+    cached_pairs = runtime_policy.get("champion_cached_runtime_pairs", 0)
+    candidate_pairs = runtime_policy.get(
+        "candidate_runtime_pair_evidence_count",
+        0,
+    )
+    return (
+        f"- R{step.round_num} target={target}: "
+        f"runtime_confidence={confidence} runtime_evidence_status={status} "
+        f"runtime_aggregate_excluded={aggregate_excluded} "
+        f"champion_cached_runtime_pairs={cached_pairs} "
+        f"candidate_runtime_pair_evidence_count={candidate_pairs}. "
+        "Treat runtime saturation/pressure as low-confidence advisory only; "
+        "need fresh champion runtime before runtime-based conclusions."
+    )
 
 def _build_runtime_failure_guidance(
     steps: List[StepRecord],

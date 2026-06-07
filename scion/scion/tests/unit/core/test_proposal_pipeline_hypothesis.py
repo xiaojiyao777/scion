@@ -203,7 +203,7 @@ def test_generate_hypothesis_allows_active_no_effect_same_mechanism_followup() -
     ]
 
 
-def test_generate_hypothesis_context_includes_runtime_clean_fork_guidance() -> None:
+def test_generate_hypothesis_context_includes_runtime_low_confidence_advisory() -> None:
     creative = FakeCreative()
     pipeline, branch, _, _, _, _ = _pipeline(creative=creative)
     branch.branch_code_status = "active_weak_positive"
@@ -222,16 +222,25 @@ def test_generate_hypothesis_context_includes_runtime_clean_fork_guidance() -> N
     hygiene = creative.hypothesis_context["branch_hygiene"]
     guidance = creative.hypothesis_context["branch_hygiene_guidance"]
     decision_field_names = {field.name for field in fields(DecisionFeatures)}
-    assert hygiene["runtime_evidence_clean_fork_guidance"]["reason"] == (
+    assert hygiene["runtime_evidence_low_confidence_advisory"]["reason"] == (
         "runtime_evidence_completeness_clean_fork"
     )
-    assert hygiene["runtime_evidence_clean_fork_guidance"][
+    assert hygiene["runtime_evidence_low_confidence_advisory"]["policy"] == (
+        "fresh_runtime_advisory"
+    )
+    assert hygiene["runtime_evidence_low_confidence_advisory"][
+        "strong_branch_constraint"
+    ] is False
+    assert hygiene["runtime_evidence_low_confidence_advisory"][
         "tainted_proposal_guidance"
     ] is True
-    assert hygiene["runtime_evidence_clean_fork_guidance"][
+    assert hygiene["runtime_evidence_low_confidence_advisory"][
         "decision_features_excluded"
     ] is True
-    assert "runtime_evidence_clean_fork_guidance" in guidance
+    assert "runtime_evidence_clean_fork_guidance" not in hygiene
+    assert "Low-confidence runtime evidence advisory is active" in guidance
+    assert "Need fresh champion runtime before runtime-based conclusions" in guidance
+    assert "prefer a clean branch/fork" not in guidance
     assert "excluded from DecisionFeatures" in guidance
     assert "runtime_evidence_clean_fork_guidance" not in decision_field_names
 
