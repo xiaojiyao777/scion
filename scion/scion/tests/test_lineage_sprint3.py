@@ -355,6 +355,7 @@ class TestBranchStore:
                 "SCREENING_FAIL_WIN_RATE",
                 BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
             ),
+            lifecycle_action="archive_lineage",
         )
         store.save(branch)
         loaded = store.load("br_terminal")

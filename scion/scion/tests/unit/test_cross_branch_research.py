@@ -18,6 +18,9 @@ from scion.core.models import (
 )
 from scion.proposal.context import cross_branch_research as cross_branch_module
 from scion.proposal.context import (
+    cross_branch_research_coverage as cross_branch_coverage_module,
+)
+from scion.proposal.context import (
     cross_branch_research_summary as cross_branch_summary_module,
 )
 from scion.proposal.context import (
@@ -248,6 +251,12 @@ def test_cross_branch_research_branch_summary_extraction_is_modularized() -> Non
 
     assert cross_branch_module._build_branch_summary.__module__.endswith(
         "cross_branch_research_summary"
+    )
+    assert cross_branch_module._portfolio_coverage.__module__.endswith(
+        "cross_branch_research_coverage"
+    )
+    assert cross_branch_module._opportunity_gaps.__module__.endswith(
+        "cross_branch_research_coverage"
     )
     assert payload["branches"][0] == expected_summary
     assert payload["branches"][0]["recent_attempts"][0]["round_num"] == 1
@@ -951,6 +960,7 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
 def test_cross_branch_research_module_has_no_problem_specific_control_terms() -> None:
     source = (
         inspect.getsource(cross_branch_module)
+        + inspect.getsource(cross_branch_coverage_module)
         + inspect.getsource(cross_branch_summary_module)
         + inspect.getsource(cross_branch_support_module)
         + inspect.getsource(research_portfolio_module)

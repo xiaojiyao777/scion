@@ -213,9 +213,12 @@ class TestArchiveWorkspaceReturnsPath:
 
         campaign_dir = tmp_path / "campaign"
         campaign_dir.mkdir()
-        mat = WorkspaceMaterializer(str(campaign_dir))
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            editable_patterns=("operators/*.py",),
+        )
 
-        # Create a minimal workspace with operators/
+        # Create a minimal declared research-surface workspace.
         ws = tmp_path / "ws"
         (ws / "operators").mkdir(parents=True)
         (ws / "operators" / "my_op.py").write_text("class MyOp: pass\n")
