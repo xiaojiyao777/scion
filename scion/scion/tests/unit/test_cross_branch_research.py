@@ -18,12 +18,19 @@ from scion.core.models import (
 )
 from scion.proposal.context import cross_branch_research as cross_branch_module
 from scion.proposal.context import (
+    cross_branch_research_summary as cross_branch_summary_module,
+)
+from scion.proposal.context import (
     cross_branch_research_support as cross_branch_support_module,
 )
 from scion.proposal.context import research_portfolio as research_portfolio_module
 from scion.proposal.context.cross_branch_research import (
     build_cross_branch_research_map,
     render_cross_branch_research_map,
+)
+from scion.proposal.context.cross_branch_research_summary import (
+    build_branch_summary,
+    safe_prompt_steps,
 )
 
 
@@ -206,6 +213,45 @@ def test_cross_branch_research_map_is_tainted_and_finds_near_duplicates() -> Non
     assert "excluded_from_decision_features" in rendered
     assert "raw_metrics_ref" not in rendered
     assert "/internal/raw-metrics.json" not in rendered
+
+
+def test_cross_branch_research_branch_summary_extraction_is_modularized() -> None:
+    current = _branch("branch-a", mechanism_ids=("bounded_probe",))
+    sibling = _branch("branch-b", mechanism_ids=("flat_probe",))
+    steps = [
+        _screening_step(
+            "branch-a",
+            round_num=1,
+            mechanism_id="bounded_probe",
+            wins=1,
+            reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        ),
+        _screening_step(
+            "branch-a",
+            round_num=2,
+            mechanism_id="bounded_probe_validation",
+            stage=ExperimentStage.VALIDATION,
+            wins=4,
+            gate_outcome="pass",
+        ),
+    ]
+
+    safe_steps = safe_prompt_steps(steps)
+    expected_summary = build_branch_summary(
+        branch_id="branch-a",
+        branch=current,
+        steps=safe_steps,
+        is_current_branch=True,
+        max_steps_per_branch=4,
+    )
+    payload = build_cross_branch_research_map(current, [current, sibling], steps)
+
+    assert cross_branch_module._build_branch_summary.__module__.endswith(
+        "cross_branch_research_summary"
+    )
+    assert payload["branches"][0] == expected_summary
+    assert payload["branches"][0]["recent_attempts"][0]["round_num"] == 1
+    assert "bounded_probe_validation" not in json.dumps(payload, sort_keys=True)
 
 
 def test_cross_branch_research_structured_guidance_is_generic() -> None:
@@ -905,6 +951,7 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
 def test_cross_branch_research_module_has_no_problem_specific_control_terms() -> None:
     source = (
         inspect.getsource(cross_branch_module)
+        + inspect.getsource(cross_branch_summary_module)
         + inspect.getsource(cross_branch_support_module)
         + inspect.getsource(research_portfolio_module)
     ).lower()

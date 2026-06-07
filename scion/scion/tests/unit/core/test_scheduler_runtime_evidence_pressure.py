@@ -25,6 +25,7 @@ from scion.core.scheduler import (
     reclaim_active_slot_for_new_branch,
     reconcile_active_slot_overflow,
 )
+from scion.core.scheduling import active_slots as active_slot_module
 from scion.core.scheduling.runtime_pressure import (
     branch_runtime_evidence_clean_fork_pressure_summary,
 )
@@ -100,6 +101,24 @@ def test_runtime_pressure_summary_module_matches_scheduler_facade() -> None:
     assert summary["tainted_proposal_guidance"] is True
     assert summary["decision_features_excluded"] is True
     assert "tainted proposal text" not in str(summary)
+
+
+def test_active_slot_module_inventory_matches_scheduler_facade_policy() -> None:
+    branch = Branch(
+        branch_id="active-slot-module-facade",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        lifecycle_no_effect_diagnostic_followups=2,
+    )
+
+    assert active_slot_module.active_slot_inventory(
+        [branch],
+        max_active_branches=1,
+        policy=scheduler_facade._active_slot_policy(),
+    ) == active_slot_inventory([branch], max_active_branches=1)
 
 
 def test_active_slot_reclaim_requires_decision_origin_park_marker() -> None:
