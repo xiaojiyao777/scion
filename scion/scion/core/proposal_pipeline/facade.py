@@ -118,6 +118,7 @@ class ProposalPipeline(
     problem_spec_hash: str | None = None
     split_manifest_hash: str | None = None
     seed_ledger_hash: str | None = None
+    require_agentic_problem_anchors: bool = False
     persistent_forced_locus: str | None = None
     forced_surface_action: str | None = None
     forced_surface_target_file: str | None = None

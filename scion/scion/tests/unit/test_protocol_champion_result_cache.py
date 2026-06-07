@@ -97,6 +97,14 @@ def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
         second.exposed_summary
     )
     assert "fresh_champion_required=true" in second.exposed_summary
+    assert (
+        "runtime_gate_reason_semantics=runtime_fresh_champion_required"
+        in second.exposed_summary
+    )
+    assert (
+        "runtime_rerun_recommendation=fresh_champion_re_evaluation_required"
+        in second.exposed_summary
+    )
     assert runner.call_count(str(champion_ws)) == 1
 
     raw = json.loads(Path(second.raw_metrics_ref).read_text(encoding="utf-8"))
@@ -116,9 +124,24 @@ def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
     assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in (
         policy["policy_reason_codes"]
     )
+    visibility = raw["runtime_gate_visibility"]
+    assert visibility["schema_version"] == "runtime_gate_visibility.v1"
+    assert visibility["reason_semantics"] == [
+        "runtime_fresh_champion_required"
+    ]
+    assert visibility["fresh_champion_required"] is True
+    assert visibility["rerun_recommendation"] == (
+        "fresh_champion_re_evaluation_required"
+    )
+    assert visibility["fresh_champion_requirement"] == (
+        "fresh_champion_re_evaluation_required_before_runtime_tie_advances"
+    )
+    assert visibility["formal_rerun_scheduled"] is False
+    assert visibility["decision_features_excluded"] is True
     status_snapshot = _read_partial_metrics_snapshot(second.raw_metrics_ref)
     assert status_snapshot["runtime_evidence_status"] == "fresh_champion_required"
     assert status_snapshot["runtime_evidence_policy"] == policy
+    assert status_snapshot["runtime_gate_visibility"] == visibility
     assert status_snapshot["champion_cached_runtime_pairs"] == 1
 
 

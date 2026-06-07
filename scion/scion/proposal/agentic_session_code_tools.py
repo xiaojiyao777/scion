@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scion.proposal.agentic_session_common import *
+from scion.proposal.session_trace_index import attach_agentic_trace_context
 
 
 class AgenticSessionCodeToolsMixin:
@@ -186,6 +187,17 @@ class AgenticSessionCodeToolsMixin:
                         for observation in all_observations
                     ],
                 }
+                planner_context = attach_agentic_trace_context(
+                    planner_context,
+                    session_id=state.session_id,
+                    request_id=state.request_id or state.session_id,
+                    branch_id=state.branch_id,
+                    campaign_id=state.campaign_id,
+                    request_kind="tool_selection",
+                    call_kind="tool_selection",
+                    phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                    attempt_number=len(observations) + 1,
+                )
                 try:
                     planned = selector(_sanitize_agentic_value(planner_context))
                 except Exception as exc:
@@ -208,6 +220,17 @@ class AgenticSessionCodeToolsMixin:
                     )
 
                 if not planned or getattr(planned, "stop", False):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name="stop",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_planner_stop",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner stopped.",
@@ -215,6 +238,17 @@ class AgenticSessionCodeToolsMixin:
                     )
                     break
                 if isinstance(planned, Mapping) and planned.get("stop"):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name="stop",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_planner_stop",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner stopped.",
@@ -222,6 +256,17 @@ class AgenticSessionCodeToolsMixin:
                     )
                     break
                 if not isinstance(planned, Mapping):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name="",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_malformed_tool_selection",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner returned malformed tool-selection payload; using deterministic fallback.",
@@ -247,6 +292,17 @@ class AgenticSessionCodeToolsMixin:
                 )
                 args = planned.get("args") or planned.get("input") or {}
                 if not isinstance(args, Mapping):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name=name,
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_malformed_tool_args",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner returned malformed tool arguments; using deterministic fallback.",
@@ -265,6 +321,17 @@ class AgenticSessionCodeToolsMixin:
                         selection_source="code_phase_fallback",
                     )
                 if name not in set(allowed_tools):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_invalid_tool_selection",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner selected a tool outside the allowed list; using deterministic fallback.",
@@ -285,6 +352,17 @@ class AgenticSessionCodeToolsMixin:
                 fingerprint = _tool_call_fingerprint(name, args)
                 fuse_count = state.tool_call_fuse_counts.get(fingerprint, 0)
                 if fuse_count >= self._tool_loop_config.max_repeated_tool_calls:
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_repeated_tool_call_fuse",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner repeated a proposal tool call; using deterministic fallback.",
@@ -308,6 +386,17 @@ class AgenticSessionCodeToolsMixin:
                     args,
                     hypothesis=hypothesis,
                 ):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="already_succeeded",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner selected a proposal tool already completed successfully.",
@@ -329,6 +418,17 @@ class AgenticSessionCodeToolsMixin:
                         next_args=args,
                     )
                 ):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                        source="code_phase_planner",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="solver_design_code_file_read_budget_reserved",
+                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Stopped code-phase planner full algorithm-file reads after solver_design read budget.",
@@ -342,6 +442,16 @@ class AgenticSessionCodeToolsMixin:
                         },
                     )
                     break
+                selection_ledger_index = _record_tool_selection_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
+                    source="code_phase_planner",
+                    status="executed",
+                    tool_name=name,
+                    args=args,
+                    planner_context=planner_context,
+                    planned=planned,
+                )
                 observation = self._call_tool(
                     context,
                     state,
@@ -349,6 +459,12 @@ class AgenticSessionCodeToolsMixin:
                     name,
                     args,
                     selection_source="code_phase_planner",
+                )
+                _update_tool_selection_ledger_result(
+                    state,
+                    selection_ledger_index,
+                    observation,
+                    status="executed",
                 )
                 observations.append(observation)
                 if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:

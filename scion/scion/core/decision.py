@@ -313,6 +313,9 @@ class DecisionEngine:
             decision=decision,
             reason_codes=tuple(reason_codes),
             features_snapshot=features,
+            stage_decision=decision,
+            final_decision=decision,
+            decision_layer_source="stage_decision",
         )
 
     def _apply_lifecycle_policy(
@@ -342,7 +345,11 @@ class DecisionEngine:
                 decision=outcome.decision,
                 reason_codes=outcome.reason_codes,
                 features_snapshot=features,
+                stage_decision=outcome.stage_decision,
+                final_decision=outcome.decision,
                 lifecycle_action=lifecycle_action,
+                lifecycle_reason_codes=(),
+                decision_layer_source=outcome.decision_layer_source,
             )
         reason_codes = _merge_reason_codes(outcome.reason_codes, lifecycle_codes)
         if lifecycle.action in {"archive_lineage", "soft_abandon"}:
@@ -350,13 +357,21 @@ class DecisionEngine:
                 decision=Decision.ABANDON,
                 reason_codes=reason_codes,
                 features_snapshot=features,
+                stage_decision=outcome.decision,
+                final_decision=Decision.ABANDON,
                 lifecycle_action=lifecycle_action,
+                lifecycle_reason_codes=lifecycle_codes,
+                decision_layer_source="lifecycle_policy",
             )
         return DecisionOutcome(
             decision=outcome.decision,
             reason_codes=reason_codes,
             features_snapshot=features,
+            stage_decision=outcome.stage_decision,
+            final_decision=outcome.decision,
             lifecycle_action=lifecycle_action,
+            lifecycle_reason_codes=lifecycle_codes,
+            decision_layer_source=outcome.decision_layer_source,
         )
 
 

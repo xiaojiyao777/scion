@@ -13,6 +13,7 @@ from scion.core.research_process_guidance_audit import (
 from scion.core.run_validity import apply_run_completion_aliases, build_run_validity
 from scion.core.screening_visibility import (
     observability_value_visibility_from_payload,
+    runtime_gate_visibility_summary,
     runtime_evidence_policy_summary,
 )
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
@@ -48,6 +49,7 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "runtime_confidence",
     "runtime_evidence_status",
     "runtime_evidence_policy",
+    "runtime_gate_visibility",
     "champion_cached_runtime_pairs",
     "runtime_budget_diagnostic",
     "runtime_budget_diagnostic_code",
@@ -200,6 +202,29 @@ def _ensure_runtime_evidence_policy(progress: Dict[str, Any]) -> None:
     )
 
 
+def _ensure_runtime_gate_visibility(progress: Dict[str, Any]) -> None:
+    if not _progress_has_runtime_gate_visibility_source(progress):
+        return
+    if isinstance(progress.get("runtime_gate_visibility"), Mapping):
+        return
+    progress["runtime_gate_visibility"] = runtime_gate_visibility_summary(
+        stage=progress.get("stage", ""),
+        gate_outcome=progress.get("gate_outcome", ""),
+        reason_codes=progress.get("reason_codes", ()),
+        runtime_confidence=progress.get("runtime_confidence", ""),
+        runtime_evidence_status=progress.get("runtime_evidence_status", ""),
+        runtime_pairs=progress.get("runtime_pairs", 0),
+        champion_cached_runtime_pairs=progress.get(
+            "champion_cached_runtime_pairs",
+            0,
+        ),
+        failed_pairs=progress.get("failed_pairs", 0),
+        candidate_failed_pairs=progress.get("candidate_failed_pairs", 0),
+        champion_failed_pairs=progress.get("champion_failed_pairs", 0),
+        runtime_budget_diagnostic=progress.get("runtime_budget_diagnostic"),
+    )
+
+
 def _ensure_observability_value_visibility(progress: Dict[str, Any]) -> None:
     if not _progress_has_observability_value_source(progress):
         return
@@ -235,6 +260,21 @@ def _progress_has_runtime_policy_source(progress: Mapping[str, Any]) -> bool:
             "champion_cached_runtime_pairs",
             "runtime_aggregate_excluded",
             "candidate_runtime_pair_evidence_count",
+        )
+    )
+
+
+def _progress_has_runtime_gate_visibility_source(progress: Mapping[str, Any]) -> bool:
+    return any(
+        key in progress
+        for key in (
+            "runtime_gate_visibility",
+            "gate_outcome",
+            "reason_codes",
+            "runtime_confidence",
+            "runtime_evidence_status",
+            "champion_cached_runtime_pairs",
+            "runtime_budget_diagnostic",
         )
     )
 
@@ -614,6 +654,7 @@ class StatusWriterMixin:
             "runtime_confidence",
             "runtime_evidence_status",
             "runtime_evidence_policy",
+            "runtime_gate_visibility",
             "champion_cached_runtime_pairs",
             "runtime_budget_diagnostic",
             "runtime_budget_diagnostic_code",
@@ -625,6 +666,7 @@ class StatusWriterMixin:
         if "valid_pairs" not in progress and "completed_pairs" in progress:
             progress["valid_pairs"] = progress["completed_pairs"]
         _ensure_runtime_evidence_policy(progress)
+        _ensure_runtime_gate_visibility(progress)
         _ensure_observability_value_visibility(progress)
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"

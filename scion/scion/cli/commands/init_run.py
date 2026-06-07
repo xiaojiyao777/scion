@@ -594,7 +594,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
         from scion.verification.gate import VerificationGate
         from scion.core.production_boundary import (
-            is_adapter_backed_production_spec,
+            is_adapter_backed_production_campaign,
             validate_production_campaign_boundary,
         )
 
@@ -607,9 +607,12 @@ def register_init_run_commands(app: typer.Typer) -> None:
             if time_limit_sec is not None
             else getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
         )
-        require_metric_specs = (
-            is_adapter_backed_production_spec(spec) and not allow_skeleton
+        production_campaign = is_adapter_backed_production_campaign(
+            problem_spec=spec,
+            adapter=adapter,
+            allow_skeleton=allow_skeleton,
         )
+        require_metric_specs = production_campaign
         effective_metric_specs = metric_specs if metric_specs else None
         try:
             experiment_protocol = ExperimentProtocol(
@@ -624,14 +627,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 require_metric_specs=require_metric_specs,
                 problem_spec=spec,
             )
-            validate_production_campaign_boundary(
-                problem_spec=spec,
-                experiment_protocol=experiment_protocol,
-                adapter=adapter,
-                split_manifest=split_manifest,
-                seed_ledger=seed_ledger,
-                allow_skeleton=allow_skeleton,
-            )
         except ValueError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1)
@@ -640,18 +635,25 @@ def register_init_run_commands(app: typer.Typer) -> None:
             runner,
             metrics_dir=metrics_dir,
             adapter=adapter,
-            strict_runtime_checks=(
-                is_adapter_backed_production_spec(spec) and not allow_skeleton
-            )
-            or adapter is not None,
-            require_adapter_for_runtime=(
-                is_adapter_backed_production_spec(spec) and not allow_skeleton
-            )
-            or adapter is not None,
+            strict_runtime_checks=production_campaign,
+            require_adapter_for_runtime=production_campaign,
             allow_adapter_runtime_fallback=allow_skeleton,
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=proto_cfg.runtime.max_runtime_ratio,
         )
+        try:
+            validate_production_campaign_boundary(
+                problem_spec=spec,
+                experiment_protocol=experiment_protocol,
+                adapter=adapter,
+                split_manifest=split_manifest,
+                seed_ledger=seed_ledger,
+                verification_gate=verification_gate,
+                allow_skeleton=allow_skeleton,
+            )
+        except ValueError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
 
         from scion.core.models import ChampionState
         from scion.runtime.pool_manager import read_registry

@@ -229,6 +229,151 @@ def runtime_evidence_policy_summary(
     )
 
 
+def runtime_gate_visibility_summary(
+    *,
+    stage: Any = "",
+    gate_outcome: Any = "",
+    reason_codes: Any = (),
+    runtime_confidence: Any = "",
+    runtime_evidence_status: Any = "",
+    runtime_pairs: Any = 0,
+    champion_cached_runtime_pairs: Any = 0,
+    failed_pairs: Any = 0,
+    candidate_failed_pairs: Any = 0,
+    champion_failed_pairs: Any = 0,
+    runtime_budget_diagnostic: Any = None,
+) -> dict[str, Any]:
+    """Separate runtime/objective audit reasons without changing decisions."""
+
+    stage_value = _status_value(stage)
+    outcome = _status_value(gate_outcome)
+    codes = tuple(
+        str(code).strip()
+        for code in (reason_codes or ())
+        if str(code).strip()
+    )
+    runtime_status = _status_value(runtime_evidence_status) or "unknown"
+    runtime_conf = _status_value(runtime_confidence) or "unknown"
+    runtime_pair_count = _safe_int(runtime_pairs)
+    cached_pair_count = _safe_int(champion_cached_runtime_pairs)
+    failed_pair_count = _safe_int(failed_pairs)
+    candidate_failed_count = _safe_int(candidate_failed_pairs)
+    champion_failed_count = _safe_int(champion_failed_pairs)
+    budget_diagnostic = (
+        dict(runtime_budget_diagnostic)
+        if isinstance(runtime_budget_diagnostic, Mapping)
+        else {}
+    )
+    budget_code = str(budget_diagnostic.get("code") or "").strip()
+    fresh_required = (
+        runtime_status in _FRESH_RUNTIME_STATUSES
+        or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in codes
+    )
+    runtime_incomplete = (
+        runtime_status in _LOW_RUNTIME_STATUSES
+        or "INCOMPLETE_EVIDENCE" in codes
+        or "INCOMPLETE_RUNTIME_EVIDENCE" in codes
+        or (
+            cached_pair_count > 0
+            and runtime_pair_count <= 0
+            and not fresh_required
+        )
+    )
+    objective_codes = tuple(
+        code
+        for code in codes
+        if not _runtime_visibility_code(code)
+        and not _runtime_budget_code(code, budget_code)
+    )
+    reason_semantics: list[str] = []
+    visibility_reason_codes: list[str] = []
+    if objective_codes:
+        reason_semantics.append("objective_fail")
+        visibility_reason_codes.append("OBJECTIVE_GATE_REASON_PRESENT")
+    if fresh_required:
+        reason_semantics.append("runtime_fresh_champion_required")
+        visibility_reason_codes.append("RUNTIME_FRESH_CHAMPION_REEVALUATION_REQUIRED")
+    elif runtime_incomplete:
+        reason_semantics.append("runtime_incomplete_advisory")
+        visibility_reason_codes.append("RUNTIME_INCOMPLETE_ADVISORY")
+    if budget_code:
+        reason_semantics.append("runtime_budget_saturation")
+        visibility_reason_codes.append("RUNTIME_BUDGET_SATURATION_VISIBLE")
+    if not reason_semantics:
+        reason_semantics.append("formal_gate_only")
+        visibility_reason_codes.append("FORMAL_GATE_REASON_ONLY")
+    recommendation = "none"
+    if fresh_required:
+        recommendation = "fresh_champion_re_evaluation_required"
+    elif budget_code:
+        recommendation = "inspect_runtime_budget_saturation"
+    elif runtime_incomplete:
+        recommendation = "runtime_evidence_advisory_only"
+    elif objective_codes and stage_value == "screening":
+        recommendation = "continue_objective_research"
+    return _drop_empty(
+        {
+            "schema_version": "runtime_gate_visibility.v1",
+            "stage": stage_value or None,
+            "gate_outcome": outcome or None,
+            "reason_semantics": reason_semantics,
+            "reason_codes": list(visibility_reason_codes),
+            "objective_reason_codes": list(objective_codes),
+            "runtime_reason_codes": [
+                code for code in codes if _runtime_visibility_code(code)
+            ],
+            "runtime_budget_diagnostic_code": budget_code or None,
+            "runtime_confidence": runtime_conf,
+            "runtime_evidence_status": runtime_status,
+            "runtime_pairs": runtime_pair_count,
+            "champion_cached_runtime_pairs": cached_pair_count,
+            "failed_pairs": failed_pair_count,
+            "candidate_failed_pairs": candidate_failed_count,
+            "champion_failed_pairs": champion_failed_count,
+            "fresh_champion_required": fresh_required,
+            "rerun_recommendation": recommendation,
+            "fresh_champion_requirement": (
+                "fresh_champion_re_evaluation_required_before_runtime_tie_advances"
+                if fresh_required
+                else None
+            ),
+            "formal_rerun_scheduled": False,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def runtime_gate_visibility_for_protocol(protocol: Any) -> dict[str, Any]:
+    """Return runtime gate reason visibility for a completed protocol result."""
+
+    stats = getattr(protocol, "stats", None)
+    if protocol is None or stats is None:
+        return {}
+    return runtime_gate_visibility_summary(
+        stage=getattr(getattr(protocol, "stage", None), "value", None)
+        or getattr(protocol, "stage", ""),
+        gate_outcome=getattr(protocol, "gate_outcome", ""),
+        reason_codes=getattr(protocol, "reason_codes", ()),
+        runtime_confidence=getattr(protocol, "runtime_confidence", ""),
+        runtime_evidence_status=getattr(
+            protocol,
+            "runtime_evidence_status",
+            getattr(stats, "runtime_evidence_status", ""),
+        ),
+        runtime_pairs=getattr(stats, "runtime_pairs", 0),
+        champion_cached_runtime_pairs=getattr(
+            protocol,
+            "champion_cached_runtime_pairs",
+            getattr(stats, "champion_cached_runtime_pairs", 0),
+        ),
+        failed_pairs=getattr(stats, "failed_pairs", 0),
+        candidate_failed_pairs=getattr(stats, "candidate_failed_pairs", 0),
+        champion_failed_pairs=getattr(stats, "champion_failed_pairs", 0),
+        runtime_budget_diagnostic=_runtime_budget_diagnostic_from_protocol(protocol),
+    )
+
+
 def runtime_evidence_policy_for_protocol(protocol: Any) -> dict[str, Any]:
     """Return generic runtime evidence policy metadata for a protocol result."""
 
@@ -254,6 +399,25 @@ def runtime_evidence_policy_for_protocol(protocol: Any) -> dict[str, Any]:
             "candidate_runtime_pair_evidence_count",
             0,
         ),
+    )
+
+
+def _runtime_visibility_code(code: str) -> bool:
+    upper = code.upper()
+    return (
+        upper.startswith("RUNTIME_")
+        or "RUNTIME" in upper
+        or "INCOMPLETE_EVIDENCE" in upper
+        or upper in {"CANDIDATE_RUNTIME_FAILURE", "CHAMPION_RUNTIME_FAILURE"}
+    )
+
+
+def _runtime_budget_code(code: str, budget_code: str) -> bool:
+    upper = code.upper()
+    return bool(
+        (budget_code and code == budget_code)
+        or "RUNTIME_BUDGET" in upper
+        or upper.endswith("_RUNTIME_BUDGET_SATURATION")
     )
 
 

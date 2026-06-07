@@ -1,6 +1,62 @@
 """Focused tests split from test_decision.py."""
 
+from scion.core.branch_lifecycle_policy import BranchLifecycleDecision
+
 from .decision_test_support import *  # noqa: F401,F403
+
+
+class _ArchiveLifecyclePolicy:
+    def decide(self, features):
+        return BranchLifecycleDecision(
+            action="archive_lineage",
+            reason_codes=("TEST_LIFECYCLE_REWRITE",),
+            next_zero_win_streak=0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("features", "expected"),
+    (
+        (
+            _features(stage="screening", win_rate=0.7, median_delta=0.01),
+            Decision.QUEUE_VALIDATE,
+        ),
+        (
+            _features(
+                stage="validation",
+                win_rate=0.7,
+                ci_low=0.005,
+                ci_high=0.02,
+            ),
+            Decision.QUEUE_FROZEN,
+        ),
+        (
+            _features(
+                stage="frozen",
+                ci_low=0.005,
+                ci_high=0.02,
+            ),
+            Decision.PROMOTE,
+        ),
+    ),
+)
+def test_budget_and_promotion_decisions_are_not_lifecycle_rewritten(
+    features,
+    expected,
+) -> None:
+    engine = DecisionEngine(
+        ProtocolConfig(),
+        lifecycle_policy=_ArchiveLifecyclePolicy(),
+    )
+
+    out = engine.decide(features)
+
+    assert out.decision == expected
+    assert out.stage_decision == expected
+    assert out.final_decision == expected
+    assert out.lifecycle_action == ""
+    assert out.lifecycle_reason_codes == ()
+    assert out.decision_layer_source == "stage_decision"
 
 def test_decision_validation_pass_to_queue_frozen():
     f = _features(stage="validation", win_rate=0.7, ci_low=0.005, ci_high=0.02)
@@ -38,6 +94,26 @@ def test_decision_validation_runtime_tie_improvement_queues_frozen_even_if_proto
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_FROZEN
     assert "VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
+
+
+@pytest.mark.parametrize("stage", ("validation", "frozen"))
+def test_decision_fresh_champion_required_never_promotes_later_stages(stage):
+    f = _features(
+        stage=stage,
+        win_rate=1.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_pairs=0,
+        runtime_evidence_status="fresh_champion_required",
+        protocol_gate_outcome="unclear",
+    )
+
+    out = _engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert out.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
 
 
 def test_decision_validation_fail_ci_negative():

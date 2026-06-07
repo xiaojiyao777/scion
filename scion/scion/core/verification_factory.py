@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from scion.core.production_boundary import is_adapter_backed_production_campaign
 from scion.verification.gate import VerificationGate
 
 
@@ -40,17 +41,18 @@ class CampaignVerificationFactory:
         runtime_cfg = getattr(getattr(experiment_protocol, "config", None), "runtime", None)
         max_runtime_ratio = getattr(runtime_cfg, "max_runtime_ratio", None)
 
-        spec_requires_adapter = _problem_spec_requires_adapter(problem_spec)
-        adapter_backed = adapter is not None or spec_requires_adapter
-        if allow_skeleton_mode:
-            strict_runtime_checks = False
-            require_adapter_for_runtime = False
-        else:
-            strict_runtime_checks = spec_requires_adapter or (
-                adapter_backed
-                and (runner is not None or not allow_non_strict_runtime_verification)
+        production_campaign = is_adapter_backed_production_campaign(
+            problem_spec=problem_spec,
+            adapter=adapter,
+            allow_skeleton=allow_skeleton_mode,
+        )
+        if production_campaign and allow_non_strict_runtime_verification:
+            raise ValueError(
+                "allow_non_strict_runtime_verification is not allowed for "
+                "adapter-backed production campaigns"
             )
-            require_adapter_for_runtime = spec_requires_adapter or strict_runtime_checks
+        strict_runtime_checks = production_campaign
+        require_adapter_for_runtime = production_campaign
 
         return VerificationGate(
             problem_spec,
@@ -63,14 +65,3 @@ class CampaignVerificationFactory:
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=max_runtime_ratio,
         )
-
-
-def _problem_spec_requires_adapter(problem_spec: Any | None) -> bool:
-    if problem_spec is None:
-        return False
-    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
-        return True
-    return (
-        getattr(problem_spec, "spec_version", None) == "problem-v1"
-        and bool(getattr(problem_spec, "adapter_import_path", ""))
-    )

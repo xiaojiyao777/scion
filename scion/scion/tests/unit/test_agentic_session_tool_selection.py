@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from scion.proposal.engine import _split_tool_selection_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
 
 def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
@@ -1045,3 +1046,147 @@ def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
         in event.metadata.get("detail", "")
         for event in state.transcript
     )
+
+
+def test_tool_selection_ledger_records_hypothesis_session_calls(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_algorithm.py",
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "memory.query",
+                "args": {"surface": "solver_design", "max_chars": 4000},
+            },
+            {"tool_name": "feedback.query_screening", "args": {"surface": "solver_design"}},
+            {"tool_name": "feedback.query_runtime", "args": {"surface": "solver_design"}},
+            {"stop": True},
+        ],
+        hypothesis=hypothesis,
+    )
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        artifact_store=artifact_store,
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    ledger = output.tool_selection_ledger
+    entries = ledger["entries"]
+    by_tool = {entry["selected_tool"]: entry for entry in entries}
+    output_artifact_path = next(
+        Path(ref) for ref in output.tainted_artifact_refs if Path(ref).name == "output.json"
+    )
+    output_artifact = json.loads(output_artifact_path.read_text(encoding="utf-8"))
+
+    assert ledger["schema_version"] == "agentic-tool-selection-ledger.v1"
+    assert ledger["deterministic_prefetch_plan_id"] == "none"
+    assert ledger["default_triad_satisfied"] is True
+    assert [entry["index"] for entry in entries] == list(range(1, len(entries) + 1))
+    assert by_tool["memory.query"]["status"] == "executed"
+    assert by_tool["feedback.query_screening"]["result_novelty"] == "empty"
+    assert by_tool["feedback.query_runtime"]["result_novelty"] == "empty"
+    assert by_tool["feedback.query_runtime"]["input_token_cost"] is None
+    assert by_tool["feedback.query_runtime"]["estimated_input_tokens"] > 0
+    assert by_tool["stop"]["status"] == "skipped"
+    assert "result_in_final_prompt" in by_tool["feedback.query_runtime"]
+    assert output_artifact["tool_selection_ledger"]["entry_count"] == len(entries)
+
+
+def test_code_phase_tool_selection_ledger_records_trace_context(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.read_branch_state", "args": {}},
+            {"stop": True},
+        ]
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-code-ledger",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+    )
+
+    observations = session._run_code_context_tool_loop(
+        context,
+        state,
+        hypothesis,
+        [],
+        {"kind": "code", "target_file": "policies/search_policy.py"},
+    )
+
+    entries = list(state.tool_selection_ledger)
+    assert observations
+    assert entries[0]["source"] == "code_phase_planner"
+    assert entries[0]["selected_tool"] == "context.read_branch_state"
+    assert entries[0]["status"] == "executed"
+    assert entries[0]["result_novelty"] == "new"
+    assert entries[1]["selected_tool"] == "stop"
+    assert creative.planner_contexts[0]["_scion_trace_context"]["session_id"] == (
+        "session-code-ledger"
+    )
+    assert creative.planner_contexts[0]["_scion_trace_context"]["phase"] == (
+        AgenticProposalPhase.INSPECT_INTERFACE.value
+    )
+
+
+def test_prompt_manifest_sections_record_block_profile_and_reason() -> None:
+    system_blocks, user_prompt = _split_tool_selection_context(
+        {
+            "phase": "inspect",
+            "allowed_tools": ["context.read_surface"],
+            "allowed_tool_specs": {
+                "context.read_surface": {"description": "Read a declared surface."}
+            },
+            "remaining_tool_calls": 3,
+            "observations": [{"tool_name": "context.list_surfaces"}],
+        }
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-manifest-block-profile",
+        phase="diagnose",
+        call_kind="tool_selection",
+        prompt_context={},
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    catalog = manifest["section_statuses"]["tool_selection_catalog"]
+    dynamic = manifest["section_statuses"]["dynamic_tool_selection_context"]
+
+    assert catalog["block_family"] == "tool_selection"
+    assert catalog["prompt_block_profile"] == "tool_selection"
+    assert catalog["inclusion_reason"] == "planner_selected"
+    assert dynamic["block_family"] == "tool_selection"
+    assert dynamic["inclusion_reason"] == "dynamic_phase_context"

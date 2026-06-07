@@ -67,6 +67,8 @@ class AgenticRequestMixin:
         approved_hypothesis: HypothesisProposal | None = None,
         resume_context: Mapping[str, Any] | None = None,
     ) -> AgenticProposalRequest:
+        self._validate_expected_agentic_anchors()
+
         def build_code_context(
             hypothesis: HypothesisProposal,
         ) -> Mapping[str, Any]:

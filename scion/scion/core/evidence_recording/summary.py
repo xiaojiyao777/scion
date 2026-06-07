@@ -30,6 +30,7 @@ from scion.core.screening_visibility import (
     observability_value_counts_for_steps,
     observability_value_visibility_for_step,
     runtime_aggregate_exclusion_for_protocol,
+    runtime_gate_visibility_for_protocol,
     runtime_evidence_policy_for_protocol,
     runtime_evidence_policy_counts_for_steps,
 )
@@ -857,6 +858,7 @@ class CampaignSummaryMixin:
                 kind="metrics",
             )
             runtime_evidence_policy = runtime_evidence_policy_for_protocol(pr)
+            runtime_gate_visibility = runtime_gate_visibility_for_protocol(pr)
             step_data["protocol_result"] = {
                 "stage": pr.stage.value if hasattr(pr.stage, "value") else str(pr.stage),
                 "win_rate": stats.win_rate,
@@ -945,6 +947,7 @@ class CampaignSummaryMixin:
                     runtime_aggregate_exclusion_for_protocol(pr)
                 ),
                 "runtime_evidence_policy": runtime_evidence_policy,
+                "runtime_gate_visibility": runtime_gate_visibility,
                 "telemetry_guard_failed": formal_telemetry_guard_failed(pr),
                 "telemetry_effect_zero_diagnostics": list(
                     telemetry_effect_zero_diagnostics(pr)

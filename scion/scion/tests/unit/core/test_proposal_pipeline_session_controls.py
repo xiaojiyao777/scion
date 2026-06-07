@@ -56,6 +56,51 @@ def test_default_agentic_session_has_registry_and_requests_get_tool_context() ->
     assert captured[0].tool_context.problem_id == "toy"
 
 
+def test_agentic_requests_include_all_problem_identity_anchors() -> None:
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="session-1",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                split_manifest_hash=request.split_manifest_hash,
+                seed_ledger_hash=request.seed_ledger_hash,
+                hypothesis=FakeCreative().hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline, branch, _, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=CapturingSession(),
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+        require_agentic_problem_anchors=True,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert len(captured) == 1
+    request = captured[0]
+    assert request.problem_id == "toy"
+    assert request.problem_spec_hash == "spec-hash"
+    assert request.split_manifest_hash == "split-hash"
+    assert request.seed_ledger_hash == "seed-hash"
+    assert request.tool_context is not None
+    assert request.tool_context.problem_id == "toy"
+    assert request.tool_context.problem_spec_hash == "spec-hash"
+    assert request.tool_context.split_manifest_hash == "split-hash"
+    assert request.tool_context.seed_ledger_hash == "seed-hash"
+
+
 def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
     captured: list[AgenticProposalRequest] = []
 

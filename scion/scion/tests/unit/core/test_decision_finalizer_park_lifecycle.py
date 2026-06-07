@@ -139,6 +139,7 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
             SCREENING_RUNTIME_BUDGET_SATURATION,
             SCREENING_NEUTRAL_SIGNAL_CONTINUE,
         ),
+        lifecycle_action="retain_head",
     )
 
     assert result.decision == Decision.CONTINUE_EXPLORE
@@ -276,6 +277,7 @@ def test_no_effect_after_weak_checkpoint_parks_current_head_and_opens_slot() -> 
             BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
             SCREENING_NO_EFFECT_AFTER_RETAINED_CHECKPOINT,
         ),
+        lifecycle_action="retain_checkpoint",
     )
     stored = controller.get_branch(branch.branch_id)
     action = Scheduler(max_active_branches=1).select_next([stored])
@@ -394,6 +396,7 @@ def test_balanced_mixed_screening_workspace_is_marginal_not_weak_exploit() -> No
             "SCREENING_FAIL_WIN_RATE",
             SCREENING_MARGINAL_SIGNAL_CONTINUE,
         ),
+        lifecycle_action="retain_head",
     )
 
     stored = controller.get_branch(branch.branch_id)
@@ -620,6 +623,7 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
             BRANCH_LIFECYCLE_PARK_LINEAGE,
             SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
         ),
+        lifecycle_action="park_lineage",
     )
 
     stored = controller.get_branch(branch.branch_id)
@@ -632,3 +636,102 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
     assert controller.get_active_branches() == []
     assert controller.get_reportable_branches() == [stored]
     assert action.action == "create_new"
+
+
+def test_legacy_lifecycle_reason_code_without_explicit_action_does_not_park() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Retry a weak branch without explicit lifecycle action.",
+        change_locus="repair",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-legacy-no-action",
+        branch_id=branch.branch_id,
+        change_locus="repair",
+        action="modify",
+        status="running",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    patches = {
+        branch.branch_id: PatchProposal("solver.py", "modify", "# no effect\n")
+    }
+    discarded: list[str] = []
+    archived: list[str] = []
+    cleaned: list[str] = []
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=_HypothesisStore(),
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches=patches,
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={branch.branch_id: 2},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda workspace, _reason: archived.append(workspace),
+        cleanup_workspace=lambda workspace: cleaned.append(workspace),
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=8,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="legacy lifecycle-like reason code",
+        raw_metrics_ref="/tmp/metrics.json",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            BRANCH_LIFECYCLE_PARK_LINEAGE,
+            SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
+        ),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert "park_lineage" not in result.reason
+    assert stored.state == BranchState.EXPLORE
+    assert stored.branch_code_status == "discarded"
+    assert discarded == [branch.branch_id]
+    assert archived == []
+    assert cleaned == []
+    assert branch.branch_id not in patches

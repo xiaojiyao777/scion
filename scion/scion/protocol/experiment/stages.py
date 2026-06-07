@@ -23,6 +23,7 @@ from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     opportunity_diagnostics_for_protocol,
     opportunity_status_for_diagnostics,
+    runtime_gate_visibility_summary,
     runtime_evidence_policy_summary,
 )
 from scion.protocol.gates import GateResult, frozen_gate, screening_gate, validation_gate
@@ -136,6 +137,7 @@ def run_experiment(
     champion_cache_writes = 0
     champion_cached_runtime_pairs = 0
     runtime_evidence_status = "sufficient"
+    runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     champion_cache = getattr(protocol, "_champion_result_cache", None)
     champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
@@ -201,6 +203,7 @@ def run_experiment(
                     "runtime_confidence": runtime_confidence_snapshot,
                     "runtime_evidence_status": runtime_evidence_status,
                     "runtime_evidence_policy": runtime_evidence_policy,
+                    "runtime_gate_visibility": runtime_gate_visibility,
                     "champion_cache_hits": champion_cache_hits,
                     "champion_cache_misses": champion_cache_misses,
                     "champion_cache_writes": champion_cache_writes,
@@ -839,6 +842,22 @@ def run_experiment(
                     dict.fromkeys((*tuple(gate.reason_codes), runtime_budget_code))
                 ),
             )
+    runtime_confidence = (
+        "low_cached_champion" if champion_cached_runtime_pairs else "high"
+    )
+    runtime_gate_visibility = runtime_gate_visibility_summary(
+        stage=stage.value,
+        gate_outcome=gate.outcome,
+        reason_codes=gate.reason_codes,
+        runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_evidence_status,
+        runtime_pairs=stats.runtime_pairs,
+        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
+        failed_pairs=failed_pairs,
+        candidate_failed_pairs=candidate_failed_pairs,
+        champion_failed_pairs=champion_failed_pairs,
+        runtime_budget_diagnostic=runtime_budget_diagnostic_summary,
+    )
 
     # Persist final raw metrics snapshot.
     _write_metrics_snapshot(complete=True)
@@ -860,6 +879,9 @@ def run_experiment(
             if runtime_budget_diagnostic_summary
             else None
         ),
+        runtime_confidence=runtime_confidence,
+        runtime_evidence_status=runtime_evidence_status,
+        runtime_gate_visibility=runtime_gate_visibility,
     )
     pair_counts = _pair_feedback_counts(all_pair_feedback)
     runtime_summary = _format_runtime_summary(stats)
@@ -880,9 +902,6 @@ def run_experiment(
     )
     runtime_budget_summary = format_runtime_budget_diagnostic(
         runtime_budget_diagnostic_summary
-    )
-    runtime_confidence = (
-        "low_cached_champion" if champion_cached_runtime_pairs else "high"
     )
     champion_cache_summary = (
         f" champion_cache_hits={champion_cache_hits}"
@@ -908,6 +927,13 @@ def run_experiment(
     )
     if runtime_evidence_policy.get("fresh_champion_required"):
         champion_cache_summary += " fresh_champion_required=true"
+    if runtime_gate_visibility:
+        champion_cache_summary += (
+            " runtime_gate_reason_semantics="
+            f"{','.join(runtime_gate_visibility.get('reason_semantics') or ())}"
+            " runtime_rerun_recommendation="
+            f"{runtime_gate_visibility.get('rerun_recommendation', 'none')}"
+        )
 
     # Exposure control
     if stage == ExperimentStage.SCREENING:

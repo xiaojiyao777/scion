@@ -31,7 +31,7 @@ from scion.core.frozen_budget import FrozenBudgetLedger
 from scion.core.models import ChampionState, OperatorConfig
 from scion.core.plateau_controller import PlateauController
 from scion.core.production_boundary import (
-    is_adapter_backed_production_spec,
+    is_adapter_backed_production_campaign,
     validate_production_campaign_boundary,
 )
 from scion.core.problem_runtime import ProblemRuntime
@@ -126,13 +126,9 @@ def compose_campaign_services(
     proposal_attempt_limit: int | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
-    validate_production_campaign_boundary(
+    production_campaign = is_adapter_backed_production_campaign(
         problem_spec=problem_spec,
-        experiment_protocol=experiment_protocol,
         adapter=adapter,
-        split_manifest=split_manifest,
-        seed_ledger=seed_ledger,
-        verification_gate=verification_gate,
         allow_skeleton=allow_skeleton_mode,
     )
     owner._problem_runtime = ProblemRuntime(
@@ -199,6 +195,15 @@ def compose_campaign_services(
         operator_execute_signature=operator_execute_signature,
         allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
         allow_skeleton_mode=allow_skeleton_mode,
+    )
+    validate_production_campaign_boundary(
+        problem_spec=problem_spec,
+        experiment_protocol=experiment_protocol,
+        adapter=adapter,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        verification_gate=owner._vgate,
+        allow_skeleton=allow_skeleton_mode,
     )
     if hasattr(owner._experiment_protocol, "set_progress_callback"):
         owner._experiment_protocol.set_progress_callback(owner._on_protocol_progress)
@@ -448,8 +453,7 @@ def compose_campaign_services(
         ),
         frozen_budget_ledger=owner._frozen_budget_ledger,
         require_experiment_protocol=(
-            is_adapter_backed_production_spec(problem_spec)
-            and not allow_skeleton_mode
+            production_campaign
         ),
     )
     owner._explore_step_pipeline = ExploreStepPipeline(
@@ -555,6 +559,9 @@ def compose_campaign_services(
         problem_spec_hash=stable_identity_hash(problem_spec),
         split_manifest_hash=stable_identity_hash(owner._split_manifest),
         seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
+        require_agentic_problem_anchors=(
+            use_agentic_proposal and production_campaign
+        ),
         use_agentic_proposal=use_agentic_proposal,
         agentic_artifact_dir=agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,

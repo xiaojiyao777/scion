@@ -101,6 +101,11 @@ def build_agentic_ledger_observation(
     source_digest = source_digest_payload(observation.tool_name, payload)
     digest = primary_digest(payload, source_digest)
     payload_hash = stable_digest(payload, length=16)
+    novelty = _observation_novelty(
+        observation=observation,
+        payload=payload,
+        digest=digest,
+    )
     prompt_payload_hash = stable_digest(
         {
             "observation_id": observation.observation_id,
@@ -134,6 +139,9 @@ def build_agentic_ledger_observation(
             "file_path": file_path_from_observation(payload, normalized_args),
             "symbol": symbol_from_observation(payload, normalized_args),
             "digest": digest,
+            "result_digest": digest,
+            "tool_result_novelty": novelty,
+            "result_novelty": novelty,
             "payload_hash": payload_hash,
             "source_digest": source_digest,
             "source_digest_hash": stable_digest(source_digest or digest, length=16),
@@ -186,6 +194,54 @@ def build_agentic_ledger_observation(
         }
     )
     return _sanitize_agentic_value(entry)
+
+
+def _observation_novelty(
+    *,
+    observation: ProposalObservation,
+    payload: Mapping[str, Any],
+    digest: Mapping[str, Any] | str,
+) -> str:
+    del digest
+    if _ledger_payload_empty(observation, payload):
+        return "empty"
+    if str(observation.observation_type or "") in {
+        "already_read_ref",
+        "already_observed",
+    }:
+        return "duplicate_same_digest"
+    if _ledger_payload_summary_only(observation, payload):
+        return "summary_only"
+    return "new"
+
+
+def _ledger_payload_empty(
+    observation: ProposalObservation,
+    payload: Mapping[str, Any],
+) -> bool:
+    if observation.tool_name == "feedback.query_screening":
+        status = payload.get("screening_observation_status")
+        if isinstance(status, Mapping):
+            return not bool(status.get("usable"))
+        return int(payload.get("matched_screening_step_count") or 0) <= 0
+    if observation.tool_name == "feedback.query_runtime":
+        status = payload.get("runtime_observation_status")
+        if isinstance(status, Mapping):
+            return not bool(status.get("usable"))
+    if payload:
+        return False
+    return not str(observation.summary or "").strip()
+
+
+def _ledger_payload_summary_only(
+    observation: ProposalObservation,
+    payload: Mapping[str, Any],
+) -> bool:
+    if str(observation.observation_type or "") == "tool_skipped":
+        return True
+    if not payload and str(observation.summary or "").strip():
+        return True
+    return set(payload).issubset({"summary", "status", "message", "note"})
 
 
 __all__ = [

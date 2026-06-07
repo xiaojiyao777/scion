@@ -160,6 +160,17 @@ class AgenticSessionPlannerLoopMixin:
                     )
 
                 if not planned or getattr(planned, "stop", False):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name="stop",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="planner_stop",
+                    )
                     missing = self._missing_planner_context_error(context, observations)
                     if missing is not None:
                         state.note(
@@ -182,6 +193,17 @@ class AgenticSessionPlannerLoopMixin:
                     self._record_loop_stop(state, "planner_stop")
                     break
                 if isinstance(planned, Mapping) and planned.get("stop"):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name="stop",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="planner_stop",
+                    )
                     missing = self._missing_planner_context_error(context, observations)
                     if missing is not None:
                         state.note(
@@ -205,6 +227,17 @@ class AgenticSessionPlannerLoopMixin:
                     break
 
                 if not isinstance(planned, Mapping):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name="",
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="malformed_tool_selection",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Planner returned an unsupported tool-selection payload; using fixed APS-0 tool plan.",
@@ -230,6 +263,17 @@ class AgenticSessionPlannerLoopMixin:
                 )
                 args = planned.get("args") or planned.get("input") or {}
                 if not isinstance(args, Mapping):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args={},
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="malformed_tool_args",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Planner returned malformed tool arguments; using fixed APS-0 tool plan.",
@@ -249,6 +293,17 @@ class AgenticSessionPlannerLoopMixin:
                     )
                 allowed_tools = set(planner_context["allowed_tools"])
                 if name not in allowed_tools:
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="invalid_tool_selection",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Planner selected a tool outside the allowed list; using fixed APS-0 tool plan.",
@@ -275,6 +330,17 @@ class AgenticSessionPlannerLoopMixin:
                         default_surface=str(context.forced_surface or "").strip(),
                     )
                 ):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="equivalent_feedback_observation",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         (
@@ -309,6 +375,17 @@ class AgenticSessionPlannerLoopMixin:
                 fingerprint = _tool_call_fingerprint(name, args)
                 fuse_count = state.tool_call_fuse_counts.get(fingerprint, 0)
                 if fuse_count >= self._tool_loop_config.max_repeated_tool_calls:
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="repeated_tool_call_fuse",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Planner repeated a proposal tool call; using fixed APS-0 tool plan.",
@@ -336,6 +413,17 @@ class AgenticSessionPlannerLoopMixin:
                         _context_requires_solver_design_grounding(context)
                         and name in set(_fallback_required_context_tool_names(context))
                     ):
+                        _record_tool_selection_ledger_entry(
+                            state,
+                            phase=AgenticProposalPhase.DIAGNOSE.value,
+                            source="planner_selected",
+                            status="skipped",
+                            tool_name=name,
+                            args=args,
+                            planner_context=planner_context,
+                            planned=planned,
+                            skip_reason="already_succeeded",
+                        )
                         state.note(
                             AgenticProposalPhase.DIAGNOSE,
                             (
@@ -384,6 +472,17 @@ class AgenticSessionPlannerLoopMixin:
                             "skip_reason": "already_succeeded",
                         },
                     )
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="already_succeeded",
+                    )
                     return self._complete_required_context_after_planner_gap(
                         context,
                         state,
@@ -397,6 +496,18 @@ class AgenticSessionPlannerLoopMixin:
                     )
                 if _should_defer_diagnosis_tool_to_code_phase(context, name, args):
                     _push_deferred_code_phase_tool_call(state, name, args)
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="deferred",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="code_phase_target_read",
+                        deferred_selection_source="code_phase_planner",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Deferred planner-selected target surface read to code phase.",
@@ -418,6 +529,17 @@ class AgenticSessionPlannerLoopMixin:
                     )
                     is None
                 ):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="feedback_budget_reserved",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Skipped planner feedback tool to preserve self-check budget.",
@@ -463,6 +585,17 @@ class AgenticSessionPlannerLoopMixin:
                     next_tool_name=name,
                     next_args=args,
                 ):
+                    _record_tool_selection_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DIAGNOSE.value,
+                        source="planner_selected",
+                        status="skipped",
+                        tool_name=name,
+                        args=args,
+                        planner_context=planner_context,
+                        planned=planned,
+                        skip_reason="solver_design_algorithm_file_read_budget_reserved",
+                    )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         "Stopped planner-selected solver_design file reads before full active-object exhaustion.",
@@ -485,6 +618,16 @@ class AgenticSessionPlannerLoopMixin:
                             observations,
                         ),
                     )
+                selection_ledger_index = _record_tool_selection_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DIAGNOSE.value,
+                    source="planner_selected",
+                    status="executed",
+                    tool_name=name,
+                    args=args,
+                    planner_context=planner_context,
+                    planned=planned,
+                )
                 observation = self._call_tool(
                     context,
                     state,
@@ -492,6 +635,12 @@ class AgenticSessionPlannerLoopMixin:
                     name,
                     args,
                     selection_source="planner_selected",
+                )
+                _update_tool_selection_ledger_result(
+                    state,
+                    selection_ledger_index,
+                    observation,
+                    status="executed",
                 )
                 observations.append(observation)
                 if state.loop_stop_reason == "session_timeout":

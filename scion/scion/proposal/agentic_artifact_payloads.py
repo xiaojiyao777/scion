@@ -174,6 +174,9 @@ def _agentic_transcript_artifact(
                 }
             )
         ),
+        "tool_selection_ledger": _json_ready(
+            _sanitize_agentic_value(_transcript_tool_selection_ledger_payload(state))
+        ),
         "transcript_digest": _transcript_digest(compact_transcript),
         "compact_transcript": compact_transcript,
         "tainted": True,
@@ -261,6 +264,9 @@ def _agentic_output_artifact(
         "observation_ledger": _json_ready(
             _sanitize_agentic_value(output.observation_ledger)
         ),
+        "tool_selection_ledger": _json_ready(
+            _sanitize_agentic_value(output.tool_selection_ledger)
+        ),
         "tainted_artifact_refs": list(tainted_refs),
         "prompt_manifest_artifact_ref": (
             prompt_manifest_refs[-1] if prompt_manifest_refs else ""
@@ -345,6 +351,34 @@ def _patch_artifact_payload(patch: PatchProposal) -> dict[str, Any]:
         payload["additional_changes"] = additional
         payload["additional_change_count"] = len(additional)
     return payload
+
+
+def _transcript_tool_selection_ledger_payload(
+    state: AgenticProposalSessionState,
+) -> dict[str, Any]:
+    entries = list(state.tool_selection_ledger)
+    executed_tools = {
+        str(entry.get("selected_tool") or entry.get("tool_name") or "")
+        for entry in entries
+        if isinstance(entry, Mapping)
+        and entry.get("status") == "executed"
+        and not entry.get("result_is_error")
+    }
+    return {
+        "schema_version": "agentic-tool-selection-ledger.v1",
+        "session_id": state.session_id,
+        "campaign_id": state.campaign_id,
+        "branch_id": state.branch_id,
+        "deterministic_prefetch_plan_id": "none",
+        "default_triad_satisfied": {
+            "memory.query",
+            "feedback.query_screening",
+            "feedback.query_runtime",
+        }.issubset(executed_tools),
+        "entry_count": len(entries),
+        "entries": entries,
+    }
+
 
 def _load_artifact_payload(artifact: str | Path | Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(artifact, Mapping):

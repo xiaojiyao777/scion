@@ -213,6 +213,7 @@ def test_win_skewed_weak_positive_screening_workspace_reason_is_positive() -> No
             "SCREENING_FAIL_WIN_RATE",
             SCREENING_WEAK_SIGNAL_CONTINUE,
         ),
+        lifecycle_action="retain_head",
     )
 
     stored = controller.get_branch(branch.branch_id)
@@ -326,6 +327,7 @@ def test_pair_level_weak_positive_screening_workspace_is_retained() -> None:
             "SCREENING_FAIL_WIN_RATE",
             SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
         ),
+        lifecycle_action="retain_head",
     )
 
     stored = controller.get_branch(branch.branch_id)

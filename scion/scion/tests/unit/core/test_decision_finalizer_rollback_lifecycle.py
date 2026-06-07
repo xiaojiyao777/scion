@@ -146,6 +146,7 @@ def test_regressed_followup_does_not_remain_active_weak_positive() -> None:
             SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
             SCREENING_SOFT_ABANDON_NON_POSITIVE_CI,
         ),
+        lifecycle_action="rollback_to_checkpoint",
     )
 
     stored = controller.get_branch(branch.branch_id)

@@ -222,10 +222,21 @@ class TestProgrammaticRuntimeVerificationDefault:
         proto._require_metric_specs = True
         return proto
 
+    def _legacy_spec(self, base: ProblemSpec) -> ProblemSpec:
+        return base.model_copy(
+            update={
+                "spec_version": "legacy",
+                "adapter_import_path": "",
+                "requires_adapter_for_runtime": False,
+            }
+        )
+
     def test_adapter_protocol_runner_builds_strict_verification_gate(self, tmp_path):
         proto = _MockProtocol()
         proto.runner = object()
         proto.config = ProtocolConfig()
+        proto._metric_specs = (object(),)
+        proto._require_metric_specs = True
         cm = _campaign(
             tmp_path,
             experiment_protocol=proto,
@@ -235,8 +246,8 @@ class TestProgrammaticRuntimeVerificationDefault:
         cm = CampaignManager(
             problem_spec=cm._spec,
             protocol_config=ProtocolConfig(),
-            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
-            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
             llm_client=MockLLMClient(
                 hypothesis_response=_VALID_HYPOTHESIS,
                 patch_response=_VALID_PATCH,
@@ -254,18 +265,20 @@ class TestProgrammaticRuntimeVerificationDefault:
 
     def test_adapter_without_runner_fails_closed_by_default(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        proto = self._production_protocol()
+        proto.runner = None
         cm = CampaignManager(
             problem_spec=base._spec,
             protocol_config=ProtocolConfig(),
-            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
-            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
             llm_client=MockLLMClient(
                 hypothesis_response=_VALID_HYPOTHESIS,
                 patch_response=_VALID_PATCH,
             ),
             champion=base._champion,
             campaign_dir=str(tmp_path / "missing-runner-campaign"),
-            experiment_protocol=_MockProtocol(),
+            experiment_protocol=proto,
             adapter=object(),
         )
         result = cm._vgate.run(
@@ -277,31 +290,53 @@ class TestProgrammaticRuntimeVerificationDefault:
         assert result.passed is False
         assert result.first_failure == "V_runtime_config"
 
-    def test_adapter_without_runner_compatibility_opt_in_is_non_strict(self, tmp_path):
+    def test_adapter_allow_non_strict_runtime_verification_is_rejected(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(
+            ValueError,
+            match="allow_non_strict_runtime_verification is not allowed",
+        ):
+            CampaignManager(
+                problem_spec=base._spec,
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "compat-campaign"),
+                experiment_protocol=self._production_protocol(),
+                adapter=object(),
+                allow_non_strict_runtime_verification=True,
+            )
+
+    def test_adapter_skeleton_mode_preserves_non_strict_runtime_fallback(
+        self,
+        tmp_path,
+    ):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         cm = CampaignManager(
             problem_spec=base._spec,
             protocol_config=ProtocolConfig(),
-            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
-            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            split_manifest=SplitManifest(),
+            seed_ledger=SeedLedgerConfig(),
             llm_client=MockLLMClient(
                 hypothesis_response=_VALID_HYPOTHESIS,
                 patch_response=_VALID_PATCH,
             ),
             champion=base._champion,
-            campaign_dir=str(tmp_path / "compat-campaign"),
+            campaign_dir=str(tmp_path / "compat-skeleton-campaign"),
             experiment_protocol=_MockProtocol(),
             adapter=object(),
             allow_non_strict_runtime_verification=True,
-        )
-        result = cm._vgate.run(
-            str(tmp_path / "champion_code"),
-            str(tmp_path / "champion_code"),
-            PatchProposal(**_VALID_PATCH),
+            allow_skeleton_mode=True,
         )
 
-        assert result.passed is True
         assert cm._vgate._strict_runtime_checks is False
+        assert cm._vgate._require_adapter_for_runtime is False
 
     def test_production_campaign_requires_experiment_protocol(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
@@ -319,6 +354,76 @@ class TestProgrammaticRuntimeVerificationDefault:
                 champion=base._champion,
                 campaign_dir=str(tmp_path / "production-no-protocol"),
                 experiment_protocol=None,
+                adapter=object(),
+            )
+
+    def test_legacy_adapter_campaign_requires_metric_specs(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        proto = _MockProtocol()
+        proto.runner = object()
+        proto.config = ProtocolConfig()
+
+        with pytest.raises(ValueError, match="metric_specs are required"):
+            CampaignManager(
+                problem_spec=self._legacy_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "legacy-adapter-no-metrics"),
+                experiment_protocol=proto,
+                adapter=object(),
+            )
+
+    def test_legacy_adapter_campaign_requires_canary_split_and_seed(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(ValueError, match="split_manifest.canary is required"):
+            CampaignManager(
+                problem_spec=self._legacy_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=SplitManifest(
+                    screening=["screening-case"],
+                    validation=["validation-case"],
+                    frozen=["frozen-case"],
+                    canary=[],
+                ),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "legacy-adapter-no-canary-split"),
+                experiment_protocol=self._production_protocol(),
+                adapter=object(),
+            )
+
+        with pytest.raises(ValueError, match="seed_ledger.canary is required"):
+            CampaignManager(
+                problem_spec=self._legacy_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=SeedLedgerConfig(
+                    screening=[1],
+                    validation=[2],
+                    frozen=[3],
+                    canary=[],
+                ),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "legacy-adapter-no-canary-seed"),
+                experiment_protocol=self._production_protocol(),
                 adapter=object(),
             )
 
@@ -440,3 +545,24 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         assert cm._vgate._strict_runtime_checks is True
         assert cm._vgate._require_adapter_for_runtime is True
+
+    def test_agentic_production_campaign_enables_anchor_preflight(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        cm = CampaignManager(
+            problem_spec=self._legacy_spec(base._spec),
+            protocol_config=ProtocolConfig(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "agentic-production-anchors"),
+            experiment_protocol=self._production_protocol(),
+            adapter=object(),
+            use_agentic_proposal=True,
+        )
+
+        assert cm._proposal_pipeline.require_agentic_problem_anchors is True

@@ -13,6 +13,19 @@ def is_adapter_backed_production_spec(problem_spec: Any | None) -> bool:
     return requires_adapter_for_runtime(problem_spec)
 
 
+def is_adapter_backed_production_campaign(
+    *,
+    problem_spec: Any | None,
+    adapter: Any | None,
+    allow_skeleton: bool = False,
+) -> bool:
+    """Return whether a campaign must use production adapter boundaries."""
+
+    if allow_skeleton:
+        return False
+    return adapter is not None or is_adapter_backed_production_spec(problem_spec)
+
+
 def validate_production_campaign_boundary(
     *,
     problem_spec: Any | None,
@@ -31,7 +44,11 @@ def validate_production_campaign_boundary(
     needed by the campaign loop.
     """
 
-    if not is_adapter_backed_production_spec(problem_spec) or allow_skeleton:
+    if not is_adapter_backed_production_campaign(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        allow_skeleton=allow_skeleton,
+    ):
         return
 
     errors = production_boundary_errors(
@@ -128,6 +145,7 @@ def _attr(obj: Any, name: str, default: Any = None) -> Any:
 
 
 __all__ = [
+    "is_adapter_backed_production_campaign",
     "is_adapter_backed_production_spec",
     "production_boundary_errors",
     "validate_production_campaign_boundary",

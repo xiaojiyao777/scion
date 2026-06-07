@@ -17,6 +17,20 @@ from .classification import _agentic_self_check_failure_detail
 
 
 class AgenticValidationMixin:
+    def _validate_expected_agentic_anchors(self) -> None:
+        if not getattr(self, "require_agentic_problem_anchors", False):
+            return
+        missing = _missing_expected_problem_anchors(
+            problem_id=self.problem_id,
+            problem_spec_hash=self.problem_spec_hash,
+            split_manifest_hash=self.split_manifest_hash,
+            seed_ledger_hash=self.seed_ledger_hash,
+        )
+        if missing:
+            raise PermissionError(
+                "agentic production anchors missing: " + ", ".join(missing)
+            )
+
     def _agentic_output_can_continue(
         self,
         output: AgenticProposalOutput,
@@ -193,6 +207,25 @@ def _validate_problem_anchor(
                 "actual": actual_text,
             }
         )
+
+
+def _missing_expected_problem_anchors(
+    *,
+    problem_id: str | None,
+    problem_spec_hash: str | None,
+    split_manifest_hash: str | None,
+    seed_ledger_hash: str | None,
+) -> tuple[str, ...]:
+    missing: list[str] = []
+    for field, value in (
+        ("problem_id", problem_id),
+        ("problem_spec_hash", problem_spec_hash),
+        ("split_manifest_hash", split_manifest_hash),
+        ("seed_ledger_hash", seed_ledger_hash),
+    ):
+        if not str(value or "").strip():
+            missing.append(field)
+    return tuple(missing)
 
 
 def _agentic_anchor_structured_rejection(

@@ -173,6 +173,11 @@ from scion.proposal.agentic_session_tools import (
     _solver_design_code_algorithm_file_read_budget_exhausted,
     _surface_names_from_observations,
 )
+from scion.proposal.agentic_tool_selection_ledger import (
+    record_tool_selection_ledger_entry as _record_tool_selection_ledger_entry,
+    tool_selection_ledger_payload as _tool_selection_ledger_payload,
+    update_tool_selection_ledger_result as _update_tool_selection_ledger_result,
+)
 from scion.proposal.agentic_utils import (
     _drop_empty_dict,
     _enum_value,
@@ -377,6 +382,7 @@ __all__ = (
     "_proposal_payload",
     "_push_deferred_code_phase_tool_call",
     "_recommended_algorithm_file_path",
+    "_record_tool_selection_ledger_entry",
     "_record_failure_ledger_entry",
     "record_agentic_ledger_observation",
     "_rejection_termination_reason",
@@ -406,7 +412,9 @@ __all__ = (
     "_tool_budget_used_payload",
     "_tool_call_fingerprint",
     "_tool_loop_config_payload",
+    "_tool_selection_ledger_payload",
     "_transcript_digest",
+    "_update_tool_selection_ledger_result",
     "_with_code_scope_control",
     "build_api_visible_prompt_manifest",
     "compute_agentic_idempotency_key",

@@ -115,6 +115,7 @@ class AgenticProposalSessionState:
     scratch_artifact_refs: list[str] = field(default_factory=list)
     failure_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     observation_ledger: list[Mapping[str, Any]] = field(default_factory=list)
+    tool_selection_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     tool_step_count: int = 0
     tool_call_count: int = 0
     tool_event_count: int = 0
@@ -180,6 +181,7 @@ class AgenticProposalOutput:
     structured_rejection: Mapping[str, Any] | None = None
     failure_ledger: Mapping[str, Any] = field(default_factory=dict)
     observation_ledger: Mapping[str, Any] = field(default_factory=dict)
+    tool_selection_ledger: Mapping[str, Any] = field(default_factory=dict)
     phase: str | None = None
 
     @property

@@ -24,7 +24,6 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_ZERO_WIN_STREAK_CONTINUE,
 )
 from scion.core.decision_lifecycle_actions import (
-    lifecycle_action as _lifecycle_action,
     merge_branch_lifecycle_block as _merge_branch_lifecycle_block,
     park_lineage as _park_lineage,
     update_branch_screening_evidence_summary as _update_branch_screening_evidence_summary,
@@ -947,7 +946,7 @@ def _effective_lifecycle_action(
         "archive_lineage",
     }:
         return lifecycle_action  # type: ignore[return-value]
-    return _lifecycle_action(decision_reason_codes)  # legacy reason-code fallback
+    return ""
 
 
 def _merge_protocol_evidence_summary(

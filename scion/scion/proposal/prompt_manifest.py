@@ -749,9 +749,15 @@ def _section_record(
     block_index: int | None,
     cache_control: Any,
 ) -> dict[str, Any]:
+    block_family = _section_block_family(name)
+    inclusion_reason = _section_inclusion_reason(name, prompt_part=prompt_part)
+    prompt_block_profile = _section_prompt_block_profile(name)
     return {
         "name": name,
         "heading": heading,
+        "block_family": block_family,
+        "prompt_block_profile": prompt_block_profile,
+        "inclusion_reason": inclusion_reason,
         "prompt_part": prompt_part,
         "block_index": block_index,
         "cacheable": bool(prompt_part == "system" and cache_control),
@@ -784,6 +790,9 @@ def _section_status_record(section: Mapping[str, Any]) -> dict[str, Any]:
         "char_count": section.get("char_count", 0),
         "content_hash": section.get("content_hash", ""),
         "heading": section.get("heading", ""),
+        "block_family": section.get("block_family", ""),
+        "prompt_block_profile": section.get("prompt_block_profile", ""),
+        "inclusion_reason": section.get("inclusion_reason", ""),
         "prompt_part": section.get("prompt_part", ""),
         "block_index": section.get("block_index"),
         "cacheable": bool(section.get("cacheable")),
@@ -893,6 +902,12 @@ def _tool_result_visibility_ledger(
                 "rendered_visibility_flag": bool(
                     item.get("rendered_visibility_flag")
                 ),
+                "result_in_final_prompt": bool(
+                    item.get("rendered_visibility_flag")
+                ),
+                "result_in_final_prompt_status": (
+                    "included" if item.get("rendered_visibility_flag") else "omitted"
+                ),
                 "rendered_visibility_source": item.get(
                     "rendered_visibility_source", ""
                 ),
@@ -979,6 +994,9 @@ def _section_visibility_ledger_entry(section: Mapping[str, Any]) -> dict[str, An
         {
             "entry_kind": "section",
             "section_name": name,
+            "block_family": section.get("block_family", ""),
+            "prompt_block_profile": section.get("prompt_block_profile", ""),
+            "inclusion_reason": section.get("inclusion_reason", ""),
             "source": "provider_prompt_section",
             "source_ref": f"section:{name}" if name else "",
             "visibility_status": status,
@@ -990,6 +1008,64 @@ def _section_visibility_ledger_entry(section: Mapping[str, Any]) -> dict[str, An
             "projection_ref": f"section:{name}" if name else "",
         }
     )
+
+
+def _section_block_family(name: str) -> str:
+    if name.startswith("tool_selection") or name in {
+        "stable_tool_selection_context_adapter_provider_rendered_anchors",
+        "dynamic_tool_selection_context",
+        "tool_selection_phase",
+    }:
+        return "tool_selection"
+    if "proposal_tool_observation" in name or "tool_result" in name:
+        return "tool_observation"
+    if "active_algorithm_fact" in name or "active_solver" in name:
+        return "active_facts"
+    if "solver_design" in name or "algorithm_file" in name or "source" in name:
+        return "source_context"
+    if "contract" in name or "schema" in name or "permission" in name:
+        return "governance"
+    if "feedback" in name or "runtime" in name or "screening" in name:
+        return "feedback"
+    if "repair" in name or "failure" in name:
+        return "repair_guidance"
+    return "general"
+
+
+def _section_prompt_block_profile(name: str) -> str:
+    if name.startswith("tool_selection") or name in {
+        "stable_tool_selection_context_adapter_provider_rendered_anchors",
+        "dynamic_tool_selection_context",
+    }:
+        return "tool_selection"
+    if name in {
+        "approved_target_file_current_content",
+        "branch_current_integration_files",
+        "required_full_integration_edit_sources",
+    }:
+        return AGENTIC_CODE_PHASE_CONTEXT_PROFILE
+    if "repair" in name or "failure" in name:
+        return "repair"
+    return "algorithm"
+
+
+def _section_inclusion_reason(name: str, *, prompt_part: str) -> str:
+    if prompt_part == "user":
+        return "dynamic_phase_context"
+    family = _section_block_family(name)
+    if family in {"governance", "active_facts"}:
+        return "always_v3"
+    if family == "source_context":
+        return "phase_required"
+    if family == "tool_selection":
+        return "planner_selected"
+    if family == "repair_guidance":
+        return "failure_mode"
+    if family == "tool_observation":
+        return "planner_selected"
+    if family == "feedback":
+        return "phase_required"
+    return "always"
 
 
 def _tool_visibility_ledger_entry(item: Mapping[str, Any]) -> dict[str, Any]:

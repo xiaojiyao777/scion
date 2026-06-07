@@ -156,6 +156,47 @@ def test_agentic_output_missing_problem_anchor_fails_closed() -> None:
     assert circuit.failures == [detail]
 
 
+def test_agentic_production_request_requires_expected_anchors() -> None:
+    calls = 0
+
+    class CapturingSession:
+        def run(self, _request: AgenticProposalRequest) -> AgenticProposalOutput:
+            nonlocal calls
+            calls += 1
+            raise AssertionError("session must not run without expected anchors")
+
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=CapturingSession(),
+        split_manifest_hash=None,
+        seed_ledger_hash="seed-hash",
+        require_agentic_problem_anchors=True,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    assert calls == 0
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail == "agentic production anchors missing: split_manifest_hash"
+    assert len(failures) == 1
+    assert failures[0][1].category == "proposal"
+    assert circuit.failures == [detail]
+
+
+def test_agentic_problem_anchors_are_not_decision_features() -> None:
+    decision_field_names = {field.name for field in fields(DecisionFeatures)}
+
+    for anchor in (
+        "problem_id",
+        "problem_spec_hash",
+        "split_manifest_hash",
+        "seed_ledger_hash",
+    ):
+        assert anchor not in decision_field_names
+
+
 def test_agentic_output_mismatched_split_seed_anchor_fails_closed() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(

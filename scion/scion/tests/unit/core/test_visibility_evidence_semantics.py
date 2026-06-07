@@ -201,7 +201,29 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
         "audit_or_proposal_guidance_only"
     )
     assert protocol_policy["decision_features_excluded"] is True
+    runtime_gate_visibility = summary["steps"][0]["protocol_result"][
+        "runtime_gate_visibility"
+    ]
+    assert runtime_gate_visibility["schema_version"] == (
+        "runtime_gate_visibility.v1"
+    )
+    assert runtime_gate_visibility["reason_semantics"] == [
+        "runtime_fresh_champion_required",
+    ]
+    assert runtime_gate_visibility["rerun_recommendation"] == (
+        "fresh_champion_re_evaluation_required"
+    )
+    assert runtime_gate_visibility["fresh_champion_requirement"] == (
+        "fresh_champion_re_evaluation_required_before_runtime_tie_advances"
+    )
+    assert runtime_gate_visibility["formal_rerun_scheduled"] is False
+    assert runtime_gate_visibility["proposal_visibility_only"] is True
+    assert runtime_gate_visibility["decision_features_excluded"] is True
     assert "runtime_evidence_policy" not in DecisionFeatures.__dataclass_fields__
+    assert "runtime_gate_visibility" not in DecisionFeatures.__dataclass_fields__
+    assert "runtime_gate_reason_semantics" not in (
+        DecisionFeatures.__dataclass_fields__
+    )
     assert "runtime_signal_role" not in DecisionFeatures.__dataclass_fields__
     assert "standalone_optimization_signal" not in DecisionFeatures.__dataclass_fields__
     assert "decision_features_excluded" not in DecisionFeatures.__dataclass_fields__
@@ -225,6 +247,15 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     assert progress["runtime_evidence_policy"]["decision_features_excluded"] is True
     assert status["current_progress"]["runtime_evidence_policy"] == (
         progress["runtime_evidence_policy"]
+    )
+    assert progress["runtime_gate_visibility"]["reason_semantics"] == [
+        "runtime_fresh_champion_required"
+    ]
+    assert progress["runtime_gate_visibility"]["rerun_recommendation"] == (
+        "fresh_champion_re_evaluation_required"
+    )
+    assert status["current_progress"]["runtime_gate_visibility"] == (
+        progress["runtime_gate_visibility"]
     )
 
     progress = recorder.record_protocol_progress(
@@ -256,6 +287,70 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     assert visibility["proposal_visibility_only"] is True
     assert visibility["decision_features_excluded"] is True
     assert status["current_progress"]["observability_value_visibility"] == visibility
+
+
+def test_runtime_gate_visibility_separates_objective_incomplete_and_budget(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-generic", campaign_dir=tmp_path)
+    diagnostic = {
+        "schema": "scion.runtime_budget_diagnostic.v1",
+        "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+        "stage": "screening",
+        "severity": "warn",
+    }
+    step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=3,
+                wins=1,
+                losses=2,
+                ties=0,
+                win_rate=0.33,
+                median_delta=-1.0,
+                ci_low=-2.0,
+                ci_high=0.0,
+                runtime_pairs=0,
+                champion_cached_runtime_pairs=2,
+                runtime_evidence_status="insufficient",
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "SCREENING_FAIL_WIN_RATE",
+                "SCREENING_RUNTIME_BUDGET_SATURATION",
+            ),
+            champion_cached_runtime_pairs=2,
+            runtime_confidence="low_cached_champion",
+            runtime_evidence_status="insufficient",
+            candidate_surface_runtime_summary={
+                "runtime_budget_diagnostic": diagnostic,
+            },
+        )
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_generic_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    visibility = summary["steps"][0]["protocol_result"]["runtime_gate_visibility"]
+    assert visibility["reason_semantics"] == [
+        "objective_fail",
+        "runtime_incomplete_advisory",
+        "runtime_budget_saturation",
+    ]
+    assert visibility["objective_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
+    assert visibility["runtime_budget_diagnostic_code"] == (
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    )
+    assert visibility["rerun_recommendation"] == (
+        "inspect_runtime_budget_saturation"
+    )
+    assert visibility["fresh_champion_required"] is False
+    assert visibility["proposal_visibility_only"] is True
+    assert visibility["decision_features_excluded"] is True
 
 
 def test_quality_candidate_with_expected_telemetry_stays_quality(

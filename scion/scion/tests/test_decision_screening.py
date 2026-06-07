@@ -1,5 +1,9 @@
 """Focused tests split from test_decision.py."""
 
+from scion.core.branch_lifecycle_policy import (
+    BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+)
+
 from .decision_test_support import *  # noqa: F401,F403
 
 def test_decision_contract_fail():
@@ -84,6 +88,28 @@ def test_decision_screening_high_win_positive_effect_queues_validation():
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_VALIDATE
     assert "SCREENING_PASS" in out.reason_codes
+
+
+def test_decision_lifecycle_archive_abandon_has_structured_fields():
+    f = _features(
+        stage="screening",
+        win_rate=0.4,
+        median_delta=-0.01,
+        ci_low=-0.02,
+        ci_high=0.01,
+    )
+
+    out = _engine.decide(f)
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert out.decision == Decision.ABANDON
+    assert out.final_decision == Decision.ABANDON
+    assert out.lifecycle_action == "archive_lineage"
+    assert out.lifecycle_reason_codes == (
+        BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
+        "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
+    )
+    assert out.decision_layer_source == "lifecycle_policy"
 
 
 def test_decision_screening_fail():

@@ -54,6 +54,11 @@ DecisionLifecycleAction = Literal[
     "archive_lineage",
 ]
 
+DecisionLayerSource = Literal[
+    "stage_decision",
+    "lifecycle_policy",
+]
+
 # --- Proposals (Tainted from LLM) ---
 
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
@@ -479,7 +484,17 @@ class DecisionOutcome:
     decision: Decision
     reason_codes: Tuple[str, ...]
     features_snapshot: DecisionFeatures
+    stage_decision: Optional[Decision] = None
+    final_decision: Optional[Decision] = None
     lifecycle_action: DecisionLifecycleAction = ""
+    lifecycle_reason_codes: Tuple[str, ...] = ()
+    decision_layer_source: DecisionLayerSource = "stage_decision"
+
+    def __post_init__(self) -> None:
+        if self.stage_decision is None:
+            object.__setattr__(self, "stage_decision", self.decision)
+        if self.final_decision is None:
+            object.__setattr__(self, "final_decision", self.decision)
 
 # --- Campaign & Branch State ---
 
