@@ -87,14 +87,19 @@ _TOOL_SELECTION_CACHEABLE_CONTEXT_KEYS = frozenset(
 
 _TOOL_SELECTION_VOLATILE_CACHE_KEYS = frozenset(
     {
+        "artifact_id",
+        "artifact_ref",
         "branch_id",
         "evidence_ref",
+        "observation_id",
+        "observation_tool_call_id",
         "request_id",
         "session_id",
         "source_observation_id",
         "source_tool_call_id",
         "step_id",
         "tool_call_id",
+        "trace_id",
     }
 )
 

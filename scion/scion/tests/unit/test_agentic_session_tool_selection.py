@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from scion.proposal.engine import _split_tool_selection_context
@@ -264,6 +265,121 @@ def test_tool_selection_prompt_caches_stable_planner_context() -> None:
     assert "tool_arg_guidance" not in first_prompt
     assert "remaining_tool_calls" in first_prompt
     assert "context.read_active_solver_design" in later_prompt
+
+
+def test_tool_selection_cacheable_context_strips_volatile_receipt_ids() -> None:
+    base_context = {
+        "phase": "inspect",
+        "allowed_tools": ["context.read_algorithm_file"],
+        "allowed_tool_specs": {
+            "context.read_algorithm_file": {
+                "description": "Read a declared source file."
+            }
+        },
+        "active_algorithm_facts_anchor": {
+            "fact_ids": ["fact.alpha"],
+            "snapshot_digest": "snapshot-digest",
+            "source_observation_id": "obs-a",
+            "source_tool_call_id": "tool-a",
+        },
+        "tool_arg_guidance": {
+            "context.read_algorithm_file": {
+                "allowed_paths": ["policies/baseline_algorithm.py"],
+                "receipt": {
+                    "artifact_id": "artifact-a",
+                    "artifact_ref": "proposal-artifact://session-a/artifact-a",
+                    "observation_id": "obs-a",
+                    "observation_tool_call_id": "tool-a",
+                    "request_id": "request-a",
+                    "session_id": "session-a",
+                    "source_digest": "source-digest",
+                    "source_observation_id": "obs-a",
+                    "source_tool_call_id": "tool-a",
+                    "trace_id": "trace-a",
+                    "tool_call_id": "tool-a",
+                },
+            }
+        },
+        "remaining_tool_calls": 2,
+        "observations": [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "observation_id": "obs-a",
+                "session_id": "session-a",
+                "source_tool_call_id": "tool-a",
+            }
+        ],
+    }
+    later_context = {
+        **base_context,
+        "active_algorithm_facts_anchor": {
+            **base_context["active_algorithm_facts_anchor"],
+            "source_observation_id": "obs-b",
+            "source_tool_call_id": "tool-b",
+        },
+        "tool_arg_guidance": {
+            "context.read_algorithm_file": {
+                "allowed_paths": ["policies/baseline_algorithm.py"],
+                "receipt": {
+                    **base_context["tool_arg_guidance"][
+                        "context.read_algorithm_file"
+                    ]["receipt"],
+                    "artifact_id": "artifact-b",
+                    "artifact_ref": "proposal-artifact://session-b/artifact-b",
+                    "observation_id": "obs-b",
+                    "observation_tool_call_id": "tool-b",
+                    "request_id": "request-b",
+                    "session_id": "session-b",
+                    "source_observation_id": "obs-b",
+                    "source_tool_call_id": "tool-b",
+                    "trace_id": "trace-b",
+                    "tool_call_id": "tool-b",
+                },
+            }
+        },
+        "observations": [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "observation_id": "obs-b",
+                "session_id": "session-b",
+                "source_tool_call_id": "tool-b",
+            }
+        ],
+    }
+
+    first_blocks, first_prompt = _split_tool_selection_context(base_context)
+    later_blocks, later_prompt = _split_tool_selection_context(later_context)
+    first_stable_text = first_blocks[0]["text"]
+    later_stable_text = later_blocks[0]["text"]
+
+    assert first_stable_text == later_stable_text
+    assert hashlib.sha256(first_stable_text.encode()).hexdigest() == hashlib.sha256(
+        later_stable_text.encode()
+    ).hexdigest()
+    assert "source-digest" in first_stable_text
+    assert "policies/baseline_algorithm.py" in first_stable_text
+    for volatile_value in (
+        "artifact-a",
+        "artifact-b",
+        "obs-a",
+        "obs-b",
+        "request-a",
+        "request-b",
+        "session-a",
+        "session-b",
+        "tool-a",
+        "tool-b",
+        "trace-a",
+        "trace-b",
+    ):
+        assert volatile_value not in first_stable_text
+        assert volatile_value not in later_stable_text
+    assert "obs-a" in first_prompt
+    assert "session-a" in first_prompt
+    assert "tool-a" in first_prompt
+    assert "obs-b" in later_prompt
+    assert "session-b" in later_prompt
+    assert "tool-b" in later_prompt
 
 
 def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() -> None:
