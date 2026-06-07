@@ -12,6 +12,9 @@ from scion.core.scheduler import (
     branch_active_slot_release_reason,
     reclaim_active_slot_for_new_branch,
 )
+from scion.core.scheduling.signals import (
+    scheduler_owned_active_slot_release_reason as signal_active_slot_release_reason,
+)
 
 
 def _branch(
@@ -310,6 +313,22 @@ def test_quality_regression_without_actionable_diagnostic_releases_active_slot()
     assert action.slot == "explore_new"
     assert action.reason == "new_exploration_slot_available"
     assert action.audit_metadata["low_value_active_slot_release"] is True
+
+
+def test_scheduler_facade_uses_extracted_low_value_release_signal():
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "generic quality-regression follow-up"
+    branch.branch_code_status = "active_quality_regression"
+    branch.last_screening_feedback_tier = "quality_regression"
+    branch.branch_mechanism_ids = ("quality_probe",)
+    branch.branch_evidence_summary = {"tier": "quality_regression"}
+
+    assert signal_active_slot_release_reason(branch) == (
+        "quality_regression_without_actionable_diagnostic_slot_release"
+    )
+    assert branch_active_slot_release_reason(branch) == (
+        signal_active_slot_release_reason(branch)
+    )
 
 
 def test_quality_regression_actionable_diagnostic_runs_existing_branch():

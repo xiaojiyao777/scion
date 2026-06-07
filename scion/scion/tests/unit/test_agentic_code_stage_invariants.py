@@ -6,7 +6,7 @@ from scion.core.models import (
     PatchFileChange,
     PatchProposal,
 )
-from scion.proposal.agentic_session_patch_flow import (
+from scion.proposal.agentic_session_patch_validation import (
     _code_context_with_required_full_integration_files,
     _code_integration_visibility_issue,
     _code_stage_identity_issue,
