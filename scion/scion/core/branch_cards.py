@@ -4,6 +4,59 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+from scion.core.branch_cards_evidence import (
+    _best_checkpoint_mapping,
+    _best_checkpoint_reason_codes,
+    _best_checkpoint_scalar,
+    _branch_block,
+    _branch_block_codes,
+    _branch_card_allowed_actions,
+    _branch_card_forbidden_actions,
+    _branch_case_outcomes,
+    _branch_evidence_codes,
+    _branch_evidence_summary,
+    _branch_generic_evidence_summary,
+    _branch_lifecycle_block,
+    _branch_lifecycle_block_codes,
+    _branch_phase_activation_summary,
+    _branch_rollback_codes,
+    _branch_runtime_evidence_confidence,
+    _branch_runtime_evidence_pressure_count,
+    _branch_state_value,
+    _current_gate_observation_codes,
+    _current_reason_codes,
+    _history_mapping_list,
+    _history_reason_codes,
+    _is_current_gate_observation_code,
+    _is_lifecycle_action_code,
+    _is_proposal_block_code,
+    _lifecycle_action_reason_codes,
+    _mapping_codes,
+    _metric_value,
+    _optional_float,
+    _optional_int,
+    _proposal_block_codes,
+    _tier_from_status,
+    _why_abandoned_codes,
+    _why_not_promoted_codes,
+)
+from scion.core.branch_cards_rendering import (
+    _card_list,
+    _card_mapping,
+    _card_mapping_list,
+    _compact_card_value,
+    _format_case_outcomes,
+    _format_evidence_summary,
+    _format_phase_activation_history,
+    _format_phase_activation_summary,
+    branch_prompt_card_from_context as _render_branch_prompt_card_from_context,
+)
+from scion.core.branch_cards_runtime import (
+    _diversity_guidance_sentence,
+    _runtime_evidence_low_confidence_advisory_sentence,
+    _runtime_evidence_prompt_advisory_projection,
+    _runtime_saturated_diversity_guidance,
+)
 from scion.core.branch_hygiene import (
     BRANCH_LOCAL_FOLLOWUP_MODE,
     BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE,
@@ -11,18 +64,14 @@ from scion.core.branch_hygiene import (
     NO_UNRELATED_MECHANISM_IDS,
     OPEN_EXPLORATION_ALLOWED,
     OPEN_EXPLORATION_MODE,
-    PARKED_BRANCH_CODE_STATUSES,
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
-    RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE,
     SAME_MECHANISM_ALLOWED_ACTIONS,
     SAME_MECHANISM_FOLLOWUP_ONLY,
     SAME_MECHANISM_ONLY_MODE,
     WIRING_SUSPECT_REQUIRES_REPAIR,
     branch_checkpoint_status,
     branch_code_status,
-    branch_has_actionable_diagnostic,
     branch_has_retained_checkpoint,
-    is_branch_lifecycle_policy_block,
     branch_is_parked_lineage,
     branch_lifecycle_reroute_context,
     branch_lineage_status,
@@ -46,133 +95,7 @@ def branch_prompt_card(branch: Branch | None) -> str:
 
 def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     """Render an already reconciled generic branch-card context."""
-    allowed = ",".join(_card_list(context.get("allowed_next_actions"))) or "none"
-    forbidden = ",".join(_card_list(context.get("forbidden_next_actions"))) or "none"
-    mechanism_ids = ",".join(_card_list(context.get("mechanism_ids"))) or "none"
-    evidence = _format_evidence_summary(_card_mapping(context.get("generic_evidence_summary")))
-    winners = _format_case_outcomes(_card_mapping_list(context.get("case_level_winners")))
-    losses = _format_case_outcomes(_card_mapping_list(context.get("case_level_losses")))
-    activation = _format_phase_activation_summary(
-        _card_mapping(context.get("phase_activation_summary"))
-    )
-    best_checkpoint_evidence = _format_evidence_summary(
-        _card_mapping(context.get("best_checkpoint_generic_evidence_summary"))
-    )
-    best_checkpoint_activation = _format_phase_activation_summary(
-        _card_mapping(context.get("best_checkpoint_phase_activation_summary"))
-    )
-    history_activation = _format_phase_activation_history(
-        _card_mapping_list(context.get("history_phase_activation_summaries"))
-    )
-    runtime_confidence = context.get("runtime_evidence_confidence") or "unknown"
-    runtime_pressure_count = _optional_int(
-        context.get("runtime_evidence_pressure_count")
-    )
-    why_not_promoted = (
-        ",".join(_card_list(context.get("why_not_promoted_reason_codes"))) or "none"
-    )
-    proposal_blocks = (
-        ",".join(_card_list(context.get("proposal_block_reason_codes"))) or "none"
-    )
-    why_abandoned = (
-        ",".join(_card_list(context.get("why_abandoned_reason_codes"))) or "none"
-    )
-    optional_parts: list[str] = []
-    if _card_mapping(context.get("best_checkpoint_generic_evidence_summary")):
-        optional_parts.append(
-            f"best_checkpoint_generic_evidence_summary={best_checkpoint_evidence}"
-        )
-    if _card_mapping(context.get("best_checkpoint_phase_activation_summary")):
-        optional_parts.append(
-            "best_checkpoint_phase_activation_summary="
-            f"{best_checkpoint_activation}"
-        )
-    best_checkpoint_runtime_confidence = context.get(
-        "best_checkpoint_runtime_evidence_confidence"
-    )
-    if best_checkpoint_runtime_confidence:
-        optional_parts.append(
-            "best_checkpoint_runtime_evidence_confidence="
-            f"{best_checkpoint_runtime_confidence}"
-        )
-    current_head_release_reason = context.get(
-        "current_head_active_slot_release_reason"
-    )
-    if current_head_release_reason:
-        optional_parts.append(
-            "current_head_active_slot_release_reason="
-            f"{current_head_release_reason}"
-        )
-    if context.get("retained_checkpoint_no_effect_current_head_released"):
-        optional_parts.append(
-            "retained_checkpoint_no_effect_current_head_released=true"
-        )
-    if history_activation != "none":
-        optional_parts.append(
-            f"history_phase_activation_summaries={history_activation}"
-        )
-    if runtime_pressure_count is not None:
-        optional_parts.append(
-            f"runtime_evidence_pressure_count={runtime_pressure_count}"
-        )
-    runtime_advisory = _card_mapping(
-        context.get("runtime_evidence_low_confidence_advisory")
-        or context.get("runtime_evidence_clean_fork_guidance")
-    )
-    if runtime_advisory:
-        optional_parts.append(
-            "runtime_evidence_low_confidence_advisory="
-            f"{runtime_advisory.get('reason') or 'fresh_runtime_required'}"
-        )
-    optional_suffix = (
-        " " + " ".join(optional_parts)
-        if optional_parts
-        else ""
-    )
-    return (
-        f"branch_id={context.get('branch_id') or 'unknown'} "
-        f"status={context.get('status') or 'unknown'} "
-        f"direction={_compact_card_value(context.get('direction'))} "
-        f"mechanism_ids={mechanism_ids} "
-        f"lineage_status={context.get('lineage_status') or 'unknown'} "
-        f"current_head_status={context.get('current_head_status') or 'unknown'} "
-        f"best_checkpoint_status={context.get('best_checkpoint_status') or 'none'} "
-        f"best_quality_checkpoint_id={context.get('best_quality_checkpoint_id') or 'none'} "
-        f"last_valid_checkpoint_id={context.get('last_valid_checkpoint_id') or 'none'} "
-        f"rollback_count={context.get('rollback_count') or 0} "
-        f"allowed_next_actions={allowed} "
-        f"forbidden_next_actions={forbidden} "
-        f"latest_head_failed={str(bool(context.get('latest_head_failed'))).lower()} "
-        "lineage_retained_checkpoint="
-        f"{str(bool(context.get('lineage_retained_checkpoint'))).lower()} "
-        f"generic_evidence_summary={evidence} "
-        f"case_level_winners={winners} "
-        f"case_level_losses={losses} "
-        f"phase_activation_summary={activation} "
-        f"runtime_evidence_confidence={runtime_confidence} "
-        f"why_not_promoted_reason_codes={why_not_promoted} "
-        f"proposal_block_reason_codes={proposal_blocks} "
-        f"why_abandoned_reason_codes={why_abandoned}"
-        f"{optional_suffix}"
-    )
-
-
-def _card_list(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value] if value else []
-    if not isinstance(value, Iterable) or isinstance(value, Mapping):
-        return []
-    return [str(item) for item in value if str(item)]
-
-
-def _card_mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
-
-
-def _card_mapping_list(value: Any) -> list[Mapping[str, Any]]:
-    if not isinstance(value, Iterable) or isinstance(value, (str, bytes, Mapping)):
-        return []
-    return [item for item in value if isinstance(item, Mapping)]
+    return _render_branch_prompt_card_from_context(context)
 
 
 def active_slot_inventory_from_branch_cards(
@@ -622,118 +545,6 @@ def _branch_lifecycle_guidance_suffix(context: Mapping[str, Any]) -> str:
     )
 
 
-def _runtime_saturated_diversity_guidance(
-    context: Mapping[str, Any],
-) -> dict[str, Any]:
-    reason_text = " ".join(
-        str(value or "")
-        for value in (
-            context.get("branch_code_status"),
-            context.get("last_screening_feedback_tier"),
-            context.get("last_telemetry_outcome"),
-            context.get("branch_lifecycle_reroute_reason"),
-            (
-                (context.get("last_branch_lifecycle_policy_block") or {}).get(
-                    "reason"
-                )
-                if isinstance(
-                    context.get("last_branch_lifecycle_policy_block"),
-                    Mapping,
-                )
-                else ""
-            ),
-            (
-                (context.get("last_branch_lifecycle_policy_block") or {}).get(
-                    "detail"
-                )
-                if isinstance(
-                    context.get("last_branch_lifecycle_policy_block"),
-                    Mapping,
-                )
-                else ""
-            ),
-        )
-    ).lower()
-    if not any(
-        token in reason_text
-        for token in (
-            "runtime_saturation",
-            "runtime saturation",
-            "runtime_budget",
-            "no_effect",
-            "no effect",
-            "zero_effect",
-            "zero effect",
-        )
-    ):
-        return {}
-    return {
-        "policy": RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE,
-        "guidance": (
-            "Recent branch feedback is low-effect or runtime-saturated. Avoid "
-            "continuing with another homogeneous high-cost variant on the same "
-            "branch. Prefer a clean branch/fork or a materially different "
-            "research direction that changes the mechanism family, trigger "
-            "condition, budget allocation, or evaluation observability."
-        ),
-        "allowed_same_branch_followup": (
-            "Only continue this branch when the follow-up reduces/redirects "
-            "work or improves observability for the protected mechanism."
-        ),
-    }
-
-
-def _diversity_guidance_sentence(context: Mapping[str, Any]) -> str:
-    guidance = context.get("diversity_reroute_guidance")
-    if not isinstance(guidance, Mapping) or not guidance:
-        return ""
-    return (
-        "Runtime/no-effect lifecycle feedback is active: avoid another "
-        "homogeneous high-cost variant here; prefer changing mechanism family, "
-        "trigger condition, budget allocation, or evaluation observability, "
-        "or use a clean branch/fork for a new direction. "
-    )
-
-
-def _runtime_evidence_low_confidence_advisory_sentence(
-    context: Mapping[str, Any],
-) -> str:
-    guidance = (
-        context.get("runtime_evidence_low_confidence_advisory")
-        or context.get("runtime_evidence_clean_fork_guidance")
-    )
-    if not isinstance(guidance, Mapping) or not guidance:
-        return ""
-    reason = guidance.get("reason") or "runtime_evidence_completeness_clean_fork"
-    return (
-        " Low-confidence runtime evidence advisory is active: do not treat "
-        "runtime saturation/pressure as a strong conclusion or branch-routing "
-        "constraint. Need fresh champion runtime before runtime-based "
-        "conclusions; same-branch follow-up may focus on improving runtime "
-        "evidence completeness. This is tainted proposal guidance excluded "
-        f"from DecisionFeatures; reason={reason}."
-    )
-
-
-def _runtime_evidence_prompt_advisory_projection(
-    guidance: Mapping[str, Any],
-) -> dict[str, Any]:
-    if not isinstance(guidance, Mapping) or not guidance:
-        return {}
-    projected = dict(guidance)
-    projected["policy"] = "fresh_runtime_advisory"
-    projected["runtime_signal_role"] = "low_confidence_advisory"
-    projected["strong_branch_constraint"] = False
-    projected["proposal_guidance"] = (
-        "Need fresh champion runtime before runtime-based conclusions; do not "
-        "treat runtime saturation/pressure as a strong diagnostic when "
-        "runtime aggregate evidence is excluded or low confidence."
-    )
-    projected["tainted_proposal_guidance"] = True
-    projected["decision_features_excluded"] = True
-    return projected
-
-
 def _protected_mechanism_text(context: Mapping[str, Any]) -> str:
     ids = [
         str(item).strip()
@@ -750,556 +561,6 @@ def _allowed_actions_text(context: Mapping[str, Any]) -> str:
         if str(item).strip()
     ]
     return ",".join(actions) if actions else "none"
-
-
-def _branch_state_value(branch: Branch | None) -> str:
-    if branch is None:
-        return "unknown"
-    state = getattr(branch, "state", None)
-    return str(getattr(state, "value", state) or "unknown")
-
-
-def _branch_block(branch: Branch | None) -> Mapping[str, Any]:
-    if branch is None:
-        return {}
-    block = getattr(branch, "last_branch_lifecycle_policy_block", {}) or {}
-    return block if isinstance(block, Mapping) else {}
-
-
-def _branch_lifecycle_block(branch: Branch | None) -> Mapping[str, Any]:
-    block = _branch_block(branch)
-    return block if is_branch_lifecycle_policy_block(block) else {}
-
-
-def _branch_block_codes(branch: Branch | None, *keys: str) -> list[str]:
-    block = _branch_block(branch)
-    return _mapping_codes(block, *keys)
-
-
-def _branch_lifecycle_block_codes(branch: Branch | None, *keys: str) -> list[str]:
-    block = _branch_lifecycle_block(branch)
-    return _mapping_codes(block, *keys)
-
-
-def _branch_evidence_codes(branch: Branch | None, *keys: str) -> list[str]:
-    evidence = _branch_evidence_summary(branch)
-    return _mapping_codes(evidence, *keys)
-
-
-def _best_checkpoint_mapping(branch: Branch | None, key: str) -> dict[str, Any]:
-    value = _branch_evidence_summary(branch).get(key)
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _best_checkpoint_scalar(branch: Branch | None, key: str) -> Any:
-    value = _branch_evidence_summary(branch).get(key)
-    if isinstance(value, (Mapping, list, tuple, set)):
-        return None
-    return value
-
-
-def _history_mapping_list(branch: Branch | None, key: str) -> list[dict[str, Any]]:
-    value = _branch_evidence_summary(branch).get(key)
-    if not isinstance(value, Iterable) or isinstance(value, (str, bytes, Mapping)):
-        return []
-    return [dict(item) for item in value if isinstance(item, Mapping)]
-
-
-def _mapping_codes(source: Mapping[str, Any], *keys: str) -> list[str]:
-    codes: list[str] = []
-    for key in keys:
-        value = source.get(key)
-        if isinstance(value, str):
-            codes.extend([value] if value else [])
-        elif isinstance(value, Iterable) and not isinstance(value, Mapping):
-            codes.extend(str(item) for item in value if str(item))
-    return list(dict.fromkeys(codes))
-
-
-def _branch_rollback_codes(branch: Branch | None) -> list[str]:
-    codes = _branch_lifecycle_block_codes(branch, "rollback_reason_codes")
-    reason = (
-        str(getattr(branch, "last_rollback_reason", "") or "")
-        if branch is not None
-        else ""
-    )
-    if reason:
-        codes.append(reason)
-    return list(dict.fromkeys(codes))
-
-
-def _branch_evidence_summary(branch: Branch | None) -> Mapping[str, Any]:
-    if branch is None:
-        return {}
-    value = getattr(branch, "branch_evidence_summary", {}) or {}
-    return value if isinstance(value, Mapping) else {}
-
-
-def _branch_case_outcomes(branch: Branch | None, key: str) -> list[dict[str, Any]]:
-    evidence = _branch_evidence_summary(branch)
-    block = _branch_block(branch)
-    raw = evidence.get(key) or block.get(key) or []
-    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes, Mapping)):
-        return []
-    outcomes: list[dict[str, Any]] = []
-    for item in raw:
-        if not isinstance(item, Mapping):
-            continue
-        case_id = str(item.get("case_id") or "").strip()
-        result = str(item.get("result") or "").strip()
-        if not case_id or result not in {"win", "loss", "tie", "mixed"}:
-            continue
-        entry: dict[str, Any] = {"case_id": case_id, "result": result}
-        delta = _optional_float(item.get("delta"))
-        if delta is not None:
-            entry["delta"] = delta
-        counters = item.get("effect_counters")
-        if isinstance(counters, Mapping):
-            compact = {
-                name: _optional_int(counters.get(name))
-                for name in ("wins", "losses", "ties", "pairs")
-            }
-            compact = {name: value for name, value in compact.items() if value is not None}
-            if compact:
-                entry["effect_counters"] = compact
-        outcomes.append(entry)
-    return outcomes[:5]
-
-
-def _branch_phase_activation_summary(branch: Branch | None) -> dict[str, Any]:
-    evidence = _branch_evidence_summary(branch)
-    raw = evidence.get("phase_activation_summary")
-    if isinstance(raw, Mapping):
-        return {
-            "stage": str(raw.get("stage") or "unknown"),
-            "activation_status": str(
-                raw.get("activation_status") or "unknown"
-            ),
-            "effect_status": str(raw.get("effect_status") or "unknown"),
-            "activation_evidence_status": str(
-                raw.get("activation_evidence_status") or "unknown"
-            ),
-            "objective_effect_status": str(
-                raw.get("objective_effect_status") or "unknown"
-            ),
-            "opportunity_status": str(
-                raw.get("opportunity_status") or "unknown"
-            ),
-            "telemetry_outcome": raw.get("telemetry_outcome"),
-        }
-    return {
-        "stage": "unknown",
-        "activation_status": "unknown",
-        "effect_status": str(
-            getattr(branch, "last_telemetry_outcome", None) or "unknown"
-        ),
-        "activation_evidence_status": "unknown",
-        "objective_effect_status": "unknown",
-        "opportunity_status": "unknown",
-        "telemetry_outcome": (
-            getattr(branch, "last_telemetry_outcome", None)
-            if branch is not None
-            else None
-        ),
-    }
-
-
-def _branch_runtime_evidence_confidence(branch: Branch | None) -> str:
-    evidence = _branch_evidence_summary(branch)
-    for value in (
-        evidence.get("runtime_evidence_confidence"),
-        evidence.get("runtime_confidence"),
-    ):
-        text = str(value or "").strip()
-        if text:
-            return text
-    return "unknown"
-
-
-def _branch_runtime_evidence_pressure_count(branch: Branch | None) -> int | None:
-    value = _branch_evidence_summary(branch).get("runtime_evidence_pressure_count")
-    count = _optional_int(value)
-    if count is None:
-        return None
-    return max(0, count)
-
-
-def _current_reason_codes(branch: Branch | None) -> list[str]:
-    return _branch_evidence_codes(
-        branch,
-        "why_not_promoted_reason_codes",
-        "decision_reason_codes",
-        "effective_reason_codes",
-        "reason_codes",
-    )
-
-
-def _current_gate_observation_codes(branch: Branch | None) -> list[str]:
-    codes = _branch_evidence_codes(branch, "gate_observation_reason_codes")
-    codes.extend(
-        code
-        for code in _current_reason_codes(branch)
-        if _is_current_gate_observation_code(code)
-    )
-    return list(dict.fromkeys(codes))
-
-
-def _lifecycle_action_reason_codes(branch: Branch | None) -> list[str]:
-    codes = _branch_evidence_codes(branch, "lifecycle_action_reason_codes")
-    codes.extend(
-        _branch_lifecycle_block_codes(
-            branch,
-            "lifecycle_action_reason_codes",
-            "decision_reason_codes",
-            "reason_codes",
-        )
-    )
-    return list(dict.fromkeys(codes))
-
-
-def _best_checkpoint_reason_codes(branch: Branch | None) -> list[str]:
-    return _branch_evidence_codes(branch, "best_checkpoint_reason_codes")
-
-
-def _history_reason_codes(branch: Branch | None) -> list[str]:
-    codes = _branch_evidence_codes(branch, "history_reason_codes")
-    block = _branch_block(branch)
-    if block and not is_branch_lifecycle_policy_block(block):
-        current = set(_current_reason_codes(branch))
-        codes.extend(
-            code
-            for code in _mapping_codes(
-                block,
-                "gate_observation_reason_codes",
-                "why_not_promoted_reason_codes",
-                "decision_reason_codes",
-                "reason_codes",
-            )
-            if code not in current
-        )
-    return list(dict.fromkeys(codes))
-
-
-def _why_not_promoted_codes(branch: Branch | None) -> list[str]:
-    if branch is None:
-        return []
-    codes = list(getattr(branch, "failure_codes", None) or ())
-    codes.extend(_current_reason_codes(branch))
-    codes.extend(_branch_evidence_codes(branch, "terminal_reason_codes"))
-    if not codes:
-        codes.extend(
-            _branch_lifecycle_block_codes(
-                branch,
-                "lifecycle_action_reason_codes",
-                "decision_reason_codes",
-                "reason_codes",
-            )
-        )
-    return list(
-        dict.fromkeys(
-            str(code)
-            for code in codes
-            if str(code) and not _is_proposal_block_code(str(code))
-        )
-    )
-
-
-def _proposal_block_codes(branch: Branch | None) -> list[str]:
-    if branch is None:
-        return []
-    codes = list(getattr(branch, "failure_codes", None) or ())
-    codes.extend(
-        _branch_evidence_codes(
-            branch,
-            "proposal_block_reason_codes",
-            "schema_reason_codes",
-            "proposal_quality_reason_codes",
-            "reason_codes",
-        )
-    )
-    return list(
-        dict.fromkeys(str(code) for code in codes if _is_proposal_block_code(str(code)))
-    )
-
-
-def _why_abandoned_codes(branch: Branch | None) -> list[str]:
-    if branch is None or _branch_state_value(branch) != "abandoned":
-        return []
-    codes = _why_not_promoted_codes(branch)
-    return codes or ["abandoned_without_promotable_evidence"]
-
-
-def _branch_generic_evidence_summary(
-    branch: Branch | None,
-    *,
-    current_tier: Any,
-) -> dict[str, Any]:
-    evidence = _branch_evidence_summary(branch)
-    source: Mapping[str, Any] = evidence
-    status = branch_code_status(branch)
-    tier = (
-        str(current_tier or "").strip()
-        or str(source.get("tier") or "").strip()
-        or _tier_from_status(status)
-    )
-    summary: dict[str, Any] = {"tier": tier or "unknown"}
-    metric_keys = {
-        "wins": ("wins", "case_wins", "pair_wins", "screening_case_wins"),
-        "losses": ("losses", "case_losses", "pair_losses", "screening_case_losses"),
-        "ties": ("ties", "case_ties", "pair_ties", "screening_case_ties"),
-    }
-    for name, keys in metric_keys.items():
-        value = _metric_value(source, keys, int)
-        if value is not None:
-            summary[name] = value
-    for group, keys in {
-        "effect": ("median_delta", "ci_low", "ci_high"),
-        "runtime": (
-            "runtime_ratio_median",
-            "runtime_delta_median_ms",
-            "runtime_regression_rate",
-            "runtime_pairs",
-        ),
-    }.items():
-        values = {key: _metric_value(source, (key,), float) for key in keys}
-        values = {key: value for key, value in values.items() if value is not None}
-        if values:
-            summary[group] = values
-    runtime_confidence = _branch_runtime_evidence_confidence(branch)
-    if runtime_confidence != "unknown":
-        summary["runtime_evidence_confidence"] = runtime_confidence
-    runtime_pressure_count = _branch_runtime_evidence_pressure_count(branch)
-    if runtime_pressure_count is not None:
-        summary["runtime_evidence_pressure_count"] = runtime_pressure_count
-    runtime_aggregate_exclusion = source.get("runtime_aggregate_exclusion")
-    if isinstance(runtime_aggregate_exclusion, Mapping) and runtime_aggregate_exclusion:
-        summary["runtime_aggregate_exclusion"] = dict(runtime_aggregate_exclusion)
-    return summary
-
-
-def _tier_from_status(status: str) -> str:
-    if status.startswith("active_"):
-        return status.removeprefix("active_")
-    if "regress" in status:
-        return "regression"
-    if status in PARKED_BRANCH_CODE_STATUSES:
-        return "diagnostic"
-    return "unknown"
-
-
-def _metric_value(
-    source: Mapping[str, Any],
-    keys: Iterable[str],
-    caster: Any,
-) -> Any | None:
-    for key in keys:
-        value = source.get(key)
-        if value is None:
-            continue
-        try:
-            return caster(value)
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _is_proposal_block_code(code: str) -> bool:
-    text = str(code or "").strip().lower()
-    if not text:
-        return False
-    tokens = (
-        "proposal",
-        "schema",
-        "duplicate",
-        "c11",
-        "premise",
-        "agent_quality",
-        "agent_grounding",
-        "mechanism_novelty",
-        "mechanism_changes_duplicate_id",
-    )
-    return any(token in text for token in tokens)
-
-
-def _is_lifecycle_action_code(code: str) -> bool:
-    return str(code or "").strip().upper().startswith("BRANCH_LIFECYCLE_")
-
-
-def _is_current_gate_observation_code(code: str) -> bool:
-    text = str(code or "").strip().upper()
-    if not text:
-        return False
-    if _is_lifecycle_action_code(text) or _is_proposal_block_code(text):
-        return False
-    return text.startswith(
-        (
-            "SCREENING_",
-            "VALIDATION_",
-            "FROZEN_",
-            "CANARY_",
-            "TELEMETRY_",
-            "NO_SCREENING_STATS",
-        )
-    )
-
-
-def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
-    parts = [f"tier:{summary.get('tier', 'unknown')}"]
-    for key in ("wins", "losses", "ties"):
-        if key in summary:
-            parts.append(f"{key}:{summary[key]}")
-    effect = summary.get("effect")
-    if isinstance(effect, Mapping) and "median_delta" in effect:
-        parts.append(f"effect:{effect['median_delta']}")
-    runtime = summary.get("runtime")
-    if isinstance(runtime, Mapping) and "runtime_ratio_median" in runtime:
-        parts.append(f"runtime:{runtime['runtime_ratio_median']}")
-    runtime_confidence = summary.get("runtime_evidence_confidence")
-    if runtime_confidence:
-        parts.append(f"runtime_confidence:{runtime_confidence}")
-    runtime_pressure_count = _optional_int(
-        summary.get("runtime_evidence_pressure_count")
-    )
-    if runtime_pressure_count is not None:
-        parts.append(f"runtime_evidence_pressure_count:{runtime_pressure_count}")
-    exclusion = summary.get("runtime_aggregate_exclusion")
-    if isinstance(exclusion, Mapping) and exclusion.get("excluded"):
-        reason = exclusion.get("reason") or exclusion.get("runtime_confidence")
-        if reason:
-            parts.append(f"runtime_aggregate_excluded:{reason}")
-    return ",".join(parts)
-
-
-def _format_case_outcomes(outcomes: Iterable[Mapping[str, Any]]) -> str:
-    parts: list[str] = []
-    for item in outcomes:
-        case_id = str(item.get("case_id") or "").strip()
-        result = str(item.get("result") or "").strip()
-        if not case_id or not result:
-            continue
-        delta = item.get("delta")
-        counters = item.get("effect_counters")
-        counter_text = ""
-        if isinstance(counters, Mapping):
-            counter_text = (
-                f":w{counters.get('wins', 0)}"
-                f"l{counters.get('losses', 0)}"
-                f"t{counters.get('ties', 0)}"
-            )
-        delta_text = "" if delta is None else f":delta={delta}"
-        parts.append(f"{case_id}:{result}{delta_text}{counter_text}")
-    return "|".join(parts) if parts else "none"
-
-
-def _format_phase_activation_summary(summary: Mapping[str, Any]) -> str:
-    return ",".join(
-        f"{key}:{_compact_card_value(summary.get(key))}"
-        for key in (
-            "stage",
-            "activation_status",
-            "effect_status",
-            "activation_evidence_status",
-            "objective_effect_status",
-            "opportunity_status",
-            "telemetry_outcome",
-        )
-        if summary.get(key) is not None
-    ) or "none"
-
-
-def _format_phase_activation_history(summaries: Iterable[Mapping[str, Any]]) -> str:
-    parts = [
-        _format_phase_activation_summary(summary)
-        for summary in summaries
-        if summary
-    ]
-    parts = [part for part in parts if part != "none"]
-    return "|".join(parts) if parts else "none"
-
-
-def _compact_card_value(value: Any) -> str:
-    text = " ".join(str(value or "none").split())
-    if len(text) > 96:
-        text = text[:93].rstrip() + "..."
-    return text.replace(" ", "_")
-
-
-def _branch_card_allowed_actions(
-    branch: Branch | None,
-    *,
-    lineage_status: str,
-    strict_same_mechanism_followup: bool,
-    repair_focus_required: bool,
-) -> list[str]:
-    if branch_is_parked_lineage(branch):
-        return ["clean_fork"]
-    if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
-        branch
-    ):
-        return ["clean_fork"]
-    actions: list[str] = []
-    if repair_focus_required:
-        actions.extend(["repair", "telemetry_wiring"])
-    if lineage_status in {
-        "active_weak_positive",
-        "restored_weak_positive",
-        "restored_checkpoint",
-        "checkpoint_retained",
-    }:
-        actions.append("refine_checkpoint")
-    if lineage_status in {
-        "active_weak_positive",
-        "restored_weak_positive",
-        "active_marginal",
-    }:
-        actions.extend(["tune", "integrate", "parameterize"])
-    if strict_same_mechanism_followup:
-        actions.extend(SAME_MECHANISM_ALLOWED_ACTIONS)
-    if lineage_status == "active_no_effect":
-        actions.extend(["diagnose", "repair"])
-    if not actions:
-        actions.append("open_exploration")
-    return list(dict.fromkeys(actions))
-
-
-def _branch_card_forbidden_actions(
-    branch: Branch | None,
-    *,
-    lineage_status: str,
-    strict_same_mechanism_followup: bool,
-    latest_head_failed: bool,
-    has_checkpoint: bool,
-) -> list[str]:
-    forbidden: list[str] = []
-    if branch_is_parked_lineage(branch):
-        forbidden.append("consume_active_slot")
-    if strict_same_mechanism_followup:
-        forbidden.append("unrelated_mechanism")
-    if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
-        branch
-    ):
-        forbidden.append("unchanged_repeat")
-    if latest_head_failed and has_checkpoint:
-        forbidden.append("treat_failed_head_as_lineage_failure")
-    return list(dict.fromkeys(forbidden))
 
 
 __all__ = [
