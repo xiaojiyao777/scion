@@ -15,6 +15,7 @@ from scion.proposal.edit_protocol import (
     normalize_patch_typed_edits,
     source_digest_for_content,
 )
+from scion.proposal.edit_protocol.source_discovery import source_records_from_context
 from scion.proposal.agentic_session_repair import (
     _code_edit_protocol_retry_context,
     _is_code_edit_protocol_retryable,
@@ -331,6 +332,32 @@ def test_markdown_wrapped_target_file_code_uses_raw_source_digest() -> None:
 
     assert source_digest_for_content(raw_source) in manifest
     assert source_digest_for_content(wrapped_source) not in manifest
+
+
+def test_source_discovery_preserves_agentic_observation_provenance() -> None:
+    source = "VALUE = 1\n"
+    records = source_records_from_context(
+        {
+            "agentic_tool_observations": [
+                {
+                    "tool_name": "context.read_algorithm_file",
+                    "is_error": False,
+                    "structured_payload": {
+                        "file_path": "policies/example.py",
+                        "readable": True,
+                        "active": True,
+                        "truncated": False,
+                        "content_preview": source,
+                    },
+                }
+            ]
+        }
+    )
+
+    record = records["policies/example.py"]
+    assert record.content == source
+    assert record.digest == source_digest_for_content(source)
+    assert record.provenance == "agentic_tool_observations.context.read_algorithm_file"
 
 
 def test_parse_patch_exact_replace_with_wrapped_target_uses_raw_code() -> None:

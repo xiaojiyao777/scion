@@ -1919,6 +1919,9 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["quality_blocks"] == 4
     assert status["quality_block_ledger_count"] == 4
     assert status["quality_block_ledger"][0]["branch_id"] == "branch-1"
+    assert status["quality_block_ledger"][-1]["schema_version"] == (
+        "quality_block_attempt.v1"
+    )
     assert status["quality_block_ledger"][-1]["source"] == (
         "aggregate_reconciliation"
     )
@@ -1938,6 +1941,9 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert summary["counted_experiment_steps"] == 0
     assert summary["quality_block_ledger_count"] == 4
     assert summary["quality_block_ledger"][0]["hypothesis_id"] == "hyp-1"
+    assert summary["quality_block_ledger"][-1]["schema_version"] == (
+        "quality_block_attempt.v1"
+    )
     assert summary["quality_block_ledger"][-1]["source"] == (
         "aggregate_reconciliation"
     )

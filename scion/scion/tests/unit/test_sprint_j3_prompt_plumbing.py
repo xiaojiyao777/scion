@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from scion.proposal.engine import _split_hypothesis_context, _split_code_context
-from scion.proposal.engine.prompt import formatting, observations
+from scion.proposal.engine.prompt import formatting, observations, tool_receipts
 from scion.proposal.engine.prompt_common import (
     _DefaultDict,
     _active_solver_map_receipts_projection,
@@ -88,6 +88,13 @@ def test_prompt_common_reexports_observation_projection_helpers_without_semantic
     assert _same_fact_packet is observations._same_fact_packet
     assert _solver_design_full_algorithm_file_reads is (
         observations._solver_design_full_algorithm_file_reads
+    )
+    assert observations._PREVIEW_TOOL_NAMES is tool_receipts._PREVIEW_TOOL_NAMES
+    assert observations._compact_preview_tool_payload is (
+        tool_receipts._compact_preview_tool_payload
+    )
+    assert observations._compact_surface_payload is (
+        tool_receipts._compact_surface_payload
     )
 
     projection = _tool_observations_model_projection(
