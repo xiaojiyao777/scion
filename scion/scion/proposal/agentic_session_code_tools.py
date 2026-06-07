@@ -50,10 +50,12 @@ class AgenticSessionCodeToolsMixin:
                     "allowed_tools": allowed_tools,
                 },
             )
+            had_deferred_call = False
             while len(observations) < max_calls and allowed_tools:
                 deferred = _pop_deferred_code_phase_tool_call(state)
                 if deferred is None:
                     break
+                had_deferred_call = True
                 name, args = deferred
                 if name not in set(allowed_tools):
                     state.note(
@@ -124,7 +126,49 @@ class AgenticSessionCodeToolsMixin:
                 )
                 if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
                     break
+            observations.extend(
+                _run_deterministic_compact_feedback_prefetch(
+                    self,
+                    context,
+                    state,
+                    [*prior_observations, *observations],
+                    phase=AgenticProposalPhase.INSPECT_INTERFACE,
+                    source="code_phase_deterministic_prefetch",
+                    preserve_observation_chars=(
+                        self._minimum_budgeted_observation_chars()
+                    ),
+                )
+            )
+            if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+                return observations
+            if not _code_phase_planner_needed(
+                self,
+                context,
+                state,
+                hypothesis,
+                [*prior_observations, *observations],
+                code_context,
+                had_deferred_call=had_deferred_call,
+            ):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped code-phase LLM planner after deterministic context prefetch.",
+                    metadata={
+                        "stop_reason": "code_phase_context_satisfied",
+                        "selection_source": "code_phase_deterministic_prefetch",
+                    },
+                )
             while (
+                _code_phase_planner_needed(
+                    self,
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    code_context,
+                    had_deferred_call=had_deferred_call,
+                )
+                and
                 len(observations) < max_calls
                 and allowed_tools
                 and not self._tool_loop_limit_reached(state)
@@ -220,17 +264,6 @@ class AgenticSessionCodeToolsMixin:
                     )
 
                 if not planned or getattr(planned, "stop", False):
-                    _record_tool_selection_ledger_entry(
-                        state,
-                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
-                        source="code_phase_planner",
-                        status="skipped",
-                        tool_name="stop",
-                        args={},
-                        planner_context=planner_context,
-                        planned=planned,
-                        skip_reason="code_planner_stop",
-                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner stopped.",
@@ -238,17 +271,6 @@ class AgenticSessionCodeToolsMixin:
                     )
                     break
                 if isinstance(planned, Mapping) and planned.get("stop"):
-                    _record_tool_selection_ledger_entry(
-                        state,
-                        phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
-                        source="code_phase_planner",
-                        status="skipped",
-                        tool_name="stop",
-                        args={},
-                        planner_context=planner_context,
-                        planned=planned,
-                        skip_reason="code_planner_stop",
-                    )
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
                         "Code-phase planner stopped.",
@@ -729,3 +751,39 @@ class AgenticSessionCodeToolsMixin:
                     )
                 )
             return observations
+
+
+def _code_phase_planner_needed(
+    runner: Any,
+    context: ProposalToolContext,
+    state: AgenticProposalSessionState,
+    hypothesis: HypothesisProposal,
+    observations: list[ProposalObservation],
+    code_context: Mapping[str, Any],
+    *,
+    had_deferred_call: bool,
+) -> bool:
+    if runner._planner_context_satisfied(context, observations) is False:
+        return True
+    deferred_calls = getattr(state, "_deferred_code_phase_tool_calls", None)
+    if had_deferred_call or bool(deferred_calls):
+        return True
+    if not _has_code_phase_surface_read(observations, hypothesis):
+        return True
+    source_context = runner._code_phase_source_visibility_context(
+        hypothesis,
+        observations,
+        code_context=code_context,
+    )
+    receipts = {
+        str(item.get("file_path") or "").strip()
+        for item in source_context.get("already_visible_file_receipts") or ()
+        if isinstance(item, Mapping)
+    }
+    for item in source_context.get("mandatory_visible_files") or ():
+        if not isinstance(item, Mapping):
+            continue
+        path = str(item.get("file_path") or "").strip()
+        if path and path not in receipts:
+            return True
+    return False

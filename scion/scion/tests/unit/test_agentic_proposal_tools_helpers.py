@@ -164,6 +164,25 @@ class PlanningCreative(FakeCreative):
             return {"stop": True}
         return self.plans.pop(0)
 
+    def has_pending_hypothesis_tool_plan(self, **_kwargs) -> bool:
+        for plan in self.plans:
+            if plan.get("code_phase") is True:
+                continue
+            if plan.get("stop"):
+                return False
+            name = str(
+                plan.get("tool_name") or plan.get("name") or plan.get("tool") or ""
+            )
+            args = plan.get("args") or plan.get("input") or {}
+            if name in {"context.list_surfaces", "context.read_problem"}:
+                continue
+            if name == "memory.query" and args == {}:
+                continue
+            if name in {"feedback.query_screening", "feedback.query_runtime"}:
+                return bool(args)
+            return bool(name)
+        return False
+
 
 class ToolSelectionClient:
     def __init__(self, selections: list[dict]) -> None:

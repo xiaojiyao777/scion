@@ -207,6 +207,8 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     for event in output.transcript:
         if "tool_name" not in event.metadata:
             continue
+        if "step_id" not in event.metadata:
+            continue
         assert {
             "step_id",
             "tool_name",

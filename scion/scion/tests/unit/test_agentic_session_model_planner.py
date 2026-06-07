@@ -27,30 +27,22 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
-
-    output = session.run(
-        AgenticProposalRequest(
-            campaign_id="camp-1",
-            branch=context.branch,
-            champion=context.champion,
-            hypothesis_context={},
-                build_code_context=_policy_code_context,
-            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
-                passed=True,
-                failure_reason=None,
-            ),
-            problem_id=context.problem_id,
-            problem_spec_hash=context.problem_spec_hash,
-            tool_context=context,
-        )
+    state = AgenticProposalSessionState(
+        session_id="session-model-tool-selection",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
     )
 
+    observations = session._run_bounded_planner_tools(context, state)
     planner_events = [
         event.metadata
-        for event in output.transcript
+        for event in state.transcript
         if event.metadata.get("selection_source") == "planner_selected"
     ]
-    assert output.status == AgenticProposalStatus.COMPLETED
+    assert [observation.tool_name for observation in observations[-2:]] == [
+        "context.list_surfaces",
+        "context.read_problem",
+    ]
     assert [event["tool_name"] for event in planner_events[:2]] == [
         "context.list_surfaces",
         "context.read_problem",
@@ -115,15 +107,11 @@ def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
     assert all(spec.get("name") for spec in first_planner_context["allowed_tool_specs"])
 
 
-def test_solver_design_tool_selection_context_carries_active_fact_anchor(
+def test_solver_design_satisfied_context_skips_hypothesis_tool_selection_stop(
     tmp_path: Path,
 ) -> None:
     creative = PlanningCreative(
-        [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_active_solver_design", "args": {}},
-            {"stop": True},
-        ]
+        [{"stop": True}]
     )
     context = replace(
         _cvrp_context_with_champion(tmp_path),
@@ -153,20 +141,19 @@ def test_solver_design_tool_selection_context_carries_active_fact_anchor(
         )
     )
 
-    anchors = [
-        planner_context.get("active_algorithm_facts_anchor") or {}
-        for planner_context in creative.planner_contexts
-    ]
-
     assert output.status in {
         AgenticProposalStatus.COMPLETED,
         AgenticProposalStatus.FAILED,
         AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
     }
-    assert any(anchor.get("fact_packet_digest") for anchor in anchors)
-    assert any(
-        "cvrp.local_search.or_opt_1_relocation" in anchor.get("fact_ids", ())
-        for anchor in anchors
+    assert not [
+        context
+        for context in creative.planner_contexts
+        if context.get("code_phase") is not True
+    ]
+    assert not any(
+        entry["selected_tool"] == "stop"
+        for entry in output.tool_selection_ledger["entries"]
     )
 
 
@@ -210,11 +197,7 @@ def test_solver_design_planner_repeated_completed_required_tool_does_not_loop(
         "required_context_satisfied",
         "planner_stop",
     }
-    assert any(
-        event.metadata.get("tool_name") == "context.read_active_solver_design"
-        and event.metadata.get("skip_reason") == "already_succeeded"
-        for event in state.transcript
-    )
+    assert not any(entry["selected_tool"] == "stop" for entry in state.tool_selection_ledger)
     assert sum(
         1
         for observation in observations
@@ -763,9 +746,9 @@ def test_code_phase_targeted_read_context_carries_active_fact_anchor(
     )
     creative = PlanningCreative(
         [
-            {"stop": True},
             {
                 "tool_name": "context.read_algorithm_symbol",
+                "code_phase": True,
                 "args": {
                     "surface": "solver_design",
                     "file_path": target_file,
@@ -950,30 +933,27 @@ def test_planner_stop_after_problem_context_completes_required_feedback_and_surf
         output.tool_budget_used["observation_chars"]
         <= output.tool_loop_config["max_observation_chars"]
     )
-    assert (
-        creative.planner_contexts[0]["tool_arg_guidance"]["context.read_surface"][
-            "recommended_args"
-        ]["max_code_chars"]
-        == 800
-    )
-    stop_context = creative.planner_contexts[2]["required_context_status"]
-    assert stop_context["stop_allowed"] is False
-    assert "feedback.query_screening" in stop_context["missing_required_context"]
-    assert "feedback.query_runtime" in stop_context["missing_required_context"]
-    assert {
-        item["tool_name"] for item in stop_context["next_required_tools"]
-    } >= {"feedback.query_screening", "feedback.query_runtime"}
-    assert "Do not return stop=true" in stop_context["rule"]
-    assert any(
+    assert session._tool_arg_guidance(context, [])["context.read_surface"][
+        "recommended_args"
+    ]["max_code_chars"] == 800
+    assert not [
+        context
+        for context in creative.planner_contexts
+        if context.get("phase") == AgenticProposalPhase.DIAGNOSE.value
+    ]
+    assert not any(
         event.metadata.get("error_code") == "planner_stopped_before_required_context"
-        and event.metadata.get("status") == "framework_required_completion"
         for event in output.transcript
+    )
+    assert not any(
+        entry["selected_tool"] == "stop"
+        for entry in output.tool_selection_ledger["entries"]
     )
     for feedback_tool in _COMPACT_FEEDBACK_TOOL_NAMES:
         assert feedback_tool in tool_names
         assert any(
             event["tool_name"] == feedback_tool
-            and event["selection_source"] == "framework_required_completion"
+            and event["selection_source"] == "deterministic_prefetch"
             for event in tool_events
         )
     assert any(
@@ -1041,18 +1021,19 @@ def test_planner_memory_only_uses_framework_completion_for_screening_and_runtime
     ]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert any(
+    assert not any(
         event.metadata.get("error_code") == "planner_stopped_before_required_context"
-        and event.metadata.get("status") == "framework_required_completion"
-        and "feedback.query_screening" in event.metadata.get("detail", "")
-        and "feedback.query_runtime" in event.metadata.get("detail", "")
         for event in output.transcript
+    )
+    assert not any(
+        entry["selected_tool"] == "stop"
+        for entry in output.tool_selection_ledger["entries"]
     )
     assert "memory.query" in tool_names
     assert "feedback.query_screening" in tool_names
     assert "feedback.query_runtime" in tool_names
     assert any(
-        event.metadata.get("selection_source") == "framework_required_completion"
+        event.metadata.get("selection_source") == "deterministic_prefetch"
         and event.metadata.get("tool_name") == "feedback.query_screening"
         for event in output.transcript
     )

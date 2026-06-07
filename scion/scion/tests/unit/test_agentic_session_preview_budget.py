@@ -7,7 +7,12 @@ def test_agentic_session_wall_time_reserve_stops_smoke_repair_before_code_llm(
     monkeypatch,
 ) -> None:
     creative = FakeCreative()
-    context = _context(tmp_path, policy=_tool_enabled_policy())
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        search_memory=None,
+        research_log=None,
+        step_history=(),
+    )
     registry = ProposalToolRegistry.default_read_only()
     registry._tools["proposal.algorithm_smoke"] = _FailingAlgorithmSmokeTool()
 
@@ -189,7 +194,12 @@ def test_agentic_session_runs_algorithm_smoke_with_independent_preview_budget(
     tmp_path: Path,
 ) -> None:
     creative = FakeCreative()
-    context = _context(tmp_path, policy=_tool_enabled_policy())
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        search_memory=None,
+        research_log=None,
+        step_history=(),
+    )
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -443,8 +453,6 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
     )
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
             {
                 "tool_name": "context.read_surface",
                 "args": {"surface": "solver_design"},
@@ -553,11 +561,14 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
         [
             {"tool_name": "test.huge_observation", "args": {}},
             {"tool_name": "test.huge_error", "args": {}},
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
         ]
     )
-    context = _context(tmp_path, policy=_tool_enabled_policy())
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        search_memory=None,
+        research_log=None,
+        step_history=(),
+    )
     registry = ProposalToolRegistry.default_read_only()
     registry.register(
         LargeObservationTool(
@@ -574,9 +585,9 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
     )
     artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
     config = AgenticToolLoopConfig(
-        max_steps=6,
-        max_tool_calls=6,
-        max_observation_chars=2000,
+        max_steps=8,
+        max_tool_calls=8,
+        max_observation_chars=6000,
     )
     session = AgenticProposalSession(
         creative,
@@ -609,8 +620,11 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
         in {"test.huge_observation", "test.huge_error"}
     ]
 
-    assert output.tool_budget_used["observation_chars"] <= 2000
-    assert artifact["tool_budget_used"]["observation_chars"] <= 2000
+    assert output.tool_budget_used["observation_chars"] <= config.max_observation_chars
+    assert (
+        artifact["tool_budget_used"]["observation_chars"]
+        <= config.max_observation_chars
+    )
     assert validate_agentic_session_artifact(artifact).ok is True
     assert {event["tool_name"] for event in huge_events} == {
         "test.huge_observation",

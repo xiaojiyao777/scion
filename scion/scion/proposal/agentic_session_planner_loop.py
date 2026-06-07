@@ -26,6 +26,29 @@ class AgenticSessionPlannerLoopMixin:
                     ),
                 )
 
+            observations.extend(
+                _run_deterministic_compact_feedback_prefetch(
+                    self,
+                    context,
+                    state,
+                    observations,
+                    phase=AgenticProposalPhase.DIAGNOSE,
+                    source="deterministic_prefetch",
+                )
+            )
+            if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+                return observations
+            if self._planner_context_satisfied(
+                context,
+                observations,
+            ) and not _creative_declares_hypothesis_planner_needed(
+                self._creative,
+                context,
+                observations,
+            ):
+                self._record_loop_stop(state, "required_context_satisfied")
+                return observations
+
             planner_decisions = 0
             max_planner_decisions = max(
                 1,
@@ -67,9 +90,13 @@ class AgenticSessionPlannerLoopMixin:
                         error_code="planner_selection_limit",
                     )
                     break
-                if (
-                    not _context_requires_solver_design_grounding(context)
-                    and self._planner_context_satisfied(context, observations)
+                if self._planner_context_satisfied(
+                    context,
+                    observations,
+                ) and not _creative_declares_hypothesis_planner_needed(
+                    self._creative,
+                    context,
+                    observations,
                 ):
                     self._record_loop_stop(state, "required_context_satisfied")
                     break
@@ -160,17 +187,6 @@ class AgenticSessionPlannerLoopMixin:
                     )
 
                 if not planned or getattr(planned, "stop", False):
-                    _record_tool_selection_ledger_entry(
-                        state,
-                        phase=AgenticProposalPhase.DIAGNOSE.value,
-                        source="planner_selected",
-                        status="skipped",
-                        tool_name="stop",
-                        args={},
-                        planner_context=planner_context,
-                        planned=planned,
-                        skip_reason="planner_stop",
-                    )
                     missing = self._missing_planner_context_error(context, observations)
                     if missing is not None:
                         state.note(
@@ -190,20 +206,9 @@ class AgenticSessionPlannerLoopMixin:
                             tool_name=None,
                             detail=missing,
                         )
-                    self._record_loop_stop(state, "planner_stop")
+                    self._record_loop_stop(state, "required_context_satisfied")
                     break
                 if isinstance(planned, Mapping) and planned.get("stop"):
-                    _record_tool_selection_ledger_entry(
-                        state,
-                        phase=AgenticProposalPhase.DIAGNOSE.value,
-                        source="planner_selected",
-                        status="skipped",
-                        tool_name="stop",
-                        args={},
-                        planner_context=planner_context,
-                        planned=planned,
-                        skip_reason="planner_stop",
-                    )
                     missing = self._missing_planner_context_error(context, observations)
                     if missing is not None:
                         state.note(
@@ -223,7 +228,7 @@ class AgenticSessionPlannerLoopMixin:
                             tool_name=None,
                             detail=missing,
                         )
-                    self._record_loop_stop(state, "planner_stop")
+                    self._record_loop_stop(state, "required_context_satisfied")
                     break
 
                 if not isinstance(planned, Mapping):
@@ -663,9 +668,13 @@ class AgenticSessionPlannerLoopMixin:
                         error_code=str(_enum_value(observation.failure_code)),
                         tool_name=observation.tool_name,
                     )
-                if (
-                    not _context_requires_solver_design_grounding(context)
-                    and self._planner_context_satisfied(context, observations)
+                if self._planner_context_satisfied(
+                    context,
+                    observations,
+                ) and not _creative_declares_hypothesis_planner_needed(
+                    self._creative,
+                    context,
+                    observations,
                 ):
                     self._record_loop_stop(state, "required_context_satisfied")
                     break
@@ -1041,3 +1050,17 @@ class AgenticSessionPlannerLoopMixin:
                 }.items()
                 if value
             }
+
+
+def _creative_declares_hypothesis_planner_needed(
+    creative: Any,
+    context: ProposalToolContext,
+    observations: list[ProposalObservation],
+) -> bool:
+    checker = getattr(creative, "has_pending_hypothesis_tool_plan", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker(context=context, observations=observations))
+    except TypeError:
+        return bool(checker())

@@ -130,9 +130,9 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
     )
     creative = PlanningCreative(
         [
-            {"stop": True},
             {
                 "tool_name": "context.read_surface",
+                "code_phase": True,
                 "args": {
                     "surface": "solver_design",
                     "target_file": target_file,
@@ -259,7 +259,7 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
         AgenticTerminationReason.REPEATED_TOOL_CALL,
     }
     assert len(read_surface_events) == 4
-    assert read_surface_events[0]["error_code"] == "not_found"
+    assert any(event["error_code"] == "not_found" for event in read_surface_events)
     assert any(
         event["status"] == "ok"
         and event["selection_source"] == "selected_surface_required"
@@ -269,9 +269,14 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
         event["status"] == "ok" and event["selection_source"] == "code_phase_required"
         for event in read_surface_events
     )
-    assert creative.planner_contexts[1]["tool_arg_guidance"]["context.read_surface"][
-        "allowed_surface_ids"
-    ] == ["route_local", "search_policy"]
+    assert any(
+        context["tool_arg_guidance"]["context.read_surface"].get(
+            "allowed_surface_ids"
+        )
+        == ["route_local", "search_policy"]
+        for context in creative.planner_contexts
+        if "tool_arg_guidance" in context
+    )
     assert any(
         event.metadata.get("status") == "fallback_selected"
         and event.metadata.get("fallback") == "fixed_tool_plan"

@@ -326,9 +326,9 @@ def test_agentic_session_repeated_tool_call_fuse_falls_back(
 ) -> None:
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_surface", "args": {"surface": "main"}},
+            {"tool_name": "context.read_surface", "args": {"surface": "main"}},
+            {"tool_name": "context.read_surface", "args": {"surface": "main"}},
         ]
     )
     context = _context(tmp_path, policy=_tool_enabled_policy())
@@ -529,5 +529,4 @@ def test_agentic_session_fallback_fixed_plan_still_works(tmp_path: Path) -> None
         if event.metadata.get("tool_name")
     )
     assert creative.hypothesis_contexts
-
 

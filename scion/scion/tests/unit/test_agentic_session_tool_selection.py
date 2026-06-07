@@ -28,6 +28,7 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
+    guidance = session._tool_arg_guidance(context, [])
 
     output = session.run(
         AgenticProposalRequest(
@@ -42,19 +43,22 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
         )
     )
 
-    read_surface_guidance = creative.planner_contexts[0]["tool_arg_guidance"][
-        "context.read_surface"
-    ]
+    read_surface_guidance = guidance["context.read_surface"]
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
     assert read_surface_guidance["allowed_surface_ids"] == ["solver_design"]
     assert "active_problem_boundary_rule" in read_surface_guidance
     assert "forced_surface_rule" not in read_surface_guidance
-    assert creative.planner_contexts[0]["tool_arg_guidance"][
-        "feedback.query_screening"
-    ]["recommended_args"] == {"surface": "solver_design"}
-    assert creative.planner_contexts[0]["tool_arg_guidance"][
-        "feedback.query_runtime"
-    ]["recommended_args"] == {"surface": "solver_design"}
+    assert guidance["feedback.query_screening"]["recommended_args"] == {
+        "surface": "solver_design"
+    }
+    assert guidance["feedback.query_runtime"]["recommended_args"] == {
+        "surface": "solver_design"
+    }
+    assert not [
+        context
+        for context in creative.planner_contexts
+        if context.get("code_phase") is not True
+    ]
 
 
 def test_feedback_query_args_use_single_active_boundary_without_forcing(
@@ -744,7 +748,7 @@ def test_algorithm_symbol_reusable_observations_are_scoped_by_file_and_symbol() 
     )
 
 
-def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
+def test_solver_design_satisfied_context_skips_optional_hypothesis_file_reads(
     tmp_path: Path,
 ) -> None:
     target_file = "policies/baseline_algorithm.py"
@@ -765,22 +769,6 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
     )
     creative = PlanningCreative(
         [
-            {
-                "tool_name": "context.read_algorithm_file",
-                "args": {
-                    "surface": "solver_design",
-                    "file_path": support_file,
-                    "max_chars": 4000,
-                },
-            },
-            {
-                "tool_name": "context.read_algorithm_file",
-                "args": {
-                    "surface": "solver_design",
-                    "file_path": second_support_file,
-                    "max_chars": 4000,
-                },
-            },
             {"stop": True},
         ],
         hypothesis=hypothesis,
@@ -874,11 +862,14 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
         in {"context.read_operator_registry", "context.read_algorithm_slice"}
         and event["selection_source"] == "planner_map_followup_required"
     } == {"context.read_operator_registry", "context.read_algorithm_slice"}
-    assert [event["status"] for event in planner_file_read_events[:2]] == [
-        "ok",
-        "ok",
+    assert planner_file_read_events == []
+    assert support_file not in prompt_file_paths
+    assert second_support_file not in prompt_file_paths
+    assert not [
+        context
+        for context in creative.planner_contexts
+        if context.get("code_phase") is not True
     ]
-    assert prompt_file_paths >= {support_file, second_support_file}
     assert not [
         event
         for event in already_succeeded_file_skips
@@ -886,7 +877,7 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
     ]
 
 
-def test_solver_design_planner_can_read_full_active_algorithm_manifest(
+def test_solver_design_satisfied_context_does_not_read_full_manifest_via_planner(
     tmp_path: Path,
 ) -> None:
     files = [
@@ -913,17 +904,7 @@ def test_solver_design_planner_can_read_full_active_algorithm_manifest(
         )
     )
     creative = PlanningCreative(
-        [
-            {
-                "tool_name": "context.read_algorithm_file",
-                "args": {
-                    "surface": "solver_design",
-                    "file_path": file_path,
-                    "max_chars": 24000,
-                },
-            }
-            for file_path in files
-        ],
+        [{"stop": True}],
         hypothesis=hypothesis,
         patch=PatchProposal(
             file_path=files[0],
@@ -971,8 +952,16 @@ def test_solver_design_planner_can_read_full_active_algorithm_manifest(
     ]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert len(file_read_events) == len(files)
+    assert len(file_read_events) == 1
+    assert file_read_events[0]["selection_source"] == "required_context_preface"
+    assert file_read_events[0]["status"] == "ok"
+    assert file_read_events[0]["tool_name"] == "context.read_algorithm_file"
     assert {event["status"] for event in file_read_events} == {"ok"}
+    assert not [
+        context
+        for context in creative.planner_contexts
+        if context.get("code_phase") is not True
+    ]
     assert not cap_events
 
 
@@ -1051,24 +1040,12 @@ def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
 def test_tool_selection_ledger_records_hypothesis_session_calls(
     tmp_path: Path,
 ) -> None:
-    context = replace(
-        _cvrp_context_with_champion(tmp_path),
-        forced_surface="solver_design",
-    )
-    hypothesis = HypothesisProposal(
-        **_valid_hypothesis_payload(
-            change_locus="solver_design",
-            target_file="policies/baseline_algorithm.py",
-        )
-    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
     creative = PlanningCreative(
         [
-            {
-                "tool_name": "memory.query",
-                "args": {"surface": "solver_design", "max_chars": 4000},
-            },
-            {"tool_name": "feedback.query_screening", "args": {"surface": "solver_design"}},
-            {"tool_name": "feedback.query_runtime", "args": {"surface": "solver_design"}},
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
             {"stop": True},
         ],
         hypothesis=hypothesis,
@@ -1102,17 +1079,24 @@ def test_tool_selection_ledger_records_hypothesis_session_calls(
     output_artifact = json.loads(output_artifact_path.read_text(encoding="utf-8"))
 
     assert ledger["schema_version"] == "agentic-tool-selection-ledger.v1"
-    assert ledger["deterministic_prefetch_plan_id"] == "none"
+    assert ledger["deterministic_prefetch_plan_id"] != "none"
     assert ledger["default_triad_satisfied"] is True
     assert [entry["index"] for entry in entries] == list(range(1, len(entries) + 1))
+    assert by_tool["memory.query"]["source"] == "deterministic_prefetch"
+    assert by_tool["feedback.query_screening"]["source"] == "deterministic_prefetch"
+    assert by_tool["feedback.query_runtime"]["source"] == "deterministic_prefetch"
+    assert by_tool["feedback.query_runtime"]["deterministic_prefetch_plan_id"] != "none"
     assert by_tool["memory.query"]["status"] == "executed"
-    assert by_tool["feedback.query_screening"]["result_novelty"] == "empty"
-    assert by_tool["feedback.query_runtime"]["result_novelty"] == "empty"
+    assert by_tool["feedback.query_screening"]["result_novelty"] == "new"
+    assert by_tool["feedback.query_runtime"]["result_novelty"] == "new"
     assert by_tool["feedback.query_runtime"]["input_token_cost"] is None
-    assert by_tool["feedback.query_runtime"]["estimated_input_tokens"] > 0
-    assert by_tool["stop"]["status"] == "skipped"
+    assert by_tool["feedback.query_runtime"]["estimated_input_tokens"] is None
+    assert "stop" not in by_tool
     assert "result_in_final_prompt" in by_tool["feedback.query_runtime"]
     assert output_artifact["tool_selection_ledger"]["entry_count"] == len(entries)
+    assert output_artifact["tool_selection_ledger"][
+        "deterministic_prefetch_plan_id"
+    ] == ledger["deterministic_prefetch_plan_id"]
 
 
 def test_code_phase_tool_selection_ledger_records_trace_context(
@@ -1145,12 +1129,17 @@ def test_code_phase_tool_selection_ledger_records_trace_context(
     )
 
     entries = list(state.tool_selection_ledger)
+    by_tool = {entry["selected_tool"]: entry for entry in entries}
     assert observations
-    assert entries[0]["source"] == "code_phase_planner"
-    assert entries[0]["selected_tool"] == "context.read_branch_state"
-    assert entries[0]["status"] == "executed"
-    assert entries[0]["result_novelty"] == "new"
-    assert entries[1]["selected_tool"] == "stop"
+    assert entries[0]["source"] == "code_phase_deterministic_prefetch"
+    assert entries[0]["deterministic_prefetch_plan_id"] != "none"
+    assert by_tool["feedback.query_runtime"]["source"] == (
+        "code_phase_deterministic_prefetch"
+    )
+    assert by_tool["context.read_branch_state"]["source"] == "code_phase_planner"
+    assert by_tool["context.read_branch_state"]["status"] == "executed"
+    assert by_tool["context.read_branch_state"]["result_novelty"] == "new"
+    assert "stop" not in by_tool
     assert creative.planner_contexts[0]["_scion_trace_context"]["session_id"] == (
         "session-code-ledger"
     )

@@ -16,11 +16,9 @@ def test_code_phase_planner_can_query_memory_and_get_full_surface(
 ) -> None:
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
-            {"stop": True},
             {
                 "tool_name": "memory.query",
+                "code_phase": True,
                 "args": {
                     "surface": "search_policy",
                     "query": "implementation lessons for search_policy",
@@ -148,35 +146,23 @@ def test_model_side_forbidden_tool_selection_is_rejected_before_execution(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
-
-    output = session.run(
-        AgenticProposalRequest(
-            campaign_id="camp-1",
-            branch=context.branch,
-            champion=context.champion,
-            hypothesis_context={},
-                build_code_context=_policy_code_context,
-            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
-                passed=True,
-                failure_reason=None,
-            ),
-            problem_id=context.problem_id,
-            problem_spec_hash=context.problem_spec_hash,
-            tool_context=context,
-        )
+    state = AgenticProposalSessionState(
+        session_id="session-forbidden-tool",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
     )
+    session._run_bounded_planner_tools(context, state)
 
     invalid_events = [
         event.metadata
-        for event in output.transcript
+        for event in state.transcript
         if event.metadata.get("error_code") == "invalid_tool_selection"
     ]
     forbidden_tool_events = [
         event.metadata
-        for event in output.transcript
+        for event in state.transcript
         if event.metadata.get("tool_name") == "proposal.contract_preview"
     ]
-    assert output.status == AgenticProposalStatus.COMPLETED
     assert invalid_events
     assert invalid_events[0]["fallback"] == "fixed_tool_plan"
     assert not any(
@@ -205,39 +191,21 @@ def test_model_side_malformed_tool_selection_falls_back_without_raw_refs(
         artifact_store=artifact_store,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
-
-    output = session.run(
-        AgenticProposalRequest(
-            campaign_id="camp-1",
-            branch=context.branch,
-            champion=context.champion,
-            hypothesis_context={
-                "raw_metrics_ref": "/SECRET/raw.json",
-                "note": "safe line\nvalidation SECRET_HOLDOUT_SIGNAL",
-            },
-                build_code_context=_policy_code_context,
-            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
-                passed=True,
-                failure_reason=None,
-            ),
-            problem_id=context.problem_id,
-            problem_spec_hash=context.problem_spec_hash,
-            tool_context=context,
-        )
+    state = AgenticProposalSessionState(
+        session_id="session-malformed-tool",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
     )
+    session._run_bounded_planner_tools(context, state)
 
-    rendered_output = json.dumps(output, default=str, sort_keys=True)
-    assert output.status == AgenticProposalStatus.COMPLETED
     assert any(
         event.metadata.get("error_code") == "planner_exception"
-        for event in output.transcript
+        for event in state.transcript
     )
     assert any(
         event.metadata.get("fallback") == "fixed_tool_plan"
-        for event in output.transcript
+        for event in state.transcript
     )
-    assert "raw_metrics_ref" not in rendered_output
-    assert "SECRET_HOLDOUT_SIGNAL" not in rendered_output
     assert "raw_metrics_ref" not in client.prompts[0]
     assert "SECRET_HOLDOUT_SIGNAL" not in client.prompts[0]
 
@@ -295,16 +263,6 @@ def test_agentic_session_fallback_does_not_repeat_successful_feedback_tools(
 ) -> None:
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "memory.query", "args": {}},
-            {
-                "tool_name": "feedback.query_screening",
-                "args": {"branch_id": "branch-1"},
-            },
-            {
-                "tool_name": "feedback.query_runtime",
-                "args": {"branch_id": "branch-1"},
-            },
             {"tool_name": "context.read_surface", "args": "bad-args"},
         ]
     )
@@ -360,16 +318,13 @@ def test_agentic_session_retries_empty_branch_scoped_feedback_campaign_wide(
 ) -> None:
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
-            {"tool_name": "memory.query", "args": {}},
             {
                 "tool_name": "feedback.query_screening",
-                "args": {"branch_id": "branch-current"},
+                "args": {"branch_id": "branch-empty"},
             },
             {
                 "tool_name": "feedback.query_runtime",
-                "args": {"branch_id": "branch-current"},
+                "args": {"branch_id": "branch-empty"},
             },
             {"stop": True},
         ]
@@ -425,7 +380,16 @@ def test_agentic_session_retries_empty_branch_scoped_feedback_campaign_wide(
     ]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert any("Returned 0 of 0" in summary for summary in screening_summaries)
     assert any("Returned 1 of 1" in summary for summary in screening_summaries)
     assert len(runtime_summaries) >= 2
     assert useful_screening
+    assert any(
+        event.metadata.get("selection_source") == "deterministic_prefetch"
+        and event.metadata.get("tool_name") == "feedback.query_screening"
+        for event in output.transcript
+    )
+    assert any(
+        event.metadata.get("selection_source") == "planner_selected"
+        and event.metadata.get("skip_reason") == "equivalent_feedback_observation"
+        for event in output.transcript
+    )

@@ -116,6 +116,7 @@ class AgenticProposalSessionState:
     failure_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     observation_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     tool_selection_ledger: list[Mapping[str, Any]] = field(default_factory=list)
+    deterministic_prefetch_plan_id: str = "none"
     tool_step_count: int = 0
     tool_call_count: int = 0
     tool_event_count: int = 0

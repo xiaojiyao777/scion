@@ -179,11 +179,7 @@ class AgenticSessionDiagnosisMixin:
             context: ProposalToolContext,
             state: AgenticProposalSessionState,
         ) -> list[ProposalObservation]:
-            observations = (
-                self._run_required_context_preface(context, state)
-                if _context_requires_solver_design_grounding(context)
-                else []
-            )
+            observations = self._run_required_context_preface(context, state)
             if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
                 return observations
             observations.extend(

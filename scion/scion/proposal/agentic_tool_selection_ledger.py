@@ -40,7 +40,10 @@ def tool_selection_ledger_payload(state: Any, output: Any) -> dict[str, Any]:
         "campaign_id": getattr(output, "campaign_id", "")
         or getattr(state, "campaign_id", ""),
         "branch_id": getattr(output, "branch_id", "") or getattr(state, "branch_id", ""),
-        "deterministic_prefetch_plan_id": "none",
+        "deterministic_prefetch_plan_id": (
+            str(getattr(state, "deterministic_prefetch_plan_id", "") or "").strip()
+            or "none"
+        ),
         "default_triad_satisfied": _default_triad_satisfied(entries),
         "entry_count": len(entries),
         "entries": entries,
@@ -94,7 +97,10 @@ def record_tool_selection_ledger_entry(
             if planner_context is not None
             else None
         ),
-        "deterministic_prefetch_plan_id": "none",
+        "deterministic_prefetch_plan_id": (
+            str(getattr(state, "deterministic_prefetch_plan_id", "") or "").strip()
+            or "none"
+        ),
         "default_triad_satisfied": _default_triad_satisfied(
             getattr(state, "tool_selection_ledger", ())
         ),

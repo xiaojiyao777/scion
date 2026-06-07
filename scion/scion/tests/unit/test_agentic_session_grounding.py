@@ -33,13 +33,10 @@ def test_generic_session_keeps_planner_owned_required_context(
         event.metadata for event in state.transcript if event.metadata.get("step_id")
     ]
     assert [event["selection_source"] for event in tool_events[:2]] == [
-        "planner_selected",
-        "planner_selected",
+        "required_context_preface",
+        "required_context_preface",
     ]
-    assert not any(
-        event.metadata.get("selection_source") == "required_context_preface"
-        for event in state.transcript
-    )
+    assert creative.planner_contexts == []
 
 
 def test_code_phase_required_surface_read_compacts_to_preserve_self_check_reserve(
@@ -372,4 +369,3 @@ def test_budget_denial_does_not_apply_to_mandatory_code_surface_read(
         selection_source="code_phase_required_compact",
         state=state,
     )
-

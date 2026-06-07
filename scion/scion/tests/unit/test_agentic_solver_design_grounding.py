@@ -9,29 +9,16 @@ def test_hypothesis_planner_exposes_active_solver_tools_before_surface_fallback(
         _cvrp_context_with_champion(tmp_path),
         active_problem_boundary_surfaces=("solver_design",),
     )
-    creative = PlanningCreative([{"stop": True}])
+    creative = PlanningCreative([])
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
 
-    session.run(
-        AgenticProposalRequest(
-            campaign_id="camp-cvrp",
-            branch=context.branch,
-            champion=context.champion,
-            hypothesis_context={},
-            build_code_context=lambda _hypothesis: {"kind": "code"},
-            problem_id=context.problem_id,
-            problem_spec_hash=context.problem_spec_hash,
-            tool_context=context,
-        )
-    )
-
-    allowed_tools = creative.planner_contexts[0]["allowed_tools"]
+    allowed_tools = session._planner_allowed_tools(context)
     spec_names = [
         spec["name"]
-        for spec in creative.planner_contexts[0]["allowed_tool_specs"]
+        for spec in session._planner_allowed_tool_specs(context)
     ]
     assert "context.read_active_solver_design" in allowed_tools
     assert "context.read_solver_call_graph" in allowed_tools
@@ -41,7 +28,7 @@ def test_hypothesis_planner_exposes_active_solver_tools_before_surface_fallback(
     assert spec_names.index("context.read_active_solver_design") < spec_names.index(
         "context.read_surface"
     )
-    file_guidance = creative.planner_contexts[0]["tool_arg_guidance"][
+    file_guidance = session._tool_arg_guidance(context, [])[
         "context.read_algorithm_file"
     ]
     assert file_guidance["required_first_tool"] == "context.list_algorithm_files"

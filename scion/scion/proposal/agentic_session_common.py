@@ -178,6 +178,9 @@ from scion.proposal.agentic_tool_selection_ledger import (
     tool_selection_ledger_payload as _tool_selection_ledger_payload,
     update_tool_selection_ledger_result as _update_tool_selection_ledger_result,
 )
+from scion.proposal.agentic_session_deterministic_tools import (
+    run_deterministic_compact_feedback_prefetch as _run_deterministic_compact_feedback_prefetch,
+)
 from scion.proposal.agentic_utils import (
     _drop_empty_dict,
     _enum_value,
@@ -368,6 +371,7 @@ __all__ = (
     "_patch_self_reported_unresolved_issue",
     "_pre_hypothesis_solver_design_target_file_read_args",
     "_planner_available_compact_feedback_tools",
+    "_run_deterministic_compact_feedback_prefetch",
     "_planner_missing_context_error",
     "_planner_policy_context_satisfied",
     "_planner_required_context_status",
