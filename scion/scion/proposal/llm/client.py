@@ -120,6 +120,7 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
         )
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._last_usage_metadata: dict[str, Any] | None = None
+        self._last_prompt_cache_key: str | None = None
         self._last_retry_events: list[dict[str, Any]] = []
         self._anthropic_client: Any = None
         self._openai_client: Any = None

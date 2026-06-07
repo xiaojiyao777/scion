@@ -393,6 +393,209 @@ def test_deepseek_tool_call_kwargs_omit_named_tool_choice(monkeypatch):
     assert kwargs["reasoning_effort"] == "max"
 
 
+def test_gpt_codex_chat_kwargs_include_prompt_cache_key_without_retention() -> None:
+    client = LLMClient(model="gpt-5.5")
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "generate_patch",
+            "parameters": {"type": "object", "required": ["file_path"]},
+        },
+    }
+
+    kwargs = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "branch=session user prompt"}],
+        timeout_sec=10,
+        tools=[tool],
+        request_kind="code",
+        system_blocks=[
+            {
+                "type": "text",
+                "text": "stable code-generation system context",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+    )
+
+    assert kwargs["prompt_cache_key"].startswith("scion:v3:gpt:code:")
+    assert "prompt_cache_retention" not in kwargs
+
+
+def test_prompt_cache_key_omitted_for_deepseek_chat_kwargs() -> None:
+    client = LLMClient(model="deepseek-v4-pro")
+
+    kwargs = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "hi"}],
+        timeout_sec=10,
+        request_kind="code",
+        system_blocks=[
+            {
+                "type": "text",
+                "text": "stable system context",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+    )
+
+    assert "prompt_cache_key" not in kwargs
+    assert "prompt_cache_retention" not in kwargs
+
+
+def test_prompt_cache_key_omitted_for_anthropic_tool_call() -> None:
+    client = LLMClient(model="claude-test", timeout_sec=60, max_retries=0)
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.name = "generate_patch"
+    tool_block.input = {"file_path": "x.py"}
+    response = MagicMock()
+    response.stop_reason = "tool_use"
+    response.content = [tool_block]
+    response.usage = None
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.return_value = response
+
+    with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
+        client.call_with_tool(
+            "prompt",
+            tool,
+            model="claude-test",
+            system_blocks=[
+                {
+                    "type": "text",
+                    "text": "stable system context",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        )
+
+    kwargs = fake_anthropic_client.messages.create.call_args.kwargs
+    assert "prompt_cache_key" not in kwargs
+    assert "prompt_cache_retention" not in kwargs
+
+
+def test_prompt_cache_key_ignores_user_prompt_branch_and_session() -> None:
+    client = LLMClient(model="gpt-5.5")
+    system_blocks = [
+        {
+            "type": "text",
+            "text": "stable planner context",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "plan_proposal_tool_call",
+                "parameters": {"type": "object", "required": ["tool_name"]},
+            },
+        }
+    ]
+
+    first = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[
+            {"role": "user", "content": "branch_id=a session_id=a choose tool"}
+        ],
+        timeout_sec=10,
+        tools=tools,
+        request_kind="tool_selection",
+        system_blocks=system_blocks,
+    )["prompt_cache_key"]
+    second = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[
+            {
+                "role": "user",
+                "content": "branch_id=b session_id=b different hypothesis prompt",
+            }
+        ],
+        timeout_sec=10,
+        tools=tools,
+        request_kind="tool_selection",
+        system_blocks=system_blocks,
+    )["prompt_cache_key"]
+
+    assert first == second
+
+
+def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes() -> None:
+    client = LLMClient(model="gpt-5.5")
+    base_system = [
+        {
+            "type": "text",
+            "text": "stable system context",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    changed_system = [
+        {
+            "type": "text",
+            "text": "changed stable system context",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    base_tool = [
+        {
+            "type": "function",
+            "function": {
+                "name": "generate_patch",
+                "parameters": {"type": "object", "required": ["file_path"]},
+            },
+        }
+    ]
+    changed_tool = [
+        {
+            "type": "function",
+            "function": {
+                "name": "generate_patch",
+                "parameters": {
+                    "type": "object",
+                    "required": ["file_path", "action"],
+                },
+            },
+        }
+    ]
+
+    base_key = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "same prompt"}],
+        timeout_sec=10,
+        tools=base_tool,
+        request_kind="code",
+        system_blocks=base_system,
+    )["prompt_cache_key"]
+    system_key = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "same prompt"}],
+        timeout_sec=10,
+        tools=base_tool,
+        request_kind="code",
+        system_blocks=changed_system,
+    )["prompt_cache_key"]
+    tool_key = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "same prompt"}],
+        timeout_sec=10,
+        tools=changed_tool,
+        request_kind="code",
+        system_blocks=base_system,
+    )["prompt_cache_key"]
+
+    assert system_key != base_key
+    assert tool_key != base_key
+
+
 def test_tool_selection_tool_call_defaults_missing_intent() -> None:
     client = LLMClient(max_retries=0)
     client._tool_call_once = MagicMock(  # type: ignore[method-assign]
@@ -570,7 +773,7 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
 
     usage = client.get_last_usage_metadata()
     assert usage["provider"] == "openai_compatible"
-    assert usage["cache_mode"] == "automatic_prefix_cache_observed"
+    assert usage["cache_mode"] == "prompt_cache_key_observed"
     assert usage["cache_accounting_mode"] == "provider_prompt_tokens_include_cache_read"
     assert usage["input_tokens"] == 120
     assert usage["prompt_tokens_total"] == 120
@@ -582,6 +785,8 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
     assert usage["prompt_cache_miss"] is True
     assert usage["prompt_cache_hit_tokens"] == 80
     assert usage["prompt_cache_miss_tokens"] == 40
+    assert usage["prompt_cache_key"].startswith("scion:v3:gpt:code:")
+    assert usage["prompt_cache_key_digest"] == usage["prompt_cache_key"].rsplit(":", 1)[-1]
 
 
 def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:

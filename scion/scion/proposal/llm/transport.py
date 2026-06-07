@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any, Dict
 
+from .cache import gpt_prompt_cache_key
 from .config import (
     _is_deepseek_model,
     _is_gpt_codex_model,
@@ -145,6 +146,8 @@ class TransportMixin:
                 timeout_sec=timeout_sec,
                 tools=[openai_tool],
                 tool_choice={"type": "function", "function": {"name": tool_name}},
+                request_kind=_normalize_request_kind(tool=tool) or "tool_call",
+                system_blocks=system_blocks,
             )
         )
 
@@ -159,6 +162,7 @@ class TransportMixin:
                 usage,
                 model=model,
                 request_kind=_normalize_request_kind(tool=tool) or "tool_call",
+                prompt_cache_key=self._last_prompt_cache_key,
             )
             if self._token_tracker is not None:
                 self._token_tracker.record(
@@ -267,6 +271,8 @@ class TransportMixin:
                     max_tokens=self.max_tokens,
                     messages=messages,
                     timeout_sec=self.timeout_sec,
+                    request_kind="llm_call",
+                    system_blocks=system_blocks,
                 )
             )
             usage = response.usage
@@ -283,6 +289,7 @@ class TransportMixin:
                     usage,
                     model=model,
                     request_kind="llm_call",
+                    prompt_cache_key=self._last_prompt_cache_key,
                 )
                 if self._token_tracker is not None:
                     self._token_tracker.record(
@@ -306,6 +313,8 @@ class TransportMixin:
         timeout_sec: float,
         tools: list[Dict[str, Any]] | None = None,
         tool_choice: Dict[str, Any] | None = None,
+        request_kind: str | None = None,
+        system_blocks: list[dict] | None = None,
     ) -> Dict[str, Any]:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -317,6 +326,19 @@ class TransportMixin:
             kwargs["tools"] = tools
         if tool_choice is not None and not _is_deepseek_model(str(model or "")):
             kwargs["tool_choice"] = tool_choice
+        normalized_kind = _normalize_request_kind(
+            request_kind=request_kind,
+            tool=tools[0] if tools else None,
+        ) or "llm_call"
+        prompt_cache_key = gpt_prompt_cache_key(
+            model=model,
+            request_kind=normalized_kind,
+            system_blocks=system_blocks,
+            tool_schema=tools or {},
+        )
+        self._last_prompt_cache_key = prompt_cache_key
+        if prompt_cache_key:
+            kwargs["prompt_cache_key"] = prompt_cache_key
         reasoning_effort = self._openai_reasoning_effort(model)
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
@@ -419,6 +441,7 @@ class TransportMixin:
         *,
         model: str,
         request_kind: str,
+        prompt_cache_key: str | None = None,
     ) -> None:
         cache_read, cache_miss = self._openai_cache_usage(usage)
         prompt_tokens_total = self._get_usage_int(usage, "prompt_tokens")
@@ -430,15 +453,23 @@ class TransportMixin:
         )
         if cache_read and not cache_miss and prompt_tokens_total > cache_read:
             cache_miss = prompt_tokens_total - cache_read
+        if prompt_cache_key:
+            cache_mode = (
+                "prompt_cache_key_observed"
+                if cache_read or cache_miss
+                else "prompt_cache_key_attempted"
+            )
+        else:
+            cache_mode = (
+                "automatic_prefix_cache_observed"
+                if cache_read or cache_miss
+                else "automatic_prefix_cache_attempted"
+            )
         self._last_usage_metadata = {
             "provider": "openai_compatible",
             "model": model,
             "request_kind": request_kind,
-            "cache_mode": (
-                "automatic_prefix_cache_observed"
-                if cache_read or cache_miss
-                else "automatic_prefix_cache_attempted"
-            ),
+            "cache_mode": cache_mode,
             "cache_accounting_mode": "provider_prompt_tokens_include_cache_read",
             "input_tokens": prompt_tokens_total,
             "prompt_tokens_total": prompt_tokens_total,
@@ -452,6 +483,11 @@ class TransportMixin:
             "prompt_cache_hit_tokens": cache_read,
             "prompt_cache_miss_tokens": cache_miss,
         }
+        if prompt_cache_key:
+            self._last_usage_metadata["prompt_cache_key"] = prompt_cache_key
+            self._last_usage_metadata["prompt_cache_key_digest"] = (
+                prompt_cache_key.rsplit(":", 1)[-1]
+            )
 
     @staticmethod
     def _raise_classified(exc: Exception) -> None:
