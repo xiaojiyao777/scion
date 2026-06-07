@@ -20,6 +20,7 @@ import yaml
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
+from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.termination import TerminationConfig
 from scion.evidence import attach_final_evidence_package
 from scion.problems.cvrp.evidence import (
@@ -31,6 +32,7 @@ from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -40,6 +42,7 @@ from scion.verification.gate import VerificationGate
 SCION_ROOT = Path(__file__).resolve().parent
 CVRP_DIR = SCION_ROOT / "scion" / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
+VRP_DIR = CVRP_DIR.parents[3] / "vrp"
 CONTROLLED_CANARY = "controlled/data/synthetic_controlled_canary_5.vrp"
 
 
@@ -89,6 +92,11 @@ def main() -> None:
             key: str(path) for key, path in package_result.artifacts.items()
         },
     }
+    _validate_smoke_success(
+        campaign=campaign,
+        final_quality=final_quality,
+        output_dir=output_dir,
+    )
     result_path = output_dir / "e2e_result.json"
     result_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(summary, indent=2, sort_keys=True))
@@ -107,13 +115,30 @@ def _problem_v1() -> ProblemSpecV1:
     return ProblemSpecV1(**data)
 
 
+def _baseline_algorithm_solve_patch(new_solve: str) -> dict[str, Any]:
+    source = (CVRP_DIR / "policies" / "baseline_algorithm.py").read_text(
+        encoding="utf-8"
+    )
+    old_solve = source[source.index("def solve(") :]
+    return {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(source + "\n"),
+        "old_string": old_solve,
+        "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
+        "replace_all": False,
+        "test_hint": None,
+    }
+
+
 def _mock_llm() -> MockLLMClient:
     return MockLLMClient(
         hypothesis_response={
-            "hypothesis_text": "Add a bounded controlled route improver for synthetic CVRP smoke.",
-            "change_locus": "route_local",
-            "action": "create_new",
-            "target_file": None,
+            "hypothesis_text": "Use a bounded solver-design route ordering pass for synthetic CVRP smoke.",
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_algorithm.py",
             "predicted_direction": "exploratory",
             "target_weakness": "controlled CVRP route ordering",
             "expected_effect": "Improve only the checked-in synthetic controlled route shapes.",
@@ -123,27 +148,31 @@ def _mock_llm() -> MockLLMClient:
             "objective_tradeoff_policy": "preserve fleet_violation before distance",
             "no_op_condition": "unrecognized controlled customer sets return the original solution",
             "risk_to_higher_priority": "none for route-count preserving controlled changes",
-            "target_runtime_effect": "neutral",
-            "complexity_claim": "single pass over existing routes and customer ids",
-            "runtime_budget_strategy": "no nested route-pair scan; bounded controlled fixture rewrite only",
+            "target_runtime_effect": "preserve",
+            "complexity_claim": "O(n log n) route ordering with one bounded pass.",
+            "runtime_budget_strategy": "Use one deterministic pass and emit solver-design telemetry.",
+            "novelty_signature": {
+                "algorithm_family": "controlled_solver_design_smoke",
+                "construction_strategy": "ascending_single_route_when_capacity_allows",
+                "improvement_strategy": "bounded_route_ordering",
+                "acceptance_strategy": "strict_capacity_preserving",
+                "runtime_budget_strategy": "single_pass",
+            },
         },
-        patch_response={
-            "file_path": "operators/controlled_route_improver.py",
-            "action": "create",
-            "code_content": (
-                "class ControlledRouteImprover:\n"
-                "    def execute(self, solution, instance, rng):\n"
-                "        customers = set()\n"
-                "        for route in solution.routes:\n"
-                "            customers.update(route)\n"
-                "        if customers == {1, 2, 3, 4}:\n"
-                "            return solution.__class__(routes=((1, 2, 3, 4),))\n"
-                "        if customers == {1, 2, 3, 4, 5}:\n"
-                "            return solution.__class__(routes=((1, 2, 3, 4, 5),))\n"
-                "        return solution\n"
-            ),
-            "test_hint": None,
-        },
+        patch_response=_baseline_algorithm_solve_patch(
+            (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    ordered = tuple(sorted(instance.customer_ids))\n"
+                "    if ordered and instance.route_load(ordered) <= instance.capacity:\n"
+                "        solution = context.make_solution((ordered,))\n"
+                "    else:\n"
+                "        solution = context.nearest_neighbor()\n"
+                "    context.record_iteration('controlled_order_probe', 1)\n"
+                "    context.record_move('controlled_order_probe', attempted=1, accepted=1, delta=0.0)\n"
+                "    context.set_stop_reason('controlled_order_completed')\n"
+                "    return solution\n"
+            )
+        ),
     )
 
 
@@ -163,6 +192,7 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
         metric_specs=tuple(spec_v1.objectives),
         objective_policy=spec_v1.objective_policy,
         require_metric_specs=True,
+        problem_spec=spec_v1,
     )
 
     bridge = bridge_problem_spec_v1(spec_v1)
@@ -196,6 +226,7 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
         termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
+        force_surface="solver_design",
     )
 
 
@@ -217,6 +248,7 @@ def _write_final_evidence(
             candidate_workspace=champion_snapshot,
             time_limit_sec=2,
             seeds=(0, 1),
+            data_roots=(VRP_DIR,),
             baseline_label="controlled-baseline",
             candidate_label=f"controlled-promoted-v{campaign._champion.version}",
             baseline_registry_path=CVRP_DIR / "registry.yaml",
@@ -226,6 +258,46 @@ def _write_final_evidence(
         runner=runner,
         adapter=adapter,
     )
+
+
+def _validate_smoke_success(
+    *,
+    campaign: CampaignManager,
+    final_quality: dict[str, Any],
+    output_dir: Path,
+) -> None:
+    protocol_steps = [
+        step
+        for step in campaign._step_history
+        if getattr(step, "protocol_result", None) is not None
+    ]
+    effective_steps = [
+        step
+        for step in protocol_steps
+        if screened_experiment_effective(step.protocol_result)
+    ]
+
+    reasons: list[str] = []
+    if not protocol_steps:
+        reasons.append("no campaign step reached ExperimentProtocol")
+    if not effective_steps:
+        reasons.append("no campaign step counted as an effective screened experiment")
+
+    n_cases = int(final_quality.get("n_cases", 0) or 0)
+    n_ok = int(final_quality.get("n_ok", 0) or 0)
+    n_error = int(final_quality.get("n_error", 0) or 0)
+    if n_error != 0:
+        reasons.append(f"final_quality n_error={n_error}, expected 0")
+    if n_ok != n_cases:
+        reasons.append(f"final_quality n_ok={n_ok}, expected n_cases={n_cases}")
+    if n_cases == 0:
+        reasons.append("final_quality n_cases=0")
+
+    if reasons:
+        detail = "; ".join(reasons)
+        raise SystemExit(
+            f"controlled CVRP smoke failed closed: {detail}; output_dir={output_dir}"
+        )
 
 
 def _step_result_summary(result: Any) -> dict[str, Any]:
