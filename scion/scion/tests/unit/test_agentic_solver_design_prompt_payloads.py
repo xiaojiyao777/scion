@@ -265,6 +265,84 @@ def test_code_prompt_renders_generic_telemetry_identity_rules() -> None:
     assert "demand" not in user_prompt.lower()
 
 
+def test_code_prompt_telemetry_identity_repair_blocks_baseline_id_reuse() -> None:
+    context = {
+        "problem_summary": "Synthetic scheduling problem.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "solver_body.py",
+        "action": "modify",
+        "hypothesis_implementation_brief": {
+            "hypothesis_text": "Add a declared bounded signal.",
+            "target_file": "solver_body.py",
+            "mechanism_changes": [
+                {"id": "approved_signal", "change_type": "add"}
+            ],
+        },
+        "target_file_code": (
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return None\n"
+        ),
+        "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+        "import_whitelist": "math, random, time",
+        "reference_operators": "",
+        "editable_patterns": "solver_body.py",
+        "frozen_patterns": "adapter.py",
+        "previous_patch": {
+            "file_path": "solver_body.py",
+            "action": "modify",
+            "code_content": (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    context.record_move('alns', attempted=1, accepted=0)\n"
+                "    return None\n"
+            ),
+        },
+        "agentic_code_self_check_feedback": {
+            "passed": False,
+            "failure_code": "code_stage_telemetry_identity_mismatch",
+            "current_blocker": "telemetry_identity",
+            "offending_telemetry_ids": ["alns"],
+            "protected_mechanism_ids": ["approved_signal"],
+            "telemetry_preservation_policy": "protected_mechanism_ids_only",
+            "compact_offending_telemetry_usages": [
+                {
+                    "file": "solver_body.py",
+                    "line": 2,
+                    "helper": "record_move",
+                    "mechanism_id": "alns",
+                    "line_text": (
+                        "context.record_move('alns', attempted=1, accepted=0)"
+                    ),
+                }
+            ],
+            "hard_constraints": [
+                (
+                    "Do not add or increase telemetry for baseline, "
+                    "structural, aggregate, or unapproved mechanism ids."
+                ),
+                "Do not copy existing baseline telemetry as new evidence.",
+            ],
+        },
+    }
+
+    _system_blocks, user_prompt = _split_code_context(context)
+
+    assert "Telemetry Identity Repair Blocker" in user_prompt
+    assert "Approved/protected mechanism id(s): `approved_signal`" in user_prompt
+    assert "Offending unapproved telemetry id(s): `alns`" in user_prompt
+    assert "Do not add or increase telemetry for baseline" in user_prompt
+    assert "Do not copy existing baseline telemetry as new evidence" in user_prompt
+    assert "genuinely implements that mechanism" in user_prompt
+    assert "Otherwise remove the newly added or increased telemetry call" in user_prompt
+    assert "file=solver_body.py" in user_prompt
+    assert "line=2" in user_prompt
+    assert "helper=record_move" in user_prompt
+    assert "mechanism_id=alns" in user_prompt
+    assert "line_text=context.record_move('alns', attempted=1, accepted=0)" in user_prompt
+    assert "context.record_move('alns', ...)" not in user_prompt
+
+
 def test_solver_design_code_prompt_uses_synthetic_provider_guidance() -> None:
     client = CapturingToolClient()
     creative = CreativeLayer(client)

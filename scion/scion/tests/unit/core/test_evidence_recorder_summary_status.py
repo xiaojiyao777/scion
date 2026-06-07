@@ -1851,6 +1851,22 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
         "proposal_quality_loop_limit": 6,
         "proposal_quality_blocks_consumed": 4,
         "quality_blocks": 4,
+        "quality_block_ledger": [
+            {
+                "sequence": 1,
+                "index": 0,
+                "branch_id": "branch-1",
+                "hypothesis_id": "hyp-1",
+                "attempt_kind": "proposal_block",
+                "failure_stage": "agent_quality_blocked",
+                "failure_category": "agent_quality_blocked",
+                "failure_reason": "proposal_premise_contradicted",
+                "source_result_reason": "agent_quality_blocked",
+                "counts_toward_max_rounds": False,
+                "pre_protocol": True,
+            }
+        ],
+        "quality_block_ledger_count": 1,
         "blocked_attempts": 4,
         "proposal_quality_blocks_remaining": 2,
     }
@@ -1873,6 +1889,12 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert status["reconcile_lifecycle_steps"] == 1
     assert status["non_counted_lifecycle_steps"] == 2
     assert status["quality_blocks"] == 4
+    assert status["quality_block_ledger_count"] == 4
+    assert status["quality_block_ledger"][0]["branch_id"] == "branch-1"
+    assert status["quality_block_ledger"][-1]["source"] == (
+        "aggregate_reconciliation"
+    )
+    assert status["proposal_accounting"]["quality_block_ledger_count"] == 4
     assert status["blocked_attempts"] == 4
     assert status["campaign_loop"]["attempt_limit"] == 3
     assert status["campaign_loop"]["effective_rounds_completed"] == 0
@@ -1886,6 +1908,12 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert summary["reconcile_lifecycle_steps"] == 1
     assert summary["non_counted_lifecycle_steps"] == 2
     assert summary["counted_experiment_steps"] == 0
+    assert summary["quality_block_ledger_count"] == 4
+    assert summary["quality_block_ledger"][0]["hypothesis_id"] == "hyp-1"
+    assert summary["quality_block_ledger"][-1]["source"] == (
+        "aggregate_reconciliation"
+    )
+    assert summary["proposal_accounting"]["quality_block_ledger_count"] == 4
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
 
 
@@ -2166,12 +2194,27 @@ def test_campaign_summary_reconciles_screened_and_effective_rounds(
     }
     assert reconciliation["effective_rounds_completed"] == 1
     assert reconciliation["screened_minus_effective"] == 1
+    assert reconciliation["non_effective_screening_count"] == 1
+    non_effective = reconciliation["non_effective_screenings"][0]
+    assert non_effective["branch_id"] == "branch-1"
+    assert non_effective["hypothesis_id"] == "hyp-1"
+    assert "TELEMETRY_VALIDATION_REPAIRABLE" in non_effective["reason_codes"]
+    assert non_effective["decision"] == "continue_explore"
+    assert non_effective["protocol_stage"] == "screening"
+    assert non_effective["effective"] is False
+    assert not str(non_effective["raw_metrics_ref"]).startswith("/")
     assert reconciliation["accepted_experiments"] == 1
     assert reconciliation["accepted_screening_experiments"] == 1
     assert reconciliation["model_repair_attempts"] == 0
     assert reconciliation["model_repair_failures"] == 1
     assert reconciliation["telemetry_repairable_attempts"] == 1
     assert reconciliation["quality_blocks"] == 1
+    assert reconciliation["quality_block_ledger_count"] == 1
+    assert reconciliation["quality_block_ledger"][0]["source"] == (
+        "aggregate_reconciliation"
+    )
+    assert reconciliation["attempt_breakdown"]["non_effective_screening_count"] == 1
+    assert reconciliation["attempt_breakdown"]["quality_block_ledger_count"] == 1
     assert {
         "relation": "screened_rounds_minus_effective_rounds",
         "delta": 1,
@@ -2181,6 +2224,7 @@ def test_campaign_summary_reconciles_screened_and_effective_rounds(
     assert summary["proposal_accounting"]["accounting_reconciliation"] == (
         reconciliation
     )
+    assert summary["proposal_accounting"]["non_effective_screening_count"] == 1
 
 
 def test_campaign_summary_separates_formal_screening_from_holdout_protocol_counts(

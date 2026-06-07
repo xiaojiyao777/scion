@@ -206,6 +206,9 @@ def _split_code_context(
         D["previous_patch"],
         current_feedback=D["agentic_code_self_check_feedback"],
     )
+    telemetry_identity_retry_section = _telemetry_identity_retry_blocker_section(
+        D["agentic_code_self_check_feedback"]
+    )
     telemetry_identity_section = _telemetry_identity_guidance_section(D)
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     cacheable_agentic_context = ""
@@ -289,6 +292,7 @@ def _split_code_context(
     user_prompt = (
         f"{prior_failure_section}"
         f"{previous_patch_section}"
+        f"{telemetry_identity_retry_section}"
         f"## Hypothesis to Implement\n{_code_implementation_brief(D)}\n\n"
         f"## Hypothesis Detail Audit\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{required_full_integration_section}"
@@ -408,6 +412,69 @@ def _telemetry_identity_guidance_section(context: Dict[str, Any]) -> str:
         "or accounting context only; it is not activation/effect evidence for "
         "the approved mechanism id(s).\n\n"
     )
+
+
+def _telemetry_identity_retry_blocker_section(feedback: Any) -> str:
+    policy = _telemetry_identity_preservation_policy(feedback)
+    if not policy["protected_id_only"] or not isinstance(feedback, dict):
+        return ""
+    approved = sorted(policy["protected_ids"])
+    offending = sorted(policy["offending_ids"])
+    approved_text = ", ".join(f"`{item}`" for item in approved) or "none"
+    offending_text = ", ".join(f"`{item}`" for item in offending) or "none"
+    usage_lines = _compact_offending_telemetry_usage_lines(feedback)
+    usage_section = (
+        "Offending generated telemetry usages to edit:\n"
+        + "\n".join(f"- {line}" for line in usage_lines)
+        + "\n"
+        if usage_lines
+        else ""
+    )
+    return (
+        "## Telemetry Identity Repair Blocker\n"
+        f"Approved/protected mechanism id(s): {approved_text}.\n"
+        f"Offending unapproved telemetry id(s): {offending_text}.\n"
+        "Hard repair rules:\n"
+        "- Do not add or increase telemetry for baseline, structural, "
+        "aggregate, or unapproved mechanism ids.\n"
+        "- Do not copy existing baseline telemetry as new evidence for this "
+        "patch.\n"
+        "- Use an approved/protected mechanism id only when the edited code "
+        "path genuinely implements that mechanism.\n"
+        "- Otherwise remove the newly added or increased telemetry call.\n"
+        f"{usage_section}\n"
+    )
+
+
+def _compact_offending_telemetry_usage_lines(feedback: Dict[str, Any]) -> list[str]:
+    usages = feedback.get("compact_offending_telemetry_usages")
+    if not isinstance(usages, list) or not usages:
+        usages = feedback.get("offending_telemetry_usages")
+    if not isinstance(usages, list):
+        return []
+    lines: list[str] = []
+    for usage in usages[:8]:
+        if not isinstance(usage, dict):
+            continue
+        file_path = str(usage.get("file") or usage.get("file_path") or "").strip()
+        line_no = str(usage.get("line") or "?").strip()
+        helper = str(usage.get("helper") or "").strip()
+        mechanism_id = str(usage.get("mechanism_id") or "").strip()
+        line_text = _snippet_text(
+            str(usage.get("line_text") or ""),
+            max_chars=180,
+        )
+        parts = [
+            f"file={file_path}" if file_path else "",
+            f"line={line_no}" if line_no else "",
+            f"helper={helper}" if helper else "",
+            f"mechanism_id={mechanism_id}" if mechanism_id else "",
+            f"line_text={line_text}" if line_text else "",
+        ]
+        rendered = "; ".join(part for part in parts if part)
+        if rendered:
+            lines.append(rendered)
+    return lines
 
 
 def _approved_mechanism_ids(context: Dict[str, Any]) -> list[str]:

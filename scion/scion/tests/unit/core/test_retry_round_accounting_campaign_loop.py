@@ -280,6 +280,7 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
     calls = 0
     stopped_reasons: list[str | None] = []
     last_results: list[StepResult] = []
+    loop_statuses: list[dict[str, Any]] = []
 
     def run_one_step() -> StepResult:
         nonlocal calls
@@ -292,6 +293,8 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
             stopped_reasons.append(kwargs.get("stopped_reason"))
         if "last_result" in kwargs:
             last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
 
     loop = CampaignLoop(
         write_status=write_status,
@@ -320,6 +323,78 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
     assert last_results[-1].reason == "agent_quality_blocked"
     assert last_results[-1].stopped is True
     assert "proposal_quality_loop" in stopped_reasons
+    ledger = loop_statuses[-1]["quality_block_ledger"]
+    assert loop_statuses[-1]["quality_block_ledger_count"] == 2
+    assert ledger[0]["sequence"] == 1
+    assert ledger[0]["index"] == 0
+    assert ledger[0]["branch_id"] == "b1"
+    assert ledger[0]["attempt_kind"] == "proposal_block"
+    assert ledger[0]["source_result_reason"] == "agent_quality_blocked"
+    assert ledger[0]["counts_toward_max_rounds"] is False
+    assert ledger[0]["pre_protocol"] is True
+    assert ledger[0]["loop_step"] == 1
+
+
+def test_campaign_loop_records_model_repair_failed_quality_block_ledger() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="model_repair_failed",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            failure_stage="code_generation",
+            failure_category="model_repair_failed",
+            failure_detail="model_repair_failed: code repair exhausted",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: loop_statuses.append(
+            dict(kwargs["loop_status"])
+        )
+        if "loop_status" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 2
+    ledger = loop_statuses[-1]["quality_block_ledger"]
+    assert loop_statuses[-1]["quality_blocks"] == 1
+    assert loop_statuses[-1]["quality_block_ledger_count"] == 1
+    assert ledger[0]["failure_stage"] == "code_generation"
+    assert ledger[0]["failure_category"] == "model_repair_failed"
+    assert ledger[0]["failure_reason"] == (
+        "model_repair_failed: code repair exhausted"
+    )
+    assert ledger[0]["source_result_reason"] == "model_repair_failed"
 
 
 def test_campaign_loop_does_not_count_mechanism_novelty_diagnostics_as_quality_blocks() -> None:

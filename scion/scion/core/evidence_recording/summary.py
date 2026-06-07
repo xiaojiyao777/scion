@@ -561,6 +561,10 @@ class CampaignSummaryMixin:
                 "scheduler_active_slot_blocked_attempt_limit",
                 "active_slot_blocked_attempt_limit",
                 "quality_blocks",
+                "quality_block_ledger",
+                "quality_block_ledger_count",
+                "non_effective_screenings",
+                "non_effective_screening_count",
                 "blocked_attempts",
             ):
                 value = self.campaign_loop_status.get(key)

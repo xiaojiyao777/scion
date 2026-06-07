@@ -1301,6 +1301,27 @@ def test_agentic_session_repairs_telemetry_identity_with_delta_feedback(
     assert feedback["failure_code"] == "code_stage_telemetry_identity_mismatch"
     assert feedback["offending_telemetry_ids"] == ["alns"]
     assert feedback["protected_mechanism_ids"] == ["granular_intensify"]
+    assert feedback["compact_offending_telemetry_usages"] == [
+        {
+            "file": "policies/search_policy.py",
+            "line": 2,
+            "helper": "record_move",
+            "mechanism_id": "alns",
+            "line_text": "context.record_move('alns', attempted=1, accepted=0)",
+        }
+    ]
+    assert any(
+        "Do not add or increase telemetry for baseline" in rule
+        for rule in feedback["hard_constraints"]
+    )
+    assert any(
+        "Do not copy existing baseline telemetry as new evidence" in rule
+        for rule in feedback["hard_constraints"]
+    )
+    assert (
+        "only if the edited code path is genuinely for that mechanism"
+        in feedback["repair_instruction"]
+    )
     assert feedback["offending_telemetry_usages"] == [
         {
             "mechanism_id": "alns",

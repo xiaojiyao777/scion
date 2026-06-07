@@ -238,8 +238,24 @@ def test_code_prompt_telemetry_identity_retry_preserves_only_protected_ids():
                     "line_text": "self.context.record_phase('vns_compaction', 1)",
                 }
             ],
+            "compact_offending_telemetry_usages": [
+                {
+                    "file": "policies/baseline_modules/local_search.py",
+                    "line": 2,
+                    "helper": "record_phase",
+                    "mechanism_id": "vns_compaction",
+                    "line_text": "self.context.record_phase('vns_compaction', 1)",
+                }
+            ],
             "protected_mechanism_ids": ["compaction_trigger", "route_compaction"],
             "telemetry_preservation_policy": "protected_mechanism_ids_only",
+            "hard_constraints": [
+                (
+                    "Do not add or increase telemetry for baseline, "
+                    "structural, aggregate, or unapproved mechanism ids."
+                ),
+                "Do not copy existing baseline telemetry as new evidence.",
+            ],
         },
     )
 
@@ -247,6 +263,19 @@ def test_code_prompt_telemetry_identity_retry_preserves_only_protected_ids():
 
     assert "Code Self-Check Retry Feedback" in user_prompt
     assert "Current blocker is telemetry identity" in user_prompt
+    assert "Telemetry Identity Repair Blocker" in user_prompt
+    assert "Approved/protected mechanism id(s): `compaction_trigger`, `route_compaction`" in user_prompt
+    assert "Offending unapproved telemetry id(s): `vns_compaction`" in user_prompt
+    assert "Do not add or increase telemetry for baseline" in user_prompt
+    assert "Do not copy existing baseline telemetry as new evidence" in user_prompt
+    assert "genuinely implements that mechanism" in user_prompt
+    assert "Otherwise remove the newly added or increased telemetry call" in user_prompt
+    assert "Offending generated telemetry usages to edit" in user_prompt
+    assert "file=policies/baseline_modules/local_search.py" in user_prompt
+    assert "line=2" in user_prompt
+    assert "helper=record_phase" in user_prompt
+    assert "mechanism_id=vns_compaction" in user_prompt
+    assert "line_text=self.context.record_phase('vns_compaction', 1)" in user_prompt
     assert "offending_telemetry_usages" in user_prompt
     assert "policies/baseline_modules/local_search.py" in user_prompt
     assert "/code_content" in user_prompt

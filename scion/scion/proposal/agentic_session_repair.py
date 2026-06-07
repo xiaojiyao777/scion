@@ -490,6 +490,9 @@ def _code_self_check_structured_feedback(
     ]
     offending_ids = _parse_telemetry_identity_ids(issue_detail)
     offending_usages = _parse_telemetry_identity_usages(issue_detail)
+    compact_offending_usages = _compact_telemetry_identity_usages(
+        offending_usages
+    )
     return _drop_empty_dict(
         {
             "failure_code": "code_stage_telemetry_identity_mismatch",
@@ -497,19 +500,39 @@ def _code_self_check_structured_feedback(
             "offending_telemetry_ids": offending_ids,
             "offending_generated_telemetry_ids": offending_ids,
             "offending_telemetry_usages": offending_usages,
+            "compact_offending_telemetry_usages": compact_offending_usages,
             "protected_mechanism_ids": protected_ids,
             "allowed_structural_telemetry_ids": (
                 _code_context_telemetry_identity_allowlist(code_context)
             ),
             "telemetry_preservation_policy": "protected_mechanism_ids_only",
+            "hard_constraints": [
+                (
+                    "Do not add or increase telemetry for baseline, "
+                    "structural, aggregate, or unapproved mechanism ids."
+                ),
+                (
+                    "Do not copy existing baseline telemetry as new evidence "
+                    "for this patch."
+                ),
+                (
+                    "Use an approved/protected mechanism id only when the "
+                    "edited code path genuinely implements that mechanism."
+                ),
+                (
+                    "Otherwise remove the newly added or increased telemetry "
+                    "call instead of preserving it."
+                ),
+            ],
             "repair_instruction": (
                 "Repair each offending_telemetry_usage in the named file_path "
-                "and json_pointer: replace that telemetry mechanism id with "
-                "one of protected_mechanism_ids, or remove the newly added "
-                "mechanism-evidence call. Do not preserve any telemetry id "
-                "outside protected_mechanism_ids from the previous patch; "
-                "baseline phase ids are diagnostic context only unless "
-                "unchanged."
+                "and line_text: do not add or increase telemetry for baseline "
+                "or unapproved mechanism ids; do not copy existing baseline "
+                "telemetry as new evidence. Replace the mechanism id with one "
+                "of protected_mechanism_ids only if the edited code path is "
+                "genuinely for that mechanism; otherwise remove the newly "
+                "added mechanism-evidence call. Baseline, structural, or "
+                "aggregate ids are diagnostic context only unless unchanged."
             ),
         }
     )
@@ -571,6 +594,27 @@ def _parse_telemetry_identity_usages(issue_detail: str) -> list[dict[str, Any]]:
         if usage:
             usages.append(usage)
     return usages
+
+
+def _compact_telemetry_identity_usages(
+    usages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for usage in usages[:8]:
+        if not isinstance(usage, Mapping):
+            continue
+        item = _drop_empty_dict(
+            {
+                "file": usage.get("file_path"),
+                "line": usage.get("line"),
+                "helper": usage.get("helper"),
+                "mechanism_id": usage.get("mechanism_id"),
+                "line_text": usage.get("line_text"),
+            }
+        )
+        if item:
+            compact.append(item)
+    return compact
 
 
 def _code_context_telemetry_identity_allowlist(

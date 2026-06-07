@@ -10,7 +10,11 @@ from typing import Any, Iterable, Mapping
 
 from scion.core.models import Decision, StepRecord
 from scion.core.public_refs import public_artifact_ref
-from scion.core.telemetry_validation import screened_experiment_effective
+from scion.core.run_validity import failure_category_for_run_validity
+from scion.core.telemetry_validation import (
+    formal_screening_attempted,
+    screened_experiment_effective,
+)
 from scion.proposal.session_trace_index import SESSION_TRACE_INDEX_NAME
 
 logger = logging.getLogger(__name__)
@@ -55,11 +59,31 @@ def proposal_accounting_fields(
         state_map.get("screened_experiments"),
         default=0,
     )
+    effective = _first_int(
+        loop.get("effective_rounds_completed"),
+        state_map.get("effective_rounds_completed"),
+        default=sum(1 for step in step_list if _step_counts_effective(step))
+        if has_step_history
+        else 0,
+    )
+    screened_not_effective = max(0, screened - effective)
+    non_effective_screenings = _non_effective_screenings(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        screened_not_effective=screened_not_effective,
+    )
     quality_blocks = _first_int(
         loop.get("quality_blocks"),
         loop.get("proposal_quality_blocks_consumed"),
         state_map.get("quality_blocks"),
         default=0,
+    )
+    quality_block_ledger = _quality_block_ledger(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        quality_blocks=quality_blocks,
     )
     active_slot_blocked_attempts = _first_int(
         loop.get("active_slot_blocked_attempts"),
@@ -100,7 +124,12 @@ def proposal_accounting_fields(
         "campaign_accounting_schema_version": "campaign_accounting.v1",
         "campaign_steps": campaign_steps,
         "screened_rounds": screened,
+        "screened_not_effective": screened_not_effective,
+        "non_effective_screenings": non_effective_screenings,
+        "non_effective_screening_count": len(non_effective_screenings),
         "quality_blocks": quality_blocks,
+        "quality_block_ledger": quality_block_ledger,
+        "quality_block_ledger_count": len(quality_block_ledger),
         "active_slot_blocked_attempts": active_slot_blocked_attempts,
         "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
         **candidate_accounting,
@@ -250,6 +279,12 @@ def accounting_reconciliation_fields(
             1 for step in step_list if _attempt_kind(step) in _QUALITY_BLOCK_KINDS
         ),
     )
+    quality_block_ledger = _quality_block_ledger(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        quality_blocks=quality_blocks,
+    )
     active_slot_blocked_attempts = _first_int(
         loop.get("active_slot_blocked_attempts"),
         loop.get("scheduler_active_slot_blocked_attempts"),
@@ -291,6 +326,12 @@ def accounting_reconciliation_fields(
         default=0,
     )
     screened_not_effective = max(0, screened - effective)
+    non_effective_screenings = _non_effective_screenings(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+        screened_not_effective=screened_not_effective,
+    )
     loop_counted_delta = (
         effective - counted
         if has_step_history or counted_experiment_steps is not None
@@ -333,6 +374,8 @@ def accounting_reconciliation_fields(
         "accepted_screening_experiments": accepted_screening,
         "promoted_experiments": promoted,
         "screened_minus_effective": screened_not_effective,
+        "non_effective_screenings": non_effective_screenings,
+        "non_effective_screening_count": len(non_effective_screenings),
         "effective_minus_counted_step_records": loop_counted_delta,
         "state_screened_minus_step_screened": state_screened_delta,
         "model_repair_attempts": model_repair_attempts,
@@ -341,6 +384,8 @@ def accounting_reconciliation_fields(
         "telemetry_repairable_attempts": telemetry_repairable_attempts,
         "validation_repair_required_attempts": validation_repair_required_attempts,
         "quality_blocks": quality_blocks,
+        "quality_block_ledger": quality_block_ledger,
+        "quality_block_ledger_count": len(quality_block_ledger),
         "active_slot_blocked_attempts": active_slot_blocked_attempts,
         "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
         "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
@@ -359,10 +404,12 @@ def accounting_reconciliation_fields(
             ],
             "effective_screenings": effective,
             "screened_not_effective": screened_not_effective,
+            "non_effective_screening_count": len(non_effective_screenings),
             "accepted": accepted,
             "model_repair": model_repair_attempts,
             "model_repair_failures": model_repair_failures,
             "quality_blocks": quality_blocks,
+            "quality_block_ledger_count": len(quality_block_ledger),
             "active_slot_blocked_attempts": active_slot_blocked_attempts,
             "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
             "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
@@ -397,6 +444,217 @@ def llm_request_kind_counts(campaign_dir: str | Path) -> dict[str, int]:
 
 _QUALITY_BLOCK_KINDS = frozenset({"proposal_block", "schema_quality_block"})
 _PROTOCOL_STAGE_KEYS = ("screening", "validation", "frozen")
+
+
+def _quality_block_ledger(
+    *,
+    steps: list[StepRecord],
+    loop: Mapping[str, Any],
+    state_map: Mapping[str, Any],
+    quality_blocks: int,
+) -> list[dict[str, Any]]:
+    for source in (
+        loop.get("quality_block_ledger"),
+        state_map.get("quality_block_ledger"),
+    ):
+        ledger = _normalized_mapping_ledger(source)
+        if ledger:
+            return _complete_quality_block_ledger(ledger, quality_blocks)
+    ledger = _quality_block_ledger_from_steps(steps)
+    if ledger:
+        return ledger
+    if quality_blocks <= 0:
+        return []
+    return _aggregate_quality_block_entries(start=0, count=quality_blocks)
+
+
+def _quality_block_ledger_from_steps(
+    steps: Iterable[StepRecord],
+) -> list[dict[str, Any]]:
+    ledger: list[dict[str, Any]] = []
+    for step in steps:
+        attempt_kind = _attempt_kind(step)
+        if attempt_kind not in _QUALITY_BLOCK_KINDS:
+            continue
+        sequence = len(ledger) + 1
+        failure_reason = str(getattr(step, "failure_detail", "") or "")
+        failure_stage = getattr(step, "failure_stage", None)
+        ledger.append(
+            {
+                "schema_version": "quality_block_attempt.v1",
+                "sequence": sequence,
+                "index": sequence - 1,
+                "branch_id": getattr(step, "branch_id", None),
+                "hypothesis_id": getattr(step, "hypothesis_id", None),
+                "attempt_kind": attempt_kind,
+                "failure_stage": failure_stage,
+                "failure_category": _step_failure_category(step),
+                "failure_reason": failure_reason,
+                "source_result_reason": failure_reason,
+                "counts_toward_max_rounds": bool(
+                    getattr(step, "counts_toward_max_rounds", True)
+                ),
+                "pre_protocol": getattr(step, "protocol_result", None) is None,
+                "loop_step": getattr(step, "round_num", None),
+                "source": "step_history",
+            }
+        )
+    return ledger
+
+
+def _non_effective_screenings(
+    *,
+    steps: list[StepRecord],
+    loop: Mapping[str, Any],
+    state_map: Mapping[str, Any],
+    screened_not_effective: int,
+) -> list[dict[str, Any]]:
+    for source in (
+        loop.get("non_effective_screenings"),
+        state_map.get("non_effective_screenings"),
+    ):
+        ledger = _normalized_mapping_ledger(source)
+        if ledger:
+            return _complete_non_effective_screening_ledger(
+                ledger,
+                screened_not_effective,
+            )
+    ledger = _non_effective_screenings_from_steps(steps)
+    if ledger:
+        return ledger
+    if screened_not_effective <= 0:
+        return []
+    return _aggregate_non_effective_screening_entries(
+        start=0,
+        count=screened_not_effective,
+    )
+
+
+def _non_effective_screenings_from_steps(
+    steps: Iterable[StepRecord],
+) -> list[dict[str, Any]]:
+    ledger: list[dict[str, Any]] = []
+    for step in steps:
+        protocol = getattr(step, "protocol_result", None)
+        if not formal_screening_attempted(protocol):
+            continue
+        if screened_experiment_effective(protocol):
+            continue
+        sequence = len(ledger) + 1
+        reason_codes = list(getattr(protocol, "reason_codes", ()) or ())
+        decision_codes = list(getattr(step, "decision_reason_codes", ()) or ())
+        ledger.append(
+            {
+                "schema_version": "non_effective_screening.v1",
+                "sequence": sequence,
+                "index": sequence - 1,
+                "branch_id": getattr(step, "branch_id", None),
+                "hypothesis_id": getattr(step, "hypothesis_id", None),
+                "reason_codes": list(dict.fromkeys([*reason_codes, *decision_codes])),
+                "decision": _decision_value(step) or None,
+                "protocol_stage": _stage_value(step),
+                "raw_metrics_ref": getattr(protocol, "raw_metrics_ref", None),
+                "effective": False,
+                "counts_toward_max_rounds": bool(
+                    getattr(step, "counts_toward_max_rounds", True)
+                ),
+                "attempt_kind": _attempt_kind(step),
+                "loop_step": getattr(step, "round_num", None),
+                "source": "step_history",
+            }
+        )
+    return ledger
+
+
+def _normalized_mapping_ledger(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _complete_quality_block_ledger(
+    items: list[dict[str, Any]],
+    quality_blocks: int,
+) -> list[dict[str, Any]]:
+    normalized = _with_sequence(items)
+    missing = max(0, int(quality_blocks) - len(normalized))
+    if missing:
+        normalized.extend(
+            _aggregate_quality_block_entries(start=len(normalized), count=missing)
+        )
+    return _with_sequence(normalized)
+
+
+def _aggregate_quality_block_entries(*, start: int, count: int) -> list[dict[str, Any]]:
+    return [
+        {
+            "schema_version": "quality_block_attempt.v1",
+            "sequence": index + 1,
+            "index": index,
+            "branch_id": None,
+            "hypothesis_id": None,
+            "attempt_kind": "proposal_or_schema_quality_block",
+            "failure_stage": None,
+            "failure_category": None,
+            "failure_reason": "quality_block_record_missing_legacy_aggregate",
+            "source_result_reason": "",
+            "counts_toward_max_rounds": False,
+            "pre_protocol": True,
+            "source": "aggregate_reconciliation",
+        }
+        for index in range(max(0, int(start)), max(0, int(start)) + max(0, int(count)))
+    ]
+
+
+def _complete_non_effective_screening_ledger(
+    items: list[dict[str, Any]],
+    screened_not_effective: int,
+) -> list[dict[str, Any]]:
+    normalized = _with_sequence(items)
+    missing = max(0, int(screened_not_effective) - len(normalized))
+    if missing:
+        normalized.extend(
+            _aggregate_non_effective_screening_entries(
+                start=len(normalized),
+                count=missing,
+            )
+        )
+    return _with_sequence(normalized)
+
+
+def _aggregate_non_effective_screening_entries(
+    *,
+    start: int,
+    count: int,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "schema_version": "non_effective_screening.v1",
+            "sequence": index + 1,
+            "index": index,
+            "branch_id": None,
+            "hypothesis_id": None,
+            "reason_codes": [
+                "screened_formal_results_excluded_from_effective_rounds"
+            ],
+            "decision": None,
+            "protocol_stage": "screening",
+            "raw_metrics_ref": None,
+            "effective": False,
+            "source": "aggregate_reconciliation",
+        }
+        for index in range(max(0, int(start)), max(0, int(start)) + max(0, int(count)))
+    ]
+
+
+def _with_sequence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        entry = dict(item)
+        entry.setdefault("sequence", index + 1)
+        entry.setdefault("index", index)
+        normalized.append(entry)
+    return normalized
 
 
 def _candidate_accounting_fields(
@@ -625,6 +883,22 @@ def _stage_value(step: StepRecord) -> str:
 
 def _attempt_kind(step: StepRecord) -> str:
     return str(getattr(step, "attempt_kind", "") or "").strip()
+
+
+def _step_failure_category(step: StepRecord) -> str | None:
+    detail = getattr(step, "failure_detail", None)
+    stage = getattr(step, "failure_stage", None)
+    if not detail and not stage:
+        return None
+    session_ref = getattr(step, "proposal_session_ref", None)
+    category = None
+    if isinstance(session_ref, Mapping):
+        category = session_ref.get("failure_category")
+    return failure_category_for_run_validity(
+        detail,
+        category=category,
+        failure_stage=stage,
+    )
 
 
 def _step_screened(step: StepRecord) -> bool:

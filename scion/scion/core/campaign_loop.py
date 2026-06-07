@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from scion.core.branch_repair_policy import repair_attempt_key_label
@@ -55,6 +56,7 @@ class CampaignLoop:
         scheduler_active_slot_blocked_attempts = 0
         formal_screened_candidates = 0
         protocol_evaluated_candidates = 0
+        quality_block_ledger: list[dict[str, Any]] = []
         protocol_stage_counts: dict[str, int] = {
             "screening": 0,
             "validation": 0,
@@ -164,6 +166,7 @@ class CampaignLoop:
                 formal_screened_candidates=formal_screened_candidates,
                 protocol_evaluated_candidates=protocol_evaluated_candidates,
                 protocol_stage_counts=protocol_stage_counts,
+                quality_block_ledger=quality_block_ledger,
                 failure_categories=failure_category_counts,
                 last_failure_category=last_failure_category,
             )
@@ -281,6 +284,14 @@ class CampaignLoop:
                 elif kind == "proposal_block":
                     consume_proposal_attempt()
                     proposal_quality_blocked_attempts += 1
+                    quality_block_ledger.append(
+                        _quality_block_ledger_entry(
+                            result,
+                            sequence=proposal_quality_blocked_attempts,
+                            loop_step=loop_steps,
+                            attempt_kind=kind,
+                        )
+                    )
                     if (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
@@ -288,6 +299,14 @@ class CampaignLoop:
                         final_reason = "proposal_quality_loop"
                 elif kind == "schema_quality_block":
                     proposal_quality_blocked_attempts += 1
+                    quality_block_ledger.append(
+                        _quality_block_ledger_entry(
+                            result,
+                            sequence=proposal_quality_blocked_attempts,
+                            loop_step=loop_steps,
+                            attempt_kind=kind,
+                        )
+                    )
                     if (
                         proposal_quality_blocked_attempts
                         >= proposal_quality_loop_limit
@@ -458,6 +477,42 @@ def _result_failure_category(result: StepResult) -> str:
     )
 
 
+def _quality_block_ledger_entry(
+    result: StepResult,
+    *,
+    sequence: int,
+    loop_step: int,
+    attempt_kind: str,
+) -> dict[str, Any]:
+    failure_reason = str(
+        getattr(result, "failure_detail", None)
+        or getattr(result, "reason", None)
+        or ""
+    )
+    return {
+        "schema_version": "quality_block_attempt.v1",
+        "sequence": max(1, int(sequence)),
+        "index": max(0, int(sequence) - 1),
+        "branch_id": getattr(result, "branch_id", None),
+        "hypothesis_id": getattr(result, "hypothesis_id", None),
+        "attempt_kind": attempt_kind,
+        "failure_stage": getattr(result, "failure_stage", None),
+        "failure_category": (
+            getattr(result, "failure_category", None)
+            or _result_failure_category(result)
+            or None
+        ),
+        "failure_reason": failure_reason,
+        "source_result_reason": str(getattr(result, "reason", "") or ""),
+        "counts_toward_max_rounds": bool(
+            getattr(result, "counts_toward_max_rounds", True)
+        ),
+        "pre_protocol": _protocol_stage_for_result(result) == "",
+        "loop_step": max(0, int(loop_step)),
+        "recorded_at": datetime.now().isoformat(),
+    }
+
+
 def _proposal_quality_loop_limit(
     requested_rounds: int,
     *,
@@ -574,6 +629,7 @@ def _campaign_loop_status(
     formal_screened_candidates: int,
     protocol_evaluated_candidates: int,
     protocol_stage_counts: dict[str, int],
+    quality_block_ledger: list[dict[str, Any]],
     failure_categories: dict[str, int],
     last_failure_category: str,
 ) -> dict[str, Any]:
@@ -661,6 +717,8 @@ def _campaign_loop_status(
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_blocks_consumed": quality_blocks,
         "quality_blocks": quality_blocks,
+        "quality_block_ledger": [dict(item) for item in quality_block_ledger],
+        "quality_block_ledger_count": len(quality_block_ledger),
         "blocked_attempts": quality_blocks,
         "proposal_quality_blocks_remaining": max(
             0,
