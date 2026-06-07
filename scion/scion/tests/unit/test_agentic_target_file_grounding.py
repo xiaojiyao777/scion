@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scion.proposal.agentic_session_hypothesis as hypothesis_facade
+import scion.proposal.agentic_session_hypothesis_target as target_module
 from scion.proposal.engine import (
     _parse_hypothesis_target_intent,
     _split_code_context,
@@ -17,6 +19,7 @@ from scion.proposal.agentic_session_hypothesis import (
 from scion.proposal.engine.exceptions import ProposalValidationError
 from scion.proposal.agentic_observation_ledger.payloads import read_receipt_from_entry
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
+from scion.proposal.prompt_manifest_visibility import VISIBILITY_LEDGER_SCHEMA_VERSION
 from scion.proposal.target_intent_binding import (
     canonical_formal_mechanism_id,
     target_intent_binding_retry_feedback,
@@ -203,6 +206,22 @@ def _target_binding_artifacts(output: AgenticProposalOutput) -> list[dict]:
         for ref in output.tainted_artifact_refs
         if "hypothesis_target_intent_binding" in str(ref)
     ]
+
+
+def test_target_grounding_helpers_remain_importable_from_hypothesis_facade() -> None:
+    helper_names = (
+        "_observations_include_sufficient_target_context",
+        "_target_context_summary_from_observations",
+        "_target_grounding_context_key",
+        "_normalize_hypothesis_target_intent",
+        "_mechanism_id_schema_output_retry_feedback",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(hypothesis_facade, helper_name) is getattr(
+            target_module,
+            helper_name,
+        )
 
 
 def test_target_intent_mismatch_retries_then_blocks_before_code(
@@ -1847,7 +1866,7 @@ def test_prompt_manifest_writes_compact_explicit_visibility_ledger() -> None:
 
     ledger = manifest["visibility_ledger"]
     entries = ledger["entries"]
-    assert ledger["schema_version"] == "prompt-visibility-ledger.v1"
+    assert ledger["schema_version"] == VISIBILITY_LEDGER_SCHEMA_VERSION
     assert ledger["entry_count"] == len(entries)
     assert set(ledger["status_values"]) == {
         "full",

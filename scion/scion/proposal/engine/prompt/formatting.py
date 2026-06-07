@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -43,3 +44,24 @@ def _limit_text(text: str, max_chars: int) -> str:
         return text
     return text[: max(0, max_chars - 3)] + "..."
 
+
+def _stable_short_digest(value: Any) -> str:
+    try:
+        rendered = json.dumps(value, sort_keys=True, default=str)
+    except TypeError:
+        rendered = str(value)
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
+
+
+def _bounded_list(value: Any, limit: int) -> list[Any]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return list(value[: max(0, limit)])
+
+
+def _drop_empty(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: item
+        for key, item in value.items()
+        if item not in (None, "", (), [], {})
+    }

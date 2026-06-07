@@ -4,13 +4,18 @@ from __future__ import annotations
 import pytest
 
 from scion.proposal.engine import _split_hypothesis_context, _split_code_context
-from scion.proposal.engine.prompt import formatting
+from scion.proposal.engine.prompt import formatting, observations
 from scion.proposal.engine.prompt_common import (
     _DefaultDict,
+    _active_solver_map_receipts_projection,
     _bounded_json,
+    _dedupe_tool_observations,
     _format_bulleted_section,
     _limit_code_phase_text,
     _limit_text,
+    _same_fact_packet,
+    _solver_design_full_algorithm_file_reads,
+    _tool_observations_model_projection,
 )
 
 
@@ -73,6 +78,44 @@ def test_prompt_common_reexports_formatting_helpers_without_semantic_drift():
     assert _bounded_json({"z": "x" * 100}, 20).endswith(
         "\n... <truncated agentic context>"
     )
+
+
+def test_prompt_common_reexports_observation_projection_helpers_without_semantic_drift():
+    assert _active_solver_map_receipts_projection is (
+        observations._active_solver_map_receipts_projection
+    )
+    assert _dedupe_tool_observations is observations._dedupe_tool_observations
+    assert _same_fact_packet is observations._same_fact_packet
+    assert _solver_design_full_algorithm_file_reads is (
+        observations._solver_design_full_algorithm_file_reads
+    )
+
+    projection = _tool_observations_model_projection(
+        [
+            {
+                "observation_id": "obs-diagnosis",
+                "tool_name": "feedback.query_runtime",
+                "structured_payload": {
+                    "research_diagnosis": {
+                        "schema_version": "research-diagnosis.v1",
+                        "runtime_diagnosis_count": 1,
+                        "latest_runtime_diagnosis": {
+                            "runtime_signal_rows": [
+                                {"detail": "x" * 20} for _ in range(20)
+                            ],
+                        },
+                        "raw_rows": [{"payload": "y" * 20} for _ in range(20)],
+                    }
+                },
+            }
+        ],
+        code_phase=False,
+    )
+
+    rendered = str(projection)
+    assert "agentic_tool_observations_projection.v1" in rendered
+    assert "agentic_research_diagnosis_projection.v1" in rendered
+    assert "raw_rows" not in rendered
 
 
 # ---------------------------------------------------------------------------
