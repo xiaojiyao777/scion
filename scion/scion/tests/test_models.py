@@ -3,7 +3,12 @@ import uuid
 import re
 import dataclasses
 
-from scion.core.explore_step.pipeline import material_difference_pre_code_block_reason
+from scion.core.explore_step.material_difference import (
+    material_difference_pre_code_block_reason,
+)
+from scion.core.explore_step.pipeline import (
+    material_difference_pre_code_block_reason as pipeline_md_block_reason,
+)
 from scion.core.models import (
     Branch,
     Decision,
@@ -159,6 +164,10 @@ def test_material_difference_required_blocks_empty_record_before_code():
         )
         is not None
     )
+
+
+def test_material_difference_pipeline_import_stays_compatible():
+    assert pipeline_md_block_reason is material_difference_pre_code_block_reason
 
 
 def test_material_difference_requirement_record_in_branch_metadata_blocks_before_code():
