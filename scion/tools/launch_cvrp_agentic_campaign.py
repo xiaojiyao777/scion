@@ -15,6 +15,7 @@ import yaml
 
 DEFAULT_EXPERIMENTS_ROOT = Path("/home/clawd/research/scion-experiments")
 DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_TIME_LIMIT_SEC = 10
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
@@ -110,6 +111,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "PY",
         "PYTHONPATH",
         "SCION_MODEL",
+        "SCION_BASE_URL",
         "SCION_SDK_MAX_RETRIES",
         "SCION_LLM_MAX_RETRIES",
         "SCION_PROBLEM_DATA_ROOT",
@@ -134,7 +136,7 @@ def _write_run_sh(run_root: Path, command: str) -> None:
 set -uo pipefail
 source "$(dirname "$0")/launch.env"
 cd "$SCION_DIR" || exit 1
-export PYTHONPATH SCION_MODEL SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_PROBLEM_DATA_ROOT
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_PROBLEM_DATA_ROOT
 {{
   echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "GIT_COMMIT:$GIT_COMMIT"
@@ -212,6 +214,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "PY": DEFAULT_PYTHON,
         "PYTHONPATH": scion_dir,
         "SCION_MODEL": args.model,
+        "SCION_BASE_URL": args.base_url,
         "SCION_SDK_MAX_RETRIES": 0,
         "SCION_LLM_MAX_RETRIES": 2,
         "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
@@ -232,7 +235,15 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     _write_launch_env(run_root, env)
     _write_run_sh(run_root, command)
     (run_root / "command.txt").write_text(
-        command + "\n\nlaunch:\nnohup setsid bash run.sh > nohup.log 2>&1 &\n",
+        (
+            "environment:\n"
+            f"SCION_MODEL={env['SCION_MODEL']}\n"
+            f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
+            "command:\n"
+            f"{command}\n\n"
+            "launch:\n"
+            "nohup setsid bash run.sh > nohup.log 2>&1 &\n"
+        ),
         encoding="utf-8",
     )
 
@@ -250,6 +261,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rounds", type=int, required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--time-limit-sec", type=int, default=DEFAULT_TIME_LIMIT_SEC)
     parser.add_argument(
         "--agentic-session-timeout-sec",
@@ -273,6 +285,8 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--time-limit-sec must be >= 1")
     if args.agentic_session_timeout_sec < 1:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
+    if not args.base_url.strip():
+        raise SystemExit("--base-url must not be empty")
     return args
 
 

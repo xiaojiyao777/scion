@@ -31,6 +31,7 @@ def test_cvrp_agentic_launcher_help() -> None:
 
     assert "--rounds" in result.stdout
     assert "--launch" in result.stdout
+    assert "--base-url" in result.stdout
 
 
 def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
@@ -66,18 +67,57 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
     assert f"SCION_PROBLEM_DATA_ROOT={PROJECT_ROOT / 'vrp'}" in launch_env
     assert "SCION_MODEL=gpt-5.5" in launch_env
+    assert "SCION_BASE_URL=http://127.0.0.1:8080" in launch_env
     assert "ROUNDS=4" in launch_env
 
     run_sh = run_root / "run.sh"
+    run_sh_text = run_sh.read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
-    assert 'cd "$SCION_DIR"' in run_sh.read_text(encoding="utf-8")
+    assert 'cd "$SCION_DIR"' in run_sh_text
+    assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL" in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
-        run_sh.read_text(encoding="utf-8")
+        run_sh_text
     )
+    assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
+
+
+def test_cvrp_agentic_launcher_prepare_accepts_base_url_override(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-base",
+            "--base-url",
+            "http://127.0.0.1:18080/v1",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+
+    assert "SCION_BASE_URL=http://127.0.0.1:18080/v1" in launch_env
+    assert "SCION_BASE_URL=http://127.0.0.1:18080/v1" in command_txt
+    assert "SCION_API_KEY" not in launch_env
+    assert "SCION_API_KEY" not in command_txt
 
 
 def test_cvrp_agentic_launcher_preflight_rejects_parameter_search_enabled(
