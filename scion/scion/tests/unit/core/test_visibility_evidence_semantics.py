@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scion.core import screening_visibility as screening_visibility_facade
+from scion.core import screening_visibility_runtime as runtime_visibility
 from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.models import (
     ChampionState,
@@ -17,6 +19,60 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
+
+
+def test_runtime_visibility_module_preserves_facade_contract() -> None:
+    assert (
+        screening_visibility_facade.runtime_gate_visibility_summary
+        is runtime_visibility.runtime_gate_visibility_summary
+    )
+    assert (
+        screening_visibility_facade.runtime_evidence_policy_summary
+        is runtime_visibility.runtime_evidence_policy_summary
+    )
+
+    visibility = screening_visibility_facade.runtime_gate_visibility_summary(
+        stage="screening",
+        gate_outcome="fail",
+        reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+            "SCREENING_RUNTIME_BUDGET_SATURATION",
+        ),
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        runtime_pairs=0,
+        champion_cached_runtime_pairs=3,
+        runtime_budget_diagnostic={
+            "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+        },
+    )
+
+    assert visibility["reason_semantics"] == [
+        "objective_fail",
+        "runtime_fresh_champion_required",
+        "runtime_budget_saturation",
+    ]
+    assert visibility["objective_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
+    assert visibility["rerun_recommendation"] == (
+        "fresh_champion_re_evaluation_required"
+    )
+    assert visibility["proposal_visibility_only"] is True
+    assert visibility["decision_features_excluded"] is True
+
+    policy = screening_visibility_facade.runtime_evidence_policy_summary(
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        runtime_pairs=0,
+        champion_cached_runtime_pairs=3,
+        runtime_aggregate_excluded=True,
+    )
+    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert policy["standalone_optimization_signal"] is False
+    assert policy["proposal_guidance_only"] is True
+    assert policy["decision_features_excluded"] is True
+    assert "runtime_gate_visibility" not in DecisionFeatures.__dataclass_fields__
+    assert "runtime_evidence_policy" not in DecisionFeatures.__dataclass_fields__
 
 
 def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(

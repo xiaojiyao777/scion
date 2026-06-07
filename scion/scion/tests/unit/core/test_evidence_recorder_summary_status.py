@@ -8,6 +8,7 @@ from scion.core.run_validity import (
     RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
 )
 from scion.core.models import CaseAggregateFeedback, MechanismChange
+from scion.core.evidence_recording.summary_cache import _campaign_cache_stats
 from scion.core.step_result import StepResult
 
 
@@ -909,6 +910,33 @@ def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     assert repeated[0]["cache_create_calls"] == 2
     assert repeated[0]["cache_read_calls"] == 0
     assert "multiple cache writes without a read" in repeated[0]["diagnosis"]
+
+
+def test_summary_cache_helper_preserves_step_record_fallback_schema(
+    tmp_path: Path,
+) -> None:
+    cache_stats = _campaign_cache_stats(
+        [_step("/tmp/metrics-round-3.json")],
+        campaign_dir=tmp_path,
+    )
+
+    assert cache_stats == {
+        "total_tokens": 100,
+        "prompt_tokens_total": 100,
+        "input_tokens": 100,
+        "cache_read_tokens": 25,
+        "cache_miss_tokens": 75,
+        "cache_create_tokens": 75,
+        "cache_hit_rate": 0.25,
+        "cache_accounting_modes": {},
+        "output_tokens": 0,
+        "calls": 0,
+        "source": "step_records",
+        "by_request_kind_provider": [],
+        "repeated_cache_create_groups": [],
+        "repeated_cache_key_groups": [],
+        "repeated_cache_key_no_read": [],
+    }
 
 
 def test_campaign_summary_uses_provider_aware_openai_cache_accounting(
