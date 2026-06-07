@@ -6,12 +6,9 @@ from typing import Any
 
 from scion.runtime.audit import normalize_surface_name
 from scion.runtime.telemetry_guard.declarations import (
-    declared_activity_runtime_fields,
     declared_runtime_field_roles,
-    declared_stage_budget_runtime_fields,
     find_research_surface,
 )
-from scion.runtime.telemetry_guard.evidence import _as_bool
 from scion.runtime.telemetry_guard.expected_schema import (
     EXPECTED_TELEMETRY_CATEGORIES,
     normalize_declared_mechanisms,
@@ -23,26 +20,25 @@ from scion.runtime.telemetry_guard.mechanism_probes import (
     declared_mechanism_runtime_probes,
 )
 from scion.runtime.telemetry_guard.observations import (
-    _matches_protected_objective_field,
     _protected_objective_tokens,
     _runtime_field_summary,
 )
 from scion.runtime.telemetry_guard.runtime_paths import (
     _mechanism_field_summary_key,
 )
+from scion.runtime.telemetry_guard.summary_fallbacks import (
+    _record_no_expected_telemetry_fallbacks,
+)
+from scion.runtime.telemetry_guard.summary_fields import _record_expected_field_issues
 from scion.runtime.telemetry_guard.summary_mechanisms import (
-    _declared_effect_activation_observed,
     _expected_field_mechanisms,
-    _field_is_mechanism_scoped,
     _has_explicit_mechanism_field,
-    _is_objective_outcome_effect_field,
     _legacy_diagnostic_type_for_kind,
     _legacy_telemetry_outcome_for_kind,
     _looks_like_runtime_field,
     _mechanism_category_diagnostic_kind,
     _mechanism_diagnostics,
     _mechanism_issue_severity,
-    _record_declared_field_issue_for_mechanisms,
     _repairable_for_kind,
     _runtime_fields_for_mechanism_categories,
     _runtime_zero_or_subms_signal,
@@ -50,8 +46,6 @@ from scion.runtime.telemetry_guard.summary_mechanisms import (
 )
 from scion.runtime.telemetry_guard.summary_signals import (
     ACTIVATION_MISSING_OR_WIRING_SUSPECT,
-    EFFECT_ATTRIBUTION_MISSING,
-    MECHANISM_EXECUTED_NO_IMPROVEMENT,
     RUNTIME_BUDGET_ZERO_OR_SUBMS,
 )
 from scion.runtime.telemetry_guard.utils import _field
@@ -117,141 +111,22 @@ def build_telemetry_guard_summary(
         for mechanism in mechanisms
     }
 
-    for category, fields in sorted(categories.items()):
-        for field in fields:
-            summary = _runtime_field_summary(
-                field,
-                candidate_runtimes=candidate_runtimes,
-                champion_runtimes=champion_runtimes,
-            )
-            field_summaries[field] = summary
-            if category in {"activation", "budget"} and _field_is_mechanism_scoped(
-                field,
-                mechanisms=mechanisms,
-                field_mechanisms=expected_field_mechanisms,
-            ):
-                continue
-            if category == "budget" and summary["candidate_positive"] == 0:
-                failures.append(
-                    _guard_issue(
-                        "TELEMETRY_BUDGET_STARVED",
-                        category=category,
-                        field=field,
-                        severity="fail",
-                        summary=summary,
-                    )
-                )
-            elif category == "effect" and _is_objective_outcome_effect_field(
-                field,
-                role_map=role_map,
-            ):
-                if summary["candidate_present"] == 0:
-                    protected_effect = _matches_protected_objective_field(
-                        field,
-                        protected_tokens,
-                    )
-                    activation_observed = _declared_effect_activation_observed(
-                        field,
-                        mechanisms=mechanisms,
-                        field_mechanisms=expected_field_mechanisms,
-                        activation_probe_fields=activation_probe_fields_by_mechanism,
-                        candidate_runtimes=candidate_runtimes,
-                        champion_runtimes=champion_runtimes,
-                    )
-                    code = (
-                        "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED"
-                        if protected_effect
-                        else "TELEMETRY_EFFECT_NOT_OBSERVED"
-                    )
-                    issue = _guard_issue(
-                        code,
-                        category=category,
-                        field=field,
-                        severity=(
-                            "fail"
-                            if protected_effect
-                            or (effect_observation_required and not activation_observed)
-                            else "warn"
-                        ),
-                        summary=summary,
-                        diagnostic_type=(
-                            EFFECT_ATTRIBUTION_MISSING
-                            if activation_observed and not protected_effect
-                            else None
-                        ),
-                        telemetry_outcome=(
-                            "effect_attribution_missing"
-                            if activation_observed and not protected_effect
-                            else None
-                        ),
-                        repairable=(
-                            True if activation_observed and not protected_effect else None
-                        ),
-                    )
-                    _record_declared_field_issue_for_mechanisms(
-                        mechanism_summaries,
-                        mechanisms=mechanisms,
-                        category=category,
-                        field=field,
-                        issue=issue,
-                    )
-                    (failures if issue["severity"] == "fail" else warnings).append(
-                        issue
-                    )
-            elif summary["candidate_positive"] == 0:
-                activation_observed = category == "effect" and (
-                    _declared_effect_activation_observed(
-                        field,
-                        mechanisms=mechanisms,
-                        field_mechanisms=expected_field_mechanisms,
-                        activation_probe_fields=activation_probe_fields_by_mechanism,
-                        candidate_runtimes=candidate_runtimes,
-                        champion_runtimes=champion_runtimes,
-                    )
-                )
-                issue = _guard_issue(
-                    _zero_activity_issue_code(category, summary),
-                    category=category,
-                    field=field,
-                    severity=(
-                        "warn"
-                        if category == "effect"
-                        and (not effect_observation_required or activation_observed)
-                        else "fail"
-                    ),
-                    summary=summary,
-                    diagnostic_type=(
-                        (
-                            MECHANISM_EXECUTED_NO_IMPROVEMENT
-                            if int(summary.get("candidate_present", 0) or 0) > 0
-                            else EFFECT_ATTRIBUTION_MISSING
-                        )
-                        if activation_observed
-                        else None
-                    ),
-                    telemetry_outcome=(
-                        (
-                            "no_effect"
-                            if int(summary.get("candidate_present", 0) or 0) > 0
-                            else "effect_attribution_missing"
-                        )
-                        if activation_observed
-                        else None
-                    ),
-                    repairable=(
-                        int(summary.get("candidate_present", 0) or 0) == 0
-                        if activation_observed
-                        else None
-                    ),
-                )
-                _record_declared_field_issue_for_mechanisms(
-                    mechanism_summaries,
-                    mechanisms=mechanisms,
-                    category=category,
-                    field=field,
-                    issue=issue,
-                )
-                (failures if issue["severity"] == "fail" else warnings).append(issue)
+    _record_expected_field_issues(
+        categories=categories,
+        candidate_runtimes=candidate_runtimes,
+        champion_runtimes=champion_runtimes,
+        role_map=role_map,
+        protected_tokens=protected_tokens,
+        mechanisms=mechanisms,
+        expected_field_mechanisms=expected_field_mechanisms,
+        activation_probe_fields_by_mechanism=activation_probe_fields_by_mechanism,
+        effect_observation_required=effect_observation_required,
+        field_summaries=field_summaries,
+        mechanism_summaries=mechanism_summaries,
+        failures=failures,
+        warnings=warnings,
+        zero_activity_issue_code=_zero_activity_issue_code,
+    )
 
     mechanism_probe_categories: dict[str, dict[str, list[str]]] = {
         mechanism: {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES}
@@ -440,82 +315,17 @@ def build_telemetry_guard_summary(
                 warnings.append(issue)
 
     if not expected_present:
-        activity_fields = declared_activity_runtime_fields(surface)
-        if activity_fields:
-            activity_positive = 0
-            activity_present = 0
-            activity_missing = 0
-            activity_champion_positive = 0
-            for field in activity_fields:
-                summary = field_summaries.get(field)
-                if summary is None:
-                    summary = _runtime_field_summary(
-                        field,
-                        candidate_runtimes=candidate_runtimes,
-                        champion_runtimes=champion_runtimes,
-                    )
-                    field_summaries[field] = summary
-                activity_positive += int(summary["candidate_positive"])
-                activity_present += int(summary["candidate_present"])
-                activity_missing += int(summary["candidate_missing"])
-                activity_champion_positive += int(summary["champion_positive"])
-            if candidate_runtimes and activity_positive == 0:
-                issue = _guard_issue(
-                    _zero_activity_issue_code(
-                        "activity",
-                        {
-                            "candidate_present": activity_present,
-                            "candidate_missing": activity_missing,
-                            "candidate_positive": activity_positive,
-                        },
-                    ),
-                    category="activity",
-                    field=",".join(activity_fields),
-                    severity=(
-                        "fail"
-                        if implicit_activity_claim
-                        or _as_bool(_field(evidence, "fail_closed_on_zero_activity"))
-                        else "warn"
-                    ),
-                    summary={
-                        "candidate_runs": len(candidate_runtimes),
-                        "candidate_positive": activity_positive,
-                        "candidate_present": activity_present,
-                        "candidate_missing": activity_missing,
-                        "champion_positive": activity_champion_positive,
-                    },
-                )
-                (failures if issue["severity"] == "fail" else warnings).append(issue)
-
-        budget_fields = declared_stage_budget_runtime_fields(surface)
-        for field in budget_fields:
-            if field in field_summaries:
-                continue
-            summary = _runtime_field_summary(
-                field,
-                candidate_runtimes=candidate_runtimes,
-                champion_runtimes=champion_runtimes,
-            )
-            field_summaries[field] = summary
-            if (
-                candidate_runtimes
-                and summary["candidate_positive"] == 0
-                and summary["champion_positive"] > 0
-            ):
-                issue = _guard_issue(
-                    "TELEMETRY_BUDGET_STARVED",
-                    category="budget",
-                    field=field,
-                    severity=(
-                        "fail"
-                        if _as_bool(
-                            _field(evidence, "fail_closed_on_stage_budget_starvation")
-                        )
-                        else "warn"
-                    ),
-                    summary=summary,
-                )
-                (failures if issue["severity"] == "fail" else warnings).append(issue)
+        _record_no_expected_telemetry_fallbacks(
+            surface=surface,
+            evidence=evidence,
+            candidate_runtimes=candidate_runtimes,
+            champion_runtimes=champion_runtimes,
+            implicit_activity_claim=implicit_activity_claim,
+            field_summaries=field_summaries,
+            failures=failures,
+            warnings=warnings,
+            zero_activity_issue_code=_zero_activity_issue_code,
+        )
 
     return {
         "schema": "scion.telemetry_guard.v1",
