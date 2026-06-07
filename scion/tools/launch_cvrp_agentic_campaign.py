@@ -10,6 +10,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
 
 DEFAULT_EXPERIMENTS_ROOT = Path("/home/clawd/research/scion-experiments")
 DEFAULT_MODEL = "gpt-5.5"
@@ -22,6 +24,10 @@ PROBLEM = "scion/problems/cvrp/problem.yaml"
 PROTOCOL = "scion/problems/cvrp/formal/protocol.yaml"
 SPLIT = "scion/problems/cvrp/formal/split_manifest.yaml"
 SEEDS = "scion/problems/cvrp/formal/seed_ledger.yaml"
+CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED = (
+    PROBLEM,
+    "scion/problems/cvrp/problem-v1.yaml",
+)
 
 
 def _repo_root() -> Path:
@@ -57,6 +63,26 @@ def _safe_label(label: str) -> str:
 
 def _shell_assign(name: str, value: object) -> str:
     return f"{name}={shlex.quote(str(value))}"
+
+
+def _preflight_cvrp_parameter_search_disabled(scion_dir: Path) -> None:
+    for spec_path in CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED:
+        full_path = scion_dir / spec_path
+        with full_path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        parameter_search = (
+            data.get("parameter_search") if isinstance(data, dict) else None
+        )
+        enabled = (
+            parameter_search.get("enabled")
+            if isinstance(parameter_search, dict)
+            else None
+        )
+        if enabled is not False:
+            raise SystemExit(
+                "CVRP agentic launcher requires "
+                f"parameter_search.enabled=false in {spec_path}"
+            )
 
 
 def _build_command(env: dict[str, object]) -> str:
@@ -166,6 +192,7 @@ def _launch(run_root: Path) -> str:
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     repo_root = _repo_root()
     scion_dir = repo_root / "scion"
+    _preflight_cvrp_parameter_search_disabled(scion_dir)
     started_at = datetime.now(timezone.utc)
     timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
     label = _safe_label(args.label)

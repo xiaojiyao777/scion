@@ -1,11 +1,23 @@
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 SCION_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LAUNCHER = SCION_DIR / "tools" / "launch_cvrp_agentic_campaign.py"
+
+
+def _load_launcher_module():
+    spec = importlib.util.spec_from_file_location("cvrp_agentic_launcher", LAUNCHER)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_cvrp_agentic_launcher_help() -> None:
@@ -66,3 +78,28 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
+
+
+def test_cvrp_agentic_launcher_preflight_rejects_parameter_search_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_launcher_module()
+    problem = tmp_path / "problem.yaml"
+    problem_v1 = tmp_path / "problem-v1.yaml"
+    problem.write_text("parameter_search:\n  enabled: false\n", encoding="utf-8")
+    problem_v1.write_text("parameter_search:\n  enabled: true\n", encoding="utf-8")
+    monkeypatch.setattr(
+        module,
+        "CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED",
+        (problem.name, problem_v1.name),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        module._preflight_cvrp_parameter_search_disabled(tmp_path)
+
+    assert exc_info.value.code != 0
+    assert "CVRP agentic launcher requires parameter_search.enabled=false" in str(
+        exc_info.value
+    )
+    assert "problem-v1.yaml" in str(exc_info.value)
