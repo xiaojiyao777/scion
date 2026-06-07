@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.core import scheduler as scheduler_facade
 from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_PARK_LINEAGE,
     SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE,
@@ -23,6 +24,9 @@ from scion.core.scheduler import (
     active_slot_inventory,
     reclaim_active_slot_for_new_branch,
     reconcile_active_slot_overflow,
+)
+from scion.core.scheduling.runtime_pressure import (
+    branch_runtime_evidence_clean_fork_pressure_summary,
 )
 from scion.proposal.screening_feedback import screening_feedback_summary
 
@@ -50,6 +54,52 @@ def _runtime_pressure_protocol() -> ProtocolResult:
         runtime_evidence_status="insufficient",
         champion_cached_runtime_pairs=4,
     )
+
+
+def test_runtime_pressure_summary_module_matches_scheduler_facade() -> None:
+    branch = Branch(
+        branch_id="runtime-pressure-summary-facade",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        direction="tainted proposal text must not appear",
+        branch_evidence_summary={
+            "wins": "0",
+            "losses": "-1",
+            "runtime_evidence_confidence": " low_cached_champion ",
+            "runtime_evidence_status": "fresh_required",
+            "runtime_aggregate_exclusion": {"excluded": True},
+            "runtime_evidence_pressure_count": "2",
+        },
+    )
+
+    summary = branch_runtime_evidence_clean_fork_pressure_summary(branch)
+
+    assert (
+        summary
+        == scheduler_facade.branch_runtime_evidence_clean_fork_pressure_summary(
+            branch
+        )
+    )
+    assert summary["reason"] == RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON
+    assert summary["policy"] == "prefer_clean_fork"
+    assert summary["runtime_evidence_pressure_count"] == 2
+    assert summary["case_wins"] == 0
+    assert summary["case_losses"] == 0
+    assert summary["case_balance"] == "no_case_win"
+    assert summary["runtime_evidence_confidence"] == "low_cached_champion"
+    assert summary["runtime_evidence_status"] == "fresh_required"
+    assert summary["runtime_aggregate_excluded"] is True
+    assert summary["runtime_evidence_pressure_triggers"] == [
+        "low_or_cached_runtime_confidence",
+        "runtime_evidence_status:fresh_required",
+        "runtime_aggregate_excluded",
+    ]
+    assert summary["tainted_proposal_guidance"] is True
+    assert summary["decision_features_excluded"] is True
+    assert "tainted proposal text" not in str(summary)
 
 
 def test_active_slot_reclaim_requires_decision_origin_park_marker() -> None:

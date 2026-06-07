@@ -19,6 +19,16 @@ from scion.core.branch_hygiene import (
 )
 from scion.core.branch_lifecycle_policy import BRANCH_LIFECYCLE_PARK_LINEAGE
 from scion.core.models import Branch, BranchState
+from scion.core.scheduling.runtime_pressure import (
+    RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
+    _runtime_aggregate_excluded,
+    _runtime_evidence_low_or_incomplete,
+    _runtime_evidence_pressure_count,
+    _runtime_evidence_pressure_triggers,
+    _summary_nonnegative_int,
+    _summary_text,
+    branch_runtime_evidence_clean_fork_pressure_summary,
+)
 
 
 @dataclass(frozen=True)
@@ -60,9 +70,6 @@ _TERMINAL_STATES = frozenset({
 
 _DEFAULT_MAX_ACTIVE_BRANCHES = 3
 _PLATEAU_REROUTE_REASON = "plateau_reroute_clean_fork"
-RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON = (
-    "runtime_evidence_completeness_clean_fork"
-)
 ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
 ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH = "active_slot_reclaimed_for_new_branch"
 ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
@@ -962,47 +969,6 @@ def _branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
     return _runtime_evidence_pressure_count(summary) >= 2
 
 
-def branch_runtime_evidence_clean_fork_pressure_summary(
-    branch: Branch | None,
-) -> dict[str, Any]:
-    if branch is None or not _branch_is_weak_positive_lineage(branch):
-        return {}
-    summary = getattr(branch, "branch_evidence_summary", {}) or {}
-    if not isinstance(summary, Mapping):
-        return {}
-    pressure_count = _runtime_evidence_pressure_count(summary)
-    if pressure_count < 2 or not _runtime_evidence_low_or_incomplete(summary):
-        return {}
-    wins = _summary_nonnegative_int(summary, "wins")
-    losses = _summary_nonnegative_int(summary, "losses")
-    if wins > 0 and losses == 0:
-        return {}
-    return {
-        "reason": RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
-        "policy": "prefer_clean_fork",
-        "runtime_evidence_pressure_count": pressure_count,
-        "case_wins": wins,
-        "case_losses": losses,
-        "case_balance": "case_loss" if losses > 0 else "no_case_win",
-        "runtime_evidence_confidence": _summary_text(
-            summary,
-            "runtime_evidence_confidence",
-            default="unknown",
-        ),
-        "runtime_evidence_status": _summary_text(
-            summary,
-            "runtime_evidence_status",
-            default="unknown",
-        ),
-        "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
-        "runtime_evidence_pressure_triggers": _runtime_evidence_pressure_triggers(
-            summary
-        ),
-        "tainted_proposal_guidance": True,
-        "decision_features_excluded": True,
-    }
-
-
 def _clean_fork_selection_audit(
     branches: Iterable[Branch],
     *,
@@ -1700,87 +1666,6 @@ def _branch_screening_tier(branch: Branch) -> str:
 def _branch_state_value(branch: Branch) -> str:
     state = getattr(branch, "state", "")
     return str(getattr(state, "value", state) or "")
-
-
-def _runtime_evidence_pressure_count(summary: Mapping[str, Any]) -> int:
-    try:
-        return max(0, int(summary.get("runtime_evidence_pressure_count") or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _summary_nonnegative_int(summary: Mapping[str, Any], key: str) -> int:
-    try:
-        return max(0, int(summary.get(key) or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _summary_text(
-    summary: Mapping[str, Any],
-    key: str,
-    *,
-    default: str = "",
-) -> str:
-    value = str(summary.get(key) or "").strip()
-    return value if value else default
-
-
-def _runtime_evidence_low_or_incomplete(summary: Mapping[str, Any]) -> bool:
-    confidence = _summary_text(summary, "runtime_evidence_confidence").lower()
-    status = _summary_text(summary, "runtime_evidence_status").lower()
-    return (
-        _runtime_aggregate_excluded(summary)
-        or confidence.startswith("low")
-        or confidence
-        in {"incomplete", "insufficient", "missing", "none", "unknown"}
-        or status
-        in {
-            "fresh_required",
-            "fresh_champion_required",
-            "incomplete",
-            "insufficient",
-            "missing",
-            "none",
-            "unknown",
-        }
-        or "incomplete" in status
-        or "insufficient" in status
-    )
-
-
-def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
-    exclusion = summary.get("runtime_aggregate_exclusion")
-    if isinstance(exclusion, Mapping):
-        if "excluded" in exclusion:
-            return bool(exclusion.get("excluded"))
-        return bool(exclusion)
-    return bool(exclusion)
-
-
-def _runtime_evidence_pressure_triggers(summary: Mapping[str, Any]) -> list[str]:
-    pressure = summary.get("runtime_evidence_pressure")
-    if isinstance(pressure, Mapping):
-        triggers = pressure.get("triggers")
-        if isinstance(triggers, list):
-            return [str(item) for item in triggers if str(item).strip()]
-    triggers: list[str] = []
-    confidence = _summary_text(summary, "runtime_evidence_confidence").lower()
-    status = _summary_text(summary, "runtime_evidence_status").lower()
-    if confidence.startswith("low") or "cached" in confidence:
-        triggers.append("low_or_cached_runtime_confidence")
-    if status in {
-        "fresh_required",
-        "fresh_champion_required",
-        "incomplete",
-        "insufficient",
-        "missing",
-        "unknown",
-    }:
-        triggers.append(f"runtime_evidence_status:{status}")
-    if _runtime_aggregate_excluded(summary):
-        triggers.append("runtime_aggregate_excluded")
-    return list(dict.fromkeys(triggers))
 
 
 def _branch_research_priority(branch: Branch) -> int:

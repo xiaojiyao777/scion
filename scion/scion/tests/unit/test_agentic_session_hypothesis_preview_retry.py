@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
+import scion.proposal.agentic_session_hypothesis as hypothesis_facade
 from scion.core.models import (
     Decision,
     DecisionFeatures,
@@ -14,6 +15,7 @@ from scion.core.models import (
 from scion.proposal.agentic_session_hypothesis import (
     _hypothesis_preview_retry_feedback,
 )
+from scion.proposal import agentic_session_hypothesis_schema_retry as schema_retry
 from scion.proposal.engine import (
     _split_hypothesis_context,
     _split_hypothesis_target_intent_context,
@@ -57,6 +59,87 @@ class SequentialHypothesisToolClient:
                 raise AssertionError("generate_hypothesis called too many times")
             return self.payloads.pop(0)
         raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
+def test_schema_retry_helpers_remain_importable_from_hypothesis_facade() -> None:
+    helper_names = (
+        "_schema_retry_preservation_drift",
+        "_schema_retry_corrective_retry_already_used",
+        "_same_mechanism_preview_retry_pending",
+        "_schema_retry_drift_feedback",
+        "_schema_retry_drift_failure_detail",
+        "_schema_retry_protected_identity",
+        "_hypothesis_retry_anchor",
+        "_mechanism_ref_token",
+        "_mechanism_ref_matches",
+        "_mechanism_id_schema_retry_pending",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(hypothesis_facade, helper_name) is getattr(
+            schema_retry,
+            helper_name,
+        )
+
+
+def test_schema_retry_identity_helpers_keep_existing_behavior() -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            target_file="policies/baseline_modules/local_search.py",
+            expected_telemetry={
+                "activation": [
+                    "solver_algorithm_context_records.other_probe_iterations"
+                ],
+            },
+        ),
+        mechanism_changes=(
+            MechanismChange(
+                id="adaptive_vns_operator_weights",
+                change_type="add",
+            ),
+        ),
+    )
+    preserve_hypothesis = {
+        "action": "modify",
+        "target_file": "policies/baseline_modules/local_search.py",
+        "mechanism_changes": [
+            {"id": "adaptive_vns_operator_weights", "change_type": "add"}
+        ],
+    }
+    preview_rejections = [
+        {
+            "attempt": 1,
+            "failure_code": "C11_expected_telemetry",
+            "preserve_hypothesis": preserve_hypothesis,
+        }
+    ]
+
+    assert hypothesis_facade._same_mechanism_preview_retry_pending(
+        [{"failure_code": "same_mechanism_only_violation"}]
+    )
+    assert hypothesis_facade._mechanism_id_schema_retry_pending(
+        [{"failure_code": "invalid_mechanism_id"}]
+    )
+    assert hypothesis_facade._mechanism_ref_token(
+        "Adaptive-VNS-Operator-Weights_iterations"
+    ) == "adaptive_vns_operator_weights"
+
+    drift = hypothesis_facade._schema_retry_preservation_drift(
+        hypothesis,
+        preview_rejections,
+        attempt=2,
+    )
+
+    assert drift is not None
+    assert drift["failure_code"] == "schema_retry_drift"
+    assert drift["drift_fields"] == ["expected_telemetry.activation"]
+    feedback = hypothesis_facade._schema_retry_drift_feedback(
+        drift,
+        hypothesis,
+        attempt=2,
+    )
+    assert feedback["corrective_retry"] is True
+    assert "Do not explore" in feedback["retry_constraint"]
 
 
 def test_material_difference_requirement_is_first_class_in_manifest() -> None:

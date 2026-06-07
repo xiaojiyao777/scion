@@ -4,6 +4,14 @@ from __future__ import annotations
 import pytest
 
 from scion.proposal.engine import _split_hypothesis_context, _split_code_context
+from scion.proposal.engine.prompt import formatting
+from scion.proposal.engine.prompt_common import (
+    _DefaultDict,
+    _bounded_json,
+    _format_bulleted_section,
+    _limit_code_phase_text,
+    _limit_text,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +53,26 @@ def _user_text(context):
     """Extract user prompt from hypothesis context."""
     _, user = _split_hypothesis_context(context)
     return user
+
+
+def test_prompt_common_reexports_formatting_helpers_without_semantic_drift():
+    assert _DefaultDict is formatting._DefaultDict
+    assert _bounded_json is formatting._bounded_json
+    assert _format_bulleted_section is formatting._format_bulleted_section
+    assert _limit_code_phase_text is formatting._limit_code_phase_text
+    assert _limit_text is formatting._limit_text
+
+    assert _DefaultDict({"known": "value"})["missing"] == ""
+    assert _format_bulleted_section("Rules", ["one", "two"]) == (
+        "## Rules\n- one\n- two\n"
+    )
+    assert _limit_text("abcdef", 5) == "ab..."
+    assert _limit_code_phase_text("abcdef", 5, label="payload") == (
+        "\n... <truncated payload for compact code generation>"
+    )
+    assert _bounded_json({"z": "x" * 100}, 20).endswith(
+        "\n... <truncated agentic context>"
+    )
 
 
 # ---------------------------------------------------------------------------
