@@ -653,7 +653,58 @@ def _record_requires_branch_lesson_usage(record: Mapping[str, Any]) -> bool:
     response = _required_response(record)
     if response.get("required_output_field") != "branch_lesson_usage":
         return False
-    return _required_for(record) in _ACTIVE_REQUIRED_FOR
+    return (
+        _required_for(record) in _ACTIVE_REQUIRED_FOR
+        and _actionable_lesson_record(record)
+    )
+
+
+def _actionable_lesson_record(record: Mapping[str, Any]) -> bool:
+    if not _clean_text(record.get("lesson_id")):
+        return False
+    if not _clean_text(record.get("lesson_type")):
+        return False
+    if not _clean_text(record.get("lesson_role")):
+        return False
+    if _specific_signal_present(record.get("shared_signature")):
+        return True
+    if _specific_signal_present(record.get("transfer_contract")):
+        return True
+    return _actionable_evidence_basis(record.get("evidence_basis"))
+
+
+def _actionable_evidence_basis(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    for item in value.values():
+        if isinstance(item, Mapping):
+            if _actionable_status_counts(item):
+                return True
+            if _actionable_evidence_basis(item):
+                return True
+            continue
+        if isinstance(item, (list, tuple, set)):
+            if any(_actionable_evidence_basis(child) for child in item):
+                return True
+            continue
+        text = _token(item) if isinstance(item, str) else ""
+        if text and text not in {"unknown", "active"}:
+            return True
+    return False
+
+
+def _actionable_status_counts(value: Mapping[str, Any]) -> bool:
+    for raw_key, raw_count in value.items():
+        key = _token(raw_key)
+        if key in {"unknown", "active"}:
+            continue
+        try:
+            count = float(raw_count)
+        except (TypeError, ValueError):
+            count = 1.0 if _specific_signal_present(raw_count) else 0.0
+        if count > 0:
+            return True
+    return False
 
 
 def _required_response(record: Mapping[str, Any]) -> Mapping[str, Any]:

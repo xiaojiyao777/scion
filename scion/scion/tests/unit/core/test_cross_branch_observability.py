@@ -104,6 +104,13 @@ def _branch_lesson_record(lesson_id: str) -> dict:
         "lesson_type": "near_duplicate",
         "maturity": "repeated",
         "source_branch_ids": ["branch-a"],
+        "shared_signature": {
+            "mechanism_family": "family_a",
+            "target_file": "components/common.py",
+            "action": "modify",
+            "change_locus": "selection_policy",
+        },
+        "evidence_basis": {"outcome_patterns": {"no_effect": 1}},
         "required_response": {
             "required_for": "clean_fork_new_branch",
             "required_output_field": "branch_lesson_usage",

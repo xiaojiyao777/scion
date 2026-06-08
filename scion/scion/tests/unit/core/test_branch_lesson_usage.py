@@ -104,6 +104,45 @@ def _record(
     }
 
 
+def _non_actionable_sibling_record() -> dict:
+    return {
+        "schema_version": "branch_lesson.v1",
+        "lesson_id": "lesson:unknown-active",
+        "source": "proposal_only",
+        "decision_input_policy": "excluded_from_decision_features",
+        "scope": "branch_local",
+        "lesson_role": "avoid",
+        "lesson_type": "no_effect",
+        "maturity": "fresh",
+        "source_branch_ids": ["branch-active"],
+        "evidence_basis": {
+            "activation_statuses": {"unknown": 1},
+            "effect_statuses": {"unknown": 1},
+            "outcome_patterns": {"active": 1},
+            "runtime_evidence_statuses": {"unknown": 1},
+        },
+        "required_response": {
+            "minimum_requirement": (
+                "name_borrowed_or_avoided_lesson_and_contrast_dimension"
+            ),
+            "required_contrast_dimensions": [
+                "mechanism_family",
+                "target_file",
+                "action",
+                "change_locus",
+                "effect_path",
+                "activation_path",
+                "runtime_budget_strategy",
+            ],
+            "required_for": "sibling_nearby_attempt",
+            "required_output_field": "branch_lesson_usage",
+            "same_branch_refinement_allowed": False,
+            "sibling_duplication_allowed": False,
+        },
+        "reason_codes": ["BRANCH_LESSON_REQUIRED", "LESSON_ACTIVE"],
+    }
+
+
 def test_clean_fork_requirement_blocks_missing_branch_lesson_usage() -> None:
     branch = _branch()
     branch.branch_evidence_summary = {
@@ -122,6 +161,22 @@ def test_clean_fork_requirement_blocks_missing_branch_lesson_usage() -> None:
         "agent_quality_blocked:branch_lesson_usage_required_missing"
     )
     assert "required_for=clean_fork_new_branch" in detail
+
+
+def test_non_actionable_sibling_unknown_record_does_not_require_usage() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_non_actionable_sibling_record()]
+    }
+
+    requirement = branch_lesson_usage_requirement_from_records(
+        branch.branch_evidence_summary["branch_lesson_records"]
+    )
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert requirement == {}
+    assert metadata == {"required": False}
+    assert branch_lesson_usage_pre_code_block_reason(_hypothesis(), branch) is None
 
 
 def test_same_branch_weak_positive_preserve_satisfies_requirement() -> None:
@@ -254,6 +309,37 @@ def test_near_duplicate_clean_fork_without_contrast_or_reject_fails() -> None:
     reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
 
     assert reason is not None
+    assert "branch_lesson_usage_semantic_mismatch" in reason
+
+
+def test_actionable_sibling_near_duplicate_without_contrast_or_reject_fails() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [
+            _record(
+                "lesson:sibling-duplicate",
+                required_for="sibling_nearby_attempt",
+            )
+        ]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "avoided_lessons": [
+                {
+                    "lesson_id": "lesson:sibling-duplicate",
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism": "generic_signal",
+                    "avoid_reason_code": "same_family_no_effect",
+                }
+            ],
+        }
+    )
+
+    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "required_for=sibling_nearby_attempt" in reason
     assert "branch_lesson_usage_semantic_mismatch" in reason
 
 
