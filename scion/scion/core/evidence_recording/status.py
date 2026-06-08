@@ -126,6 +126,19 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "effective_rounds_completed": "effective_rounds_completed",
         "formal_screened_candidates": "formal_screened_candidates",
         "protocol_evaluated_candidates": "protocol_evaluated_candidates",
+        "protocol_metric_results": "protocol_metric_results",
+        "screening_protocol_results": "screening_protocol_results",
+        "fresh_runtime_replay_protocol_results": (
+            "fresh_runtime_replay_protocol_results"
+        ),
+        "validation_protocol_results": "validation_protocol_results",
+        "frozen_protocol_results": "frozen_protocol_results",
+        "verification_consumed_candidates": "verification_consumed_candidates",
+        "verification_failure_consumed_candidates": (
+            "verification_failure_consumed_candidates"
+        ),
+        "proposal_quality_blocks": "proposal_quality_blocks",
+        "protocol_metric_stage_counts": "protocol_metric_stage_counts",
         "protocol_stage_counts": "protocol_stage_counts",
         "max_rounds_budget_counter": "max_rounds_budget_counter",
         "max_rounds_semantics": "max_rounds_semantics",

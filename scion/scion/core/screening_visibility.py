@@ -33,9 +33,19 @@ _OBSERVABILITY_VALUE_COUNT_KEYS = (
     "observability_value_not_applicable",
 )
 _OBSERVABILITY_INTENT_TERMS = {
-    "observability",
+    "diagnostic_telemetry",
     "instrument",
     "instrumentation",
+    "log",
+    "logging",
+    "measure",
+    "measurement",
+    "metric",
+    "metrics",
+    "observability",
+    "runtime_budget",
+    "runtime_telemetry",
+    "telemetry",
     "visibility",
     "telemetry_bridge",
     "telemetry_probe",
@@ -58,6 +68,9 @@ _DIAGNOSTIC_INTENT_TERMS = {
     "tool_budget",
     "tool_loop",
 }
+_OBSERVABILITY_ONLY_MECHANISM_TERMS = (
+    _OBSERVABILITY_INTENT_TERMS | _DIAGNOSTIC_INTENT_TERMS
+) - {"runtime_aggregate_excluded"}
 _REPAIR_OR_INFRA_INTENT_TERMS = {
     "contract",
     "failure_repair",
@@ -245,6 +258,9 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
     intent_token_text = " ".join(intent_tokens).lower()
     diagnostic_token_text = " ".join(diagnostic_tokens).lower()
     quality_hits = _quality_intent_hits_for_step(step)
+    observability_only_mechanism = _candidate_has_only_observability_mechanism_change(
+        step
+    )
     observability_hits = sorted(
         term for term in _OBSERVABILITY_INTENT_TERMS if term in intent_token_text
     )
@@ -260,13 +276,43 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
             if term in intent_token_text
         }
     )
+    repair_hits = sorted(
+        {
+            term
+            for term in _REPAIR_OR_INFRA_INTENT_TERMS
+            if term in diagnostic_token_text
+        }
+        | {
+            term
+            for term in _REPAIR_OR_INFRA_DECLARED_INTENT_TERMS
+            if term in intent_token_text
+        }
+    )
     no_effect = False
     if protocol is not None:
         try:
             no_effect = no_objective_effect_for_protocol(protocol)
         except Exception:  # pragma: no cover - defensive visibility only
             no_effect = False
-    if quality_hits:
+    if repair_hits and observability_only_mechanism:
+        intent = _REPAIR_OR_INFRA_CANDIDATE
+        reason_codes = [
+            f"CANDIDATE_INTENT_REPAIR_OR_INFRA_{_reason_suffix(hit)}"
+            for hit in repair_hits[:3]
+        ]
+        reason_codes.append(
+            "CANDIDATE_INTENT_REPAIR_OR_INFRA_NO_SOLVER_QUALITY_MECHANISM_CHANGE"
+        )
+    elif observability_hits and observability_only_mechanism:
+        intent = _OBSERVABILITY_CANDIDATE
+        reason_codes = [
+            f"CANDIDATE_INTENT_OBSERVABILITY_{_reason_suffix(hit)}"
+            for hit in observability_hits[:3]
+        ]
+        reason_codes.append(
+            "CANDIDATE_INTENT_OBSERVABILITY_NO_SOLVER_QUALITY_MECHANISM_CHANGE"
+        )
+    elif quality_hits:
         intent = _ALGORITHM_QUALITY_CANDIDATE
         reason_codes = [
             f"CANDIDATE_INTENT_ALGORITHM_QUALITY_{_reason_suffix(hit)}"
@@ -942,8 +988,24 @@ def _mechanism_change_is_observability_or_repair(change: Any) -> bool:
     tokens = " ".join(_structured_tokens(change)).lower()
     if not tokens:
         return False
-    return any(term in tokens for term in _OBSERVABILITY_INTENT_TERMS) or any(
+    return any(term in tokens for term in _OBSERVABILITY_ONLY_MECHANISM_TERMS) or any(
         term in tokens for term in _REPAIR_OR_INFRA_DECLARED_INTENT_TERMS
+    )
+
+
+def _candidate_has_only_observability_mechanism_change(step: Any) -> bool:
+    changes = []
+    hypothesis = getattr(step, "hypothesis", None)
+    if hypothesis is not None:
+        changes.extend(getattr(hypothesis, "mechanism_changes", ()) or ())
+    patch = getattr(step, "patch", None)
+    if patch is not None:
+        changes.extend(getattr(patch, "mechanism_changes", ()) or ())
+    if not changes:
+        return False
+    return all(
+        _mechanism_change_is_observability_or_repair(change)
+        for change in changes
     )
 
 

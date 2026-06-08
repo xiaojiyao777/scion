@@ -2382,6 +2382,7 @@ def test_status_and_summary_expose_proposal_accounting_fields(
     )
     loop_status = {
         "requested_rounds": 4,
+        "effective_rounds_completed": 2,
         "loop_steps": 7,
         "proposal_attempts": 5,
         "proposal_attempts_consumed": 5,
@@ -2401,8 +2402,13 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         _step("/tmp/accounting-metrics.json"),
         proposal_session_ref={"session_id": "session-1"},
     )
+    second_step = replace(
+        _step("/tmp/accounting-metrics-2.json"),
+        round_num=2,
+        proposal_session_ref={"session_id": "session-2"},
+    )
     summary = recorder.write_campaign_summary(
-        step_history=[step],
+        step_history=[step, second_step],
         round_num=5,
         champion=_champion(),
     )
@@ -2413,6 +2419,19 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["proposal_attempts_total"] == 7
         assert payload["formal_screened_candidates"] == 2
         assert payload["protocol_evaluated_candidates"] == 2
+        assert payload["protocol_metric_results"] == 2
+        assert payload["screening_protocol_results"] == 2
+        assert payload["fresh_runtime_replay_protocol_results"] == 0
+        assert payload["validation_protocol_results"] == 0
+        assert payload["frozen_protocol_results"] == 0
+        assert payload["verification_consumed_candidates"] == 2
+        assert payload["verification_failure_consumed_candidates"] == 0
+        assert payload["proposal_quality_blocks"] == 3
+        assert payload["protocol_metric_stage_counts"] == {
+            "screening": 2,
+            "validation": 0,
+            "frozen": 0,
+        }
         assert payload["protocol_stage_counts"] == {
             "screening": 2,
             "validation": 0,
@@ -2427,7 +2446,19 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["proposal_accounting"]["proposal_attempts_total"] == 7
         assert payload["proposal_accounting"]["formal_screened_candidates"] == 2
         assert payload["proposal_accounting"]["protocol_evaluated_candidates"] == 2
+        assert payload["proposal_accounting"]["protocol_metric_results"] == 2
+        assert (
+            payload["proposal_accounting"][
+                "fresh_runtime_replay_protocol_results"
+            ]
+            == 0
+        )
+        assert (
+            payload["proposal_accounting"]["verification_consumed_candidates"]
+            == 2
+        )
         assert payload["proposal_accounting"]["quality_blocks"] == 3
+        assert payload["proposal_accounting"]["proposal_quality_blocks"] == 3
         assert payload["proposal_accounting"]["agentic_sessions"] == 2
         assert payload["proposal_accounting"]["hypothesis_calls"] == 1
         assert payload["proposal_accounting"]["code_calls"] == 2
@@ -2619,30 +2650,104 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
             }
         },
     )
+    fresh_replay_step = replace(
+        _step("/tmp/accounting-fresh-replay.json"),
+        round_num=5,
+        decision=Decision.CONTINUE_EXPLORE,
+        counts_toward_max_rounds=False,
+        attempt_kind="fresh_runtime_replay",
+    )
+    fresh_replay_step.protocol_result = replace(
+        fresh_replay_step.protocol_result,
+        stage=ExperimentStage.SCREENING,
+        raw_metrics_ref="/tmp/accounting-fresh-replay.json",
+    )
+    verification_failure_step = replace(
+        _step("/tmp/accounting-v9-heavy.json"),
+        round_num=6,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="verification",
+        failure_detail="V9_perf_guard: heavy verification failed",
+        verification_detail="V9_perf_guard: heavy verification failed",
+        counts_toward_max_rounds=True,
+        attempt_kind="screening",
+    )
+    recorder.campaign_loop_status = {
+        "requested_rounds": 4,
+        "effective_rounds_completed": 4,
+    }
 
     summary = recorder.write_campaign_summary(
-        step_history=[screening_step, validation_step, frozen_step, repair_step],
-        round_num=4,
+        step_history=[
+            screening_step,
+            validation_step,
+            frozen_step,
+            repair_step,
+            fresh_replay_step,
+            verification_failure_step,
+        ],
+        round_num=6,
         champion=_champion(),
         stopped_reason="max_rounds_exhausted",
     )
 
-    assert summary["screened_experiments"] == 2
-    assert summary["effective_rounds_completed"] == 3
+    assert summary["screened_experiments"] == 3
+    assert summary["effective_rounds_completed"] == 4
+    assert summary["counted_experiment_steps"] == 3
     assert summary["formal_screened_candidates"] == 1
-    assert summary["protocol_evaluated_candidates"] == 4
+    assert summary["protocol_evaluated_candidates"] == 5
+    assert summary["protocol_metric_results"] == 5
+    assert summary["screening_protocol_results"] == 3
+    assert summary["fresh_runtime_replay_protocol_results"] == 1
+    assert summary["validation_protocol_results"] == 1
+    assert summary["frozen_protocol_results"] == 1
+    assert summary["verification_consumed_candidates"] == 4
+    assert summary["verification_failure_consumed_candidates"] == 1
     assert summary["protocol_stage_counts"] == {
-        "screening": 2,
+        "screening": 3,
+        "validation": 1,
+        "frozen": 1,
+    }
+    assert summary["protocol_metric_stage_counts"] == {
+        "screening": 3,
         "validation": 1,
         "frozen": 1,
     }
     assert summary["proposal_accounting"]["formal_screened_candidates"] == 1
-    assert summary["proposal_accounting"]["protocol_evaluated_candidates"] == 4
+    assert summary["proposal_accounting"]["protocol_evaluated_candidates"] == 5
+    assert summary["proposal_accounting"]["protocol_metric_results"] == 5
+    assert (
+        summary["proposal_accounting"]["fresh_runtime_replay_protocol_results"]
+        == 1
+    )
+    assert (
+        summary["proposal_accounting"]["verification_failure_consumed_candidates"]
+        == 1
+    )
     reconciliation = summary["accounting_reconciliation"]
     assert reconciliation["formal_screened_candidates"] == 1
-    assert reconciliation["protocol_evaluated_candidates"] == 4
+    assert reconciliation["protocol_evaluated_candidates"] == 5
+    assert reconciliation["protocol_metric_results"] == 5
+    assert reconciliation["fresh_runtime_replay_protocol_results"] == 1
+    assert reconciliation["verification_consumed_candidates"] == 4
+    assert reconciliation["verification_failure_consumed_candidates"] == 1
     assert reconciliation["attempt_breakdown"]["formal_screened_candidates"] == 1
-    assert reconciliation["attempt_breakdown"]["protocol_evaluated_candidates"] == 4
+    assert reconciliation["attempt_breakdown"]["protocol_evaluated_candidates"] == 5
+    assert reconciliation["attempt_breakdown"]["protocol_metric_results"] == 5
+    assert (
+        reconciliation["attempt_breakdown"][
+            "fresh_runtime_replay_protocol_results"
+        ]
+        == 1
+    )
+    assert (
+        reconciliation["attempt_breakdown"][
+            "verification_failure_consumed_candidates"
+        ]
+        == 1
+    )
 
 
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(

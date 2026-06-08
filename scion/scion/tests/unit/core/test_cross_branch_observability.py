@@ -429,7 +429,7 @@ def test_cross_branch_observability_counts_branch_lesson_usage_quality() -> None
     assert payload["avoided_lesson_count"] == 1
     assert payload["contrasted_lesson_count"] == 1
     assert payload["preserved_same_branch_lesson_count"] == 1
-    assert payload["clean_fork_contrast_satisfied_count"] == 2
+    assert payload["clean_fork_contrast_satisfied_count"] == 1
     assert payload["weak_positive_transfer_count"] == 1
     assert payload["weak_positive_transfer_reject_count"] == 0
     assert payload["policy"] == "proposal_observability_only"

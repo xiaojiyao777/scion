@@ -141,6 +141,7 @@ def test_same_branch_weak_positive_preserve_satisfies_requirement() -> None:
             "preserved_same_branch_lesson": {
                 "lesson_id": "lesson:local",
                 "preserved_signal": "observed_signal",
+                "changed_dimensions": ["activation_threshold"],
                 "risk_to_avoid": "known_gap",
                 "target_file": "components/common.py",
                 "action": "modify",
@@ -150,6 +151,26 @@ def test_same_branch_weak_positive_preserve_satisfies_requirement() -> None:
     )
 
     assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+
+
+def test_metadata_only_lesson_usage_fails_requirement() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:metadata-only")]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "schema_version": "branch_lesson_usage.v1",
+            "proposal_visibility_only": True,
+            "candidate_lesson_ids": ["lesson:metadata-only"],
+            "decision_features_excluded": True,
+        }
+    )
+
+    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "branch_lesson_usage_metadata_only" in reason
 
 
 def test_clean_fork_contrast_requires_changed_dimensions() -> None:
@@ -182,6 +203,94 @@ def test_clean_fork_contrast_requires_changed_dimensions() -> None:
 
     assert branch_lesson_usage_pre_code_block_reason(only_id, branch) is not None
     assert branch_lesson_usage_pre_code_block_reason(with_dimensions, branch) is None
+
+
+def test_clean_fork_action_linked_usage_accepts_generic_mechanism_family() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:family")]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:family",
+                    "contrast_dimensions": ["mechanism_family", "target_file"],
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism_family": "family_a",
+                    "change_rationale": "different_trigger_family",
+                }
+            ],
+        }
+    )
+
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+
+
+def test_near_duplicate_clean_fork_without_contrast_or_reject_fails() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:duplicate")]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "borrowed_lessons": [
+                {
+                    "lesson_id": "lesson:duplicate",
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism": "generic_signal",
+                    "borrow_reason_code": "same_family_follow_up",
+                }
+            ],
+            "clean_fork_diversity_claim": {
+                "changed_dimensions": ["target_file"],
+                "sibling_duplication_allowed": False,
+            },
+        }
+    )
+
+    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+
+    assert reason is not None
+    assert "branch_lesson_usage_semantic_mismatch" in reason
+
+
+def test_clean_fork_accepts_machine_readable_near_duplicate_reject() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:reject")]
+    }
+    vague_reject = _hypothesis(
+        branch_lesson_usage={
+            "rejected_lessons": [
+                {
+                    "lesson_id": "lesson:reject",
+                    "reject_reason": "not suitable",
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism": "generic_signal",
+                }
+            ],
+        }
+    )
+    linked_reject = _hypothesis(
+        branch_lesson_usage={
+            "rejected_lessons": [
+                {
+                    "lesson_id": "lesson:reject",
+                    "reject_reason_code": "same_family_changed_target",
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism": "generic_signal",
+                }
+            ],
+        }
+    )
+
+    assert branch_lesson_usage_pre_code_block_reason(vague_reject, branch) is not None
+    assert branch_lesson_usage_pre_code_block_reason(linked_reject, branch) is None
 
 
 def test_requirement_metadata_derives_compact_record_from_branch_lessons() -> None:
@@ -778,7 +887,7 @@ def test_target_action_mechanism_linkage_are_all_required() -> None:
         ), omitted_field
 
 
-def test_broad_family_token_does_not_satisfy_specific_mechanism_linkage() -> None:
+def test_broad_family_token_satisfies_generic_action_linkage() -> None:
     hypothesis = _hypothesis()
     usage = {
         "contrasted_lessons": [
@@ -796,7 +905,7 @@ def test_broad_family_token_does_not_satisfy_specific_mechanism_linkage() -> Non
         },
     }
 
-    assert not branch_lesson_usage_requirement_satisfied(
+    assert branch_lesson_usage_requirement_satisfied(
         usage,
         metadata=_strict_requirement(),
         hypothesis=hypothesis,
@@ -807,7 +916,7 @@ def test_broad_family_token_does_not_satisfy_specific_mechanism_linkage() -> Non
             metadata=_strict_requirement(),
             hypothesis=hypothesis,
         )
-        == "semantic_mismatch"
+        == "satisfied"
     )
 
 

@@ -601,6 +601,83 @@ def test_candidate_intent_counts_separate_algorithm_observability_and_repair(
     ]["observability_value_status"] == "observability_value_observed"
 
 
+def test_telemetry_only_candidate_intent_stays_distinct_from_quality_search(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-generic", campaign_dir=tmp_path)
+    step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=8,
+                wins=0,
+                losses=0,
+                ties=8,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "SCREENING_NO_EFFECT",
+                "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+            ),
+            mechanism_evidence={
+                "primary_mechanism": "runtime_budget_telemetry_probe",
+                "primary_activation_status": "observed",
+                "primary_effect_status": "zero",
+                "telemetry_outcome": "observed",
+            },
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "runtime_budget_telemetry_probe_count": {
+                        "present": 8,
+                        "missing": 0,
+                    }
+                },
+                "runtime_budget_diagnostic": {
+                    "code": "runtime_budget_diagnostic_visible",
+                },
+            },
+        ),
+        predicted_direction="improve",
+        target_objectives=("generic_objective",),
+        expected_telemetry={"intent": "runtime_budget_telemetry_probe"},
+        mechanism_changes=(
+            MechanismChange(
+                id="runtime_budget_telemetry_probe",
+                change_type="add",
+            ),
+        ),
+        target_file="core/runtime_telemetry.py",
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_generic_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    assert summary["candidate_intent_counts"] == {
+        "algorithm_quality_candidate": 0,
+        "observability_candidate": 1,
+        "repair_or_infra_candidate": 0,
+        "unknown": 0,
+    }
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["candidate_intent"] == "observability_candidate"
+    assert protocol["quality_search_interpretation"] == (
+        "diagnostic_not_quality_failure"
+    )
+    assert "CANDIDATE_INTENT_OBSERVABILITY_NO_SOLVER_QUALITY_MECHANISM_CHANGE" in (
+        protocol["candidate_intent_visibility"]["candidate_intent_reason_codes"]
+    )
+    assert protocol["observability_value_visibility"][
+        "observability_value_status"
+    ] == "observability_value_observed"
+
+
 def _generic_step(
     *,
     protocol: ProtocolResult,

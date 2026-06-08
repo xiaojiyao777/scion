@@ -405,12 +405,33 @@ def accounting_reconciliation_fields(
             "protocol_evaluated_candidates": candidate_accounting[
                 "protocol_evaluated_candidates"
             ],
+            "protocol_metric_results": candidate_accounting[
+                "protocol_metric_results"
+            ],
+            "fresh_runtime_replay_protocol_results": candidate_accounting[
+                "fresh_runtime_replay_protocol_results"
+            ],
+            "validation_protocol_results": candidate_accounting[
+                "validation_protocol_results"
+            ],
+            "frozen_protocol_results": candidate_accounting[
+                "frozen_protocol_results"
+            ],
+            "verification_consumed_candidates": candidate_accounting[
+                "verification_consumed_candidates"
+            ],
+            "verification_failure_consumed_candidates": candidate_accounting[
+                "verification_failure_consumed_candidates"
+            ],
             "effective_screenings": effective,
             "screened_not_effective": screened_not_effective,
             "non_effective_screening_count": len(non_effective_screenings),
             "accepted": accepted,
             "model_repair": model_repair_attempts,
             "model_repair_failures": model_repair_failures,
+            "proposal_quality_blocks": candidate_accounting[
+                "proposal_quality_blocks"
+            ],
             "quality_blocks": quality_blocks,
             "quality_block_ledger_count": len(quality_block_ledger),
             "active_slot_blocked_attempts": active_slot_blocked_attempts,
@@ -580,13 +601,62 @@ def _candidate_accounting_fields(
 ) -> dict[str, Any]:
     """Return stable run-level candidate counters with explicit semantics."""
     has_step_history = bool(steps)
+    step_protocol_stage_counts = _protocol_stage_counts_from_steps(steps)
+    legacy_stage_count_fallbacks = (
+        ()
+        if has_step_history
+        else (
+            _protocol_stage_counts_from_mapping(state_map.get("protocol_stage_counts")),
+            _protocol_stage_counts_from_mapping(loop.get("protocol_stage_counts")),
+        )
+    )
+    protocol_metric_stage_counts = _merged_protocol_stage_counts(
+        step_protocol_stage_counts,
+        _protocol_stage_counts_from_mapping(
+            state_map.get("protocol_metric_stage_counts")
+        ),
+        _protocol_stage_counts_from_mapping(loop.get("protocol_metric_stage_counts")),
+        *legacy_stage_count_fallbacks,
+    )
     stage_counts = _merged_protocol_stage_counts(
-        _protocol_stage_counts_from_steps(steps),
+        step_protocol_stage_counts,
         _protocol_stage_counts_from_mapping(state_map.get("protocol_stage_counts")),
         _protocol_stage_counts_from_mapping(loop.get("protocol_stage_counts")),
     )
-    step_protocol_count = sum(_protocol_stage_counts_from_steps(steps).values())
+    step_protocol_count = sum(step_protocol_stage_counts.values())
     step_formal_screened = _formal_screened_candidate_count_from_steps(steps)
+    step_fresh_replay_protocol_count = _fresh_runtime_replay_protocol_count_from_steps(
+        steps
+    )
+    protocol_metric_results = _first_int(
+        loop.get("protocol_metric_results"),
+        state_map.get("protocol_metric_results"),
+        default=(
+            step_protocol_count
+            if has_step_history
+            else sum(protocol_metric_stage_counts.values())
+        ),
+    )
+    screening_protocol_results = _first_int(
+        loop.get("screening_protocol_results"),
+        state_map.get("screening_protocol_results"),
+        default=protocol_metric_stage_counts["screening"],
+    )
+    validation_protocol_results = _first_int(
+        loop.get("validation_protocol_results"),
+        state_map.get("validation_protocol_results"),
+        default=protocol_metric_stage_counts["validation"],
+    )
+    frozen_protocol_results = _first_int(
+        loop.get("frozen_protocol_results"),
+        state_map.get("frozen_protocol_results"),
+        default=protocol_metric_stage_counts["frozen"],
+    )
+    fresh_runtime_replay_protocol_results = _first_int(
+        loop.get("fresh_runtime_replay_protocol_results"),
+        state_map.get("fresh_runtime_replay_protocol_results"),
+        default=step_fresh_replay_protocol_count if has_step_history else 0,
+    )
     legacy_attempts = _first_int(
         loop.get("proposal_attempts_consumed"),
         loop.get("proposal_attempts"),
@@ -627,25 +697,103 @@ def _candidate_accounting_fields(
             - stage_counts["frozen"],
         )
         stage_counts["screening"] = inferred_screening
+    effective_rounds_completed = _first_int(
+        loop.get("effective_rounds_completed"),
+        state_map.get("effective_rounds_completed"),
+        default=(
+            sum(1 for step in steps if _step_counts_effective(step))
+            if has_step_history
+            else 0
+        ),
+    )
+    verification_failure_consumed_candidates = _first_int(
+        loop.get("verification_failure_consumed_candidates"),
+        state_map.get("verification_failure_consumed_candidates"),
+        default=sum(
+            1
+            for step in steps
+            if _verification_failure_consumed_candidate(step)
+        )
+        if has_step_history
+        else max(0, effective_rounds_completed - protocol_metric_results),
+    )
+    verification_consumed_candidates = _first_int(
+        loop.get("verification_consumed_candidates"),
+        state_map.get("verification_consumed_candidates"),
+        default=(
+            _verification_consumed_candidate_count_from_steps(steps)
+            if has_step_history
+            else effective_rounds_completed
+        ),
+    )
+    proposal_quality_blocks = _first_int(
+        loop.get("proposal_quality_blocks"),
+        loop.get("proposal_quality_blocks_consumed"),
+        loop.get("quality_blocks"),
+        state_map.get("proposal_quality_blocks"),
+        state_map.get("quality_blocks"),
+        default=0,
+    )
     return {
         "proposal_attempts_total": proposal_attempts_total,
         "formal_screened_candidates": formal_screened_candidates,
         "protocol_evaluated_candidates": protocol_evaluated_candidates,
+        "protocol_metric_results": protocol_metric_results,
+        "screening_protocol_results": screening_protocol_results,
+        "fresh_runtime_replay_protocol_results": (
+            fresh_runtime_replay_protocol_results
+        ),
+        "validation_protocol_results": validation_protocol_results,
+        "frozen_protocol_results": frozen_protocol_results,
+        "verification_consumed_candidates": verification_consumed_candidates,
+        "verification_failure_consumed_candidates": (
+            verification_failure_consumed_candidates
+        ),
+        "proposal_quality_blocks": proposal_quality_blocks,
+        "protocol_metric_stage_counts": protocol_metric_stage_counts,
         "protocol_stage_counts": stage_counts,
         "max_rounds_budget_counter": "effective_rounds_completed",
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; proposal, "
-            "repair, lifecycle, and active-slot scheduler attempts are reported "
-            "separately"
+            "quality-blocked proposal, non-counted replay, validation, frozen, "
+            "lifecycle, and active-slot scheduler attempts are reported separately"
         ),
         "formal_screened_candidates_semantics": (
-            "screening-stage protocol results that count as formal candidates; "
-            "proposal blocks, repair attempts, validation, and frozen stages are "
-            "excluded"
+            "legacy screening candidate counter retained for compatibility; use "
+            "screening_protocol_results for actual screening metrics rows and "
+            "verification_consumed_candidates for max-round candidate attempts"
         ),
         "protocol_evaluated_candidates_semantics": (
-            "completed protocol evaluations across screening, validation, and "
-            "frozen stages; proposal blocks are excluded"
+            "legacy evaluated-candidate counter retained for compatibility and "
+            "may include older run-loop candidate attempts; use "
+            "protocol_metric_results as the actual protocol metric-row total "
+            "and validation_protocol_results, frozen_protocol_results, and "
+            "fresh_runtime_replay_protocol_results as explicit breakdowns"
+        ),
+        "protocol_metric_results_semantics": (
+            "actual completed protocol metrics results/rows across screening, "
+            "validation, frozen, and fresh-runtime replay; verification-only "
+            "failures and proposal quality blocks are excluded"
+        ),
+        "verification_consumed_candidates_semantics": (
+            "candidate attempts that consumed the effective max-round budget at "
+            "or after verification; includes verification-only heavy failures "
+            "but excludes non-counted fresh-runtime replays"
+        ),
+        "fresh_runtime_replay_protocol_results_semantics": (
+            "non-counted fresh-runtime replay attempts with completed protocol "
+            "metrics; included in protocol_metric_results but not in "
+            "effective_rounds_completed"
+        ),
+        "validation_protocol_results_semantics": (
+            "validation-stage protocol metric results; not screening rounds"
+        ),
+        "frozen_protocol_results_semantics": (
+            "frozen holdout protocol metric results; not screening rounds"
+        ),
+        "proposal_quality_blocks_semantics": (
+            "proposal/schema quality blocks that consumed proposal attempts but "
+            "did not produce verification or protocol metrics"
         ),
     }
 
@@ -675,6 +823,39 @@ def _formal_screened_candidate_count_from_steps(
             continue
         count += 1
     return count
+
+
+def _fresh_runtime_replay_protocol_count_from_steps(
+    steps: Iterable[StepRecord],
+) -> int:
+    return sum(
+        1
+        for step in steps
+        if getattr(step, "protocol_result", None) is not None
+        and _attempt_kind(step) == "fresh_runtime_replay"
+    )
+
+
+def _verification_failure_consumed_candidate(step: StepRecord) -> bool:
+    return (
+        getattr(step, "protocol_result", None) is None
+        and str(getattr(step, "failure_stage", "") or "") == "verification"
+        and bool(getattr(step, "counts_toward_max_rounds", True))
+    )
+
+
+def _verification_consumed_candidate_count_from_steps(
+    steps: Iterable[StepRecord],
+) -> int:
+    return sum(
+        1
+        for step in steps
+        if bool(getattr(step, "counts_toward_max_rounds", True))
+        and (
+            getattr(step, "protocol_result", None) is not None
+            or _verification_failure_consumed_candidate(step)
+        )
+    )
 
 
 def _protocol_stage_counts_from_mapping(value: Any) -> dict[str, int]:

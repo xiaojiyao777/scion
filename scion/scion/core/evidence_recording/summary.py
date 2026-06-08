@@ -274,7 +274,10 @@ class CampaignSummaryMixin:
             1 for step in steps if formal_screening_attempted(step.protocol_result)
         )
         counted_experiment_steps = sum(
-            1 for step in steps if screened_experiment_effective(step.protocol_result)
+            1
+            for step in steps
+            if screened_experiment_effective(step.protocol_result)
+            and bool(getattr(step, "counts_toward_max_rounds", True))
         )
         effective_rounds_completed = counted_experiment_steps
         state_screened_experiments: Any | None = None

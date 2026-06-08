@@ -24,11 +24,15 @@ from scion.core.models import (
 )
 from scion.core.scheduler import (
     Scheduler,
+    SchedulerAction,
     branch_active_slot_release_reason,
     branch_counts_toward_active_slots,
     active_slot_capacity_block_metadata,
     reclaim_active_slot_for_new_branch,
     reconcile_active_slot_overflow,
+)
+from scion.core.evidence_recording.replay_identity import (
+    FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS,
 )
 from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
@@ -243,12 +247,84 @@ class BranchStepRunner:
             )
 
         active = self.branch_controller.get_active_branches()
+        pending_materialized = _materialize_fresh_runtime_pending_markers(
+            active,
+            branch_workspaces=self.branch_workspaces,
+            branch_hypotheses=self.branch_hypotheses,
+            branch_current_hypothesis=self.branch_current_hypothesis,
+            branch_patches=self.branch_patches,
+        )
+        for entry in pending_materialized:
+            branch_id = str(entry.get("branch_id") or "")
+            if branch_id:
+                self.persist_branch_state(branch_id)
         sched = self.scheduler.select_next(active)
         branch = getattr(sched, "branch", None)
+        if pending_materialized:
+            scheduler_audit = dict(getattr(sched, "audit_metadata", None) or {})
+            scheduler_audit.setdefault(
+                "fresh_runtime_pending_materialized",
+                pending_materialized,
+            )
+            sched_action = str(getattr(sched, "action", "") or "run_existing")
+            if sched_action not in {
+                "run_existing",
+                "replay_existing",
+                "create_new",
+                "at_capacity",
+            }:
+                sched_action = "run_existing"
+            sched_slot = str(getattr(sched, "slot", "") or "refine_active")
+            if sched_slot not in {
+                "explore_new",
+                "exploit_weak_positive",
+                "repair_diagnostic",
+                "refine_active",
+                "capacity_blocked",
+            }:
+                sched_slot = "refine_active"
+            sched = SchedulerAction(
+                action=sched_action,  # type: ignore[arg-type]
+                branch=branch,
+                reason=str(getattr(sched, "reason", "") or ""),
+                slot=sched_slot,  # type: ignore[arg-type]
+                audit_metadata=scheduler_audit,
+            )
+        materializable_pending = _materializable_fresh_runtime_pending_branch(
+            active,
+            branch_workspaces=self.branch_workspaces,
+            branch_hypotheses=self.branch_hypotheses,
+            branch_current_hypothesis=self.branch_current_hypothesis,
+            branch_patches=self.branch_patches,
+        )
+        if (
+            str(getattr(sched, "action", "") or "") != "replay_existing"
+            and materializable_pending is not None
+        ):
+            sched = SchedulerAction(
+                action="replay_existing",
+                branch=materializable_pending,
+                reason="fresh_champion_runtime_replay_followup",
+                slot="exploit_weak_positive",
+                audit_metadata={
+                    "fresh_runtime_replay_drain_override": (
+                        "materializable_pending_replay_preferred"
+                    ),
+                    "fresh_runtime_pending_materialized": pending_materialized,
+                    "decision_features_excluded": True,
+                },
+            )
+            branch = materializable_pending
 
         def skip(reason: str) -> StepResult:
             pressure_without_candidate = (
-                _fresh_runtime_pressure_without_replayable_candidate(active)
+                _fresh_runtime_pressure_without_replayable_candidate(
+                    active,
+                    branch_workspaces=self.branch_workspaces,
+                    branch_hypotheses=self.branch_hypotheses,
+                    branch_current_hypothesis=self.branch_current_hypothesis,
+                    branch_patches=self.branch_patches,
+                )
             )
             drain_metadata = {
                 "schema_version": "fresh_runtime_replay_drain.v1",
@@ -256,6 +332,10 @@ class BranchStepRunner:
                 "skip_reason": reason,
                 "decision_features_excluded": True,
             }
+            if pending_materialized:
+                drain_metadata["fresh_runtime_pending_materialized"] = (
+                    pending_materialized
+                )
             if pressure_without_candidate:
                 drain_metadata["pressure_no_replayable_candidate"] = True
                 drain_metadata["fresh_runtime_pressure_candidates"] = (
@@ -272,6 +352,11 @@ class BranchStepRunner:
                     ),
                     "fresh_runtime_pressure_candidates": (
                         pressure_without_candidate
+                    ),
+                    "missing_materialization_keys": (
+                        _aggregate_missing_materialization_keys(
+                            pressure_without_candidate
+                        )
                     ),
                     "counts_toward_max_rounds": False,
                     "decision_features_excluded": True,
@@ -1011,6 +1096,11 @@ def _fresh_runtime_replay_result_metadata(
 
 def _fresh_runtime_pressure_without_replayable_candidate(
     branches: Any,
+    *,
+    branch_workspaces: Mapping[str, str] | None = None,
+    branch_hypotheses: Mapping[str, HypothesisProposal] | None = None,
+    branch_current_hypothesis: Mapping[str, HypothesisRecord] | None = None,
+    branch_patches: Mapping[str, PatchProposal] | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for branch in branches or ():
@@ -1040,6 +1130,13 @@ def _fresh_runtime_pressure_without_replayable_candidate(
         )
         if not fresh_required:
             continue
+        materialization = _fresh_runtime_replay_materialization_diagnostic(
+            branch,
+            branch_workspaces=branch_workspaces,
+            branch_hypotheses=branch_hypotheses,
+            branch_current_hypothesis=branch_current_hypothesis,
+            branch_patches=branch_patches,
+        )
         candidates.append(
             {
                 "branch_id": getattr(branch, "branch_id", None),
@@ -1060,9 +1157,296 @@ def _fresh_runtime_pressure_without_replayable_candidate(
                 "runtime_evidence_pressure_count": _nonnegative_int(
                     summary.get("runtime_evidence_pressure_count")
                 ),
+                "replay_materializable": not bool(
+                    materialization["missing_materialization_keys"]
+                ),
+                "missing_materialization_keys": list(
+                    materialization["missing_materialization_keys"]
+                ),
+                "missing_replay_identity_keys": list(
+                    materialization["missing_replay_identity_keys"]
+                ),
+                "replay_identity_status": materialization["replay_identity_status"],
+                "protocol_stage": materialization["protocol_stage"],
+                "candidate_code_hash": materialization["candidate_code_hash"],
             }
         )
     return candidates
+
+
+def _materialize_fresh_runtime_pending_markers(
+    branches: Any,
+    *,
+    branch_workspaces: Mapping[str, str],
+    branch_hypotheses: Mapping[str, HypothesisProposal],
+    branch_current_hypothesis: Mapping[str, HypothesisRecord],
+    branch_patches: Mapping[str, PatchProposal],
+) -> list[dict[str, Any]]:
+    materialized: list[dict[str, Any]] = []
+    for branch in branches or ():
+        summary = (
+            dict(getattr(branch, "branch_evidence_summary", {}) or {})
+            if isinstance(getattr(branch, "branch_evidence_summary", None), Mapping)
+            else {}
+        )
+        if not summary:
+            continue
+        marker = summary.get("fresh_runtime_followup")
+        marker_payload = dict(marker) if isinstance(marker, Mapping) else {}
+        if (
+            bool(marker_payload.get("fresh_runtime_pending"))
+            and str(marker_payload.get("scheduler_marker") or "")
+            == "fresh_champion_runtime_replay_pending"
+        ):
+            continue
+        if not _summary_fresh_runtime_required(summary, marker_payload):
+            continue
+        state = getattr(branch, "state", "")
+        if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
+            continue
+        materialization = _fresh_runtime_replay_materialization_diagnostic(
+            branch,
+            branch_workspaces=branch_workspaces,
+            branch_hypotheses=branch_hypotheses,
+            branch_current_hypothesis=branch_current_hypothesis,
+            branch_patches=branch_patches,
+        )
+        if materialization["missing_materialization_keys"]:
+            continue
+        marker_payload.update(
+            {
+                "schema_version": "fresh_runtime_followup.v1",
+                "queue_intent": "fresh_champion_runtime_replay",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "trigger": marker_payload.get("trigger")
+                or "fresh_runtime_required",
+                "fresh_runtime_pending": True,
+                "fresh_runtime_required": True,
+                "followup_recommended": True,
+                "followup_required": True,
+                "counts_toward_max_rounds": False,
+                "decision_features_excluded": True,
+                "replay_materialization": {
+                    "schema_version": "fresh_runtime_materialization.v1",
+                    "materializable": True,
+                    "candidate_code_hash": materialization["candidate_code_hash"],
+                    "protocol_stage": materialization["protocol_stage"],
+                    "replay_identity_status": (
+                        materialization["replay_identity_status"]
+                    ),
+                    "decision_features_excluded": True,
+                },
+            }
+        )
+        summary["fresh_runtime_followup"] = marker_payload
+        summary["fresh_runtime_pending"] = True
+        summary["fresh_runtime_required"] = True
+        branch.branch_evidence_summary = summary
+        materialized.append(
+            {
+                "branch_id": getattr(branch, "branch_id", None),
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "candidate_code_hash": materialization["candidate_code_hash"],
+                "protocol_stage": materialization["protocol_stage"],
+                "replay_identity_status": materialization["replay_identity_status"],
+                "counts_toward_max_rounds": False,
+                "decision_features_excluded": True,
+            }
+        )
+    return materialized
+
+
+def _materializable_fresh_runtime_pending_branch(
+    branches: Any,
+    *,
+    branch_workspaces: Mapping[str, str],
+    branch_hypotheses: Mapping[str, HypothesisProposal],
+    branch_current_hypothesis: Mapping[str, HypothesisRecord],
+    branch_patches: Mapping[str, PatchProposal],
+) -> Branch | None:
+    for branch in branches or ():
+        summary = getattr(branch, "branch_evidence_summary", {}) or {}
+        marker = (
+            summary.get("fresh_runtime_followup")
+            if isinstance(summary, Mapping)
+            else {}
+        )
+        if not isinstance(marker, Mapping):
+            continue
+        state = getattr(branch, "state", "")
+        if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
+            continue
+        if not (
+            bool(marker.get("fresh_runtime_pending"))
+            and str(marker.get("scheduler_marker") or "")
+            == "fresh_champion_runtime_replay_pending"
+        ):
+            continue
+        materialization = _fresh_runtime_replay_materialization_diagnostic(
+            branch,
+            branch_workspaces=branch_workspaces,
+            branch_hypotheses=branch_hypotheses,
+            branch_current_hypothesis=branch_current_hypothesis,
+            branch_patches=branch_patches,
+        )
+        if not materialization["missing_materialization_keys"]:
+            return branch
+    return None
+
+
+def _summary_fresh_runtime_required(
+    summary: Mapping[str, Any],
+    marker_payload: Mapping[str, Any],
+) -> bool:
+    reason_codes = _summary_reason_codes(summary)
+    runtime_status = str(summary.get("runtime_evidence_status") or "").lower()
+    return bool(
+        summary.get("fresh_runtime_required")
+        or marker_payload.get("fresh_runtime_required")
+        or marker_payload.get("followup_required")
+        or runtime_status in {"fresh_champion_required", "fresh_required"}
+        or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_codes
+        or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_codes
+    )
+
+
+def _fresh_runtime_replay_materialization_diagnostic(
+    branch: Branch,
+    *,
+    branch_workspaces: Mapping[str, str] | None,
+    branch_hypotheses: Mapping[str, HypothesisProposal] | None,
+    branch_current_hypothesis: Mapping[str, HypothesisRecord] | None,
+    branch_patches: Mapping[str, PatchProposal] | None,
+) -> dict[str, Any]:
+    bid = str(getattr(branch, "branch_id", "") or "")
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    evidence = summary if isinstance(summary, Mapping) else {}
+    missing: list[str] = []
+    if branch_workspaces is not None and not branch_workspaces.get(bid):
+        missing.append("candidate_workspace")
+    if branch_hypotheses is not None and branch_hypotheses.get(bid) is None:
+        missing.append("hypothesis")
+    if (
+        branch_current_hypothesis is not None
+        and branch_current_hypothesis.get(bid) is None
+    ):
+        missing.append("hypothesis_record")
+    if branch_patches is not None and branch_patches.get(bid) is None:
+        missing.append("patch")
+    candidate_code_hash = _candidate_code_hash(branch, evidence)
+    if not candidate_code_hash:
+        missing.append("candidate_hash")
+    protocol_stage = _summary_protocol_stage(evidence)
+    if not protocol_stage:
+        missing.append("protocol_stage")
+    replay_identity = _summary_replay_identity(evidence)
+    missing_identity_keys = _missing_replay_identity_keys(replay_identity)
+    if replay_identity is None:
+        missing.append("replay_identity")
+    else:
+        missing.extend(
+            f"replay_identity.{key}" for key in missing_identity_keys
+        )
+    return {
+        "missing_materialization_keys": list(dict.fromkeys(missing)),
+        "missing_replay_identity_keys": missing_identity_keys,
+        "replay_identity_status": (
+            str(
+                replay_identity.get("identity_status")
+                or replay_identity.get("status")
+                or "complete"
+            )
+            if replay_identity is not None and not missing_identity_keys
+            else "missing"
+            if replay_identity is None
+            else "degraded"
+        ),
+        "protocol_stage": protocol_stage,
+        "candidate_code_hash": candidate_code_hash,
+    }
+
+
+def _candidate_code_hash(branch: Branch, summary: Mapping[str, Any]) -> str:
+    for value in (
+        getattr(branch, "current_code_hash", None),
+        summary.get("candidate_code_hash"),
+        summary.get("code_hash"),
+        summary.get("current_code_hash"),
+        getattr(branch, "last_clean_code_hash", None),
+        summary.get("last_clean_code_hash"),
+    ):
+        text = str(value or "").strip()
+        if text and text != "unknown":
+            return text
+    return ""
+
+
+def _summary_protocol_stage(summary: Mapping[str, Any]) -> str:
+    for value in (
+        summary.get("protocol_stage"),
+        summary.get("stage"),
+        summary.get("experiment_stage"),
+    ):
+        text = str(getattr(value, "value", value) or "").strip()
+        if text and text != "unknown":
+            return text
+    return ""
+
+
+def _summary_replay_identity(summary: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    for key in (
+        "replay_identity",
+        "formal_replay_identity",
+        "candidate_replay_identity",
+    ):
+        value = summary.get(key)
+        if isinstance(value, Mapping):
+            return value
+    metadata = summary.get("replay_metadata")
+    if isinstance(metadata, Mapping):
+        value = metadata.get("replay_identity")
+        if isinstance(value, Mapping):
+            return value
+    marker = summary.get("fresh_runtime_followup")
+    if isinstance(marker, Mapping):
+        value = marker.get("replay_identity")
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def _missing_replay_identity_keys(
+    replay_identity: Mapping[str, Any] | None,
+) -> list[str]:
+    if replay_identity is None:
+        return ["replay_identity"]
+    explicit = replay_identity.get("missing_identity_keys")
+    if explicit is None:
+        explicit = replay_identity.get("missing_keys")
+    if isinstance(explicit, str):
+        missing = [explicit] if explicit else []
+    elif isinstance(explicit, (list, tuple, set)):
+        missing = [str(item) for item in explicit if str(item)]
+    else:
+        missing = []
+    for key in FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS:
+        value = str(replay_identity.get(key) or "").strip()
+        if not value or value == "unknown":
+            missing.append(key)
+    return list(dict.fromkeys(missing))
+
+
+def _aggregate_missing_materialization_keys(
+    candidates: list[dict[str, Any]],
+) -> list[str]:
+    keys: list[str] = []
+    for candidate in candidates:
+        value = candidate.get("missing_materialization_keys")
+        if isinstance(value, str):
+            keys.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            keys.extend(str(item) for item in value if str(item))
+    return list(dict.fromkeys(keys))
 
 
 def _summary_reason_codes(summary: Mapping[str, Any]) -> set[str]:
@@ -1096,6 +1480,13 @@ def _fresh_runtime_replay_materialization_block(
     summary = getattr(branch, "branch_evidence_summary", {}) or {}
     if not isinstance(summary, Mapping):
         summary = {}
+    materialization = _fresh_runtime_replay_materialization_diagnostic(
+        branch,
+        branch_workspaces=None,
+        branch_hypotheses=None,
+        branch_current_hypothesis=None,
+        branch_patches=None,
+    )
     artifact_ref = str(summary.get("formal_candidate_patch_artifact_ref") or "")
     if artifact_ref:
         return {
@@ -1109,6 +1500,17 @@ def _fresh_runtime_replay_materialization_block(
             "metadata": {
                 "formal_candidate_patch_artifact_ref": artifact_ref,
                 "missing_live_state": list(missing_live_state),
+                "missing_materialization_keys": list(
+                    materialization["missing_materialization_keys"]
+                ),
+                "missing_replay_identity_keys": list(
+                    materialization["missing_replay_identity_keys"]
+                ),
+                "replay_identity_status": materialization[
+                    "replay_identity_status"
+                ],
+                "protocol_stage": materialization["protocol_stage"],
+                "candidate_code_hash": materialization["candidate_code_hash"],
                 "missing_replay_materialization": [
                     "workspace_from_formal_candidate_patch_artifact",
                     "hypothesis_from_candidate_metadata_or_store",
@@ -1123,6 +1525,15 @@ def _fresh_runtime_replay_materialization_block(
         "detail": "fresh runtime replay missing " + ",".join(missing_live_state),
         "metadata": {
             "missing_live_state": list(missing_live_state),
+            "missing_materialization_keys": list(
+                materialization["missing_materialization_keys"]
+            ),
+            "missing_replay_identity_keys": list(
+                materialization["missing_replay_identity_keys"]
+            ),
+            "replay_identity_status": materialization["replay_identity_status"],
+            "protocol_stage": materialization["protocol_stage"],
+            "candidate_code_hash": materialization["candidate_code_hash"],
             "decision_features_excluded": True,
         },
     }

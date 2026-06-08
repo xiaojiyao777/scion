@@ -54,6 +54,25 @@ def _champion() -> ChampionState:
     )
 
 
+def _complete_replay_identity(code_hash: str = "candidate-hash") -> dict[str, object]:
+    return {
+        "schema": "scion.formal_replay_identity.v1",
+        "problem_spec_hash": "problem-hash",
+        "split_manifest_hash": "split-hash",
+        "seed_ledger_hash": "seed-hash",
+        "patch_digest": "patch-digest",
+        "patch_hash": "patch-digest",
+        "selected_surface": "generic_surface",
+        "protocol_version": "protocol-v3",
+        "raw_metrics_ref": "metrics/screening.json",
+        "code_hash": code_hash,
+        "identity_status": "complete",
+        "status": "complete",
+        "missing_identity_keys": [],
+        "missing_keys": [],
+    }
+
+
 def _runner(
     *,
     scheduler_action: SchedulerAction,
@@ -371,7 +390,11 @@ def test_fresh_runtime_replay_scheduler_action_skips_proposal_and_is_non_counted
     def fail_proposal(selected: Branch) -> StepResult:
         raise AssertionError("fresh replay must not call proposal explore")
 
-    def evaluate(selected: Branch, workspace: str, replay_hypothesis: HypothesisProposal):
+    def evaluate(
+        selected: Branch,
+        workspace: str,
+        replay_hypothesis: HypothesisProposal,
+    ):
         evaluated.append(
             (
                 selected.branch_id,
@@ -552,6 +575,139 @@ def test_fresh_runtime_replay_drain_step_does_not_execute_non_replay_action() ->
     assert recorded == []
 
 
+def test_fresh_runtime_replay_drain_materializes_pressure_and_prefers_replay() -> None:
+    branch = _branch("fresh-pressure-materializable")
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_evidence_summary = {
+        "runtime_evidence_status": "fresh_champion_required",
+        "fresh_runtime_required": True,
+        "fresh_runtime_pending": False,
+        "runtime_evidence_pressure_count": 2,
+        "reason_codes": ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+        "protocol_stage": "screening",
+        "replay_identity": _complete_replay_identity(),
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Replay current candidate against fresh champion runtime.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-fresh-pressure-materializable",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        exposed_summary="fresh replay complete",
+        raw_metrics_ref="/tmp/fresh-replay.json",
+        champion_cache_hits=0,
+        champion_cache_misses=8,
+        champion_cached_runtime_pairs=0,
+        runtime_confidence="high",
+        runtime_evidence_status="sufficient",
+    )
+    evaluated_pending_markers: list[dict[str, object]] = []
+    persisted: list[str] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("replay drain must prefer replay over create_new")
+
+    def evaluate(selected: Branch, workspace: str, replay_hypothesis: HypothesisProposal):
+        evaluated_pending_markers.append(
+            dict(selected.branch_evidence_summary["fresh_runtime_followup"])
+        )
+        return Decision.CONTINUE_EXPLORE, protocol, CanaryResult(passed=True)
+
+    def finalize(**kwargs):
+        selected = kwargs["branch"]
+        selected.branch_evidence_summary["fresh_runtime_followup"][
+            "fresh_runtime_pending"
+        ] = False
+        selected.branch_evidence_summary["fresh_runtime_followup"][
+            "scheduler_marker"
+        ] = "fresh_champion_runtime_replay_closed"
+        selected.branch_evidence_summary["fresh_runtime_replay_closure"] = {
+            "schema_version": "fresh_runtime_replay_closure.v1",
+            "closure_status": "fresh_evidence_recorded",
+            "decision_features_excluded": True,
+        }
+        return StepResult(
+            action="explore",
+            branch_id=selected.branch_id,
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="fresh replay complete",
+        )
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            branch=None,
+            slot="explore_new",
+            reason="runtime_evidence_completeness_clean_fork",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.branch_workspaces[branch.branch_id] = "/tmp/workspace"
+    runner.branch_hypotheses[branch.branch_id] = hypothesis
+    runner.branch_current_hypothesis[branch.branch_id] = h_record
+    runner.branch_patches[branch.branch_id] = patch
+    runner.evaluate = evaluate
+    runner.apply_decision_and_finalize = finalize
+    runner.persist_branch_state = persisted.append
+
+    result = runner.run_fresh_runtime_replay_drain_step()
+    metadata = result.scheduler_audit_metadata
+
+    assert result.action == "replay"
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "fresh_runtime_replay"
+    assert metadata["scheduler_action"] == "replay_existing"
+    assert metadata["fresh_runtime_replay_selected"] is True
+    assert metadata["fresh_runtime_replay_drain_override"] == (
+        "materializable_pending_replay_preferred"
+    )
+    assert metadata["fresh_runtime_pending_materialized"][0]["branch_id"] == (
+        branch.branch_id
+    )
+    assert (
+        metadata["fresh_runtime_pending_materialized"][0][
+            "decision_features_excluded"
+        ]
+        is True
+    )
+    assert metadata["fresh_runtime_replay"]["decision_features_excluded"] is True
+    assert evaluated_pending_markers[0]["fresh_runtime_pending"] is True
+    assert evaluated_pending_markers[0]["scheduler_marker"] == (
+        "fresh_champion_runtime_replay_pending"
+    )
+    assert evaluated_pending_markers[0]["decision_features_excluded"] is True
+    assert persisted == [branch.branch_id]
+
+
 def test_fresh_runtime_replay_drain_step_reports_pressure_without_pending_candidate() -> None:
     branch = _branch("fresh-pressure-no-pending")
     branch.branch_code_status = "active_no_effect"
@@ -593,6 +749,23 @@ def test_fresh_runtime_replay_drain_step_reports_pressure_without_pending_candid
     assert metadata["fresh_runtime_replay"][
         "fresh_runtime_pressure_candidates"
     ][0]["branch_id"] == "fresh-pressure-no-pending"
+    candidate = metadata["fresh_runtime_replay"][
+        "fresh_runtime_pressure_candidates"
+    ][0]
+    assert candidate["replay_materializable"] is False
+    assert set(candidate["missing_materialization_keys"]) == {
+        "candidate_workspace",
+        "hypothesis",
+        "hypothesis_record",
+        "patch",
+        "candidate_hash",
+        "protocol_stage",
+        "replay_identity",
+    }
+    assert metadata["fresh_runtime_replay"]["missing_materialization_keys"] == (
+        candidate["missing_materialization_keys"]
+    )
+    assert metadata["fresh_runtime_replay"]["decision_features_excluded"] is True
 
 
 def test_clean_fork_reclaims_scheduler_origin_slot_before_create_new() -> None:

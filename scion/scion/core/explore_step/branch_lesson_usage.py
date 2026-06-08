@@ -153,6 +153,34 @@ _REJECT_REASON_FIELDS = frozenset(
         "reuse_decision",
     }
 )
+_ACTION_RATIONALE_FIELDS = frozenset(
+    {
+        "avoid_reason",
+        "avoid_reason_code",
+        "avoid_rationale",
+        "borrow_reason",
+        "borrow_reason_code",
+        "borrow_rationale",
+        "change_rationale",
+        "preserve_reason",
+        "preserve_reason_code",
+        "preserve_rationale",
+        "refine_reason",
+        "refine_reason_code",
+        "refine_rationale",
+    }
+)
+_PRESERVED_SIGNAL_FIELDS = frozenset(
+    {
+        "preserved_dimension",
+        "preserved_dimensions",
+        "preserved_signal",
+        "preserved_signal_id",
+        "preserved_signal_ids",
+        "preserved_target",
+        "preserved_targets",
+    }
+)
 _METADATA_FIELD_NAMES = frozenset(
     {
         "audit",
@@ -191,6 +219,7 @@ _BOILERPLATE = frozenset(
         "n/a",
         "none",
         "preserve",
+        "reject",
         "required",
         "same",
         "tbd",
@@ -464,53 +493,70 @@ def branch_lesson_usage_requirement_diagnostic(
     same_branch_only = bool(required_fors) and set(required_fors) <= {
         "same_branch_refinement"
     }
+    metadata = metadata or {}
     semantic_linkage = _proposal_linkage_diagnostic(
         value,
-        metadata=metadata or {},
+        metadata=metadata,
         hypothesis=hypothesis,
     )
     semantic_linkage_present = semantic_linkage == "satisfied"
     if (
         same_branch_only
-        and _preserved_same_branch_lesson_present(value, metadata=metadata or {})
-        and semantic_linkage_present
+        and _same_branch_preserve_refine_present(
+            value,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
     ):
         return "satisfied"
-    if _weak_positive_transfer_required(metadata or {}):
+    if _weak_positive_transfer_required(metadata):
         satisfies_weak_positive = (
             _weak_positive_transfer_application_present(
                 value,
-                metadata=metadata or {},
+                metadata=metadata,
+                hypothesis=hypothesis,
             )
         ) or (
             allow_machine_reject
             and _weak_positive_reject_reason_present(
                 value,
-                metadata=metadata or {},
+                metadata=metadata,
+                hypothesis=hypothesis,
             )
         )
-        if satisfies_weak_positive and semantic_linkage_present:
-            return "satisfied"
         if satisfies_weak_positive:
-            return semantic_linkage
+            return "satisfied"
         return "semantic_mismatch"
     if set(required_fors) & _STRICT_REQUIRED_FOR:
-        satisfies_strict = (
-            _applied_lesson_present(value, metadata=metadata or {})
-            and _changed_dimensions_present(value)
-        )
-        if satisfies_strict and semantic_linkage_present:
+        if _strict_clean_fork_lesson_usage_present(
+            value,
+            metadata=metadata,
+            hypothesis=hypothesis,
+            allow_machine_reject=allow_machine_reject,
+        ):
             return "satisfied"
-        if satisfies_strict:
-            return semantic_linkage
+        if _strict_clean_fork_lesson_attempt_present(
+            value,
+            metadata=metadata,
+        ):
+            return (
+                "linkage_unrecognized"
+                if semantic_linkage == "linkage_unrecognized"
+                else "semantic_mismatch"
+            )
         return "semantic_mismatch"
-    if (
-        _preserved_same_branch_lesson_present(value, metadata=metadata or {})
-        and semantic_linkage_present
+    if _same_branch_preserve_refine_present(
+        value,
+        metadata=metadata,
+        hypothesis=hypothesis,
     ):
         return "satisfied"
     satisfies_default = (
-        _applied_lesson_present(value, metadata=metadata or {})
+        _action_linked_application_present(
+            value,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
         and _changed_dimensions_present(value)
     )
     if satisfies_default and semantic_linkage_present:
@@ -551,8 +597,8 @@ _BRANCH_LESSON_USAGE_REASON_GUIDANCE = {
     ),
     "semantic_mismatch": (
         "branch_lesson_usage is present, but it does not match the required "
-        "lesson ids, changed dimensions, or concrete target/action/mechanism "
-        "linkage."
+        "lesson ids, item-level changed dimensions or machine reject reason, "
+        "or concrete target/action/mechanism linkage."
     ),
 }
 
@@ -772,7 +818,13 @@ def _proposal_linkage_diagnostic(
         target_present = _field_signal_present(value, _TARGET_LINKAGE_FIELDS)
         action_present = _field_signal_present(value, _ACTION_LINKAGE_FIELDS)
         mechanism_present = _field_signal_present(value, _MECHANISM_LINKAGE_FIELDS)
-        if target_present and action_present and mechanism_present:
+        broad_mechanism_present = _field_signal_present(
+            value,
+            _BROAD_MECHANISM_LINKAGE_FIELDS,
+        )
+        if target_present and action_present and (
+            mechanism_present or broad_mechanism_present
+        ):
             return "satisfied"
         if target_present or action_present or _mechanism_linkage_attempt_present(value):
             return "linkage_unrecognized"
@@ -785,6 +837,7 @@ def _proposal_linkage_diagnostic(
     target_values = _field_values(value, _TARGET_LINKAGE_FIELDS)
     action_values = _field_values(value, _ACTION_LINKAGE_FIELDS)
     mechanism_values = _field_values(value, _MECHANISM_LINKAGE_FIELDS)
+    broad_mechanism_values = _field_values(value, _BROAD_MECHANISM_LINKAGE_FIELDS)
 
     target_ok = _values_correspond_to_expected_path(
         target_values,
@@ -796,12 +849,19 @@ def _proposal_linkage_diagnostic(
         mechanism_values,
         expected_mechanisms,
     )
-    if target_ok and action_ok and mechanism_ok:
+    broad_mechanism_ok = _broad_mechanism_values_correspond(
+        broad_mechanism_values,
+        metadata,
+        expected_mechanisms,
+    )
+    if target_ok and action_ok and (mechanism_ok or broad_mechanism_ok):
         return "satisfied"
-    if _broad_mechanism_linkage_present(value) and not mechanism_values:
-        return "semantic_mismatch"
     if (
-        (not target_values or not action_values or not mechanism_values)
+        (
+            not target_values
+            or not action_values
+            or (not mechanism_values and not broad_mechanism_values)
+        )
         and _linkage_attempt_present(value)
     ):
         return "linkage_unrecognized"
@@ -860,6 +920,26 @@ def _values_correspond_to_any_token(
     return any(_specific_signal_present(value) for value in values)
 
 
+def _broad_mechanism_values_correspond(
+    values: set[str],
+    metadata: Mapping[str, Any],
+    expected_mechanisms: set[str],
+) -> bool:
+    if not values:
+        return False
+    normalized_values = {_token(value) for value in values if value}
+    candidate_families = {
+        _token(value)
+        for value in _string_list(metadata.get("candidate_mechanism_families"))
+    }
+    if candidate_families and normalized_values & candidate_families:
+        return True
+    expected_values = {_token(value) for value in expected_mechanisms if value}
+    if expected_values and normalized_values & expected_values:
+        return True
+    return any(_specific_signal_present(value) for value in values)
+
+
 def _linkage_attempt_present(value: Any) -> bool:
     return (
         _field_signal_present(value, _TARGET_LINKAGE_FIELDS)
@@ -891,10 +971,6 @@ def _mechanism_linkage_attempt_present(value: Any, *, depth: int = 0) -> bool:
             for item in value
         )
     return False
-
-
-def _broad_mechanism_linkage_present(value: Any) -> bool:
-    return _field_signal_present(value, _BROAD_MECHANISM_LINKAGE_FIELDS)
 
 
 def _field_values(
@@ -938,18 +1014,63 @@ def _scalar_values(value: Any) -> set[str]:
     return {text} if text else set()
 
 
-def _applied_lesson_present(
+def _action_linked_application_present(
     value: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
 ) -> bool:
     return any(
-        _lesson_items_present(
+        _lesson_items_with_action_linkage_present(
             value.get(field),
             metadata=metadata,
+            hypothesis=hypothesis,
+            require_action_rationale=field in {"borrowed_lessons", "avoided_lessons"},
         )
         for field in _LESSON_APPLICATION_FIELDS
     )
+
+
+def _lesson_items_with_action_linkage_present(
+    value: Any,
+    *,
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+    lesson_types: set[str] | None = None,
+    lesson_roles: set[str] | None = None,
+    require_changed_dimensions: bool = False,
+    require_action_rationale: bool = False,
+) -> bool:
+    return any(
+        _lesson_item_semantic(
+            item,
+            metadata=metadata,
+            lesson_types=lesson_types,
+            lesson_roles=lesson_roles,
+        )
+        and _lesson_item_action_linkage_present(
+            item,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        and (
+            not require_changed_dimensions
+            or _changed_dimensions_present(item)
+        )
+        and (
+            not require_action_rationale
+            or _field_signal_present(item, _ACTION_RATIONALE_FIELDS)
+        )
+        for item in _lesson_item_mappings(value)
+    )
+
+
+def _lesson_item_mappings(value: Any) -> tuple[Mapping[str, Any], ...]:
+    if isinstance(value, Mapping):
+        return (value,)
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
 
 
 def _lesson_items_present(
@@ -980,41 +1101,76 @@ def _lesson_items_present(
     )
 
 
-def _preserved_same_branch_lesson_present(
+def _same_branch_preserve_refine_present(
+    value: Mapping[str, Any],
+    *,
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    return any(
+        _lesson_item_semantic(
+            item,
+            metadata=metadata,
+            lesson_roles={"preserve"},
+        )
+        and _lesson_item_action_linkage_present(
+            item,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        and _field_signal_present(item, _PRESERVED_SIGNAL_FIELDS)
+        and _changed_dimensions_present(item)
+        for item in _lesson_item_mappings(value.get("preserved_same_branch_lesson"))
+    )
+
+
+def _strict_clean_fork_lesson_usage_present(
+    value: Mapping[str, Any],
+    *,
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+    allow_machine_reject: bool,
+) -> bool:
+    contrasted = _lesson_items_with_action_linkage_present(
+        value.get("contrasted_lessons"),
+        metadata=metadata,
+        hypothesis=hypothesis,
+        require_changed_dimensions=True,
+    )
+    rejected = allow_machine_reject and _lesson_items_with_machine_reject_present(
+        value.get("rejected_lessons"),
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
+    return contrasted or rejected
+
+
+def _strict_clean_fork_lesson_attempt_present(
     value: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
 ) -> bool:
-    preserved = value.get("preserved_same_branch_lesson")
-    if isinstance(preserved, Mapping):
-        return _lesson_item_semantic(
-            preserved,
+    return any(
+        _lesson_items_present(
+            value.get(field),
             metadata=metadata,
-            lesson_roles={"preserve"},
         )
-    if isinstance(preserved, (list, tuple)):
-        return any(
-            isinstance(item, Mapping)
-            and _lesson_item_semantic(
-                item,
-                metadata=metadata,
-                lesson_roles={"preserve"},
-            )
-            for item in preserved
-        )
-    return False
+        for field in _LESSON_APPLICATION_FIELDS | {"rejected_lessons"}
+    )
 
 
 def _weak_positive_transfer_application_present(
     value: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
 ) -> bool:
     return (
         any(
-            _lesson_items_present(
+            _lesson_items_with_action_linkage_present(
                 value.get(field),
                 metadata=metadata,
+                hypothesis=hypothesis,
                 lesson_types={"weak_positive"},
                 lesson_roles={"borrow", "preserve"},
             )
@@ -1038,16 +1194,75 @@ def _weak_positive_reject_reason_present(
     value: Mapping[str, Any],
     *,
     metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
 ) -> bool:
     return any(
-        _lesson_items_present(
+        _lesson_items_with_machine_reject_present(
             value.get(field),
             metadata=metadata,
+            hypothesis=hypothesis,
             lesson_types={"weak_positive"},
         )
-        and _field_signal_present(value.get(field), _REJECT_REASON_FIELDS)
         for field in _LESSON_REJECTION_FIELDS
     )
+
+
+def _lesson_items_with_machine_reject_present(
+    value: Any,
+    *,
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+    lesson_types: set[str] | None = None,
+) -> bool:
+    return any(
+        _lesson_item_semantic(
+            item,
+            metadata=metadata,
+            lesson_types=lesson_types,
+        )
+        and _lesson_item_action_linkage_present(
+            item,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        and _machine_readable_reject_reason_present(item)
+        for item in _lesson_item_mappings(value)
+    )
+
+
+def _lesson_item_action_linkage_present(
+    item: Mapping[str, Any],
+    *,
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    return (
+        _proposal_linkage_diagnostic(
+            item,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "satisfied"
+    )
+
+
+def _machine_readable_reject_reason_present(item: Mapping[str, Any]) -> bool:
+    for raw_key, value in item.items():
+        key = _key(raw_key)
+        if key not in _REJECT_REASON_FIELDS:
+            continue
+        values = _scalar_values(value)
+        if key.endswith("_code") or key.endswith("_codes"):
+            if any(_specific_signal_present(candidate) for candidate in values):
+                return True
+            continue
+        for candidate in values:
+            text = _clean_text(candidate)
+            if not _specific_signal_present(text):
+                continue
+            if "_" in text or "-" in text:
+                return True
+    return False
 
 
 def _lesson_item_semantic(

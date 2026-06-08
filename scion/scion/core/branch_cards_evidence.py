@@ -189,8 +189,45 @@ def _branch_runtime_evidence_pressure_count(branch: Branch | None) -> int | None
 
 
 def _branch_fresh_runtime_followup(branch: Branch | None) -> dict[str, Any]:
-    value = _branch_evidence_summary(branch).get("fresh_runtime_followup")
-    return dict(value) if isinstance(value, Mapping) else {}
+    evidence = _branch_evidence_summary(branch)
+    value = evidence.get("fresh_runtime_followup")
+    if isinstance(value, Mapping):
+        return dict(value)
+    reason_codes = {
+        str(code).strip().upper()
+        for code in _mapping_codes(
+            evidence,
+            "reason_codes",
+            "decision_reason_codes",
+            "why_not_promoted_reason_codes",
+            "gate_observation_reason_codes",
+        )
+    }
+    runtime_status = str(evidence.get("runtime_evidence_status") or "").lower()
+    fresh_required = bool(
+        evidence.get("fresh_runtime_required")
+        or runtime_status in {"fresh_champion_required", "fresh_required"}
+        or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_codes
+        or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_codes
+    )
+    if not fresh_required:
+        return {}
+    pending = bool(evidence.get("fresh_runtime_pending"))
+    return {
+        "schema_version": "fresh_runtime_followup.v1",
+        "queue_intent": "fresh_champion_runtime_replay",
+        "scheduler_marker": (
+            "fresh_champion_runtime_replay_pending"
+            if pending
+            else "fresh_champion_runtime_replay_pressure"
+        ),
+        "trigger": "fresh_runtime_required",
+        "fresh_runtime_pending": pending,
+        "fresh_runtime_required": True,
+        "followup_recommended": True,
+        "followup_required": True,
+        "decision_features_excluded": True,
+    }
 
 
 def _branch_code_retention_status(branch: Branch | None) -> str:
