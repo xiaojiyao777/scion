@@ -188,6 +188,39 @@ def _branch_runtime_evidence_pressure_count(branch: Branch | None) -> int | None
     return max(0, count)
 
 
+def _branch_fresh_runtime_followup(branch: Branch | None) -> dict[str, Any]:
+    value = _branch_evidence_summary(branch).get("fresh_runtime_followup")
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _branch_code_retention_status(branch: Branch | None) -> str:
+    status = branch_code_status(branch)
+    if status in {
+        "discarded",
+        "regressed_followup",
+        "quality_regression",
+        "active_quality_regression",
+    }:
+        return "discarded"
+    if status.startswith("active_") or status.startswith("restored_"):
+        return "retained"
+    if branch_has_retained_checkpoint(branch):
+        return "checkpoint_retained"
+    if branch_is_parked_lineage(branch):
+        return "parked"
+    return "unknown"
+
+
+def _branch_evidence_retention_status(branch: Branch | None) -> str:
+    evidence = _branch_evidence_summary(branch)
+    explicit = str(evidence.get("evidence_retention_status") or "").strip()
+    if explicit:
+        return explicit
+    if evidence:
+        return "retained"
+    return "unknown"
+
+
 def _current_reason_codes(branch: Branch | None) -> list[str]:
     return _branch_evidence_codes(
         branch,
@@ -338,6 +371,17 @@ def _branch_generic_evidence_summary(
     runtime_aggregate_exclusion = source.get("runtime_aggregate_exclusion")
     if isinstance(runtime_aggregate_exclusion, Mapping) and runtime_aggregate_exclusion:
         summary["runtime_aggregate_exclusion"] = dict(runtime_aggregate_exclusion)
+    fresh_runtime_followup = _branch_fresh_runtime_followup(branch)
+    if fresh_runtime_followup:
+        summary["fresh_runtime_pending"] = bool(
+            fresh_runtime_followup.get("fresh_runtime_pending")
+        )
+        summary["fresh_runtime_required"] = bool(
+            fresh_runtime_followup.get("fresh_runtime_required")
+        )
+        summary["fresh_runtime_trigger"] = str(
+            fresh_runtime_followup.get("trigger") or ""
+        )
     return summary
 
 

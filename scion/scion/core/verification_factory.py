@@ -34,18 +34,34 @@ class CampaignVerificationFactory:
         allow_non_strict_runtime_verification: bool = False,
         allow_skeleton_mode: bool = False,
     ) -> Any:
-        if verification_gate is not None:
-            return verification_gate
-
-        runner = protocol_runner(experiment_protocol)
-        runtime_cfg = getattr(getattr(experiment_protocol, "config", None), "runtime", None)
-        max_runtime_ratio = getattr(runtime_cfg, "max_runtime_ratio", None)
-
         production_campaign = is_adapter_backed_production_campaign(
             problem_spec=problem_spec,
             adapter=adapter,
             allow_skeleton=allow_skeleton_mode,
         )
+        runtime_cfg = getattr(getattr(experiment_protocol, "config", None), "runtime", None)
+        max_runtime_ratio = getattr(runtime_cfg, "max_runtime_ratio", None)
+        runtime_time_limit_sec = _verification_runtime_time_limit_sec(
+            problem_spec=problem_spec,
+            experiment_protocol=experiment_protocol,
+            runtime_cfg=runtime_cfg,
+        )
+        if verification_gate is not None:
+            if production_campaign and not isinstance(verification_gate, VerificationGate):
+                raise ValueError(
+                    "custom verification_gate is not allowed for adapter-backed "
+                    "production campaigns; use the default VerificationGate or "
+                    "explicit skeleton mode for tests"
+                )
+            if production_campaign and isinstance(verification_gate, VerificationGate):
+                verification_gate.bind_runtime_policy(
+                    max_runtime_ratio=max_runtime_ratio,
+                    runtime_time_limit_sec=runtime_time_limit_sec,
+                )
+            return verification_gate
+
+        runner = protocol_runner(experiment_protocol)
+
         if production_campaign and allow_non_strict_runtime_verification:
             raise ValueError(
                 "allow_non_strict_runtime_verification is not allowed for "
@@ -64,4 +80,31 @@ class CampaignVerificationFactory:
             allow_adapter_runtime_fallback=allow_skeleton_mode,
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=max_runtime_ratio,
+            runtime_time_limit_sec=runtime_time_limit_sec,
         )
+
+
+def _verification_runtime_time_limit_sec(
+    *,
+    problem_spec: Any,
+    experiment_protocol: Any | None,
+    runtime_cfg: Any | None,
+) -> int | None:
+    """Return the explicit runtime budget used by verification canary checks."""
+
+    candidates = (
+        getattr(runtime_cfg, "verification_runtime_budget_sec", None),
+        getattr(experiment_protocol, "verification_runtime_budget_sec", None),
+        getattr(experiment_protocol, "time_limit_sec", None),
+        getattr(getattr(problem_spec, "solver", None), "time_limit_sec", None),
+    )
+    for value in candidates:
+        if isinstance(value, bool) or value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric > 0:
+            return max(1, int(numeric))
+    return None

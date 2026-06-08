@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from scion.core.models import ProtocolResult, VerificationResult
+from scion.core.public_refs import redact_public_refs
 
 from .common import _drop_none, _optional_int, _stage_value
 
@@ -120,14 +121,29 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
 
 
 
+_VERIFICATION_CHECK_DETAIL_LIMIT = 1000
+
+
+def _audit_check_detail(detail: Any, *, base_dir: str | Path | None = None) -> str:
+    text = str(detail or "")
+    redacted = redact_public_refs(text, base_dir=base_dir)
+    clean = str(redacted)
+    if len(clean) > _VERIFICATION_CHECK_DETAIL_LIMIT:
+        return f"{clean[:_VERIFICATION_CHECK_DETAIL_LIMIT]}..."
+    return clean
+
+
 def _serialize_verification_checks(
     verification_result: VerificationResult,
+    *,
+    base_dir: str | Path | None = None,
 ) -> list[Dict[str, Any]]:
     return [
         {
             "name": check.name,
             "passed": check.passed,
             "severity": check.severity,
+            "detail": _audit_check_detail(check.detail, base_dir=base_dir),
             "elapsed_ms": check.elapsed_ms,
             "metadata": dict(check.metadata or {}),
         }
@@ -203,13 +219,24 @@ def _screening_rate_fields(
     if protocol_result is None or _stage_value(protocol_result.stage) != "screening":
         return {}
     stats = protocol_result.stats
+    wins = stats.wins
+    losses = stats.losses
+    ties = stats.ties
+    total = wins + losses + ties
+    win_rate = stats.win_rate
     return {
-        "screening_case_wins": stats.wins,
-        "screening_case_losses": stats.losses,
-        "screening_case_ties": stats.ties,
-        "screening_case_win_rate": stats.win_rate,
-        "screening_gate_win_rate": stats.win_rate,
-        "screening_win_rate": stats.win_rate,
+        "screening_case_wins": wins,
+        "screening_case_losses": losses,
+        "screening_case_ties": ties,
+        "screening_case_total": total,
+        "screening_case_win_rate": win_rate,
+        "screening_case_level_gate_wins": wins,
+        "screening_case_level_gate_losses": losses,
+        "screening_case_level_gate_ties": ties,
+        "screening_case_level_gate_total": total,
+        "screening_case_level_gate_win_rate": win_rate,
+        "screening_gate_win_rate": win_rate,
+        "screening_win_rate": win_rate,
         "screening_win_rate_scope": "case_level_gate",
         **_screening_pair_counts(protocol_result),
     }

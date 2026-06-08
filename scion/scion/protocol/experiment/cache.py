@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import inspect
 import json
 import os
 import tempfile
@@ -83,7 +84,10 @@ class ChampionResultCache:
                 objective_policy=objective_policy,
                 problem_spec=problem_spec,
             ),
-            "runner_runtime": runner_runtime_identity(runner),
+            "runner_runtime": runner_runtime_identity(
+                runner,
+                selected_surface=selected_surface,
+            ),
         }
         key["digest"] = stable_digest(key)
         return key
@@ -190,7 +194,11 @@ def objective_digest(
     )
 
 
-def runner_runtime_identity(runner: Any) -> dict[str, Any]:
+def runner_runtime_identity(
+    runner: Any,
+    *,
+    selected_surface: str | None = None,
+) -> dict[str, Any]:
     runner_type = type(runner)
     payload: dict[str, Any] = {
         "schema": RUNNER_RUNTIME_SCHEMA,
@@ -200,7 +208,44 @@ def runner_runtime_identity(runner: Any) -> dict[str, Any]:
         value = getattr(runner, attr, None)
         if value is not None:
             payload[attr] = str(value)
+    runtime_identity = _runner_runtime_identity_payload(
+        runner,
+        selected_surface=selected_surface,
+    )
+    if runtime_identity is not None:
+        payload["runtime_identity"] = runtime_identity
     return payload
+
+
+def _runner_runtime_identity_payload(
+    runner: Any,
+    *,
+    selected_surface: str | None,
+) -> Any | None:
+    for method_name in ("cache_identity", "runtime_identity"):
+        try:
+            inspect.getattr_static(runner, method_name)
+        except AttributeError:
+            continue
+        method = getattr(runner, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            signature = inspect.signature(method)
+        except (TypeError, ValueError):
+            return _stable_payload(method())
+        parameters = signature.parameters
+        accepts_selected_surface = (
+            "selected_surface" in parameters
+            or any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+        )
+        if accepts_selected_surface:
+            return _stable_payload(method(selected_surface=selected_surface))
+        return _stable_payload(method())
+    return None
 
 
 def stable_digest(value: Any) -> str:

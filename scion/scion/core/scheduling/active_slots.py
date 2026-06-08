@@ -18,6 +18,9 @@ from scion.core.models import Branch, BranchState
 ACTIVE_SLOT_HARD_CAP_RECONCILED = "active_slot_hard_cap_reconciled"
 ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH = "active_slot_reclaimed_for_new_branch"
 ACTIVE_SLOT_HARD_CAP_BLOCKED = "active_slot_hard_cap_blocked"
+SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE = (
+    "SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE"
+)
 
 _TERMINAL_STATES = frozenset({
     BranchState.PROMOTED,
@@ -42,6 +45,7 @@ class ActiveSlotReconciliation:
     parked_branch_ids: tuple[str, ...] = ()
     candidate_branch_ids: tuple[str, ...] = ()
     marker_missing_branch_ids: tuple[str, ...] = ()
+    scheduler_origin_parked_branch_ids: tuple[str, ...] = ()
 
     @property
     def changed(self) -> bool:
@@ -74,6 +78,28 @@ class ActiveSlotReconciliation:
                     ),
                 }
             )
+        if self.parked_branch_ids:
+            scheduler_origin_ids = set(self.scheduler_origin_parked_branch_ids)
+            lifecycle_origin = (
+                "scheduler_active_slot_reclaim"
+                if scheduler_origin_ids
+                else "decision_lifecycle"
+            )
+            reason_codes = [BRANCH_LIFECYCLE_PARK_LINEAGE]
+            if scheduler_origin_ids:
+                reason_codes.append(SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE)
+            metadata.update(
+                {
+                    "lifecycle_action": "park_lineage",
+                    "lifecycle_action_origin": lifecycle_origin,
+                    "lifecycle_action_reason_codes": reason_codes,
+                    "reclaimed_branch_ids": list(self.parked_branch_ids),
+                }
+            )
+            if scheduler_origin_ids:
+                metadata["scheduler_origin_reclaimed_branch_ids"] = list(
+                    self.scheduler_origin_parked_branch_ids
+                )
         return metadata
 
 
@@ -339,11 +365,13 @@ def _reconcile_active_slots(
     )
     candidate_ids = tuple(branch.branch_id for branch in candidates)
     parked: list[str] = []
+    scheduler_origin_parked: list[str] = []
     marker_missing: list[str] = []
     for branch in candidates:
         if len(active_slot_branches(branches, policy=policy)) <= target:
             break
-        if not branch_has_decision_origin_park_marker(branch):
+        has_decision_marker = branch_has_decision_origin_park_marker(branch)
+        if not has_decision_marker and mode != "new_branch_reclaim":
             marker_missing.append(branch.branch_id)
             continue
         parked_branch = _park_active_slot_branch(
@@ -352,9 +380,12 @@ def _reconcile_active_slots(
             mode=mode,
             max_active_branches=max_active_branches,
             before_used=before_used,
+            scheduler_origin=not has_decision_marker,
         )
         if parked_branch:
             parked.append(branch.branch_id)
+            if not has_decision_marker:
+                scheduler_origin_parked.append(branch.branch_id)
     after_used = len(active_slot_branches(branches, policy=policy))
     return ActiveSlotReconciliation(
         mode=mode,
@@ -365,6 +396,7 @@ def _reconcile_active_slots(
         parked_branch_ids=tuple(parked),
         candidate_branch_ids=candidate_ids,
         marker_missing_branch_ids=tuple(marker_missing),
+        scheduler_origin_parked_branch_ids=tuple(scheduler_origin_parked),
     )
 
 
@@ -375,8 +407,9 @@ def _park_active_slot_branch(
     mode: str,
     max_active_branches: int,
     before_used: int,
+    scheduler_origin: bool = False,
 ) -> bool:
-    if not branch_has_decision_origin_park_marker(branch):
+    if not scheduler_origin and not branch_has_decision_origin_park_marker(branch):
         return False
     now = datetime.now()
     existing = dict(getattr(branch, "last_branch_lifecycle_policy_block", {}) or {})
@@ -390,12 +423,27 @@ def _park_active_slot_branch(
             [
                 *list(existing.get("lifecycle_action_reason_codes") or ()),
                 *branch_decision_origin_park_reason_codes(branch),
+                BRANCH_LIFECYCLE_PARK_LINEAGE,
+                *(
+                    [SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE]
+                    if scheduler_origin
+                    else []
+                ),
             ]
         )
     )
     existing.update(
         {
             "reason": existing.get("reason") or "park_lineage",
+            "action": existing.get("action") or "park_lineage",
+            "lifecycle_action_origin": (
+                existing.get("lifecycle_action_origin")
+                or (
+                    "scheduler_active_slot_reclaim"
+                    if scheduler_origin
+                    else "decision_lifecycle"
+                )
+            ),
             "detail": (
                 f"{reason}: active_slots.used={before_used} "
                 f"max_active_branches={max_active_branches}"
@@ -411,6 +459,8 @@ def _park_active_slot_branch(
                 "mode": mode,
                 "before_used": before_used,
                 "max_active_branches": max_active_branches,
+                "reason": reason,
+                "scheduler_origin_reclaim": scheduler_origin,
             },
             "active_slot_status": "parked_lineage",
             "next_selection": "excluded_from_active_slot_pool",

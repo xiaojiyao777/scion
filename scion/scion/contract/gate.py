@@ -54,9 +54,13 @@ from scion.contract.schema import (
 from scion.contract.surface_access import SurfaceAccess
 from scion.contract.surface_interface import check_surface_interface
 from scion.problem.providers import (
+    ProblemProviderError,
     active_subject_policy_matches_path,
     active_subject_policy_payload,
 )
+from scion.contract.telemetry import surface_mechanism_telemetry_declarations
+
+_VALIDATION_MODES = {"production", "preview"}
 
 def _normalize_source_overrides(
     source_overrides: Mapping[str, str] | None,
@@ -109,8 +113,10 @@ class ContractGate:
         champion_snapshot_path: str | None = None,
         champion_snapshot_provider: Callable[[], str | None] | None = None,
         source_overrides: Mapping[str, str] | None = None,
+        adapter: Any = None,
     ) -> None:
         self._spec = problem_spec
+        self._adapter = adapter
         self._operator_signature = parse_execute_signature(operator_execute_signature)
         self._champion_snapshot_path = champion_snapshot_path
         self._champion_snapshot_provider = champion_snapshot_provider
@@ -161,8 +167,14 @@ class ContractGate:
         selected_surface: str | None = None,
         base_snapshot_path: str | None = None,
         base_file_overrides: Mapping[str, str] | None = None,
+        validation_mode: str = "production",
     ) -> ContractResult:
         """Run C4–C9 checks on a PatchProposal."""
+        if validation_mode not in _VALIDATION_MODES:
+            raise ValueError(
+                "validation_mode must be one of "
+                f"{sorted(_VALIDATION_MODES)}, got {validation_mode!r}"
+            )
         checks: List[CheckResult] = []
         base_file_content = self._file_content_provider(
             base_snapshot_path,
@@ -182,8 +194,16 @@ class ContractGate:
                 patch,
                 contract_hypothesis,
                 selected_surface=selected_surface_name,
+                validation_mode=validation_mode,
             )
         )
+        active_subject_check = self._c9f_active_subject_provider(
+            patch,
+            selected_surface=selected_surface_name,
+            validation_mode=validation_mode,
+        )
+        if active_subject_check is not None:
+            checks.append(active_subject_check)
         for index, change in enumerate(file_changes):
             is_primary = index == 0
             change_patch = PatchProposal(
@@ -335,7 +355,47 @@ class ContractGate:
         approved_hypothesis: HypothesisProposal | HypothesisRecord | None,
         *,
         selected_surface: str | None,
+        validation_mode: str,
     ) -> CheckResult:
+        t0 = time.monotonic_ns()
+        surface = self._surface_for_patch_binding(
+            patch,
+            approved_hypothesis=approved_hypothesis,
+            selected_surface=selected_surface,
+        )
+        declarations = surface_mechanism_telemetry_declarations(surface)
+        if declarations and approved_hypothesis is None:
+            surface_name = str(getattr(surface, "name", "") or selected_surface or "")
+            if validation_mode == "preview":
+                return _cr(
+                    "C12_mechanism_binding",
+                    True,
+                    "light",
+                    "preview/static validation has no approved hypothesis; "
+                    "C12_patch_mechanism_echo skipped",
+                    t0,
+                    metadata={
+                        "validation_mode": "preview",
+                        "preview_skipped": True,
+                        "reason_code": "hypothesis_bound_check_skipped",
+                        "skipped_check": "C12_patch_mechanism_echo",
+                        "surface": surface_name,
+                    },
+                )
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                "approved_hypothesis is required for production patch validation "
+                f"of mechanism-telemetry surface '{surface_name}'",
+                t0,
+                metadata={
+                    "validation_mode": "production",
+                    "reason_code": "hypothesis_bound_check_required",
+                    "required_check": "C12_patch_mechanism_echo",
+                    "surface": surface_name,
+                },
+            )
         return check_patch_mechanism_binding(
             patch,
             approved_hypothesis,
@@ -541,7 +601,7 @@ class ContractGate:
         return self._champion_snapshot_path
 
     # ------------------------------------------------------------------
-    # C9e: Solver-design patches must integrate newly added helpers.
+    # C9e: Generic surface-integration dispatch.
     # ------------------------------------------------------------------
 
     def _c9e_solver_design_integration(
@@ -555,6 +615,7 @@ class ContractGate:
         result = check_solver_design_integration(
             patch,
             problem_spec=self._spec,
+            adapter=self._adapter,
             selected_surface=selected_surface,
             champion_file_content=base_file_content or self._champion_file_content,
         )
@@ -564,6 +625,11 @@ class ContractGate:
             "light",
             result.detail,
             t0,
+            metadata={
+                "generic_check_alias": "C9e_surface_integration",
+                "surface_contract": "solver_design",
+                "surface_contract_scope": "generic_first_class_surface",
+            },
         )
 
     # ------------------------------------------------------------------
@@ -611,6 +677,76 @@ class ContractGate:
             current_champion_version=current_champion_version,
         )
 
+    # ------------------------------------------------------------------
+    # C9f: Active-subject provider availability for declared surfaces.
+    # ------------------------------------------------------------------
+
+    def _c9f_active_subject_provider(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None,
+        validation_mode: str,
+    ) -> CheckResult | None:
+        surface = self._surface_for_patch_binding(
+            patch,
+            approved_hypothesis=None,
+            selected_surface=selected_surface,
+        )
+        if not self._surface_requires_active_subject_provider(surface):
+            return None
+        t0 = time.monotonic_ns()
+        surface_name = str(getattr(surface, "name", "") or selected_surface or "")
+        try:
+            policy = self._active_subject_policy(
+                selected_surface=surface_name,
+                strict=True,
+            )
+        except ProblemProviderError as exc:
+            if validation_mode == "preview":
+                return _cr(
+                    "C9f_active_subject_provider",
+                    True,
+                    "light",
+                    "preview degraded: active-subject provider unavailable for "
+                    f"surface '{surface_name}': {exc}",
+                    t0,
+                    metadata={
+                        "validation_mode": "preview",
+                        "preview_degraded": True,
+                        "reason_code": "active_subject_provider_unavailable",
+                        "surface": surface_name,
+                    },
+                )
+            return _cr(
+                "C9f_active_subject_provider",
+                False,
+                "heavy",
+                "active-subject provider unavailable for production surface "
+                f"'{surface_name}': {exc}",
+                t0,
+                metadata={
+                    "validation_mode": "production",
+                    "reason_code": "active_subject_provider_unavailable",
+                    "surface": surface_name,
+                },
+            )
+        return _cr(
+            "C9f_active_subject_provider",
+            True,
+            "light",
+            "active-subject provider available",
+            t0,
+            metadata={
+                "validation_mode": validation_mode,
+                "surface": surface_name,
+                "entrypoint_path_count": len(policy.get("entrypoint_paths", ())),
+                "support_module_glob_count": len(
+                    policy.get("support_module_globs", ())
+                ),
+            },
+        )
+
     def _complexity_scale_terms_for_patch(
         self,
         patch: PatchProposal,
@@ -655,6 +791,26 @@ class ContractGate:
         name = str(getattr(hypothesis, "change_locus", "") or "").strip()
         return name or None
 
+    def _surface_for_patch_binding(
+        self,
+        patch: PatchProposal,
+        *,
+        approved_hypothesis: HypothesisProposal | HypothesisRecord | None,
+        selected_surface: str | None,
+    ) -> Any | None:
+        selected = str(selected_surface or "").strip()
+        if selected:
+            return self._surface_access.surface_by_name(selected)
+        if approved_hypothesis is not None:
+            surface = self._surface_access.surface_for_hypothesis(approved_hypothesis)
+            if surface is not None:
+                return surface
+        try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError:
+            return None
+        return self._surface_access.surface_for_patch_path(file_rel)
+
     def _is_solver_design_patch_path(self, file_rel: str) -> bool:
         normalized = str(file_rel or "").replace("\\", "/").lstrip("/")
         policy = self._active_subject_policy()
@@ -676,10 +832,13 @@ class ContractGate:
         self,
         *,
         selected_surface: str | None = None,
+        strict: bool = False,
     ) -> dict[str, Any]:
         return active_subject_policy_payload(
             problem_spec=self._spec,
+            adapter=self._adapter,
             surface=selected_surface,
+            strict=strict,
         )
 
     def _forbidden_entrypoint_calls(
@@ -712,3 +871,16 @@ class ContractGate:
         return bool(getattr(targets, "singleton", False)) or bool(
             getattr(surface, "singleton", False)
         )
+
+    @staticmethod
+    def _surface_requires_active_subject_provider(surface: Any | None) -> bool:
+        if surface is None:
+            return False
+        kind = str(getattr(surface, "kind", "") or "").strip()
+        role = str(
+            getattr(getattr(surface, "algorithm", None), "role", "") or ""
+        ).strip()
+        return kind in {"solver_design", "solver_algorithm"} or role in {
+            "solver_design",
+            "solver_algorithm",
+        }

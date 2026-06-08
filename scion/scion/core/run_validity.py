@@ -170,6 +170,7 @@ def build_run_validity(
             "complete",
         }
     )
+    protocol_in_flight = _coerce_bool(partial_in_flight, default=False)
     partial_hint = _coerce_bool(
         partial_in_flight,
         default=bool(not completed_requested and interrupted),
@@ -208,13 +209,13 @@ def build_run_validity(
         valid = False
 
     if completed_requested:
-        partial = False
+        partial_campaign = False
     elif reason == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED:
-        partial = True
+        partial_campaign = True
     elif status == "invalid":
-        partial = False
+        partial_campaign = False
     else:
-        partial = partial_hint
+        partial_campaign = partial_hint
 
     record: dict[str, Any] = {
         "schema_version": "run-validity.v1",
@@ -225,12 +226,14 @@ def build_run_validity(
         "effective_rounds_completed": effective,
         "completed_requested_rounds": completed_requested,
         "interrupted": interrupted,
-        "partial_in_flight": partial,
+        "partial_campaign_evidence": partial_campaign,
+        "protocol_in_flight": protocol_in_flight,
+        "partial_in_flight": partial_campaign,
         "completeness_status": _completeness_status(
             stopped=stopped,
             completed_requested=completed_requested,
             interrupted=interrupted,
-            partial_in_flight=partial,
+            partial_in_flight=partial_campaign,
         ),
         "complete": completed_requested,
         "n_experiments": experiments,

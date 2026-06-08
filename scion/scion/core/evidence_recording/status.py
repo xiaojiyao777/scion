@@ -1,8 +1,10 @@
 """Status payload writer for campaign evidence recording."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
@@ -24,8 +26,21 @@ from .accounting import (
 )
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
 from .cross_branch_observability import build_cross_branch_research_observability
+from .lineage import apply_lineage_integrity_to_run_validity
 
 logger = logging.getLogger(__name__)
+
+_BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS = (
+    "branch_lesson_usage_present_count",
+    "branch_lesson_usage_satisfied_count",
+    "branch_lesson_usage_missing_block_count",
+    "borrowed_lesson_count",
+    "avoided_lesson_count",
+    "contrasted_lesson_count",
+    "preserved_same_branch_lesson_count",
+    "clean_fork_contrast_satisfied_count",
+    "weak_positive_transfer_count",
+)
 
 _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "complete",
@@ -127,6 +142,27 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
             "scheduler_active_slot_blocked_attempt_limit"
         ),
         "active_slot_blocked_attempt_limit": "active_slot_blocked_attempt_limit",
+        "fresh_runtime_replay_drain": "fresh_runtime_replay_drain",
+        "fresh_runtime_replay_drain_status": "fresh_runtime_replay_drain_status",
+        "fresh_runtime_replay_drain_attempts": "fresh_runtime_replay_drain_attempts",
+        "fresh_runtime_replay_drain_executed": "fresh_runtime_replay_drain_executed",
+        "fresh_runtime_replay_drain_skipped": "fresh_runtime_replay_drain_skipped",
+        "fresh_runtime_replay_drain_limit": "fresh_runtime_replay_drain_limit",
+        "fresh_runtime_replay_drain_stopped_reason": (
+            "fresh_runtime_replay_drain_stopped_reason"
+        ),
+        "fresh_runtime_replay_drain_accepted_replay_last_result": (
+            "fresh_runtime_replay_drain_accepted_replay_last_result"
+        ),
+        "fresh_runtime_replay_drain_final_attempt_last_result": (
+            "fresh_runtime_replay_drain_final_attempt_last_result"
+        ),
+        "fresh_runtime_replay_drain_blocked_count": (
+            "fresh_runtime_replay_drain_blocked_count"
+        ),
+        "fresh_runtime_replay_drain_unresolved_closures": (
+            "fresh_runtime_replay_drain_unresolved_closures"
+        ),
         "quality_blocks": "quality_blocks",
         "quality_block_ledger": "quality_block_ledger",
         "quality_block_ledger_count": "quality_block_ledger_count",
@@ -414,6 +450,95 @@ def _sync_in_flight_branch_fields(
     return merged
 
 
+def _status_context_records(
+    *values: Mapping[str, Any] | None,
+) -> list[Mapping[str, Any]]:
+    records: list[Mapping[str, Any]] = []
+    for value in values:
+        if not isinstance(value, Mapping):
+            continue
+        ref = value.get("proposal_session_ref")
+        if isinstance(ref, Mapping):
+            records.append(ref)
+        for key in (
+            "branch_lesson_records",
+            "branch_lessons",
+            "branch_lesson_usage_requirement",
+            "cross_branch_research_audit_records",
+            "cross_branch_research_payload",
+            "cross_branch_research_status",
+            "material_difference_audit_records",
+            "material_difference_requirement",
+        ):
+            if key in value:
+                records.append(value)
+                break
+    return records
+
+
+def _summary_grade_branch_lesson_usage_counters(
+    *,
+    campaign_dir: Path,
+    campaign_id: str,
+) -> dict[str, Any] | None:
+    summary_path = campaign_dir / "campaign_summary.json"
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(summary, Mapping):
+        return None
+    if summary.get("campaign_id") not in (None, campaign_id):
+        return None
+    observability = summary.get("cross_branch_research_observability")
+    if not isinstance(observability, Mapping):
+        return None
+    if observability.get("step_history_scope") in (None, "none"):
+        return None
+    source_counts = observability.get("source_counts")
+    step_history_total = 0
+    if isinstance(source_counts, Mapping):
+        try:
+            step_history_total = int(source_counts.get("step_history_total") or 0)
+        except (TypeError, ValueError):
+            step_history_total = 0
+    if step_history_total <= 0:
+        return None
+
+    counters = {
+        key: observability[key]
+        for key in _BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS
+        if key in observability
+    }
+    if not counters:
+        return None
+    counters["branch_lesson_usage_counter_scope"] = "summary_step_history"
+    counters["branch_lesson_usage_counter_source"] = "campaign_summary_json"
+    counters["branch_lesson_usage_counter_reason"] = (
+        "status_step_history_not_available; copied_summary_grade_step_history_counters"
+    )
+    counters["branch_lesson_usage_step_history_scope"] = observability.get(
+        "step_history_scope"
+    )
+    counters["branch_lesson_usage_summary_step_history_total"] = step_history_total
+    return counters
+
+
+def _mark_branch_lesson_usage_counters_unavailable(
+    observability: Dict[str, Any],
+) -> None:
+    if observability.get("step_history_scope") != "none":
+        return
+    for key in _BRANCH_LESSON_USAGE_STEP_COUNTER_FIELDS:
+        if key in observability:
+            observability[key] = None
+    observability["branch_lesson_usage_counter_scope"] = "not_available"
+    observability["branch_lesson_usage_counter_source"] = "requires_step_history"
+    observability["branch_lesson_usage_counter_reason"] = (
+        "status_json_does_not_have_step_history; use_campaign_summary_json_when_available"
+    )
+
+
 _BRANCH_PROGRESS_FIELDS = (
     "lineage_status",
     "current_head_status",
@@ -486,6 +611,13 @@ class StatusWriterMixin:
                     True,
                 ),
                 "attempt_kind": getattr(last_result, "attempt_kind", "screening"),
+                "protocol_stage": getattr(last_result, "protocol_stage", None),
+                "formal_protocol_evaluated": bool(
+                    getattr(last_result, "formal_protocol_evaluated", False)
+                ),
+                "screened_experiment_effective": bool(
+                    getattr(last_result, "screened_experiment_effective", False)
+                ),
                 "repair_mechanism_ids": list(
                     getattr(last_result, "repair_mechanism_ids", ()) or ()
                 ),
@@ -494,12 +626,34 @@ class StatusWriterMixin:
                     "repair_policy_reason",
                     "",
                 ),
+                "decision_layer_source": getattr(
+                    last_result,
+                    "decision_layer_source",
+                    None,
+                ),
+                "decision_engine_reason_codes": list(
+                    getattr(last_result, "decision_engine_reason_codes", ()) or ()
+                ),
+                "diagnostic_reason_codes": list(
+                    getattr(last_result, "diagnostic_reason_codes", ()) or ()
+                ),
+                "bypass_reason_codes": list(
+                    getattr(last_result, "bypass_reason_codes", ()) or ()
+                ),
+                "lifecycle_reason_codes": list(
+                    getattr(last_result, "lifecycle_reason_codes", ()) or ()
+                ),
                 "scheduler_slot": getattr(last_result, "scheduler_slot", ""),
                 "scheduler_reason": getattr(last_result, "scheduler_reason", ""),
                 "scheduler_audit_metadata": dict(
                     getattr(last_result, "scheduler_audit_metadata", None) or {}
                 ),
             }
+            proposal_session_ref = getattr(last_result, "proposal_session_ref", None)
+            if isinstance(proposal_session_ref, Mapping):
+                self.last_status_result["proposal_session_ref"] = dict(
+                    proposal_session_ref
+                )
             guidance_audit = extract_research_process_guidance_audit(
                 getattr(last_result, "scheduler_audit_metadata", None) or {}
             )
@@ -572,9 +726,34 @@ class StatusWriterMixin:
                 build_cross_branch_research_observability(
                     branch_rows=branch_rows,
                     scheduler_records=scheduler_records,
+                    context_records=_status_context_records(
+                        self.last_status_result
+                        if isinstance(self.last_status_result, Mapping)
+                        else None,
+                        current_progress
+                        if isinstance(current_progress, Mapping)
+                        else None,
+                        payload.get("in_flight_protocol")
+                        if isinstance(payload.get("in_flight_protocol"), Mapping)
+                        else None,
+                    ),
                 )
             )
             _merge_status_cross_branch_map_coverage(payload)
+            observability = payload.get("cross_branch_research_observability")
+            if isinstance(observability, dict):
+                summary_counters = (
+                    _summary_grade_branch_lesson_usage_counters(
+                        campaign_dir=self.campaign_dir,
+                        campaign_id=self.campaign_id,
+                    )
+                    if terminal_stopped
+                    else None
+                )
+                if summary_counters is not None:
+                    observability.update(summary_counters)
+                else:
+                    _mark_branch_lesson_usage_counters_unavailable(observability)
         except Exception as exc:  # pragma: no cover - status is best-effort
             logger.debug("cross-branch observability status failed: %s", exc)
         payload["evidence_scope_reconciliation"] = _status_scope_reconciliation(
@@ -589,6 +768,20 @@ class StatusWriterMixin:
                 current_progress if isinstance(current_progress, Mapping) else None
             ),
         )
+        lineage_integrity = self.lineage_integrity_snapshot(
+            source="status_recorder_accumulator"
+        )
+        payload["lineage_integrity"] = lineage_integrity
+        payload["evidence_integrity"] = {
+            "schema_version": "scion.evidence_integrity.v1",
+            "status": lineage_integrity["status"],
+            "lineage_status": lineage_integrity["status"],
+            "warnings": (
+                [lineage_integrity["warning"]]
+                if lineage_integrity.get("warning")
+                else []
+            ),
+        }
         if payload.get("stopped_reason") is not None or payload.get("stopped") is True:
             loop = payload.get("campaign_loop")
             loop_mapping = loop if isinstance(loop, Mapping) else {}
@@ -618,6 +811,7 @@ class StatusWriterMixin:
                 partial_in_flight=bool(payload.get("in_flight_protocol")),
             )
             payload["run_validity_status"] = payload["run_validity"]["reason"]
+            apply_lineage_integrity_to_run_validity(payload, lineage_integrity)
             payload = apply_run_completion_aliases(payload)
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:

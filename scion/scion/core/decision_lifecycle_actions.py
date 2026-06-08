@@ -20,6 +20,10 @@ from scion.core.branch_lifecycle_policy import (
 )
 from scion.core.models import Branch, BranchState, ProtocolResult
 from scion.core.reason_code_groups import classify_reason_codes
+from scion.core.runtime_budget_diagnostics import (
+    BOTH_RUNTIME_BUDGET_SATURATION,
+    CANDIDATE_RUNTIME_BUDGET_SATURATION,
+)
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     runtime_aggregate_exclusion_for_protocol,
@@ -183,10 +187,13 @@ def update_branch_screening_evidence_summary(
         if isinstance(getattr(branch, "branch_evidence_summary", None), Mapping)
         else {}
     )
+    case_level_winners = _compact_case_results(protocol_result, "win")
+    case_level_losses = _compact_case_results(protocol_result, "loss")
     summary = {
         "stage": "screening",
         "tier": str(getattr(screening_feedback, "tier", "") or "").strip()
         or "unknown",
+        "evidence_retention_status": "retained",
         "wins": max(0, int(getattr(stats, "wins", 0) or 0)),
         "losses": max(0, int(getattr(stats, "losses", 0) or 0)),
         "ties": max(0, int(getattr(stats, "ties", 0) or 0)),
@@ -234,8 +241,13 @@ def update_branch_screening_evidence_summary(
             ),
             "telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
         },
-        "case_level_winners": _compact_case_results(protocol_result, "win"),
-        "case_level_losses": _compact_case_results(protocol_result, "loss"),
+        "opportunity_diagnostics": list(
+            _string_tuple(getattr(screening_feedback, "opportunity_diagnostics", None))
+        ),
+        "case_level_winners": case_level_winners,
+        "case_level_losses": case_level_losses,
+        "case_level_positive_cases": case_level_winners,
+        "case_level_negative_cases": case_level_losses,
         "runtime_cache": {
             "champion_cache_hits": max(
                 0,
@@ -326,6 +338,23 @@ def update_branch_screening_evidence_summary(
         )
         if pressure_history:
             summary["history_runtime_evidence_pressure"] = pressure_history
+    fresh_replay_step = bool(getattr(branch, "fresh_runtime_replay_step", False))
+    fresh_runtime_followup = (
+        {}
+        if fresh_replay_step
+        else _fresh_runtime_followup_marker(
+            summary,
+            reason_codes=reason_codes,
+        )
+    )
+    if fresh_runtime_followup:
+        summary["fresh_runtime_followup"] = fresh_runtime_followup
+        summary["fresh_runtime_pending"] = True
+        summary["fresh_runtime_required"] = bool(
+            fresh_runtime_followup.get("fresh_runtime_required")
+        )
+    elif fresh_replay_step:
+        summary.update(_fresh_runtime_replay_closure(previous_summary, summary))
     plateau_gate = _plateau_gate_observation(
         previous_summary,
         current_summary=summary,
@@ -599,6 +628,8 @@ def _runtime_evidence_pressure_observation(
     saturation_reason = (
         "SCREENING_RUNTIME_BUDGET_SATURATION" in reason_set
         or "TINY_RUNTIME_BUDGET_SATURATION" in reason_set
+        or CANDIDATE_RUNTIME_BUDGET_SATURATION in reason_set
+        or BOTH_RUNTIME_BUDGET_SATURATION in reason_set
         or "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC" in reason_set
     )
     if saturation_reason:
@@ -651,6 +682,8 @@ def _plateau_gate_observation(
         {
             "SCREENING_RUNTIME_BUDGET_SATURATION",
             "TINY_RUNTIME_BUDGET_SATURATION",
+            CANDIDATE_RUNTIME_BUDGET_SATURATION,
+            BOTH_RUNTIME_BUDGET_SATURATION,
             "SCREENING_RUNTIME_SATURATION_DIAGNOSTIC",
             "SCREENING_RUNTIME_SATURATION_REROUTE",
             "SCREENING_RUNTIME_EVIDENCE_INCOMPLETE_PRESSURE",
@@ -735,6 +768,176 @@ def _runtime_aggregate_excluded(summary: Mapping[str, Any]) -> bool:
             return bool(exclusion.get("excluded"))
         return bool(exclusion)
     return bool(exclusion)
+
+
+def _fresh_runtime_followup_marker(
+    summary: Mapping[str, Any],
+    *,
+    reason_codes: tuple[str, ...],
+) -> dict[str, Any]:
+    if not _fresh_champion_runtime_required(summary, reason_codes):
+        return {}
+    pair_wins = max(0, int(summary.get("pair_wins") or 0))
+    pair_losses = max(0, int(summary.get("pair_losses") or 0))
+    losses = max(0, int(summary.get("losses") or 0))
+    pair_win_no_loss = pair_wins > 0 and pair_losses == 0
+    actionable_loss_diagnostic = (
+        (losses > 0 or pair_losses > 0)
+        and _has_actionable_loss_diagnostic(summary, reason_codes)
+    )
+    if not pair_win_no_loss and not actionable_loss_diagnostic:
+        return {}
+    trigger = (
+        "pair_level_win_no_loss"
+        if pair_win_no_loss
+        else "actionable_loss_diagnostic"
+    )
+    required = pair_win_no_loss or actionable_loss_diagnostic
+    return {
+        "schema_version": "fresh_runtime_followup.v1",
+        "stage": "screening",
+        "queue_intent": "fresh_champion_runtime_replay",
+        "scheduler_marker": "fresh_champion_runtime_replay_pending",
+        "trigger": trigger,
+        "fresh_runtime_pending": True,
+        "fresh_runtime_required": required,
+        "followup_recommended": True,
+        "followup_required": required,
+        "followup_policy": (
+            "fresh_champion_runtime_required_before_runtime_based_escalation"
+            if pair_win_no_loss
+            else "fresh_champion_runtime_or_diagnostic_followup_required"
+        ),
+        "pair_summary": {
+            "wins": pair_wins,
+            "losses": pair_losses,
+            "ties": max(0, int(summary.get("pair_ties") or 0)),
+        },
+        "case_summary": {
+            "wins": max(0, int(summary.get("wins") or 0)),
+            "losses": losses,
+            "ties": max(0, int(summary.get("ties") or 0)),
+        },
+        "runtime_evidence_confidence": str(
+            summary.get("runtime_evidence_confidence") or "unknown"
+        ),
+        "runtime_evidence_status": str(
+            summary.get("runtime_evidence_status") or "unknown"
+        ),
+        "runtime_aggregate_excluded": _runtime_aggregate_excluded(summary),
+        "reason_codes": [
+            code
+            for code in reason_codes
+            if _fresh_runtime_followup_reason_code(code)
+        ],
+        "promotion_boundary": "not_a_promotion_or_validation_decision",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
+
+
+def _fresh_runtime_replay_closure(
+    previous_summary: Mapping[str, Any],
+    current_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    previous_marker = previous_summary.get("fresh_runtime_followup")
+    marker = dict(previous_marker) if isinstance(previous_marker, Mapping) else {}
+    cached_pairs = 0
+    cache = current_summary.get("runtime_cache")
+    if isinstance(cache, Mapping):
+        cached_pairs = max(0, int(cache.get("champion_cached_runtime_pairs") or 0))
+    status = str(
+        current_summary.get("runtime_evidence_status") or ""
+    ).strip().lower()
+    if status in {"fresh_champion_required", "fresh_required"}:
+        closure_status = "capped_reject_fresh_champion_still_required"
+    elif cached_pairs > 0:
+        closure_status = "capped_reject_still_cached_or_incomplete"
+    else:
+        closure_status = "fresh_evidence_recorded"
+    marker.update(
+        {
+            "fresh_runtime_pending": False,
+            "scheduler_marker": "fresh_champion_runtime_replay_closed",
+            "closure_status": closure_status,
+            "decision_features_excluded": True,
+        }
+    )
+    return {
+        "fresh_runtime_followup": marker,
+        "fresh_runtime_pending": False,
+        "fresh_runtime_required": False,
+        "fresh_runtime_replay_closure": {
+            "schema_version": "fresh_runtime_replay_closure.v1",
+            "closure_status": closure_status,
+            "runtime_evidence_status": status or "unknown",
+            "runtime_evidence_confidence": str(
+                current_summary.get("runtime_evidence_confidence") or "unknown"
+            ),
+            "cache_stats": dict(cache) if isinstance(cache, Mapping) else {},
+            "decision_features_excluded": True,
+        },
+    }
+
+
+def _fresh_champion_runtime_required(
+    summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> bool:
+    status = str(summary.get("runtime_evidence_status") or "").strip().lower()
+    policy = summary.get("runtime_evidence_policy")
+    policy_fresh = (
+        bool(policy.get("fresh_champion_required"))
+        if isinstance(policy, Mapping)
+        else False
+    )
+    reason_set = {str(code).strip().upper() for code in reason_codes}
+    return bool(
+        status in {"fresh_champion_required", "fresh_required"}
+        or policy_fresh
+        or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_set
+        or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_set
+    )
+
+
+def _has_actionable_loss_diagnostic(
+    summary: Mapping[str, Any],
+    reason_codes: tuple[str, ...],
+) -> bool:
+    if _string_tuple(summary.get("opportunity_diagnostics")):
+        return True
+    phase = summary.get("phase_activation_summary")
+    if isinstance(phase, Mapping):
+        activation = str(phase.get("activation_status") or "").strip().lower()
+        effect = str(phase.get("effect_status") or "").strip().lower()
+        objective = str(phase.get("objective_effect_status") or "").strip().lower()
+        telemetry = str(phase.get("telemetry_outcome") or "").strip().lower()
+        if activation == "observed":
+            return True
+        if effect not in {"", "unknown", "no_objective_effect"}:
+            return True
+        if objective not in {"", "unknown", "zero", "no_effect"}:
+            return True
+        if telemetry not in {"", "unknown"}:
+            return True
+    reason_set = {str(code).strip().upper() for code in reason_codes}
+    return any(
+        token in code
+        for code in reason_set
+        for token in ("DIAGNOSTIC", "TELEMETRY", "RUNTIME_TIE_FRESH_CHAMPION")
+    )
+
+
+def _fresh_runtime_followup_reason_code(code: str) -> bool:
+    text = str(code or "").strip().upper()
+    return bool(
+        text
+        and (
+            "FRESH_CHAMPION" in text
+            or "DIAGNOSTIC" in text
+            or text in {"SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL"}
+        )
+    )
 
 
 def _historical_runtime_pressure(

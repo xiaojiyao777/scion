@@ -16,6 +16,7 @@ from scion.cli.commands.common import validate_cli_forced_surface
 from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
     validate_declared_problem_data_cases,
+    with_declared_problem_data_roots,
 )
 from scion.core.research_surface_index import editable_identity_patterns
 
@@ -529,9 +530,11 @@ def register_init_run_commands(app: typer.Typer) -> None:
             )
 
         if protocol:
-            proto_cfg = ProtocolConfig.from_yaml(protocol)
+            protocol_path = Path(protocol)
+            proto_cfg = ProtocolConfig.from_yaml(protocol_path)
         else:
             proto_path = problem_dir / "protocol.yaml"
+            protocol_path = proto_path if proto_path.exists() else None
             proto_cfg = (
                 ProtocolConfig.from_yaml(str(proto_path))
                 if proto_path.exists()
@@ -551,11 +554,15 @@ def register_init_run_commands(app: typer.Typer) -> None:
         try:
             data_root_activation = activate_declared_problem_data_root(
                 problem_yaml=problem_yaml,
-                protocol_path=Path(protocol) if protocol else None,
+                protocol_path=protocol_path,
             )
             validate_declared_problem_data_cases(
                 activation=data_root_activation,
                 problem_yaml=problem_yaml,
+                split_manifest=split_manifest,
+            )
+            split_manifest = with_declared_problem_data_roots(
+                activation=data_root_activation,
                 split_manifest=split_manifest,
             )
             if data_root_activation is not None and data_root_activation.activated:

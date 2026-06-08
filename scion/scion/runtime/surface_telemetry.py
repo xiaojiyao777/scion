@@ -54,6 +54,7 @@ def declared_surface_telemetry_fields(
     *,
     problem_spec: Any | None = None,
     declared_mechanisms: Sequence[str] = (),
+    include_templates: bool = False,
 ) -> frozenset[str]:
     """Return all runtime fields declared by a research surface."""
 
@@ -76,9 +77,17 @@ def declared_surface_telemetry_fields(
         surface,
         problem_spec=problem_spec,
         declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
     ).values():
         fields.update(role_fields)
-    return frozenset(field for field in fields if _is_concrete_runtime_field(field))
+    return frozenset(
+        field
+        for field in fields
+        if _is_runtime_field_declaration(
+            field,
+            include_templates=include_templates,
+        )
+    )
 
 
 def declared_runtime_field_roles(
@@ -86,6 +95,7 @@ def declared_runtime_field_roles(
     *,
     problem_spec: Any | None = None,
     declared_mechanisms: Sequence[str] = (),
+    include_templates: bool = False,
 ) -> dict[str, frozenset[str]]:
     """Return role -> runtime fields declared by the selected surface."""
 
@@ -96,24 +106,28 @@ def declared_runtime_field_roles(
         "activity",
         _string_list(_field(evidence, "activity_runtime_fields")),
         declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
     )
     _add_role_fields(
         roles,
         "mechanism_activation",
         _string_list(_field(evidence, "activation_runtime_fields")),
         declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
     )
     _add_role_fields(
         roles,
         "effect",
         _string_list(_field(evidence, "effect_probe_runtime_fields")),
         declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
     )
     _add_role_fields(
         roles,
         "budget",
         _string_list(_field(evidence, "stage_budget_runtime_fields")),
         declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
     )
     for telemetry in _mechanism_telemetry_values(evidence):
         _add_role_fields(
@@ -121,12 +135,14 @@ def declared_runtime_field_roles(
             "mechanism_activation",
             _string_list(_field(telemetry, "activation_runtime_fields")),
             declared_mechanisms=declared_mechanisms,
+            include_templates=include_templates,
         )
         _add_role_fields(
             roles,
             "mechanism_effect",
             _string_list(_field(telemetry, "effect_probe_runtime_fields")),
             declared_mechanisms=declared_mechanisms,
+            include_templates=include_templates,
         )
 
     for source in _role_mapping_sources(
@@ -138,6 +154,7 @@ def declared_runtime_field_roles(
             roles,
             source,
             declared_mechanisms=declared_mechanisms,
+            include_templates=include_templates,
         )
     return {
         role: frozenset(fields)
@@ -396,6 +413,7 @@ def _merge_role_mapping(
     value: Any,
     *,
     declared_mechanisms: Sequence[str],
+    include_templates: bool,
 ) -> None:
     if not isinstance(value, Mapping):
         return
@@ -408,6 +426,7 @@ def _merge_role_mapping(
                 normalized_key,
                 _string_list(raw_value),
                 declared_mechanisms=declared_mechanisms,
+                include_templates=include_templates,
             )
             continue
         for role in _string_list(raw_value):
@@ -419,6 +438,7 @@ def _merge_role_mapping(
                 normalized_role,
                 [key],
                 declared_mechanisms=declared_mechanisms,
+                include_templates=include_templates,
             )
 
 
@@ -428,20 +448,30 @@ def _add_role_fields(
     fields: Sequence[str],
     *,
     declared_mechanisms: Sequence[str],
+    include_templates: bool,
 ) -> None:
     normalized_role = str(role or "").strip().lower()
     if normalized_role not in TELEMETRY_FIELD_ROLES:
         return
     target = roles.setdefault(normalized_role, set())
     for field in fields:
-        for expanded in _expand_mechanism_templates(field, declared_mechanisms):
-            if _is_concrete_runtime_field(expanded):
+        for expanded in _expand_mechanism_templates(
+            field,
+            declared_mechanisms,
+            include_templates=include_templates,
+        ):
+            if _is_runtime_field_declaration(
+                expanded,
+                include_templates=include_templates,
+            ):
                 target.add(expanded)
 
 
 def _expand_mechanism_templates(
     field: str,
     declared_mechanisms: Sequence[str],
+    *,
+    include_templates: bool = False,
 ) -> tuple[str, ...]:
     text = str(field or "").strip()
     if not text:
@@ -450,7 +480,7 @@ def _expand_mechanism_templates(
         return (text,)
     mechanisms = [str(item).strip() for item in declared_mechanisms if str(item).strip()]
     if not mechanisms:
-        return ()
+        return (text,) if include_templates else ()
     return tuple(text.replace("{mechanism}", mechanism) for mechanism in mechanisms)
 
 
@@ -494,6 +524,21 @@ def _string_list(value: Any) -> list[str]:
 def _is_concrete_runtime_field(field: str) -> bool:
     text = str(field or "").strip()
     return bool(text) and "{" not in text and "}" not in text
+
+
+def _is_runtime_field_declaration(
+    field: str,
+    *,
+    include_templates: bool,
+) -> bool:
+    text = str(field or "").strip()
+    if _is_concrete_runtime_field(text):
+        return True
+    if not include_templates:
+        return False
+    if "{mechanism}" not in text:
+        return False
+    return _is_concrete_runtime_field(text.replace("{mechanism}", "mechanism"))
 
 
 def _is_error_count_field(field: str) -> bool:

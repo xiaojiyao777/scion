@@ -42,6 +42,7 @@ from scion.core.scheduling.signals import (
     PLATEAU_REROUTE_REASON as _PLATEAU_REROUTE_REASON,
     QUALITY_REGRESSION_ACTIVE_SLOT_RELEASE_REASON,
     SAME_BRANCH_REFINEMENT_SAMPLE_REASON,
+    FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON,
     active_slot_reclaim_sort_key as _active_slot_reclaim_sort_key,
     branch_lifecycle_budget_exhausted as _branch_lifecycle_budget_exhausted,
     branch_is_weak_positive_priority as _branch_is_weak_positive_priority,
@@ -65,7 +66,7 @@ from scion.core.scheduling.signals import (
 
 @dataclass(frozen=True)
 class SchedulerAction:
-    action: Literal["run_existing", "create_new", "at_capacity"]
+    action: Literal["run_existing", "replay_existing", "create_new", "at_capacity"]
     branch: Optional[Branch] = None
     reason: str = ""
     slot: Literal[
@@ -221,8 +222,14 @@ class Scheduler:
             ]
             if weak_positive_priority_candidates:
                 selected = _select_budgeted(weak_positive_priority_candidates)
+                action: Literal["run_existing", "replay_existing"] = (
+                    "replay_existing"
+                    if _reason_for_branch(selected)
+                    == FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
+                    else "run_existing"
+                )
                 return SchedulerAction(
-                    action="run_existing",
+                    action=action,
                     branch=selected,
                     reason=_reason_for_branch(selected),
                     slot=_slot_for_branch(selected),

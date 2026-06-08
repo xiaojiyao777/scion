@@ -24,6 +24,7 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.explore_step.branch_lesson_usage import project_branch_lesson_records
 from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
 )
@@ -67,6 +68,64 @@ from .protocols import (
 from .records import ProposalRecordMixin
 
 logger = logging.getLogger(__name__)
+
+
+_PROPOSAL_CONTEXT_SESSION_REF_FIELDS = (
+    "branch_lesson_records",
+    "branch_lesson_usage_requirement",
+    "cross_branch_research_audit_records",
+    "cross_branch_research_status",
+)
+
+
+def _compact_proposal_context_session_ref(
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return bounded proposal-visible context metadata for durable refs."""
+
+    ref: dict[str, Any] = {"schema_version": "proposal-context-ref.v1"}
+    records = context.get("branch_lesson_records")
+    compact_records = project_branch_lesson_records(records)
+    if compact_records:
+        ref["branch_lesson_records"] = compact_records
+    requirement = context.get("branch_lesson_usage_requirement")
+    if isinstance(requirement, Mapping):
+        ref["branch_lesson_usage_requirement"] = dict(requirement)
+    audit_records = context.get("cross_branch_research_audit_records")
+    if isinstance(audit_records, (list, tuple)):
+        compact_audit_records = [
+            dict(record)
+            for record in audit_records[:8]
+            if isinstance(record, Mapping)
+        ]
+        if compact_audit_records:
+            ref["cross_branch_research_audit_records"] = compact_audit_records
+    if (
+        ref.get("branch_lesson_records")
+        or ref.get("branch_lesson_usage_requirement")
+        or ref.get("cross_branch_research_audit_records")
+    ):
+        ref["cross_branch_research_status"] = "available"
+    return ref if len(ref) > 1 else {}
+
+
+def _merge_proposal_context_session_ref(
+    existing: Mapping[str, Any] | None,
+    addition: Mapping[str, Any],
+) -> dict[str, Any]:
+    merged = dict(existing or {})
+    if not addition:
+        return merged
+    if not merged.get("schema_version"):
+        merged["schema_version"] = addition.get(
+            "schema_version",
+            "proposal-context-ref.v1",
+        )
+    for key in _PROPOSAL_CONTEXT_SESSION_REF_FIELDS:
+        value = addition.get(key)
+        if value not in (None, "", [], {}, ()):
+            merged[key] = value
+    return merged
 
 
 @dataclass
@@ -118,6 +177,7 @@ class ProposalPipeline(
     problem_spec_hash: str | None = None
     split_manifest_hash: str | None = None
     seed_ledger_hash: str | None = None
+    production_campaign: bool = False
     require_agentic_problem_anchors: bool = False
     persistent_forced_locus: str | None = None
     forced_surface_action: str | None = None
@@ -135,6 +195,10 @@ class ProposalPipeline(
     agentic_quality_feedback: MutableMapping[str, list[Mapping[str, Any]]] = field(
         default_factory=dict
     )
+
+    def __post_init__(self) -> None:
+        if self.production_campaign and self._agentic_enabled:
+            self.require_agentic_problem_anchors = True
 
     def generate_hypothesis(
         self,
@@ -211,7 +275,13 @@ class ProposalPipeline(
             )
             if negative_fact_block:
                 context["agentic_negative_fact_block"] = negative_fact_block
+        context_session_ref = _compact_proposal_context_session_ref(context)
         prompt_context = filter_hypothesis_context_for_prompt(context)
+        if context_session_ref:
+            self.agentic_session_refs[bid] = _merge_proposal_context_session_ref(
+                self.agentic_session_refs.get(bid),
+                context_session_ref,
+            )
         if self._agentic_enabled:
             return self._generate_agentic_hypothesis(
                 branch=branch,

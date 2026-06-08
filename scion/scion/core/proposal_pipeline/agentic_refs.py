@@ -30,6 +30,14 @@ from .utils import _agentic_value, _json_dumps, _now_iso
 logger = logging.getLogger(__name__)
 
 
+_PROPOSAL_CONTEXT_SESSION_REF_FIELDS = (
+    "branch_lesson_records",
+    "branch_lesson_usage_requirement",
+    "cross_branch_research_audit_records",
+    "cross_branch_research_status",
+)
+
+
 class AgenticRefsMixin:
     def _with_agentic_resume_context(
         self,
@@ -206,6 +214,11 @@ class AgenticRefsMixin:
         merged_guidance_audit = explicit_guidance_audit or inherited_guidance_audit
         if merged_guidance_audit:
             ref["research_process_guidance_audit"] = merged_guidance_audit
+        if isinstance(existing_ref, Mapping):
+            for key in _PROPOSAL_CONTEXT_SESSION_REF_FIELDS:
+                value = existing_ref.get(key)
+                if value not in (None, "", [], {}, ()):
+                    ref[key] = value
         self.agentic_session_refs[output.branch_id] = ref
 
     def pop_agentic_session_ref(self, branch_id: str) -> Mapping[str, Any] | None:

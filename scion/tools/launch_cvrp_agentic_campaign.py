@@ -16,6 +16,7 @@ import yaml
 DEFAULT_EXPERIMENTS_ROOT = Path("/home/clawd/research/scion-experiments")
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
+DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 10
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
@@ -66,6 +67,18 @@ def _shell_assign(name: str, value: object) -> str:
     return f"{name}={shlex.quote(str(value))}"
 
 
+def _default_api_key_for_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized in {
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8080/v1",
+        "http://localhost:8080",
+        "http://localhost:8080/v1",
+    }:
+        return DEFAULT_LOCAL_PROXY_API_KEY
+    return ""
+
+
 def _preflight_cvrp_parameter_search_disabled(scion_dir: Path) -> None:
     for spec_path in CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED:
         full_path = scion_dir / spec_path
@@ -112,6 +125,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "PYTHONPATH",
         "SCION_MODEL",
         "SCION_BASE_URL",
+        "SCION_API_KEY",
         "SCION_SDK_MAX_RETRIES",
         "SCION_LLM_MAX_RETRIES",
         "SCION_PROBLEM_DATA_ROOT",
@@ -136,7 +150,7 @@ def _write_run_sh(run_root: Path, command: str) -> None:
 set -uo pipefail
 source "$(dirname "$0")/launch.env"
 cd "$SCION_DIR" || exit 1
-export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_PROBLEM_DATA_ROOT
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_PROBLEM_DATA_ROOT
 {{
   echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "GIT_COMMIT:$GIT_COMMIT"
@@ -215,6 +229,11 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "PYTHONPATH": scion_dir,
         "SCION_MODEL": args.model,
         "SCION_BASE_URL": args.base_url,
+        "SCION_API_KEY": (
+            args.api_key
+            if args.api_key is not None
+            else _default_api_key_for_base_url(args.base_url)
+        ),
         "SCION_SDK_MAX_RETRIES": 0,
         "SCION_LLM_MAX_RETRIES": 2,
         "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
@@ -239,6 +258,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             "environment:\n"
             f"SCION_MODEL={env['SCION_MODEL']}\n"
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
+            "SCION_API_KEY="
+            f"{'<set>' if str(env['SCION_API_KEY']) else '<unset>'}\n\n"
             "command:\n"
             f"{command}\n\n"
             "launch:\n"
@@ -262,6 +283,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help=(
+            "API key for the configured OpenAI-compatible proxy. "
+            "Defaults to the local gpt-5.5 proxy key for 127.0.0.1:8080; "
+            "use an explicit value for other proxies."
+        ),
+    )
     parser.add_argument("--time-limit-sec", type=int, default=DEFAULT_TIME_LIMIT_SEC)
     parser.add_argument(
         "--agentic-session-timeout-sec",

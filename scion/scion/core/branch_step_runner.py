@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, MutableMapping, Optional
@@ -11,6 +13,7 @@ from scion.core.models import (
     Branch,
     BranchState,
     ChampionState,
+    CheckResult,
     ContractResult,
     Decision,
     HypothesisProposal,
@@ -35,6 +38,7 @@ from scion.core.branch_lifecycle_policy import (
 )
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
+from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
 
 logger = logging.getLogger(__name__)
@@ -67,7 +71,7 @@ class BranchStepRunner:
     record_verification_pass: Callable[[Branch, str], None]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
-        tuple[Decision, Any, Any],
+        tuple[Optional[Decision], Any, Any],
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     record_step: Callable[[StepRecord], None]
@@ -79,6 +83,7 @@ class BranchStepRunner:
     increment_rounds_since_last_promote: Callable[[], None]
     hypothesis_store: Any
     record_scheduler_result: Optional[Callable[[StepResult], None]] = None
+    decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -197,6 +202,8 @@ class BranchStepRunner:
             return finalize(self.run_reconcile_step_callback(branch))
 
         if branch.state == BranchState.EXPLORE:
+            if str(getattr(sched, "action", "") or "") == "replay_existing":
+                return finalize(self.run_fresh_runtime_replay_step(branch))
             return finalize(self.run_explore_step(branch))
 
         if branch.state in (
@@ -221,6 +228,60 @@ class BranchStepRunner:
                 branch_id=branch.branch_id,
                 reason=f"unhandled state {branch.state.value}",
             )
+        )
+
+    def run_fresh_runtime_replay_drain_step(self) -> StepResult:
+        """Execute one post-max-round fresh-runtime replay, if selected."""
+        self.drain_weight_opt_events()
+        if self.should_stop():
+            return StepResult(
+                action="stopped",
+                stopped=True,
+                reason=self.get_last_stop_reason() or "termination condition met",
+                counts_toward_max_rounds=False,
+                attempt_kind="other",
+            )
+
+        active = self.branch_controller.get_active_branches()
+        sched = self.scheduler.select_next(active)
+        branch = getattr(sched, "branch", None)
+
+        def skip(reason: str) -> StepResult:
+            result = StepResult(
+                action="skip",
+                branch_id=getattr(branch, "branch_id", None),
+                reason=reason,
+                counts_toward_max_rounds=False,
+                attempt_kind="other",
+                scheduler_audit_metadata={
+                    "fresh_runtime_replay_drain": {
+                        "schema_version": "fresh_runtime_replay_drain.v1",
+                        "executed": False,
+                        "skip_reason": reason,
+                        "decision_features_excluded": True,
+                    }
+                },
+            )
+            return _with_scheduler_metadata(result, sched)
+
+        if str(getattr(sched, "action", "") or "") != "replay_existing":
+            return skip(
+                "fresh runtime replay drain skipped: scheduler did not select replay_existing"
+            )
+        if branch is None:
+            return skip(
+                "fresh runtime replay drain skipped: scheduler selected no branch"
+            )
+
+        selected = self.branch_controller.get_branch(branch.branch_id)
+        if selected.state != BranchState.EXPLORE:
+            return skip(
+                "fresh runtime replay drain skipped: selected branch is not explore"
+            )
+        return _finalize_scheduler_result(
+            self.run_fresh_runtime_replay_step(selected),
+            sched,
+            self.record_scheduler_result,
         )
 
     def _persist_active_slot_reconciliation(self, reconciliation: Any) -> None:
@@ -260,8 +321,11 @@ class BranchStepRunner:
             return StepResult(action="validate", branch_id=bid, reason="hypothesis not found")
 
         patch = self.branch_patches.get(bid)
-        verification_result = VerificationResult(passed=True, checks=())
         action_label = self._eval_action_label(branch)
+        verification_result = _screening_verification_reuse_result(
+            branch,
+            action_label=action_label,
+        )
 
         h_record = self.branch_current_hypothesis.get(bid)
         if h_record is None:
@@ -270,18 +334,59 @@ class BranchStepRunner:
             )
 
         contract_result = ContractResult(passed=True, checks=())
+        if not verification_result.passed:
+            logger.info(
+                "Branch %s: eval verification reuse invariant failed: %s",
+                bid,
+                verification_result.first_failure,
+            )
+            self._reject_current_hypothesis(bid)
+            self.branch_controller.apply_decision(bid, Decision.ABANDON)
+            self.record_hard_abandon(bid, "eval_verification_reuse_invalid")
+            round_num = self.increment_round()
+            self.record_step(
+                StepRecord(
+                    round_num=round_num,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    contract_passed=True,
+                    verification_passed=False,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="verification",
+                    failure_detail=verification_result.first_failure,
+                    verification_detail=_verification_result_detail(
+                        verification_result
+                    ),
+                    hypothesis_id=h_record.hypothesis_id,
+                    counts_toward_max_rounds=False,
+                    attempt_kind="other",
+                )
+            )
+            return StepResult(
+                action=action_label,
+                branch_id=bid,
+                reason="verification reuse invalid",
+                counts_toward_max_rounds=False,
+                attempt_kind="other",
+                failure_stage="verification",
+                failure_detail=verification_result.first_failure,
+            )
+
         decision, protocol_result, canary_result = self.evaluate(
             branch,
             workspace,
             hypothesis,
         )
+        finalizer_decision = decision or Decision.ABANDON
 
         round_num = self.increment_round()
         if action_label == "explore":
             self.increment_rounds_since_last_promote()
         result = self.apply_decision_and_finalize(
             branch=branch,
-            decision=decision,
+            decision=finalizer_decision,
             hypothesis=hypothesis,
             h_record=h_record,
             protocol_result=protocol_result,
@@ -290,7 +395,17 @@ class BranchStepRunner:
             verification_result=verification_result,
             action_label=action_label,
         )
-        failure_stage, failure_detail = _eval_failure_detail(protocol_result)
+        _annotate_protocol_accounting(result, protocol_result)
+        failure_stage, failure_detail = _eval_failure_detail(
+            protocol_result,
+            canary_result=canary_result,
+        )
+        if decision is None:
+            result.decision = None
+            result.failure_stage = failure_stage or "evaluation"
+            result.failure_detail = failure_detail or "evaluation failed"
+        provenance = self.decision_provenance_for(bid)
+        _attach_decision_provenance(result, provenance)
         self.record_step(
             StepRecord(
                 round_num=round_num,
@@ -300,14 +415,18 @@ class BranchStepRunner:
                 contract_passed=True,
                 verification_passed=True,
                 protocol_result=protocol_result,
-                decision=result.decision,
+                decision=result.decision if decision is not None else None,
                 failure_stage=failure_stage,
                 failure_detail=failure_detail,
+                verification_detail=_verification_result_detail(
+                    verification_result
+                ),
                 hypothesis_id=h_record.hypothesis_id,
                 decision_reason_codes=self.decision_reason_codes_for(
                     bid,
                     protocol_result,
                 ),
+                **provenance,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
@@ -315,6 +434,159 @@ class BranchStepRunner:
             )
         )
         return result
+
+    def run_fresh_runtime_replay_step(self, branch: Branch) -> StepResult:
+        """Fresh champion replay for screening evidence closure.
+
+        This path deliberately reuses the current branch candidate and does not
+        call hypothesis/code proposal generation.
+        """
+        bid = branch.branch_id
+        workspace = self.branch_workspaces.get(bid)
+        hypothesis = self.branch_hypotheses.get(bid)
+        h_record = self.branch_current_hypothesis.get(bid)
+        patch = self.branch_patches.get(bid)
+        if (
+            workspace is None
+            or hypothesis is None
+            or h_record is None
+            or patch is None
+        ):
+            missing = [
+                name
+                for name, value in (
+                    ("workspace", workspace),
+                    ("hypothesis", hypothesis),
+                    ("hypothesis_record", h_record),
+                    ("patch", patch),
+                )
+                if value is None
+            ]
+            materialization = _fresh_runtime_replay_materialization_block(
+                branch,
+                missing_live_state=missing,
+            )
+            closure_status = materialization["closure_status"]
+            detail = str(materialization["detail"])
+            _close_fresh_runtime_replay_marker(
+                branch,
+                closure_status=closure_status,
+                detail=detail,
+            )
+            self.persist_branch_state(bid)
+            return StepResult(
+                action="replay",
+                branch_id=bid,
+                reason=detail,
+                counts_toward_max_rounds=False,
+                attempt_kind="fresh_runtime_replay",
+                failure_stage="fresh_runtime_replay",
+                failure_detail=detail,
+                scheduler_audit_metadata={
+                    "fresh_runtime_replay": {
+                        "schema_version": "fresh_runtime_replay.v1",
+                        "closure_status": closure_status,
+                        "missing": missing,
+                        **materialization["metadata"],
+                        "counts_toward_max_rounds": False,
+                    }
+                },
+            )
+
+        verification_result = _screening_verification_reuse_result(
+            branch,
+            action_label="fresh_runtime_replay",
+            require_clean_status=False,
+        )
+        contract_result = ContractResult(passed=True, checks=())
+        round_num = self.increment_round()
+        setattr(branch, "fresh_runtime_replay_step", True)
+        try:
+            if not verification_result.passed:
+                decision = None
+                protocol_result = None
+                canary_result = None
+                result = StepResult(
+                    action="replay",
+                    branch_id=bid,
+                    reason="fresh runtime replay verification reuse invalid",
+                    counts_toward_max_rounds=False,
+                    attempt_kind="fresh_runtime_replay",
+                    failure_stage="verification",
+                    failure_detail=verification_result.first_failure,
+                )
+            else:
+                decision, protocol_result, canary_result = self.evaluate(
+                    branch,
+                    workspace,
+                    hypothesis,
+                )
+                finalizer_decision = decision or Decision.ABANDON
+                result = self.apply_decision_and_finalize(
+                    branch=branch,
+                    decision=finalizer_decision,
+                    hypothesis=hypothesis,
+                    h_record=h_record,
+                    protocol_result=protocol_result,
+                    canary_result=canary_result,
+                    contract_result=contract_result,
+                    verification_result=verification_result,
+                    action_label="fresh_runtime_replay",
+                )
+                result.action = "replay"
+                if decision is None:
+                    failure_stage, failure_detail = _eval_failure_detail(
+                        protocol_result,
+                        canary_result=canary_result,
+                    )
+                    result.decision = None
+                    result.failure_stage = failure_stage or "evaluation"
+                    result.failure_detail = failure_detail or "evaluation failed"
+            result.counts_toward_max_rounds = False
+            result.attempt_kind = "fresh_runtime_replay"
+            _annotate_protocol_accounting(result, protocol_result)
+            provenance = self.decision_provenance_for(bid)
+            _attach_decision_provenance(result, provenance)
+            closure = _fresh_runtime_replay_result_metadata(
+                protocol_result,
+                verification_result=verification_result,
+                failure_detail=result.failure_detail,
+            )
+            audit_metadata = dict(result.scheduler_audit_metadata or {})
+            audit_metadata["fresh_runtime_replay"] = closure
+            result.scheduler_audit_metadata = audit_metadata
+            self.record_step(
+                StepRecord(
+                    round_num=round_num,
+                    branch_id=bid,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    contract_passed=True,
+                    verification_passed=verification_result.passed,
+                    protocol_result=protocol_result,
+                    decision=result.decision if decision is not None else None,
+                    failure_stage=result.failure_stage,
+                    failure_detail=result.failure_detail,
+                    verification_detail=_verification_result_detail(
+                        verification_result
+                    ),
+                    cache_stats=_protocol_cache_stats(protocol_result),
+                    hypothesis_id=h_record.hypothesis_id,
+                    decision_reason_codes=self.decision_reason_codes_for(
+                        bid,
+                        protocol_result,
+                    ),
+                    **provenance,
+                    counts_toward_max_rounds=False,
+                    attempt_kind="fresh_runtime_replay",
+                )
+            )
+            return result
+        finally:
+            try:
+                delattr(branch, "fresh_runtime_replay_step")
+            except AttributeError:
+                pass
 
     def run_reconcile_step(self, branch: Branch) -> StepResult:
         """Attempt to rebase a stale branch on the new champion."""
@@ -447,9 +719,10 @@ class BranchStepRunner:
                 delattr(branch, "reconcile_rescreening")
             except AttributeError:
                 pass
+        finalizer_decision = decision or Decision.ABANDON
         result = self.apply_decision_and_finalize(
             branch=branch,
-            decision=decision,
+            decision=finalizer_decision,
             hypothesis=hypothesis,
             h_record=h_record,
             protocol_result=protocol_result,
@@ -458,6 +731,17 @@ class BranchStepRunner:
             verification_result=verification_result,
             action_label="reconcile",
         )
+        _annotate_protocol_accounting(result, protocol_result)
+        failure_stage, failure_detail = _eval_failure_detail(
+            protocol_result,
+            canary_result=canary_result,
+        )
+        if decision is None:
+            result.decision = None
+            result.failure_stage = failure_stage or "evaluation"
+            result.failure_detail = failure_detail or "evaluation failed"
+        provenance = self.decision_provenance_for(bid)
+        _attach_decision_provenance(result, provenance)
         self.record_step(
             StepRecord(
                 round_num=round_num,
@@ -467,14 +751,15 @@ class BranchStepRunner:
                 contract_passed=True,
                 verification_passed=True,
                 protocol_result=protocol_result,
-                decision=result.decision,
-                failure_stage=None,
-                failure_detail=None,
+                decision=result.decision if decision is not None else None,
+                failure_stage=failure_stage,
+                failure_detail=failure_detail,
                 hypothesis_id=h_record.hypothesis_id,
                 decision_reason_codes=self.decision_reason_codes_for(
                     bid,
                     protocol_result,
                 ),
+                **provenance,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
@@ -516,6 +801,8 @@ class BranchStepRunner:
 
 def _eval_failure_detail(
     protocol_result: Any | None,
+    *,
+    canary_result: Any | None = None,
 ) -> tuple[str | None, str | None]:
     if protocol_result is None:
         return None, None
@@ -523,9 +810,263 @@ def _eval_failure_detail(
         str(code).lower()
         for code in getattr(protocol_result, "reason_codes", ()) or ()
     }
+    if "evaluation_failed" in reason_codes:
+        detail = str(getattr(canary_result, "reason", "") or "evaluation failed")
+        return "evaluation", detail
     if FROZEN_BUDGET_EXHAUSTED in reason_codes:
         return "frozen_budget", FROZEN_BUDGET_EXHAUSTED
     return None, None
+
+
+def _annotate_protocol_accounting(
+    result: StepResult,
+    protocol_result: Any | None,
+) -> None:
+    if protocol_result is None:
+        return
+    stage_obj = getattr(protocol_result, "stage", "")
+    stage = str(getattr(stage_obj, "value", stage_obj) or "")
+    if stage not in {"screening", "validation", "frozen"}:
+        return
+    formal_evaluated = (
+        getattr(protocol_result, "stats", None) is not None
+        and screened_experiment_effective(protocol_result)
+    )
+    result.protocol_stage = stage  # type: ignore[assignment]
+    result.formal_protocol_evaluated = formal_evaluated
+    result.screened_experiment_effective = stage == "screening" and formal_evaluated
+
+
+def _screening_verification_reuse_result(
+    branch: Branch,
+    *,
+    action_label: str,
+    require_clean_status: bool = True,
+) -> VerificationResult:
+    current_hash = getattr(branch, "current_code_hash", None)
+    last_clean_hash = getattr(branch, "last_clean_code_hash", None)
+    code_status = str(getattr(branch, "branch_code_status", "clean") or "clean")
+    hash_available = bool(current_hash) and bool(last_clean_hash)
+    matches_verified_hash = (
+        hash_available
+        and current_hash == last_clean_hash
+        and (code_status == "clean" or not require_clean_status)
+    )
+    reuse_allowed = matches_verified_hash or not (current_hash or last_clean_hash)
+    source_detail = (
+        "screening/reconcile VerificationGate pass for "
+        f"code_hash={last_clean_hash or 'missing'}"
+    )
+    metadata: dict[str, Any] = {
+        "verification_reused_from_screening": True,
+        "verification_reuse_stage": action_label,
+        "verification_reuse_source": "screening_or_reconcile",
+        "original_verification_audit_detail": source_detail,
+        "current_code_hash": current_hash,
+        "last_clean_code_hash": last_clean_hash,
+        "branch_code_status": code_status,
+        "verification_reuse_requires_clean_status": require_clean_status,
+        "verification_reuse_hash_available": hash_available,
+        "current_matches_original_verification": matches_verified_hash,
+        "strict_checks_rerun": False,
+    }
+    audit_hash_payload = json.dumps(metadata, sort_keys=True, default=str)
+    metadata["original_verification_audit_hash"] = hashlib.sha256(
+        audit_hash_payload.encode("utf-8")
+    ).hexdigest()[:16]
+    if reuse_allowed:
+        detail = (
+            f"{action_label} reuses prior screening/reconcile verification; "
+            "V1-V9 were not rerun for this eval step; "
+            f"original_verification_audit_hash="
+            f"{metadata['original_verification_audit_hash']}"
+        )
+        return VerificationResult(
+            passed=True,
+            checks=(
+                CheckResult(
+                    name="V0_screening_verification_reuse",
+                    passed=True,
+                    severity="light",
+                    detail=detail,
+                    elapsed_ms=0,
+                    metadata=metadata,
+                ),
+            ),
+        )
+
+    detail = (
+        f"{action_label} cannot reuse screening/reconcile verification: "
+        "current code hash/status does not match the last verified clean hash"
+    )
+    return VerificationResult(
+        passed=False,
+        checks=(
+            CheckResult(
+                name="V0_screening_verification_reuse",
+                passed=False,
+                severity="heavy",
+                detail=detail,
+                elapsed_ms=0,
+                metadata=metadata,
+            ),
+        ),
+        failure_severity="heavy",
+        first_failure="V0_screening_verification_reuse",
+    )
+
+
+def _protocol_cache_stats(protocol_result: Any | None) -> dict[str, int] | None:
+    if protocol_result is None:
+        return None
+    return {
+        "champion_cache_hits": max(
+            0,
+            int(getattr(protocol_result, "champion_cache_hits", 0) or 0),
+        ),
+        "champion_cache_misses": max(
+            0,
+            int(getattr(protocol_result, "champion_cache_misses", 0) or 0),
+        ),
+        "champion_cached_runtime_pairs": max(
+            0,
+            int(getattr(protocol_result, "champion_cached_runtime_pairs", 0) or 0),
+        ),
+    }
+
+
+def _fresh_runtime_replay_result_metadata(
+    protocol_result: Any | None,
+    *,
+    verification_result: VerificationResult,
+    failure_detail: str | None,
+) -> dict[str, Any]:
+    cache_stats = _protocol_cache_stats(protocol_result) or {}
+    status = (
+        "verification_reuse_failed"
+        if not verification_result.passed
+        else "evaluation_failed"
+        if protocol_result is None
+        else "fresh_evidence_recorded"
+        if cache_stats.get("champion_cached_runtime_pairs", 0) == 0
+        else "capped_reject_still_cached_or_incomplete"
+    )
+    runtime_status = str(
+        getattr(protocol_result, "runtime_evidence_status", "") or "unknown"
+    )
+    if runtime_status in {"fresh_champion_required", "fresh_required"}:
+        status = "capped_reject_fresh_champion_still_required"
+    return {
+        "schema_version": "fresh_runtime_replay.v1",
+        "closure_status": status,
+        "counts_toward_max_rounds": False,
+        "decision_features_excluded": True,
+        "protocol_stage": str(
+            getattr(getattr(protocol_result, "stage", ""), "value", "")
+            or getattr(protocol_result, "stage", "")
+            or ""
+        ),
+        "runtime_evidence_status": runtime_status,
+        "runtime_evidence_confidence": str(
+            getattr(protocol_result, "runtime_confidence", "") or "unknown"
+        ),
+        "cache_stats": cache_stats,
+        "failure_detail": failure_detail or "",
+        "reason_codes": [
+            str(code)
+            for code in getattr(protocol_result, "reason_codes", ()) or ()
+            if str(code)
+        ],
+    }
+
+
+def _fresh_runtime_replay_materialization_block(
+    branch: Branch,
+    *,
+    missing_live_state: list[str],
+) -> dict[str, Any]:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        summary = {}
+    artifact_ref = str(summary.get("formal_candidate_patch_artifact_ref") or "")
+    if artifact_ref:
+        return {
+            "closure_status": "blocked_missing_replay_materialization",
+            "detail": (
+                "fresh runtime replay missing live "
+                + ",".join(missing_live_state)
+                + "; formal_candidate_patch_artifact_ref present but replay "
+                + f"materialization is unavailable: {artifact_ref}"
+            ),
+            "metadata": {
+                "formal_candidate_patch_artifact_ref": artifact_ref,
+                "missing_live_state": list(missing_live_state),
+                "missing_replay_materialization": [
+                    "workspace_from_formal_candidate_patch_artifact",
+                    "hypothesis_from_candidate_metadata_or_store",
+                    "hypothesis_record_from_candidate_metadata_or_store",
+                    "patch_from_candidate_patch_json",
+                ],
+                "decision_features_excluded": True,
+            },
+        }
+    return {
+        "closure_status": "blocked_missing_candidate_state",
+        "detail": "fresh runtime replay missing " + ",".join(missing_live_state),
+        "metadata": {
+            "missing_live_state": list(missing_live_state),
+            "decision_features_excluded": True,
+        },
+    }
+
+
+def _close_fresh_runtime_replay_marker(
+    branch: Branch,
+    *,
+    closure_status: str,
+    detail: str = "",
+) -> None:
+    summary = (
+        dict(getattr(branch, "branch_evidence_summary", {}) or {})
+        if isinstance(getattr(branch, "branch_evidence_summary", None), Mapping)
+        else {}
+    )
+    marker = summary.get("fresh_runtime_followup")
+    marker_payload = dict(marker) if isinstance(marker, Mapping) else {}
+    marker_payload.update(
+        {
+            "fresh_runtime_pending": False,
+            "scheduler_marker": "fresh_champion_runtime_replay_closed",
+            "closure_status": closure_status,
+            "detail": detail,
+            "decision_features_excluded": True,
+        }
+    )
+    summary["fresh_runtime_followup"] = marker_payload
+    summary["fresh_runtime_pending"] = False
+    summary["fresh_runtime_replay_closure"] = {
+        "schema_version": "fresh_runtime_replay_closure.v1",
+        "closure_status": closure_status,
+        "detail": detail,
+        "decision_features_excluded": True,
+    }
+    branch.branch_evidence_summary = summary
+
+
+def _verification_result_detail(vresult: VerificationResult) -> str | None:
+    if not vresult or not vresult.checks:
+        return None
+    failed = [check for check in vresult.checks if not check.passed]
+    checks = failed if failed else list(vresult.checks)
+    lines = []
+    if failed:
+        lines.append(
+            f"severity={vresult.failure_severity or 'unknown'}  "
+            f"first_failure={vresult.first_failure or 'N/A'}"
+        )
+    for check in checks:
+        lines.append(f"  [{check.name}] ({check.severity}) {check.detail}")
+    return "\n".join(lines) if lines else None
 
 
 def _scheduler_max_active_branches(scheduler: Any) -> int | None:
@@ -621,7 +1162,10 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
                 "post_finalizer_next_proposal_policy": "clean_fork_selected",
             }
         )
-    elif scheduler_action == "run_existing" and scheduled_branch is not None:
+    elif (
+        scheduler_action in {"run_existing", "replay_existing"}
+        and scheduled_branch is not None
+    ):
         branch_id = str(
             getattr(scheduled_branch, "branch_id", "") or result.branch_id or ""
         )
@@ -637,8 +1181,14 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
             {
                 "same_branch_refinement_selected": (
                     actual_action == "continue_same_branch"
+                    and scheduler_action == "run_existing"
                 ),
-                "pre_finalizer_same_branch_refinement_selected": True,
+                "pre_finalizer_same_branch_refinement_selected": (
+                    scheduler_action == "run_existing"
+                ),
+                "fresh_runtime_replay_selected": (
+                    scheduler_action == "replay_existing"
+                ),
                 "refined_branch_id": branch_id,
                 "actual_branch_action": actual_action,
                 "post_finalizer_actual_branch_action": actual_action,
@@ -912,6 +1462,21 @@ def _material_difference_requirement_candidates(
             seen.add(dedupe_key)
             candidates.append(item)
     return candidates
+
+
+def _attach_decision_provenance(
+    result: StepResult,
+    provenance: Mapping[str, Any],
+) -> None:
+    for key in (
+        "decision_layer_source",
+        "decision_engine_reason_codes",
+        "diagnostic_reason_codes",
+        "bypass_reason_codes",
+        "lifecycle_reason_codes",
+    ):
+        if key in provenance:
+            setattr(result, key, provenance[key])
 
 
 def _material_difference_candidate_summary(

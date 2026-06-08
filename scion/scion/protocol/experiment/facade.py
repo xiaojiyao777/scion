@@ -15,11 +15,13 @@ from scion.protocol.evaluation import (
 from scion.runtime.runner import Runner
 from .cache import ChampionResultCache
 from .selection import (
+    CasePathResolution,
     SeedLedger,
     SplitManager,
-    resolve_case_path,
+    resolve_case_path_details,
     select_cases,
     select_seeds,
+    validate_case_path_resolution,
 )
 
 if TYPE_CHECKING:
@@ -41,9 +43,11 @@ class ExperimentProtocol:
         metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
         objective_policy: "ObjectivePolicySpec | None" = None,
         require_metric_specs: bool = False,
+        allow_legacy_objective_fallback: bool | None = None,
         problem_spec: Any | None = None,
         champion_result_cache_enabled: bool = True,
         champion_result_cache_dir: str | None = None,
+        strict_case_paths: bool | None = None,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -51,10 +55,16 @@ class ExperimentProtocol:
         self.runner = runner
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
-        self._metric_specs = metric_specs
-        self._objective_policy = objective_policy
+        self._metric_specs = _hydrate_metric_specs(metric_specs, problem_spec)
+        self._objective_policy = objective_policy or _hydrate_objective_policy(problem_spec)
         self._require_metric_specs = require_metric_specs
+        self._allow_legacy_objective_fallback = allow_legacy_objective_fallback
         self._problem_spec = problem_spec
+        self._strict_case_paths = (
+            bool(require_metric_specs)
+            if strict_case_paths is None
+            else bool(strict_case_paths)
+        )
         self._progress_callback: Optional[Callable[..., None]] = None
         self._champion_result_cache_enabled = champion_result_cache_enabled
         self._champion_result_cache = (
@@ -65,9 +75,19 @@ class ExperimentProtocol:
             if champion_result_cache_enabled
             else None
         )
-        if self._require_metric_specs and not _has_metric_specs(self._metric_specs):
-            raise ValueError("metric_specs are required for production ExperimentProtocol")
         if not _has_metric_specs(self._metric_specs):
+            if self._require_metric_specs:
+                raise ValueError("metric_specs are required for production ExperimentProtocol")
+            if _requires_declared_objective_semantics(problem_spec):
+                if allow_legacy_objective_fallback is not True:
+                    raise ValueError(
+                        "metric_specs are required for adapter-backed or problem-v1 "
+                        "ExperimentProtocol unless allow_legacy_objective_fallback=True"
+                    )
+            elif allow_legacy_objective_fallback is False:
+                raise ValueError(
+                    "metric_specs are required unless allow_legacy_objective_fallback=True"
+                )
             self._metric_specs = None
             logger.warning(
                 "ExperimentProtocol initialized without metric_specs; using legacy "
@@ -170,6 +190,13 @@ class ExperimentProtocol:
         return compute_delta(candidate_objective, champion_objective)
 
     @property
+    def objective_semantics(self) -> str:
+        if self._metric_specs is None:
+            return "legacy_all_minimize"
+        mode = getattr(self._objective_policy, "mode", None) or "lexicographic"
+        return f"declared_objectives_{mode}"
+
+    @property
     def problem_spec(self) -> Any | None:
         return self._problem_spec
 
@@ -207,11 +234,35 @@ class ExperimentProtocol:
         return select_seeds(seed_ledger=self.seed_ledger, stage=stage)
 
     def _resolve_case_path(self, instance_path: str, *, workspace: str) -> str:
-        return resolve_case_path(
+        return self._resolve_case_path_status(
+            instance_path,
+            workspace=workspace,
+        ).resolved
+
+    def _resolve_case_path_status(
+        self,
+        instance_path: str,
+        *,
+        workspace: str,
+    ) -> CasePathResolution:
+        resolution = resolve_case_path_details(
             instance_path,
             workspace=workspace,
             safe_data_roots=self.split_manager.safe_data_roots(),
         )
+        validate_case_path_resolution(
+            resolution,
+            strict=self._strict_case_paths,
+        )
+        if not resolution.safe:
+            logger.warning(
+                "ExperimentProtocol accepted unsafe case path in non-strict mode: "
+                "path=%r status=%s reason=%s",
+                resolution.original,
+                resolution.status,
+                resolution.reason,
+            )
+        return resolution
 
     def run_experiment(
         self,
@@ -248,3 +299,38 @@ __all__ = ["ExperimentProtocol"]
 
 def _has_metric_specs(metric_specs: Sequence[Any] | None) -> bool:
     return metric_specs is not None and len(metric_specs) > 0
+
+
+def _hydrate_metric_specs(
+    metric_specs: Sequence[Any] | None,
+    problem_spec: Any | None,
+) -> Sequence[Any] | None:
+    if _has_metric_specs(metric_specs):
+        return metric_specs
+    declared = getattr(problem_spec, "objectives", None)
+    if _has_metric_specs(declared):
+        return tuple(declared)
+    spec_v1 = getattr(problem_spec, "spec_v1", None)
+    declared = getattr(spec_v1, "objectives", None)
+    if _has_metric_specs(declared):
+        return tuple(declared)
+    return metric_specs
+
+
+def _hydrate_objective_policy(problem_spec: Any | None) -> Any | None:
+    policy = getattr(problem_spec, "objective_policy", None)
+    if policy is not None:
+        return policy
+    spec_v1 = getattr(problem_spec, "spec_v1", None)
+    return getattr(spec_v1, "objective_policy", None)
+
+
+def _requires_declared_objective_semantics(problem_spec: Any | None) -> bool:
+    if problem_spec is None:
+        return False
+    if getattr(problem_spec, "spec_version", None) == "problem-v1":
+        return True
+    spec_v1 = getattr(problem_spec, "spec_v1", None)
+    if getattr(spec_v1, "spec_version", None) == "problem-v1":
+        return True
+    return bool(getattr(problem_spec, "requires_adapter_for_runtime", False))

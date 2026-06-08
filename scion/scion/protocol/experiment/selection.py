@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence
+from typing import Any, List, Sequence
 
 from scion.config.problem import SeedLedgerConfig, SplitManifest
 from scion.core.models import ExperimentStage
@@ -31,6 +32,33 @@ class SplitManager:
     def validate_disjoint(self) -> bool:
         self._manifest.validate_disjoint()
         return True
+
+
+@dataclass(frozen=True)
+class CasePathResolution:
+    """Structured case path resolution evidence for protocol raw metrics."""
+
+    original: str
+    resolved: str
+    status: str
+    source: str
+    safe: bool
+    reason: str = ""
+    matched_root: str | None = None
+
+    def as_metrics(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "original": self.original,
+            "resolved": self.resolved,
+            "status": self.status,
+            "source": self.source,
+            "safe": self.safe,
+        }
+        if self.reason:
+            payload["reason"] = self.reason
+        if self.matched_root:
+            payload["matched_root"] = self.matched_root
+        return payload
 
 
 class SeedLedger:
@@ -137,28 +165,153 @@ def resolve_case_path(
 ) -> str:
     """Resolve a case path against a workspace or declared read-only data roots."""
 
-    path = Path(instance_path)
+    return resolve_case_path_details(
+        instance_path,
+        workspace=workspace,
+        safe_data_roots=safe_data_roots,
+    ).resolved
+
+
+def resolve_case_path_details(
+    instance_path: str,
+    *,
+    workspace: str,
+    safe_data_roots: Sequence[str] = (),
+) -> CasePathResolution:
+    """Resolve a case path and return boundary/safety status."""
+
+    original = str(instance_path)
+    path = Path(original).expanduser()
+    workspace_root = Path(workspace).expanduser().resolve(strict=False)
+    safe_roots = tuple(
+        Path(root).expanduser().resolve(strict=False)
+        for root in safe_data_roots
+        if str(root)
+    )
+
     if path.is_absolute():
-        return str(path)
+        resolved = path.resolve(strict=False)
+        if _is_relative_to(resolved, workspace_root):
+            return CasePathResolution(
+                original=original,
+                resolved=str(resolved),
+                status="resolved_workspace",
+                source="absolute",
+                safe=True,
+                matched_root=str(workspace_root),
+            )
+        safe_root = _matching_root(resolved, safe_roots)
+        if safe_root is not None:
+            return CasePathResolution(
+                original=original,
+                resolved=str(resolved),
+                status="resolved_safe_data_root",
+                source="absolute",
+                safe=True,
+                matched_root=str(safe_root),
+            )
+        return CasePathResolution(
+            original=original,
+            resolved=str(path),
+            status="absolute_outside_roots",
+            source="absolute",
+            safe=False,
+            reason="absolute case path is outside workspace and safe_data_roots",
+        )
 
-    workspace_candidate = Path(workspace) / path
+    workspace_candidate = workspace_root / path
     if workspace_candidate.exists():
-        return str(workspace_candidate)
+        resolved = workspace_candidate.resolve(strict=False)
+        if _is_relative_to(resolved, workspace_root):
+            return CasePathResolution(
+                original=original,
+                resolved=str(resolved),
+                status="resolved_workspace",
+                source="workspace",
+                safe=True,
+                matched_root=str(workspace_root),
+            )
+        return CasePathResolution(
+            original=original,
+            resolved=str(workspace_candidate),
+            status="workspace_escape",
+            source="workspace",
+            safe=False,
+            reason="relative case path escapes workspace",
+            matched_root=str(workspace_root),
+        )
 
-    for root in safe_data_roots:
-        root_path = Path(root).expanduser()
+    for root_path in safe_roots:
         candidate = root_path / path
         if candidate.exists():
-            return str(candidate.resolve(strict=False))
+            resolved = candidate.resolve(strict=False)
+            if _is_relative_to(resolved, root_path):
+                return CasePathResolution(
+                    original=original,
+                    resolved=str(resolved),
+                    status="resolved_safe_data_root",
+                    source="safe_data_root",
+                    safe=True,
+                    matched_root=str(root_path),
+                )
+            return CasePathResolution(
+                original=original,
+                resolved=str(candidate),
+                status="safe_data_root_escape",
+                source="safe_data_root",
+                safe=False,
+                reason="relative case path escapes safe_data_root",
+                matched_root=str(root_path),
+            )
 
-    return instance_path
+    return CasePathResolution(
+        original=original,
+        resolved=original,
+        status="unresolved_relative",
+        source="unresolved",
+        safe=False,
+        reason="relative case path did not resolve under workspace or safe_data_roots",
+    )
+
+
+def validate_case_path_resolution(
+    resolution: CasePathResolution,
+    *,
+    strict: bool,
+) -> None:
+    """Reject unsafe case paths when protocol strict path safety is enabled."""
+
+    if strict and not resolution.safe:
+        raise ValueError(
+            "Unsafe case path in strict ExperimentProtocol: "
+            f"{resolution.original!r} status={resolution.status} "
+            f"reason={resolution.reason or 'not under an allowed root'}"
+        )
+
+
+def _matching_root(path: Path, roots: Sequence[Path]) -> Path | None:
+    for root in roots:
+        if _is_relative_to(path, root):
+            return root
+    return None
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 __all__ = [
+    "CasePathResolution",
     "SeedLedger",
     "SplitManager",
     "_select_evenly_spaced_cases",
     "resolve_case_path",
+    "resolve_case_path_details",
     "select_cases",
     "select_seeds",
+    "validate_case_path_resolution",
 ]

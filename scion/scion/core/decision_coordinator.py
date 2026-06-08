@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Any, Tuple
 
 from scion.config.problem import ProtocolConfig
 from scion.core.decision import DecisionEngine
-from scion.core.models import Decision, DecisionFeatures, DecisionLifecycleAction
+from scion.core.models import (
+    Decision,
+    DecisionFeatures,
+    DecisionLayerSource,
+    DecisionLifecycleAction,
+)
 
 
 @dataclass(frozen=True)
@@ -15,6 +20,11 @@ class CoordinatedDecision:
     rule: str
     features_snapshot: DecisionFeatures
     lifecycle_action: DecisionLifecycleAction = ""
+    stage_decision: Decision | None = None
+    final_decision: Decision | None = None
+    lifecycle_reason_codes: Tuple[str, ...] = ()
+    decision_layer_source: DecisionLayerSource = "stage_decision"
+    lifecycle_policy_evidence: dict[str, Any] | None = None
 
 
 class DecisionCoordinator:
@@ -42,6 +52,13 @@ class DecisionCoordinator:
             rule=_rule_name(features, outcome.decision, reason_codes),
             features_snapshot=outcome.features_snapshot,
             lifecycle_action=outcome.lifecycle_action,
+            stage_decision=outcome.stage_decision,
+            final_decision=outcome.final_decision,
+            lifecycle_reason_codes=tuple(
+                str(code) for code in outcome.lifecycle_reason_codes
+            ),
+            decision_layer_source=outcome.decision_layer_source,
+            lifecycle_policy_evidence=dict(outcome.lifecycle_policy_evidence or {}),
         )
 
 

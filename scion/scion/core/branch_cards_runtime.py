@@ -86,10 +86,15 @@ def _runtime_evidence_low_confidence_advisory_sentence(
     guidance = (
         context.get("runtime_evidence_low_confidence_advisory")
         or context.get("runtime_evidence_clean_fork_guidance")
+        or context.get("fresh_runtime_followup")
     )
     if not isinstance(guidance, Mapping) or not guidance:
         return ""
-    reason = guidance.get("reason") or "runtime_evidence_completeness_clean_fork"
+    reason = (
+        guidance.get("reason")
+        or guidance.get("queue_intent")
+        or "runtime_evidence_completeness_clean_fork"
+    )
     return (
         " Low-confidence runtime evidence advisory is active: do not treat "
         "runtime saturation/pressure as a strong conclusion or branch-routing "

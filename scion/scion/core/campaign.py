@@ -11,6 +11,7 @@ from scion.core.campaign_adapters import (
     _branch_step_runner_for,
     _evaluation_orchestrator_for,
     _explore_step_pipeline_for,
+    _lookup_decision_provenance,
     _lookup_decision_reason_codes,
     _workspace_service_for,
 )
@@ -260,8 +261,21 @@ class CampaignManager:
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
-        self._run_runtime_preflight()
-        self._campaign_loop.run(max_rounds=max_rounds)
+        try:
+            self._run_runtime_preflight()
+            self._campaign_loop.run(max_rounds=max_rounds)
+        except Exception as exc:
+            reason = (
+                "preflight_exception"
+                if not getattr(self, "_runtime_preflight_checked", False)
+                else "unhandled_exception"
+            )
+            self._finalize_unhandled_run_exception(
+                reason=reason,
+                exc=exc,
+                max_rounds=max_rounds,
+            )
+            raise
 
     def request_stop(self, reason: str = "external_stop_requested") -> None:
         """Request graceful campaign stop before starting more work."""
@@ -279,6 +293,113 @@ class CampaignManager:
         self._write_campaign_summary()
         self._write_status(stopped_reason=self._last_stop_reason)
 
+    def _finalize_unhandled_run_exception(
+        self,
+        *,
+        reason: str,
+        exc: Exception,
+        max_rounds: int,
+    ) -> None:
+        """Best-effort terminal campaign artifacts for unexpected run crashes."""
+        self._last_stop_reason = reason
+        self._external_stop_requested = True
+        loop_status = self._crashed_campaign_loop_status(
+            reason=reason,
+            exc=exc,
+            max_rounds=max_rounds,
+        )
+        try:
+            self._write_status(
+                stopped_reason=reason,
+                loop_status=loop_status,
+            )
+            self._write_campaign_summary()
+            self._write_status(
+                stopped_reason=reason,
+                loop_status=loop_status,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write terminal campaign artifacts after %s",
+                reason,
+            )
+
+    def _crashed_campaign_loop_status(
+        self,
+        *,
+        reason: str,
+        exc: Exception,
+        max_rounds: int,
+    ) -> Dict[str, Any]:
+        existing = getattr(self._evidence_recorder, "campaign_loop_status", None)
+        loop_status: Dict[str, Any] = (
+            dict(existing) if isinstance(existing, dict) else {}
+        )
+        requested_rounds = _positive_int(
+            loop_status.get("requested_rounds"),
+            max_rounds,
+            default=1,
+        )
+        loop_steps = _nonnegative_int(
+            loop_status.get("loop_steps", loop_status.get("campaign_steps")),
+            default=len(getattr(self, "_step_history", ()) or ()),
+        )
+        effective_rounds = _nonnegative_int(
+            loop_status.get("effective_rounds_completed"),
+            default=0,
+        )
+        proposal_attempts = _nonnegative_int(
+            loop_status.get(
+                "proposal_attempts_consumed",
+                loop_status.get("proposal_attempts"),
+            ),
+            default=effective_rounds,
+        )
+        failure_categories = dict(loop_status.get("failure_categories") or {})
+        failure_categories[reason] = _nonnegative_int(
+            failure_categories.get(reason),
+            default=0,
+        ) + 1
+        loop_status.update(
+            {
+                "requested_rounds": requested_rounds,
+                "attempt_limit": _nonnegative_int(
+                    loop_status.get("attempt_limit"),
+                    default=0,
+                ),
+                "proposal_attempt_limit": _nonnegative_int(
+                    loop_status.get("proposal_attempt_limit"),
+                    loop_status.get("attempt_limit"),
+                    default=0,
+                ),
+                "attempts": proposal_attempts,
+                "total_rounds": _nonnegative_int(
+                    loop_status.get("total_rounds"),
+                    default=getattr(self, "_round_num", 0),
+                ),
+                "proposal_attempts": proposal_attempts,
+                "proposal_attempts_consumed": proposal_attempts,
+                "proposal_attempts_total": _nonnegative_int(
+                    loop_status.get("proposal_attempts_total"),
+                    default=max(loop_steps, proposal_attempts),
+                ),
+                "loop_steps": loop_steps,
+                "campaign_steps": _nonnegative_int(
+                    loop_status.get("campaign_steps"),
+                    default=loop_steps,
+                ),
+                "effective_rounds_completed": effective_rounds,
+                "failure_categories": failure_categories,
+                "last_failure_category": reason,
+                "terminal_exception": {
+                    "reason": reason,
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:500],
+                },
+            }
+        )
+        return loop_status
+
     def _run_runtime_preflight(self) -> None:
         """Validate problem-owned runtime dependencies before proposal work."""
         if getattr(self, "_runtime_preflight_checked", False):
@@ -292,6 +413,10 @@ class CampaignManager:
         """Execute one campaign step and return a StepResult."""
         return _branch_step_runner_for(self).run_one_step()
 
+    def run_fresh_runtime_replay_drain_step(self) -> StepResult:
+        """Execute one scheduler-approved fresh-runtime replay drain step."""
+        return _branch_step_runner_for(self).run_fresh_runtime_replay_drain_step()
+
     def should_stop(self) -> bool:
         if getattr(self, "_external_stop_requested", False):
             if not self._last_stop_reason:
@@ -304,19 +429,21 @@ class CampaignManager:
         """Compatibility wrapper for budget-efficiency early-stop guard."""
         return CampaignGovernanceService.has_pending_evaluation(branches)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self, *, reconcile_active_slots: bool = True) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_reportable_branches()
         max_active_branches = int(
             getattr(self._scheduler, "max_active_branches", 0) or 0
         )
-        active_slot_reconciliation = reconcile_active_slot_overflow(
-            branches,
-            max_active_branches=max_active_branches,
-        )
-        if active_slot_reconciliation.changed:
-            for branch_id in active_slot_reconciliation.parked_branch_ids:
-                self._persist_branch_state(branch_id)
-            branches = self._branch_ctrl.get_reportable_branches()
+        active_slot_reconciliation = None
+        if reconcile_active_slots:
+            active_slot_reconciliation = reconcile_active_slot_overflow(
+                branches,
+                max_active_branches=max_active_branches,
+            )
+            if active_slot_reconciliation.changed:
+                for branch_id in active_slot_reconciliation.parked_branch_ids:
+                    self._persist_branch_state(branch_id)
+                branches = self._branch_ctrl.get_reportable_branches()
         active_slots = active_slot_inventory(
             branches,
             max_active_branches=max_active_branches,
@@ -426,7 +553,7 @@ class CampaignManager:
             state["branch_lifecycle_reroute_policy"] = (
                 branch_lifecycle_reroute_policy
             )
-        if active_slot_reconciliation.changed:
+        if active_slot_reconciliation is not None and active_slot_reconciliation.changed:
             state["active_slot_reconciliation"] = (
                 active_slot_reconciliation.as_audit_metadata()
             )
@@ -443,6 +570,10 @@ class CampaignManager:
                 branch_rows,
             )
         return state
+
+    def get_state_snapshot(self) -> Dict[str, Any]:
+        """Read-only state projection for evidence/status generation."""
+        return self.get_state(reconcile_active_slots=False)
 
     def _write_status(
         self,
@@ -662,7 +793,7 @@ class CampaignManager:
         branch: Branch,
         workspace: str,
         hypothesis: HypothesisProposal,
-    ) -> Tuple[Decision, Optional[ProtocolResult], CanaryResult]:
+    ) -> Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult]:
         return _evaluation_orchestrator_for(self).evaluate(
             branch,
             workspace,
@@ -749,6 +880,7 @@ class CampaignManager:
         hypothesis_id: str = "",
         decision_reason_codes: Optional[tuple] = None,
         event_id: Optional[str] = None,
+        strict: bool = False,
     ) -> None:
         """Write one experiment_event + one decision row to the registry."""
         self._evidence_recorder.record_step_lineage(
@@ -764,6 +896,7 @@ class CampaignManager:
             hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
             event_id=event_id,
+            strict=strict,
         )
 
     def _decision_reason_codes_for(
@@ -773,6 +906,9 @@ class CampaignManager:
     ) -> Optional[Tuple[str, ...]]:
         return _lookup_decision_reason_codes(self, branch_id, protocol_result)
 
+    def _decision_provenance_for(self, branch_id: str) -> Dict[str, Any]:
+        return _lookup_decision_provenance(self, branch_id)
+
     def _decision_lifecycle_action_for(
         self,
         branch_id: str,
@@ -781,6 +917,17 @@ class CampaignManager:
         orchestrator = _evaluation_orchestrator_for(self)
         actions = getattr(orchestrator, "decision_lifecycle_actions", {}) or {}
         return actions.get(branch_id, "")
+
+    def _decision_lifecycle_policy_evidence_for(
+        self,
+        branch_id: str,
+    ) -> Dict[str, Any]:
+        orchestrator = _evaluation_orchestrator_for(self)
+        evidence = (
+            getattr(orchestrator, "decision_lifecycle_policy_evidence", {}) or {}
+        )
+        value = evidence.get(branch_id, {})
+        return dict(value) if isinstance(value, dict) else {}
 
     def _increment_round(self) -> int:
         self._round_num += 1
@@ -821,6 +968,9 @@ class CampaignManager:
             lifecycle_action=(
                 lifecycle_action
                 or self._decision_lifecycle_action_for(branch.branch_id, protocol_result)
+            ),
+            lifecycle_policy_evidence=self._decision_lifecycle_policy_evidence_for(
+                branch.branch_id,
             ),
         )
 
@@ -986,6 +1136,24 @@ class CampaignManager:
 def _build_verification_detail(vresult: VerificationResult) -> Optional[str]:
     """Compatibility wrapper for the extracted explore-step helper."""
     return build_verification_detail(vresult)
+
+
+def _nonnegative_int(*values: Any, default: int = 0) -> int:
+    for value in values:
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return max(0, int(default))
+
+
+def _positive_int(*values: Any, default: int = 1) -> int:
+    for value in values:
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            continue
+    return max(1, int(default))
 
 
 def _branch_state_row(branch: Branch) -> Dict[str, Any]:

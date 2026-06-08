@@ -60,6 +60,7 @@ from .failure_summary import (
     _primary_failure_attribution,
     _secondary_failure_observations,
 )
+from .lineage import apply_lineage_integrity_to_run_validity
 from .summary_branch_history import (
     _branch_cards_from_rows,
     _branch_history_cards,
@@ -132,6 +133,17 @@ def _summary_current_progress(
     if stopped and progress.get("complete") is not True:
         return None
     return dict(progress)
+
+
+def _proposal_context_records_from_steps(
+    steps: Iterable[StepRecord],
+) -> list[Mapping[str, Any]]:
+    records: list[Mapping[str, Any]] = []
+    for step in steps:
+        ref = getattr(step, "proposal_session_ref", None)
+        if isinstance(ref, Mapping):
+            records.append(ref)
+    return records
 
 
 def _render_campaign_summary_json(summary: Mapping[str, Any]) -> str:
@@ -487,10 +499,14 @@ class CampaignSummaryMixin:
             "steps": [],
         }
         state_n_experiments: Any | None = None
+        state_protocol_in_flight = bool(getattr(self, "in_flight_protocol", None))
         if self.state_provider is not None:
             try:
                 state_for_validity = dict(self.state_provider())
                 state_n_experiments = state_for_validity.get("n_experiments")
+                state_protocol_in_flight = state_protocol_in_flight or bool(
+                    state_for_validity.get("in_flight_protocol")
+                )
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for run validity failed: %s", exc)
         summary["failure_categories"] = failure_categories
@@ -510,8 +526,25 @@ class CampaignSummaryMixin:
             stopped_reason=effective_stopped_reason,
             failure_categories=failure_categories,
             stopped=True,
+            partial_in_flight=state_protocol_in_flight,
         )
         summary["run_validity_status"] = summary["run_validity"]["reason"]
+        lineage_integrity = self.lineage_integrity_snapshot(
+            expected_step_count=len(steps),
+            source="summary_step_history_and_recorder_accumulator",
+        )
+        summary["lineage_integrity"] = lineage_integrity
+        summary["evidence_integrity"] = {
+            "schema_version": "scion.evidence_integrity.v1",
+            "status": lineage_integrity["status"],
+            "lineage_status": lineage_integrity["status"],
+            "warnings": (
+                [lineage_integrity["warning"]]
+                if lineage_integrity.get("warning")
+                else []
+            ),
+        }
+        apply_lineage_integrity_to_run_validity(summary, lineage_integrity)
         if effective_stopped_reason == API_BALANCE_EXHAUSTED_STOP_REASON:
             summary["stop_category"] = "provider_error"
             summary["provider_error"] = {
@@ -534,6 +567,17 @@ class CampaignSummaryMixin:
                 "active_slot_blocked_attempts",
                 "scheduler_active_slot_blocked_attempt_limit",
                 "active_slot_blocked_attempt_limit",
+                "fresh_runtime_replay_drain",
+                "fresh_runtime_replay_drain_status",
+                "fresh_runtime_replay_drain_attempts",
+                "fresh_runtime_replay_drain_executed",
+                "fresh_runtime_replay_drain_skipped",
+                "fresh_runtime_replay_drain_limit",
+                "fresh_runtime_replay_drain_stopped_reason",
+                "fresh_runtime_replay_drain_accepted_replay_last_result",
+                "fresh_runtime_replay_drain_final_attempt_last_result",
+                "fresh_runtime_replay_drain_blocked_count",
+                "fresh_runtime_replay_drain_unresolved_closures",
                 "quality_blocks",
                 "quality_block_ledger",
                 "quality_block_ledger_count",
@@ -583,6 +627,8 @@ class CampaignSummaryMixin:
             "missing": list(readiness.missing),
             "status": readiness.status,
         }
+        if lineage_integrity.get("status") == "degraded":
+            summary["formal_readiness"]["lineage_integrity_status"] = "degraded"
         if readiness.reason_code:
             summary["formal_readiness"]["reason_code"] = readiness.reason_code
         if refs:
@@ -632,6 +678,7 @@ class CampaignSummaryMixin:
                 build_cross_branch_research_observability(
                     steps=steps,
                     branch_rows=summary.get("branches") or (),
+                    context_records=_proposal_context_records_from_steps(steps),
                 )
             )
         except Exception as exc:  # pragma: no cover - observability is best-effort
@@ -659,6 +706,16 @@ class CampaignSummaryMixin:
 
     def _build_summary_step(self, step: StepRecord) -> Dict[str, Any]:
         decision_reason_codes = list(step.decision_reason_codes or ())
+        decision_engine_reason_codes = list(
+            getattr(step, "decision_engine_reason_codes", ()) or ()
+        )
+        diagnostic_reason_codes = list(
+            getattr(step, "diagnostic_reason_codes", ()) or ()
+        )
+        bypass_reason_codes = list(getattr(step, "bypass_reason_codes", ()) or ())
+        lifecycle_reason_codes = list(
+            getattr(step, "lifecycle_reason_codes", ()) or ()
+        )
         candidate_intent_visibility = candidate_intent_visibility_for_step(step)
         observability_value_visibility = observability_value_visibility_for_step(step)
         code_archive_ref = public_artifact_ref(
@@ -677,7 +734,15 @@ class CampaignSummaryMixin:
             "branch_id": step.branch_id,
             "decision": step.decision.value if step.decision is not None else None,
             "decision_reason_codes": decision_reason_codes,
+            "decision_layer_source": getattr(step, "decision_layer_source", None),
+            "decision_engine_reason_codes": decision_engine_reason_codes,
+            "diagnostic_reason_codes": diagnostic_reason_codes,
+            "bypass_reason_codes": bypass_reason_codes,
+            "lifecycle_reason_codes": lifecycle_reason_codes,
             "contract_passed": False if contract_not_run_reason else step.contract_passed,
+            "contract_diagnostics": list(
+                getattr(step, "contract_diagnostics", ()) or ()
+            ),
             "verification_passed": step.verification_passed,
             "failure_stage": step.failure_stage,
             "failure_detail": step.failure_detail,
@@ -781,6 +846,9 @@ class CampaignSummaryMixin:
                 "material_difference_requirement_ref",
                 "material_difference_requirement_status",
                 "novelty_pressure",
+                "branch_lesson_records",
+                "branch_lessons",
+                "branch_lesson_usage_requirement",
             }
             audit_ref_fields = _VISIBILITY_AUDIT_CONTAINER_KEYS
             session_ref: dict[str, Any] = {}
@@ -878,6 +946,15 @@ class CampaignSummaryMixin:
                 "reason_codes": list(pr.reason_codes),
                 "protocol_reason_codes": protocol_reason_codes,
                 "decision_reason_codes": decision_reason_codes,
+                "decision_layer_source": getattr(
+                    step,
+                    "decision_layer_source",
+                    None,
+                ),
+                "decision_engine_reason_codes": decision_engine_reason_codes,
+                "diagnostic_reason_codes": diagnostic_reason_codes,
+                "bypass_reason_codes": bypass_reason_codes,
+                "lifecycle_reason_codes": lifecycle_reason_codes,
                 "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "effective_reason_codes": effective_reason_codes,
                 "gate_observation_reason_codes": list(
@@ -887,7 +964,8 @@ class CampaignSummaryMixin:
                     reason_code_groups.lifecycle_action_reason_codes
                 ),
                 "effective_reason_source": (
-                    "decision_engine" if decision_reason_codes else "protocol_gate"
+                    getattr(step, "decision_layer_source", None)
+                    or ("decision_engine" if decision_reason_codes else "protocol_gate")
                 ),
                 "raw_metrics_ref": raw_metrics_public_ref,
                 "raw_metrics_public_ref": raw_metrics_public_ref,

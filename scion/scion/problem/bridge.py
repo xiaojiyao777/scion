@@ -96,6 +96,7 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
     )
     if spec.family_taxonomy is not None:
         object.__setattr__(legacy, "family_taxonomy", spec.family_taxonomy)
+    object.__setattr__(legacy, "spec_v1", spec)
     object.__setattr__(legacy, "objectives", tuple(spec.objectives))
     object.__setattr__(legacy, "runtime_dependencies", spec.runtime_dependencies)
     return legacy

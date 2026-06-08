@@ -74,6 +74,28 @@ class PromotionCommitResult:
     branch_id: str
     champion_version: int
     stale_branch_ids: tuple[str, ...]
+    champion_persisted: bool = False
+    completed_phases: tuple[str, ...] = ()
+
+
+class PromotionCommitError(RuntimeError):
+    """Promotion commit failed with enough phase state for recovery handling."""
+
+    def __init__(
+        self,
+        *,
+        phase: str,
+        original: BaseException,
+        champion_persisted: bool,
+        completed_phases: Iterable[str],
+        stale_branch_ids: Iterable[str] = (),
+    ) -> None:
+        super().__init__(f"{phase}: {original}")
+        self.phase = phase
+        self.original = original
+        self.champion_persisted = champion_persisted
+        self.completed_phases = tuple(completed_phases)
+        self.stale_branch_ids = tuple(stale_branch_ids)
 
 
 PrepareHook = Callable[[PromotionRequest], PromotionPlan]
@@ -140,33 +162,66 @@ class PromotionService:
 
     def commit(self, plan: PromotionPlan) -> PromotionCommitResult:
         """Commit a prepared promotion plan through injected mutation hooks."""
-        if self._persist_champion is not None:
-            self._persist_champion(plan.champion)
-        if self._before_commit is not None:
-            self._before_commit(plan)
-        if self._commit_champion is not None:
-            self._commit_champion(plan.champion)
-        if self._commit_pool is not None:
-            self._commit_pool(plan.champion.operator_pool)
-        if self._promote_branch is not None:
-            self._promote_branch(plan.branch_id, plan.champion)
-
+        completed_phases: list[str] = []
+        champion_persisted = False
         stale_branch_ids: tuple[str, ...] = ()
-        if self._mark_stale is not None:
-            stale_branch_ids = tuple(self._mark_stale(plan.new_champion_version))
-        if self._persist_branch_states is not None:
-            self._persist_branch_states()
-        if self._on_promoted_branch is not None:
-            self._on_promoted_branch(plan.branch_id, plan.champion)
 
-        result = PromotionCommitResult(
+        def run_phase(phase: str, callback: Callable[[], Any]) -> Any:
+            nonlocal champion_persisted
+            try:
+                value = callback()
+            except Exception as exc:
+                raise PromotionCommitError(
+                    phase=phase,
+                    original=exc,
+                    champion_persisted=champion_persisted,
+                    completed_phases=completed_phases,
+                    stale_branch_ids=stale_branch_ids,
+                ) from exc
+            completed_phases.append(phase)
+            if phase == "persist_champion":
+                champion_persisted = True
+            return value
+
+        if self._persist_champion is not None:
+            run_phase("persist_champion", lambda: self._persist_champion(plan.champion))
+        if self._before_commit is not None:
+            run_phase("before_commit", lambda: self._before_commit(plan))
+        if self._commit_champion is not None:
+            run_phase("commit_champion", lambda: self._commit_champion(plan.champion))
+        if self._commit_pool is not None:
+            run_phase("commit_pool", lambda: self._commit_pool(plan.champion.operator_pool))
+        if self._promote_branch is not None:
+            run_phase(
+                "promote_branch",
+                lambda: self._promote_branch(plan.branch_id, plan.champion),
+            )
+
+        if self._mark_stale is not None:
+            stale_branch_ids = tuple(
+                run_phase(
+                    "mark_stale",
+                    lambda: self._mark_stale(plan.new_champion_version),
+                )
+            )
+        if self._persist_branch_states is not None:
+            run_phase("persist_branch_states", self._persist_branch_states)
+        if self._on_promoted_branch is not None:
+            run_phase(
+                "on_promoted_branch",
+                lambda: self._on_promoted_branch(plan.branch_id, plan.champion),
+            )
+
+        if self._after_commit is not None:
+            run_phase("after_commit", lambda: self._after_commit(plan))
+
+        return PromotionCommitResult(
             branch_id=plan.branch_id,
             champion_version=plan.new_champion_version,
             stale_branch_ids=stale_branch_ids,
+            champion_persisted=champion_persisted,
+            completed_phases=tuple(completed_phases),
         )
-        if self._after_commit is not None:
-            self._after_commit(plan)
-        return result
 
     def _prepare_from_workspace(self, request: PromotionRequest) -> PromotionPlan:
         if self._snapshot_root is None:

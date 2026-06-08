@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 import os
 import resource
 import signal
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 MAX_INLINE_OUTPUT_BYTES = 50_000
 _OFFLOAD_PREFIX = "__offloaded__:"
 _SOLVER_WALL_CLOCK_GRACE_SEC = 2
+_POST_KILL_DRAIN_GRACE_SEC = 1
 
 
 # Environment variables passed through to the subprocess (whitelist).
@@ -45,6 +47,21 @@ def _build_clean_env() -> dict[str, str]:
     }
     env.update(_ENV_FIXED)
     return env
+
+
+def _effective_scion_env(selected_surface: str | None = None) -> dict[str, str]:
+    """Return the effective SCION_* environment passed to solver subprocesses."""
+    env = _build_clean_env()
+    surface = str(selected_surface or "").strip()
+    if surface:
+        env["SCION_SELECTED_SURFACE"] = surface
+    else:
+        env.pop("SCION_SELECTED_SURFACE", None)
+    return {k: v for k, v in env.items() if k.startswith("SCION_")}
+
+
+def _scion_env_value_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8", errors="surrogateescape")).hexdigest()
 
 
 def _make_preexec_fn(limits: ResourceLimits):
@@ -94,6 +111,17 @@ class LocalSubprocessRunner:
     def set_progress_callback(self, callback: Callable[..., None] | None) -> None:
         """Register a best-effort subprocess lifecycle callback."""
         self._progress_callback = callback
+
+    def cache_identity(self, *, selected_surface: str | None = None) -> dict[str, Any]:
+        """Return subprocess inputs that affect cacheable champion results."""
+        scion_env = _effective_scion_env(selected_surface)
+        return {
+            "schema": "scion.local_subprocess_runner.cache_identity.v1",
+            "scion_env": {
+                name: _scion_env_value_digest(value)
+                for name, value in sorted(scion_env.items())
+            },
+        }
 
     def run_solver(
         self,
@@ -149,9 +177,8 @@ class LocalSubprocessRunner:
 
         env = _build_clean_env()
         surface = str(selected_surface or "").strip()
-        if surface:
-            env["SCION_SELECTED_SURFACE"] = surface
-        else:
+        env.update(_effective_scion_env(surface or None))
+        if not surface:
             env.pop("SCION_SELECTED_SURFACE", None)
         # Ensure the workspace itself is on PYTHONPATH so operators can be imported
         existing_pp = env.get("PYTHONPATH", "")
@@ -182,10 +209,23 @@ class LocalSubprocessRunner:
                 stdout_bytes, stderr_bytes = proc.communicate(
                     timeout=effective_timeout
                 )
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
                 # Hard-kill the whole process group
                 _kill_proc(proc)
-                stdout_bytes, stderr_bytes = proc.communicate()
+                stdout_bytes, stderr_bytes, drain_timed_out = _drain_after_timeout(
+                    proc,
+                    initial_stdout=exc.output,
+                    initial_stderr=exc.stderr,
+                    timeout_sec=_POST_KILL_DRAIN_GRACE_SEC,
+                )
+                if drain_timed_out:
+                    stderr_bytes = _append_stderr_note(
+                        stderr_bytes,
+                        (
+                            "Subprocess timed out; stdout/stderr drain did not "
+                            f"finish within {_POST_KILL_DRAIN_GRACE_SEC}s after kill."
+                        ),
+                    )
                 error_category = "timeout"
 
         except MemoryError:
@@ -228,6 +268,8 @@ class LocalSubprocessRunner:
         stderr_str = self._maybe_offload(stderr_str, workdir, f"{run_id}_stderr")
 
         exit_code = proc.returncode
+        if exit_code is None:
+            exit_code = -signal.SIGKILL
         self._emit_progress(
             child_pid=None,
             child_exit_code=exit_code,
@@ -333,6 +375,58 @@ def _kill_proc(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+
+
+def _drain_after_timeout(
+    proc: subprocess.Popen,
+    *,
+    initial_stdout: bytes | str | None,
+    initial_stderr: bytes | str | None,
+    timeout_sec: int,
+) -> tuple[bytes, bytes, bool]:
+    """Drain output after killing a timed-out subprocess, without unbounded wait."""
+    try:
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout_sec)
+        return (
+            _output_to_bytes(stdout_bytes),
+            _output_to_bytes(stderr_bytes),
+            False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        _close_proc_pipes(proc)
+        return (
+            _output_to_bytes(exc.output, fallback=initial_stdout),
+            _output_to_bytes(exc.stderr, fallback=initial_stderr),
+            True,
+        )
+
+
+def _close_proc_pipes(proc: subprocess.Popen) -> None:
+    for pipe in (proc.stdout, proc.stderr):
+        if pipe is None:
+            continue
+        try:
+            pipe.close()
+        except OSError:
+            pass
+
+
+def _output_to_bytes(
+    value: bytes | str | None,
+    *,
+    fallback: bytes | str | None = None,
+) -> bytes:
+    output = fallback if value is None else value
+    if output is None:
+        return b""
+    if isinstance(output, bytes):
+        return output
+    return output.encode("utf-8", errors="replace")
+
+
+def _append_stderr_note(stderr_bytes: bytes, note: str) -> bytes:
+    separator = b"\n" if stderr_bytes else b""
+    return stderr_bytes + separator + note.encode("utf-8")
 
 
 def _try_remove(path: str) -> None:

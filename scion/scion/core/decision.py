@@ -261,8 +261,17 @@ class DecisionEngine:
         if features.runtime_guard_passed is False:
             return self._out(features, Decision.ABANDON, ["RUNTIME_GUARD_FAILED"])
 
+        # Normal DecisionEngine flow preempts lifecycle candidate-runtime
+        # classifications so runtime failures have one authoritative reason.
         if features.candidate_failed_pairs > 0:
             return self._out(features, Decision.ABANDON, ["CANDIDATE_RUNTIME_FAILURE"])
+
+        if features.stage == "screening" and features.champion_failed_pairs > 0:
+            return self._out(
+                features,
+                Decision.CONTINUE_EXPLORE,
+                ["SCREENING_PARTIAL_CHAMPION_EVIDENCE"],
+            )
 
         if (
             features.runtime_ratio_median is not None
@@ -340,6 +349,10 @@ class DecisionEngine:
         lifecycle = self.lifecycle_policy.decide(features)
         lifecycle_action = _decision_lifecycle_action(lifecycle.action)
         lifecycle_codes = _lifecycle_reason_codes(lifecycle)
+        lifecycle_evidence = self.lifecycle_policy.evidence_metadata(
+            features,
+            lifecycle,
+        )
         if not lifecycle_codes:
             return DecisionOutcome(
                 decision=outcome.decision,
@@ -350,6 +363,7 @@ class DecisionEngine:
                 lifecycle_action=lifecycle_action,
                 lifecycle_reason_codes=(),
                 decision_layer_source=outcome.decision_layer_source,
+                lifecycle_policy_evidence=lifecycle_evidence,
             )
         reason_codes = _merge_reason_codes(outcome.reason_codes, lifecycle_codes)
         if lifecycle.action in {"archive_lineage", "soft_abandon"}:
@@ -362,6 +376,7 @@ class DecisionEngine:
                 lifecycle_action=lifecycle_action,
                 lifecycle_reason_codes=lifecycle_codes,
                 decision_layer_source="lifecycle_policy",
+                lifecycle_policy_evidence=lifecycle_evidence,
             )
         return DecisionOutcome(
             decision=outcome.decision,
@@ -372,6 +387,7 @@ class DecisionEngine:
             lifecycle_action=lifecycle_action,
             lifecycle_reason_codes=lifecycle_codes,
             decision_layer_source=outcome.decision_layer_source,
+            lifecycle_policy_evidence=lifecycle_evidence,
         )
 
 

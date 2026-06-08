@@ -65,6 +65,7 @@ def validate_expected_telemetry_contract(
             surface,
             problem_spec=problem_spec,
             declared_mechanisms=mechanisms,
+            include_templates=True,
         )
     )
     mechanism_probes = declared_mechanism_runtime_probes(
@@ -76,6 +77,7 @@ def validate_expected_telemetry_contract(
         surface,
         problem_spec=problem_spec,
         declared_mechanisms=mechanisms,
+        include_templates=True,
     )
     for probe in mechanism_probes:
         allowed.add(probe.field)
@@ -195,6 +197,11 @@ def _is_allowed_declared_runtime_subfield(
             return True
         if not (roles & _ACTIVATION_COMPATIBLE_CONTAINER_ROLES):
             return False
+        return _subfield_child_matches_declared_mechanism(
+            child,
+            declared_mechanisms,
+        )
+    if declared_mechanisms:
         return _subfield_child_matches_declared_mechanism(
             child,
             declared_mechanisms,

@@ -41,6 +41,9 @@ PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON = (
 LOW_VALUE_CLEAN_FORK_MATERIAL_DIFFERENCE_REASON = (
     "low_value_clean_fork_material_difference_required"
 )
+FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON = (
+    "fresh_champion_runtime_replay_followup"
+)
 
 _RESEARCH_STATES = frozenset({BranchState.EXPLORE})
 _TERMINAL_STATES = frozenset({
@@ -196,6 +199,8 @@ def branch_plateau_reroute_preferred(branch: Branch) -> bool:
 
 
 def branch_runtime_evidence_pressure_preferred(branch: Branch) -> bool:
+    if branch_fresh_runtime_replay_pending(branch):
+        return False
     if branch_is_weak_positive_priority(branch):
         return False
     if branch_plateau_gate_same_branch_candidate(branch):
@@ -411,6 +416,27 @@ def branch_has_weak_positive_followup_signal(branch: Branch) -> bool:
     )
 
 
+def branch_fresh_runtime_replay_marker(branch: Branch | None) -> Mapping[str, Any]:
+    if branch is None:
+        return {}
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    marker = summary.get("fresh_runtime_followup")
+    return marker if isinstance(marker, Mapping) else {}
+
+
+def branch_fresh_runtime_replay_pending(branch: Branch | None) -> bool:
+    marker = branch_fresh_runtime_replay_marker(branch)
+    if not marker:
+        return False
+    return (
+        bool(marker.get("fresh_runtime_pending"))
+        and str(marker.get("scheduler_marker") or "")
+        == "fresh_champion_runtime_replay_pending"
+    )
+
+
 def weak_positive_followup_not_selected_reason(branch: Branch) -> str:
     if branch.state in _TERMINAL_STATES:
         return "terminal_or_parked"
@@ -439,7 +465,7 @@ def weak_positive_followup_not_selected_reason(branch: Branch) -> str:
 
 def branch_is_weak_positive_priority(branch: Branch) -> bool:
     return (
-        branch_is_weak_positive_lineage(branch)
+        (branch_is_weak_positive_lineage(branch) or branch_fresh_runtime_replay_pending(branch))
         and not branch_runtime_evidence_clean_fork_pressure_summary(branch)
     )
 
@@ -464,6 +490,8 @@ def branch_research_priority(branch: Branch) -> int:
     status = branch_lineage_status(branch)
     if getattr(branch, "pending_retry", False):
         return 0
+    if branch_fresh_runtime_replay_pending(branch):
+        return 5
     if status in {"active_weak_positive", "restored_weak_positive"}:
         return 10
     if status == "restored_checkpoint":
@@ -593,6 +621,8 @@ def slot_for_branch(
 ]:
     if getattr(branch, "pending_retry", False):
         return "repair_diagnostic"
+    if branch_fresh_runtime_replay_pending(branch):
+        return "exploit_weak_positive"
     lineage_status = branch_lineage_status(branch)
     if lineage_status in {"active_weak_positive", "restored_weak_positive"}:
         return "exploit_weak_positive"
@@ -628,10 +658,14 @@ def slot_for_branch(
 def reason_for_branch(branch: Branch) -> str:
     if getattr(branch, "pending_retry", False):
         return "pending_retry_diagnostic_followup"
+    if branch_fresh_runtime_replay_pending(branch):
+        return FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
     slot = slot_for_branch(branch)
     status = str(getattr(branch, "branch_code_status", "") or "")
     tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
     if slot == "exploit_weak_positive":
+        if branch_fresh_runtime_replay_pending(branch):
+            return FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
         if branch_lineage_status(branch) == "restored_weak_positive":
             return "restored_weak_positive_checkpoint_followup"
         return "weak_positive_signal_followup"

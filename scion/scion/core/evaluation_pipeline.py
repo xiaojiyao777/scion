@@ -20,7 +20,7 @@ from scion.core.models import (
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
     protocol_runtime_budget_diagnostic,
-    runtime_budget_diagnostic_code,
+    runtime_budget_diagnostic_reason_codes,
 )
 from scion.core.telemetry_validation import (
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
@@ -48,6 +48,7 @@ class EvaluationRequest:
     screening_expand_count: int = 0
     validation_expand_count: int = 0
     failure_codes: tuple[str, ...] = ()
+    force_fresh_champion: bool = False
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,7 @@ class EvaluationPipeline:
                         expected_telemetry=request.expected_telemetry,
                         mechanism_changes=request.mechanism_changes,
                         protected_objectives=request.protected_objectives,
+                        force_fresh_champion=request.force_fresh_champion,
                     )
                     protocol_result = _annotate_telemetry_validation_failure(
                         protocol_result
@@ -326,10 +328,10 @@ def _annotate_telemetry_effect_zero_diagnostic(
 def _annotate_runtime_budget_diagnostic(
     result: ProtocolResult,
 ) -> ProtocolResult:
-    code = runtime_budget_diagnostic_code(result)
-    if not code:
+    codes = runtime_budget_diagnostic_reason_codes(result)
+    if not codes:
         return result
-    reason_codes = tuple(dict.fromkeys((*tuple(result.reason_codes), code)))
+    reason_codes = tuple(dict.fromkeys((*tuple(result.reason_codes), *codes)))
     exposed_summary = result.exposed_summary or ""
     suffix = format_runtime_budget_diagnostic(
         protocol_runtime_budget_diagnostic(result)
@@ -367,6 +369,7 @@ def _run_protocol_experiment(
     expected_telemetry = kwargs.pop("expected_telemetry", None)
     mechanism_changes = kwargs.pop("mechanism_changes", None)
     protected_objectives = kwargs.pop("protected_objectives", None)
+    force_fresh_champion = bool(kwargs.pop("force_fresh_champion", False))
     if _should_forward_selected_surface(
         protocol,
         "run_experiment",
@@ -391,7 +394,28 @@ def _run_protocol_experiment(
         "protected_objectives",
     ):
         kwargs["protected_objectives"] = protected_objectives
+    if force_fresh_champion:
+        return _run_with_fresh_champion_policy(protocol, kwargs)
     return protocol.run_experiment(**kwargs)
+
+
+def _run_with_fresh_champion_policy(
+    protocol: ExperimentProtocolLike,
+    kwargs: dict[str, object],
+) -> ProtocolResult:
+    config = getattr(protocol, "config", None)
+    runtime = getattr(config, "runtime", None)
+    if runtime is None or not hasattr(runtime, "champion_runtime_policy"):
+        return protocol.run_experiment(**kwargs)
+    previous = getattr(runtime, "champion_runtime_policy")
+    try:
+        setattr(runtime, "champion_runtime_policy", "fresh_always")
+        return protocol.run_experiment(**kwargs)
+    finally:
+        try:
+            setattr(runtime, "champion_runtime_policy", previous)
+        except Exception:
+            pass
 
 
 def _should_forward_selected_surface(

@@ -1,4 +1,8 @@
-"""Generic dispatch for problem-owned solver-design integration checks."""
+"""Generic dispatch for problem-owned surface-integration checks.
+
+`solver_design` is a Scion v0.4 first-class surface contract. Problem packages
+own the concrete algorithm API and integration rules behind this generic hook.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,6 +27,7 @@ def check_solver_design_integration(
     patch: PatchProposal,
     *,
     problem_spec: Any,
+    adapter: Any = None,
     selected_surface: str | None,
     champion_file_content,
 ) -> SolverDesignIntegrationResult:
@@ -36,14 +41,14 @@ def check_solver_design_integration(
         return SolverDesignIntegrationResult(True, "not a solver_design patch")
 
     try:
-        provider = resolve_contract_check_provider(problem_spec)
+        provider = resolve_contract_check_provider(problem_spec, adapter=adapter)
     except ProblemIntegrationProviderError as exc:
         return SolverDesignIntegrationResult(False, str(exc))
     if provider is None:
         return SolverDesignIntegrationResult(
             False,
-            "problem-owned solver-design integration check provider is required "
-            "for solver_design patches",
+            "problem-owned surface integration check provider is required for "
+            "solver_design patches",
         )
 
     check = getattr(provider, "check_solver_design_integration", None)
@@ -65,7 +70,7 @@ def check_solver_design_integration(
     except Exception as exc:
         return SolverDesignIntegrationResult(
             False,
-            f"problem-owned solver-design integration check failed: {exc}",
+            f"problem-owned surface integration check failed: {exc}",
         )
 
 
@@ -77,5 +82,5 @@ def _coerce_result(result: Any) -> SolverDesignIntegrationResult:
     if detail is None:
         reasons = getattr(result, "reasons", ())
         detail = "; ".join(str(reason) for reason in reasons) if reasons else ""
-    detail_text = str(detail or "problem-owned solver-design integration check")
+    detail_text = str(detail or "problem-owned surface integration check")
     return SolverDesignIntegrationResult(bool(passed), detail_text)

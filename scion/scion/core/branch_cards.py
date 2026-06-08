@@ -12,9 +12,12 @@ from scion.core.branch_cards_evidence import (
     _branch_block_codes,
     _branch_card_allowed_actions,
     _branch_card_forbidden_actions,
+    _branch_code_retention_status,
     _branch_case_outcomes,
+    _branch_evidence_retention_status,
     _branch_evidence_codes,
     _branch_evidence_summary,
+    _branch_fresh_runtime_followup,
     _branch_generic_evidence_summary,
     _branch_lifecycle_block,
     _branch_lifecycle_block_codes,
@@ -186,6 +189,24 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         branch_active_slot_release_reason(branch) if branch is not None else ""
     )
     runtime_evidence_pressure_count = _branch_runtime_evidence_pressure_count(branch)
+    fresh_runtime_followup = _branch_fresh_runtime_followup(branch)
+    fresh_runtime_pending = bool(
+        fresh_runtime_followup.get("fresh_runtime_pending")
+    )
+    fresh_runtime_required = bool(
+        fresh_runtime_followup.get("fresh_runtime_required")
+    )
+    candidate_code_retention_status = _branch_code_retention_status(branch)
+    evidence_retention_status = _branch_evidence_retention_status(branch)
+    followup_required = bool(
+        fresh_runtime_required
+        or fresh_runtime_followup.get("followup_required")
+    )
+    followup_recommended = bool(
+        followup_required
+        or weak_positive_followup
+        or fresh_runtime_followup.get("followup_recommended")
+    )
     runtime_low_confidence_advisory = (
         _runtime_evidence_prompt_advisory_projection(
             branch_runtime_evidence_clean_fork_pressure_summary(branch)
@@ -230,6 +251,16 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "branch_code_status": status,
         "lineage_status": lineage_status,
         "current_head_status": current_head_status,
+        "candidate_code_retention_status": candidate_code_retention_status,
+        "candidate_code_retained": candidate_code_retention_status
+        in {"retained", "checkpoint_retained"},
+        "evidence_retention_status": evidence_retention_status,
+        "candidate_evidence_retained": evidence_retention_status == "retained",
+        "followup_recommended": followup_recommended,
+        "followup_required": followup_required,
+        "fresh_runtime_pending": fresh_runtime_pending,
+        "fresh_runtime_required": fresh_runtime_required,
+        "fresh_runtime_followup": fresh_runtime_followup,
         "active_slot_status": (
             "active_slot"
             if counts_toward_active_slots

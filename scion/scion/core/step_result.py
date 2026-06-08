@@ -15,6 +15,7 @@ class StepResult:
         "frozen",
         "create_branch",
         "reconcile",
+        "replay",
         "skip",
         "soft_abandon",
         "stopped",
@@ -35,6 +36,7 @@ class StepResult:
         "telemetry_repairable",
         "validation_repair_required",
         "same_family_retry",
+        "fresh_runtime_replay",
         "reconcile_lifecycle",
         "scheduler_active_slot_blocked",
         "other",
@@ -44,6 +46,15 @@ class StepResult:
     failure_stage: Optional[str] = None
     failure_detail: Optional[str] = None
     failure_category: Optional[str] = None
+    protocol_stage: Optional[Literal["screening", "validation", "frozen"]] = None
+    formal_protocol_evaluated: bool = False
+    screened_experiment_effective: bool = False
+    decision_layer_source: Optional[str] = None
+    decision_engine_reason_codes: Tuple[str, ...] = ()
+    diagnostic_reason_codes: Tuple[str, ...] = ()
+    bypass_reason_codes: Tuple[str, ...] = ()
+    lifecycle_reason_codes: Tuple[str, ...] = ()
     scheduler_slot: str = ""
     scheduler_reason: str = ""
     scheduler_audit_metadata: Dict[str, Any] | None = None
+    proposal_session_ref: Dict[str, Any] | None = None

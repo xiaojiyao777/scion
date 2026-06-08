@@ -242,7 +242,13 @@ class VerificationMixin:
         retry_attempt: bool = False,
         prior_failure: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
-        ref = self.proposal_session_ref_for(branch_id)
+        cache = getattr(self, "_proposal_session_ref_cache", None)
+        if isinstance(cache, dict):
+            if branch_id not in cache:
+                cache[branch_id] = self.proposal_session_ref_for(branch_id)
+            ref = cache[branch_id]
+        else:
+            ref = self.proposal_session_ref_for(branch_id)
         if not retry_attempt:
             return ref
 

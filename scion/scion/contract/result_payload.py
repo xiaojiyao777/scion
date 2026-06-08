@@ -53,3 +53,24 @@ def build_result(checks: list[CheckResult]) -> ContractResult:
         checks=tuple(checks),
         failure_reason=first_failure,
     )
+
+
+def diagnostic_checks(result: ContractResult | None) -> tuple[dict[str, Any], ...]:
+    """Return compact passed-diagnostic contract checks for durable evidence."""
+    if result is None:
+        return ()
+    diagnostics: list[dict[str, Any]] = []
+    for check in getattr(result, "checks", ()) or ():
+        metadata = dict(getattr(check, "metadata", {}) or {})
+        if str(metadata.get("gate_action") or "") != "diagnostic":
+            continue
+        diagnostics.append(
+            {
+                "name": str(getattr(check, "name", "") or ""),
+                "passed": bool(getattr(check, "passed", False)),
+                "severity": str(getattr(check, "severity", "") or ""),
+                "detail": str(getattr(check, "detail", "") or ""),
+                "metadata": metadata,
+            }
+        )
+    return tuple(diagnostics)

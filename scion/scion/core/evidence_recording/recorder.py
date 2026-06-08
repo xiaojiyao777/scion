@@ -29,6 +29,9 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         state_provider: StateProvider | None = None,
         model_id: str | None = None,
         protocol_version: str | None = None,
+        problem_spec_hash: str | None = None,
+        split_manifest_hash: str | None = None,
+        seed_ledger_hash: str | None = None,
         family_taxonomy: Any | None = None,
     ) -> None:
         self.campaign_id = campaign_id
@@ -38,12 +41,16 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         self.state_provider = state_provider
         self.model_id = model_id
         self.protocol_version = protocol_version
+        self.problem_spec_hash = problem_spec_hash
+        self.split_manifest_hash = split_manifest_hash
+        self.seed_ledger_hash = seed_ledger_hash
         self.family_taxonomy = family_taxonomy
         self.current_status_progress: Dict[str, Any] | None = None
         self.in_flight_protocol: Dict[str, Any] | None = None
         self.last_status_result: Dict[str, Any] | None = None
         self.campaign_loop_status: Dict[str, Any] | None = None
         self.final_evidence_refs: Dict[str, Any] = {}
+        self.lineage_recording_outcomes: list[Dict[str, Any]] = []
 
     def record_step(
         self,

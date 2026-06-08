@@ -25,6 +25,7 @@ def check_feasibility(
     adapter: Optional[ProblemAdapter] = None,
     selected_surface: str | None = None,
     require_adapter_for_runtime: bool = False,
+    runtime_time_limit_sec: int | float = 30,
 ) -> CheckResult:
     """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
@@ -43,7 +44,7 @@ def check_feasibility(
             workdir=candidate_workspace,
             instance_path=canary,
             seed=42,
-            time_limit_sec=30,
+            time_limit_sec=runtime_time_limit_sec,
             registry_path=_registry_path(candidate_workspace),
             selected_surface=selected_surface,
         )

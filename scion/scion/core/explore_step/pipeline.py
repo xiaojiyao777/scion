@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, MutableMapping, Optional, Tuple
+from typing import Any, Callable, MutableMapping, Optional, Sequence, Tuple
 
 from scion.core.branch_hygiene import (
     branch_hygiene_context,
@@ -40,6 +40,7 @@ from scion.core.repeated_contract_failures import (
 from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 from scion.core.verification_call import run_verification_gate
+from scion.contract.result_payload import diagnostic_checks
 from scion.proposal.context.branch_followup import branch_current_file_sources
 
 from .common import (
@@ -56,6 +57,10 @@ from .common import (
     _proposal_failure_stage,
     _proposal_session_ref_is_agent_quality_blocked,
 )
+from .branch_lesson_usage import (
+    branch_lesson_usage_pre_code_block_reason,
+    branch_lesson_usage_requirement_metadata,
+)
 from .events import ExploreStepEventMixin
 from .material_difference import (
     material_difference_pre_code_block_reason,
@@ -67,6 +72,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ExploreStepPipeline",
+    "branch_lesson_usage_pre_code_block_reason",
+    "branch_lesson_usage_requirement_metadata",
     "material_difference_pre_code_block_reason",
     "material_difference_requirement_metadata",
 ]
@@ -108,7 +115,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     archive_failed_workspace: Callable[[str, str, int], Optional[str]]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
-        Tuple[Decision, Optional[ProtocolResult], CanaryResult],
+        Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult],
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
@@ -119,6 +126,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     update_status_progress: Callable[[dict[str, Any] | None], None] = (
         lambda _payload: None
     )
+    step_history: Sequence[StepRecord] = ()
+    decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
 
     def _block_missing_material_difference(
         self,
@@ -180,11 +189,76 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             failure_stage="proposal",
             failure_detail=detail,
             failure_category="proposal",
+            proposal_session_ref=session_ref,
+        )
+
+    def _block_missing_branch_lesson_usage(
+        self,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        h_record: HypothesisRecord,
+        *,
+        round_num: int,
+        retry_attempt: bool,
+        prior_failure: str | None,
+    ) -> StepResult | None:
+        bid = branch.branch_id
+        session_ref = self._proposal_session_ref(
+            bid,
+            retry_attempt=retry_attempt,
+            prior_failure=prior_failure,
+        )
+        detail = branch_lesson_usage_pre_code_block_reason(
+            hypothesis,
+            branch,
+            session_ref=session_ref,
+        )
+        if not detail:
+            return None
+        logger.info(
+            "Branch %s: branch_lesson_usage pre-code block: %s",
+            bid,
+            detail,
+        )
+        self.handle_failure(
+            branch,
+            FailureEvent(category="proposal", detail=detail),
+        )
+        self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+        self.record_step(
+            StepRecord(
+                round_num=round_num,
+                branch_id=bid,
+                hypothesis=hypothesis,
+                patch=None,
+                contract_passed=True,
+                verification_passed=False,
+                protocol_result=None,
+                decision=None,
+                failure_stage="proposal",
+                failure_detail=detail,
+                hypothesis_id=h_record.hypothesis_id,
+                proposal_session_ref=session_ref,
+                counts_toward_max_rounds=False,
+                attempt_kind="proposal_block",
+            )
+        )
+        return StepResult(
+            action="explore",
+            branch_id=bid,
+            reason="branch lesson usage required before code generation",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            failure_stage="proposal",
+            failure_detail=detail,
+            failure_category="proposal",
+            proposal_session_ref=session_ref,
         )
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
         bid = branch.branch_id
+        self._proposal_session_ref_cache = {}
         pending = self.pending_hypotheses.pop(bid, None)
         retry_attempt = pending is not None
         if retry_attempt:
@@ -194,6 +268,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             self.increment_rounds_since_last_promote()
 
         prior_failure: Optional[str] = None
+        h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
 
         if pending is None:
             # Expand budgets are per candidate, not per branch.
@@ -277,6 +352,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         decision=None,
                         failure_stage=failure_stage,
                         failure_detail=failure_detail,
+                        contract_diagnostics=diagnostic_checks(c_result_pending),
                         hypothesis_id=h_record.hypothesis_id,
                         proposal_session_ref=session_ref,
                         attempt_kind=(
@@ -314,9 +390,21 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                             if repeated_contract.threshold_reached
                             else ""
                         ),
+                        proposal_session_ref=session_ref,
                     )
                 )
+            h_contract_diagnostics = diagnostic_checks(c_result_pending)
             blocked = self._block_missing_material_difference(
+                branch,
+                hypothesis,
+                h_record,
+                round_num=rnum,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            if blocked is not None:
+                return self._finish_status_progress(blocked)
+            blocked = self._block_missing_branch_lesson_usage(
                 branch,
                 hypothesis,
                 h_record,
@@ -399,6 +487,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         failure_stage=failure_stage,
                         failure_detail=failure_detail,
                         failure_category=failure_category,
+                        proposal_session_ref=session_ref,
                     ),
                 )
             if h_record is None:
@@ -484,6 +573,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         decision=None,
                         failure_stage=failure_stage,
                         failure_detail=failure_detail,
+                        contract_diagnostics=diagnostic_checks(c_result),
                         hypothesis_id=h_record.hypothesis_id,
                         proposal_session_ref=session_ref,
                         attempt_kind=(
@@ -521,13 +611,25 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                             if repeated_contract.threshold_reached
                             else ""
                         ),
+                        proposal_session_ref=session_ref,
                     )
                 )
+            h_contract_diagnostics = diagnostic_checks(c_result)
 
             champion = self.get_champion()
             h_record.base_champion_version = champion.version if champion else 0
             self.hypothesis_store.save(h_record)
             blocked = self._block_missing_material_difference(
+                branch,
+                hypothesis,
+                h_record,
+                round_num=rnum,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            if blocked is not None:
+                return self._finish_status_progress(blocked)
+            blocked = self._block_missing_branch_lesson_usage(
                 branch,
                 hypothesis,
                 h_record,
@@ -672,6 +774,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_stage=failure_stage,
                     failure_detail=failure_detail,
                     failure_category=failure_category,
+                    proposal_session_ref=session_ref,
                 ),
             )
 
@@ -679,7 +782,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             branch,
             hypothesis,
             patch,
-            step_history=getattr(self, "step_history", ()),
+            step_history=self.step_history,
         )
         if not repair_patch_check.allowed:
             detail = repair_patch_check.detail
@@ -704,6 +807,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     repair_patch_check.protected_mechanism_ids
                     or repair_patch_check.proposed_mechanism_ids
                 )
+            session_ref = self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -717,11 +825,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_stage="repair_policy",
                     failure_detail=detail,
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self._proposal_session_ref(
-                        bid,
-                        retry_attempt=retry_attempt,
-                        prior_failure=prior_failure,
-                    ),
+                    proposal_session_ref=session_ref,
                     counts_toward_max_rounds=False,
                     attempt_kind=attempt_kind,
                     repair_policy_reason=(
@@ -741,6 +845,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     repair_policy_reason=(
                         repair_policy_reason or repair_patch_check.reason
                     ),
+                    proposal_session_ref=session_ref,
                 )
             )
 
@@ -758,7 +863,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             base_snapshot_path=self.branch_workspaces.get(bid),
             base_file_overrides=branch_current_file_sources(
                 branch,
-                getattr(self, "step_history", ()),
+                self.step_history,
             ),
         )
         if not p_result.passed:
@@ -796,6 +901,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     decision=None,
                     failure_stage="patch_contract",
                     failure_detail=p_result.failure_reason,
+                    contract_diagnostics=(
+                        *h_contract_diagnostics,
+                        *diagnostic_checks(p_result),
+                    ),
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
                     attempt_kind=(
@@ -830,6 +939,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         if repeated_contract.threshold_reached
                         else ""
                     ),
+                    proposal_session_ref=session_ref,
                 )
             )
 
@@ -849,6 +959,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 hypothesis_already_recorded=True,
             )
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+            session_ref = self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -862,11 +977,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_stage="workspace",
                     failure_detail="workspace setup failed",
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self._proposal_session_ref(
-                        bid,
-                        retry_attempt=retry_attempt,
-                        prior_failure=prior_failure,
-                    ),
+                    proposal_session_ref=session_ref,
                 )
             )
             return self._finish_status_progress(
@@ -875,6 +986,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     branch_id=bid,
                     reason="workspace setup failed",
                     counts_toward_max_rounds=not retry_attempt,
+                    proposal_session_ref=session_ref,
                 )
             )
 
@@ -903,6 +1015,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 FailureEvent(category="contract", detail=f"apply_patch: {exc}"),
             )
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+            session_ref = self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -916,11 +1033,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_stage="workspace",
                     failure_detail=f"apply_patch: {exc}",
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self._proposal_session_ref(
-                        bid,
-                        retry_attempt=retry_attempt,
-                        prior_failure=prior_failure,
-                    ),
+                    proposal_session_ref=session_ref,
                 )
             )
             return self._finish_status_progress(
@@ -929,6 +1042,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     branch_id=bid,
                     reason="apply_patch failed",
                     counts_toward_max_rounds=not retry_attempt,
+                    proposal_session_ref=session_ref,
                 )
             )
 
@@ -1003,9 +1117,10 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             workspace,
             hypothesis,
         )
+        finalizer_decision = decision or Decision.ABANDON
         result = self.apply_decision_and_finalize(
             branch=branch,
-            decision=decision,
+            decision=finalizer_decision,
             hypothesis=hypothesis,
             h_record=h_record,
             protocol_result=protocol_result,
@@ -1014,10 +1129,27 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             verification_result=vresult,
             action_label="explore",
         )
+        failure_stage, failure_detail = _evaluation_failure_detail(
+            protocol_result,
+            canary_result=canary_result,
+        )
+        if decision is None:
+            result.decision = None
+            result.failure_stage = failure_stage or "evaluation"
+            result.failure_detail = failure_detail or "evaluation failed"
+        provenance = self.decision_provenance_for(bid)
+        for key, value in provenance.items():
+            setattr(result, key, value)
+        session_ref = self._proposal_session_ref(
+            bid,
+            retry_attempt=retry_attempt,
+            prior_failure=prior_failure,
+        )
+        result.proposal_session_ref = session_ref
         logger.debug(
             "_run_explore_step done bid=%s decision=%s workspaces=%s",
             bid,
-            decision.value,
+            finalizer_decision.value,
             list(self.branch_workspaces.keys()),
         )
         self.record_step(
@@ -1029,19 +1161,20 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 contract_passed=True,
                 verification_passed=True,
                 protocol_result=protocol_result,
-                decision=result.decision or Decision.ABANDON,
-                failure_stage=None,
-                failure_detail=None,
+                decision=result.decision if decision is not None else None,
+                failure_stage=failure_stage,
+                failure_detail=failure_detail,
+                contract_diagnostics=(
+                    *h_contract_diagnostics,
+                    *diagnostic_checks(p_result),
+                ),
                 hypothesis_id=h_record.hypothesis_id,
                 decision_reason_codes=self.decision_reason_codes_for(
                     bid,
                     protocol_result,
                 ),
-                proposal_session_ref=self._proposal_session_ref(
-                    bid,
-                    retry_attempt=retry_attempt,
-                    prior_failure=prior_failure,
-                ),
+                **provenance,
+                proposal_session_ref=session_ref,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
@@ -1070,7 +1203,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         if is_branch_lifecycle_policy_block_detail(failure_detail):
             ids = branch_continuation_mechanism_ids(
                 branch,
-                getattr(self, "step_history", ()),
+                self.step_history,
             )
             if not ids:
                 ids = branch_repair_mechanism_ids(branch)
@@ -1192,3 +1325,20 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         except Exception:  # pragma: no cover - status cleanup must not affect result
             logger.debug("Failed to clear explore status progress", exc_info=True)
         return result
+
+
+def _evaluation_failure_detail(
+    protocol_result: ProtocolResult | None,
+    *,
+    canary_result: CanaryResult | None = None,
+) -> tuple[str | None, str | None]:
+    if protocol_result is None:
+        return None, None
+    reason_codes = {
+        str(code).lower()
+        for code in getattr(protocol_result, "reason_codes", ()) or ()
+    }
+    if "evaluation_failed" not in reason_codes:
+        return None, None
+    detail = str(getattr(canary_result, "reason", "") or "evaluation failed")
+    return "evaluation", detail

@@ -5,6 +5,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scion.runtime.audit import normalize_surface_name
+from scion.runtime.surface_telemetry import (
+    declared_runtime_field_roles as _surface_declared_runtime_field_roles,
+    declared_surface_telemetry_fields as _surface_declared_surface_telemetry_fields,
+    runtime_field_roles_for as _surface_runtime_field_roles_for,
+)
 from scion.runtime.telemetry_guard.utils import (
     _field,
     _fields_with_suffix,
@@ -64,35 +69,16 @@ def declared_surface_telemetry_fields(
     *,
     problem_spec: Any | None = None,
     declared_mechanisms: Sequence[str] = (),
+    include_templates: bool = False,
 ) -> frozenset[str]:
     """Return all runtime telemetry fields a surface exposes for guard use."""
 
-    evidence = _field(surface, "evidence")
-    fields: set[str] = set()
-    for name in (
-        "required_runtime_fields",
-        "optional_runtime_fields",
-        "activity_runtime_fields",
-        "effect_probe_runtime_fields",
-        "stage_budget_runtime_fields",
-    ):
-        fields.update(_string_list(_field(evidence, name)))
-    activation = _field(evidence, "activation_runtime_fields")
-    if isinstance(activation, Mapping):
-        for value in activation.values():
-            fields.update(_string_list(value))
-    else:
-        fields.update(_string_list(activation))
-    for telemetry in _mechanism_telemetry_values(evidence):
-        fields.update(_string_list(_field(telemetry, "activation_runtime_fields")))
-        fields.update(_string_list(_field(telemetry, "effect_probe_runtime_fields")))
-    for role_fields in declared_runtime_field_roles(
+    return _surface_declared_surface_telemetry_fields(
         surface,
         problem_spec=problem_spec,
         declared_mechanisms=declared_mechanisms,
-    ).values():
-        fields.update(role_fields)
-    return frozenset(field for field in fields if field)
+        include_templates=include_templates,
+    )
 
 
 def declared_runtime_field_roles(
@@ -100,6 +86,7 @@ def declared_runtime_field_roles(
     *,
     problem_spec: Any | None = None,
     declared_mechanisms: Sequence[str] = (),
+    include_templates: bool = False,
 ) -> dict[str, frozenset[str]]:
     """Return role -> runtime fields declared by the selected surface.
 
@@ -108,77 +95,19 @@ def declared_runtime_field_roles(
     problem field names.
     """
 
-    evidence = _field(surface, "evidence")
-    roles: dict[str, set[str]] = {}
-    _add_role_fields(
-        roles,
-        "activity",
-        _string_list(_field(evidence, "activity_runtime_fields")),
-        declared_mechanisms=declared_mechanisms,
-    )
-    activation = _field(evidence, "activation_runtime_fields")
-    _add_role_fields(
-        roles,
-        "mechanism_activation",
-        _string_list(activation),
-        declared_mechanisms=declared_mechanisms,
-    )
-    _add_role_fields(
-        roles,
-        "effect",
-        _string_list(_field(evidence, "effect_probe_runtime_fields")),
-        declared_mechanisms=declared_mechanisms,
-    )
-    _add_role_fields(
-        roles,
-        "budget",
-        _string_list(_field(evidence, "stage_budget_runtime_fields")),
-        declared_mechanisms=declared_mechanisms,
-    )
-    for telemetry in _mechanism_telemetry_values(evidence):
-        _add_role_fields(
-            roles,
-            "mechanism_activation",
-            _string_list(_field(telemetry, "activation_runtime_fields")),
-            declared_mechanisms=declared_mechanisms,
-        )
-        _add_role_fields(
-            roles,
-            "mechanism_effect",
-            _string_list(_field(telemetry, "effect_probe_runtime_fields")),
-            declared_mechanisms=declared_mechanisms,
-        )
-
-    for source in _role_mapping_sources(
-        surface=surface,
-        evidence=evidence,
+    return _surface_declared_runtime_field_roles(
+        surface,
         problem_spec=problem_spec,
-    ):
-        _merge_role_mapping(
-            roles,
-            source,
-            declared_mechanisms=declared_mechanisms,
-        )
-    return {
-        role: frozenset(fields)
-        for role, fields in sorted(roles.items())
-        if role and fields
-    }
+        declared_mechanisms=declared_mechanisms,
+        include_templates=include_templates,
+    )
 
 
 def runtime_field_roles_for(
     field: str,
     role_map: Mapping[str, Sequence[str] | frozenset[str]],
 ) -> frozenset[str]:
-    field_text = str(field or "").strip()
-    if not field_text:
-        return frozenset()
-    roles = [
-        role
-        for role, fields in role_map.items()
-        if field_text in {str(item) for item in fields}
-    ]
-    return frozenset(roles)
+    return _surface_runtime_field_roles_for(field, role_map)
 
 
 def declared_activity_runtime_fields(surface: Any | None) -> tuple[str, ...]:

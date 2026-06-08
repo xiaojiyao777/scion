@@ -13,6 +13,36 @@ from typing import Any, Dict, List, Optional
 from scion.core.models import DecisionFeatures, DecisionOutcome, WeightOptimizationResult
 
 
+def _with_screening_case_level_gate_aliases(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep legacy screening_case_* fields and explicit gate aliases in sync."""
+    aliases = (
+        ("screening_case_wins", "screening_case_level_gate_wins"),
+        ("screening_case_losses", "screening_case_level_gate_losses"),
+        ("screening_case_ties", "screening_case_level_gate_ties"),
+        ("screening_case_total", "screening_case_level_gate_total"),
+        ("screening_case_win_rate", "screening_case_level_gate_win_rate"),
+    )
+    updates: Dict[str, Any] = {}
+    for legacy, gate_alias in aliases:
+        if legacy in event and gate_alias not in event:
+            updates[gate_alias] = event[legacy]
+        elif gate_alias in event and legacy not in event:
+            updates[legacy] = event[gate_alias]
+    merged = dict(event, **updates)
+    if "screening_case_total" not in merged:
+        counts = (
+            merged.get("screening_case_wins"),
+            merged.get("screening_case_losses"),
+            merged.get("screening_case_ties"),
+        )
+        if all(count is not None for count in counts):
+            updates["screening_case_total"] = sum(int(count or 0) for count in counts)
+            updates["screening_case_level_gate_total"] = updates[
+                "screening_case_total"
+            ]
+    return dict(event, **updates) if updates else event
+
+
 class LineageRegistry:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -52,7 +82,13 @@ class LineageRegistry:
                     screening_case_wins    INTEGER,
                     screening_case_losses  INTEGER,
                     screening_case_ties    INTEGER,
+                    screening_case_total   INTEGER,
                     screening_case_win_rate REAL,
+                    screening_case_level_gate_wins INTEGER,
+                    screening_case_level_gate_losses INTEGER,
+                    screening_case_level_gate_ties INTEGER,
+                    screening_case_level_gate_total INTEGER,
+                    screening_case_level_gate_win_rate REAL,
                     screening_gate_win_rate REAL,
                     screening_pair_wins    INTEGER,
                     screening_pair_losses  INTEGER,
@@ -85,11 +121,18 @@ class LineageRegistry:
                 "prompt_tokens":     "INTEGER",
                 "completion_tokens": "INTEGER",
                 "audit_payload_json": "TEXT",
+                "contract_diagnostics_json": "TEXT",
                 "screening_win_rate_scope": "TEXT",
                 "screening_case_wins": "INTEGER",
                 "screening_case_losses": "INTEGER",
                 "screening_case_ties": "INTEGER",
+                "screening_case_total": "INTEGER",
                 "screening_case_win_rate": "REAL",
+                "screening_case_level_gate_wins": "INTEGER",
+                "screening_case_level_gate_losses": "INTEGER",
+                "screening_case_level_gate_ties": "INTEGER",
+                "screening_case_level_gate_total": "INTEGER",
+                "screening_case_level_gate_win_rate": "REAL",
                 "screening_gate_win_rate": "REAL",
                 "screening_pair_wins": "INTEGER",
                 "screening_pair_losses": "INTEGER",
@@ -252,6 +295,7 @@ class LineageRegistry:
 
     def record_event(self, event: Dict[str, Any]) -> str:
         """Insert one experiment row into experiment_events. Returns event_id."""
+        event = _with_screening_case_level_gate_aliases(event)
         if "event_id" not in event:
             event = dict(event, event_id=str(uuid.uuid4()))
         if "timestamp" not in event:
@@ -398,18 +442,44 @@ class LineageRegistry:
             ).fetchall()
             screening = conn.execute("""
                 SELECT
-                    COALESCE(SUM(screening_n_cases), 0) AS case_total,
                     COALESCE(
                         SUM(
                             COALESCE(
+                                screening_case_level_gate_total,
+                                screening_case_total,
+                                screening_n_cases
+                            )
+                        ),
+                        0
+                    ) AS case_total,
+                    COALESCE(
+                        SUM(
+                            COALESCE(
+                                screening_case_level_gate_wins,
                                 screening_case_wins,
                                 ROUND(screening_win_rate * screening_n_cases)
                             )
                         ),
                         0
                     ) AS case_wins,
-                    COALESCE(SUM(screening_case_losses), 0) AS case_losses,
-                    COALESCE(SUM(screening_case_ties), 0) AS case_ties,
+                    COALESCE(
+                        SUM(
+                            COALESCE(
+                                screening_case_level_gate_losses,
+                                screening_case_losses
+                            )
+                        ),
+                        0
+                    ) AS case_losses,
+                    COALESCE(
+                        SUM(
+                            COALESCE(
+                                screening_case_level_gate_ties,
+                                screening_case_ties
+                            )
+                        ),
+                        0
+                    ) AS case_ties,
                     COALESCE(SUM(screening_pair_wins), 0) AS pair_wins,
                     COALESCE(SUM(screening_pair_losses), 0) AS pair_losses,
                     COALESCE(SUM(screening_pair_ties), 0) AS pair_ties,
@@ -479,6 +549,11 @@ class LineageRegistry:
             "screening_case_ties": screening_case_ties,
             "screening_case_total": screening_case_total,
             "screening_case_win_rate": screening_case_win_rate,
+            "screening_case_level_gate_wins": screening_case_wins,
+            "screening_case_level_gate_losses": screening_case_losses,
+            "screening_case_level_gate_ties": screening_case_ties,
+            "screening_case_level_gate_total": screening_case_total,
+            "screening_case_level_gate_win_rate": screening_case_win_rate,
             "screening_gate_win_rate": screening_case_win_rate,
             "screening_pair_wins": screening_pair_wins,
             "screening_pair_losses": screening_pair_losses,

@@ -1,11 +1,18 @@
 """Compact cross-branch proposal-context observability counters."""
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Mapping
 
+from scion.core.explore_step.branch_lesson_usage import (
+    branch_lesson_usage_missing_block_prefix,
+    branch_lesson_usage_reason_prefixes,
+    branch_lesson_usage_requirement_diagnostic,
+    branch_lesson_usage_requirement_from_records,
+    branch_lesson_usage_requirement_satisfied,
+)
 from scion.core.models import StepRecord, mechanism_changes
-
 
 _SCHEMA_VERSION = "cross_branch_research_observability.v1"
 _POLICY = "proposal_observability_only"
@@ -77,12 +84,26 @@ def build_cross_branch_research_observability(
         scheduler_metadata=scheduler_metadata,
         branch_rows=branch_row_list,
     )
+    branch_lesson_record_count = _branch_lesson_record_count(
+        context_records=context_record_list,
+        scheduler_metadata=scheduler_metadata,
+        branch_rows=branch_row_list,
+    )
+    branch_lesson_usage_requirement_count = _branch_lesson_usage_requirement_count(
+        context_records=context_record_list,
+        scheduler_metadata=scheduler_metadata,
+        branch_rows=branch_row_list,
+    )
+    branch_lesson_usage_stats = _branch_lesson_usage_stats(
+        safe_steps=safe_steps,
+        all_steps=step_list,
+    )
     signature_groups = _signature_groups(safe_steps, branch_row_list)
     near_duplicate_count = _near_duplicate_count(signature_groups)
     saturated_signature_count = _saturated_signature_count(signature_groups)
     avoid_signature_count = saturated_signature_count
-    same_branch_refinement_allowance_count = (
-        _same_branch_refinement_allowance_count(safe_steps, scheduler_metadata)
+    same_branch_refinement_allowance_count = _same_branch_refinement_allowance_count(
+        safe_steps, scheduler_metadata
     )
     same_branch_refinement_not_selected_count = (
         _same_branch_refinement_not_selected_count(scheduler_metadata)
@@ -104,6 +125,7 @@ def build_cross_branch_research_observability(
             saturated_signature_count,
             avoid_signature_count,
             material_difference_requirement_count,
+            branch_lesson_usage_requirement_count,
             same_branch_refinement_allowance_count,
             same_branch_refinement_not_selected_count,
         )
@@ -116,9 +138,7 @@ def build_cross_branch_research_observability(
         "policy": _POLICY,
         "decision_input_policy": _DECISION_INPUT_POLICY,
         "step_history_scope": (
-            "screening_and_counted_pre_protocol_failures"
-            if step_list
-            else "none"
+            "screening_and_counted_pre_protocol_failures" if step_list else "none"
         ),
         "branch_state_scope": "branch_rows_snapshot" if branch_row_list else "none",
         "scheduler_record_scope": (
@@ -144,6 +164,49 @@ def build_cross_branch_research_observability(
         "saturated_signature_count": saturated_signature_count,
         "avoid_signature_count": avoid_signature_count,
         "material_difference_requirement_count": material_difference_requirement_count,
+        "branch_lesson_record_count": branch_lesson_record_count,
+        "branch_lesson_usage_requirement_count": (
+            branch_lesson_usage_requirement_count
+        ),
+        "branch_lesson_usage_present_count": (branch_lesson_usage_stats["present"]),
+        "branch_lesson_usage_satisfied_count": (branch_lesson_usage_stats["satisfied"]),
+        "branch_lesson_usage_present_not_semantic_count": (
+            branch_lesson_usage_stats["present_not_semantic"]
+        ),
+        "branch_lesson_usage_missing_block_count": (
+            branch_lesson_usage_stats["missing_block"]
+        ),
+        "branch_lesson_usage_metadata_only_count": (
+            branch_lesson_usage_stats["metadata_only"]
+        ),
+        "branch_lesson_usage_metadata_only_block_count": (
+            branch_lesson_usage_stats["metadata_only_block"]
+        ),
+        "branch_lesson_usage_linkage_unrecognized_count": (
+            branch_lesson_usage_stats["linkage_unrecognized"]
+        ),
+        "branch_lesson_usage_linkage_unrecognized_block_count": (
+            branch_lesson_usage_stats["linkage_unrecognized_block"]
+        ),
+        "branch_lesson_usage_semantic_mismatch_count": (
+            branch_lesson_usage_stats["semantic_mismatch"]
+        ),
+        "branch_lesson_usage_semantic_mismatch_block_count": (
+            branch_lesson_usage_stats["semantic_mismatch_block"]
+        ),
+        "borrowed_lesson_count": branch_lesson_usage_stats["borrowed"],
+        "avoided_lesson_count": branch_lesson_usage_stats["avoided"],
+        "contrasted_lesson_count": branch_lesson_usage_stats["contrasted"],
+        "preserved_same_branch_lesson_count": (branch_lesson_usage_stats["preserved"]),
+        "clean_fork_contrast_satisfied_count": (
+            branch_lesson_usage_stats["clean_fork_contrast_satisfied"]
+        ),
+        "weak_positive_transfer_count": (
+            branch_lesson_usage_stats["weak_positive_transfer"]
+        ),
+        "weak_positive_transfer_reject_count": (
+            branch_lesson_usage_stats["weak_positive_reject"]
+        ),
         "same_branch_refinement_allowance_count": (
             same_branch_refinement_allowance_count
         ),
@@ -385,11 +448,7 @@ def _same_branch_refinement_allowance_count(
     if selected:
         return selected
     return len(
-        {
-            step.branch_id
-            for step in steps
-            if _outcome_pattern(step) == "weak_positive"
-        }
+        {step.branch_id for step in steps if _outcome_pattern(step) == "weak_positive"}
     )
 
 
@@ -426,8 +485,7 @@ def _repeated_contract_reroute_count(
             branch_ids.add(step.branch_id)
     for item in metadata:
         if any(
-            _REPEATED_CONTRACT_REROUTE_REASON in str(value)
-            for value in item.values()
+            _REPEATED_CONTRACT_REROUTE_REASON in str(value) for value in item.values()
         ):
             branch_ids.add(str(item.get("branch_id") or f"metadata:{len(branch_ids)}"))
     return len(branch_ids)
@@ -453,9 +511,7 @@ def _material_difference_requirement_count(
             record_ids.add(record_id)
             continue
         digest = str(
-            record.get("record_digest")
-            or record.get("requirement_digest")
-            or ""
+            record.get("record_digest") or record.get("requirement_digest") or ""
         ).strip()
         if digest:
             fallback_digests.add(digest)
@@ -518,6 +574,449 @@ def _is_material_difference_record(record: Mapping[str, Any]) -> bool:
     if record.get("schema_version") == "material_difference_requirement.v1":
         return bool(record.get("record_id") or record.get("record_digest"))
     return False
+
+
+def _branch_lesson_record_count(
+    *,
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> int:
+    lesson_ids: set[str] = set()
+    fallback_digests: set[str] = set()
+    for record in _iter_branch_lesson_records(
+        context_records,
+        scheduler_metadata,
+        branch_rows,
+    ):
+        if not _is_branch_lesson_record(record):
+            continue
+        lesson_id = str(record.get("lesson_id") or "").strip()
+        if lesson_id:
+            lesson_ids.add(lesson_id)
+            continue
+        digest = str(record.get("record_digest") or "").strip()
+        if digest:
+            fallback_digests.add(digest)
+    return len(lesson_ids) + len(fallback_digests)
+
+
+def _branch_lesson_usage_requirement_count(
+    *,
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> int:
+    record_ids: set[str] = set()
+    fallback_digests: set[str] = set()
+    for record in _iter_branch_lesson_usage_requirement_records(
+        context_records,
+        scheduler_metadata,
+        branch_rows,
+    ):
+        if not _is_branch_lesson_usage_requirement(record):
+            continue
+        record_id = str(record.get("record_id") or "").strip()
+        if record_id:
+            record_ids.add(record_id)
+            continue
+        digest = str(record.get("record_digest") or "").strip()
+        if digest:
+            fallback_digests.add(digest)
+    return len(record_ids) + len(fallback_digests)
+
+
+def _iter_branch_lesson_usage_requirement_records(
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> Iterable[Mapping[str, Any]]:
+    for item in _iter_observability_mappings(
+        context_records,
+        scheduler_metadata,
+        branch_rows,
+    ):
+        direct = item.get("branch_lesson_usage_requirement")
+        direct_seen = False
+        if isinstance(direct, Mapping):
+            yield direct
+            direct_seen = True
+        if _is_branch_lesson_usage_requirement(item):
+            yield item
+            direct_seen = True
+
+        if not direct_seen:
+            records = item.get("branch_lesson_records") or item.get("branch_lessons")
+            derived = branch_lesson_usage_requirement_from_records(records)
+            if derived:
+                yield derived
+
+        payload = item.get("cross_branch_research_payload")
+        if isinstance(payload, Mapping):
+            direct = payload.get("branch_lesson_usage_requirement")
+            payload_direct_seen = False
+            if isinstance(direct, Mapping):
+                yield direct
+                payload_direct_seen = True
+            if not payload_direct_seen:
+                derived = branch_lesson_usage_requirement_from_records(
+                    payload.get("branch_lesson_records")
+                )
+                if derived:
+                    yield derived
+
+
+def _iter_branch_lesson_records(
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> Iterable[Mapping[str, Any]]:
+    for item in _iter_observability_mappings(
+        context_records,
+        scheduler_metadata,
+        branch_rows,
+    ):
+        if _is_branch_lesson_record(item):
+            yield item
+        for key in ("branch_lesson_records", "branch_lessons"):
+            values = item.get(key)
+            if isinstance(values, (list, tuple)):
+                for value in values:
+                    if isinstance(value, Mapping):
+                        yield value
+        payload = item.get("cross_branch_research_payload")
+        if isinstance(payload, Mapping):
+            for value in payload.get("branch_lesson_records", []) or []:
+                if isinstance(value, Mapping):
+                    yield value
+
+
+def _iter_observability_mappings(
+    context_records: Iterable[Mapping[str, Any]],
+    scheduler_metadata: Iterable[Mapping[str, Any]],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> Iterable[Mapping[str, Any]]:
+    for record in context_records:
+        if isinstance(record, Mapping):
+            yield record
+    for item in scheduler_metadata:
+        if isinstance(item, Mapping):
+            yield item
+    for row in branch_rows:
+        if isinstance(row, Mapping):
+            yield row
+            summary = row.get("branch_evidence_summary")
+            if isinstance(summary, Mapping):
+                yield summary
+            card = row.get("branch_card")
+            if isinstance(card, Mapping):
+                yield card
+
+
+def _is_branch_lesson_record(record: Mapping[str, Any]) -> bool:
+    return record.get("schema_version") == "branch_lesson.v1" and bool(
+        record.get("lesson_id") or record.get("record_digest")
+    )
+
+
+def _is_branch_lesson_usage_requirement(record: Mapping[str, Any]) -> bool:
+    if record.get("schema_version") != "branch_lesson_usage_requirement.v1":
+        return False
+    if record.get("required") is False:
+        return False
+    return bool(
+        record.get("required") is True
+        or str(record.get("record_id") or "").strip()
+        or str(record.get("record_digest") or "").strip()
+    )
+
+
+def _branch_lesson_usage_stats(
+    *,
+    safe_steps: Iterable[StepRecord],
+    all_steps: Iterable[StepRecord],
+) -> dict[str, int]:
+    counts = {
+        "present": 0,
+        "satisfied": 0,
+        "present_not_semantic": 0,
+        "missing_block": 0,
+        "metadata_only": 0,
+        "metadata_only_block": 0,
+        "linkage_unrecognized": 0,
+        "linkage_unrecognized_block": 0,
+        "semantic_mismatch": 0,
+        "semantic_mismatch_block": 0,
+        "borrowed": 0,
+        "avoided": 0,
+        "contrasted": 0,
+        "preserved": 0,
+        "clean_fork_contrast_satisfied": 0,
+        "weak_positive_transfer": 0,
+        "weak_positive_reject": 0,
+    }
+    reason_prefixes = branch_lesson_usage_reason_prefixes()
+    missing_prefix = branch_lesson_usage_missing_block_prefix()
+    for step in all_steps:
+        if _step_has_branch_lesson_missing_block(step, missing_prefix):
+            counts["missing_block"] += 1
+        if _step_has_branch_lesson_missing_block(
+            step,
+            reason_prefixes["metadata_only"],
+        ):
+            counts["metadata_only_block"] += 1
+        if _step_has_branch_lesson_missing_block(
+            step,
+            reason_prefixes["linkage_unrecognized"],
+        ):
+            counts["linkage_unrecognized_block"] += 1
+        if _step_has_branch_lesson_missing_block(
+            step,
+            reason_prefixes["semantic_mismatch"],
+        ):
+            counts["semantic_mismatch_block"] += 1
+
+    for step in safe_steps:
+        usage = getattr(step.hypothesis, "branch_lesson_usage", None)
+        if not isinstance(usage, Mapping):
+            continue
+        if _usage_mapping_present(usage):
+            counts["present"] += 1
+        counts["borrowed"] += _lesson_usage_item_count(usage.get("borrowed_lessons"))
+        counts["avoided"] += _lesson_usage_item_count(usage.get("avoided_lessons"))
+        counts["contrasted"] += _lesson_usage_item_count(
+            usage.get("contrasted_lessons")
+        )
+        counts["preserved"] += _preserved_usage_count(
+            usage.get("preserved_same_branch_lesson")
+        )
+        metadata = _step_branch_lesson_requirement_metadata(step)
+        diagnostic = "missing"
+        semantic_satisfied = False
+        if metadata:
+            diagnostic = branch_lesson_usage_requirement_diagnostic(
+                usage,
+                metadata=metadata,
+                hypothesis=step.hypothesis,
+            )
+            semantic_satisfied = diagnostic == "satisfied"
+        if semantic_satisfied:
+            counts["satisfied"] += 1
+        elif _usage_mapping_present(usage):
+            counts["present_not_semantic"] += 1
+            if diagnostic in {
+                "metadata_only",
+                "linkage_unrecognized",
+                "semantic_mismatch",
+            }:
+                counts[diagnostic] += 1
+        clean_fork_metadata = {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_fors": ["clean_fork_new_branch"],
+        }
+        if branch_lesson_usage_requirement_satisfied(
+            usage,
+            metadata=clean_fork_metadata,
+            hypothesis=step.hypothesis,
+        ):
+            counts["clean_fork_contrast_satisfied"] += 1
+        if _weak_positive_transfer_usage_present(
+            usage,
+            metadata,
+            hypothesis=step.hypothesis,
+        ):
+            counts["weak_positive_transfer"] += 1
+        elif _weak_positive_transfer_required_and_rejected(
+            usage,
+            metadata,
+            hypothesis=step.hypothesis,
+        ):
+            counts["weak_positive_reject"] += 1
+    return counts
+
+
+def _step_has_branch_lesson_missing_block(
+    step: StepRecord,
+    missing_prefix: str,
+) -> bool:
+    if missing_prefix in str(step.failure_detail or ""):
+        return True
+    ref = (
+        step.proposal_session_ref
+        if isinstance(step.proposal_session_ref, Mapping)
+        else {}
+    )
+    primary = ref.get("primary_failure") if isinstance(ref, Mapping) else {}
+    if isinstance(primary, Mapping) and any(
+        missing_prefix in str(primary.get(key) or "")
+        for key in ("code", "reason", "category", "detail")
+    ):
+        return True
+    return any(missing_prefix in str(ref.get(key) or "") for key in ref)
+
+
+def _step_branch_lesson_requirement_metadata(step: StepRecord) -> Mapping[str, Any]:
+    ref = (
+        step.proposal_session_ref
+        if isinstance(step.proposal_session_ref, Mapping)
+        else {}
+    )
+    if isinstance(ref.get("branch_lesson_usage_requirement"), Mapping):
+        return ref["branch_lesson_usage_requirement"]
+    derived = branch_lesson_usage_requirement_from_records(
+        ref.get("branch_lesson_records")
+    )
+    if derived:
+        return derived
+    payload = ref.get("cross_branch_research_payload")
+    if isinstance(payload, Mapping):
+        if isinstance(payload.get("branch_lesson_usage_requirement"), Mapping):
+            return payload["branch_lesson_usage_requirement"]
+        derived = branch_lesson_usage_requirement_from_records(
+            payload.get("branch_lesson_records")
+        )
+        if derived:
+            return derived
+    scheduler = (
+        step.scheduler_audit_metadata
+        if isinstance(step.scheduler_audit_metadata, Mapping)
+        else {}
+    )
+    if isinstance(scheduler.get("branch_lesson_usage_requirement"), Mapping):
+        return scheduler["branch_lesson_usage_requirement"]
+    derived = branch_lesson_usage_requirement_from_records(
+        scheduler.get("branch_lesson_records")
+    )
+    if derived:
+        return derived
+    return {}
+
+
+def _lesson_usage_item_count(value: Any) -> int:
+    if isinstance(value, Mapping):
+        return 1 if _usage_mapping_present(value) else 0
+    if not isinstance(value, (list, tuple)):
+        return 0
+    return sum(
+        1
+        for item in value
+        if isinstance(item, Mapping) and _usage_mapping_present(item)
+    )
+
+
+def _preserved_usage_count(value: Any) -> int:
+    if isinstance(value, Mapping):
+        return 1 if _usage_mapping_present(value) else 0
+    if not isinstance(value, (list, tuple)):
+        return 0
+    return sum(
+        1
+        for item in value
+        if isinstance(item, Mapping) and _usage_mapping_present(item)
+    )
+
+
+def _weak_positive_transfer_usage_present(
+    usage: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    *,
+    hypothesis: Any,
+) -> bool:
+    if not _borrowed_weak_positive_lesson_present(
+        usage.get("borrowed_lessons")
+    ) and not _metadata_weak_positive_transfer(metadata):
+        return False
+    transfer_metadata = dict(metadata or {})
+    transfer_metadata.update(
+        {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_fors": ["clean_fork_new_branch"],
+            "requirement_source": "weak_positive_transfer",
+        }
+    )
+    return branch_lesson_usage_requirement_satisfied(
+        usage,
+        metadata=transfer_metadata,
+        hypothesis=hypothesis,
+        allow_machine_reject=False,
+    )
+
+
+def _weak_positive_transfer_required_and_rejected(
+    usage: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    *,
+    hypothesis: Any,
+) -> bool:
+    if not _metadata_weak_positive_transfer(metadata):
+        return False
+    if not (
+        _lesson_usage_item_count(usage.get("rejected_weak_positive_lessons"))
+        or _lesson_usage_item_count(usage.get("rejected_lessons"))
+    ):
+        return False
+    transfer_metadata = dict(metadata or {})
+    transfer_metadata.update(
+        {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_fors": ["clean_fork_new_branch"],
+            "requirement_source": "weak_positive_transfer",
+        }
+    )
+    return branch_lesson_usage_requirement_satisfied(
+        usage,
+        metadata=transfer_metadata,
+        hypothesis=hypothesis,
+    )
+
+
+def _borrowed_weak_positive_lesson_present(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return _mapping_mentions_weak_positive_lesson(value)
+    if not isinstance(value, (list, tuple)):
+        return False
+    return any(
+        isinstance(item, Mapping) and _mapping_mentions_weak_positive_lesson(item)
+        for item in value
+    )
+
+
+def _mapping_mentions_weak_positive_lesson(value: Mapping[str, Any]) -> bool:
+    for key in (
+        "lesson_type",
+        "source_lesson_type",
+        "borrowed_lesson_type",
+        "borrowed_signal",
+    ):
+        token = _clean_token(value.get(key))
+        if token in {"weak_positive", "weak_positive_signal"}:
+            return True
+    return False
+
+
+def _metadata_weak_positive_transfer(value: Mapping[str, Any]) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    if _clean_token(value.get("requirement_source")) == "weak_positive_transfer":
+        return True
+    lesson_types = {
+        _clean_token(item) for item in value.get("candidate_lesson_types", []) or []
+    }
+    lesson_roles = {
+        _clean_token(item) for item in value.get("candidate_lesson_roles", []) or []
+    }
+    return "weak_positive" in lesson_types and "borrow" in lesson_roles
+
+
+def _usage_mapping_present(value: Mapping[str, Any]) -> bool:
+    return any(
+        child not in (None, "", [], {}, ())
+        for key, child in value.items()
+        if str(key).strip().lower() not in {"metadata", "audit"}
+    )
 
 
 def _row_has_repeated_contract_reroute(row: Mapping[str, Any]) -> bool:
@@ -610,18 +1109,21 @@ def _add_reason_codes_from_mapping(
 def _is_observability_reason_code(code: str) -> bool:
     upper = code.upper()
     lower = code.lower()
-    return any(
-        marker in upper
-        for marker in (
-            "CROSS_BRANCH",
-            "DUPLICATE",
-            "MATERIAL_DIFFERENCE",
-            "NOVELTY",
-            "REFINEMENT",
-            "REROUTE",
-            "SIGNATURE",
+    return (
+        any(
+            marker in upper
+            for marker in (
+                "CROSS_BRANCH",
+                "DUPLICATE",
+                "MATERIAL_DIFFERENCE",
+                "NOVELTY",
+                "REFINEMENT",
+                "REROUTE",
+                "SIGNATURE",
+            )
         )
-    ) or lower == _REPEATED_CONTRACT_REROUTE_REASON
+        or lower == _REPEATED_CONTRACT_REROUTE_REASON
+    )
 
 
 def _clean_token(value: Any) -> str:

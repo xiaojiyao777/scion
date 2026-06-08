@@ -29,6 +29,7 @@ Test checks (V3, V4) are skipped when runner is None or no test file is found.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from typing import TYPE_CHECKING, List, Optional
 
 from scion.config.problem import ProblemSpec
@@ -47,6 +48,9 @@ from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter
+
+
+_DEFAULT_RUNTIME_TIME_LIMIT_SEC = 30
 
 
 class VerificationGate:
@@ -74,6 +78,7 @@ class VerificationGate:
         allow_adapter_runtime_fallback: bool = False,
         operator_execute_signature: str | None = None,
         max_runtime_ratio: float | None = None,
+        runtime_time_limit_sec: int | float | None = None,
     ) -> None:
         self._spec = problem_spec
         self._runner = runner
@@ -91,6 +96,32 @@ class VerificationGate:
         )
         self._operator_execute_signature = operator_execute_signature
         self._max_runtime_ratio = max_runtime_ratio
+        self._runtime_time_limit_sec = _positive_int_or_default(
+            runtime_time_limit_sec,
+            _DEFAULT_RUNTIME_TIME_LIMIT_SEC,
+        )
+
+    def bind_runtime_policy(
+        self,
+        *,
+        max_runtime_ratio: float | None = None,
+        runtime_time_limit_sec: int | float | None = None,
+    ) -> None:
+        """Bind protocol-derived runtime policy to an accepted custom gate.
+
+        Production composition may receive an already-built ``VerificationGate``.
+        The gate is still campaign-owned at that point, so binding the protocol
+        runtime policy keeps V5-V9 coherent with the evidence harness instead
+        of falling back to constructor defaults.
+        """
+
+        if max_runtime_ratio is not None:
+            self._max_runtime_ratio = max_runtime_ratio
+        if runtime_time_limit_sec is not None:
+            self._runtime_time_limit_sec = _positive_int_or_default(
+                runtime_time_limit_sec,
+                self._runtime_time_limit_sec,
+            )
 
     def run(
         self,
@@ -176,7 +207,9 @@ class VerificationGate:
             adapter=self._adapter,
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
+            runtime_time_limit_sec=self._runtime_time_limit_sec,
         )
+        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -189,7 +222,9 @@ class VerificationGate:
             adapter=self._adapter,
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
+            runtime_time_limit_sec=self._runtime_time_limit_sec,
         )
+        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -202,7 +237,9 @@ class VerificationGate:
             adapter=self._adapter,
             selected_surface=surface_name,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
+            runtime_time_limit_sec=self._runtime_time_limit_sec,
         )
+        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -218,7 +255,9 @@ class VerificationGate:
             selected_surface=surface_name,
             adapter=self._adapter,
             require_adapter_for_runtime=self._require_adapter_for_runtime,
+            runtime_time_limit_sec=self._runtime_time_limit_sec,
         )
+        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -231,7 +270,10 @@ class VerificationGate:
             champion_workspace,
             max_slowdown=self._max_runtime_ratio or 5.0,
             selected_surface=surface_name,
+            timeout_sec=self._runtime_time_limit_sec,
+            strict_runtime_checks=self._strict_runtime_checks,
         )
+        r = _with_runtime_budget_metadata(r, self._runtime_time_limit_sec)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -278,6 +320,28 @@ def _runtime_config_failure(detail: str) -> CheckResult:
         detail=detail,
         elapsed_ms=0,
     )
+
+
+def _positive_int_or_default(value: int | float | None, default: int) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if numeric <= 0:
+        return default
+    return max(1, int(numeric))
+
+
+def _with_runtime_budget_metadata(
+    check: CheckResult,
+    runtime_time_limit_sec: int,
+) -> CheckResult:
+    metadata = dict(check.metadata)
+    metadata.setdefault("verification_time_limit_sec", runtime_time_limit_sec)
+    metadata.setdefault("runtime_time_limit_source", "verification_gate")
+    return replace(check, metadata=metadata)
 
 
 def _selected_surface_name(

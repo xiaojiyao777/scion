@@ -11,7 +11,9 @@ from scion.core.models import (
     DecisionRuntimeEvidenceConfidence, DecisionRuntimeEvidenceStatus,
 )
 from scion.core.repeated_contract_failures import REPEATED_CONTRACT_FAILURE_CODE
-from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_detected
+from scion.core.runtime_budget_diagnostics import (
+    runtime_budget_candidate_saturation_detected,
+)
 from scion.core.screening_visibility import runtime_confidence_for_protocol
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
@@ -221,7 +223,7 @@ class SafeFeatureExtractor:
             telemetry_guard_failed=formal_telemetry_guard_failed(protocol),
             telemetry_effect_zero_diagnostic=telemetry_effect_zero_detected(protocol),
             runtime_budget_saturation_diagnostic=(
-                runtime_budget_diagnostic_detected(protocol)
+                runtime_budget_candidate_saturation_detected(protocol)
             ),
         )
 

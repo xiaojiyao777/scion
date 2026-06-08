@@ -18,6 +18,7 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
+from scion.core.production_boundary import is_adapter_backed_production_campaign
 from scion.core.step_result import StepResult
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 
@@ -31,6 +32,46 @@ def _lookup_decision_reason_codes(
         branch_id,
         protocol_result.reason_codes if protocol_result else None,
     )
+
+
+def _lookup_decision_provenance(
+    owner: Any,
+    branch_id: str,
+) -> dict[str, Any]:
+    orchestrator = getattr(owner, "_evaluation_orchestrator", None)
+
+    def mapping(name: str) -> Any:
+        if orchestrator is not None:
+            value = getattr(orchestrator, name, None)
+            if value is not None:
+                return value
+        owner_name = f"_{name}"
+        return getattr(owner, owner_name, {})
+
+    return {
+        "decision_layer_source": mapping("decision_layer_sources").get(branch_id),
+        "decision_engine_reason_codes": tuple(
+            mapping("decision_engine_reason_codes").get(
+                branch_id,
+                (),
+            )
+        ),
+        "diagnostic_reason_codes": tuple(
+            mapping("diagnostic_reason_codes").get(
+                branch_id,
+                (),
+            )
+        ),
+        "bypass_reason_codes": tuple(
+            mapping("bypass_reason_codes").get(branch_id, ())
+        ),
+        "lifecycle_reason_codes": tuple(
+            mapping("lifecycle_reason_codes").get(
+                branch_id,
+                (),
+            )
+        ),
+    }
 
 
 def _workspace_service_for(owner: Any) -> WorkspaceLifecycleService:
@@ -148,6 +189,11 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
                 branch_id,
                 protocol_result,
             ),
+        ),
+        decision_provenance_for=getattr(
+            owner,
+            "_decision_provenance_for",
+            lambda branch_id: _lookup_decision_provenance(owner, branch_id),
         ),
         run_explore_step=getattr(
             owner,
@@ -278,6 +324,11 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
                 protocol_result,
             ),
         ),
+        decision_provenance_for=getattr(
+            owner,
+            "_decision_provenance_for",
+            lambda branch_id: _lookup_decision_provenance(owner, branch_id),
+        ),
         proposal_session_ref_for=getattr(
             owner,
             "_proposal_session_ref_for",
@@ -285,6 +336,7 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
         ),
         get_current_round=lambda: getattr(owner, "_round_num", 0),
         persist_branch_state=getattr(owner, "_persist_branch_state", lambda bid: None),
+        step_history=getattr(owner, "_step_history", ()),
     )
 
 
@@ -315,6 +367,19 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         value = getattr(owner, "_soft_abandon_streak", 0) + 1
         setattr(owner, "_soft_abandon_streak", value)
 
+    problem_runtime = getattr(owner, "_problem_runtime", None)
+    problem_spec = getattr(problem_runtime, "spec", getattr(owner, "_spec", None))
+    adapter = getattr(problem_runtime, "adapter", getattr(owner, "_adapter", None))
+    require_experiment_protocol = getattr(owner, "_require_experiment_protocol", None)
+    if require_experiment_protocol is None:
+        require_experiment_protocol = getattr(owner, "_production_campaign", None)
+    if require_experiment_protocol is None:
+        require_experiment_protocol = is_adapter_backed_production_campaign(
+            problem_spec=problem_spec,
+            adapter=adapter,
+            allow_skeleton=getattr(owner, "_allow_skeleton_mode", False),
+        )
+
     return EvaluationOrchestrator(
         branch_controller=owner._branch_ctrl,
         champion_lock=getattr(owner, "_champion_lock", nullcontext()),
@@ -328,6 +393,15 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         get_budget=lambda: owner._budget,
         decision_coordinator=owner._decision_coordinator,
         decision_reason_codes=getattr(owner, "_decision_reason_codes", {}),
+        decision_layer_sources=getattr(owner, "_decision_layer_sources", {}),
+        decision_engine_reason_codes=getattr(
+            owner,
+            "_decision_engine_reason_codes",
+            {},
+        ),
+        diagnostic_reason_codes=getattr(owner, "_diagnostic_reason_codes", {}),
+        bypass_reason_codes=getattr(owner, "_bypass_reason_codes", {}),
+        lifecycle_reason_codes=getattr(owner, "_lifecycle_reason_codes", {}),
         campaign_id=getattr(owner, "_campaign_id", ""),
         registry=getattr(owner, "_registry", None),
         materializer=getattr(owner, "_materializer", None),
@@ -345,4 +419,12 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         increment_soft_abandon_streak=increment_soft_abandon_streak,
         increment_telemetry_failed_count=increment_telemetry_failed_count,
         decision_lifecycle_actions=decision_lifecycle_actions,
+        branch_zero_win_streaks=getattr(owner, "_branch_zero_win_streaks", {}),
+        branch_telemetry_diagnostic_streaks=getattr(
+            owner,
+            "_branch_telemetry_diagnostic_streaks",
+            {},
+        ),
+        frozen_budget_ledger=getattr(owner, "_frozen_budget_ledger", None),
+        require_experiment_protocol=bool(require_experiment_protocol),
     )

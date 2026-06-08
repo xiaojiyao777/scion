@@ -91,6 +91,7 @@ class HypothesisProposal:
     expected_telemetry: Dict[str, Any] = field(default_factory=dict)
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
     material_difference: Dict[str, Any] = field(default_factory=dict)
+    branch_lesson_usage: Dict[str, Any] = field(default_factory=dict)
     mechanism_changes: Tuple[MechanismChange, ...] = ()
     schema_repair_attribution: Tuple[Dict[str, Any], ...] = ()
 
@@ -260,6 +261,7 @@ class ProtocolResult:
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
     raw_metrics_ref: str  # Internal path to full JSON metrics; public payloads redact it.
+    objective_semantics: str = "unknown"
     case_ids: Tuple[str, ...] = ()
     seed_set: Tuple[int, ...] = ()
     # Case-level feedback (screening only; empty for validation/frozen)
@@ -489,6 +491,7 @@ class DecisionOutcome:
     lifecycle_action: DecisionLifecycleAction = ""
     lifecycle_reason_codes: Tuple[str, ...] = ()
     decision_layer_source: DecisionLayerSource = "stage_decision"
+    lifecycle_policy_evidence: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.stage_decision is None:
@@ -661,13 +664,16 @@ class StepRecord:
         'patch_contract'      — patch failed ContractGate
         'workspace'           — workspace setup / apply_patch failed
         'verification'        — VerificationGate failed (light or heavy)
+        'evaluation'          — Protocol/evaluation failed before DecisionEngine
         'screening'           — experiment returned a non-promote result
         None                  — no failure (reached _apply_decision_and_finalize)
 
     decision: None means the step did not reach the Decision Engine (early failure).
               Only set to a real Decision value when the Decision Engine actually ran.
     hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
-    decision_reason_codes: reason codes from the Decision Engine outcome.
+    decision_reason_codes: backward-compatible outcome reason-code union.
+                           Prefer the structured provenance fields below for
+                           source-aware consumers.
     """
     round_num: int
     branch_id: str
@@ -683,7 +689,13 @@ class StepRecord:
     code_archive_ref: Optional[str] = None  # 归档目录路径
     cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
     hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
-    decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)
+    decision_reason_codes: Optional[Tuple[str, ...]] = None  # Compatibility outcome reason-code union (T04/T05)
+    decision_layer_source: Optional[str] = None
+    decision_engine_reason_codes: Tuple[str, ...] = ()
+    diagnostic_reason_codes: Tuple[str, ...] = ()
+    bypass_reason_codes: Tuple[str, ...] = ()
+    lifecycle_reason_codes: Tuple[str, ...] = ()
+    contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
     counts_toward_max_rounds: bool = True
     attempt_kind: str = "screening"

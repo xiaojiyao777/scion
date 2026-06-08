@@ -24,6 +24,8 @@ def check_perf(
     *,
     max_slowdown: float = _DEFAULT_MAX_SLOWDOWN,
     selected_surface: str | None = None,
+    timeout_sec: int | float | None = None,
+    strict_runtime_checks: bool = False,
 ) -> CheckResult:
     """V9_perf_guard: candidate solve time must stay within configured slowdown."""
     t0 = time.monotonic_ns()
@@ -32,15 +34,33 @@ def check_perf(
     perf_case = os.environ.get("SCION_PERF_GUARD_CASE") or problem_spec.canary_case_path
     perf_case = resolve_problem_path(problem_spec, perf_case)
     if not perf_case:
-        return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
+        return _invalid_comparison(
+            strict_runtime_checks,
+            "skipped: no canary_case_path configured",
+            t0,
+            metadata={"comparison_valid": False},
+        )
 
     if not os.path.isfile(perf_case):
-        return _cr(True, "heavy", f"skipped: perf case not found: {perf_case}", t0)
+        return _invalid_comparison(
+            strict_runtime_checks,
+            f"skipped: perf case not found: {perf_case}",
+            t0,
+            metadata={"comparison_valid": False, "case_path": perf_case},
+        )
 
     if not champion_workspace or not os.path.isdir(champion_workspace):
-        return _cr(True, "heavy", "skipped: champion workspace not available", t0)
+        return _invalid_comparison(
+            strict_runtime_checks,
+            "skipped: champion workspace not available",
+            t0,
+            metadata={
+                "comparison_valid": False,
+                "champion_error_category": "workspace_unavailable",
+            },
+        )
 
-    timeout_sec = int(os.environ.get("SCION_PERF_GUARD_TIMEOUT", str(_DEFAULT_PERF_TIMEOUT_SEC)))
+    timeout_sec = _timeout_sec(timeout_sec)
 
     def _run(workdir: str) -> dict[str, object]:
         """Return structured runtime facts for evidence."""
@@ -99,6 +119,7 @@ def check_perf(
             "champion_ms": None,
             "ratio": None,
             "limit_ratio": limit_ratio,
+            "comparison_valid": False,
             "candidate_timeout": bool(cand["timeout"]),
             "champion_timeout": False,
             "candidate_error_category": cand["error_category"],
@@ -123,17 +144,50 @@ def check_perf(
             "champion_ms": champ["elapsed_ms"],
             "ratio": None,
             "limit_ratio": limit_ratio,
+            "comparison_valid": False,
             "candidate_timeout": bool(cand["timeout"]),
             "champion_timeout": bool(champ["timeout"]),
             "candidate_error_category": cand["error_category"],
             "champion_error_category": champ["error_category"],
         }
-        return _cr(True, "heavy", "skipped: champion solver run failed", t0, metadata=metadata)
+        detail = (
+            "skipped: champion solver run failed"
+            if not strict_runtime_checks
+            else "champion solver run failed; performance comparison invalid"
+        )
+        return _cr(
+            not strict_runtime_checks,
+            "heavy",
+            detail,
+            t0,
+            metadata=metadata,
+        )
 
     cand_ms = int(cand["elapsed_ms"] or 0)
     champ_ms = int(champ["elapsed_ms"] or 0)
     if champ_ms == 0:
-        return _cr(True, "heavy", "skipped: champion time=0ms (degenerate)", t0)
+        return _invalid_comparison(
+            strict_runtime_checks,
+            (
+                "skipped: champion time=0ms (degenerate)"
+                if not strict_runtime_checks
+                else "champion time=0ms; performance comparison invalid"
+            ),
+            t0,
+            metadata={
+                "case_id": case_id,
+                "timeout_sec": timeout_sec,
+                "candidate_ms": cand_ms,
+                "champion_ms": champ_ms,
+                "ratio": None,
+                "limit_ratio": limit_ratio,
+                "comparison_valid": False,
+                "candidate_timeout": bool(cand["timeout"]),
+                "champion_timeout": bool(champ["timeout"]),
+                "candidate_error_category": cand["error_category"],
+                "champion_error_category": "zero_runtime",
+            },
+        )
 
     ratio = cand_ms / champ_ms
     metadata = {
@@ -143,6 +197,7 @@ def check_perf(
         "champion_ms": champ_ms,
         "ratio": ratio,
         "limit_ratio": limit_ratio,
+        "comparison_valid": True,
         "candidate_timeout": bool(cand["timeout"]),
         "champion_timeout": bool(champ["timeout"]),
         "candidate_error_category": cand["error_category"],
@@ -157,6 +212,34 @@ def check_perf(
     return _cr(
         False, "heavy",
         f"too slow: {detail} (limit={limit_ratio:g}x)",
+        t0,
+        metadata=metadata,
+    )
+
+
+def _timeout_sec(value: int | float | None) -> int:
+    if isinstance(value, bool) or value is None:
+        value = os.environ.get("SCION_PERF_GUARD_TIMEOUT", _DEFAULT_PERF_TIMEOUT_SEC)
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        numeric = _DEFAULT_PERF_TIMEOUT_SEC
+    if numeric <= 0:
+        numeric = _DEFAULT_PERF_TIMEOUT_SEC
+    return max(1, int(numeric))
+
+
+def _invalid_comparison(
+    strict_runtime_checks: bool,
+    detail: str,
+    t0: int,
+    *,
+    metadata: dict[str, object] | None = None,
+) -> CheckResult:
+    return _cr(
+        not strict_runtime_checks,
+        "heavy",
+        detail,
         t0,
         metadata=metadata,
     )

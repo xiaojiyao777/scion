@@ -13,8 +13,18 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     forbidden = ",".join(_card_list(context.get("forbidden_next_actions"))) or "none"
     mechanism_ids = ",".join(_card_list(context.get("mechanism_ids"))) or "none"
     evidence = _format_evidence_summary(_card_mapping(context.get("generic_evidence_summary")))
-    winners = _format_case_outcomes(_card_mapping_list(context.get("case_level_winners")))
-    losses = _format_case_outcomes(_card_mapping_list(context.get("case_level_losses")))
+    positive_cases = _format_case_outcomes(
+        _card_mapping_list(
+            context.get("case_level_positive_cases")
+            or context.get("case_level_winners")
+        )
+    )
+    negative_cases = _format_case_outcomes(
+        _card_mapping_list(
+            context.get("case_level_negative_cases")
+            or context.get("case_level_losses")
+        )
+    )
     activation = _format_phase_activation_summary(
         _card_mapping(context.get("phase_activation_summary"))
     )
@@ -31,6 +41,9 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
     runtime_pressure_count = _optional_int(
         context.get("runtime_evidence_pressure_count")
     )
+    code_retention = context.get("candidate_code_retention_status") or "unknown"
+    evidence_retention = context.get("evidence_retention_status") or "unknown"
+    fresh_runtime_followup = _card_mapping(context.get("fresh_runtime_followup"))
     why_not_promoted = (
         ",".join(_card_list(context.get("why_not_promoted_reason_codes"))) or "none"
     )
@@ -78,6 +91,13 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         optional_parts.append(
             f"runtime_evidence_pressure_count={runtime_pressure_count}"
         )
+    if fresh_runtime_followup:
+        trigger = fresh_runtime_followup.get("trigger") or "fresh_runtime_required"
+        policy = fresh_runtime_followup.get("followup_policy") or "fresh_runtime"
+        optional_parts.append(
+            "fresh_runtime_followup="
+            f"{_compact_card_value(trigger)}:{_compact_card_value(policy)}"
+        )
     runtime_advisory = _card_mapping(
         context.get("runtime_evidence_low_confidence_advisory")
         or context.get("runtime_evidence_clean_fork_guidance")
@@ -99,6 +119,16 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         f"mechanism_ids={mechanism_ids} "
         f"lineage_status={context.get('lineage_status') or 'unknown'} "
         f"current_head_status={context.get('current_head_status') or 'unknown'} "
+        f"candidate_code_retention={code_retention} "
+        f"evidence_retention={evidence_retention} "
+        "followup_recommended="
+        f"{str(bool(context.get('followup_recommended'))).lower()} "
+        "followup_required="
+        f"{str(bool(context.get('followup_required'))).lower()} "
+        "fresh_runtime_pending="
+        f"{str(bool(context.get('fresh_runtime_pending'))).lower()} "
+        "fresh_runtime_required="
+        f"{str(bool(context.get('fresh_runtime_required'))).lower()} "
         f"best_checkpoint_status={context.get('best_checkpoint_status') or 'none'} "
         f"best_quality_checkpoint_id={context.get('best_quality_checkpoint_id') or 'none'} "
         f"last_valid_checkpoint_id={context.get('last_valid_checkpoint_id') or 'none'} "
@@ -109,8 +139,8 @@ def branch_prompt_card_from_context(context: Mapping[str, Any]) -> str:
         "lineage_retained_checkpoint="
         f"{str(bool(context.get('lineage_retained_checkpoint'))).lower()} "
         f"generic_evidence_summary={evidence} "
-        f"case_level_winners={winners} "
-        f"case_level_losses={losses} "
+        f"case_level_positive_cases={positive_cases} "
+        f"case_level_negative_cases={negative_cases} "
         f"phase_activation_summary={activation} "
         f"runtime_evidence_confidence={runtime_confidence} "
         f"why_not_promoted_reason_codes={why_not_promoted} "
@@ -162,6 +192,9 @@ def _format_evidence_summary(summary: Mapping[str, Any]) -> str:
         reason = exclusion.get("reason") or exclusion.get("runtime_confidence")
         if reason:
             parts.append(f"runtime_aggregate_excluded:{reason}")
+    if summary.get("fresh_runtime_pending"):
+        trigger = summary.get("fresh_runtime_trigger") or "fresh_runtime_required"
+        parts.append(f"fresh_runtime_pending:{trigger}")
     return ",".join(parts)
 
 

@@ -451,6 +451,75 @@ class BranchLifecyclePolicy:
             reason_codes=(reason, *diagnostic_reasons),
         )
 
+    def evidence_metadata(
+        self,
+        features: DecisionFeatures,
+        decision: BranchLifecycleDecision,
+    ) -> dict[str, object]:
+        """Return non-decisional evidence explaining lifecycle thresholds/counters."""
+        return {
+            "schema": "scion.branch_lifecycle_policy_evidence.v1",
+            "action": decision.action,
+            "reason_codes": list(decision.reason_codes),
+            "thresholds": {
+                "low_win_rate_threshold": self.low_win_rate_threshold,
+                "zero_win_streak_limit": self.zero_win_streak_limit,
+                "no_effect_followup_limit": self.no_effect_followup_limit,
+                "marginal_no_effect_streak_limit": (
+                    self.marginal_no_effect_streak_limit
+                ),
+                "repeated_signal_signature_limit": (
+                    self.repeated_signal_signature_limit
+                ),
+                "rollback_budget_limit": self.rollback_budget_limit,
+                "soft_runtime_ratio_threshold": self.soft_runtime_ratio_threshold,
+                "high_runtime_regression_rate": self.high_runtime_regression_rate,
+                "telemetry_diagnostic_streak_limit": (
+                    self.telemetry_diagnostic_streak_limit
+                ),
+                "diagnostic_zero_win_streak_limit": (
+                    self.diagnostic_zero_win_streak_limit
+                ),
+            },
+            "counters": {
+                "input_zero_win_streak": int(
+                    getattr(features, "lifecycle_zero_win_streak", 0) or 0
+                ),
+                "next_zero_win_streak": decision.next_zero_win_streak,
+                "input_telemetry_diagnostic_streak": int(
+                    getattr(features, "lifecycle_telemetry_diagnostic_streak", 0)
+                    or 0
+                ),
+                "next_telemetry_diagnostic_streak": (
+                    decision.next_telemetry_diagnostic_streak
+                ),
+                "input_marginal_no_effect_streak": int(
+                    getattr(features, "lifecycle_marginal_no_effect_streak", 0)
+                    or 0
+                ),
+                "next_marginal_no_effect_streak": (
+                    decision.next_marginal_no_effect_streak
+                ),
+                "input_no_effect_diagnostic_followups": int(
+                    getattr(features, "lifecycle_no_effect_diagnostic_followups", 0)
+                    or 0
+                ),
+                "next_no_effect_diagnostic_followups": (
+                    decision.next_no_effect_diagnostic_followups
+                ),
+                "input_signal_repeat_count": int(
+                    getattr(features, "lifecycle_previous_signal_repeat_count", 0)
+                    or 0
+                ),
+                "next_signal_repeat_count": (
+                    decision.next_signal_signature_repeat_count
+                ),
+                "rollback_count": int(
+                    getattr(features, "lifecycle_rollback_count", 0) or 0
+                ),
+            },
+        }
+
     def _decide_telemetry_diagnostic(
         self,
         features: DecisionFeatures,

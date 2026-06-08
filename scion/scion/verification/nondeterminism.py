@@ -52,6 +52,7 @@ def check_nondeterminism(
     selected_surface: str | None = None,
     adapter: ProblemAdapter | None = None,
     require_adapter_for_runtime: bool = False,
+    runtime_time_limit_sec: int | float = 30,
 ) -> CheckResult:
     """V8_nondeterminism: two same-seed runs must produce equivalent output."""
     t0 = time.monotonic_ns()
@@ -73,7 +74,7 @@ def check_nondeterminism(
                 workdir=candidate_workspace,
                 instance_path=canary,
                 seed=_CANARY_SEED,
-                time_limit_sec=30,
+                time_limit_sec=runtime_time_limit_sec,
                 registry_path=reg,
                 selected_surface=selected_surface,
             )

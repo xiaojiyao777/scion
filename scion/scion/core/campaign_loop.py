@@ -5,7 +5,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from scion.core.branch_repair_policy import repair_attempt_key_label
 from scion.core.run_validity import failure_category_for_run_validity
@@ -32,9 +32,11 @@ class CampaignLoop:
     terminalize_active_branches: Callable[[str], None]
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
+    run_fresh_runtime_replay_drain_step: Callable[[], StepResult] | None = None
     proposal_quality_loop_limit: int | None = None
     proposal_attempt_limit: int | None = None
     telemetry_repair_attempt_limit: int | None = None
+    fresh_runtime_replay_drain_limit: int | None = None
     get_proposal_attempts: Callable[[], int] | None = None
 
     def run(self, max_rounds: int = 1000) -> None:
@@ -54,6 +56,13 @@ class CampaignLoop:
         branch_lifecycle_policy_blocks = 0
         reconcile_lifecycle_steps = 0
         scheduler_active_slot_blocked_attempts = 0
+        fresh_runtime_replay_drain_attempts = 0
+        fresh_runtime_replay_drain_executed = 0
+        fresh_runtime_replay_drain_skipped = 0
+        fresh_runtime_replay_drain_stop_reason = ""
+        fresh_runtime_replay_drain_last_metadata: dict[str, Any] = {}
+        fresh_runtime_replay_drain_accepted_metadata: dict[str, Any] = {}
+        fresh_runtime_replay_drain_final_metadata: dict[str, Any] = {}
         formal_screened_candidates = 0
         protocol_evaluated_candidates = 0
         quality_block_ledger: list[dict[str, Any]] = []
@@ -82,6 +91,10 @@ class CampaignLoop:
         reconcile_lifecycle_step_limit = requested_rounds + 4
         scheduler_active_slot_blocked_attempt_limit = (
             _scheduler_active_slot_blocked_attempt_limit(requested_rounds)
+        )
+        fresh_runtime_replay_drain_limit = _fresh_runtime_replay_drain_limit(
+            requested_rounds,
+            configured=self.fresh_runtime_replay_drain_limit,
         )
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  Ordinary
@@ -159,6 +172,28 @@ class CampaignLoop:
                 ),
                 scheduler_active_slot_blocked_attempt_limit=(
                     scheduler_active_slot_blocked_attempt_limit
+                ),
+                fresh_runtime_replay_drain_attempts=(
+                    fresh_runtime_replay_drain_attempts
+                ),
+                fresh_runtime_replay_drain_executed=(
+                    fresh_runtime_replay_drain_executed
+                ),
+                fresh_runtime_replay_drain_skipped=(
+                    fresh_runtime_replay_drain_skipped
+                ),
+                fresh_runtime_replay_drain_limit=fresh_runtime_replay_drain_limit,
+                fresh_runtime_replay_drain_stop_reason=(
+                    fresh_runtime_replay_drain_stop_reason
+                ),
+                fresh_runtime_replay_drain_last_metadata=(
+                    fresh_runtime_replay_drain_last_metadata
+                ),
+                fresh_runtime_replay_drain_accepted_metadata=(
+                    fresh_runtime_replay_drain_accepted_metadata
+                ),
+                fresh_runtime_replay_drain_final_metadata=(
+                    fresh_runtime_replay_drain_final_metadata
                 ),
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
@@ -338,6 +373,70 @@ class CampaignLoop:
             self.run_stagnation_check()
             self.check_soft_stagnation()
         if final_reason is None and counted_rounds >= requested_rounds:
+            drain_step = self.run_fresh_runtime_replay_drain_step
+            if drain_step is not None:
+                while (
+                    fresh_runtime_replay_drain_executed
+                    < fresh_runtime_replay_drain_limit
+                ):
+                    self.drain_weight_opt_events()
+                    if self.should_stop():
+                        fresh_runtime_replay_drain_stop_reason = (
+                            self.get_last_stop_reason()
+                            or "termination condition met"
+                        )
+                        break
+                    circuit_breaker = self.get_circuit_breaker()
+                    if circuit_breaker.is_tripped:
+                        fresh_runtime_replay_drain_stop_reason = "circuit_breaker"
+                        break
+                    fresh_runtime_replay_drain_attempts += 1
+                    self.write_status(loop_status=loop_status())
+                    result = drain_step()
+                    if not _is_fresh_runtime_replay_drain_result(result):
+                        fresh_runtime_replay_drain_skipped += 1
+                        fresh_runtime_replay_drain_stop_reason = (
+                            "no_fresh_runtime_replay_pending"
+                        )
+                        fresh_runtime_replay_drain_final_metadata = (
+                            _fresh_runtime_replay_drain_result_metadata(result)
+                        )
+                        fresh_runtime_replay_drain_last_metadata = dict(
+                            fresh_runtime_replay_drain_final_metadata
+                        )
+                        break
+                    fresh_runtime_replay_drain_executed += 1
+                    fresh_runtime_replay_drain_accepted_metadata = (
+                        _fresh_runtime_replay_drain_result_metadata(result)
+                    )
+                    fresh_runtime_replay_drain_final_metadata = dict(
+                        fresh_runtime_replay_drain_accepted_metadata
+                    )
+                    fresh_runtime_replay_drain_last_metadata = dict(
+                        fresh_runtime_replay_drain_accepted_metadata
+                    )
+                    self.write_status(
+                        last_result=result,
+                        loop_status=loop_status(),
+                    )
+                    if result.stopped:
+                        fresh_runtime_replay_drain_stop_reason = (
+                            result.reason or "fresh_runtime_replay_stopped"
+                        )
+                        break
+                else:
+                    fresh_runtime_replay_drain_stop_reason = (
+                        "fresh_runtime_replay_drain_cap_exhausted"
+                    )
+                    fresh_runtime_replay_drain_final_metadata = {
+                        **fresh_runtime_replay_drain_final_metadata,
+                        "cap_exhausted": True,
+                        "stopped_reason": fresh_runtime_replay_drain_stop_reason,
+                    }
+                    fresh_runtime_replay_drain_last_metadata = dict(
+                        fresh_runtime_replay_drain_final_metadata
+                    )
+        if final_reason is None and counted_rounds >= requested_rounds:
             final_reason = "max_rounds_exhausted"
         elif final_reason is None and counted_rounds == 0:
             final_reason = "no_effective_round_loop"
@@ -398,6 +497,63 @@ def _attempt_kind(result: StepResult) -> str:
     return "proposal_block"
 
 
+def _is_fresh_runtime_replay_drain_result(result: StepResult) -> bool:
+    if bool(getattr(result, "counts_toward_max_rounds", True)):
+        return False
+    if _attempt_kind(result) == "fresh_runtime_replay":
+        return True
+    return (
+        str(getattr(result, "action", "") or "") == "replay"
+        and _scheduler_action_for_result(result) == "replay_existing"
+    )
+
+
+def _scheduler_action_for_result(result: StepResult) -> str:
+    metadata = getattr(result, "scheduler_audit_metadata", None) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return str(
+        metadata.get("pre_finalizer_scheduler_action")
+        or metadata.get("scheduler_action")
+        or ""
+    )
+
+
+def _fresh_runtime_replay_drain_result_metadata(
+    result: StepResult,
+) -> dict[str, Any]:
+    metadata = getattr(result, "scheduler_audit_metadata", None) or {}
+    replay_metadata = (
+        metadata.get("fresh_runtime_replay")
+        if isinstance(metadata, dict)
+        else None
+    )
+    return {
+        "schema_version": "fresh_runtime_replay_drain_result.v1",
+        "branch_id": getattr(result, "branch_id", None),
+        "action": str(getattr(result, "action", "") or ""),
+        "attempt_kind": _attempt_kind(result),
+        "counts_toward_max_rounds": bool(
+            getattr(result, "counts_toward_max_rounds", True)
+        ),
+        "scheduler_action": _scheduler_action_for_result(result),
+        "scheduler_slot": str(getattr(result, "scheduler_slot", "") or ""),
+        "scheduler_reason": str(getattr(result, "scheduler_reason", "") or ""),
+        "reason": str(getattr(result, "reason", "") or ""),
+        "failure_stage": getattr(result, "failure_stage", None),
+        "failure_category": getattr(result, "failure_category", None),
+        "failure_detail": (
+            str(getattr(result, "failure_detail", ""))[:1000]
+            if getattr(result, "failure_detail", None)
+            else None
+        ),
+        "accepted_for_drain": _is_fresh_runtime_replay_drain_result(result),
+        "fresh_runtime_replay": (
+            dict(replay_metadata) if isinstance(replay_metadata, dict) else {}
+        ),
+    }
+
+
 def _is_scheduler_active_slot_blocked(result: StepResult) -> bool:
     if str(getattr(result, "action", "") or "") != "skip":
         return False
@@ -413,6 +569,11 @@ def _is_scheduler_active_slot_blocked(result: StepResult) -> bool:
 
 def _protocol_stage_for_result(result: StepResult) -> str:
     """Best-effort protocol stage classification for loop-only accounting."""
+    explicit_stage = str(getattr(result, "protocol_stage", "") or "")
+    if explicit_stage in {"screening", "validation", "frozen"}:
+        if bool(getattr(result, "formal_protocol_evaluated", False)):
+            return explicit_stage
+        return ""
     raw_kind = str(getattr(result, "attempt_kind", "") or "")
     action = str(getattr(result, "action", "") or "")
     if (
@@ -432,6 +593,11 @@ def _protocol_stage_for_result(result: StepResult) -> str:
 
 
 def _is_formal_screened_candidate_result(result: StepResult, stage: str) -> bool:
+    explicit_stage = str(getattr(result, "protocol_stage", "") or "")
+    if explicit_stage:
+        return stage == "screening" and bool(
+            getattr(result, "screened_experiment_effective", False)
+        )
     raw_kind = str(getattr(result, "attempt_kind", "") or "")
     return (
         stage == "screening"
@@ -590,6 +756,25 @@ def _scheduler_active_slot_blocked_attempt_limit(requested_rounds: int) -> int:
     return max(2, min(3, max(1, int(requested_rounds))))
 
 
+def _fresh_runtime_replay_drain_limit(
+    requested_rounds: int,
+    *,
+    configured: int | None,
+) -> int:
+    if configured is not None:
+        return max(1, int(configured))
+    raw = os.environ.get("SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_FRESH_RUNTIME_REPLAY_DRAIN_LIMIT=%r",
+                raw,
+            )
+    return max(1, min(4, max(1, int(requested_rounds))))
+
+
 def _initial_proposal_attempts(
     getter: Callable[[], int] | None,
     *,
@@ -602,6 +787,87 @@ def _initial_proposal_attempts(
     except Exception as exc:  # pragma: no cover - defensive status path
         logger.debug("Failed to read initial proposal attempt count: %s", exc)
         return max(0, int(fallback))
+
+
+def _fresh_runtime_replay_closure_status(result_metadata: Mapping[str, Any]) -> str:
+    replay = result_metadata.get("fresh_runtime_replay")
+    if isinstance(replay, Mapping):
+        closure_status = str(replay.get("closure_status") or replay.get("status") or "")
+        if closure_status:
+            return closure_status
+    failure_stage = str(result_metadata.get("failure_stage") or "")
+    if failure_stage:
+        return failure_stage
+    return ""
+
+
+def _fresh_runtime_replay_blocked_count(result_metadata: Mapping[str, Any]) -> int:
+    if not result_metadata:
+        return 0
+    closure_status = _fresh_runtime_replay_closure_status(result_metadata)
+    if closure_status.startswith("blocked_"):
+        return 1
+    return 0
+
+
+def _fresh_runtime_replay_unresolved_closures(
+    result_metadata: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    if _fresh_runtime_replay_blocked_count(result_metadata) == 0:
+        return []
+    replay = result_metadata.get("fresh_runtime_replay")
+    replay_mapping = replay if isinstance(replay, Mapping) else {}
+    closure_status = _fresh_runtime_replay_closure_status(result_metadata)
+    return [
+        {
+            "branch_id": result_metadata.get("branch_id"),
+            "closure_status": closure_status or "failed",
+            "detail": (
+                replay_mapping.get("detail")
+                or result_metadata.get("failure_detail")
+                or result_metadata.get("reason")
+                or ""
+            ),
+            "attempt_kind": result_metadata.get("attempt_kind"),
+            "scheduler_reason": result_metadata.get("scheduler_reason"),
+        }
+    ]
+
+
+def _fresh_runtime_replay_drain_status(
+    *,
+    attempts: int,
+    executed: int,
+    skipped: int,
+    stopped_reason: str,
+    accepted_replay_last_result: Mapping[str, Any],
+    blocked_count: int,
+) -> str:
+    if executed > 0:
+        if blocked_count > 0:
+            return "selected_blocked"
+        closure_status = _fresh_runtime_replay_closure_status(
+            accepted_replay_last_result
+        )
+        if closure_status in {
+            "fresh_evidence_recorded",
+            "closed",
+            "complete",
+            "completed",
+            "succeeded",
+            "success",
+        }:
+            return "selected_succeeded"
+        if accepted_replay_last_result.get("failure_stage") or (
+            accepted_replay_last_result.get("failure_detail")
+        ):
+            return "selected_failed"
+        return "selected_executed"
+    if skipped > 0 or str(stopped_reason or "") == "no_fresh_runtime_replay_pending":
+        return "not_selected_no_pending"
+    if attempts > 0:
+        return "not_selected"
+    return "not_started"
 
 
 def _campaign_loop_status(
@@ -623,6 +889,14 @@ def _campaign_loop_status(
     reconcile_lifecycle_step_limit: int,
     scheduler_active_slot_blocked_attempts: int,
     scheduler_active_slot_blocked_attempt_limit: int,
+    fresh_runtime_replay_drain_attempts: int,
+    fresh_runtime_replay_drain_executed: int,
+    fresh_runtime_replay_drain_skipped: int,
+    fresh_runtime_replay_drain_limit: int,
+    fresh_runtime_replay_drain_stop_reason: str,
+    fresh_runtime_replay_drain_last_metadata: dict[str, Any],
+    fresh_runtime_replay_drain_accepted_metadata: dict[str, Any],
+    fresh_runtime_replay_drain_final_metadata: dict[str, Any],
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
@@ -644,6 +918,27 @@ def _campaign_loop_status(
     branch_lifecycle_blocks = max(0, int(branch_lifecycle_policy_blocks))
     reconcile_steps = max(0, int(reconcile_lifecycle_steps))
     active_slot_blocks = max(0, int(scheduler_active_slot_blocked_attempts))
+    fresh_replay_drain_attempts = max(0, int(fresh_runtime_replay_drain_attempts))
+    fresh_replay_drain_executed = max(0, int(fresh_runtime_replay_drain_executed))
+    fresh_replay_drain_skipped = max(0, int(fresh_runtime_replay_drain_skipped))
+    fresh_replay_drain_limit = max(1, int(fresh_runtime_replay_drain_limit))
+    accepted_replay_last_result = dict(fresh_runtime_replay_drain_accepted_metadata)
+    final_attempt_last_result = dict(fresh_runtime_replay_drain_final_metadata)
+    legacy_last_result = dict(fresh_runtime_replay_drain_last_metadata)
+    fresh_replay_blocked_count = _fresh_runtime_replay_blocked_count(
+        accepted_replay_last_result
+    )
+    fresh_replay_unresolved_closures = _fresh_runtime_replay_unresolved_closures(
+        accepted_replay_last_result
+    )
+    fresh_replay_drain_status = _fresh_runtime_replay_drain_status(
+        attempts=fresh_replay_drain_attempts,
+        executed=fresh_replay_drain_executed,
+        skipped=fresh_replay_drain_skipped,
+        stopped_reason=fresh_runtime_replay_drain_stop_reason,
+        accepted_replay_last_result=accepted_replay_last_result,
+        blocked_count=fresh_replay_blocked_count,
+    )
     proposal_attempts_total = max(max(0, int(loop_steps)), attempts_value)
     protocol_stage_counts_value = {
         "screening": max(0, int(protocol_stage_counts.get("screening", 0))),
@@ -712,6 +1007,40 @@ def _campaign_loop_status(
         "active_slot_blocked_attempt_limit": max(
             1,
             int(scheduler_active_slot_blocked_attempt_limit),
+        ),
+        "fresh_runtime_replay_drain": {
+            "schema_version": "fresh_runtime_replay_drain.v1",
+            "status": fresh_replay_drain_status,
+            "attempts": fresh_replay_drain_attempts,
+            "executed": fresh_replay_drain_executed,
+            "skipped": fresh_replay_drain_skipped,
+            "limit": fresh_replay_drain_limit,
+            "stopped_reason": str(fresh_runtime_replay_drain_stop_reason or ""),
+            "last_result": legacy_last_result,
+            "accepted_replay_last_result": accepted_replay_last_result,
+            "final_attempt_last_result": final_attempt_last_result,
+            "blocked_count": fresh_replay_blocked_count,
+            "unresolved_closures": fresh_replay_unresolved_closures,
+            "counts_toward_max_rounds": False,
+            "decision_features_excluded": True,
+        },
+        "fresh_runtime_replay_drain_status": fresh_replay_drain_status,
+        "fresh_runtime_replay_drain_attempts": fresh_replay_drain_attempts,
+        "fresh_runtime_replay_drain_executed": fresh_replay_drain_executed,
+        "fresh_runtime_replay_drain_skipped": fresh_replay_drain_skipped,
+        "fresh_runtime_replay_drain_limit": fresh_replay_drain_limit,
+        "fresh_runtime_replay_drain_stopped_reason": str(
+            fresh_runtime_replay_drain_stop_reason or ""
+        ),
+        "fresh_runtime_replay_drain_accepted_replay_last_result": (
+            accepted_replay_last_result
+        ),
+        "fresh_runtime_replay_drain_final_attempt_last_result": (
+            final_attempt_last_result
+        ),
+        "fresh_runtime_replay_drain_blocked_count": fresh_replay_blocked_count,
+        "fresh_runtime_replay_drain_unresolved_closures": (
+            fresh_replay_unresolved_closures
         ),
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),

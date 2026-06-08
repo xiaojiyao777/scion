@@ -9,6 +9,8 @@ from __future__ import annotations
 import importlib
 from typing import Any, Mapping, Protocol, Sequence
 
+from scion.problem.loader import ProblemAdapterLoadError, load_problem_adapter
+
 
 class ProblemProviderError(RuntimeError):
     """Raised when a declared problem provider cannot be loaded."""
@@ -195,6 +197,7 @@ def active_subject_policy_payload(
     adapter: Any = None,
     surface: str | None = None,
     subject_id: str | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """Return a normalized active subject policy payload, or ``{}``."""
 
@@ -204,19 +207,41 @@ def active_subject_policy_payload(
             adapter=adapter,
         )
     except ProblemProviderError:
+        if strict:
+            raise
         return {}
     if provider is None:
+        if strict:
+            raise ProblemProviderError("active subject policy provider unavailable")
         return {}
     method = getattr(provider, "active_subject_policy", None)
     if not callable(method):
+        if strict:
+            raise ProblemProviderError(
+                "active subject policy provider has no active_subject_policy method"
+            )
         return {}
     try:
-        raw = method(context, surface=surface, subject_id=subject_id)
-    except TypeError:
-        raw = method(surface=surface, subject_id=subject_id)
-    if not isinstance(raw, Mapping):
+        try:
+            raw = method(context, surface=surface, subject_id=subject_id)
+        except TypeError:
+            raw = method(surface=surface, subject_id=subject_id)
+    except Exception as exc:
+        if strict:
+            raise ProblemProviderError(
+                f"active subject policy provider failed: {exc}"
+            ) from exc
         return {}
-    return _normalize_active_subject_policy(raw)
+    if not isinstance(raw, Mapping):
+        if strict:
+            raise ProblemProviderError(
+                "active subject policy provider returned non-mapping payload"
+            )
+        return {}
+    normalized = _normalize_active_subject_policy(raw)
+    if strict and not normalized:
+        raise ProblemProviderError("active subject policy provider returned empty policy")
+    return normalized
 
 
 def active_subject_taxonomy_payload(
@@ -270,6 +295,7 @@ def active_subject_code_constraints_payload(
     adapter: Any = None,
     surface: str | None = None,
     subject_id: str | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """Return provider-declared active subject code constraints, or ``{}``.
 
@@ -280,6 +306,7 @@ def active_subject_code_constraints_payload(
     for provider in _active_subject_code_constraint_providers(
         problem_spec=problem_spec,
         adapter=adapter,
+        strict=strict,
     ):
         method = getattr(provider, "active_subject_code_constraints", None)
         if not callable(method):
@@ -330,6 +357,7 @@ def _active_subject_code_constraint_providers(
     *,
     problem_spec: Any = None,
     adapter: Any = None,
+    strict: bool = False,
 ) -> tuple[Any, ...]:
     providers: list[Any] = []
     seen: set[int] = set()
@@ -344,6 +372,7 @@ def _active_subject_code_constraint_providers(
         ("contract_check_provider", "contract_checks_provider"),
     )
     owners = (adapter, problem_spec)
+    _validate_adapter_identity(adapter=adapter, problem_spec=problem_spec)
     for owner in owners:
         for factory_names in factory_groups:
             provider = _provider_from_factory(owner, factory_names)
@@ -360,6 +389,8 @@ def _active_subject_code_constraint_providers(
         try:
             loaded_adapter = _instantiate_adapter(adapter_import_path, problem_spec)
         except ProblemProviderError:
+            if strict:
+                raise
             loaded_adapter = None
         if loaded_adapter is not None:
             for factory_names in factory_groups:
@@ -433,6 +464,7 @@ def _resolve_provider(
     adapter: Any = None,
     factory_names: Sequence[str],
 ) -> Any | None:
+    _validate_adapter_identity(adapter=adapter, problem_spec=problem_spec)
     direct = _provider_from_factory(adapter, factory_names)
     if direct is not None:
         return direct
@@ -606,10 +638,32 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
             f"providers, got '{import_path}'"
         )
     module_path, class_name = import_path.rsplit(":", 1)
-    if not module_path.startswith("scion.problems."):
+    problem_id = _problem_id(problem_spec)
+    if problem_id:
+        allowed_prefix = f"scion.problems.{problem_id}."
+    else:
+        allowed_prefix = "scion.problems."
+    if not module_path.startswith(allowed_prefix):
         raise ProblemProviderError(
-            "problem provider adapter module must live under 'scion.problems.*', "
+            f"problem provider adapter module must live under '{allowed_prefix}*', "
             f"got '{module_path}'"
+        )
+    spec_v1 = _problem_spec_v1(problem_spec)
+    if spec_v1 is not None:
+        declared_import_path = _adapter_import_path(spec_v1)
+        if declared_import_path and declared_import_path != import_path:
+            raise ProblemProviderError(
+                "problem provider adapter import path does not match spec_v1: "
+                f"legacy '{import_path}' vs v1 '{declared_import_path}'"
+            )
+        try:
+            return load_problem_adapter(spec_v1)
+        except ProblemAdapterLoadError as exc:
+            raise ProblemProviderError(str(exc)) from exc
+    if getattr(problem_spec, "requires_adapter_for_runtime", False):
+        raise ProblemProviderError(
+            "problem provider fallback for adapter-backed runtime requires a "
+            "spec_v1 compatibility pointer"
         )
     try:
         module = importlib.import_module(module_path)
@@ -628,6 +682,58 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
         raise ProblemProviderError(
             f"failed to instantiate adapter '{import_path}' for providers: {exc}"
         ) from exc
+
+
+def _problem_spec_v1(problem_spec: Any) -> Any | None:
+    spec_v1 = getattr(problem_spec, "spec_v1", None)
+    if spec_v1 is not None:
+        return spec_v1
+    adapter_ref = getattr(problem_spec, "adapter", None)
+    if getattr(problem_spec, "id", None) and getattr(adapter_ref, "import_path", None):
+        return problem_spec
+    return None
+
+
+def _problem_id(problem_spec: Any) -> str:
+    spec_v1 = _problem_spec_v1(problem_spec)
+    for owner in (spec_v1, problem_spec):
+        value = str(
+            getattr(owner, "id", None)
+            or getattr(owner, "problem_id", None)
+            or getattr(owner, "name", "")
+            or ""
+        ).strip()
+        if value:
+            return value
+    return ""
+
+
+def _validate_adapter_identity(
+    *,
+    adapter: Any = None,
+    problem_spec: Any = None,
+) -> None:
+    if adapter is None or problem_spec is None:
+        return
+    expected_id = _problem_id(problem_spec)
+    adapter_spec = getattr(adapter, "spec", None) or getattr(adapter, "_spec", None)
+    adapter_id = str(getattr(adapter_spec, "id", "") or "").strip()
+    if expected_id and adapter_id and adapter_id != expected_id:
+        raise ProblemProviderError(
+            "loaded problem adapter id does not match problem spec: "
+            f"adapter '{adapter_id}' vs spec '{expected_id}'"
+        )
+    expected_import_path = _adapter_import_path(problem_spec)
+    adapter_import_path = _adapter_import_path(adapter_spec)
+    if (
+        expected_import_path
+        and adapter_import_path
+        and adapter_import_path != expected_import_path
+    ):
+        raise ProblemProviderError(
+            "loaded problem adapter import path does not match problem spec: "
+            f"adapter '{adapter_import_path}' vs spec '{expected_import_path}'"
+        )
 
 
 __all__ = [

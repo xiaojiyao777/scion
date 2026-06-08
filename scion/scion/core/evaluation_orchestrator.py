@@ -35,7 +35,7 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
-from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_reason_codes
 from scion.core.telemetry_validation import (
     TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     formal_telemetry_guard_failed,
@@ -82,15 +82,40 @@ class EvaluationOrchestrator:
     decision_lifecycle_actions: MutableMapping[str, DecisionLifecycleAction] = field(
         default_factory=dict
     )
+    decision_lifecycle_policy_evidence: MutableMapping[str, dict[str, Any]] = field(
+        default_factory=dict
+    )
+    decision_layer_sources: MutableMapping[str, str] = field(default_factory=dict)
+    decision_engine_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
+        default_factory=dict
+    )
+    diagnostic_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
+        default_factory=dict
+    )
+    bypass_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
+        default_factory=dict
+    )
+    lifecycle_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
+        default_factory=dict
+    )
 
     def evaluate(
         self,
         branch: Branch,
         workspace: str,
         hypothesis: HypothesisProposal,
-    ) -> Tuple[Decision, Optional[ProtocolResult], CanaryResult]:
+    ) -> Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult]:
         bid = branch.branch_id
         self.decision_lifecycle_actions[bid] = ""
+        self.decision_lifecycle_policy_evidence.pop(bid, None)
+        self._set_reason_provenance(
+            bid,
+            source=None,
+            decision_engine=(),
+            diagnostics=(),
+            bypass=(),
+            lifecycle=(),
+        )
         stage = self.branch_controller.next_stage(bid)
 
         with self.champion_lock:
@@ -104,6 +129,11 @@ class EvaluationOrchestrator:
             budget_decision = self.frozen_budget_ledger.try_consume(branch_id=bid)
             if not budget_decision.allowed:
                 self.decision_reason_codes[bid] = ("FROZEN_BUDGET_EXHAUSTED",)
+                self._set_reason_provenance(
+                    bid,
+                    source="frozen_budget_bypass",
+                    bypass=("FROZEN_BUDGET_EXHAUSTED",),
+                )
                 return Decision.ABANDON, _frozen_budget_protocol_result(
                     used=budget_decision.used,
                     limit=budget_decision.limit,
@@ -129,6 +159,9 @@ class EvaluationOrchestrator:
             screening_expand_count=branch.screening_expand_count,
             validation_expand_count=branch.validation_expand_count,
             failure_codes=tuple(branch.failure_codes),
+            force_fresh_champion=bool(
+                getattr(branch, "fresh_runtime_replay_step", False)
+            ),
         )
         pipeline = EvaluationPipeline(
             experiment_protocol=protocol,
@@ -161,8 +194,13 @@ class EvaluationOrchestrator:
             logger.error("Branch %s: experiment failed: %s", bid, exc)
             self.handle_failure(branch, FailureEvent(category="evaluation", detail=str(exc)))
             self.decision_reason_codes[bid] = ("EVALUATION_FAILED",)
-            return Decision.ABANDON, None, CanaryResult(
-                passed=True,
+            self._set_reason_provenance(
+                bid,
+                source="evaluation_bypass",
+                bypass=("EVALUATION_FAILED",),
+            )
+            return None, _evaluation_failure_protocol_result(stage=stage), CanaryResult(
+                passed=False,
                 reason="evaluation failed",
             )
 
@@ -183,16 +221,33 @@ class EvaluationOrchestrator:
             "lifecycle_action",
             "",
         )
+        lifecycle_evidence = getattr(coordinated, "lifecycle_policy_evidence", None)
+        if isinstance(lifecycle_evidence, dict) and lifecycle_evidence:
+            self.decision_lifecycle_policy_evidence[bid] = dict(lifecycle_evidence)
+        self._set_reason_provenance(
+            bid,
+            source=str(getattr(coordinated, "decision_layer_source", "") or "stage_decision"),
+            decision_engine=coordinated.reason_codes,
+            lifecycle=tuple(getattr(coordinated, "lifecycle_reason_codes", ()) or ()),
+        )
         if features.telemetry_effect_zero_diagnostic:
             self.decision_reason_codes[bid] = _merge_reason_codes(
                 self.decision_reason_codes[bid],
                 (TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,),
             )
-        runtime_budget_code = runtime_budget_diagnostic_code(protocol_result)
-        if runtime_budget_code:
+            self.diagnostic_reason_codes[bid] = _merge_reason_codes(
+                self.diagnostic_reason_codes.get(bid, ()),
+                (TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,),
+            )
+        runtime_budget_codes = runtime_budget_diagnostic_reason_codes(protocol_result)
+        if runtime_budget_codes:
             self.decision_reason_codes[bid] = _merge_reason_codes(
                 self.decision_reason_codes[bid],
-                (runtime_budget_code,),
+                runtime_budget_codes,
+            )
+            self.diagnostic_reason_codes[bid] = _merge_reason_codes(
+                self.diagnostic_reason_codes.get(bid, ()),
+                runtime_budget_codes,
             )
         logger.info(
             "Branch %s: features wr=%s md=%s stage=%s -> decision=%s rule=%s reasons=%s",
@@ -218,6 +273,25 @@ class EvaluationOrchestrator:
             self.branch_telemetry_diagnostic_streaks.pop(bid, None)
 
         return decision, protocol_result, canary_result
+
+    def _set_reason_provenance(
+        self,
+        branch_id: str,
+        *,
+        source: str | None,
+        decision_engine: Tuple[str, ...] | tuple[str, ...] = (),
+        diagnostics: Tuple[str, ...] | tuple[str, ...] = (),
+        bypass: Tuple[str, ...] | tuple[str, ...] = (),
+        lifecycle: Tuple[str, ...] | tuple[str, ...] = (),
+    ) -> None:
+        if source is None:
+            self.decision_layer_sources.pop(branch_id, None)
+        else:
+            self.decision_layer_sources[branch_id] = source
+        self.decision_engine_reason_codes[branch_id] = tuple(decision_engine)
+        self.diagnostic_reason_codes[branch_id] = tuple(diagnostics)
+        self.bypass_reason_codes[branch_id] = tuple(bypass)
+        self.lifecycle_reason_codes[branch_id] = tuple(lifecycle)
 
     @staticmethod
     def _prepare_expand(branch: Branch, protocol: Any) -> tuple[bool, int]:
@@ -348,4 +422,25 @@ def _frozen_budget_protocol_result(*, used: int, limit: int) -> ProtocolResult:
             f"reason={FROZEN_BUDGET_EXHAUSTED} used={used} limit={limit}"
         ),
         raw_metrics_ref="",
+    )
+
+
+def _evaluation_failure_protocol_result(*, stage: ExperimentStage) -> ProtocolResult:
+    return ProtocolResult(
+        stage=stage,
+        stats=EvalStats(
+            n_cases=0,
+            wins=0,
+            losses=0,
+            ties=0,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("EVALUATION_FAILED",),
+        exposed_summary="evaluation failed before decision",
+        raw_metrics_ref="",
+        opportunity_diagnostics=("evaluation_failed",),
     )

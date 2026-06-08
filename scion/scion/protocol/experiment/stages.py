@@ -18,6 +18,7 @@ from scion.core.models import (
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
     runtime_budget_diagnostic,
+    runtime_budget_summary_reason_codes,
 )
 from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
@@ -80,6 +81,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+SCREENING_PARTIAL_CHAMPION_EVIDENCE = "SCREENING_PARTIAL_CHAMPION_EVIDENCE"
+
 
 def run_experiment(
     protocol: "ExperimentProtocol",
@@ -139,6 +142,7 @@ def run_experiment(
     runtime_evidence_status = "sufficient"
     runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
+    objective_semantics = protocol.objective_semantics
     champion_cache = getattr(protocol, "_champion_result_cache", None)
     champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
     champion_cache_enabled = bool(
@@ -165,6 +169,36 @@ def run_experiment(
         problem_spec=protocol._problem_spec,
         selected_surface=normalized_selected_surface,
     )
+    case_path_resolutions: dict[str, dict[str, Any]] = {}
+    resolved_case_paths: dict[str, dict[str, str]] = {}
+    for case in cases:
+        champion_resolution = protocol._resolve_case_path_status(
+            case,
+            workspace=champion_ws,
+        )
+        candidate_resolution = protocol._resolve_case_path_status(
+            case,
+            workspace=candidate_ws,
+        )
+        case_path_resolutions[case] = {
+            "champion": champion_resolution.as_metrics(),
+            "candidate": candidate_resolution.as_metrics(),
+        }
+        resolved_case_paths[case] = {
+            "champion": champion_resolution.resolved,
+            "candidate": candidate_resolution.resolved,
+        }
+
+    def _case_path_resolution_status_counts() -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for side_records in case_path_resolutions.values():
+            for side, payload in side_records.items():
+                if not isinstance(payload, Mapping):
+                    continue
+                status = str(payload.get("status") or "unknown")
+                key = f"{side}:{status}"
+                counts[key] = counts.get(key, 0) + 1
+        return counts
 
     def _write_metrics_snapshot(*, complete: bool) -> None:
         runtime_stats_snapshot = _build_runtime_stats(
@@ -191,7 +225,15 @@ def run_experiment(
                 {
                     "stage": stage.value,
                     "selected_surface": normalized_selected_surface,
+                    "objective_semantics": objective_semantics,
                     "case_ids": cases,
+                    "case_path_resolution": {
+                        "strict": bool(
+                            getattr(protocol, "_strict_case_paths", False)
+                        ),
+                        "status_counts": _case_path_resolution_status_counts(),
+                        "cases": case_path_resolutions,
+                    },
                     "seed_set": seeds,
                     "total_pairs": total_pairs,
                     "attempted_pairs": attempted_pairs,
@@ -199,6 +241,19 @@ def run_experiment(
                     "failed_pairs": failed_pairs,
                     "candidate_failed_pairs": candidate_failed_pairs,
                     "champion_failed_pairs": champion_failed_pairs,
+                    "screening_evidence_status": _screening_evidence_status(
+                        stage=stage,
+                        champion_failed_pairs=champion_failed_pairs,
+                    ),
+                    "screening_partial_champion_evidence": (
+                        _screening_partial_champion_evidence(
+                            stage=stage,
+                            total_pairs=total_pairs,
+                            valid_pairs=valid_pairs,
+                            failed_pairs=failed_pairs,
+                            champion_failed_pairs=champion_failed_pairs,
+                        )
+                    ),
                     "runtime_stats": runtime_stats_snapshot,
                     "runtime_confidence": runtime_confidence_snapshot,
                     "runtime_evidence_status": runtime_evidence_status,
@@ -252,14 +307,9 @@ def run_experiment(
         case_features = _extract_case_features(case)
         for seed in seeds:
             attempted_pairs += 1
-            champion_case_path = protocol._resolve_case_path(
-                case,
-                workspace=champion_ws,
-            )
-            candidate_case_path = protocol._resolve_case_path(
-                case,
-                workspace=candidate_ws,
-            )
+            resolved_for_case = resolved_case_paths[case]
+            champion_case_path = resolved_for_case["champion"]
+            candidate_case_path = resolved_for_case["candidate"]
             protocol._emit_progress(
                 stage=stage.value,
                 case=case,
@@ -681,6 +731,7 @@ def run_experiment(
                     "case": case,
                     "seed": seed,
                     "comparison": cmp,
+                    "objective_semantics": objective_semantics,
                     "delta": delta,
                     "decisive_metric": breakdown.decisive_metric,
                     "metric_deltas": {
@@ -799,6 +850,19 @@ def run_experiment(
                 reason_codes.append("CHAMPION_RUNTIME_FAILURE")
             gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
 
+        if stage == ExperimentStage.SCREENING and champion_failed_pairs > 0:
+            gate = GateResult(
+                outcome="unclear" if gate.outcome == "pass" else gate.outcome,
+                reason_codes=tuple(
+                    dict.fromkeys(
+                        (
+                            *tuple(gate.reason_codes),
+                            SCREENING_PARTIAL_CHAMPION_EVIDENCE,
+                        )
+                    )
+                ),
+            )
+
     candidate_telemetry_guard_summary = build_telemetry_guard_summary(
         candidate_runtimes=candidate_guard_runtimes,
         champion_runtimes=champion_guard_runtimes,
@@ -832,14 +896,16 @@ def run_experiment(
         total_pairs=total_pairs,
     )
     if runtime_budget_diagnostic_summary:
-        runtime_budget_code = str(
-            runtime_budget_diagnostic_summary.get("code") or ""
-        ).strip()
-        if runtime_budget_code:
+        runtime_budget_codes = runtime_budget_summary_reason_codes(
+            runtime_budget_diagnostic_summary
+        )
+        if runtime_budget_codes:
             gate = GateResult(
                 outcome=gate.outcome,
                 reason_codes=tuple(
-                    dict.fromkeys((*tuple(gate.reason_codes), runtime_budget_code))
+                    dict.fromkeys(
+                        (*tuple(gate.reason_codes), *runtime_budget_codes)
+                    )
                 ),
             )
     runtime_confidence = (
@@ -945,7 +1011,11 @@ def run_experiment(
             f"pair_losses={pair_counts['losses']} "
             f"pair_ties={pair_counts['ties']} "
             f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
+            f"objective_semantics={objective_semantics} "
             f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
+            f"champion_failures={champion_failed_pairs} "
+            f"screening_evidence_status={_screening_evidence_status(stage=stage, champion_failed_pairs=champion_failed_pairs)} "
+            f"reason_codes={','.join(gate.reason_codes) or 'none'} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             f"{telemetry_guard_summary}{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
@@ -957,6 +1027,7 @@ def run_experiment(
             f"stage={stage.value} outcome={gate.outcome} "
             f"stat={stats.statistical_status or 'legacy'} "
             f"metric={stats.statistical_metric or 'scalar'} "
+            f"objective_semantics={objective_semantics} "
             f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
             f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
@@ -979,6 +1050,7 @@ def run_experiment(
         reason_codes=gate.reason_codes,
         exposed_summary=exposed,
         raw_metrics_ref=raw_ref,
+        objective_semantics=objective_semantics,
         case_ids=tuple(cases),
         seed_set=tuple(seeds),
         pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
@@ -1054,6 +1126,42 @@ def _runtime_evidence_status(
     if champion_cached_runtime_pairs > 0 and runtime_pairs < min_runtime_pairs:
         return "insufficient"
     return "sufficient"
+
+
+def _screening_evidence_status(
+    *,
+    stage: ExperimentStage,
+    champion_failed_pairs: int,
+) -> str:
+    if stage == ExperimentStage.SCREENING and champion_failed_pairs > 0:
+        return "partial_champion_evidence"
+    return "complete"
+
+
+def _screening_partial_champion_evidence(
+    *,
+    stage: ExperimentStage,
+    total_pairs: int,
+    valid_pairs: int,
+    failed_pairs: int,
+    champion_failed_pairs: int,
+) -> dict[str, Any] | None:
+    if stage != ExperimentStage.SCREENING or champion_failed_pairs <= 0:
+        return None
+    ratio = (
+        float(champion_failed_pairs) / float(total_pairs)
+        if total_pairs > 0
+        else 0.0
+    )
+    return {
+        "reason_code": SCREENING_PARTIAL_CHAMPION_EVIDENCE,
+        "total_pairs": total_pairs,
+        "valid_pairs": valid_pairs,
+        "failed_pairs": failed_pairs,
+        "champion_failed_pairs": champion_failed_pairs,
+        "champion_failed_pair_ratio": ratio,
+        "decision_complete_evidence": False,
+    }
 
 
 __all__ = ["run_experiment"]

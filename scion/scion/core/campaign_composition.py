@@ -27,6 +27,9 @@ from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.features import BudgetState
+from scion.core.formal_candidate_artifacts import (
+    FormalCandidatePatchArtifactRecorder,
+)
 from scion.core.frozen_budget import FrozenBudgetLedger
 from scion.core.models import ChampionState, OperatorConfig
 from scion.core.plateau_controller import PlateauController
@@ -134,6 +137,8 @@ def compose_campaign_services(
     owner._problem_runtime = ProblemRuntime(
         problem_spec=problem_spec,
         adapter=adapter,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
         runtime_slow_threshold=protocol_config.runtime.max_runtime_ratio,
     )
     owner._protocol_config = protocol_config
@@ -158,6 +163,7 @@ def compose_campaign_services(
     owner._contract_gate = ContractGate(
         problem_spec,
         operator_execute_signature=operator_execute_signature,
+        adapter=adapter,
         champion_snapshot_provider=lambda: getattr(
             owner._champion,
             "code_snapshot_path",
@@ -237,9 +243,12 @@ def compose_campaign_services(
         campaign_dir=campaign_dir,
         status_reporter=owner._status_reporter,
         registry=owner._registry,
-        state_provider=owner.get_state,
+        state_provider=owner.get_state_snapshot,
         model_id=getattr(llm_client, "model", None),
         protocol_version=getattr(protocol_config, "version", None),
+        problem_spec_hash=stable_identity_hash(problem_spec),
+        split_manifest_hash=stable_identity_hash(owner._split_manifest),
+        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
         family_taxonomy=family_taxonomy,
     )
     owner._frozen_budget_ledger = FrozenBudgetLedger(
@@ -257,6 +266,11 @@ def compose_campaign_services(
     owner._branch_hypotheses = {}
     owner._branch_patches = {}
     owner._decision_reason_codes = {}
+    owner._decision_layer_sources = {}
+    owner._decision_engine_reason_codes = {}
+    owner._diagnostic_reason_codes = {}
+    owner._bypass_reason_codes = {}
+    owner._lifecycle_reason_codes = {}
     owner._branch_current_hypothesis = {}
     owner._pending_hypotheses = {}
     owner._step_history = []
@@ -372,6 +386,13 @@ def compose_campaign_services(
             value,
         ),
     )
+    formal_candidate_artifacts = FormalCandidatePatchArtifactRecorder(
+        owner._campaign_dir,
+        protocol_version=getattr(protocol_config, "version", None),
+        problem_spec_hash=stable_identity_hash(problem_spec),
+        split_manifest_hash=stable_identity_hash(owner._split_manifest),
+        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
+    )
     owner._decision_finalizer = DecisionFinalizer(
         branch_controller=owner._branch_ctrl,
         branch_store=owner._branch_store,
@@ -388,6 +409,7 @@ def compose_campaign_services(
         record_hard_abandon=owner._record_hard_abandon,
         record_step_lineage=owner._record_step_lineage,
         decision_reason_codes_for=owner._decision_reason_codes_for,
+        decision_provenance_for=owner._decision_provenance_for,
         discard_branch_workspace=lambda branch_id: _workspace_service_for(
             owner
         ).discard_branch_workspace(branch_id),
@@ -405,6 +427,10 @@ def compose_campaign_services(
         capture_branch_checkpoint=lambda branch: _workspace_service_for(
             owner
         ).capture_branch_checkpoint(branch),
+        record_formal_candidate_artifact=lambda **kwargs: formal_candidate_artifacts.record(
+            **kwargs,
+            base_workspace=getattr(owner._champion, "code_snapshot_path", None),
+        ),
     )
     owner._evaluation_orchestrator = EvaluationOrchestrator(
         branch_controller=owner._branch_ctrl,
@@ -419,6 +445,11 @@ def compose_campaign_services(
         get_budget=lambda: owner._budget,
         decision_coordinator=owner._decision_coordinator,
         decision_reason_codes=owner._decision_reason_codes,
+        decision_layer_sources=owner._decision_layer_sources,
+        decision_engine_reason_codes=owner._decision_engine_reason_codes,
+        diagnostic_reason_codes=owner._diagnostic_reason_codes,
+        bypass_reason_codes=owner._bypass_reason_codes,
+        lifecycle_reason_codes=owner._lifecycle_reason_codes,
         branch_zero_win_streaks=owner._branch_zero_win_streaks,
         branch_telemetry_diagnostic_streaks=(
             owner._branch_telemetry_diagnostic_streaks
@@ -488,10 +519,12 @@ def compose_campaign_services(
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
         decision_reason_codes_for=owner._decision_reason_codes_for,
+        decision_provenance_for=owner._decision_provenance_for,
         proposal_failure_detail_for=owner._proposal_failure_detail_for,
         proposal_session_ref_for=owner._proposal_session_ref_for,
         persist_branch_state=owner._persist_branch_state,
         update_status_progress=owner._update_status_progress,
+        step_history=owner._step_history,
     )
     owner._branch_step_runner = BranchStepRunner(
         branch_controller=owner._branch_ctrl,
@@ -524,6 +557,7 @@ def compose_campaign_services(
         record_step=owner._record_step,
         record_scheduler_result=owner._record_scheduler_result,
         decision_reason_codes_for=owner._decision_reason_codes_for,
+        decision_provenance_for=owner._decision_provenance_for,
         run_explore_step=owner._explore_step_pipeline.run,
         run_eval_step_callback=owner._run_eval_step,
         run_reconcile_step_callback=owner._run_reconcile_step,
@@ -627,6 +661,9 @@ def compose_campaign_services(
         get_circuit_breaker=lambda: owner._circuit_breaker,
         circuit_breaker_threshold=MAX_CONSECUTIVE_LLM_FAILURES,
         run_one_step=lambda: owner.run_one_step(),
+        run_fresh_runtime_replay_drain_step=(
+            lambda: owner.run_fresh_runtime_replay_drain_step()
+        ),
         run_stagnation_check=lambda: owner._run_stagnation_check(),
         check_soft_stagnation=lambda: owner._check_soft_stagnation(),
         write_campaign_summary=lambda: owner._write_campaign_summary(),

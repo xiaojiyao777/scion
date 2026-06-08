@@ -12,6 +12,7 @@ _VISIBILITY_AUDIT_RECORD_KEYS = {
     "record_digest",
     "requirement_digest",
     "requirement_id",
+    "lesson_id",
     "status",
     "requirement_status",
     "source",
@@ -20,7 +21,23 @@ _VISIBILITY_AUDIT_RECORD_KEYS = {
     "digest",
     "reason_codes",
     "policy",
+    "required",
+    "required_for",
+    "required_fors",
+    "required_output_field",
+    "requirement_source",
+    "candidate_branch_ids",
+    "candidate_lesson_ids",
+    "candidate_lesson_types",
+    "candidate_lesson_roles",
+    "required_contrast_dimensions",
+    "scope",
+    "lesson_role",
+    "lesson_type",
+    "maturity",
+    "source_branch_ids",
     "proposal_visibility_only",
+    "proposal_guidance_only",
     "decision_features_excluded",
     "decision_input_policy",
     "material_difference_required",
@@ -32,6 +49,12 @@ _VISIBILITY_AUDIT_CONTAINER_KEYS = {
     "material_difference_requirement",
     "material_difference_requirement_ref",
     "material_difference_requirement_status",
+    "branch_lesson_records",
+    "branch_lessons",
+    "branch_lesson_usage_requirement",
+    "required_response",
+    "shared_signature",
+    "evidence_basis",
     "cross_branch_research_payload",
     "cross_branch_research_status",
     "cross_branch_research_audit_ref",
@@ -137,6 +160,24 @@ def _visibility_records_from_mapping(
         )
         if record:
             yield "material", record
+
+    lesson_requirement = item.get("branch_lesson_usage_requirement")
+    if isinstance(lesson_requirement, Mapping):
+        record = _compact_visibility_audit_record(
+            lesson_requirement,
+            source=source,
+        )
+        if record:
+            yield "cross_branch", record
+
+    for key in ("branch_lesson_records", "branch_lessons"):
+        values = item.get(key)
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            record = _compact_visibility_audit_record(value, source=source)
+            if record:
+                yield "cross_branch", record
 
     for key in (
         "material_difference_requirement_ref",

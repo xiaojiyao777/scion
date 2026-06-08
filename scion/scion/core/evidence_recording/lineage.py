@@ -26,6 +26,7 @@ from scion.core.telemetry_validation import (
     telemetry_failure_categories,
     telemetry_validation_feedback,
 )
+from scion.contract.result_payload import diagnostic_checks
 
 from .artifact_refs import (
     _extract_protocol_runtime_stats,
@@ -33,8 +34,126 @@ from .artifact_refs import (
     _screening_rate_fields,
     _serialize_verification_checks,
 )
+from .replay_identity import formal_replay_identity_payload, stable_patch_digest
 
 logger = logging.getLogger(__name__)
+
+_LINEAGE_ERROR_MESSAGE_LIMIT = 240
+_LINEAGE_DEGRADED_WARNING = "lineage_registry_write_degraded"
+
+
+def _stable_patch_digest(patch: PatchProposal | None) -> str:
+    if patch is None:
+        return ""
+    return stable_patch_digest(patch.iter_file_changes())
+
+
+def _lineage_error(exc: Exception) -> Dict[str, Any]:
+    message = " ".join(str(exc).split())
+    if len(message) > _LINEAGE_ERROR_MESSAGE_LIMIT:
+        message = f"{message[:_LINEAGE_ERROR_MESSAGE_LIMIT]}..."
+    return {
+        "type": type(exc).__name__,
+        "message": message,
+    }
+
+
+def _new_lineage_outcome(
+    *,
+    branch_id: str,
+    hypothesis_id: str,
+    decision: Decision,
+    event_id: str | None,
+    strict: bool,
+    registry_configured: bool,
+) -> Dict[str, Any]:
+    return {
+        "schema_version": "scion.lineage_write_outcome.v1",
+        "branch_id": branch_id,
+        "hypothesis_id": hypothesis_id,
+        "decision": decision.value,
+        "event_id": event_id,
+        "strict": strict,
+        "registry_configured": registry_configured,
+        "event_recorded": None,
+        "decision_recorded": None,
+        "errors": [],
+        "status": "not_configured" if not registry_configured else "pending",
+    }
+
+
+def _finalize_lineage_outcome(outcome: Dict[str, Any]) -> Dict[str, Any]:
+    if not outcome.get("registry_configured"):
+        outcome["status"] = "not_configured"
+    elif outcome.get("errors"):
+        outcome["status"] = "degraded"
+    elif (
+        outcome.get("event_recorded") is True
+        and outcome.get("decision_recorded") is True
+    ):
+        outcome["status"] = "complete"
+    else:
+        outcome["status"] = "incomplete"
+    return outcome
+
+
+def lineage_integrity_snapshot(
+    *,
+    outcomes: Iterable[Dict[str, Any]],
+    registry_configured: bool,
+    expected_step_count: int | None = None,
+    source: str = "recorder_accumulator",
+) -> Dict[str, Any]:
+    outcome_list = [dict(outcome) for outcome in outcomes]
+    degraded = [
+        outcome for outcome in outcome_list if outcome.get("status") == "degraded"
+    ]
+    event_failures = sum(
+        1
+        for outcome in degraded
+        for error in outcome.get("errors", ())
+        if isinstance(error, dict) and error.get("operation") == "record_event"
+    )
+    decision_failures = sum(
+        1
+        for outcome in degraded
+        for error in outcome.get("errors", ())
+        if isinstance(error, dict) and error.get("operation") == "record_decision"
+    )
+    status = "not_configured"
+    if registry_configured:
+        status = "degraded" if degraded else "complete"
+    snapshot: Dict[str, Any] = {
+        "schema_version": "scion.lineage_integrity.v1",
+        "status": status,
+        "degraded": bool(degraded),
+        "registry_configured": registry_configured,
+        "source": source,
+        "recorded_outcome_count": len(outcome_list),
+        "degraded_outcome_count": len(degraded),
+        "event_recording_failures": event_failures,
+        "decision_recording_failures": decision_failures,
+        "warning": _LINEAGE_DEGRADED_WARNING if degraded else None,
+        "recent_degraded_outcomes": degraded[-5:],
+    }
+    if expected_step_count is not None:
+        snapshot["expected_step_count"] = expected_step_count
+    return snapshot
+
+
+def apply_lineage_integrity_to_run_validity(
+    payload: Dict[str, Any],
+    integrity: Dict[str, Any],
+) -> None:
+    if integrity.get("status") != "degraded":
+        return
+    run_validity = payload.get("run_validity")
+    if not isinstance(run_validity, dict):
+        return
+    run_validity["integrity_status"] = "degraded"
+    warnings = run_validity.setdefault("warnings", [])
+    if isinstance(warnings, list) and _LINEAGE_DEGRADED_WARNING not in warnings:
+        warnings.append(_LINEAGE_DEGRADED_WARNING)
 
 
 def _runtime_guard_decision_features(
@@ -52,6 +171,24 @@ def _runtime_guard_decision_features(
 
 
 class LineageRecorderMixin:
+    def lineage_integrity_snapshot(
+        self,
+        *,
+        expected_step_count: int | None = None,
+        source: str = "recorder_accumulator",
+    ) -> Dict[str, Any]:
+        return lineage_integrity_snapshot(
+            outcomes=getattr(self, "lineage_recording_outcomes", ()),
+            registry_configured=self.registry is not None,
+            expected_step_count=expected_step_count,
+            source=source,
+        )
+
+    def _record_lineage_outcome(self, outcome: Dict[str, Any]) -> None:
+        accumulator = getattr(self, "lineage_recording_outcomes", None)
+        if isinstance(accumulator, list):
+            accumulator.append(dict(outcome))
+
     def build_step_lineage_event(
         self,
         *,
@@ -95,23 +232,50 @@ class LineageRecorderMixin:
             tuple(decision_reason_codes or ()) + tuple(protocol_reason_codes),
             protocol_reason_codes=protocol_reason_codes,
         )
-        verification_checks = _serialize_verification_checks(verification_result)
+        verification_checks = _serialize_verification_checks(
+            verification_result,
+            base_dir=self.campaign_dir,
+        )
         runtime_guard = _extract_runtime_guard_evidence(verification_result)
         telemetry_feedback = telemetry_validation_feedback(protocol_result)
+        selected_surface = (
+            (protocol_result.selected_surface if protocol_result else None)
+            or hypothesis.change_locus
+            or ""
+        )
+        patch_digest = _stable_patch_digest(patch)
+        replay_identity = formal_replay_identity_payload(
+            problem_spec_hash=getattr(self, "problem_spec_hash", None),
+            split_manifest_hash=getattr(self, "split_manifest_hash", None),
+            seed_ledger_hash=getattr(self, "seed_ledger_hash", None),
+            patch_digest=patch_digest,
+            selected_surface=selected_surface,
+            protocol_version=self.protocol_version,
+            raw_metrics_ref=raw_metrics_public_ref,
+            code_hash=branch.current_code_hash,
+        )
         internal_audit_payload = {
-            "schema": "scion.internal_audit_refs.v1",
+            "schema": "scion.internal_audit_refs.v2",
             "internal_only": True,
-            "raw_metrics_ref": raw_metrics_public_ref,
+            "problem_spec_hash": replay_identity["problem_spec_hash"],
+            "split_manifest_hash": replay_identity["split_manifest_hash"],
+            "seed_ledger_hash": replay_identity["seed_ledger_hash"],
+            "patch_digest": replay_identity["patch_digest"],
+            "patch_hash": replay_identity["patch_hash"],
+            "selected_surface": replay_identity["selected_surface"],
+            "protocol_version": replay_identity["protocol_version"],
+            "raw_metrics_ref": replay_identity["raw_metrics_ref"],
+            "code_hash": replay_identity["code_hash"],
             "raw_metrics_public_ref": raw_metrics_public_ref,
             "raw_metrics_ref_scope": "public_artifact_ref",
-            "protocol_raw_metrics_ref": raw_metrics_public_ref,
+            "protocol_raw_metrics_ref": replay_identity["raw_metrics_ref"],
             "protocol_raw_metrics_ref_scope": "public_artifact_ref",
             "raw_metrics_internal_only": True,
             "case_ids": public_case_ids,
             "metrics_refs": {
-                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_ref": replay_identity["raw_metrics_ref"],
                 "raw_metrics_ref_scope": "public_artifact_ref",
-                "protocol_raw_metrics_ref": raw_metrics_public_ref,
+                "protocol_raw_metrics_ref": replay_identity["raw_metrics_ref"],
                 "protocol_raw_metrics_ref_scope": "public_artifact_ref",
                 "raw_metrics_internal_only": True,
             },
@@ -119,6 +283,7 @@ class LineageRecorderMixin:
             "runtime_guard": runtime_guard,
             "telemetry_failure_details": telemetry_details,
             "telemetry_validation_feedback": telemetry_feedback,
+            "replay_identity": replay_identity,
         }
         evidence_metadata = {
             "branch_state": branch.state.value,
@@ -142,9 +307,7 @@ class LineageRecorderMixin:
             ),
             "current_champion_version": champion.version,
             "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
-            "selected_surface": (
-                protocol_result.selected_surface if protocol_result else None
-            ),
+            "selected_surface": selected_surface,
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
             "gate_observation_reason_codes": list(
@@ -173,6 +336,10 @@ class LineageRecorderMixin:
             "patch_file": patch.file_path if patch else "",
             "hypothesis_text": (hypothesis.hypothesis_text or "")[:500],
             "contract_passed": str(contract_result.passed),
+            "contract_diagnostics_json": json.dumps(
+                list(diagnostic_checks(contract_result)),
+                sort_keys=True,
+            ),
             "verification_passed": str(verification_result.passed),
             "contract_result": "passed" if contract_result.passed else "failed",
             "verification_result": "passed" if verification_result.passed else "failed",
@@ -229,6 +396,7 @@ class LineageRecorderMixin:
             "branch_id": branch.branch_id,
             "stage": protocol_result.stage.value if protocol_result else "",
             "contract_passed": contract_result.passed,
+            "contract_diagnostics": list(diagnostic_checks(contract_result)),
             "verification_passed": verification_result.passed,
             "canary_passed": canary_result.passed,
             "win_rate": stats.win_rate if stats else None,
@@ -299,8 +467,17 @@ class LineageRecorderMixin:
         hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
         event_id: str | None = None,
+        strict: bool = False,
     ) -> Dict[str, Any]:
         """Write experiment + decision lineage rows where a registry is configured."""
+        outcome = _new_lineage_outcome(
+            branch_id=branch.branch_id,
+            hypothesis_id=hypothesis_id,
+            decision=decision,
+            event_id=event_id,
+            strict=strict,
+            registry_configured=self.registry is not None,
+        )
         event = self.build_step_lineage_event(
             branch=branch,
             hypothesis=hypothesis,
@@ -315,24 +492,58 @@ class LineageRecorderMixin:
             decision_reason_codes=decision_reason_codes,
             event_id=event_id,
         )
-        if self.registry is not None:
-            try:
-                self.registry.record_event(event)
-            except Exception as exc:  # pragma: no cover - mirrors campaign best-effort behavior
-                logger.debug("registry.record_event failed: %s", exc)
-            decision_payload = self.build_decision_lineage_payload(
-                branch=branch,
-                protocol_result=protocol_result,
-                contract_result=contract_result,
-                verification_result=verification_result,
-                canary_result=canary_result,
-                decision=decision,
-                decision_reason_codes=decision_reason_codes,
+        if self.registry is None:
+            outcome = _finalize_lineage_outcome(outcome)
+            self._record_lineage_outcome(outcome)
+            return outcome
+
+        try:
+            self.registry.record_event(event)
+            outcome["event_recorded"] = True
+        except Exception as exc:  # pragma: no cover - mirrors campaign best-effort behavior
+            outcome["event_recorded"] = False
+            outcome["errors"].append(
+                {
+                    "operation": "record_event",
+                    **_lineage_error(exc),
+                }
             )
-            try:
-                self.registry.record_decision(**decision_payload)
-            except Exception as exc:  # pragma: no cover
-                logger.debug("registry.record_decision failed: %s", exc)
+            if strict:
+                outcome = _finalize_lineage_outcome(outcome)
+                self._record_lineage_outcome(outcome)
+                raise
+            logger.debug("registry.record_event failed: %s", exc)
+
+        decision_payload = self.build_decision_lineage_payload(
+            branch=branch,
+            protocol_result=protocol_result,
+            contract_result=contract_result,
+            verification_result=verification_result,
+            canary_result=canary_result,
+            decision=decision,
+            decision_reason_codes=decision_reason_codes,
+        )
+        try:
+            self.registry.record_decision(**decision_payload)
+            outcome["decision_recorded"] = True
+        except Exception as exc:  # pragma: no cover
+            outcome["decision_recorded"] = False
+            outcome["errors"].append(
+                {
+                    "operation": "record_decision",
+                    **_lineage_error(exc),
+                }
+            )
+            outcome = _finalize_lineage_outcome(outcome)
+            self._record_lineage_outcome(outcome)
+            if strict:
+                raise
+            logger.debug("registry.record_decision failed: %s", exc)
+            return outcome
+
+        outcome = _finalize_lineage_outcome(outcome)
+        self._record_lineage_outcome(outcome)
+        return outcome
 
     def record_scheduler_result_lineage(
         self,

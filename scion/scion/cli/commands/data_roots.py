@@ -83,12 +83,7 @@ def validate_declared_problem_data_cases(
     if not cases:
         return
 
-    roots: list[Path] = []
-    env_value = os.environ.get(activation.env_name, "").strip()
-    if env_value:
-        roots.append(Path(env_value).expanduser().resolve(strict=False))
-    if activation.data_root is not None and activation.data_root not in roots:
-        roots.append(activation.data_root)
+    roots = _declared_data_roots(activation)
 
     missing: list[str] = []
     for case in cases:
@@ -103,6 +98,39 @@ def validate_declared_problem_data_cases(
             "split manifest contains data-root-relative cases that do not resolve "
             f"via {activation.env_name}={roots_text}: {sample}{suffix}"
         )
+
+
+def with_declared_problem_data_roots(
+    *,
+    activation: DataRootActivation | None,
+    split_manifest: Any,
+) -> Any:
+    """Return a split manifest whose safe roots include declared data roots."""
+
+    roots = _declared_data_roots(activation)
+    if not roots:
+        return split_manifest
+
+    combined = _dedupe_paths(
+        [
+            *(
+                Path(root).expanduser().resolve(strict=False)
+                for root in getattr(split_manifest, "safe_data_roots", ()) or ()
+                if str(root).strip()
+            ),
+            *roots,
+        ]
+    )
+    safe_data_roots = [str(root) for root in combined]
+    if safe_data_roots == list(getattr(split_manifest, "safe_data_roots", ()) or ()):
+        return split_manifest
+
+    model_copy = getattr(split_manifest, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(update={"safe_data_roots": safe_data_roots})
+
+    setattr(split_manifest, "safe_data_roots", safe_data_roots)
+    return split_manifest
 
 
 def _budgets_path_for_protocol(protocol_path: Path | None) -> Path | None:
@@ -150,8 +178,34 @@ def _case_path_resolves(
     return any((root / path).exists() for root in data_roots)
 
 
+def _declared_data_roots(activation: DataRootActivation | None) -> list[Path]:
+    if activation is None or not activation.env_name:
+        return []
+
+    roots: list[Path] = []
+    env_value = os.environ.get(activation.env_name, "").strip()
+    if env_value:
+        roots.append(Path(env_value).expanduser().resolve(strict=False))
+    if activation.data_root is not None:
+        roots.append(Path(activation.data_root).expanduser().resolve(strict=False))
+    return _dedupe_paths(roots)
+
+
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(path)
+    return roots
+
+
 __all__ = (
     "DataRootActivation",
     "activate_declared_problem_data_root",
     "validate_declared_problem_data_cases",
+    "with_declared_problem_data_roots",
 )
