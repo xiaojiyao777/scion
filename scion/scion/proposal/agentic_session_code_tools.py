@@ -242,6 +242,12 @@ class AgenticSessionCodeToolsMixin:
                     phase=AgenticProposalPhase.INSPECT_INTERFACE.value,
                     attempt_number=len(observations) + 1,
                 )
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="tool_selection",
+                    prompt_context=planner_context,
+                    observations=all_observations,
+                )
                 try:
                     planned = selector(_sanitize_agentic_value(planner_context))
                 except Exception as exc:

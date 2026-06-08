@@ -17,6 +17,37 @@ from scion.proposal.tools.models import (
     ProposalToolFailureCode,
 )
 
+_FORBIDDEN_PAYLOAD_KEYS = frozenset(
+    {
+        "artifact_path",
+        "audit_payload_json",
+        "internal_audit_payload",
+        "raw_metrics_path",
+        "raw_metrics_public_ref",
+        "raw_metrics_ref",
+        "case_ids",
+        "seed_set",
+        "pair_feedback",
+    }
+)
+_FORBIDDEN_RAW_MARKERS = frozenset(
+    {
+        "raw_metrics_ref",
+        "raw_metrics_public_ref",
+        "raw_metrics_path",
+        "audit_payload_json",
+        "internal_audit_payload",
+        "holdout_raw",
+        "frozen_raw",
+        "promotion_raw",
+        "raw://",
+        "holdout://",
+        "frozen://",
+        "promotion://",
+    }
+)
+
+
 def _strip_forbidden_payload_refs(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return _strip_forbidden_value(payload)
 
@@ -25,17 +56,7 @@ def _strip_forbidden_value(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_text = str(key)
-            if key_text in {
-                "artifact_path",
-                "audit_payload_json",
-                "internal_audit_payload",
-                "raw_metrics_path",
-                "raw_metrics_public_ref",
-                "raw_metrics_ref",
-                "case_ids",
-                "seed_set",
-                "pair_feedback",
-            }:
+            if key_text in _FORBIDDEN_PAYLOAD_KEYS:
                 continue
             cleaned[key_text] = _strip_forbidden_value(item)
         return cleaned
@@ -46,6 +67,28 @@ def _strip_forbidden_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     return value
+
+def _contains_forbidden_raw_marker(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            _contains_forbidden_raw_marker(key)
+            or _contains_forbidden_raw_marker(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return any(_contains_forbidden_raw_marker(item) for item in value)
+    if isinstance(value, Enum):
+        return _contains_forbidden_raw_marker(value.value)
+    if isinstance(value, str):
+        lowered = value.lower()
+        return any(marker in lowered for marker in _FORBIDDEN_RAW_MARKERS)
+    return False
+
+def _sanitized_success_payload(
+    payload: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], bool]:
+    sanitized = _strip_forbidden_payload_refs(payload)
+    return sanitized, _contains_forbidden_raw_marker(sanitized)
 
 def _error_observation(
     context: ProposalToolContext,
@@ -126,6 +169,7 @@ __all__ = [
     "_limit_text",
     "_model_payload",
     "_normalize_rel_path",
+    "_sanitized_success_payload",
     "_stage_value",
     "_strip_forbidden_payload_refs",
     "_strip_forbidden_value",

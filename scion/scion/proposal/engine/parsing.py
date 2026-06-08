@@ -105,6 +105,7 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         expected_telemetry=dict(validated.expected_telemetry or {}),
         novelty_signature=dict(validated.novelty_signature or {}),
         material_difference=dict(validated.material_difference or {}),
+        branch_lesson_usage=dict(validated.branch_lesson_usage or {}),
         mechanism_changes=tuple(
             MechanismChange(id=change.id, change_type=change.change_type)
             for change in validated.mechanism_changes

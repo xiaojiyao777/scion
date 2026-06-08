@@ -159,6 +159,7 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                 result = gate.validate_patch(
                     patch_preview["patch_object"],
                     approved_hypothesis=hypothesis_object,
+                    validation_mode="preview",
                 )
                 contract_payload = _contract_result_payload(
                     result,

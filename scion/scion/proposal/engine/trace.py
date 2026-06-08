@@ -12,6 +12,7 @@ from typing import Any, Dict, Mapping
 
 from scion.proposal.llm.config import _is_openai_model
 from scion.proposal.session_trace_index import (
+    consume_registered_prompt_manifest_trace_context,
     record_trace_finish,
     record_trace_start,
     trace_context_from_prompt_context,
@@ -55,6 +56,24 @@ class _TraceWriter:
         )
         if not isinstance(prompt_manifest_context, Mapping):
             prompt_manifest_context = {}
+        registered_trace_context = consume_registered_prompt_manifest_trace_context(
+            context,
+            prompt_hash=digest,
+        )
+        if registered_trace_context and not prompt_manifest_context:
+            prompt_manifest_context = registered_trace_context.get(
+                "prompt_manifest",
+                {},
+            )
+            if not isinstance(prompt_manifest_context, Mapping):
+                prompt_manifest_context = {}
+        provenance = _audit_provenance_context(
+            trace_context=trace_context,
+            registered_context=registered_trace_context,
+        )
+        agentic_session_context = dict(trace_context)
+        if provenance:
+            agentic_session_context["provenance"] = provenance
         payload = {
             "trace_id": trace_id,
             "request_kind": request_kind,
@@ -83,13 +102,20 @@ class _TraceWriter:
             "ok": None,
         }
         if trace_context.get("session_id"):
-            payload["agentic_session"] = trace_context
+            payload["agentic_session"] = agentic_session_context
         if prompt_manifest_context:
             payload["prompt_manifest"] = dict(prompt_manifest_context)
+        if provenance:
+            payload["scion_audit_provenance"] = provenance
         if request_policy:
             payload["request_policy"] = request_policy
         _write_json(path, payload)
         try:
+            index_context = _trace_index_context(
+                context,
+                prompt_manifest_context=prompt_manifest_context,
+                provenance=provenance,
+            )
             record_trace_start(
                 trace_dir=self._trace_dir,
                 trace_id=trace_id,
@@ -97,7 +123,7 @@ class _TraceWriter:
                 request_kind=request_kind,
                 model=model,
                 prompt_hash=digest,
-                context=context,
+                context=index_context,
                 created_at=created_at,
             )
         except Exception:
@@ -163,6 +189,37 @@ def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
         default=str,
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _audit_provenance_context(
+    *,
+    trace_context: Mapping[str, Any],
+    registered_context: Mapping[str, Any],
+) -> dict[str, Any]:
+    provenance = registered_context.get("provenance")
+    if isinstance(provenance, Mapping) and provenance:
+        return dict(provenance)
+    provenance = trace_context.get("provenance")
+    if isinstance(provenance, Mapping) and provenance:
+        return dict(provenance)
+    return {}
+
+
+def _trace_index_context(
+    context: Mapping[str, Any],
+    *,
+    prompt_manifest_context: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    updated = dict(context)
+    if prompt_manifest_context:
+        updated["_scion_prompt_manifest"] = dict(prompt_manifest_context)
+    if provenance:
+        trace_context = updated.get("_scion_trace_context")
+        trace_context = dict(trace_context) if isinstance(trace_context, Mapping) else {}
+        trace_context["provenance"] = dict(provenance)
+        updated["_scion_trace_context"] = trace_context
+    return updated
 
 
 def _prompt_visibility_ledger(

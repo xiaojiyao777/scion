@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scion.proposal.agentic_observation_ledger.models import (
+    AUDITABLE_OBSERVATION_TOOLS,
     AgenticObservationLedger,
     LEDGER_SCHEMA_VERSION,
 )
@@ -21,6 +22,7 @@ from scion.proposal.agentic_observation_ledger.reuse import (
 
 __all__ = [
     "AgenticObservationLedger",
+    "AUDITABLE_OBSERVATION_TOOLS",
     "LEDGER_SCHEMA_VERSION",
     "agentic_observation_ledger_payload",
     "already_observed_from_inherited_ledger",

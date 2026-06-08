@@ -16,7 +16,9 @@ from scion.proposal.tools.models import (
 from scion.proposal.tools.previews.common import (
     _PREVIEW_CHECK_DETAIL_CHARS,
     _PREVIEW_FAILURE_REASON_CHARS,
+    _PREVIEW_HYPOTHESIS_BOUND_CHECKS,
     _PREVIEW_MAX_CHECKS,
+    _PREVIEW_STATEFUL_CHECKS_EXCLUDED,
     _compact_problem_preview,
     _compact_preview_value,
     _contract_gate,
@@ -56,6 +58,10 @@ class ContractPreviewTool(_BaseReadOnlyTool):
             "verification_run": False,
             "protocol_run": False,
             "decision_run": False,
+            "validation_mode": "preview",
+            "stateful_checks_excluded": list(_PREVIEW_STATEFUL_CHECKS_EXCLUDED),
+            "hypothesis_bound_checks_skipped": [],
+            "preview_degraded": False,
         }
         gate = _contract_gate(context)
         if args.hypothesis is None and args.patch is None:
@@ -74,6 +80,10 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     current_champion_version=_champion_version(context.champion),
                 )
                 hypothesis_preview["contract"] = _contract_summary_payload(result)
+                hypothesis_preview["validation_mode"] = "preview"
+                hypothesis_preview["stateful_checks_excluded"] = list(
+                    _PREVIEW_STATEFUL_CHECKS_EXCLUDED
+                )
                 hypothesis_preview["checks"] = _checks_payload(
                     result.checks,
                     detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
@@ -98,6 +108,7 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                 result = gate.validate_patch(
                     patch_preview["patch_object"],
                     approved_hypothesis=hypothesis_object,
+                    validation_mode="preview",
                 )
                 contract_payload = _contract_result_payload(
                     result,
@@ -107,7 +118,21 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     ),
                 )
                 patch_preview["contract"] = _contract_summary_payload(result)
+                patch_preview["validation_mode"] = "preview"
                 patch_preview["checks"] = contract_payload["checks"]
+                skipped_checks = _preview_skipped_checks(result)
+                degraded_diagnostics = _preview_degraded_diagnostics(result)
+                patch_preview["hypothesis_bound_checks_skipped"] = list(
+                    skipped_checks
+                )
+                if degraded_diagnostics:
+                    patch_preview["preview_degraded"] = True
+                    patch_preview["degraded_diagnostics"] = degraded_diagnostics
+                    payload["preview_degraded"] = True
+                for skipped in skipped_checks:
+                    skipped_list = payload["hypothesis_bound_checks_skipped"]
+                    if skipped not in skipped_list:
+                        skipped_list.append(skipped)
                 if contract_payload.get("repair_templates"):
                     patch_preview["repair_templates"] = contract_payload[
                         "repair_templates"
@@ -135,6 +160,15 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                         payload["static_only"] = False
                 if args.hypothesis is None:
                     patch_preview["needs_hypothesis"] = True
+                    for skipped in _PREVIEW_HYPOTHESIS_BOUND_CHECKS:
+                        if skipped not in patch_preview[
+                            "hypothesis_bound_checks_skipped"
+                        ]:
+                            patch_preview[
+                                "hypothesis_bound_checks_skipped"
+                            ].append(skipped)
+                        if skipped not in payload["hypothesis_bound_checks_skipped"]:
+                            payload["hypothesis_bound_checks_skipped"].append(skipped)
                     patch_preview["passed"] = False
                     payload["incomplete"] = True
                     payload["needs_hypothesis"] = True
@@ -216,9 +250,45 @@ def _contract_summary_payload(result: ContractResult) -> dict[str, Any]:
             ),
             "check_count": len(result.checks),
             "failed_checks": failed_checks[:_PREVIEW_MAX_CHECKS],
+            "preview_degraded": bool(_preview_degraded_diagnostics(result)),
+            "hypothesis_bound_checks_skipped": list(_preview_skipped_checks(result)),
             "repair_templates": _repair_templates_payload(result.checks),
         }
     )
+
+
+def _preview_skipped_checks(result: ContractResult) -> tuple[str, ...]:
+    skipped: list[str] = []
+    for check in result.checks:
+        metadata = _attr(check, "metadata", {}) or {}
+        if not isinstance(metadata, Mapping):
+            continue
+        if not metadata.get("preview_skipped"):
+            continue
+        name = str(metadata.get("skipped_check") or _attr(check, "name") or "").strip()
+        if name and name not in skipped:
+            skipped.append(name)
+    return tuple(skipped)
+
+
+def _preview_degraded_diagnostics(result: ContractResult) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for check in result.checks:
+        metadata = _attr(check, "metadata", {}) or {}
+        if not isinstance(metadata, Mapping) or not metadata.get("preview_degraded"):
+            continue
+        diagnostics.append(
+            {
+                "name": _attr(check, "name"),
+                "reason_code": metadata.get("reason_code"),
+                "surface": metadata.get("surface"),
+                "detail": _limit_text(
+                    str(_attr(check, "detail", "")),
+                    _PREVIEW_FAILURE_REASON_CHARS,
+                ),
+            }
+        )
+    return diagnostics
 
 
 def _contract_preview_issue_summary(payload: Mapping[str, Any]) -> str:
@@ -303,6 +373,9 @@ def _checks_payload(
             "detail": _limit_text(str(_attr(check, "detail", "")), detail_chars),
             "elapsed_ms": _attr(check, "elapsed_ms"),
         }
+        preview_metadata = _preview_check_metadata(metadata)
+        if preview_metadata:
+            payload["metadata"] = preview_metadata
         if repair_template:
             payload["repair_template"] = _compact_preview_value(
                 repair_template,
@@ -310,6 +383,26 @@ def _checks_payload(
             )
         payloads.append(payload)
     return payloads
+
+
+def _preview_check_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, Mapping):
+        return {}
+    keys = (
+        "validation_mode",
+        "reason_code",
+        "skipped_check",
+        "required_check",
+        "surface",
+        "preview_skipped",
+        "preview_degraded",
+    )
+    payload = {
+        key: _compact_preview_value(metadata.get(key), max_chars=240)
+        for key in keys
+        if key in metadata
+    }
+    return {key: value for key, value in payload.items() if value not in (None, "")}
 
 
 def _repair_templates_payload(checks: Any) -> list[dict[str, Any]]:

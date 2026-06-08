@@ -11,10 +11,7 @@ class AgenticSessionCodeGuidanceMixin:
         ) -> tuple[str, ...]:
             if self.tool_registry is None:
                 return ()
-            return _filter_code_phase_tool_names(
-                self.tool_registry.allowed_tools(context),
-                context,
-            )
+            return self.tool_registry.allowed_tools_for_phase(context, "code_planning")
 
     def _code_phase_allowed_tool_specs(
             self,
@@ -22,11 +19,9 @@ class AgenticSessionCodeGuidanceMixin:
         ) -> tuple[dict[str, Any], ...]:
             if self.tool_registry is None:
                 return ()
-            allowed = set(self._code_phase_allowed_tools(context))
-            return tuple(
-                spec
-                for spec in self.tool_registry.allowed_tool_specs(context)
-                if spec.get("name") in allowed
+            return self.tool_registry.allowed_tool_specs_for_phase(
+                context,
+                "code_planning",
             )
 
     def _code_phase_budget_reserved(

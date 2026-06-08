@@ -8,6 +8,9 @@ from typing import Any, Mapping
 from scion.core.models import HypothesisProposal
 from scion.proposal.agentic_models import AgenticFailureCategory
 from scion.proposal.agentic_utils import _drop_empty_dict, _limit_string
+from scion.proposal.target_intent_binding import (
+    target_intent_binding_retry_feedback,
+)
 
 
 def _schema_retry_preservation_drift(
@@ -26,13 +29,35 @@ def _schema_retry_preservation_drift(
     expected = rejection.get("preserve_hypothesis")
     if not isinstance(expected, Mapping):
         return None
+    target_intent_drift = _schema_retry_target_intent_binding_drift(
+        rejection,
+        hypothesis,
+        attempt=attempt,
+    )
+    if target_intent_drift is not None:
+        return target_intent_drift
     observed = _hypothesis_retry_anchor(hypothesis)
     drift_fields: list[str] = []
     for field in (
+        "change_locus",
         "action",
         "target_file",
         "mechanism_changes",
     ):
+        if _canonical_retry_identity_value(expected.get(field)) in (
+            None,
+            "",
+            [],
+            (),
+            {},
+        ):
+            continue
+        if field == "action" and _schema_retry_allows_action_correction(
+            rejection,
+            expected=expected,
+            observed=observed,
+        ):
+            continue
         if _canonical_retry_identity_value(expected.get(field)) != (
             _canonical_retry_identity_value(observed.get(field))
         ):
@@ -98,6 +123,17 @@ def _same_mechanism_preview_retry_pending(
     )
 
 
+def _target_action_permission_retry_pending(
+    preview_rejections: list[Mapping[str, Any]],
+) -> bool:
+    if not preview_rejections:
+        return False
+    return (
+        str(preview_rejections[-1].get("failure_code") or "").strip()
+        == "existing_file_create_new_rejected"
+    )
+
+
 def _latest_schema_preservation_rejection(
     preview_rejections: list[Mapping[str, Any]],
     *,
@@ -116,13 +152,85 @@ def _latest_schema_preservation_rejection(
     failure_code = str(rejection.get("failure_code") or "").strip()
     if failure_code not in {
         "C11_expected_telemetry",
+        "existing_file_create_new_rejected",
         "novelty_signature_missing_fields",
         "schema_retry_drift",
+        "target_intent_binding_mismatch",
     }:
         return None
     if not isinstance(rejection.get("preserve_hypothesis"), Mapping):
         return None
     return rejection
+
+
+def _schema_retry_allows_action_correction(
+    rejection: Mapping[str, Any],
+    *,
+    expected: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> bool:
+    if (
+        str(rejection.get("failure_code") or "").strip()
+        != "existing_file_create_new_rejected"
+    ):
+        return False
+    expected_action = str(expected.get("action") or "").strip()
+    observed_action = str(observed.get("action") or "").strip()
+    return expected_action in {"", "create_new"} and observed_action == "modify"
+
+
+def _schema_retry_target_intent_binding_drift(
+    rejection: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+    *,
+    attempt: int,
+) -> dict[str, Any] | None:
+    if (
+        str(rejection.get("failure_code") or "").strip()
+        != "target_intent_binding_mismatch"
+    ):
+        return None
+    selected = rejection.get("selected_target_intent")
+    if not isinstance(selected, Mapping):
+        selected = rejection.get("preserve_hypothesis")
+    if not isinstance(selected, Mapping):
+        return None
+    feedback = target_intent_binding_retry_feedback(
+        selected,
+        hypothesis,
+        attempt=attempt,
+        manifest=None,
+    )
+    if feedback is None:
+        return None
+    mismatches = [
+        item
+        for item in feedback.get("mismatches") or ()
+        if isinstance(item, Mapping)
+    ]
+    drift_fields = [
+        str(item.get("field") or "").strip()
+        for item in mismatches
+        if str(item.get("field") or "").strip()
+    ]
+    if not drift_fields:
+        drift_fields = list(feedback.get("mismatched_fields") or ())
+    return _drop_empty_dict(
+        {
+            "source": "hypothesis_preview_retry_preservation_gate",
+            "failure_code": "schema_retry_drift",
+            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "retry_source": rejection.get("source"),
+            "retry_failure_code": rejection.get("failure_code"),
+            "attempt": attempt,
+            "drift_fields": drift_fields,
+            "expected": feedback.get("selected_target_intent") or selected,
+            "observed": feedback.get("formal_hypothesis_target"),
+            "preserve_hypothesis": selected,
+            "protected_identity": feedback.get("protected_identity")
+            or _schema_retry_protected_identity(selected),
+        }
+    )
 
 
 def _schema_retry_drift_feedback(

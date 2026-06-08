@@ -19,7 +19,9 @@ from scion.proposal.agentic_observation_ledger.digests import (
     snapshot_digest_from_source,
     source_digest_payload,
 )
-from scion.proposal.agentic_observation_ledger.models import REUSABLE_CONTEXT_TOOLS
+from scion.proposal.agentic_observation_ledger.models import (
+    AUDITABLE_OBSERVATION_TOOLS,
+)
 from scion.proposal.agentic_observation_ledger.payloads import (
     compact_active_algorithm_facts,
 )
@@ -66,7 +68,7 @@ def record_agentic_ledger_observation(
 ) -> None:
     """Record one compact observation ledger entry on session state."""
 
-    if observation.tool_name not in REUSABLE_CONTEXT_TOOLS:
+    if observation.tool_name not in AUDITABLE_OBSERVATION_TOOLS:
         return
     entry = build_agentic_ledger_observation(
         context,

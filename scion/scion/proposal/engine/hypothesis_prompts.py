@@ -9,9 +9,9 @@ from .prompt_common import (
     _CACHE_5M,
     _DefaultDict,
     _agentic_research_context_block,
+    _bounded_json,
 )
 from .solver_design_prompts import _solver_design_hypothesis_guidance
-
 
 _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
     "tune",
@@ -106,6 +106,9 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Cross-Branch Research Map\n{D['cross_branch_research']}"
         )
+    branch_lesson_context = _branch_lesson_usage_context_block(context)
+    if branch_lesson_context:
+        branch_context_parts.append(branch_lesson_context)
     if D["branch_followup_policy"]:
         branch_context_parts.append(
             f"## Branch Follow-up Policy\n{D['branch_followup_policy']}"
@@ -306,7 +309,9 @@ def _split_hypothesis_target_intent_context(
         }
     ]
     if branch_context_parts:
-        system_blocks.append({"type": "text", "text": "\n\n".join(branch_context_parts)})
+        system_blocks.append(
+            {"type": "text", "text": "\n\n".join(branch_context_parts)}
+        )
 
     forced_surface = str(D["forced_surface"]).strip()
     forced_action = str(D["forced_action"]).strip()
@@ -328,9 +333,7 @@ def _split_hypothesis_target_intent_context(
             boundary_value = constraints.get("active_problem_boundary_surfaces")
             if isinstance(boundary_value, (list, tuple)):
                 active_boundary = ", ".join(
-                    str(item).strip()
-                    for item in boundary_value
-                    if str(item).strip()
+                    str(item).strip() for item in boundary_value if str(item).strip()
                 )
             else:
                 active_boundary = str(boundary_value or "").strip()
@@ -463,16 +466,10 @@ def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
 
 
 def _prompt_same_mechanism_allowed_actions(guidance: str) -> str:
-    raw_allowed = _extract_guidance_value(
-        guidance, "same_mechanism_allowed_actions"
-    )
+    raw_allowed = _extract_guidance_value(guidance, "same_mechanism_allowed_actions")
     if not raw_allowed:
         return ",".join(_PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS)
-    raw_actions = {
-        item.strip()
-        for item in raw_allowed.split(",")
-        if item.strip()
-    }
+    raw_actions = {item.strip() for item in raw_allowed.split(",") if item.strip()}
     prompt_actions = [
         action
         for action in _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS
@@ -518,6 +515,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             novelty_requirements = raw_novelty_requirements
     target_intent_lines = _target_intent_binding_task_lines(context)
     material_difference_lines = _material_difference_requirement_task_lines(context)
+    branch_lesson_usage_lines = _branch_lesson_usage_requirement_task_lines(context)
     if forced_surface:
         lines = [
             "## Task",
@@ -545,6 +543,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             )
         lines.extend(target_intent_lines)
         lines.extend(material_difference_lines)
+        lines.extend(branch_lesson_usage_lines)
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     if active_boundary:
@@ -576,6 +575,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             lines.extend(_solver_design_hypothesis_guidance(context))
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         lines.extend(material_difference_lines)
+        lines.extend(branch_lesson_usage_lines)
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")
     available_actions = str(
@@ -594,6 +594,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
     ]
     lines.extend(target_intent_lines)
     lines.extend(material_difference_lines)
+    lines.extend(branch_lesson_usage_lines)
     return "\n".join(lines) + "\n"
 
 
@@ -603,7 +604,9 @@ def _target_intent_binding_task_lines(context: Mapping[str, Any]) -> list[str]:
         return []
     intent_value = raw_intent.get("intent")
     intent = intent_value if isinstance(intent_value, Mapping) else raw_intent
-    change_locus = str(intent.get("change_locus") or intent.get("surface") or "").strip()
+    change_locus = str(
+        intent.get("change_locus") or intent.get("surface") or ""
+    ).strip()
     action = str(intent.get("action") or "").strip()
     target_file = str(intent.get("target_file") or "").strip()
     mechanism_family = str(intent.get("mechanism_family") or "").strip()
@@ -690,6 +693,77 @@ def _material_difference_requirement_task_lines(
             "`differs_from` or `effect_path`."
         ),
     ]
+
+
+def _branch_lesson_usage_context_block(context: Mapping[str, Any]) -> str:
+    payload: dict[str, Any] = {}
+    requirement = context.get("branch_lesson_usage_requirement")
+    if isinstance(requirement, Mapping) and requirement:
+        payload["branch_lesson_usage_requirement"] = requirement
+    for key in (
+        "branch_lesson_records",
+        "branch_lessons",
+        "cross_branch_lesson_records",
+    ):
+        records = context.get(key)
+        if records:
+            payload[key] = records
+    if not payload:
+        return ""
+    return (
+        "## Branch Lesson Usage Context\n"
+        "This is tainted proposal-only research feedback and is excluded from "
+        "DecisionFeatures. Use compact lesson ids and generic dimensions; do "
+        "not copy raw lesson text into the formal hypothesis.\n\n"
+        f"{_bounded_json(payload, 6000)}"
+    )
+
+
+def _branch_lesson_usage_requirement_task_lines(
+    context: Mapping[str, Any],
+) -> list[str]:
+    if not _branch_lesson_usage_context_present(context):
+        return []
+    return [
+        (
+            "Branch lesson usage context is active: the formal hypothesis must "
+            "include a compact proposal-only `branch_lesson_usage` object that "
+            "states which visible lessons it borrows, avoids, contrasts, "
+            "preserves, or rejects with machine-readable reason codes."
+        ),
+        (
+            "For a clean fork or sibling-aware proposal, `branch_lesson_usage` "
+            "must include at least one of `borrowed_lessons`, "
+            "`avoided_lessons`, or `contrasted_lessons`, plus changed generic "
+            "contrast dimensions and target_file/action/mechanism linkage. For "
+            "weak-positive transfer, borrow or preserve with activation_path "
+            "and effect_path, or emit `rejected_weak_positive_lessons` with a "
+            "reject_reason_code and the same linkage. For same-branch "
+            "weak-positive refinement, use `preserved_same_branch_lesson` when "
+            "preserving local evidence. Keep values to compact ids, enum-like "
+            "tokens, short arrays, and small "
+            "objects; do not include raw lesson text, rationale, reasoning, "
+            "trace, prompt, transcript, observation, or problem-specific "
+            "semantics."
+        ),
+    ]
+
+
+def _branch_lesson_usage_context_present(context: Mapping[str, Any]) -> bool:
+    requirement = context.get("branch_lesson_usage_requirement")
+    if isinstance(requirement, Mapping) and requirement.get("required") is False:
+        requirement = {}
+    if isinstance(requirement, Mapping) and requirement:
+        return True
+    for key in (
+        "branch_lesson_records",
+        "branch_lessons",
+        "cross_branch_lesson_records",
+    ):
+        records = context.get(key)
+        if records not in (None, "", [], {}, ()):
+            return True
+    return False
 
 
 def _novelty_signature_task_lines(

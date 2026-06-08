@@ -35,6 +35,15 @@ def _hypothesis_preview_retry_feedback(
     hypothesis = payload.get("hypothesis")
     if not isinstance(hypothesis, Mapping):
         return None
+    target_action_feedback = _target_action_permission_preview_retry_feedback(
+        preview_observations,
+        hypothesis,
+        detail=detail,
+        attempt=attempt,
+        previous_hypothesis=previous_hypothesis,
+    )
+    if target_action_feedback is not None:
+        return target_action_feedback
     same_mechanism_feedback = _same_mechanism_preview_retry_feedback(
         hypothesis,
         detail=detail,
@@ -90,6 +99,137 @@ def _hypothesis_preview_retry_feedback(
         preserve_hypothesis=preserve_hypothesis,
         protected_identity=protected_identity,
     )
+
+
+def _target_action_permission_preview_retry_feedback(
+    preview_observations: list[ProposalObservation],
+    hypothesis: Mapping[str, Any],
+    *,
+    detail: str,
+    attempt: int,
+    previous_hypothesis: HypothesisProposal,
+) -> dict[str, Any] | None:
+    guard = hypothesis.get("target_action_guard")
+    if not isinstance(guard, Mapping) or guard.get("passed") is not False:
+        guard = _target_permission_guard_from_observations(preview_observations)
+    if not isinstance(guard, Mapping) or guard.get("passed") is not False:
+        return None
+    failure_code = str(
+        guard.get("failure_code")
+        or guard.get("reason")
+        or ""
+    ).strip()
+    if failure_code != "existing_file_create_new_rejected":
+        return None
+
+    anchor = _hypothesis_retry_anchor(previous_hypothesis)
+    corrected_anchor = dict(anchor)
+    corrected_anchor["action"] = "modify"
+    target_file = str(
+        guard.get("target_file")
+        or anchor.get("target_file")
+        or getattr(previous_hypothesis, "target_file", "")
+        or ""
+    ).strip()
+    if target_file:
+        corrected_anchor["target_file"] = target_file
+    protected_identity = _schema_retry_protected_identity(corrected_anchor)
+    protected_identity.pop("action", None)
+    protected_identity["target_action_repair"] = {
+        "invalid_file_action": "create_new",
+        "required_file_action": "modify",
+        "target_file": target_file,
+    }
+    return _drop_empty_dict(
+        {
+            "attempt": attempt,
+            "attempt_kind": "target_action_permission_repair",
+            "repair_classification": "target_action_permission_repair",
+            "source": "hypothesis_preview_target_action_guard",
+            "gate_name": "proposal.schema_preview",
+            "failure_code": "existing_file_create_new_rejected",
+            "check": "target_action_permission",
+            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "reason": _limit_string(
+                str(guard.get("detail") or guard.get("reason") or "") or detail,
+                1000,
+            ),
+            "target_file": target_file,
+            "requested_action": "create_new",
+            "required_action": "modify",
+            "source_digest": guard.get("source_digest"),
+            "allowed_file_action": {
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": guard.get("source_digest"),
+                "target_file": target_file,
+            },
+            "allowed_mechanism_semantics": (
+                "The mechanism-level hypothesis may still describe adding or "
+                "integrating a new mechanism inside the existing target file. "
+                "Only the file-level action must change: existing files require "
+                "action=modify with typed exact_replace/source_digest."
+            ),
+            "forbidden_preservation_fields": {
+                "action": "Do not preserve invalid file action create_new for an existing target_file.",
+            },
+            "preserve_hypothesis": corrected_anchor,
+            "protected_identity": protected_identity,
+            "final_task": (
+                "Rewrite the hypothesis for the same target_file with "
+                "file-level action=modify. Keep the mechanism id/intent if it "
+                "is still the same research idea, but do not keep "
+                "action=create_new for an existing file."
+            ),
+            "retry_constraint": (
+                "Target/action repair: set hypothesis action to modify for the "
+                "same existing target_file and plan code as typed exact_replace "
+                "using source_digest. Preserve target_file and mechanism_changes "
+                "ids/change_types unless another preview explicitly rejects "
+                "them. Do not preserve the invalid file-level action=create_new. "
+                "Mechanism-level wording may say add or integrate a new "
+                "mechanism inside that existing file."
+            ),
+        }
+    )
+
+
+def _target_permission_guard_from_observations(
+    preview_observations: list[ProposalObservation],
+) -> Mapping[str, Any] | None:
+    observation = _latest_tool_observation(
+        preview_observations,
+        "proposal.target_permission_preview",
+    )
+    if observation is None or observation.is_error:
+        return None
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping) or payload.get("passed") is not False:
+        return None
+    issues = payload.get("issues")
+    if not isinstance(issues, list):
+        return None
+    if not any(
+        "existing_file_create_new_rejected" in str(issue)
+        for issue in issues
+    ):
+        return None
+    requested = payload.get("requested")
+    if not isinstance(requested, Mapping):
+        requested = {}
+    return {
+        "passed": False,
+        "reason": "existing_file_create_new_rejected",
+        "detail": next(
+            (
+                str(issue)
+                for issue in issues
+                if "existing_file_create_new_rejected" in str(issue)
+            ),
+            "existing_file_create_new_rejected",
+        ),
+        "target_file": requested.get("target_file"),
+    }
 
 
 def _same_mechanism_preview_retry_feedback(

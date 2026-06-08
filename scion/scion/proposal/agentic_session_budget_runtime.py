@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from scion.proposal.agentic_session_common import *
-from scion.proposal.session_trace_index import attach_prompt_manifest_trace_context
+from scion.proposal.session_trace_index import (
+    attach_prompt_manifest_trace_context,
+    register_prompt_manifest_trace_context,
+)
 
 
 class AgenticSessionBudgetRuntimeMixin:
@@ -379,6 +382,11 @@ class AgenticSessionBudgetRuntimeMixin:
                 user_prompt=user_prompt,
                 render_error=render_error,
             )
+            audit_provenance = _tooling_audit_provenance_capsule(state)
+            if audit_provenance:
+                raw_context_audit = manifest.get("raw_context_audit")
+                if isinstance(raw_context_audit, dict):
+                    raw_context_audit["provenance"] = audit_provenance
             if call_kind == "code":
                 setattr(state, "_latest_code_prompt_manifest", manifest)
             elif str(call_kind).startswith("hypothesis"):
@@ -391,19 +399,32 @@ class AgenticSessionBudgetRuntimeMixin:
                     manifest,
                 )
                 state.scratch_artifact_refs.append(artifact_ref)
-            attach_prompt_manifest_trace_context(
-                prompt_context,
-                artifact_ref=artifact_ref,
-                prompt_hash=manifest["prompt_hash"],
-                visibility_ledger_digest=manifest["visibility_ledger_summary"][
-                    "ledger_digest"
-                ],
-                visibility_ledger_ref=(
-                    f"{artifact_ref}#visibility_ledger"
-                    if artifact_ref
-                    else "api_visible_prompt_manifest#visibility_ledger"
-                ),
+            visibility_ledger_ref = (
+                f"{artifact_ref}#visibility_ledger"
+                if artifact_ref
+                else "api_visible_prompt_manifest#visibility_ledger"
             )
+            if str(call_kind) == "tool_selection":
+                register_prompt_manifest_trace_context(
+                    prompt_context,
+                    artifact_ref=artifact_ref,
+                    prompt_hash=manifest["prompt_hash"],
+                    visibility_ledger_digest=manifest["visibility_ledger_summary"][
+                        "ledger_digest"
+                    ],
+                    visibility_ledger_ref=visibility_ledger_ref,
+                    provenance=audit_provenance,
+                )
+            else:
+                attach_prompt_manifest_trace_context(
+                    prompt_context,
+                    artifact_ref=artifact_ref,
+                    prompt_hash=manifest["prompt_hash"],
+                    visibility_ledger_digest=manifest["visibility_ledger_summary"][
+                        "ledger_digest"
+                    ],
+                    visibility_ledger_ref=visibility_ledger_ref,
+                )
             state.note(
                 state.phase,
                 "Recorded API-visible prompt manifest.",
@@ -445,8 +466,57 @@ def _render_prompt_for_manifest(
         from scion.proposal.engine import _split_code_context
 
         return _split_code_context(dict(prompt_context))
+    if str(call_kind) == "tool_selection":
+        from scion.proposal.engine import _split_tool_selection_context
+
+        return _split_tool_selection_context(dict(prompt_context))
     if str(call_kind) == "fix":
         from scion.proposal.engine import _split_fix_context
 
         return _split_fix_context(dict(prompt_context))
     raise ValueError(f"unsupported prompt manifest call_kind: {call_kind}")
+
+
+def _tooling_audit_provenance_capsule(
+    state: AgenticProposalSessionState,
+) -> dict[str, Any]:
+    entries = [
+        dict(entry)
+        for entry in getattr(state, "tool_selection_ledger", ())
+        if isinstance(entry, Mapping)
+    ]
+    plan_id = str(getattr(state, "deterministic_prefetch_plan_id", "") or "").strip()
+    if not plan_id:
+        plan_id = "none"
+    prefetch_tool_names = []
+    for entry in entries:
+        source = str(entry.get("source") or "")
+        entry_plan_id = str(entry.get("deterministic_prefetch_plan_id") or "").strip()
+        if "deterministic_prefetch" not in source and entry_plan_id != plan_id:
+            continue
+        tool_name = str(entry.get("selected_tool") or entry.get("tool_name") or "")
+        if tool_name and tool_name not in prefetch_tool_names:
+            prefetch_tool_names.append(tool_name)
+    ledger_payload = {
+        "schema_version": "agentic-tool-selection-ledger.v1",
+        "session_id": state.session_id,
+        "campaign_id": state.campaign_id,
+        "branch_id": state.branch_id,
+        "deterministic_prefetch_plan_id": plan_id,
+        "entry_count": len(entries),
+        "entries": entries,
+    }
+    return _drop_empty_dict(
+        {
+            "schema_version": "scion-tooling-audit-provenance.v1",
+            "deterministic_prefetch_plan_id": plan_id,
+            "prefetch_tool_names": prefetch_tool_names,
+            "tool_selection_ledger_digest": stable_digest(
+                ledger_payload,
+                length=16,
+            ),
+            "tool_selection_ledger_ref": (
+                "agentic_proposal_output#tool_selection_ledger"
+            ),
+        }
+    )

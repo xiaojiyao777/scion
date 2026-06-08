@@ -1,4 +1,5 @@
 """Support utilities for generic cross-branch proposal feedback."""
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -6,7 +7,6 @@ import hashlib
 import json
 import re
 from typing import Any, Iterable, Mapping
-
 
 FAMILY_SUFFIXES = {
     "attempt",
@@ -140,6 +140,24 @@ MATERIAL_DIFFERENCE_DIMENSIONS = (
     "change_locus",
     "effect_path",
 )
+BRANCH_LESSON_RECORD_SCHEMA = "branch_lesson.v1"
+BRANCH_LESSON_REQUIRED_CONTRAST_DIMENSIONS = (
+    "mechanism_family",
+    "target_file",
+    "action",
+    "change_locus",
+    "effect_path",
+    "activation_path",
+    "runtime_budget_strategy",
+)
+BRANCH_LESSON_WEAK_POSITIVE_PATH_FIELDS = (
+    "activation_path",
+    "effect_path",
+)
+BRANCH_LESSON_WEAK_POSITIVE_RISK_OR_CONTRAST_FIELDS = (
+    "risk_to_avoid",
+    "contrast_dimensions",
+)
 MATERIAL_DIFFERENCE_EVIDENCE_STATUSES = (
     "activation_status",
     "effect_status",
@@ -148,6 +166,7 @@ MATERIAL_DIFFERENCE_EVIDENCE_STATUSES = (
 )
 MATERIAL_DIFFERENCE_RECORD_SCHEMA = "material_difference_requirement.v1"
 _MATERIAL_DIFFERENCE_RECORD_PREFIX = "mdr"
+_BRANCH_LESSON_RECORD_PREFIX = "lesson"
 
 
 def branch_lesson_text(lesson_type: str) -> str:
@@ -229,7 +248,9 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         runtime_confidences = Counter(
             record["runtime_evidence_confidence"] for record in group
         )
-        runtime_statuses = Counter(record["runtime_evidence_status"] for record in group)
+        runtime_statuses = Counter(
+            record["runtime_evidence_status"] for record in group
+        )
         active_weak_positive = unique(
             record.get("branch_id", "")
             for record in group
@@ -277,9 +298,7 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "sibling_branch_ids": sibling_branch_ids,
                     "active_weak_positive_branch_ids": active_weak_positive,
                     "same_branch_refinement_allowed": bool(active_weak_positive),
-                    "same_branch_refinement_allowed_branch_ids": (
-                        active_weak_positive
-                    ),
+                    "same_branch_refinement_allowed_branch_ids": (active_weak_positive),
                     "sibling_duplication_allowed": False,
                     "material_difference_required_for": requirements.get(
                         "required_for"
@@ -291,9 +310,7 @@ def avoid_signature_set(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "runtime_evidence_confidences": dict(
                         sorted(runtime_confidences.items())
                     ),
-                    "runtime_evidence_statuses": dict(
-                        sorted(runtime_statuses.items())
-                    ),
+                    "runtime_evidence_statuses": dict(sorted(runtime_statuses.items())),
                     "reason_codes": avoid_signature_reason_codes(
                         repeated_zero=repeated_zero,
                         non_positive=non_positive,
@@ -371,6 +388,151 @@ def blocked_signature_pressure(
     ]
 
 
+def branch_lesson_records(
+    *,
+    lesson_cards: Iterable[Mapping[str, Any]],
+    branch_summaries: Iterable[Mapping[str, Any]],
+    similarity_hints: Iterable[Mapping[str, Any]],
+    avoid_bridge_guidance: Iterable[Mapping[str, Any]],
+    max_records: int = 12,
+) -> list[dict[str, Any]]:
+    """Build stable compact lesson records for proposal-time propagation."""
+
+    records: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    summaries_by_branch = {
+        str(summary.get("branch_id")): summary
+        for summary in branch_summaries
+        if isinstance(summary, Mapping) and summary.get("branch_id")
+    }
+
+    for card in lesson_cards:
+        if not isinstance(card, Mapping):
+            continue
+        scope = str(card.get("scope") or "branch_local")
+        raw_lesson_type = str(card.get("lesson_type") or "unknown")
+        lesson_type = _branch_lesson_type(raw_lesson_type)
+        source_branch_ids = _lesson_source_branch_ids(card)
+        evidence_basis = _evidence_basis_for_lesson(
+            card,
+            summaries_by_branch=summaries_by_branch,
+            source_branch_ids=source_branch_ids,
+        )
+        shared_signature = _lesson_shared_signature(card, summaries_by_branch)
+        record_scope = _lesson_record_scope(
+            scope=scope,
+            lesson_type=lesson_type,
+            source_branch_ids=source_branch_ids,
+            summaries_by_branch=summaries_by_branch,
+        )
+        lesson_role = _lesson_role(
+            scope=record_scope,
+            lesson_type=lesson_type,
+            evidence_basis=evidence_basis,
+        )
+        maturity = _lesson_maturity(
+            scope=record_scope,
+            lesson_type=lesson_type,
+            source_branch_count=len(source_branch_ids),
+            evidence_basis=evidence_basis,
+        )
+        record = _branch_lesson_record(
+            scope=record_scope,
+            lesson_role=lesson_role,
+            lesson_type=lesson_type,
+            maturity=maturity,
+            source_branch_ids=source_branch_ids,
+            shared_signature=shared_signature,
+            evidence_basis=evidence_basis,
+            required_for=(
+                "same_branch_refinement"
+                if _same_branch_refinement_allowed(
+                    scope=scope,
+                    lesson_type=lesson_type,
+                    source_branch_ids=source_branch_ids,
+                    summaries_by_branch=summaries_by_branch,
+                )
+                else (
+                    "clean_fork_new_branch"
+                    if lesson_role == "borrow"
+                    else "sibling_nearby_attempt"
+                )
+            ),
+            same_branch_refinement_allowed=_same_branch_refinement_allowed(
+                scope=record_scope,
+                lesson_type=lesson_type,
+                source_branch_ids=source_branch_ids,
+                summaries_by_branch=summaries_by_branch,
+            ),
+            reason_codes=card.get("reason_codes", []) or [],
+        )
+        _append_lesson_record(records, seen_keys, record)
+
+    for hint in similarity_hints:
+        if not isinstance(hint, Mapping):
+            continue
+        hint_type = _branch_lesson_type(str(hint.get("hint_type") or "near_duplicate"))
+        record = _branch_lesson_record(
+            scope="cross_branch",
+            lesson_role="contrast",
+            lesson_type=hint_type,
+            maturity=(
+                "saturated" if hint_type == "saturated_signature" else "repeated"
+            ),
+            source_branch_ids=unique(
+                str(item) for item in hint.get("branch_ids", []) or []
+            ),
+            shared_signature=_clean_material_signature(
+                hint.get("shared_signature", {}) if isinstance(hint, Mapping) else {}
+            ),
+            evidence_basis={
+                "outcome_patterns": _counter_dict(hint.get("outcome_patterns", {})),
+            },
+            required_for="sibling_nearby_attempt",
+            same_branch_refinement_allowed=False,
+            reason_codes=[
+                *[str(code) for code in hint.get("reason_codes", []) or []],
+                "BRANCH_LESSON_CONTRAST_REQUIRED",
+            ],
+        )
+        _append_lesson_record(records, seen_keys, record)
+
+    for guidance in avoid_bridge_guidance:
+        if not isinstance(guidance, Mapping):
+            continue
+        if not _bridge_guidance(guidance):
+            continue
+        record = _branch_lesson_record(
+            scope="cross_branch",
+            lesson_role="bridge",
+            lesson_type="no_effect",
+            maturity="repeated",
+            source_branch_ids=unique(
+                str(item) for item in guidance.get("branch_ids", []) or []
+            ),
+            shared_signature=_clean_material_signature(
+                guidance.get("shared_signature", {})
+                or guidance.get("signature", {})
+                or {}
+            ),
+            evidence_basis={
+                "outcome_patterns": _counter_dict(guidance.get("outcome_patterns", {})),
+                "runtime_evidence_statuses": _counter_dict(
+                    guidance.get("runtime_evidence_statuses", {})
+                ),
+            },
+            required_for="clean_fork_new_branch",
+            same_branch_refinement_allowed=False,
+            reason_codes=[
+                *[str(code) for code in guidance.get("reason_codes", []) or []],
+                "BRANCH_LESSON_BRIDGE_REQUIRED",
+            ],
+        )
+        _append_lesson_record(records, seen_keys, record)
+
+    return sorted(records, key=lambda item: item["lesson_id"])[:max_records]
+
+
 def material_difference_requirements_for_avoidance(
     avoid_signatures: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -426,7 +588,9 @@ def material_difference_audit_records(
         )
         item["pressure_types"].add(str(pressure_type))
         item["pressure_sources"].add(str(pressure_source))
-        item["branch_ids"].update(str(branch_id) for branch_id in branch_ids if branch_id)
+        item["branch_ids"].update(
+            str(branch_id) for branch_id in branch_ids if branch_id
+        )
         item["reason_codes"].update(str(code) for code in reason_codes if code)
         if outcome_patterns:
             for pattern, count in outcome_patterns.items():
@@ -441,9 +605,7 @@ def material_difference_audit_records(
     for item in avoid_signatures:
         requirement = item.get("material_difference_requirements", {})
         signature = (
-            requirement.get("signature")
-            if isinstance(requirement, Mapping)
-            else None
+            requirement.get("signature") if isinstance(requirement, Mapping) else None
         ) or item.get("shared_signature", {})
         add_pressure(
             signature=signature,
@@ -453,8 +615,7 @@ def material_difference_audit_records(
             reason_codes=item.get("reason_codes", []) or [],
             outcome_patterns=item.get("outcome_patterns", {}) or {},
             required_for=str(
-                item.get("material_difference_required_for")
-                or "another_nearby_attempt"
+                item.get("material_difference_required_for") or "another_nearby_attempt"
             ),
             same_branch_refinement_allowed=bool(
                 item.get("same_branch_refinement_allowed")
@@ -463,11 +624,15 @@ def material_difference_audit_records(
 
     for item in saturated_signatures:
         add_pressure(
-            signature=item.get("shared_signature", {}) if isinstance(item, Mapping) else {},
+            signature=(
+                item.get("shared_signature", {}) if isinstance(item, Mapping) else {}
+            ),
             pressure_type="saturated_signature",
             pressure_source="saturated_signatures",
             branch_ids=item.get("branch_ids", []) if isinstance(item, Mapping) else [],
-            reason_codes=item.get("reason_codes", []) if isinstance(item, Mapping) else [],
+            reason_codes=(
+                item.get("reason_codes", []) if isinstance(item, Mapping) else []
+            ),
             outcome_patterns=(
                 item.get("outcome_patterns", {}) if isinstance(item, Mapping) else {}
             ),
@@ -475,11 +640,15 @@ def material_difference_audit_records(
 
     for item in near_duplicates:
         add_pressure(
-            signature=item.get("shared_signature", {}) if isinstance(item, Mapping) else {},
+            signature=(
+                item.get("shared_signature", {}) if isinstance(item, Mapping) else {}
+            ),
             pressure_type="near_duplicate_signature",
             pressure_source="near_duplicates",
             branch_ids=item.get("branch_ids", []) if isinstance(item, Mapping) else [],
-            reason_codes=item.get("reason_codes", []) if isinstance(item, Mapping) else [],
+            reason_codes=(
+                item.get("reason_codes", []) if isinstance(item, Mapping) else []
+            ),
             outcome_patterns=(
                 item.get("outcome_patterns", {}) if isinstance(item, Mapping) else {}
             ),
@@ -514,9 +683,7 @@ def material_difference_requirement(
             "required_for": required_for,
             "minimum_requirement": "change_one_or_more_generic_dimensions",
             "required_change_dimensions": list(MATERIAL_DIFFERENCE_DIMENSIONS),
-            "evidence_status_dimensions": list(
-                MATERIAL_DIFFERENCE_EVIDENCE_STATUSES
-            ),
+            "evidence_status_dimensions": list(MATERIAL_DIFFERENCE_EVIDENCE_STATUSES),
             "same_branch_refinement_allowed": same_branch_refinement_allowed,
             "sibling_duplication_allowed": False,
             "proposal_visibility_only": True,
@@ -615,6 +782,490 @@ def _stable_digest(payload: Mapping[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+
+
+def _branch_lesson_record(
+    *,
+    scope: str,
+    lesson_role: str,
+    lesson_type: str,
+    maturity: str,
+    source_branch_ids: list[str],
+    shared_signature: Mapping[str, Any],
+    evidence_basis: Mapping[str, Any],
+    required_for: str,
+    same_branch_refinement_allowed: bool,
+    reason_codes: Iterable[Any],
+) -> dict[str, Any]:
+    normalized_scope = _allowed_value(
+        scope,
+        {"branch_local", "cross_branch", "cluster"},
+        fallback="cross_branch",
+    )
+    normalized_role = _allowed_value(
+        lesson_role,
+        {"preserve", "borrow", "avoid", "contrast", "bridge"},
+        fallback="contrast",
+    )
+    normalized_type = _allowed_value(
+        lesson_type,
+        {
+            "weak_positive",
+            "no_effect",
+            "regression",
+            "abandoned",
+            "parked",
+            "near_duplicate",
+            "saturated_signature",
+        },
+        fallback="no_effect",
+    )
+    normalized_maturity = _allowed_value(
+        maturity,
+        {"fresh", "repeated", "saturated", "closed"},
+        fallback="fresh",
+    )
+    body = {
+        "schema_version": BRANCH_LESSON_RECORD_SCHEMA,
+        "source": "proposal_only",
+        "decision_input_policy": "excluded_from_decision_features",
+        "scope": normalized_scope,
+        "lesson_role": normalized_role,
+        "lesson_type": normalized_type,
+        "maturity": normalized_maturity,
+        "source_branch_ids": sorted(dict.fromkeys(source_branch_ids))[:8],
+        "shared_signature": _clean_material_signature(shared_signature),
+        "evidence_basis": _clean_evidence_basis(evidence_basis),
+        "transfer_contract": _weak_positive_transfer_contract(
+            lesson_role=normalized_role,
+            lesson_type=normalized_type,
+            shared_signature=shared_signature,
+            evidence_basis=evidence_basis,
+        ),
+        "required_response": _branch_lesson_required_response(
+            required_for=required_for,
+            lesson_role=normalized_role,
+            lesson_type=normalized_type,
+            same_branch_refinement_allowed=same_branch_refinement_allowed,
+        ),
+        "reason_codes": _branch_lesson_reason_codes(reason_codes),
+    }
+    digest = _stable_digest(body)
+    return {"lesson_id": f"{_BRANCH_LESSON_RECORD_PREFIX}:{digest[:16]}", **body}
+
+
+def _branch_lesson_required_response(
+    *,
+    required_for: str,
+    lesson_role: str,
+    lesson_type: str,
+    same_branch_refinement_allowed: bool,
+) -> dict[str, Any]:
+    response = {
+        "required_for": _allowed_value(
+            required_for,
+            {
+                "clean_fork_new_branch",
+                "sibling_nearby_attempt",
+                "same_branch_refinement",
+            },
+            fallback="sibling_nearby_attempt",
+        ),
+        "required_output_field": "branch_lesson_usage",
+        "minimum_requirement": (
+            "name_borrowed_or_avoided_lesson_and_contrast_dimension"
+        ),
+        "required_contrast_dimensions": list(
+            BRANCH_LESSON_REQUIRED_CONTRAST_DIMENSIONS
+        ),
+        "same_branch_refinement_allowed": bool(same_branch_refinement_allowed),
+        "sibling_duplication_allowed": False,
+    }
+    if lesson_type == "weak_positive" and lesson_role in {"borrow", "preserve"}:
+        response.update(
+            {
+                "minimum_requirement": (
+                    "borrow_or_preserve_or_machine_reject_with_activation_effect_linkage"
+                ),
+                "required_path_fields": list(BRANCH_LESSON_WEAK_POSITIVE_PATH_FIELDS),
+                "required_linkage_fields": [
+                    "target_file",
+                    "action",
+                    "mechanism_or_mechanism_change_id",
+                ],
+                "one_of_required_fields": list(
+                    BRANCH_LESSON_WEAK_POSITIVE_RISK_OR_CONTRAST_FIELDS
+                ),
+                "machine_reject_fields": [
+                    "rejected_weak_positive_lessons.lesson_id",
+                    "rejected_weak_positive_lessons.reject_reason_code",
+                    "rejected_weak_positive_lessons.target_file",
+                    "rejected_weak_positive_lessons.action",
+                    "rejected_weak_positive_lessons.mechanism_or_mechanism_change_id",
+                ],
+                "reuse_or_reject_required": True,
+                "proposal_guidance": (
+                    "Borrow or preserve the weak-positive lesson with "
+                    "activation path, effect path, target/action/mechanism "
+                    "linkage using a specific mechanism id, and at least one risk-to-avoid or contrast "
+                    "dimension. If rejecting reuse, emit a machine-readable "
+                    "reject reason with the same linkage. This is proposal "
+                    "guidance only and does not enter DecisionFeatures."
+                ),
+            }
+        )
+    return response
+
+
+def _weak_positive_transfer_contract(
+    *,
+    lesson_role: str,
+    lesson_type: str,
+    shared_signature: Mapping[str, Any],
+    evidence_basis: Mapping[str, Any],
+) -> dict[str, Any]:
+    if lesson_type != "weak_positive" or lesson_role not in {"borrow", "preserve"}:
+        return {}
+    signature = _clean_material_signature(shared_signature)
+    mechanism = (
+        signature.get("mechanism_family")
+        or signature.get("change_locus")
+        or "unspecified_generic_mechanism"
+    )
+    return drop_empty(
+        {
+            "trigger_mechanism": mechanism,
+            "activation_path": (
+                signature.get("change_locus")
+                or signature.get("mechanism_family")
+                or "unspecified_activation_path"
+            ),
+            "effect_path": (
+                signature.get("mechanism_family")
+                or signature.get("change_locus")
+                or "unspecified_effect_path"
+            ),
+            "entry_file": signature.get("target_file"),
+            "entry_function": "unspecified_generic_entry",
+            "risk_boundary": {
+                "risk_to_avoid": "do_not_duplicate_without_target_action_mechanism_linkage",
+                "evidence_basis": _clean_evidence_basis(evidence_basis),
+            },
+            "reuse_requirements": {
+                "required_output_field": "branch_lesson_usage",
+                "required_usage": "borrowed_lessons_or_preserved_same_branch_lesson",
+                "required_fields": [
+                    "lesson_id",
+                    "lesson_type",
+                    "activation_path",
+                    "effect_path",
+                    "target_file",
+                    "action",
+                    "mechanism_or_mechanism_change_id",
+                ],
+            },
+            "reject_requirements": {
+                "required_usage": "rejected_weak_positive_lessons",
+                "required_fields": [
+                    "lesson_id",
+                    "reject_reason_code",
+                    "target_file",
+                    "action",
+                    "mechanism_or_mechanism_change_id",
+                ],
+            },
+        }
+    )
+
+
+def _branch_lesson_reason_codes(reason_codes: Iterable[Any]) -> list[str]:
+    codes = ["BRANCH_LESSON_REQUIRED"]
+    for code in reason_codes:
+        append_unique(codes, clean_token(code))
+    return codes[:12]
+
+
+def _append_lesson_record(
+    records: list[dict[str, Any]],
+    seen_keys: set[str],
+    record: dict[str, Any],
+) -> None:
+    if not record:
+        return
+    key = record["lesson_id"]
+    if key in seen_keys:
+        return
+    seen_keys.add(key)
+    records.append(record)
+
+
+def _lesson_source_branch_ids(card: Mapping[str, Any]) -> list[str]:
+    raw_ids = card.get("branch_ids")
+    if not raw_ids:
+        raw_ids = [card.get("branch_id")]
+    return unique(str(item) for item in raw_ids or [] if item)
+
+
+def _lesson_shared_signature(
+    card: Mapping[str, Any],
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> dict[str, str]:
+    raw_signature = card.get("shared_signature")
+    if not raw_signature:
+        raw_signature = _signature_from_mechanism_signature(
+            card.get("mechanism_signature")
+        )
+    if not raw_signature:
+        for branch_id in _lesson_source_branch_ids(card):
+            summary = summaries_by_branch.get(branch_id, {})
+            descriptors = summary.get("research_descriptors", []) or []
+            if descriptors:
+                raw_signature = descriptors[0]
+                break
+    return _clean_material_signature(
+        raw_signature if isinstance(raw_signature, Mapping) else {}
+    )
+
+
+def _signature_from_mechanism_signature(value: Any) -> dict[str, str]:
+    if not isinstance(value, str):
+        return {}
+    parsed: dict[str, str] = {}
+    aliases = {
+        "family": "mechanism_family",
+        "target": "target_file",
+        "action": "action",
+        "locus": "change_locus",
+    }
+    for part in value.split("|"):
+        if "=" not in part:
+            continue
+        key, raw = part.split("=", 1)
+        if key in aliases:
+            parsed[aliases[key]] = raw
+    return parsed
+
+
+def _evidence_basis_for_lesson(
+    card: Mapping[str, Any],
+    *,
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+    source_branch_ids: list[str],
+) -> dict[str, Any]:
+    outcome_patterns: Counter[str] = Counter()
+    activation_statuses: Counter[str] = Counter()
+    effect_statuses: Counter[str] = Counter()
+    runtime_statuses: Counter[str] = Counter()
+
+    for branch_id in source_branch_ids:
+        summary = summaries_by_branch.get(branch_id, {})
+        outcome = summary.get("outcome_summary", {}) or {}
+        evidence = summary.get("evidence_profile", {}) or {}
+        outcome_patterns.update(
+            [
+                str(
+                    outcome.get("outcome_pattern")
+                    or card.get("lesson_type")
+                    or "unknown"
+                )
+            ]
+        )
+        activation_statuses.update(
+            [str(evidence.get("activation_status") or "unknown")]
+        )
+        effect_statuses.update([str(evidence.get("effect_status") or "unknown")])
+        runtime_statuses.update(
+            [str(evidence.get("runtime_evidence_status") or "unknown")]
+        )
+
+    if not outcome_patterns:
+        outcome_patterns.update([str(card.get("lesson_type") or "unknown")])
+
+    return drop_empty(
+        {
+            "outcome_patterns": dict(sorted(outcome_patterns.items())),
+            "activation_statuses": dict(sorted(activation_statuses.items())),
+            "effect_statuses": dict(sorted(effect_statuses.items())),
+            "runtime_evidence_statuses": dict(sorted(runtime_statuses.items())),
+        }
+    )
+
+
+def _clean_evidence_basis(value: Mapping[str, Any]) -> dict[str, Any]:
+    allowed = (
+        "outcome_patterns",
+        "activation_statuses",
+        "effect_statuses",
+        "runtime_evidence_statuses",
+    )
+    return drop_empty(
+        {
+            key: _counter_dict(value.get(key, {}))
+            for key in allowed
+            if isinstance(value.get(key, {}), Mapping)
+        }
+    )
+
+
+def _counter_dict(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, int] = {}
+    for key, raw_count in sorted(value.items(), key=lambda item: str(item[0])):
+        clean_key = clean_token(key)
+        if not clean_key:
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            count = 1
+        if count > 0:
+            result[clean_key] = count
+    return result
+
+
+def _branch_lesson_type(value: str) -> str:
+    normalized = clean_token(value)
+    if normalized == "saturated_family":
+        return "saturated_signature"
+    if normalized in {
+        "weak_positive",
+        "no_effect",
+        "regression",
+        "abandoned",
+        "parked",
+        "near_duplicate",
+        "saturated_signature",
+    }:
+        return normalized
+    if normalized in {"blocked", "pre_protocol_failure"}:
+        return "no_effect"
+    return "no_effect"
+
+
+def _lesson_role(
+    *,
+    scope: str,
+    lesson_type: str,
+    evidence_basis: Mapping[str, Any],
+) -> str:
+    if _bridge_evidence(evidence_basis):
+        return "bridge"
+    if lesson_type == "weak_positive":
+        return "preserve" if scope == "branch_local" else "borrow"
+    if lesson_type in {"near_duplicate", "saturated_signature"}:
+        return "contrast"
+    return "avoid"
+
+
+def _lesson_record_scope(
+    *,
+    scope: str,
+    lesson_type: str,
+    source_branch_ids: list[str],
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> str:
+    if lesson_type != "weak_positive" or scope != "branch_local":
+        return scope
+    if any(
+        _weak_positive_source_is_current(branch_id, summaries_by_branch)
+        for branch_id in source_branch_ids
+    ):
+        return "branch_local"
+    if any(
+        _weak_positive_source_is_transferable(branch_id, summaries_by_branch)
+        for branch_id in source_branch_ids
+    ):
+        return "cross_branch"
+    return scope
+
+
+def _lesson_maturity(
+    *,
+    scope: str,
+    lesson_type: str,
+    source_branch_count: int,
+    evidence_basis: Mapping[str, Any],
+) -> str:
+    if lesson_type in {"abandoned", "parked"}:
+        return "closed"
+    if lesson_type == "saturated_signature" or source_branch_count >= 3:
+        return "saturated"
+    if scope == "cross_branch" or source_branch_count >= 2:
+        return "repeated"
+    if _bridge_evidence(evidence_basis):
+        return "repeated"
+    return "fresh"
+
+
+def _same_branch_refinement_allowed(
+    *,
+    scope: str,
+    lesson_type: str,
+    source_branch_ids: list[str],
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    if scope != "branch_local" or lesson_type != "weak_positive":
+        return False
+    return any(
+        _weak_positive_source_is_current(branch_id, summaries_by_branch)
+        for branch_id in source_branch_ids
+    )
+
+
+def _weak_positive_source_is_current(
+    branch_id: str,
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    summary = summaries_by_branch.get(branch_id, {})
+    return bool(summary.get("is_current_branch")) and (
+        _weak_positive_source_is_transferable(branch_id, summaries_by_branch)
+    )
+
+
+def _weak_positive_source_is_transferable(
+    branch_id: str,
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    summary = summaries_by_branch.get(branch_id, {})
+    outcome = summary.get("outcome_summary", {}) or {}
+    if outcome.get("outcome_pattern") != "weak_positive":
+        return False
+    return summary.get("final_or_active_state") in {"active", "final"}
+
+
+def _bridge_guidance(value: Mapping[str, Any]) -> bool:
+    guidance_type = str(value.get("guidance_type") or value.get("hint_type") or "")
+    if "bridge" in guidance_type:
+        return True
+    return _bridge_evidence(
+        {
+            "runtime_evidence_statuses": value.get(
+                "runtime_evidence_statuses",
+                {},
+            )
+        }
+    )
+
+
+def _bridge_evidence(value: Mapping[str, Any]) -> bool:
+    statuses = value.get("runtime_evidence_statuses", {})
+    if not isinstance(statuses, Mapping):
+        return False
+    return any(
+        key in statuses
+        for key in (
+            "fresh_champion_required",
+            "insufficient",
+            "low",
+            "low_or_incomplete",
+        )
+    )
+
+
+def _allowed_value(value: str, allowed: set[str], *, fallback: str) -> str:
+    normalized = clean_token(value)
+    return normalized if normalized in allowed else fallback
 
 
 def same_branch_refinement_allowances(
@@ -759,9 +1410,7 @@ def parse_similarity_key(key: str) -> dict[str, str]:
 
 def tokenize(value: str) -> list[str]:
     return [
-        token
-        for token in re.split(r"[^a-zA-Z0-9]+", str(value or "").lower())
-        if token
+        token for token in re.split(r"[^a-zA-Z0-9]+", str(value or "").lower()) if token
     ]
 
 
@@ -812,9 +1461,7 @@ def append_unique_dict(
 
 def drop_empty(value: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: item
-        for key, item in value.items()
-        if item not in (None, "", [], {}, ())
+        key: item for key, item in value.items() if item not in (None, "", [], {}, ())
     }
 
 

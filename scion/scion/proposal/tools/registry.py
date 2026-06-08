@@ -51,9 +51,42 @@ from scion.proposal.tools.preview import (
 )
 from scion.proposal.tools.surface import ContextReadSurfaceTool
 from scion.proposal.tools.utils import (
+    _contains_forbidden_raw_marker,
     _error_observation,
     _json_size,
+    _sanitized_success_payload,
     _strip_forbidden_payload_refs,
+)
+
+_HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
+_FRAMEWORK_PREVIEW_TOOLS = frozenset(
+    {
+        "proposal.schema_preview",
+        "proposal.target_permission_preview",
+        "proposal.contract_preview",
+        "proposal.algorithm_smoke",
+    }
+)
+_CODE_PHASE_MODEL_SELECTABLE_TOOLS = frozenset(
+    {
+        "context.list_surfaces",
+        "context.read_problem",
+        "context.read_surface",
+        "context.read_objective_policy",
+        "context.read_champion_summary",
+        "context.read_branch_state",
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+        "context.read_active_solver_map",
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
+        "context.read_active_solver_design",
+        "context.read_solver_call_graph",
+        "context.list_algorithm_files",
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    }
 )
 
 
@@ -128,6 +161,46 @@ class ProposalToolRegistry:
             )
         return tuple(specs)
 
+    def phase_policy_projection(
+        self,
+        context: ProposalToolContext,
+        phase: str,
+    ) -> dict[str, tuple[str, ...]]:
+        """Project registered tools into model-selectable vs framework-only sets."""
+
+        allowed = set(self.allowed_tools(context))
+        framework_preview_tools = tuple(
+            sorted(allowed.intersection(_FRAMEWORK_PREVIEW_TOOLS))
+        )
+        model_selectable = set(allowed)
+        model_selectable.discard(_HOLDOUT_SUMMARY_TOOL)
+        model_selectable.difference_update(_FRAMEWORK_PREVIEW_TOOLS)
+        if str(phase or "").strip() == "code_planning":
+            model_selectable.intersection_update(_CODE_PHASE_MODEL_SELECTABLE_TOOLS)
+        return {
+            "model_selectable_tools": tuple(sorted(model_selectable)),
+            "framework_preview_tools": framework_preview_tools,
+        }
+
+    def allowed_tools_for_phase(
+        self,
+        context: ProposalToolContext,
+        phase: str,
+    ) -> tuple[str, ...]:
+        return self.phase_policy_projection(context, phase)["model_selectable_tools"]
+
+    def allowed_tool_specs_for_phase(
+        self,
+        context: ProposalToolContext,
+        phase: str,
+    ) -> tuple[dict[str, Any], ...]:
+        allowed = set(self.allowed_tools_for_phase(context, phase))
+        return tuple(
+            spec
+            for spec in self.allowed_tool_specs(context)
+            if str(spec.get("name") or "") in allowed
+        )
+
     def call(
         self,
         name: str,
@@ -184,6 +257,29 @@ class ProposalToolRegistry:
             )
 
         object.__setattr__(observation, "tool_call_id", call_id)
+        sanitized_payload, unsafe_marker = _sanitized_success_payload(
+            observation.structured_payload
+        )
+        if unsafe_marker or _contains_forbidden_raw_marker(
+            (observation.summary, observation.artifact_ref)
+        ):
+            return _error_observation(
+                context,
+                tool_name=tool.name,
+                tool_call_id=call_id,
+                failure_code=ProposalToolFailureCode.EXPOSURE_DENIED,
+                summary="Tool result contained forbidden raw evidence markers.",
+                structured_payload={
+                    "sanitized": True,
+                    "reason": "forbidden_raw_marker",
+                },
+                repair_hint=(
+                    "Return proposal-safe aggregate fields only; do not expose "
+                    "raw, holdout, frozen, or promotion-derived refs."
+                ),
+            )
+        if sanitized_payload != observation.structured_payload:
+            object.__setattr__(observation, "structured_payload", sanitized_payload)
         if _json_size(observation.structured_payload) > tool.max_result_chars:
             compact_observation = compact_algorithm_smoke_observation_for_agent(
                 observation

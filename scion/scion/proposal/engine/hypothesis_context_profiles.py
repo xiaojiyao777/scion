@@ -106,6 +106,11 @@ def filter_hypothesis_context_for_prompt(
     ):
         filtered.pop("material_difference_requirement", None)
 
+    if not _active_branch_lesson_usage_requirement(
+        context.get("branch_lesson_usage_requirement")
+    ):
+        filtered.pop("branch_lesson_usage_requirement", None)
+
     return filtered
 
 
@@ -182,6 +187,24 @@ def _compact_cross_branch_research(payload: Any) -> str:
                     "reason_codes",
                     "summary",
                 ),
+            ),
+            "branch_lessons": _project_items(
+                payload.get("branch_lesson_records"),
+                fields=(
+                    "lesson_id",
+                    "source",
+                    "decision_input_policy",
+                    "scope",
+                    "lesson_role",
+                    "lesson_type",
+                    "maturity",
+                    "source_branch_ids",
+                    "shared_signature",
+                    "evidence_basis",
+                    "required_response",
+                    "reason_codes",
+                ),
+                limit=8,
             ),
             "portfolio_guidance": _project_generic_value(
                 payload.get("portfolio_guidance")
@@ -384,7 +407,22 @@ def _active_material_difference_requirement(value: Any) -> bool:
     return False
 
 
+def _active_branch_lesson_usage_requirement(value: Any) -> bool:
+    if not isinstance(value, Mapping) or value.get("required") is not True:
+        return False
+    if value.get("schema_version") != "branch_lesson_usage_requirement.v1":
+        return False
+    for key, child in value.items():
+        if key in {"schema_version", "required"}:
+            continue
+        if _present(child):
+            return True
+    return False
+
+
 def _present(value: Any) -> bool:
+    if isinstance(value, bool):
+        return True
     if value is None:
         return False
     if isinstance(value, str):

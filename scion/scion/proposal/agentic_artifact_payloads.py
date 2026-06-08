@@ -19,6 +19,7 @@ from scion.proposal.agentic_models import (
     AgenticTranscriptEvent,
     AgenticToolLoopConfig,
 )
+from scion.proposal.agentic_tool_selection_ledger import tool_selection_ledger_payload
 from scion.proposal.agentic_utils import (
     _enum_value,
     _json_ready,
@@ -356,28 +357,7 @@ def _patch_artifact_payload(patch: PatchProposal) -> dict[str, Any]:
 def _transcript_tool_selection_ledger_payload(
     state: AgenticProposalSessionState,
 ) -> dict[str, Any]:
-    entries = list(state.tool_selection_ledger)
-    executed_tools = {
-        str(entry.get("selected_tool") or entry.get("tool_name") or "")
-        for entry in entries
-        if isinstance(entry, Mapping)
-        and entry.get("status") == "executed"
-        and not entry.get("result_is_error")
-    }
-    return {
-        "schema_version": "agentic-tool-selection-ledger.v1",
-        "session_id": state.session_id,
-        "campaign_id": state.campaign_id,
-        "branch_id": state.branch_id,
-        "deterministic_prefetch_plan_id": "none",
-        "default_triad_satisfied": {
-            "memory.query",
-            "feedback.query_screening",
-            "feedback.query_runtime",
-        }.issubset(executed_tools),
-        "entry_count": len(entries),
-        "entries": entries,
-    }
+    return tool_selection_ledger_payload(state, state)
 
 
 def _load_artifact_payload(artifact: str | Path | Mapping[str, Any]) -> dict[str, Any]:

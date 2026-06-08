@@ -10,6 +10,10 @@ from scion.proposal.agentic_utils import (
     _json_ready,
     _limit_string,
 )
+from scion.runtime.surface_telemetry import (
+    declared_event_fields_for,
+    runtime_path_value,
+)
 
 
 def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
@@ -342,16 +346,12 @@ def _compact_runtime_audit_failure_section(value: Any) -> dict[str, Any] | None:
             value.get("failed_runtime_fields"),
             limit=6,
         ),
-        "solver_algorithm_errors": value.get("solver_algorithm_errors"),
     }
-    events = value.get("solver_algorithm_events")
-    if events not in (None, "", [], {}):
-        compact["solver_algorithm_events"] = _limit_string(
-            json.dumps(
-                _json_ready(events),
-                sort_keys=True,
-                default=str,
-            ),
+    compact.update(_compact_runtime_mapping(value, limit=8))
+    events = _runtime_event_payloads(value)
+    if events:
+        compact["runtime_events"] = _limit_string(
+            json.dumps(_json_ready(events), sort_keys=True, default=str),
             500,
         )
     return _drop_empty_mapping(compact)
@@ -392,33 +392,62 @@ def _compact_micro_benchmark_section(value: Any) -> dict[str, Any] | None:
 def _compact_runtime_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
-    preferred_keys = (
-        "solver_algorithm_loaded",
-        "solver_algorithm_active",
-        "solver_algorithm_errors",
-        "solver_algorithm_elapsed_ms",
-        "solver_algorithm_solution_valid",
-        "solver_algorithm_search_iterations",
-        "solver_algorithm_accepted_moves",
-        "solver_algorithm_best_delta",
-        "solver_algorithm_stop_reason",
-    )
-    extra_keys = sorted(
-        key
-        for key in value
-        if str(key).startswith("solver_algorithm_")
-        and key != "solver_algorithm_events"
-        and key not in set(preferred_keys)
-    )
-    keys = (*preferred_keys, *extra_keys)
-    compact = {key: value.get(key) for key in keys if key in value}
-    events = value.get("solver_algorithm_events")
-    if events not in (None, "", [], {}):
-        compact["solver_algorithm_events"] = _limit_string(
+    compact = _compact_runtime_mapping(value, limit=12)
+    events = _runtime_event_payloads(value)
+    if events:
+        compact["runtime_events"] = _limit_string(
             json.dumps(_json_ready(events), sort_keys=True, default=str),
             500,
         )
     return _drop_empty_mapping(compact)
+
+
+def _compact_runtime_mapping(
+    value: Mapping[str, Any],
+    *,
+    limit: int,
+) -> dict[str, Any]:
+    keys = [
+        key
+        for key in sorted(value)
+        if _is_compact_runtime_field(str(key or ""))
+        and value.get(key) not in (None, "", [], {})
+    ]
+    return {key: value.get(key) for key in keys[:limit]}
+
+
+def _runtime_event_payloads(value: Mapping[str, Any]) -> list[Any]:
+    events: list[Any] = []
+    for key, item in value.items():
+        field = str(key or "")
+        if field.endswith(("_errors", ".errors")):
+            for event_field in declared_event_fields_for(value, field):
+                event_value = runtime_path_value(value, event_field)
+                if event_value not in (None, "", [], {}):
+                    events.append({event_field: event_value})
+        if field.endswith(("_events", ".events")) and item not in (None, "", [], {}):
+            events.append({field: item})
+    return events
+
+
+def _is_compact_runtime_field(field: str) -> bool:
+    normalized = field.replace(".", "_")
+    return normalized.endswith(
+        (
+            "_loaded",
+            "_active",
+            "_errors",
+            "_error_count",
+            "_elapsed_ms",
+            "_runtime_ms",
+            "_iterations",
+            "_attempts",
+            "_moves",
+            "_best_delta",
+            "_stop_reason",
+            "_solution_valid",
+        )
+    )
 
 def _compact_smoke_run_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):

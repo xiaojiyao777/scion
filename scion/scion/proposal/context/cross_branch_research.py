@@ -32,6 +32,7 @@ from scion.proposal.context.cross_branch_research_support import (
     append_unique as _append_unique,
     avoid_signature_set as _avoid_signature_set,
     blocked_signature_pressure as _blocked_signature_pressure,
+    branch_lesson_records as _branch_lesson_records,
     branch_lesson_text as _branch_lesson_text,
     clean_token as _clean_token,
     cross_branch_lesson_text as _cross_branch_lesson_text,
@@ -70,6 +71,7 @@ def build_cross_branch_research_map(
     max_steps_per_branch: int = 4,
     max_similarity_hints: int = 8,
     max_lessons: int = 12,
+    max_branch_lesson_records: int = 12,
 ) -> dict[str, Any]:
     """Build tainted cross-branch research feedback for hypothesis prompts.
 
@@ -134,6 +136,13 @@ def build_cross_branch_research_map(
         avoid_bridge_guidance,
         opportunity_gaps,
     )
+    branch_lesson_records = _branch_lesson_records(
+        lesson_cards=lesson_cards,
+        branch_summaries=branch_summaries,
+        similarity_hints=similarity_hints,
+        avoid_bridge_guidance=avoid_bridge_guidance,
+        max_records=max_branch_lesson_records,
+    )
     portfolio_steering = build_portfolio_steering(
         branch_summaries,
         opportunity_gaps=opportunity_gaps,
@@ -150,6 +159,7 @@ def build_cross_branch_research_map(
             "similarity_hints": similarity_hints,
             "lesson_cards": lesson_cards,
             "lessons": lessons,
+            "branch_lesson_records": branch_lesson_records,
             "portfolio_coverage": portfolio_coverage,
             "avoid_bridge_guidance": avoid_bridge_guidance,
             "opportunity_gaps": opportunity_gaps,
@@ -159,7 +169,10 @@ def build_cross_branch_research_map(
                 [],
             ),
             "cross_branch_research_metadata": (
-                _cross_branch_research_metadata(novelty_pressure)
+                _cross_branch_research_metadata(
+                    novelty_pressure,
+                    branch_lesson_records=branch_lesson_records,
+                )
             ),
             "portfolio_guidance": portfolio_guidance,
             "portfolio_steering": portfolio_steering,
@@ -587,8 +600,11 @@ def _in_action_diversity_pressure(
 
 def _cross_branch_research_metadata(
     novelty_pressure: dict[str, Any],
+    *,
+    branch_lesson_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     records = novelty_pressure.get("material_difference_audit_records", []) or []
+    lessons = branch_lesson_records or []
     return _drop_empty(
         {
             "schema_version": "cross_branch_research_context_metadata.v1",
@@ -606,6 +622,12 @@ def _cross_branch_research_metadata(
                 item.get("record_digest")
                 for item in records
                 if isinstance(item, dict) and item.get("record_digest")
+            ],
+            "branch_lesson_record_count": len(lessons),
+            "branch_lesson_record_ids": [
+                item.get("lesson_id")
+                for item in lessons
+                if isinstance(item, dict) and item.get("lesson_id")
             ],
         }
     )

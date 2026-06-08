@@ -23,6 +23,7 @@ from .errors import (
     _is_transient_provider_error,
     _parse_retry_after,
 )
+from .timeout import _llm_hard_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +525,8 @@ class TransportMixin:
         """
         effective_model = model or self.model
         try:
-            return self._call_once(prompt, effective_model)
+            with _llm_hard_timeout(self.timeout_sec):
+                return self._call_once(prompt, effective_model)
         except (LLMTimeoutError, LLMRateLimitError, LLMTransientProviderError):
             raise
         except Exception as exc:

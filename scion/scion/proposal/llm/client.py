@@ -183,7 +183,8 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
 
         while attempt <= self.max_retries:
             try:
-                raw = self._call_once(current_prompt, effective_model, system_blocks)
+                with _llm_hard_timeout(self.timeout_sec):
+                    raw = self._call_once(current_prompt, effective_model, system_blocks)
                 result = self._parse_and_validate(raw, response_schema)
                 self._mark_retry_events_recovered(True)
                 return result

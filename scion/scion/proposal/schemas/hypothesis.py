@@ -32,6 +32,15 @@ _MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS = (
     "cross_branch_text",
 )
 
+_BRANCH_LESSON_USAGE_MAX_STRING = 120
+_BRANCH_LESSON_USAGE_MAX_LIST_ITEMS = 12
+_BRANCH_LESSON_USAGE_MAX_DICT_KEYS = 24
+_BRANCH_LESSON_USAGE_MAX_DEPTH = 4
+_BRANCH_LESSON_USAGE_BLOCKED_KEY_PARTS = (
+    *_MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS,
+    "prose",
+)
+
 
 def normalize_material_difference(value: Any) -> Dict[str, Any]:
     """Return a compact proposal-visible material-difference record.
@@ -41,6 +50,18 @@ def normalize_material_difference(value: Any) -> Dict[str, Any]:
     """
 
     normalized = _normalize_material_difference_value(value, depth=0)
+    return normalized if isinstance(normalized, dict) else {}
+
+
+def normalize_branch_lesson_usage(value: Any) -> Dict[str, Any]:
+    """Return a compact proposal-only branch lesson usage record.
+
+    This stays in tainted proposal/audit metadata. It records which sibling or
+    same-branch lessons the proposal claims to borrow, avoid, contrast, or
+    preserve, while dropping raw prompt/context text and long prose.
+    """
+
+    normalized = _normalize_branch_lesson_usage_value(value, depth=0)
     return normalized if isinstance(normalized, dict) else {}
 
 
@@ -69,14 +90,67 @@ def _normalize_material_difference_value(value: Any, *, depth: int) -> Any:
         return items
     if isinstance(value, dict):
         out: dict[str, Any] = {}
-        for raw_key, raw_item in list(value.items())[:_MATERIAL_DIFFERENCE_MAX_DICT_KEYS]:
+        for raw_key, raw_item in list(value.items())[
+            :_MATERIAL_DIFFERENCE_MAX_DICT_KEYS
+        ]:
             key = str(raw_key or "").strip()
             if not key or len(key) > _MATERIAL_DIFFERENCE_MAX_STRING:
                 continue
             key_lower = key.lower()
-            if any(part in key_lower for part in _MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS):
+            if any(
+                part in key_lower for part in _MATERIAL_DIFFERENCE_BLOCKED_KEY_PARTS
+            ):
                 continue
             normalized = _normalize_material_difference_value(
+                raw_item,
+                depth=depth + 1,
+            )
+            if normalized not in (None, "", [], {}, ()):
+                out[key] = normalized
+        return out
+    return None
+
+
+def _normalize_branch_lesson_usage_value(value: Any, *, depth: int) -> Any:
+    if depth > _BRANCH_LESSON_USAGE_MAX_DEPTH:
+        return None
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or len(text) > _BRANCH_LESSON_USAGE_MAX_STRING:
+            return None
+        if "\n" in text or "\r" in text:
+            return None
+        return text
+    if isinstance(value, (list, tuple, set)):
+        items: list[Any] = []
+        for item in list(value)[:_BRANCH_LESSON_USAGE_MAX_LIST_ITEMS]:
+            normalized = _normalize_branch_lesson_usage_value(
+                item,
+                depth=depth + 1,
+            )
+            if normalized not in (None, "", [], {}, ()):
+                items.append(normalized)
+        return items
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for raw_key, raw_item in list(value.items())[
+            :_BRANCH_LESSON_USAGE_MAX_DICT_KEYS
+        ]:
+            key = str(raw_key or "").strip()
+            if not key or len(key) > _BRANCH_LESSON_USAGE_MAX_STRING:
+                continue
+            key_lower = key.lower()
+            if any(
+                part in key_lower for part in _BRANCH_LESSON_USAGE_BLOCKED_KEY_PARTS
+            ):
+                continue
+            normalized = _normalize_branch_lesson_usage_value(
                 raw_item,
                 depth=depth + 1,
             )
@@ -109,6 +183,7 @@ class HypothesisProposalInput(BaseModel):
     )
     novelty_signature: Dict[str, Any] = Field(default_factory=dict)
     material_difference: Dict[str, Any] = Field(default_factory=dict)
+    branch_lesson_usage: Dict[str, Any] = Field(default_factory=dict)
     mechanism_changes: list[MechanismChangeInput] = Field(default_factory=list)
 
     @field_validator("mechanism_changes", mode="before")
@@ -125,6 +200,11 @@ class HypothesisProposalInput(BaseModel):
     @classmethod
     def normalize_material_difference(cls, value: Any) -> Dict[str, Any]:
         return normalize_material_difference(value)
+
+    @field_validator("branch_lesson_usage", mode="before")
+    @classmethod
+    def normalize_branch_lesson_usage(cls, value: Any) -> Dict[str, Any]:
+        return normalize_branch_lesson_usage(value)
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -250,6 +330,53 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "transcript, or hypothesis prose."
             ),
         },
+        "branch_lesson_usage": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "borrowed_lessons": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "avoided_lessons": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "contrasted_lessons": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "preserved_same_branch_lesson": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+                "rejected_weak_positive_lessons": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "clean_fork_diversity_claim": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "description": (
+                "Compact structured proposal-only/audit record describing how "
+                "this tainted hypothesis uses visible branch lessons when "
+                "branch metadata or branch lesson records require it. Supported "
+                "shape includes borrowed_lessons, avoided_lessons, "
+                "contrasted_lessons, preserved_same_branch_lesson, "
+                "rejected_weak_positive_lessons, and clean_fork_diversity_claim "
+                "with lesson ids, source branch ids, target_file/action/"
+                "specific mechanism linkage, changed generic contrast dimensions, "
+                "activation/effect paths for weak-positive reuse, and short "
+                "enum-like tokens. Prefer `mechanism` or `mechanism_change_id` "
+                "using a concrete mechanism_changes id; `mechanism_id` is an "
+                "accepted compatibility alias. Do not use only a broad "
+                "mechanism family token as linkage. Excluded from DecisionFeatures; do not include raw "
+                "cross-branch text, LLM rationale, reasoning, trace, prompt, "
+                "transcript, observation, hypothesis prose, or long free text."
+            ),
+        },
         "mechanism_changes": _mechanism_changes_json_schema(),
     },
 }
@@ -299,6 +426,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 - If branch metadata says a material difference is required, set `material_difference` to a compact structured record of changed generic dimensions, signature digests, and evidence-status differences. Do not include raw cross-branch text, LLM rationale, trace, prompt, transcript, or repeated hypothesis prose.
+- If context includes a `branch_lesson_usage_requirement` or branch lesson records, set `branch_lesson_usage` to a compact proposal-only/audit record explaining which lessons you borrow, avoid, contrast, preserve, or reject with machine-readable reason codes. Clean forks and sibling-aware proposals need at least one borrowed_lessons, avoided_lessons, or contrasted_lessons entry plus changed generic dimensions and target_file/action/specific mechanism linkage. Prefer `mechanism` or `mechanism_change_id` and use the concrete mechanism_changes id touched by the proposal; `mechanism_id` is also accepted for compatibility. Do not use only broad family tokens such as mechanism_family/change_locus as the mechanism linkage. Weak-positive transfer must either borrow/preserve with activation_path and effect_path, or emit rejected_weak_positive_lessons with a reject_reason_code and the same linkage. Do not include raw lesson text, prompt text, rationale, transcript, trace, or problem-specific semantics.
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate. Branch `allowed_next_actions` labels such as tune, repair, parameterize, and telemetry_wiring are research action labels, not `mechanism_changes[].change_type` values; map tune/parameterize to modify and telemetry_wiring to modify or integrate.
 - Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific activity evidence, not objective/outcome fields. Aggregate outcome or activity fields show effect or activity, not activation. Declare best_delta/delta_sum effect fields only when the mechanism can emit a positive improvement delta through record_move; if it only proves activity or activation, use activity/activation telemetry instead. If you modify an existing phase or component, declare the changed lever as its own mechanism id and use that same id in expected telemetry.
 
@@ -320,6 +448,14 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
     "signature_digest": "<short digest or id>",
     "evidence_status_delta": ["<compact status enum>"]
   }},
+  "branch_lesson_usage": {{
+    "borrowed_lessons": [{{"lesson_id": "<lesson id>", "source_branch_ids": ["<branch id>"], "lesson_type": "weak_positive", "activation_path": "<compact generic token>", "effect_path": "<compact generic token>", "target_file": "<relative path>", "action": "modify", "mechanism": "<specific mechanism_changes id>"}}],
+    "avoided_lessons": [{{"lesson_id": "<lesson id>", "avoid_reason": "<compact generic token>", "target_file": "<relative path>", "action": "modify", "mechanism_change_id": "<specific mechanism_changes id>"}}],
+    "contrasted_lessons": [{{"lesson_id": "<lesson id>", "contrast_dimensions": ["<generic dimension id>"], "new_path": "<compact generic token>", "target_file": "<relative path>", "action": "modify", "mechanism_id": "<specific mechanism_changes id>"}}],
+    "preserved_same_branch_lesson": {{"lesson_id": "<lesson id>", "preserved_signal": "<compact generic token>", "risk_to_avoid": "<compact generic token>", "target_file": "<relative path>", "action": "modify", "mechanism": "<specific mechanism_changes id>"}},
+    "rejected_weak_positive_lessons": [{{"lesson_id": "<lesson id>", "lesson_type": "weak_positive", "reject_reason_code": "<compact generic token>", "target_file": "<relative path>", "action": "modify", "mechanism_change_id": "<specific mechanism_changes id>"}}],
+    "clean_fork_diversity_claim": {{"changed_dimensions": ["<generic dimension id>"], "sibling_duplication_allowed": false}}
+  }},
   "mechanism_changes": [
     {{"id": "<mechanism_id>", "change_type": "add" | "modify" | "replace" | "remove" | "integrate"}}
   ],
@@ -337,5 +473,6 @@ __all__ = [
     "HYPOTHESIS_PROMPT_TEMPLATE",
     "HYPOTHESIS_PROPOSAL_SCHEMA",
     "HypothesisProposalInput",
+    "normalize_branch_lesson_usage",
     "normalize_material_difference",
 ]

@@ -349,6 +349,17 @@ def _diagnostic_payload(
             "detected_records": _detected_records(diagnostic),
             "static_issues": static_issues or None,
             "diagnosis": _diagnosis_text(subtype_text),
+            "proposal_smoke_interpretation": (
+                "This diagnostic means the compact proposal smoke did not "
+                "exercise positive activation evidence for the declared "
+                "mechanism. It is not proof that formal screening cannot "
+                "activate the mechanism."
+            ),
+            "screening_policy": (
+                "Treat as smoke coverage or trigger-limitation feedback unless "
+                "there is a separate runtime, contract, or formal telemetry "
+                "failure."
+            ),
             "allowed_repair": repair_guidance[0] if repair_guidance else None,
             "forbidden_repair": (
                 "Do not force activation, emit fake activation, use max(..., 1), "
@@ -383,6 +394,10 @@ def _telemetry_diagnostic_public_payload(
             "effect_status": diagnostic.get("effect_status"),
             "counters": diagnostic.get("counters"),
             "diagnosis": diagnostic.get("diagnosis"),
+            "proposal_smoke_interpretation": diagnostic.get(
+                "proposal_smoke_interpretation"
+            ),
+            "screening_policy": diagnostic.get("screening_policy"),
             "allowed_repair": diagnostic.get("allowed_repair"),
             "forbidden_repair": diagnostic.get("forbidden_repair"),
         }
@@ -587,26 +602,52 @@ def _nonnegative_int(value: Any) -> int:
 
 def _diagnosis_text(subtype: str) -> str:
     if subtype == "not_connected":
-        return "Declared mechanism did not appear on the active proposal-smoke call path."
+        return (
+            "Proposal smoke coverage did not show the declared mechanism on the "
+            "exercised call path."
+        )
     if subtype == "path_not_reached":
-        return "Declared activation helper exists in the patch, but proposal smoke did not reach that mechanism path."
+        return (
+            "Declared activation helper exists in the patch, but proposal smoke "
+            "did not exercise that trigger/path."
+        )
     if subtype == "trigger_not_reached":
-        return "Declared activation telemetry was present but never positive in the short smoke case."
+        return (
+            "Declared activation telemetry was present, but the short smoke "
+            "case did not make the trigger positive."
+        )
     if subtype == "instrumentation_missing":
-        return "The solver path showed activity, but the declared mechanism did not record activation telemetry."
+        return (
+            "The proposal-smoke run showed generic activity, but it did not "
+            "observe mechanism-local activation telemetry."
+        )
     if subtype == "expected_telemetry_mismatch":
         return "Declared activation evidence is mismatched with effect/objective telemetry or a non-mechanism-specific field."
     if subtype == "smoke_budget_or_case_insufficient":
-        return "The short smoke case or budget could not prove this dormant mechanism activated."
-    return "Activation telemetry was missing, but the compact smoke payload was insufficient to classify why."
+        return (
+            "The short smoke case or budget did not cover the trigger needed "
+            "to observe activation."
+        )
+    return (
+        "Activation telemetry was missing from the compact smoke payload, but "
+        "the smoke coverage was insufficient to classify why."
+    )
 
 
 def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
     mech = mechanism or "<declared mechanism>"
     if subtype == "not_connected":
         return [
-            f"Wire {mech} into the active solver call path or operator registry.",
-            "Do not leave new helpers/classes inert; call them from the existing solve/search path.",
+            (
+                f"Check whether proposal smoke exercises {mech}'s natural "
+                "trigger; if not, add a smoke-scoped threshold or diagnostic "
+                "counter on the real path."
+            ),
+            (
+                f"If the helper is truly inert, wire {mech} into the active "
+                "path; otherwise do not add unconditional activation just for "
+                "smoke."
+            ),
         ]
     if subtype == "path_not_reached":
         return [

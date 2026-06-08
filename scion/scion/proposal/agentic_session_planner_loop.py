@@ -165,6 +165,12 @@ class AgenticSessionPlannerLoopMixin:
                     phase=AgenticProposalPhase.DIAGNOSE.value,
                     attempt_number=planner_decisions,
                 )
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="tool_selection",
+                    prompt_context=planner_context,
+                    observations=observations,
+                )
                 try:
                     planned = selector(_sanitize_agentic_value(planner_context))
                 except Exception as exc:
@@ -708,9 +714,9 @@ class AgenticSessionPlannerLoopMixin:
         ) -> tuple[str, ...]:
             if self.tool_registry is None:
                 return ()
-            return _filter_model_facing_tool_names(
-                self.tool_registry.allowed_tools(context),
+            return self.tool_registry.allowed_tools_for_phase(
                 context,
+                "hypothesis_planning",
             )
 
     def _planner_allowed_tool_specs(
@@ -719,11 +725,9 @@ class AgenticSessionPlannerLoopMixin:
         ) -> tuple[dict[str, Any], ...]:
             if self.tool_registry is None:
                 return ()
-            allowed = set(self._planner_allowed_tools(context))
-            return tuple(
-                spec
-                for spec in self.tool_registry.allowed_tool_specs(context)
-                if str(spec.get("name") or "") in allowed
+            return self.tool_registry.allowed_tool_specs_for_phase(
+                context,
+                "hypothesis_planning",
             )
 
     def _tool_arg_guidance(

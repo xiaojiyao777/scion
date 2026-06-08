@@ -9,6 +9,7 @@ from scion.proposal.context_manager import (
     _filter_hypothesis_prompt_steps,
     _get_adapter_problem_spec,
 )
+from scion.proposal.screening_feedback import screening_feedback_summary
 from scion.proposal.tools.base import _BaseReadOnlyTool
 from scion.proposal.tools.feedback.attribution import _surface_runtime_attribution_payload
 from scion.proposal.tools.feedback.compaction import _bound_compact_feedback_payload
@@ -126,6 +127,22 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
                 and step.protocol_result.stage == ExperimentStage.SCREENING
             )
         ][: args.max_items]
+        active_phase_causal_summaries = _screening_phase_causal_summaries(
+            active_steps,
+            max_items=args.max_items,
+            boundary_surfaces=feedback_scope.boundary_surfaces,
+            role=(
+                "active_boundary_evidence"
+                if feedback_scope.enforced
+                else "screening_evidence"
+            ),
+        )
+        inactive_phase_causal_summaries = _screening_phase_causal_summaries(
+            inactive_reference_steps,
+            max_items=args.max_items,
+            boundary_surfaces=feedback_scope.boundary_surfaces,
+            role="inactive_reference",
+        )
         runtime_status = _runtime_observation_status(
             context=context,
             args=args,
@@ -135,6 +152,8 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             runtime_failure_guidance=guidance,
             active_attribution=active_attribution,
             inactive_attribution=inactive_attribution,
+            active_phase_causal_summaries=active_phase_causal_summaries,
+            inactive_phase_causal_summaries=inactive_phase_causal_summaries,
         )
         payload = {
             "branch_id": args.branch_id,
@@ -155,8 +174,12 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             "runtime_feedback": rendered,
             "runtime_failure_guidance": guidance,
             "screening_runtime_attribution": active_attribution,
+            "screening_phase_causal_summaries": active_phase_causal_summaries,
             "inactive_reference_runtime_feedback": inactive_rendered,
             "inactive_reference_runtime_attribution": inactive_attribution,
+            "inactive_reference_phase_causal_summaries": (
+                inactive_phase_causal_summaries
+            ),
             "research_diagnosis": _research_diagnosis_payload(
                 active_steps,
                 max_items=args.max_items,
@@ -192,6 +215,8 @@ def _runtime_observation_status(
     runtime_failure_guidance: str,
     active_attribution: list,
     inactive_attribution: list,
+    active_phase_causal_summaries: list,
+    inactive_phase_causal_summaries: list,
 ) -> dict:
     low_confidence_exclusions = []
     for step in active_steps:
@@ -216,6 +241,8 @@ def _runtime_observation_status(
         or runtime_failure_guidance.strip()
         or active_attribution
         or inactive_attribution
+        or active_phase_causal_summaries
+        or inactive_phase_causal_summaries
     )
     return {
         "schema_version": "runtime_feedback_observation_status.v1",
@@ -229,10 +256,60 @@ def _runtime_observation_status(
         "inactive_reference_step_count": len(inactive_reference_steps),
         "active_runtime_attribution_count": len(active_attribution),
         "inactive_runtime_attribution_count": len(inactive_attribution),
+        "active_phase_causal_summary_count": len(active_phase_causal_summaries),
+        "inactive_phase_causal_summary_count": len(
+            inactive_phase_causal_summaries
+        ),
         "runtime_feedback_available": bool(runtime_feedback.strip()),
         "runtime_failure_guidance_available": bool(runtime_failure_guidance.strip()),
         "aggregate_runtime_exclusion_reasons": low_confidence_exclusions[:4],
     }
+
+
+def _screening_phase_causal_summaries(
+    steps: list,
+    *,
+    max_items: int,
+    boundary_surfaces: tuple[str, ...],
+    role: str,
+) -> list[dict]:
+    rows: list[dict] = []
+    for step in reversed(steps):
+        protocol = getattr(step, "protocol_result", None)
+        if protocol is None or protocol.stage != ExperimentStage.SCREENING:
+            continue
+        feedback = screening_feedback_summary(
+            protocol,
+            decision_reason_codes=tuple(
+                getattr(step, "decision_reason_codes", ()) or ()
+            ),
+        )
+        summary = dict(feedback.phase_causal_summary or {})
+        if not summary:
+            continue
+        rows.append(
+            _with_feedback_provenance(
+                {
+                    "round_num": getattr(step, "round_num", None),
+                    "branch_id": getattr(step, "branch_id", ""),
+                    "surface": getattr(
+                        getattr(step, "hypothesis", None),
+                        "change_locus",
+                        "",
+                    ),
+                    "screening_feedback_tier": feedback.tier,
+                    "phase_causal_summary": summary,
+                },
+                _feedback_step_provenance(
+                    step,
+                    boundary_surfaces=boundary_surfaces,
+                    role=role,
+                ),
+            )
+        )
+        if len(rows) >= max_items:
+            break
+    return rows
 
 __all__ = [
     "FeedbackQueryRuntimeTool",

@@ -30,6 +30,10 @@ from scion.proposal.tools import (
     ProposalToolFailureCode,
     ProposalToolPermission,
 )
+from scion.runtime.surface_telemetry import (
+    declared_event_fields_for,
+    runtime_path_value,
+)
 
 _HYPOTHESIS_CONTRACT_SELF_CHECKS = frozenset(
     {
@@ -332,23 +336,15 @@ def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
     candidates: list[Any] = []
     issues = value.get("issues")
     if isinstance(issues, (list, tuple)):
-        candidates.extend(
-            issue
-            for issue in issues
-            if "solver_algorithm_errors=" not in str(issue)
-        )
+        candidates.extend(issue for issue in issues if "_errors=" not in str(issue))
     runtime = value.get("runtime")
     if isinstance(runtime, Mapping):
-        candidates.extend(
-            [
-                runtime.get("solver_algorithm_events"),
-            ]
-        )
+        candidates.extend(_runtime_event_values(runtime))
     audit = value.get("runtime_audit_failure")
     if isinstance(audit, Mapping):
         candidates.extend(
             [
-                audit.get("solver_algorithm_events"),
+                *_runtime_event_values(audit),
                 audit.get("detail"),
                 audit.get("error_category"),
             ]
@@ -359,11 +355,7 @@ def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
     if isinstance(issues, (list, tuple)):
         candidates.extend(issues)
     if isinstance(runtime, Mapping):
-        candidates.append(
-            f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
-            if runtime.get("solver_algorithm_errors") not in (None, "")
-            else None
-        )
+        candidates.extend(_runtime_error_count_texts(runtime))
     primary: str | None = None
     for candidate in candidates:
         text = _limit_string(candidate, 360)
@@ -379,6 +371,37 @@ def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
     if guidance:
         return _limit_string(f"repair guidance: {guidance}", 1200)
     return None
+
+
+def _runtime_event_values(value: Mapping[str, Any]) -> list[Any]:
+    events: list[Any] = []
+    for field, field_value in value.items():
+        field_text = str(field or "")
+        if field_text.endswith(("_errors", ".errors")):
+            for event_field in declared_event_fields_for(value, field_text):
+                event_value = runtime_path_value(value, event_field)
+                if event_value not in (None, "", [], {}):
+                    events.append(event_value)
+        if field_text.endswith(("_events", ".events")) and field_value not in (
+            None,
+            "",
+            [],
+            {},
+        ):
+            events.append(field_value)
+    return events
+
+
+def _runtime_error_count_texts(value: Mapping[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for field, field_value in value.items():
+        field_text = str(field or "")
+        if not field_text.endswith(("_errors", ".errors")):
+            continue
+        if field_value in (None, ""):
+            continue
+        texts.append(f"{field_text}={field_value}")
+    return texts
 
 
 def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:

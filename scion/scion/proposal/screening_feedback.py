@@ -73,6 +73,7 @@ class ScreeningFeedbackSummary:
     opportunity_status: str = "unknown"
     opportunity_diagnostics: tuple[str, ...] = ()
     mechanism_evidence: Mapping[str, Any] = field(default_factory=dict)
+    phase_causal_summary: Mapping[str, Any] = field(default_factory=dict)
     feedback_digest: str = ""
 
     @property
@@ -106,6 +107,7 @@ class ScreeningFeedbackSummary:
             "opportunity_status": self.opportunity_status,
             "opportunity_diagnostics": list(self.opportunity_diagnostics),
             "mechanism_evidence": dict(self.mechanism_evidence or {}),
+            "phase_causal_summary": dict(self.phase_causal_summary or {}),
             "why_not_promoted": self.why_not_promoted,
             "allowed_followup_variants": list(self.allowed_followup_variants),
             "repeat_unchanged_allowed": self.repeat_unchanged_allowed,
@@ -287,6 +289,24 @@ def screening_feedback_summary(
         opportunity_status=opportunity_status,
         opportunity_diagnostics=opportunity_diagnostics,
         mechanism_evidence=mechanism_evidence,
+        phase_causal_summary=_phase_causal_summary(
+            tier=tier,
+            gate_outcome=protocol.gate_outcome,
+            case_wins=case_wins,
+            case_losses=case_losses,
+            case_ties=case_ties,
+            pair_wins=pair_wins,
+            pair_losses=pair_losses,
+            pair_ties=pair_ties,
+            median_delta=median_delta,
+            runtime_confidence=runtime_confidence,
+            activation_status=activation_status,
+            effect_status=effect_status,
+            opportunity_status=opportunity_status,
+            mechanism_evidence=mechanism_evidence,
+            runtime_ratio=runtime_ratio,
+            runtime_delta=runtime_delta,
+        ),
     )
     return _with_digest(summary)
 
@@ -325,6 +345,7 @@ def _summary(
     opportunity_status: str = "unknown",
     opportunity_diagnostics: tuple[str, ...] = (),
     mechanism_evidence: Mapping[str, Any] | None = None,
+    phase_causal_summary: Mapping[str, Any] | None = None,
 ) -> ScreeningFeedbackSummary:
     return ScreeningFeedbackSummary(
         tier=tier,
@@ -351,6 +372,7 @@ def _summary(
         opportunity_status=opportunity_status,
         opportunity_diagnostics=opportunity_diagnostics,
         mechanism_evidence=mechanism_evidence or {},
+        phase_causal_summary=phase_causal_summary or {},
     )
 
 
@@ -516,6 +538,206 @@ def _why_not_promoted(
     if tier == "runtime_regression":
         return primary or "no objective effect and runtime regressed"
     return primary or f"screening outcome remained {gate_outcome}"
+
+
+def _phase_causal_summary(
+    *,
+    tier: ScreeningFeedbackTier,
+    gate_outcome: str,
+    case_wins: int,
+    case_losses: int,
+    case_ties: int,
+    pair_wins: int,
+    pair_losses: int,
+    pair_ties: int,
+    median_delta: float | None,
+    runtime_confidence: str,
+    activation_status: str,
+    effect_status: str,
+    opportunity_status: str,
+    mechanism_evidence: Mapping[str, Any],
+    runtime_ratio: float | None,
+    runtime_delta: float | None,
+) -> dict[str, Any]:
+    """Return bounded proposal-only causal feedback for screening evidence."""
+
+    activation_evidence_status = str(
+        mechanism_evidence.get("activation_evidence_status") or "unknown"
+    )
+    objective_effect_status = str(
+        mechanism_evidence.get("objective_effect_status") or "unknown"
+    )
+    primary_activation_status = str(
+        mechanism_evidence.get("primary_activation_status") or ""
+    ).strip()
+    primary_effect_status = str(
+        mechanism_evidence.get("primary_effect_status") or ""
+    ).strip()
+    phase_positive = _phase_positive(
+        activation_status=activation_status,
+        effect_status=effect_status,
+        activation_evidence_status=activation_evidence_status,
+        objective_effect_status=objective_effect_status,
+        primary_activation_status=primary_activation_status,
+        primary_effect_status=primary_effect_status,
+    )
+    objective_loss = _objective_loss_signal(
+        case_losses=case_losses,
+        pair_losses=pair_losses,
+        median_delta=median_delta,
+    )
+    no_objective_effect = _objective_no_effect(
+        case_wins=case_wins,
+        case_losses=case_losses,
+        pair_wins=pair_wins,
+        pair_losses=pair_losses,
+        median_delta=median_delta,
+    )
+    pair_win_case_tie = (
+        pair_wins > 0
+        and case_wins == 0
+        and case_losses == 0
+        and case_ties > 0
+    )
+    if phase_positive and objective_loss:
+        classification = "phase_positive_final_objective_loss"
+        summary = (
+            "phase telemetry was positive, but final objective evidence had a "
+            "loss signal"
+        )
+        interpretation = (
+            "local phase activation/effect did not translate into reliable final "
+            "objective improvement"
+        )
+    elif phase_positive and pair_win_case_tie:
+        classification = "phase_positive_pair_win_case_tie"
+        summary = (
+            "phase telemetry was positive and pair-level evidence had a win, "
+            "but case-level evidence remained tied"
+        )
+        interpretation = (
+            "treat as weak branch-local signal; refine trigger, schedule, or "
+            "composition instead of repeating unchanged"
+        )
+    elif phase_positive and no_objective_effect:
+        classification = "zero_effect_activation"
+        summary = (
+            "activation or phase telemetry was observed, but objective effect was "
+            "zero in screening"
+        )
+        interpretation = (
+            "mechanism activity alone was insufficient; change the causal path to "
+            "objective effect"
+        )
+    elif activation_status == "not_observed":
+        classification = "activation_not_observed"
+        summary = "activation was not observed in formal screening telemetry"
+        interpretation = (
+            "repair activation path, instrumentation, or choose a different "
+            "trigger; do not manufacture positive counters"
+        )
+    elif pair_wins > 0 or case_wins > 0:
+        classification = "objective_positive_without_phase_detail"
+        summary = "objective evidence had positive signal without clear phase detail"
+        interpretation = "preserve the positive direction while improving observability"
+    elif no_objective_effect:
+        classification = "no_objective_effect"
+        summary = "screening produced no case-level or pair-level objective effect"
+        interpretation = "change mechanism family, trigger, schedule, or composition"
+    else:
+        classification = "uncertain_causal_signal"
+        summary = "screening evidence did not isolate a clear phase-to-objective cause"
+        interpretation = "use bounded follow-up diagnostics before reusing the idea"
+
+    return {
+        "schema_version": "phase_causal_summary.v1",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "stage": "screening",
+        "classification": classification,
+        "summary": summary,
+        "interpretation": interpretation,
+        "phase_evidence": {
+            "phase_positive": phase_positive,
+            "activation_status": activation_status,
+            "effect_status": effect_status,
+            "activation_evidence_status": activation_evidence_status,
+            "objective_effect_status": objective_effect_status,
+            "primary_activation_status": primary_activation_status or None,
+            "primary_effect_status": primary_effect_status or None,
+        },
+        "objective_evidence": {
+            "case_wins": case_wins,
+            "case_losses": case_losses,
+            "case_ties": case_ties,
+            "pair_wins": pair_wins,
+            "pair_losses": pair_losses,
+            "pair_ties": pair_ties,
+            "median_delta": median_delta,
+            "gate_outcome": gate_outcome,
+            "tier": tier,
+        },
+        "runtime_evidence": {
+            "runtime_confidence": runtime_confidence,
+            "runtime_ratio_median": runtime_ratio,
+            "runtime_delta_median_ms": runtime_delta,
+        },
+        "opportunity_status": opportunity_status,
+    }
+
+
+def _phase_positive(
+    *,
+    activation_status: str,
+    effect_status: str,
+    activation_evidence_status: str,
+    objective_effect_status: str,
+    primary_activation_status: str,
+    primary_effect_status: str,
+) -> bool:
+    positive_values = {"observed", "positive", "activation_observed"}
+    if activation_status == "observed":
+        return True
+    if activation_evidence_status in positive_values:
+        return True
+    if primary_activation_status in positive_values:
+        return True
+    if effect_status in {
+        "case_level_positive_signal",
+        "pair_level_positive_signal",
+    }:
+        return True
+    if objective_effect_status in {"observed", "positive"}:
+        return True
+    return primary_effect_status in positive_values
+
+
+def _objective_loss_signal(
+    *,
+    case_losses: int,
+    pair_losses: int,
+    median_delta: float | None,
+) -> bool:
+    if case_losses > 0 or pair_losses > 0:
+        return True
+    return median_delta is not None and median_delta < -_EPS
+
+
+def _objective_no_effect(
+    *,
+    case_wins: int,
+    case_losses: int,
+    pair_wins: int,
+    pair_losses: int,
+    median_delta: float | None,
+) -> bool:
+    return (
+        case_wins == 0
+        and case_losses == 0
+        and pair_wins == 0
+        and pair_losses == 0
+        and (median_delta is None or abs(median_delta) <= _EPS)
+    )
 
 
 def _allowed_followup_variants(tier: ScreeningFeedbackTier) -> tuple[str, ...]:

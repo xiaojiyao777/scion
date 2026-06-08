@@ -204,6 +204,7 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
         result = gate.validate_patch(
             patch,
             selected_surface=args.selected_surface,
+            validation_mode="preview",
         )
         interface_checks = [
             check for check in result.checks if check.name == "C7_interface"

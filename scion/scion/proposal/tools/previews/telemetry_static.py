@@ -17,6 +17,7 @@ from scion.proposal.tools.surface import _drop_empty_items
 from scion.proposal.tools.utils import _limit_text
 from scion.runtime.audit import normalize_surface_name
 from scion.runtime.telemetry_guard import (
+    declared_surface_telemetry_fields,
     declared_mechanism_runtime_probes,
     find_research_surface,
     normalize_expected_telemetry,
@@ -40,6 +41,7 @@ _ISSUE_ZERO_PHASE_RUNTIME = "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO"
 _ISSUE_MISSING_RUNTIME = "DECLARED_MECHANISM_RUNTIME_MISSING"
 _ISSUE_MISSING_EFFECT = "DECLARED_MECHANISM_EFFECT_MISSING"
 _ISSUE_MISSING_DELTA_EVIDENCE = "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"
+_ISSUE_FIELD_MISMATCH = "DECLARED_MECHANISM_FIELD_MISMATCH"
 _ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE = "CONTEXT_HELPER_SIGNATURE_INVALID"
 _TELEMETRY_STATIC_DIAGNOSTIC_ISSUES = frozenset(
     {
@@ -47,6 +49,7 @@ _TELEMETRY_STATIC_DIAGNOSTIC_ISSUES = frozenset(
         _ISSUE_MISSING_RUNTIME,
         _ISSUE_MISSING_EFFECT,
         _ISSUE_MISSING_DELTA_EVIDENCE,
+        _ISSUE_FIELD_MISMATCH,
     }
 )
 _TELEMETRY_STATIC_HARD_ISSUES = frozenset(
@@ -91,13 +94,21 @@ def _mechanism_telemetry_static_preview(
         for mechanism in mechanisms
     }
     issues: list[str] = list(signature_issues)
+    issue_codes: list[str] = (
+        [_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE] if signature_issues else []
+    )
+    field_mismatches = _expected_telemetry_field_mismatches(
+        context,
+        hypothesis,
+        mechanisms,
+    )
+    for mismatch in field_mismatches:
+        issues.append(mismatch["issue"])
+        issue_codes.append(_ISSUE_FIELD_MISMATCH)
     warnings: list[str] = []
     checked_fields: list[str] = []
     required_calls: dict[str, list[str]] = {}
     helper_evidence: dict[str, dict[str, bool]] = {}
-    issue_codes: list[str] = (
-        [_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE] if signature_issues else []
-    )
     actionable_feedback: list[dict[str, Any]] = []
     for mechanism in mechanisms:
         code_text = code_by_mechanism.get(mechanism, "")
@@ -264,6 +275,7 @@ def _mechanism_telemetry_static_preview(
             "diagnostic_issue_codes": diagnostic_issue_codes,
             "declared_mechanisms": mechanisms,
             "checked_fields": list(dict.fromkeys(checked_fields)),
+            "field_mismatches": field_mismatches,
             "required_calls": {
                 mechanism: list(dict.fromkeys(calls))
                 for mechanism, calls in required_calls.items()
@@ -352,6 +364,60 @@ def _explicit_and_declared_mechanism_fields(
         for category, values in fields.items()
         if values
     }
+
+
+def _expected_telemetry_field_mismatches(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+    mechanisms: list[str],
+) -> list[dict[str, str]]:
+    mechanism_ids = [
+        str(item or "").strip()
+        for item in mechanisms
+        if str(item or "").strip()
+    ]
+    if not mechanism_ids:
+        return []
+    claims = normalize_expected_telemetry(
+        getattr(hypothesis, "expected_telemetry", {}) or {}
+    )
+    problem_spec = _contract_problem_spec(context)
+    surface_name = normalize_surface_name(getattr(hypothesis, "change_locus", None))
+    surface = find_research_surface(problem_spec, surface_name)
+    declared_fields = declared_surface_telemetry_fields(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=mechanism_ids,
+    )
+    mismatches: list[dict[str, str]] = []
+    for category, fields in sorted(claims.items()):
+        if category not in {"activation", "budget", "effect"}:
+            continue
+        for field in fields:
+            field_text = str(field or "").strip()
+            if not field_text or "." not in field_text:
+                continue
+            if field_text in declared_fields:
+                continue
+            if any(mechanism in field_text for mechanism in mechanism_ids):
+                continue
+            mismatches.append(
+                {
+                    "failure_code": _ISSUE_FIELD_MISMATCH,
+                    "category": category,
+                    "field": field_text,
+                    "declared_mechanism_ids": ",".join(mechanism_ids),
+                    "issue": (
+                        f"expected_telemetry.{category} field {field_text!r} "
+                        "is a runtime-map subfield that does not match any "
+                        "declared mechanism id "
+                        f"({', '.join(mechanism_ids)}). Use a surface-declared "
+                        "concrete field, or substitute the exact declared "
+                        "mechanism id in the mechanism-specific telemetry path."
+                    ),
+                }
+            )
+    return mismatches
 
 
 def _mechanism_declares_effect_field(

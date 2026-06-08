@@ -61,6 +61,7 @@ from scion.proposal.tools.previews.common import (
     _NONEMPTY_SEQUENCE_NOVELTY_FIELDS,
     _PREVIEW_CHECK_DETAIL_CHARS,
     _PREVIEW_FAILURE_REASON_CHARS,
+    _PREVIEW_STATEFUL_CHECKS_EXCLUDED,
     _PREVIEW_MAX_CHECKS,
     _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS,
     _artifact_id,
@@ -209,6 +210,8 @@ class SchemaPreviewTool(_BaseReadOnlyTool):
             "hypothesis": None,
             "patch": None,
             "workspace_materialized": False,
+            "validation_mode": "preview",
+            "stateful_checks_excluded": list(_PREVIEW_STATEFUL_CHECKS_EXCLUDED),
         }
         if args.hypothesis is None and args.patch is None:
             payload["passed"] = False
@@ -305,6 +308,7 @@ def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal
         runtime_budget_strategy=value.runtime_budget_strategy,
         expected_telemetry=dict(value.expected_telemetry or {}),
         novelty_signature=dict(value.novelty_signature or {}),
+        branch_lesson_usage=dict(value.branch_lesson_usage or {}),
         mechanism_changes=tuple(
             MechanismChange(id=change.id, change_type=change.change_type)
             for change in value.mechanism_changes
@@ -353,6 +357,8 @@ def _schema_preview_hypothesis_payload(
     except ValidationError as exc:
         return {
             "passed": False,
+            "validation_mode": "preview",
+            "stateful_checks_excluded": list(_PREVIEW_STATEFUL_CHECKS_EXCLUDED),
             "errors": exc.errors(include_url=False),
         }
     hypothesis = _hypothesis_from_input(validated)
@@ -404,6 +410,9 @@ def _hypothesis_preview_summary(
             ),
             "expected_telemetry": _compact_preview_value(
                 getattr(hypothesis, "expected_telemetry", {}) or {}
+            ),
+            "branch_lesson_usage": _compact_preview_value(
+                getattr(hypothesis, "branch_lesson_usage", {}) or {}
             ),
             "mechanism_changes": _compact_preview_value(
                 [
@@ -630,6 +639,8 @@ def _hypothesis_schema_preview(
         )
     return {
         "passed": passed,
+        "validation_mode": "preview",
+        "stateful_checks_excluded": list(_PREVIEW_STATEFUL_CHECKS_EXCLUDED),
         "checks": _checks_payload(
             c1_checks,
             detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,

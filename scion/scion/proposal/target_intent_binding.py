@@ -96,7 +96,8 @@ def target_intent_binding_retry_feedback(
             },
             "final_task": (
                 "Rewrite the formal hypothesis under the same selected "
-                "target-intent preflight."
+                "target-intent preflight, or stop and request a fresh "
+                "host-selected target intent before another formal hypothesis."
             ),
             "retry_constraint": (
                 "The selected target-intent is binding for this formal "
@@ -108,8 +109,15 @@ def target_intent_binding_retry_feedback(
                 "copied into mechanism_changes. Do not silently choose another "
                 "owner or mechanism. A different target requires an explicit "
                 "host target-intent reselect flow before formal hypothesis "
-                "generation, not a schema retry."
+                "generation, not a schema retry. The retry must either preserve "
+                "selected_target_intent exactly for the formal fields or request "
+                "fresh target-intent selection; it must not drift mechanism, "
+                "action, or target_file inside the formal hypothesis."
             ),
+            "allowed_repair_paths": [
+                "preserve_selected_target_intent",
+                "request_fresh_target_intent_reselection",
+            ],
             "proposal_failure_accounting": (
                 "pre_code_binding_retry; do_not_count_as_code_or_screening_failure"
             ),

@@ -30,6 +30,8 @@ _PREVIEW_FAILURE_REASON_CHARS = 1200
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
+_PREVIEW_STATEFUL_CHECKS_EXCLUDED = ("C10_active_blacklist_rejected",)
+_PREVIEW_HYPOTHESIS_BOUND_CHECKS = ("C12_patch_mechanism_echo",)
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -72,6 +74,7 @@ def _contract_gate(context: ProposalToolContext) -> ContractGate:
         operator_execute_signature=_operator_execute_signature(context),
         champion_snapshot_path=base_snapshot_path,
         source_overrides=getattr(context, "branch_current_file_sources", None),
+        adapter=context.adapter,
     )
 
 def _contract_problem_spec(context: ProposalToolContext) -> Any:
@@ -319,9 +322,11 @@ __all__ = [
     "_NONEMPTY_SEQUENCE_NOVELTY_FIELDS",
     "_PREVIEW_CHECK_DETAIL_CHARS",
     "_PREVIEW_FAILURE_REASON_CHARS",
+    "_PREVIEW_HYPOTHESIS_BOUND_CHECKS",
     "_PREVIEW_MAX_CHECKS",
     "_PREVIEW_PROBLEM_ISSUE_CHARS",
     "_PREVIEW_PROBLEM_MAX_CHECKS",
+    "_PREVIEW_STATEFUL_CHECKS_EXCLUDED",
     "_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS",
     "_artifact_id",
     "_champion_version",

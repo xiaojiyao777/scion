@@ -6,6 +6,7 @@ from .hypothesis import (
     HYPOTHESIS_PROMPT_TEMPLATE,
     HYPOTHESIS_PROPOSAL_SCHEMA,
     HypothesisProposalInput,
+    normalize_branch_lesson_usage,
 )
 from .normalization import (
     _compact_novelty_scalar,
@@ -83,6 +84,7 @@ __all__ = [
     "_normalize_novelty_signature",
     "_normalize_novelty_signature_item",
     "_validate_unique_mechanism_change_ids",
+    "normalize_branch_lesson_usage",
     "normalize_mechanism_changes_with_repair_attribution",
     "normalize_patch_output_with_repair_attribution",
     "preflight_patch_exact_replace_shape",

@@ -18,6 +18,7 @@ from scion.proposal.agentic_models import AGENTIC_CODE_PHASE_CONTEXT_PROFILE
 
 SESSION_TRACE_INDEX_SCHEMA_VERSION = "agentic-session-trace-index.v1"
 SESSION_TRACE_INDEX_NAME = "agentic_session_trace_index.json"
+_PROMPT_MANIFEST_TRACE_CONTEXT_REGISTRY: dict[tuple[str, ...], dict[str, Any]] = {}
 
 
 def attach_agentic_trace_context(
@@ -84,6 +85,51 @@ def attach_prompt_manifest_trace_context(
     )
 
 
+def register_prompt_manifest_trace_context(
+    context: Mapping[str, Any],
+    *,
+    artifact_ref: str | None,
+    prompt_hash: str,
+    visibility_ledger_digest: str,
+    visibility_ledger_ref: str,
+    provenance: Mapping[str, Any] | None = None,
+) -> None:
+    """Register compact manifest refs for an already-rendered prompt.
+
+    Tool-selection prompts are rendered from the planner context itself.  Adding
+    manifest refs to that context before the selector runs would change the
+    provider-visible prompt, so the trace writer consumes this side registry by
+    prompt hash and trace context instead.
+    """
+    key = _prompt_manifest_registry_key(context, prompt_hash=prompt_hash)
+    if not key:
+        return
+    _PROMPT_MANIFEST_TRACE_CONTEXT_REGISTRY[key] = _drop_empty(
+        {
+            "prompt_manifest": _drop_empty(
+                {
+                    "artifact_ref": artifact_ref,
+                    "prompt_hash": prompt_hash,
+                    "visibility_ledger_digest": visibility_ledger_digest,
+                    "visibility_ledger_ref": visibility_ledger_ref,
+                }
+            ),
+            "provenance": dict(provenance or {}),
+        }
+    )
+
+
+def consume_registered_prompt_manifest_trace_context(
+    context: Mapping[str, Any],
+    *,
+    prompt_hash: str,
+) -> dict[str, Any]:
+    key = _prompt_manifest_registry_key(context, prompt_hash=prompt_hash)
+    if not key:
+        return {}
+    return _PROMPT_MANIFEST_TRACE_CONTEXT_REGISTRY.pop(key, {})
+
+
 def session_trace_index_path_for_trace_dir(trace_dir: str | Path) -> Path:
     root = Path(trace_dir).resolve().parent
     return root / "agentic_sessions" / SESSION_TRACE_INDEX_NAME
@@ -127,6 +173,7 @@ def record_trace_start(
             "attempt_number": _int_or_none(trace_context.get("attempt_number")),
             "phase": trace_context.get("phase") or request_kind,
             "context_profile": trace_context.get("context_profile"),
+            "provenance": trace_context.get("provenance"),
             "model": model,
             "prompt_hash": prompt_hash,
             "prompt_manifest_artifact_ref": prompt_manifest_ref,
@@ -182,6 +229,7 @@ def record_trace_finish(
                 "attempt_number": _int_or_none(trace_context.get("attempt_number")),
                 "phase": trace_context.get("phase") or context.get("request_kind"),
                 "context_profile": trace_context.get("context_profile"),
+                "provenance": trace_context.get("provenance"),
                 "finished_at": finished_at,
                 "final_status": "ok" if ok else "error",
                 "ok": ok,
@@ -266,6 +314,7 @@ def trace_context_from_prompt_context(context: Mapping[str, Any]) -> dict[str, A
             "attempt_number": raw.get("attempt_number")
             or raw.get("attempt")
             or context.get("agentic_hypothesis_retry_attempt"),
+            "provenance": raw.get("provenance") or context.get("provenance"),
         }
     )
 
@@ -273,6 +322,25 @@ def trace_context_from_prompt_context(context: Mapping[str, Any]) -> dict[str, A
 def _prompt_manifest_context(context: Mapping[str, Any]) -> dict[str, Any]:
     raw = context.get("_scion_prompt_manifest") if isinstance(context, Mapping) else {}
     return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def _prompt_manifest_registry_key(
+    context: Mapping[str, Any],
+    *,
+    prompt_hash: str,
+) -> tuple[str, ...]:
+    trace_context = trace_context_from_prompt_context(context)
+    session_id = str(trace_context.get("session_id") or "").strip()
+    if not session_id:
+        return ()
+    return (
+        session_id,
+        str(trace_context.get("request_kind") or "").strip(),
+        str(trace_context.get("call_kind") or "").strip(),
+        str(trace_context.get("phase") or "").strip(),
+        str(trace_context.get("attempt_number") or "").strip(),
+        str(prompt_hash or "").strip(),
+    )
 
 
 def _context_profile_from_context(context: Mapping[str, Any]) -> str:
@@ -324,6 +392,7 @@ def _upsert_trace_record(
         if value:
             session[key] = value
     _merge_session_anchors(session, anchors)
+    _merge_session_provenance(session, trace_entry.get("provenance"))
     traces = [
         dict(item)
         for item in session.get("traces", [])
@@ -428,6 +497,11 @@ def _merge_session_anchors(
         value = anchors.get(key)
         if value not in (None, ""):
             session[key] = value
+
+
+def _merge_session_provenance(session: dict[str, Any], provenance: Any) -> None:
+    if isinstance(provenance, Mapping) and provenance:
+        session["provenance"] = _drop_empty(dict(provenance))
 
 
 def _refresh_session_trace_lists(session: dict[str, Any]) -> None:
@@ -576,9 +650,11 @@ __all__ = [
     "SESSION_TRACE_INDEX_SCHEMA_VERSION",
     "attach_agentic_trace_context",
     "attach_prompt_manifest_trace_context",
+    "consume_registered_prompt_manifest_trace_context",
     "record_session_final",
     "record_trace_finish",
     "record_trace_start",
+    "register_prompt_manifest_trace_context",
     "session_trace_index_path_for_artifact_dir",
     "session_trace_index_path_for_trace_dir",
     "trace_context_from_prompt_context",

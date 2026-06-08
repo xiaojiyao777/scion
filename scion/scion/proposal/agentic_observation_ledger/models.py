@@ -21,6 +21,13 @@ REUSABLE_CONTEXT_TOOLS = frozenset(
         "context.read_surface",
     }
 )
+AUDITABLE_OBSERVATION_TOOLS = REUSABLE_CONTEXT_TOOLS | frozenset(
+    {
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }
+)
 ACTIVE_SOLVER_METADATA_TOOLS = frozenset(
     {
         "context.read_active_solver_map",
@@ -73,6 +80,7 @@ class AgenticObservationLedger:
 __all__ = [
     "ACTIVE_SOLVER_METADATA_TOOLS",
     "AgenticObservationLedger",
+    "AUDITABLE_OBSERVATION_TOOLS",
     "LEDGER_SCHEMA_VERSION",
     "REUSABLE_CONTEXT_TOOLS",
 ]

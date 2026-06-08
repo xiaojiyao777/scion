@@ -18,12 +18,14 @@ from scion.proposal.agentic_session_hypothesis_schema_retry import (
     _mechanism_id_schema_retry_pending,
     _same_mechanism_preview_retry_pending,
     _schema_retry_corrective_retry_already_used,
+    _target_action_permission_retry_pending,
 )
 from scion.proposal.agentic_session_hypothesis_target import (
     _active_grounding_rejections_for_prompt,
 )
 from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.target_intent_binding import (
+    selected_target_intent_payload as _selected_target_intent_payload,
     target_intent_binding_retry_pending as _target_intent_binding_retry_pending,
 )
 from scion.runtime.telemetry_guard import expected_telemetry_template
@@ -56,6 +58,11 @@ def _build_hypothesis_prompt_context(
         hypothesis_context["agentic_hypothesis_target_intent"] = (
             _sanitize_agentic_value(target_intent)
         )
+        target_intent_defaults = _target_intent_formal_defaults(target_intent)
+        if target_intent_defaults:
+            hypothesis_context["agentic_hypothesis_target_intent_defaults"] = (
+                target_intent_defaults
+            )
         placeholder = target_intent.get("placeholder")
         if isinstance(placeholder, Mapping):
             hypothesis_context["agentic_hypothesis_target_placeholder"] = (
@@ -111,13 +118,14 @@ def _build_hypothesis_prompt_context(
             hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
                 "TARGET-INTENT BINDING RETRY. The selected "
                 "hypothesis_target_intent is binding for this final "
-                "formal hypothesis call. Rewrite under the same "
-                "selected intent: preserve change_locus, action, "
-                "target_file, and mechanism family/continuation from "
-                "selected_target_intent. Do not switch owners or "
-                "mechanisms. A different target requires a host-owned "
-                "target-intent reselect flow before formal hypothesis "
-                "generation."
+                "formal hypothesis call. Preferred repair: rewrite under "
+                "the same selected intent and preserve change_locus, "
+                "action, target_file, and mechanism family/continuation "
+                "from selected_target_intent. If the research idea truly "
+                "needs a different owner, action, target_file, or "
+                "mechanism, do not repair it inside formal hypothesis; "
+                "request a host-owned target-intent reselect flow before "
+                "formal hypothesis generation."
             )
         elif _same_mechanism_preview_retry_pending(preview_rejections):
             hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
@@ -132,6 +140,16 @@ def _build_hypothesis_prompt_context(
                 "are available, treat the new-mechanism idea as a "
                 "branch-routing signal rather than burning this "
                 "same-branch formal proposal."
+            )
+        elif _target_action_permission_retry_pending(preview_rejections):
+            hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
+                "TARGET-ACTION PERMISSION RETRY. The selected target_file "
+                "already exists, so file-level action=create_new is invalid. "
+                "Rewrite the same hypothesis with action=modify for that "
+                "target_file and plan typed exact_replace/source_digest edits. "
+                "Mechanism-level text may still say add or integrate a new "
+                "mechanism inside the existing file, but do not preserve "
+                "file-level action=create_new."
             )
         else:
             hypothesis_context["agentic_hypothesis_preview_retry_rule"] = (
@@ -216,6 +234,36 @@ def _build_hypothesis_prompt_context(
     else:
         prompt_observations = []
     return hypothesis_context, prompt_observations
+
+
+def _target_intent_formal_defaults(
+    target_intent: Mapping[str, Any],
+) -> dict[str, Any]:
+    selected = _selected_target_intent_payload(target_intent)
+    mechanism_id = str(selected.get("mechanism_id") or "").strip()
+    return _drop_empty_dict(
+        {
+            "change_locus": selected.get("change_locus"),
+            "action": selected.get("action"),
+            "target_file": selected.get("target_file"),
+            "mechanism_changes": [
+                {"id": mechanism_id, "change_type": "modify"}
+            ]
+            if mechanism_id
+            else [],
+            "novelty_signature": _drop_empty_dict(
+                {
+                    "mechanism_family": selected.get("mechanism_family"),
+                }
+            ),
+            "default_policy": (
+                "Formal hypothesis fields inherit selected target intent by "
+                "default. Changing owner/action/target/mechanism requires a "
+                "fresh host target-intent reselect flow, not in-hypothesis "
+                "drift."
+            ),
+        }
+    )
 
 
 def _expected_telemetry_guidance_for_hypothesis(

@@ -15,6 +15,10 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.explore_step.branch_lesson_usage import (
+    branch_lesson_usage_requirement_from_records,
+    project_branch_lesson_records,
+)
 from scion.core.repeated_contract_failures import (
     contract_preview_failure_signature_feedback,
 )
@@ -208,6 +212,35 @@ def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
         }.items()
         if value not in ("", None, [], {}, ())
     }
+
+
+def _proposal_branch_lesson_usage_requirement(
+    cross_branch_research_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    return branch_lesson_usage_requirement_from_records(
+        cross_branch_research_payload.get("branch_lesson_records")
+    )
+
+
+def _record_proposal_branch_lesson_usage_requirement(
+    branch: Branch,
+    *,
+    requirement: Mapping[str, Any],
+    records: list[dict[str, Any]],
+) -> None:
+    summary = getattr(branch, "branch_evidence_summary", None)
+    if not isinstance(summary, dict):
+        return
+    if not requirement:
+        summary.pop("branch_lesson_usage_requirement", None)
+        summary.pop("branch_lesson_records", None)
+        summary.pop("branch_lesson_usage_required_for", None)
+        return
+    summary["branch_lesson_usage_requirement"] = dict(requirement)
+    summary["branch_lesson_records"] = [dict(item) for item in records[:8]]
+    required_for = str(requirement.get("required_for") or "").strip()
+    if required_for:
+        summary["branch_lesson_usage_required_for"] = required_for
 
 
 def _material_difference_candidate_projection(
@@ -582,6 +615,19 @@ class ContextManager:
         material_difference_requirement = _proposal_material_difference_requirement(
             branch
         )
+        branch_lesson_records = project_branch_lesson_records(
+            cross_branch_research_payload.get("branch_lesson_records")
+        )
+        branch_lesson_usage_requirement = (
+            _proposal_branch_lesson_usage_requirement(
+                cross_branch_research_payload
+            )
+        )
+        _record_proposal_branch_lesson_usage_requirement(
+            branch,
+            requirement=branch_lesson_usage_requirement,
+            records=branch_lesson_records,
+        )
         contract_preview_failure_signature = (
             contract_preview_failure_signature_feedback(branch)
         )
@@ -635,6 +681,10 @@ class ContextManager:
                 )
             ),
             "material_difference_requirement": material_difference_requirement,
+            "branch_lesson_usage_requirement": (
+                branch_lesson_usage_requirement
+            ),
+            "branch_lesson_records": branch_lesson_records,
             "contract_preview_failure_signature": (
                 contract_preview_failure_signature
             ),
