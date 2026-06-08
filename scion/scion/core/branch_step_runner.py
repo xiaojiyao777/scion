@@ -247,6 +247,35 @@ class BranchStepRunner:
         branch = getattr(sched, "branch", None)
 
         def skip(reason: str) -> StepResult:
+            pressure_without_candidate = (
+                _fresh_runtime_pressure_without_replayable_candidate(active)
+            )
+            drain_metadata = {
+                "schema_version": "fresh_runtime_replay_drain.v1",
+                "executed": False,
+                "skip_reason": reason,
+                "decision_features_excluded": True,
+            }
+            if pressure_without_candidate:
+                drain_metadata["pressure_no_replayable_candidate"] = True
+                drain_metadata["fresh_runtime_pressure_candidates"] = (
+                    pressure_without_candidate
+                )
+            replay_metadata: dict[str, Any] = {}
+            if pressure_without_candidate:
+                replay_metadata = {
+                    "schema_version": "fresh_runtime_replay.v1",
+                    "closure_status": "pressure_no_replayable_candidate",
+                    "detail": (
+                        "fresh champion runtime pressure exists but no "
+                        "structured replay pending candidate is materializable"
+                    ),
+                    "fresh_runtime_pressure_candidates": (
+                        pressure_without_candidate
+                    ),
+                    "counts_toward_max_rounds": False,
+                    "decision_features_excluded": True,
+                }
             result = StepResult(
                 action="skip",
                 branch_id=getattr(branch, "branch_id", None),
@@ -254,12 +283,12 @@ class BranchStepRunner:
                 counts_toward_max_rounds=False,
                 attempt_kind="other",
                 scheduler_audit_metadata={
-                    "fresh_runtime_replay_drain": {
-                        "schema_version": "fresh_runtime_replay_drain.v1",
-                        "executed": False,
-                        "skip_reason": reason,
-                        "decision_features_excluded": True,
-                    }
+                    "fresh_runtime_replay_drain": drain_metadata,
+                    **(
+                        {"fresh_runtime_replay": replay_metadata}
+                        if replay_metadata
+                        else {}
+                    ),
                 },
             )
             return _with_scheduler_metadata(result, sched)
@@ -978,6 +1007,85 @@ def _fresh_runtime_replay_result_metadata(
             if str(code)
         ],
     }
+
+
+def _fresh_runtime_pressure_without_replayable_candidate(
+    branches: Any,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for branch in branches or ():
+        summary = getattr(branch, "branch_evidence_summary", {}) or {}
+        if not isinstance(summary, Mapping):
+            continue
+        marker = summary.get("fresh_runtime_followup")
+        marker_payload = marker if isinstance(marker, Mapping) else {}
+        scheduler_marker = str(marker_payload.get("scheduler_marker") or "")
+        pending_marker = (
+            bool(marker_payload.get("fresh_runtime_pending"))
+            and scheduler_marker == "fresh_champion_runtime_replay_pending"
+        )
+        state = getattr(branch, "state", "")
+        state_value = str(getattr(state, "value", state) or "")
+        if pending_marker and state_value == BranchState.EXPLORE.value:
+            continue
+        reason_codes = _summary_reason_codes(summary)
+        runtime_status = str(summary.get("runtime_evidence_status") or "").lower()
+        fresh_required = (
+            bool(summary.get("fresh_runtime_required"))
+            or bool(marker_payload.get("fresh_runtime_required"))
+            or bool(marker_payload.get("followup_required"))
+            or runtime_status in {"fresh_champion_required", "fresh_required"}
+            or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_codes
+            or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_codes
+        )
+        if not fresh_required:
+            continue
+        candidates.append(
+            {
+                "branch_id": getattr(branch, "branch_id", None),
+                "branch_state": state_value,
+                "branch_code_status": str(
+                    getattr(branch, "branch_code_status", "") or ""
+                ),
+                "screening_tier": str(
+                    getattr(branch, "last_screening_feedback_tier", "") or ""
+                ),
+                "runtime_evidence_status": runtime_status or "unknown",
+                "fresh_runtime_required": True,
+                "fresh_runtime_pending": bool(
+                    summary.get("fresh_runtime_pending")
+                    or marker_payload.get("fresh_runtime_pending")
+                ),
+                "scheduler_marker": scheduler_marker,
+                "runtime_evidence_pressure_count": _nonnegative_int(
+                    summary.get("runtime_evidence_pressure_count")
+                ),
+            }
+        )
+    return candidates
+
+
+def _summary_reason_codes(summary: Mapping[str, Any]) -> set[str]:
+    values: list[Any] = []
+    for key in (
+        "reason_codes",
+        "decision_reason_codes",
+        "why_not_promoted_reason_codes",
+        "gate_observation_reason_codes",
+    ):
+        value = summary.get(key)
+        if isinstance(value, str):
+            values.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            values.extend(value)
+    return {str(value).strip().upper() for value in values if str(value).strip()}
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _fresh_runtime_replay_materialization_block(

@@ -395,11 +395,14 @@ class CampaignLoop:
                     result = drain_step()
                     if not _is_fresh_runtime_replay_drain_result(result):
                         fresh_runtime_replay_drain_skipped += 1
-                        fresh_runtime_replay_drain_stop_reason = (
-                            "no_fresh_runtime_replay_pending"
-                        )
                         fresh_runtime_replay_drain_final_metadata = (
                             _fresh_runtime_replay_drain_result_metadata(result)
+                        )
+                        fresh_runtime_replay_drain_stop_reason = (
+                            _fresh_runtime_replay_closure_status(
+                                fresh_runtime_replay_drain_final_metadata
+                            )
+                            or "no_fresh_runtime_replay_pending"
                         )
                         fresh_runtime_replay_drain_last_metadata = dict(
                             fresh_runtime_replay_drain_final_metadata
@@ -805,7 +808,9 @@ def _fresh_runtime_replay_blocked_count(result_metadata: Mapping[str, Any]) -> i
     if not result_metadata:
         return 0
     closure_status = _fresh_runtime_replay_closure_status(result_metadata)
-    if closure_status.startswith("blocked_"):
+    if closure_status.startswith("blocked_") or closure_status in {
+        "pressure_no_replayable_candidate",
+    }:
         return 1
     return 0
 
@@ -841,6 +846,7 @@ def _fresh_runtime_replay_drain_status(
     skipped: int,
     stopped_reason: str,
     accepted_replay_last_result: Mapping[str, Any],
+    final_attempt_last_result: Mapping[str, Any],
     blocked_count: int,
 ) -> str:
     if executed > 0:
@@ -863,6 +869,9 @@ def _fresh_runtime_replay_drain_status(
         ):
             return "selected_failed"
         return "selected_executed"
+    closure_status = _fresh_runtime_replay_closure_status(final_attempt_last_result)
+    if closure_status == "pressure_no_replayable_candidate":
+        return "pressure_no_replayable_candidate"
     if skipped > 0 or str(stopped_reason or "") == "no_fresh_runtime_replay_pending":
         return "not_selected_no_pending"
     if attempts > 0:
@@ -925,11 +934,16 @@ def _campaign_loop_status(
     accepted_replay_last_result = dict(fresh_runtime_replay_drain_accepted_metadata)
     final_attempt_last_result = dict(fresh_runtime_replay_drain_final_metadata)
     legacy_last_result = dict(fresh_runtime_replay_drain_last_metadata)
-    fresh_replay_blocked_count = _fresh_runtime_replay_blocked_count(
+    closure_source_result = (
         accepted_replay_last_result
+        if accepted_replay_last_result
+        else final_attempt_last_result
+    )
+    fresh_replay_blocked_count = _fresh_runtime_replay_blocked_count(
+        closure_source_result
     )
     fresh_replay_unresolved_closures = _fresh_runtime_replay_unresolved_closures(
-        accepted_replay_last_result
+        closure_source_result
     )
     fresh_replay_drain_status = _fresh_runtime_replay_drain_status(
         attempts=fresh_replay_drain_attempts,
@@ -937,6 +951,7 @@ def _campaign_loop_status(
         skipped=fresh_replay_drain_skipped,
         stopped_reason=fresh_runtime_replay_drain_stop_reason,
         accepted_replay_last_result=accepted_replay_last_result,
+        final_attempt_last_result=final_attempt_last_result,
         blocked_count=fresh_replay_blocked_count,
     )
     proposal_attempts_total = max(max(0, int(loop_steps)), attempts_value)

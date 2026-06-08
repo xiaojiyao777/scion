@@ -464,8 +464,10 @@ def weak_positive_followup_not_selected_reason(branch: Branch) -> str:
 
 
 def branch_is_weak_positive_priority(branch: Branch) -> bool:
+    if branch_fresh_runtime_replay_pending(branch):
+        return True
     return (
-        (branch_is_weak_positive_lineage(branch) or branch_fresh_runtime_replay_pending(branch))
+        branch_is_weak_positive_lineage(branch)
         and not branch_runtime_evidence_clean_fork_pressure_summary(branch)
     )
 

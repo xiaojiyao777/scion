@@ -552,6 +552,49 @@ def test_fresh_runtime_replay_drain_step_does_not_execute_non_replay_action() ->
     assert recorded == []
 
 
+def test_fresh_runtime_replay_drain_step_reports_pressure_without_pending_candidate() -> None:
+    branch = _branch("fresh-pressure-no-pending")
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.branch_evidence_summary = {
+        "runtime_evidence_status": "fresh_champion_required",
+        "fresh_runtime_required": True,
+        "fresh_runtime_pending": False,
+        "runtime_evidence_pressure_count": 2,
+        "reason_codes": ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+    }
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("replay drain must not execute ordinary proposal")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            branch=None,
+            slot="explore_new",
+            reason="runtime_evidence_completeness_clean_fork",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+
+    result = runner.run_fresh_runtime_replay_drain_step()
+    metadata = result.scheduler_audit_metadata
+
+    assert result.action == "skip"
+    assert result.counts_toward_max_rounds is False
+    assert metadata["scheduler_action"] == "create_new"
+    assert metadata["fresh_runtime_replay"]["closure_status"] == (
+        "pressure_no_replayable_candidate"
+    )
+    assert metadata["fresh_runtime_replay_drain"][
+        "pressure_no_replayable_candidate"
+    ] is True
+    assert metadata["fresh_runtime_replay"][
+        "fresh_runtime_pressure_candidates"
+    ][0]["branch_id"] == "fresh-pressure-no-pending"
+
+
 def test_clean_fork_reclaims_scheduler_origin_slot_before_create_new() -> None:
     champion = _champion()
     controller = BranchController()

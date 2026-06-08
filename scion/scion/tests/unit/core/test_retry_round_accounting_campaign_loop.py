@@ -434,10 +434,105 @@ def test_fresh_runtime_replay_drain_status_distinguishes_failed_from_blocked() -
                 "failure_detail": "runtime error",
                 "fresh_runtime_replay": {"closure_status": "failed"},
             },
+            final_attempt_last_result={},
             blocked_count=0,
         )
         == "selected_failed"
     )
+
+
+def test_campaign_loop_reports_fresh_pressure_without_replayable_candidate() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        return StepResult(
+            action="skip",
+            branch_id="b1",
+            reason=(
+                "fresh runtime replay drain skipped: scheduler did not select "
+                "replay_existing"
+            ),
+            counts_toward_max_rounds=False,
+            attempt_kind="other",
+            scheduler_audit_metadata={
+                "scheduler_action": "create_new",
+                "fresh_runtime_replay": {
+                    "schema_version": "fresh_runtime_replay.v1",
+                    "closure_status": "pressure_no_replayable_candidate",
+                    "detail": (
+                        "fresh champion runtime pressure exists but no "
+                        "structured replay pending candidate is materializable"
+                    ),
+                    "fresh_runtime_pressure_candidates": [
+                        {
+                            "branch_id": "b1",
+                            "runtime_evidence_status": "fresh_champion_required",
+                            "fresh_runtime_required": True,
+                            "fresh_runtime_pending": False,
+                            "runtime_evidence_pressure_count": 2,
+                        }
+                    ],
+                    "counts_toward_max_rounds": False,
+                    "decision_features_excluded": True,
+                },
+            },
+        )
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: statuses.append(dict(kwargs["loop_status"]))
+        if "loop_status" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        fresh_runtime_replay_drain_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    drain = final_status["fresh_runtime_replay_drain"]
+
+    assert main_calls == 1
+    assert drain_calls == 1
+    assert final_status["fresh_runtime_replay_drain_status"] == (
+        "pressure_no_replayable_candidate"
+    )
+    assert drain["status"] == "pressure_no_replayable_candidate"
+    assert drain["executed"] == 0
+    assert drain["skipped"] == 1
+    assert drain["stopped_reason"] == "pressure_no_replayable_candidate"
+    assert drain["blocked_count"] == 1
+    assert drain["unresolved_closures"][0]["closure_status"] == (
+        "pressure_no_replayable_candidate"
+    )
+    assert drain["final_attempt_last_result"]["fresh_runtime_replay"][
+        "fresh_runtime_pressure_candidates"
+    ][0]["branch_id"] == "b1"
 
 
 def test_campaign_loop_caps_fresh_runtime_replay_drain_after_max_rounds() -> None:

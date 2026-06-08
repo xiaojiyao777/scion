@@ -905,6 +905,41 @@ def test_fresh_runtime_replay_marker_prioritizes_discarded_weak_positive_followu
     assert action.reason == FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
 
 
+def test_fresh_runtime_replay_pending_overrides_runtime_clean_fork_pressure() -> None:
+    branch = Branch(
+        branch_id="fresh-runtime-pending-with-pressure",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        branch_evidence_summary={
+            "tier": "weak_positive",
+            "wins": 0,
+            "losses": 0,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "fresh_champion_required",
+            "runtime_aggregate_exclusion": {"excluded": True},
+            "runtime_evidence_pressure_count": 2,
+            "fresh_runtime_followup": {
+                "schema_version": "fresh_runtime_followup.v1",
+                "queue_intent": "fresh_champion_runtime_replay",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "fresh_runtime_pending": True,
+                "fresh_runtime_required": True,
+                "followup_required": True,
+                "decision_features_excluded": True,
+            },
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "replay_existing"
+    assert action.branch is branch
+    assert action.reason == FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
+
+
 def test_fresh_runtime_replay_closes_pending_marker_after_replay() -> None:
     branch = Branch(
         branch_id="fresh-runtime-replayed",
