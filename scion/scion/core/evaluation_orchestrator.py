@@ -85,6 +85,9 @@ class EvaluationOrchestrator:
     decision_lifecycle_policy_evidence: MutableMapping[str, dict[str, Any]] = field(
         default_factory=dict
     )
+    decision_lifecycle_bookkeeping: MutableMapping[str, dict[str, Any]] = field(
+        default_factory=dict
+    )
     decision_layer_sources: MutableMapping[str, str] = field(default_factory=dict)
     decision_engine_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
         default_factory=dict
@@ -108,6 +111,7 @@ class EvaluationOrchestrator:
         bid = branch.branch_id
         self.decision_lifecycle_actions[bid] = ""
         self.decision_lifecycle_policy_evidence.pop(bid, None)
+        self.decision_lifecycle_bookkeeping.pop(bid, None)
         self._set_reason_provenance(
             bid,
             source=None,
@@ -224,6 +228,17 @@ class EvaluationOrchestrator:
         lifecycle_evidence = getattr(coordinated, "lifecycle_policy_evidence", None)
         if isinstance(lifecycle_evidence, dict) and lifecycle_evidence:
             self.decision_lifecycle_policy_evidence[bid] = dict(lifecycle_evidence)
+        lifecycle_action = str(getattr(coordinated, "lifecycle_action", "") or "")
+        if coordinated.decision == Decision.ABANDON and lifecycle_action in {
+            "archive_lineage",
+            "soft_abandon",
+        }:
+            self.decision_lifecycle_bookkeeping[bid] = _soft_lifecycle_bookkeeping(
+                lifecycle_action=lifecycle_action,
+                decision_reason_codes=coordinated.reason_codes,
+            )
+        else:
+            self.decision_lifecycle_bookkeeping.pop(bid, None)
         self._set_reason_provenance(
             bid,
             source=str(getattr(coordinated, "decision_layer_source", "") or "stage_decision"),
@@ -318,6 +333,23 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _soft_lifecycle_bookkeeping(
+    *,
+    lifecycle_action: str,
+    decision_reason_codes: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "schema": "scion.lifecycle_bookkeeping.v1",
+        "role": "screening_result_lifecycle_annotation",
+        "attached_to_attempt_kind": "screening",
+        "legacy_attempt_kind": "branch_lifecycle_policy",
+        "legacy_decision_layer_source": "lifecycle_policy",
+        "decision_layer_source": "stage_decision",
+        "lifecycle_action": lifecycle_action or "archive_lineage",
+        "reason_codes": list(decision_reason_codes or ()),
+    }
 
 
 def _with_lifecycle_inputs(

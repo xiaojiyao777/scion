@@ -54,6 +54,7 @@ class StepResult:
     diagnostic_reason_codes: Tuple[str, ...] = ()
     bypass_reason_codes: Tuple[str, ...] = ()
     lifecycle_reason_codes: Tuple[str, ...] = ()
+    lifecycle_bookkeeping: Dict[str, Any] | None = None
     scheduler_slot: str = ""
     scheduler_reason: str = ""
     scheduler_audit_metadata: Dict[str, Any] | None = None

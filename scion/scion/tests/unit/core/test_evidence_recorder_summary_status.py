@@ -7,7 +7,7 @@ from scion.core.run_validity import (
     RUN_VALIDITY_INVALID_INFRA_ONLY,
     RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
 )
-from scion.core.models import CaseAggregateFeedback, MechanismChange
+from scion.core.models import CaseAggregateFeedback, Decision, MechanismChange
 from scion.core.evidence_recording.summary_cache import _campaign_cache_stats
 from scion.core.step_result import StepResult
 
@@ -76,6 +76,45 @@ def test_status_last_result_exposes_structured_decision_provenance(
     assert last_result["decision_engine_reason_codes"] == []
 
 
+def test_status_last_result_soft_abandon_is_screening_lifecycle_bookkeeping(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-soft-abandon", campaign_dir=tmp_path)
+
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="soft_abandon",
+            branch_id="branch-1",
+            decision=Decision.ABANDON,
+            reason="soft_abandon: SCREENING_FAIL_WIN_RATE",
+            attempt_kind="screening",
+            protocol_stage="screening",
+            formal_protocol_evaluated=True,
+            screened_experiment_effective=True,
+            decision_layer_source="stage_decision",
+            decision_engine_reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            lifecycle_reason_codes=("BRANCH_LIFECYCLE_ARCHIVE_LINEAGE",),
+            lifecycle_bookkeeping={
+                "schema": "scion.lifecycle_bookkeeping.v1",
+                "role": "screening_result_lifecycle_annotation",
+                "attached_to_attempt_kind": "screening",
+                "legacy_attempt_kind": "branch_lifecycle_policy",
+                "legacy_decision_layer_source": "lifecycle_policy",
+            },
+        )
+    )
+
+    last_result = status["last_result"]
+    assert last_result["attempt_kind"] == "screening"
+    assert last_result["decision_layer_source"] == "stage_decision"
+    assert last_result["lifecycle_bookkeeping"]["legacy_attempt_kind"] == (
+        "branch_lifecycle_policy"
+    )
+    assert last_result["lifecycle_bookkeeping"]["legacy_decision_layer_source"] == (
+        "lifecycle_policy"
+    )
+
+
 def test_campaign_summary_exposes_structured_step_reason_provenance(
     tmp_path: Path,
 ) -> None:
@@ -93,6 +132,14 @@ def test_campaign_summary_exposes_structured_step_reason_provenance(
             "SCREENING_WEAK_SIGNAL_CONTINUE",
         ),
         diagnostic_reason_codes=("SCREENING_RUNTIME_BUDGET_SATURATION",),
+        lifecycle_reason_codes=("BRANCH_LIFECYCLE_ARCHIVE_LINEAGE",),
+        lifecycle_bookkeeping={
+            "schema": "scion.lifecycle_bookkeeping.v1",
+            "role": "screening_result_lifecycle_annotation",
+            "attached_to_attempt_kind": "screening",
+            "legacy_attempt_kind": "branch_lifecycle_policy",
+            "legacy_decision_layer_source": "lifecycle_policy",
+        },
     )
 
     summary = recorder.write_campaign_summary(
@@ -111,10 +158,16 @@ def test_campaign_summary_exposes_structured_step_reason_provenance(
     assert summary_step["diagnostic_reason_codes"] == [
         "SCREENING_RUNTIME_BUDGET_SATURATION"
     ]
+    assert summary_step["lifecycle_bookkeeping"]["legacy_attempt_kind"] == (
+        "branch_lifecycle_policy"
+    )
     assert protocol["effective_reason_source"] == "stage_decision"
     assert protocol["diagnostic_reason_codes"] == [
         "SCREENING_RUNTIME_BUDGET_SATURATION"
     ]
+    assert protocol["lifecycle_bookkeeping"]["legacy_decision_layer_source"] == (
+        "lifecycle_policy"
+    )
 
 
 def test_campaign_summary_exposes_contract_diagnostics(tmp_path: Path) -> None:

@@ -695,6 +695,7 @@ class StepRecord:
     diagnostic_reason_codes: Tuple[str, ...] = ()
     bypass_reason_codes: Tuple[str, ...] = ()
     lifecycle_reason_codes: Tuple[str, ...] = ()
+    lifecycle_bookkeeping: Dict[str, Any] = field(default_factory=dict)
     contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
     counts_toward_max_rounds: bool = True

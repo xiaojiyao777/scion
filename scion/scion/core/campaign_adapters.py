@@ -71,6 +71,9 @@ def _lookup_decision_provenance(
                 (),
             )
         ),
+        "lifecycle_bookkeeping": dict(
+            mapping("decision_lifecycle_bookkeeping").get(branch_id, {}) or {}
+        ),
     }
 
 
@@ -402,6 +405,11 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         diagnostic_reason_codes=getattr(owner, "_diagnostic_reason_codes", {}),
         bypass_reason_codes=getattr(owner, "_bypass_reason_codes", {}),
         lifecycle_reason_codes=getattr(owner, "_lifecycle_reason_codes", {}),
+        decision_lifecycle_bookkeeping=getattr(
+            owner,
+            "_decision_lifecycle_bookkeeping",
+            {},
+        ),
         campaign_id=getattr(owner, "_campaign_id", ""),
         registry=getattr(owner, "_registry", None),
         materializer=getattr(owner, "_materializer", None),

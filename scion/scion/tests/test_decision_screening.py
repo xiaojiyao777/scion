@@ -145,7 +145,13 @@ def test_decision_lifecycle_archive_abandon_has_structured_fields():
         BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
         "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
     )
-    assert out.decision_layer_source == "lifecycle_policy"
+    assert out.decision_layer_source == "stage_decision"
+    assert out.lifecycle_policy_evidence["bookkeeping_role"] == (
+        "screening_result_lifecycle_annotation"
+    )
+    assert out.lifecycle_policy_evidence["legacy_decision_layer_source"] == (
+        "lifecycle_policy"
+    )
 
 
 def test_decision_screening_fail():

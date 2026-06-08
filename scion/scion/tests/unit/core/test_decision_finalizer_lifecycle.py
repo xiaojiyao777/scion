@@ -1066,7 +1066,17 @@ def test_lifecycle_archive_abandon_does_not_increment_hard_counter() -> None:
     assert branch.state == BranchState.ABANDONED
     assert result.action == "soft_abandon"
     assert result.decision == Decision.ABANDON
-    assert result.attempt_kind == "branch_lifecycle_policy"
+    assert result.attempt_kind == "screening"
+    assert result.lifecycle_bookkeeping == {
+        "schema": "scion.lifecycle_bookkeeping.v1",
+        "role": "screening_result_lifecycle_annotation",
+        "attached_to_attempt_kind": "screening",
+        "legacy_attempt_kind": "branch_lifecycle_policy",
+        "legacy_decision_layer_source": "lifecycle_policy",
+        "decision_layer_source": "stage_decision",
+        "lifecycle_action": "archive_lineage",
+        "reason_codes": ["SCREENING_SOFT_ABANDON_NEGATIVE_DELTA"],
+    }
     assert hard_abandons == []
     assert archived == [("/tmp/workspace", branch.branch_id)]
     assert cleaned == ["/tmp/workspace"]

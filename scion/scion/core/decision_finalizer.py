@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, replace
-from typing import Callable, Iterable, MutableMapping, Optional, Protocol
+from typing import Any, Callable, Iterable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.branch_hygiene import (
@@ -257,6 +257,10 @@ class DecisionFinalizer:
                         branch_id=bid,
                         decision=decision,
                         reason=f"soft_abandon: {primary_reason}",
+                        lifecycle_bookkeeping=_soft_lifecycle_bookkeeping(
+                            lifecycle_action=effective_lifecycle_action,
+                            decision_reason_codes=effective_reason_codes,
+                        ),
                     ),
                     protocol_result,
                 )
@@ -310,7 +314,11 @@ class DecisionFinalizer:
                     branch_id=bid,
                     decision=decision,
                     reason=f"soft_abandon: {primary_reason}",
-                    attempt_kind="branch_lifecycle_policy",
+                    attempt_kind="screening",
+                    lifecycle_bookkeeping=_soft_lifecycle_bookkeeping(
+                        lifecycle_action=effective_lifecycle_action,
+                        decision_reason_codes=effective_reason_codes,
+                    ),
                 ),
                 protocol_result,
             )
@@ -1093,6 +1101,23 @@ def _with_protocol_accounting(
     result.formal_protocol_evaluated = formal_evaluated
     result.screened_experiment_effective = stage == "screening" and formal_evaluated
     return result
+
+
+def _soft_lifecycle_bookkeeping(
+    *,
+    lifecycle_action: DecisionLifecycleAction,
+    decision_reason_codes: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "schema": "scion.lifecycle_bookkeeping.v1",
+        "role": "screening_result_lifecycle_annotation",
+        "attached_to_attempt_kind": "screening",
+        "legacy_attempt_kind": "branch_lifecycle_policy",
+        "legacy_decision_layer_source": "lifecycle_policy",
+        "decision_layer_source": "stage_decision",
+        "lifecycle_action": lifecycle_action or "archive_lineage",
+        "reason_codes": list(decision_reason_codes or ()),
+    }
 
 
 def _preserve_low_signal_screening_workspace(

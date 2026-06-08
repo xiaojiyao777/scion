@@ -716,6 +716,9 @@ class CampaignSummaryMixin:
         lifecycle_reason_codes = list(
             getattr(step, "lifecycle_reason_codes", ()) or ()
         )
+        lifecycle_bookkeeping = dict(
+            getattr(step, "lifecycle_bookkeeping", {}) or {}
+        )
         candidate_intent_visibility = candidate_intent_visibility_for_step(step)
         observability_value_visibility = observability_value_visibility_for_step(step)
         code_archive_ref = public_artifact_ref(
@@ -739,6 +742,7 @@ class CampaignSummaryMixin:
             "diagnostic_reason_codes": diagnostic_reason_codes,
             "bypass_reason_codes": bypass_reason_codes,
             "lifecycle_reason_codes": lifecycle_reason_codes,
+            "lifecycle_bookkeeping": lifecycle_bookkeeping,
             "contract_passed": False if contract_not_run_reason else step.contract_passed,
             "contract_diagnostics": list(
                 getattr(step, "contract_diagnostics", ()) or ()
@@ -955,6 +959,7 @@ class CampaignSummaryMixin:
                 "diagnostic_reason_codes": diagnostic_reason_codes,
                 "bypass_reason_codes": bypass_reason_codes,
                 "lifecycle_reason_codes": lifecycle_reason_codes,
+                "lifecycle_bookkeeping": lifecycle_bookkeeping,
                 "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "effective_reason_codes": effective_reason_codes,
                 "gate_observation_reason_codes": list(

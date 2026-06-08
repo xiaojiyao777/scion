@@ -1169,6 +1169,13 @@ def test_low_mid_regressive_screening_abandon_comes_from_decision_engine() -> No
         BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
         "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
     )
+    assert orchestrator.decision_layer_sources[branch.branch_id] == "stage_decision"
+    assert orchestrator.decision_lifecycle_bookkeeping[branch.branch_id][
+        "legacy_attempt_kind"
+    ] == "branch_lifecycle_policy"
+    assert orchestrator.decision_lifecycle_bookkeeping[branch.branch_id][
+        "legacy_decision_layer_source"
+    ] == "lifecycle_policy"
 
 
 def test_orchestrator_does_not_run_post_decision_lifecycle_policy() -> None:

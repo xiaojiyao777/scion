@@ -367,6 +367,11 @@ class DecisionEngine:
             )
         reason_codes = _merge_reason_codes(outcome.reason_codes, lifecycle_codes)
         if lifecycle.action in {"archive_lineage", "soft_abandon"}:
+            lifecycle_evidence = {
+                **lifecycle_evidence,
+                "bookkeeping_role": "screening_result_lifecycle_annotation",
+                "legacy_decision_layer_source": "lifecycle_policy",
+            }
             return DecisionOutcome(
                 decision=Decision.ABANDON,
                 reason_codes=reason_codes,
@@ -375,7 +380,7 @@ class DecisionEngine:
                 final_decision=Decision.ABANDON,
                 lifecycle_action=lifecycle_action,
                 lifecycle_reason_codes=lifecycle_codes,
-                decision_layer_source="lifecycle_policy",
+                decision_layer_source=outcome.decision_layer_source,
                 lifecycle_policy_evidence=lifecycle_evidence,
             )
         return DecisionOutcome(

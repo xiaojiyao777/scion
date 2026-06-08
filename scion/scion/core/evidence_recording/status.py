@@ -643,6 +643,9 @@ class StatusWriterMixin:
                 "lifecycle_reason_codes": list(
                     getattr(last_result, "lifecycle_reason_codes", ()) or ()
                 ),
+                "lifecycle_bookkeeping": dict(
+                    getattr(last_result, "lifecycle_bookkeeping", None) or {}
+                ),
                 "scheduler_slot": getattr(last_result, "scheduler_slot", ""),
                 "scheduler_reason": getattr(last_result, "scheduler_reason", ""),
                 "scheduler_audit_metadata": dict(
