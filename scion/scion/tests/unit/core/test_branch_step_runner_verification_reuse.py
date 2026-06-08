@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+from contextlib import nullcontext
+from types import SimpleNamespace
+
+from scion.core.branch_step_runner import BranchStepRunner
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CanaryResult,
+    ChampionState,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    HypothesisRecord,
+    PatchProposal,
+    ProtocolResult,
+)
+from scion.core.scheduler import Scheduler
+from scion.core.step_result import StepResult
+
+
+def _branch(state: BranchState = BranchState.VALIDATING) -> Branch:
+    return Branch(
+        branch_id="branch-1",
+        state=state,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        current_code_hash="verified-code-hash",
+        last_clean_code_hash="verified-code-hash",
+    )
+
+
+def _hypothesis() -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text="Improve generic local search.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="solver.py",
+    )
+
+
+def _patch() -> PatchProposal:
+    return PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="def solve(*args, **kwargs):\n    return None\n",
+    )
+
+
+def _protocol_result(stage: ExperimentStage = ExperimentStage.VALIDATION) -> ProtocolResult:
+    return ProtocolResult(
+        stage=stage,
+        stats=EvalStats(
+            n_cases=3,
+            wins=2,
+            losses=1,
+            ties=0,
+            win_rate=0.67,
+            median_delta=0.1,
+            ci_low=0.01,
+            ci_high=0.2,
+        ),
+        gate_outcome="pass",
+        reason_codes=("validation_pass",),
+        exposed_summary="validation aggregate",
+        raw_metrics_ref="/tmp/validation-metrics.json",
+    )
+
+
+def test_eval_step_records_screening_verification_reuse_marker() -> None:
+    branch = _branch()
+    recorded_steps = []
+    finalized = {}
+    hypothesis = _hypothesis()
+    h_record = HypothesisRecord(
+        hypothesis_id="hyp-1",
+        branch_id=branch.branch_id,
+        change_locus=hypothesis.change_locus,
+        action=hypothesis.action,
+        status="active",
+        target_file=hypothesis.target_file,
+        hypothesis_text=hypothesis.hypothesis_text,
+    )
+
+    def apply_decision_and_finalize(**kwargs):
+        finalized.update(kwargs)
+        return StepResult(
+            action="validate",
+            branch_id=branch.branch_id,
+            decision=Decision.QUEUE_FROZEN,
+            reason="decision=queue_frozen",
+        )
+
+    runner = BranchStepRunner(
+        branch_controller=SimpleNamespace(
+            apply_decision=lambda branch_id, decision: None,
+        ),
+        scheduler=Scheduler(),
+        champion_lock=nullcontext(),
+        get_champion=lambda: ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion-hash",
+        ),
+        branch_store=SimpleNamespace(save=lambda branch: None),
+        branch_workspaces={branch.branch_id: "/tmp/workspace"},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: _patch()},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        experiment_protocol_provider=lambda: object(),
+        contract_gate=None,
+        verification_gate=None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        tick_blocked_branches=lambda: None,
+        persist_branch_state=lambda branch_id: None,
+        record_hard_abandon=lambda branch_id, reason: None,
+        setup_workspace=lambda *args, **kwargs: None,
+        apply_patch=lambda *args, **kwargs: None,
+        record_verification_pass=lambda branch, code_hash: None,
+        evaluate=lambda branch, workspace, hypothesis: (
+            Decision.QUEUE_FROZEN,
+            _protocol_result(),
+            CanaryResult(passed=True),
+        ),
+        apply_decision_and_finalize=apply_decision_and_finalize,
+        record_step=recorded_steps.append,
+        decision_reason_codes_for=lambda branch_id, protocol_result: (
+            "validation_pass",
+        ),
+        decision_provenance_for=lambda branch_id: {},
+        run_explore_step=lambda branch: StepResult(action="explore"),
+        run_eval_step_callback=lambda branch: StepResult(action="validate"),
+        run_reconcile_step_callback=lambda branch: StepResult(action="reconcile"),
+        increment_round=lambda: 2,
+        increment_rounds_since_last_promote=lambda: None,
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+    )
+
+    result = runner.run_eval_step(branch)
+
+    verification = finalized["verification_result"]
+    check = verification.checks[0]
+    step = recorded_steps[0]
+
+    assert result.decision == Decision.QUEUE_FROZEN
+    assert verification.passed is True
+    assert check.name == "V0_screening_verification_reuse"
+    assert check.metadata["verification_reused_from_screening"] is True
+    assert check.metadata["strict_checks_rerun"] is False
+    assert check.metadata["original_verification_audit_hash"]
+    assert "code_hash=verified-code-hash" in check.metadata[
+        "original_verification_audit_detail"
+    ]
+    assert "V1-V9 were not rerun" in check.detail
+    assert step.verification_passed is True
+    assert step.verification_detail is not None
+    assert "V0_screening_verification_reuse" in step.verification_detail
+    assert "original_verification_audit_hash=" in step.verification_detail
+
+
+def test_eval_step_preserves_screening_accounting_when_finalizer_lifecycle_blocks() -> None:
+    branch = _branch(BranchState.EXPLORE_EXPAND)
+    recorded_steps = []
+    hypothesis = _hypothesis()
+    h_record = HypothesisRecord(
+        hypothesis_id="hyp-1",
+        branch_id=branch.branch_id,
+        change_locus=hypothesis.change_locus,
+        action=hypothesis.action,
+        status="active",
+        target_file=hypothesis.target_file,
+        hypothesis_text=hypothesis.hypothesis_text,
+    )
+
+    runner = BranchStepRunner(
+        branch_controller=SimpleNamespace(
+            apply_decision=lambda branch_id, decision: None,
+        ),
+        scheduler=Scheduler(),
+        champion_lock=nullcontext(),
+        get_champion=lambda: ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion-hash",
+        ),
+        branch_store=SimpleNamespace(save=lambda branch: None),
+        branch_workspaces={branch.branch_id: "/tmp/workspace"},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: _patch()},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        experiment_protocol_provider=lambda: object(),
+        contract_gate=None,
+        verification_gate=None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        tick_blocked_branches=lambda: None,
+        persist_branch_state=lambda branch_id: None,
+        record_hard_abandon=lambda branch_id, reason: None,
+        setup_workspace=lambda *args, **kwargs: None,
+        apply_patch=lambda *args, **kwargs: None,
+        record_verification_pass=lambda branch, code_hash: None,
+        evaluate=lambda branch, workspace, hypothesis: (
+            Decision.ABANDON,
+            _protocol_result(ExperimentStage.SCREENING),
+            CanaryResult(passed=True),
+        ),
+        apply_decision_and_finalize=lambda **kwargs: StepResult(
+            action="soft_abandon",
+            branch_id=branch.branch_id,
+            decision=Decision.ABANDON,
+            reason="soft_abandon: screening abandon lifecycle policy",
+            attempt_kind="branch_lifecycle_policy",
+        ),
+        record_step=recorded_steps.append,
+        decision_reason_codes_for=lambda branch_id, protocol_result: (
+            "screening_abandon",
+        ),
+        decision_provenance_for=lambda branch_id: {},
+        run_explore_step=lambda branch: StepResult(action="explore"),
+        run_eval_step_callback=lambda branch: StepResult(action="validate"),
+        run_reconcile_step_callback=lambda branch: StepResult(action="reconcile"),
+        increment_round=lambda: 2,
+        increment_rounds_since_last_promote=lambda: None,
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+    )
+
+    result = runner.run_eval_step(branch)
+
+    assert result.action == "soft_abandon"
+    assert result.attempt_kind == "branch_lifecycle_policy"
+    assert result.protocol_stage == "screening"
+    assert result.formal_protocol_evaluated is True
+    assert result.screened_experiment_effective is True
+    assert recorded_steps[0].protocol_result.stage == ExperimentStage.SCREENING
+
+
+def test_eval_step_blocks_reuse_when_current_hash_drifted() -> None:
+    branch = _branch()
+    branch.current_code_hash = "drifted-code-hash"
+    recorded_steps = []
+    hard_abandons = []
+    hypothesis = _hypothesis()
+    h_record = HypothesisRecord(
+        hypothesis_id="hyp-1",
+        branch_id=branch.branch_id,
+        change_locus=hypothesis.change_locus,
+        action=hypothesis.action,
+        status="active",
+        target_file=hypothesis.target_file,
+        hypothesis_text=hypothesis.hypothesis_text,
+    )
+
+    runner = BranchStepRunner(
+        branch_controller=SimpleNamespace(
+            apply_decision=lambda branch_id, decision: None,
+        ),
+        scheduler=Scheduler(),
+        champion_lock=nullcontext(),
+        get_champion=lambda: SimpleNamespace(code_snapshot_path="/tmp/champion"),
+        branch_store=SimpleNamespace(save=lambda branch: None),
+        branch_workspaces={branch.branch_id: "/tmp/workspace"},
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: _patch()},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        experiment_protocol_provider=lambda: object(),
+        contract_gate=None,
+        verification_gate=None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        tick_blocked_branches=lambda: None,
+        persist_branch_state=lambda branch_id: None,
+        record_hard_abandon=lambda branch_id, reason: hard_abandons.append(reason),
+        setup_workspace=lambda *args, **kwargs: None,
+        apply_patch=lambda *args, **kwargs: None,
+        record_verification_pass=lambda branch, code_hash: None,
+        evaluate=lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("protocol should not run after verification drift")
+        ),
+        apply_decision_and_finalize=lambda **kwargs: StepResult(action="validate"),
+        record_step=recorded_steps.append,
+        decision_reason_codes_for=lambda branch_id, protocol_result: None,
+        decision_provenance_for=lambda branch_id: {},
+        run_explore_step=lambda branch: StepResult(action="explore"),
+        run_eval_step_callback=lambda branch: StepResult(action="validate"),
+        run_reconcile_step_callback=lambda branch: StepResult(action="reconcile"),
+        increment_round=lambda: 2,
+        increment_rounds_since_last_promote=lambda: None,
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+    )
+
+    result = runner.run_eval_step(branch)
+
+    assert result.failure_stage == "verification"
+    assert hard_abandons == ["eval_verification_reuse_invalid"]
+    assert recorded_steps[0].verification_passed is False
+    assert "current code hash/status does not match" in (
+        recorded_steps[0].verification_detail or ""
+    )

@@ -2,6 +2,90 @@
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 
+
+def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
+    tmp_path: Path,
+) -> None:
+    cm = _campaign(tmp_path)
+    branch = cm._branch_ctrl.create_branch(cm._champion)
+    helper_path = "operators/branch_helper.py"
+    helper_source = "def branch_helper(value):\n    return value + 1\n"
+    cm._step_history.append(
+        StepRecord(
+            round_num=1,
+            branch_id=branch.branch_id,
+            hypothesis=HypothesisProposal(
+                hypothesis_text="Create a generic branch helper.",
+                change_locus="local_search",
+                action="create_new",
+                target_file=helper_path,
+            ),
+            patch=PatchProposal(
+                file_path=helper_path,
+                action="create",
+                code_content=helper_source,
+            ),
+            contract_passed=True,
+            verification_passed=True,
+            protocol_result=None,
+            decision=None,
+            failure_stage=None,
+            failure_detail=None,
+        )
+    )
+    followup_hypothesis = HypothesisProposal(
+        hypothesis_text="Refine the same helper on this branch.",
+        change_locus="local_search",
+        action="modify",
+        target_file=helper_path,
+    )
+    followup_record = HypothesisRecord(
+        hypothesis_id="followup-hyp",
+        branch_id=branch.branch_id,
+        change_locus=followup_hypothesis.change_locus,
+        action=followup_hypothesis.action,
+        status="active",
+        target_file=helper_path,
+        hypothesis_text=followup_hypothesis.hypothesis_text,
+    )
+    followup_patch = PatchProposal(
+        file_path=helper_path,
+        action="modify",
+        code_content="def branch_helper(value):\n    return value + 2\n",
+    )
+    captured_overrides: list[dict[str, str]] = []
+
+    assert cm._explore_step_pipeline.step_history is cm._step_history
+    cm._explore_step_pipeline.generate_hypothesis = lambda _branch: (
+        followup_hypothesis,
+        followup_record,
+    )
+    cm._explore_step_pipeline.generate_code = (
+        lambda _branch, _hypothesis, prior_failure=None: followup_patch
+    )
+    cm._contract_gate.validate_hypothesis = lambda *_args, **_kwargs: ContractResult(
+        passed=True,
+        checks=(CheckResult("H", True, "light", "ok", 0),),
+    )
+
+    def fail_patch_contract(patch, *args, **kwargs):
+        captured_overrides.append(dict(kwargs.get("base_file_overrides") or {}))
+        return ContractResult(
+            passed=False,
+            checks=(),
+            failure_reason="forced patch contract stop",
+        )
+
+    cm._contract_gate.validate_patch = fail_patch_contract
+
+    result = cm._explore_step_pipeline.run(branch)
+
+    assert result.reason == "patch contract failed"
+    assert cm._step_history[-1].failure_stage == "patch_contract"
+    assert captured_overrides
+    assert captured_overrides[0][helper_path] == helper_source
+
+
 def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
     tmp_path: Path,
 ) -> None:

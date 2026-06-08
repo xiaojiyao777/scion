@@ -12,7 +12,8 @@ Key services installed by `campaign_composition.py`:
 
 - `ProblemRuntime`: owns legacy `ProblemSpec`, optional adapter, and adapter-aware `ContextManager`.
 - `BranchController`: owns branch state transitions and code hash bookkeeping.
-- `Scheduler`: selects the next branch by hard priority.
+- `Scheduler`: selects branch work through deterministic priority plus
+  lifecycle/resource governance.
 - `ProposalPipeline`: owns LLM proposal/code/fix calls.
 - `ExploreStepPipeline`: owns Round 1/Round 2/contract/workspace/verification/screening.
 - `EvaluationOrchestrator`: owns protocol execution glue and decision coordination.
@@ -26,10 +27,12 @@ Key services installed by `campaign_composition.py`:
 `CampaignLoop.run()` in `scion/scion/core/campaign_loop.py` is the outer lifecycle:
 
 1. Write initial `status.json`.
-2. For each round up to `max_rounds`, drain completed weight optimization events.
+2. Until `effective_rounds_completed` reaches `max_rounds`, drain completed
+   weight optimization events.
 3. Ask `CampaignGovernanceService.should_stop()`.
 4. Stop immediately if the LLM circuit breaker is tripped.
-5. Run one branch step through `CampaignManager.run_one_step()`.
+5. Run one branch step through `CampaignManager.run_one_step()`. Some steps are
+   non-counted attempts with their own limits.
 6. Write status with the last `StepResult`.
 7. Run stagnation and soft-stagnation checks.
 8. On loop exit, terminalize active branches only for max-round exhaustion.
@@ -41,16 +44,25 @@ The loop does not know proposal, evaluation, or promotion details. It depends on
 
 `BranchStepRunner` in `scion/scion/core/branch_step_runner.py` is the branch dispatch boundary. It first drains weight-opt events and checks stop state, then ticks blocked infra branches, then asks `Scheduler.select_next()`.
 
-Scheduler priority in `scion/scion/core/scheduler.py`:
+Scheduler selection in `scion/scion/core/scheduler.py`:
 
-1. `READY_FROZEN`
-2. `READY_VALIDATE`
-3. `STALE` / `STALE_WEIGHT_UPDATE`
-4. active explore/eval states: `EXPLORE`, `EXPLORE_EXPAND`, `VALIDATING`, `VALIDATING_EXPAND`, `FROZEN_TESTING`
-5. create a new branch if under capacity
-6. report at capacity
+1. High-priority formal work: `READY_FROZEN`, `READY_VALIDATE`, stale reconcile,
+   and active validation/frozen/expand states are considered before ordinary
+   research exploration.
+2. Research branches are routed by pending retry/diagnostic repair,
+   weak-positive follow-up, same-branch refinement sampling, runtime-evidence
+   pressure, plateau/lifecycle reroute, same-mechanism requirements, clean
+   research preference, and budgeted/fair selection.
+3. New clean branches are admitted only through active-slot capacity policy.
+   Scheduler may prefer a clean fork, report `at_capacity`, or rely on
+   decision-origin park/reclaim metadata to exclude/reclaim low-value lineages
+   from active-slot accounting.
 
-`BLOCKED_INFRA` is explicitly unschedulable. Within a priority tier, pending LLM retries go first, then FIFO by branch creation time.
+`BLOCKED_INFRA` and parked/released lineages are not schedulable as ordinary
+branch work. Pending retries still sort ahead inside some candidate pools and
+ties use `updated_at`/`created_at`, but that is not the whole scheduling policy.
+Treat active-slot, clean-fork, park/reclaim, and lifecycle routing as
+resource/scheduling governance, not Decision-layer promotion/abandon logic.
 
 ## Branch State Model
 
@@ -145,5 +157,15 @@ There are several budget/stop layers:
 - Soft stagnation forces a non-dominant locus through `PlateauController` instead of stopping.
 - Circuit breaker stops after repeated LLM failures.
 - API balance exhaustion sets campaign-level stop state through `ProposalPipeline`.
+
+`max_rounds` and CLI `--rounds` use `effective_rounds_completed` as the budget
+counter. They are not total loop steps and not proposal-attempt targets. Counted
+formal candidate steps consume the budget; proposal-quality blocks,
+telemetry/validation repair attempts, branch lifecycle policy blocks, reconcile
+lifecycle steps, and scheduler active-slot blocks use separate counters and
+limits. In status/summary artifacts, read `total_rounds` as a legacy/external
+attempt surface and compare it with `campaign_steps`, `proposal_attempts_total`,
+`proposal_attempts_consumed`, `formal_screened_candidates`, and
+`protocol_evaluated_candidates` before interpreting run completeness.
 
 The important boundary is that stop/go policy is centralized in governance/loop services; proposal/evaluation services report facts and failures rather than stopping the loop directly.

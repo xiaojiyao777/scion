@@ -15,7 +15,11 @@ GENERIC_LAYER_DIRS = (
     "verification",
     "evidence",
 )
-GENERIC_PREVIEW_DIR = PACKAGE_ROOT / "proposal" / "tools" / "previews"
+GENERIC_PREVIEW_PATHS = (
+    PACKAGE_ROOT / "proposal" / "agentic_preview.py",
+    PACKAGE_ROOT / "proposal" / "agentic_preview_compaction.py",
+    *(PACKAGE_ROOT / "proposal" / "tools" / "previews").rglob("*.py"),
+)
 
 FORBIDDEN_PATTERNS = {
     "cvrp": re.compile(
@@ -94,7 +98,7 @@ def test_generic_layers_do_not_contain_cvrp_solver_design_semantics() -> None:
 
 def test_generic_preview_tools_do_not_hardcode_solver_algorithm_fields() -> None:
     violations: list[str] = []
-    for path in GENERIC_PREVIEW_DIR.rglob("*.py"):
+    for path in GENERIC_PREVIEW_PATHS:
         relative = path.relative_to(PACKAGE_ROOT).as_posix()
         for line_number, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(),

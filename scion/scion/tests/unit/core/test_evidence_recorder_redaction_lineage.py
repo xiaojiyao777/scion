@@ -2,7 +2,35 @@
 
 from dataclasses import replace
 
+import pytest
+
+from scion.core.evidence_recording.replay_identity import (
+    FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS,
+    FORMAL_REPLAY_IDENTITY_SCHEMA,
+)
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
+
+
+class _FaultyLineageRegistry:
+    def __init__(
+        self, *, fail_event: bool = False, fail_decision: bool = False
+    ) -> None:
+        self.fail_event = fail_event
+        self.fail_decision = fail_decision
+        self.events = []
+        self.decisions = []
+
+    def record_event(self, event):
+        if self.fail_event:
+            raise RuntimeError("lineage event write unavailable")
+        self.events.append(dict(event))
+
+    def record_decision(self, **payload):
+        if self.fail_decision:
+            raise RuntimeError("lineage decision write unavailable")
+        self.decisions.append(dict(payload))
+
 
 def test_public_summary_and_status_redact_nested_diagnostics_and_branches(
     tmp_path: Path,
@@ -255,11 +283,17 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert metadata["runtime_stats"]["runtime_pairs"] == 4
     assert audit_payload["runtime_guard"]["metadata"]["ratio"] == 1.2
     assert audit_payload["verification_checks"][1]["name"] == "V8_nondeterminism"
+    assert audit_payload["verification_checks"][1]["detail"] == (
+        "adapter_canonical_signature identical across two runs"
+    )
     assert audit_payload["verification_checks"][1]["metadata"]["comparison_mode"] == (
         "adapter_canonical_signature"
     )
     assert audit_payload["verification_checks"][1]["metadata"]["adapter_backed"] is True
     assert audit_payload["verification_checks"][2]["name"] == "V9_perf_guard"
+    assert audit_payload["verification_checks"][2]["detail"] == (
+        "perf ok: case=case-1 candidate=120ms champion=100ms ratio=1.20x timeout=60s"
+    )
     assert audit_payload["telemetry_failure_details"][0]["surface_field_id"] == (
         "activation_probe"
     )
@@ -270,6 +304,185 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert payload_features["runtime_guard_elapsed_ms"] == 7
     assert payload_features["runtime_stats"]["runtime_regression_rate"] == 0.5
     assert reason_codes == ["frozen_positive", "runtime_ok"]
+
+
+def test_formal_lineage_audit_payload_includes_replay_identity_key_set(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        protocol_version="protocol-v3",
+        problem_spec_hash="problem-hash",
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+    protocol_result = replace(
+        _protocol_result(str(tmp_path / "metrics" / "formal.json")),
+        selected_surface="local_search",
+    )
+
+    event = recorder.build_step_lineage_event(
+        branch=_branch(),
+        hypothesis=_hypothesis(),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        canary_result=CanaryResult(passed=True),
+        protocol_result=protocol_result,
+        decision=Decision.PROMOTE,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+    )
+    same_patch_event = recorder.build_step_lineage_event(
+        branch=_branch(),
+        hypothesis=_hypothesis("Different free-text rationale."),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        canary_result=CanaryResult(passed=True),
+        protocol_result=protocol_result,
+        decision=Decision.PROMOTE,
+        champion=_champion(),
+        hypothesis_id="hyp-2",
+    )
+    changed_patch_event = recorder.build_step_lineage_event(
+        branch=_branch(),
+        hypothesis=_hypothesis(),
+        patch=PatchProposal(
+            file_path="operators/local_search.py",
+            action="modify",
+            code_content="class LocalSearch:\n    marker = 1\n",
+        ),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        canary_result=CanaryResult(passed=True),
+        protocol_result=protocol_result,
+        decision=Decision.PROMOTE,
+        champion=_champion(),
+        hypothesis_id="hyp-3",
+    )
+
+    audit_payload = json.loads(event["audit_payload_json"])
+    same_patch_payload = json.loads(same_patch_event["audit_payload_json"])
+    changed_patch_payload = json.loads(changed_patch_event["audit_payload_json"])
+    replay_identity = audit_payload["replay_identity"]
+    required_keys = set(FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS)
+
+    assert required_keys.issubset(audit_payload)
+    assert required_keys.issubset(replay_identity)
+    assert replay_identity["schema"] == FORMAL_REPLAY_IDENTITY_SCHEMA
+    for key in required_keys:
+        assert audit_payload[key]
+        assert replay_identity[key]
+        assert replay_identity[key] != "unknown"
+    assert replay_identity["identity_status"] == "complete"
+    assert replay_identity["status"] == "complete"
+    assert replay_identity["missing_identity_keys"] == []
+    assert replay_identity["missing_keys"] == []
+    assert replay_identity["degraded_markers"] == []
+    assert audit_payload["problem_spec_hash"] == "problem-hash"
+    assert audit_payload["split_manifest_hash"] == "split-hash"
+    assert audit_payload["seed_ledger_hash"] == "seed-hash"
+    assert audit_payload["selected_surface"] == "local_search"
+    assert audit_payload["protocol_version"] == "protocol-v3"
+    assert audit_payload["raw_metrics_ref"] == "metrics/formal.json"
+    assert event["protocol_version"] == "protocol-v3"
+    assert audit_payload["patch_digest"] == audit_payload["patch_hash"]
+    assert len(audit_payload["patch_digest"]) == 64
+    assert same_patch_payload["patch_digest"] == audit_payload["patch_digest"]
+    assert changed_patch_payload["patch_digest"] != audit_payload["patch_digest"]
+    assert not contains_absolute_path(audit_payload)
+
+
+def test_formal_lineage_audit_payload_marks_missing_replay_identity_degraded(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+
+    event = recorder.build_step_lineage_event(
+        branch=_branch(),
+        hypothesis=_hypothesis(),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        canary_result=CanaryResult(passed=True),
+        protocol_result=None,
+        decision=Decision.ABANDON,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+    )
+
+    audit_payload = json.loads(event["audit_payload_json"])
+    replay_identity = audit_payload["replay_identity"]
+    required_keys = set(FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS)
+
+    for key in required_keys:
+        assert key in audit_payload
+        assert key in replay_identity
+        assert audit_payload[key]
+        assert replay_identity[key]
+    assert replay_identity["schema"] == FORMAL_REPLAY_IDENTITY_SCHEMA
+    assert replay_identity["identity_status"] == "degraded"
+    assert replay_identity["status"] == "degraded"
+    assert replay_identity["identity_degraded"] is True
+    assert replay_identity["degraded_markers"] == ["missing_replay_identity"]
+    assert set(replay_identity["missing_identity_keys"]) == {
+        "problem_spec_hash",
+        "split_manifest_hash",
+        "seed_ledger_hash",
+        "protocol_version",
+        "raw_metrics_ref",
+    }
+    assert replay_identity["missing_keys"] == replay_identity["missing_identity_keys"]
+    assert audit_payload["patch_digest"] != "unknown"
+    assert audit_payload["selected_surface"] == "local_search"
+    assert audit_payload["raw_metrics_ref"] == "unknown"
+
+
+def test_internal_audit_verification_check_detail_is_redacted(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    workspace = tmp_path / "workspaces" / "branch-1"
+    outside_path = "/var/tmp/scion-secret.log"
+    verification = VerificationResult(
+        passed=False,
+        checks=(
+            CheckResult(
+                "V6_feasibility",
+                False,
+                "heavy",
+                f"capacity violation; workspace={workspace}; log={outside_path}",
+                12,
+                metadata={"adapter_backed": True, "selected_surface": "solver_design"},
+            ),
+        ),
+        failure_severity="heavy",
+        first_failure="V6_feasibility",
+    )
+
+    event = recorder.build_step_lineage_event(
+        branch=_branch(),
+        hypothesis=_hypothesis(),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=verification,
+        canary_result=CanaryResult(passed=True),
+        protocol_result=_protocol_result(str(tmp_path / "metrics.json")),
+        decision=Decision.ABANDON,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+    )
+
+    audit_payload = json.loads(event["audit_payload_json"])
+    check = audit_payload["verification_checks"][0]
+
+    assert check["name"] == "V6_feasibility"
+    assert "capacity violation" in check["detail"]
+    assert "workspaces/branch-1" in check["detail"]
+    assert "artifact:scion-secret.log#" in check["detail"]
+    assert check["metadata"]["adapter_backed"] is True
+    assert check["metadata"]["selected_surface"] == "solver_design"
+    assert not contains_absolute_path(audit_payload)
 
 
 def test_db_audit_payload_uses_public_raw_metrics_refs(tmp_path: Path) -> None:
@@ -320,6 +533,100 @@ def test_db_audit_payload_uses_public_raw_metrics_refs(tmp_path: Path) -> None:
     assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
         "public_artifact_ref"
     )
+
+
+def test_lineage_write_failures_degrade_summary_status_without_failing_step(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        ("record_event", {"fail_event": True}),
+        ("record_decision", {"fail_decision": True}),
+    )
+    for operation, registry_kwargs in cases:
+        campaign_dir = tmp_path / operation
+        registry = _FaultyLineageRegistry(**registry_kwargs)
+        recorder = EvidenceRecorder(
+            campaign_id="camp-1",
+            campaign_dir=campaign_dir,
+            registry=registry,
+            state_provider=lambda: {
+                "campaign_id": "camp-1",
+                "requested_rounds": 1,
+                "screened_experiments": 1,
+                "n_experiments": 1,
+                "proposal_attempts": 1,
+                "branches": [],
+            },
+        )
+
+        outcome = recorder.record_step_lineage(
+            branch=_branch(),
+            hypothesis=_hypothesis(),
+            patch=_patch(),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            canary_result=CanaryResult(passed=True),
+            protocol_result=_protocol_result(str(campaign_dir / "metrics.json")),
+            decision=Decision.ABANDON,
+            champion=_champion(),
+            hypothesis_id="hyp-1",
+        )
+
+        summary = recorder.write_campaign_summary(
+            step_history=[_step(str(campaign_dir / "metrics.json"))],
+            round_num=1,
+            champion=_champion(),
+            stopped_reason="max_rounds_exhausted",
+        )
+        status = recorder.write_status(
+            stopped_reason="max_rounds_exhausted",
+            loop_status={
+                "requested_rounds": 1,
+                "effective_rounds_completed": 1,
+                "proposal_attempts_consumed": 1,
+            },
+        )
+
+        assert outcome["status"] == "degraded"
+        assert outcome["errors"][0]["operation"] == operation
+        assert summary["lineage_integrity"]["status"] == "degraded"
+        assert summary["evidence_integrity"]["status"] == "degraded"
+        assert summary["formal_readiness"]["lineage_integrity_status"] == "degraded"
+        assert summary["run_validity"]["integrity_status"] == "degraded"
+        assert "lineage_registry_write_degraded" in summary["run_validity"]["warnings"]
+        assert status["lineage_integrity"]["status"] == "degraded"
+        assert status["evidence_integrity"]["lineage_status"] == "degraded"
+        assert status["run_validity"]["integrity_status"] == "degraded"
+        assert "lineage_registry_write_degraded" in status["run_validity"]["warnings"]
+
+
+def test_strict_lineage_write_failure_still_raises_and_records_degraded_outcome(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        registry=_FaultyLineageRegistry(fail_decision=True),
+    )
+
+    with pytest.raises(RuntimeError, match="lineage decision write unavailable"):
+        recorder.record_step_lineage(
+            branch=_branch(),
+            hypothesis=_hypothesis(),
+            patch=_patch(),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            canary_result=CanaryResult(passed=True),
+            protocol_result=_protocol_result(str(tmp_path / "metrics.json")),
+            decision=Decision.PROMOTE,
+            champion=_champion(),
+            hypothesis_id="hyp-1",
+            strict=True,
+        )
+
+    integrity = recorder.lineage_integrity_snapshot()
+    assert integrity["status"] == "degraded"
+    assert integrity["decision_recording_failures"] == 1
 
 
 def test_future_final_evidence_refs_do_not_change_step_schema(tmp_path: Path) -> None:

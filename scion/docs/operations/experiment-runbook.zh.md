@@ -165,11 +165,20 @@ RUN_ROOT=/home/clawd/research/scion-experiments/v04-cvrp-controlled-manual-$(dat
 P1/P0 级修复后，短实验必须从有效 `4R` 重新开始，然后依次爬梯到
 `8R`、`12R`、`20R`。这些短跑稳定后，才进入 `40R`、`50R` 长跑。
 
-有效轮次的最低要求是：run 不是 infra-only，`effective_rounds_completed`
-达到请求轮数，并且至少有 formal screened candidates。`infra-only`、
-`api_balance_exhausted`、`0 formal screened candidates` 不算有效轮次；这种 run
-只能证明 provider、账户或运行环境状态，不能当作 Scion 行为分析。修好原因后必须
-用同一个 round count 重跑，不能直接晋级到下一档。
+这里的 `--rounds` / `max_rounds` 是 effective screened/formal candidate
+budget，不是总 loop step、总 LLM/proposal attempt，或 lifecycle/repair attempt
+预算。有效轮次的最低要求是：run 不是 infra-only，
+`effective_rounds_completed` 达到请求轮数，并且至少有 formal screened
+candidates。`infra-only`、`api_balance_exhausted`、`0 formal screened
+candidates` 不算有效轮次；这种 run 只能证明 provider、账户或运行环境状态，不能当作
+Scion 行为分析。修好原因后必须用同一个 round count 重跑，不能直接晋级到下一档。
+
+分析短跑时同时看 `formal_screened_candidates`、
+`protocol_evaluated_candidates`、`proposal_attempts_consumed`、
+`telemetry_repair_attempts`、`validation_repair_required_attempts`、
+`branch_lifecycle_policy_blocks`、`reconcile_lifecycle_steps` 和
+`scheduler_active_slot_blocked_attempts`。这些字段解释 proposal 质量、protocol
+覆盖、repair/lifecycle 压力和 active-slot scheduling，但不等于 requested rounds。
 
 正式 agentic / production run 还必须有 `ExperimentProtocol` 证据。代码里保留的
 `no protocol - auto-pass` 只用于 legacy skeleton / 单元测试兼容，不代表
@@ -461,7 +470,11 @@ tail -n 80 "$RUN_ROOT/run.log"
 jq '{
   n_experiments,
   effective_rounds_completed,
+  formal_screened_candidates,
+  protocol_evaluated_candidates,
   run_validity,
+  max_rounds_budget_counter,
+  max_rounds_semantics,
   champion_version,
   n_active_branches,
   protocol_progress,
@@ -1010,6 +1023,12 @@ cd /home/clawd/research/or-autoresearch-agent
 子 agent，逐分支、逐轮次、逐 LLM 调用检查，再由主线程决定修复、同 count 重跑，
 还是进入下一档轮数。
 
+不要用 `total_rounds` 单独判断 run 是否达标；它是兼容/外部 attempt 口径，可能包含
+非 formal candidate 的循环活动。达标判断以 `run_validity`、
+`effective_rounds_completed`、`formal_screened_candidates` 和
+`protocol_evaluated_candidates` 为主，再用 proposal/repair/lifecycle/scheduler
+counter 解释为什么 requested rounds 没有被有效消耗。
+
 读取 campaign 顶层摘要：
 
 ```bash
@@ -1017,7 +1036,15 @@ SUMMARY="$CAMPAIGN_DIR/campaign_summary.json"
 jq '{
   total_rounds,
   proposal_attempts_consumed,
+  proposal_attempts_total,
   effective_rounds_completed,
+  formal_screened_candidates,
+  protocol_evaluated_candidates,
+  max_rounds_budget_counter,
+  max_rounds_semantics,
+  campaign_steps,
+  non_counted_lifecycle_steps,
+  scheduler_active_slot_blocked_attempts,
   n_experiments,
   run_validity,
   champion_version,
@@ -1337,7 +1364,13 @@ seeds=
 
 ```text
 exit_code=
-total_rounds=
+total_rounds=        # legacy/external attempt counter; not requested-round success
+effective_rounds_completed=
+formal_screened_candidates=
+protocol_evaluated_candidates=
+proposal_attempts_consumed=
+non_counted_lifecycle_steps=
+active_slot_blocked_attempts=
 experiments=
 champion=
 promotions=

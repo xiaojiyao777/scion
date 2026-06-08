@@ -177,6 +177,51 @@ class TestPromoteWeightOptimizationHook:
         rows = cm._registry.query_by_branch(bid)
         assert not any(row.get("decision") == "promote" for row in rows)
 
+    def test_promotion_later_hook_failure_reports_recoverable_advancement(self, tmp_path):
+        """After durable champion persistence, hook failures stay promotion-aware."""
+
+        cm = _campaign(tmp_path, experiment_protocol=_promote_protocol())
+
+        def fail_commit_champion(champion):
+            raise RuntimeError("memory install unavailable")
+
+        cm._promotion_service._commit_champion = fail_commit_champion
+
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert bid is not None
+        sibling = cm._branch_ctrl.create_branch(cm._champion)
+
+        cm.run_one_step()
+        result = cm.run_one_step()
+
+        assert result.branch_id == bid
+        assert result.decision == Decision.PROMOTE
+        assert result.reason.startswith("promotion_commit_recovery_pending")
+        assert result.failure_category == "promotion_recovery"
+        assert cm._champion.version == 1
+        assert cm._champion_store.get_by_version(2) is not None
+        promoted = cm._champion_store.get_by_version(2)
+        assert promoted is not None
+        assert promoted.promotion_experiment_id
+        assert cm._branch_ctrl.get_branch(bid).state == BranchState.FROZEN_TESTING
+        assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+
+        marker = cm._branch_ctrl.get_branch(bid).branch_evidence_summary[
+            "promotion_integrity"
+        ]
+        assert marker["status"] == "recovery_pending"
+        assert marker["failed_phase"] == "commit_champion"
+        assert marker["lineage_status"] == "recorded"
+        assert marker["promotion_event_id"] == promoted.promotion_experiment_id
+
+        rows = cm._registry.query_by_branch(bid)
+        assert any(
+            row.get("event_id") == promoted.promotion_experiment_id
+            and row.get("decision") == "promote"
+            for row in rows
+        )
+
     def test_on_promote_without_parameter_search(self, tmp_path):
         """parameter_search.enabled=False → _run_weight_optimization is NOT called."""
         import types

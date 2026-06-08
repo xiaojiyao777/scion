@@ -199,6 +199,7 @@ def _pipeline(
     problem_spec=None,
     split_manifest_hash: str | None = None,
     seed_ledger_hash: str | None = None,
+    production_campaign: bool = False,
     require_agentic_problem_anchors: bool = False,
 ):
     branch = _branch()
@@ -262,6 +263,7 @@ def _pipeline(
         problem_spec_hash="spec-hash",
         split_manifest_hash=split_manifest_hash,
         seed_ledger_hash=seed_ledger_hash,
+        production_campaign=production_campaign,
         require_agentic_problem_anchors=require_agentic_problem_anchors,
         persistent_forced_locus=persistent_forced_locus,
         forced_surface_action=forced_surface_action,

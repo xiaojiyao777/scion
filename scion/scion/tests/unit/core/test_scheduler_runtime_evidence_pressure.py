@@ -17,6 +17,7 @@ from scion.core.models import (
     ProtocolResult,
 )
 from scion.core.scheduler import (
+    FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON,
     PLATEAU_GATE_MATERIAL_DIFFERENCE_REASON,
     PLATEAU_GATE_SAME_BRANCH_REFINEMENT_REASON,
     RUNTIME_EVIDENCE_COMPLETENESS_CLEAN_FORK_REASON,
@@ -121,7 +122,7 @@ def test_active_slot_module_inventory_matches_scheduler_facade_policy() -> None:
     ) == active_slot_inventory([branch], max_active_branches=1)
 
 
-def test_active_slot_reclaim_requires_decision_origin_park_marker() -> None:
+def test_active_slot_reclaim_writes_scheduler_origin_marker_without_decision_marker() -> None:
     branch = Branch(
         branch_id="low-value-without-marker",
         state=BranchState.EXPLORE,
@@ -138,17 +139,27 @@ def test_active_slot_reclaim_requires_decision_origin_park_marker() -> None:
     )
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert reconciliation.changed is False
-    assert reconciliation.blocked is True
-    assert reconciliation.after_used == 1
+    assert reconciliation.changed is True
+    assert reconciliation.blocked is False
+    assert reconciliation.after_used == 0
     assert reconciliation.candidate_branch_ids == (branch.branch_id,)
-    assert reconciliation.marker_missing_branch_ids == (branch.branch_id,)
-    assert branch.state == BranchState.EXPLORE
-    assert inventory["used"] == 1
-    assert inventory["parked_lineage_ids"] == []
+    assert reconciliation.marker_missing_branch_ids == ()
+    assert reconciliation.scheduler_origin_parked_branch_ids == (branch.branch_id,)
+    assert branch.state == BranchState.PARKED_LINEAGE
+    assert inventory["used"] == 0
+    assert inventory["parked_lineage_ids"] == [branch.branch_id]
     audit = reconciliation.as_audit_metadata()
-    assert audit["decision_origin_marker_required"] is True
-    assert audit["blocked_reason"] == "decision_origin_lifecycle_marker_missing"
+    assert audit["lifecycle_action"] == "park_lineage"
+    assert audit["lifecycle_action_origin"] == "scheduler_active_slot_reclaim"
+    assert audit["reclaimed_branch_ids"] == [branch.branch_id]
+    assert audit["scheduler_origin_reclaimed_branch_ids"] == [branch.branch_id]
+    assert "decision_origin_marker_required" not in audit
+    assert branch.last_branch_lifecycle_policy_block["lifecycle_action_origin"] == (
+        "scheduler_active_slot_reclaim"
+    )
+    assert "SCHEDULER_ACTIVE_SLOT_RECLAIM_PARK_LINEAGE" in (
+        branch.last_branch_lifecycle_policy_block["lifecycle_action_reason_codes"]
+    )
 
 
 def test_active_slot_reclaim_parks_branch_with_decision_origin_marker() -> None:
@@ -854,3 +865,101 @@ def test_fresh_required_runtime_pressure_is_explained_in_scheduler_audit() -> No
     assert action.audit_metadata["runtime_evidence_clean_fork_candidates"][0][
         "runtime_evidence_pressure_triggers"
     ] == ["runtime_evidence_status:fresh_required"]
+
+
+def test_fresh_runtime_replay_marker_prioritizes_discarded_weak_positive_followup() -> None:
+    branch = Branch(
+        branch_id="discarded-weak-positive-fresh-runtime",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="discarded",
+        last_screening_feedback_tier="weak_positive",
+        branch_evidence_summary={
+            "tier": "weak_positive",
+            "wins": 0,
+            "losses": 0,
+            "pair_wins": 1,
+            "pair_losses": 0,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "fresh_champion_required",
+            "fresh_runtime_followup": {
+                "schema_version": "fresh_runtime_followup.v1",
+                "queue_intent": "fresh_champion_runtime_replay",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "trigger": "pair_level_win_no_loss",
+                "fresh_runtime_pending": True,
+                "fresh_runtime_required": True,
+                "followup_recommended": True,
+                "followup_required": True,
+                "decision_features_excluded": True,
+            },
+        },
+    )
+
+    action = Scheduler(max_active_branches=2).select_next([branch])
+
+    assert action.action == "replay_existing"
+    assert action.branch is branch
+    assert action.slot == "exploit_weak_positive"
+    assert action.reason == FRESH_CHAMPION_RUNTIME_REPLAY_FOLLOWUP_REASON
+
+
+def test_fresh_runtime_replay_closes_pending_marker_after_replay() -> None:
+    branch = Branch(
+        branch_id="fresh-runtime-replayed",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        branch_evidence_summary={
+            "fresh_runtime_followup": {
+                "schema_version": "fresh_runtime_followup.v1",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "fresh_runtime_pending": True,
+                "decision_features_excluded": True,
+            },
+        },
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        exposed_summary="fresh replay complete",
+        raw_metrics_ref="/tmp/fresh-replay.json",
+        champion_cache_hits=0,
+        champion_cache_misses=8,
+        champion_cached_runtime_pairs=0,
+        runtime_confidence="high",
+        runtime_evidence_status="sufficient",
+    )
+
+    setattr(branch, "fresh_runtime_replay_step", True)
+    try:
+        update_branch_screening_evidence_summary(
+            branch,
+            protocol_result=protocol,
+            screening_feedback=screening_feedback_summary(protocol),
+            decision_reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        )
+    finally:
+        delattr(branch, "fresh_runtime_replay_step")
+
+    marker = branch.branch_evidence_summary["fresh_runtime_followup"]
+    closure = branch.branch_evidence_summary["fresh_runtime_replay_closure"]
+    assert marker["fresh_runtime_pending"] is False
+    assert marker["scheduler_marker"] == "fresh_champion_runtime_replay_closed"
+    assert closure["closure_status"] == "fresh_evidence_recorded"
+    assert closure["cache_stats"]["champion_cache_misses"] == 8
+    assert branch.branch_evidence_summary["fresh_runtime_pending"] is False

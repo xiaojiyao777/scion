@@ -1076,7 +1076,15 @@ def test_tool_selection_ledger_records_hypothesis_session_calls(
     output_artifact_path = next(
         Path(ref) for ref in output.tainted_artifact_refs if Path(ref).name == "output.json"
     )
+    transcript_artifact_path = next(
+        Path(ref)
+        for ref in output.tainted_artifact_refs
+        if Path(ref).name == "transcript.json"
+    )
     output_artifact = json.loads(output_artifact_path.read_text(encoding="utf-8"))
+    transcript_artifact = json.loads(
+        transcript_artifact_path.read_text(encoding="utf-8")
+    )
 
     assert ledger["schema_version"] == "agentic-tool-selection-ledger.v1"
     assert ledger["deterministic_prefetch_plan_id"] != "none"
@@ -1093,10 +1101,144 @@ def test_tool_selection_ledger_records_hypothesis_session_calls(
     assert by_tool["feedback.query_runtime"]["estimated_input_tokens"] is None
     assert "stop" not in by_tool
     assert "result_in_final_prompt" in by_tool["feedback.query_runtime"]
+    deterministic_observation_ids = {
+        entry["result_observation_id"]
+        for entry in entries
+        if entry.get("source") == "deterministic_prefetch"
+        and entry.get("result_observation_id")
+    }
+    ledger_observation_ids = {
+        entry["observation_id"]
+        for entry in output.observation_ledger["observations"]
+        if entry.get("selection_source") == "deterministic_prefetch"
+    }
+    ledger_read_receipt_ids = {
+        receipt["observation_id"]
+        for receipt in output.observation_ledger["read_receipts"]
+        if receipt.get("selection_source") == "deterministic_prefetch"
+    }
+    assert deterministic_observation_ids == ledger_observation_ids
+    assert deterministic_observation_ids == ledger_read_receipt_ids
+    assert {
+        entry["tool_name"]
+        for entry in output.observation_ledger["observations"]
+        if entry.get("selection_source") == "deterministic_prefetch"
+    } == {
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }
+    assert all(
+        not entry.get("reusable_by_phases")
+        for entry in output.observation_ledger["observations"]
+        if entry.get("selection_source") == "deterministic_prefetch"
+    )
     assert output_artifact["tool_selection_ledger"]["entry_count"] == len(entries)
     assert output_artifact["tool_selection_ledger"][
         "deterministic_prefetch_plan_id"
     ] == ledger["deterministic_prefetch_plan_id"]
+    assert transcript_artifact["tool_selection_ledger"][
+        "deterministic_prefetch_plan_id"
+    ] == ledger["deterministic_prefetch_plan_id"]
+    assert transcript_artifact["tool_selection_ledger"]["entry_count"] == len(entries)
+    artifact_ledger_observation_ids = {
+        entry["observation_id"]
+        for entry in output_artifact["observation_ledger"]["observations"]
+        if entry.get("selection_source") == "deterministic_prefetch"
+    }
+    artifact_ledger_read_receipt_ids = {
+        receipt["observation_id"]
+        for receipt in output_artifact["observation_ledger"]["read_receipts"]
+        if receipt.get("selection_source") == "deterministic_prefetch"
+    }
+    assert deterministic_observation_ids == artifact_ledger_observation_ids
+    assert deterministic_observation_ids == artifact_ledger_read_receipt_ids
+
+
+def test_tool_selection_trace_records_manifest_ref_and_audit_provenance(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    trace_dir = campaign_dir / "llm_traces"
+    artifact_store = FileAgenticSessionArtifactStore(campaign_dir / "agentic_sessions")
+    client = ToolSelectionClient(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"intent": "stop"},
+        ]
+    )
+
+    class PendingToolSelectionCreative(CreativeLayer):
+        def has_pending_hypothesis_tool_plan(self, **_kwargs) -> bool:
+            return True
+
+    creative = PendingToolSelectionCreative(client, trace_dir=str(trace_dir))
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+
+    output = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        artifact_store=artifact_store,
+    ).run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    trace_payloads = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in trace_dir.glob("*.json")
+    ]
+    tool_selection_trace = next(
+        payload
+        for payload in trace_payloads
+        if payload["request_kind"] == "tool_selection"
+    )
+    manifest_ref = tool_selection_trace["prompt_manifest"]["artifact_ref"]
+    manifest_path = Path(manifest_ref)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = tool_selection_trace["agentic_session"]["provenance"]
+    index_path = campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    session_entry = next(
+        item for item in index["sessions"] if item["session_id"] == output.session_id
+    )
+    index_trace = next(
+        trace
+        for trace in session_entry["traces"]
+        if trace["request_kind"] == "tool_selection"
+    )
+
+    assert output.tool_selection_ledger["deterministic_prefetch_plan_id"] != "none"
+    assert "api_visible_prompt_manifest" in manifest_ref
+    assert manifest["call_kind"] == "tool_selection"
+    assert manifest["raw_context_audit"]["provenance"][
+        "deterministic_prefetch_plan_id"
+    ] == output.tool_selection_ledger["deterministic_prefetch_plan_id"]
+    assert provenance["deterministic_prefetch_plan_id"] == (
+        output.tool_selection_ledger["deterministic_prefetch_plan_id"]
+    )
+    assert provenance["prefetch_tool_names"] == [
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    ]
+    assert provenance["tool_selection_ledger_digest"]
+    assert index_trace["prompt_manifest_artifact_ref"].endswith(".json")
+    assert index_trace["prompt_visibility_ledger_digest"]
+    assert index_trace["provenance"]["deterministic_prefetch_plan_id"] == (
+        provenance["deterministic_prefetch_plan_id"]
+    )
+    assert session_entry["provenance"]["tool_selection_ledger_digest"] == (
+        provenance["tool_selection_ledger_digest"]
+    )
 
 
 def test_code_phase_tool_selection_ledger_records_trace_context(

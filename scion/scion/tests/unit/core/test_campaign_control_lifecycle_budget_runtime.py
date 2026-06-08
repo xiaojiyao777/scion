@@ -2,7 +2,15 @@
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 
+from types import SimpleNamespace
+
 import pytest
+
+from scion.core.production_boundary import (
+    production_boundary_errors,
+    production_boundary_identity_hashes,
+)
+from scion.problem.spec import ObjectiveMetricSpec
 
 
 class _StrictAlwaysPassVerification(_AlwaysPassVerification):
@@ -127,6 +135,92 @@ class TestEvalStepWritesStepRecord:
             "validation step must have verification_passed=True and failure_stage=None in step_history"
         )
 
+    def test_eval_protocol_exception_records_evaluation_failure_not_decision_abandon(
+        self,
+        tmp_path,
+    ):
+        class _RaisesOnValidationProtocol(_MockProtocol):
+            def run_experiment(self, **kwargs):
+                if self.experiment_calls:
+                    self.experiment_calls.append(
+                        (
+                            kwargs.get("stage"),
+                            kwargs.get("candidate_ws"),
+                            kwargs.get("champion_ws"),
+                            kwargs.get("hypothesis_action"),
+                        )
+                    )
+                    raise RuntimeError("protocol boom")
+                return super().run_experiment(**kwargs)
+
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=_RaisesOnValidationProtocol(
+                results=[
+                    _make_protocol_result(
+                        "pass",
+                        stage=ExperimentStage.SCREENING,
+                        win_rate=0.85,
+                    )
+                ],
+            ),
+        )
+
+        screening = cm.run_one_step()
+        assert screening.decision == Decision.QUEUE_VALIDATE
+
+        result = cm.run_one_step()
+
+        assert result.failure_stage == "evaluation"
+        assert result.decision is None
+        assert "evaluation failed" in result.failure_detail
+
+        failure_steps = [
+            step
+            for step in cm._step_history
+            if step.failure_stage == "evaluation"
+        ]
+        assert failure_steps, "evaluation exception must write a failure StepRecord"
+        failure = failure_steps[-1]
+        assert failure.decision is None
+        assert failure.protocol_result is not None
+        assert failure.protocol_result.gate_outcome == "fail"
+        assert failure.protocol_result.reason_codes == ("EVALUATION_FAILED",)
+        assert failure.decision_reason_codes == ("EVALUATION_FAILED",)
+
+    def test_screening_protocol_exception_records_evaluation_failure(
+        self,
+        tmp_path,
+    ):
+        class _RaisesImmediatelyProtocol(_MockProtocol):
+            def run_experiment(self, **kwargs):
+                self.experiment_calls.append(
+                    (
+                        kwargs.get("stage"),
+                        kwargs.get("candidate_ws"),
+                        kwargs.get("champion_ws"),
+                        kwargs.get("hypothesis_action"),
+                    )
+                )
+                raise RuntimeError("protocol boom")
+
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=_RaisesImmediatelyProtocol(),
+        )
+
+        result = cm.run_one_step()
+
+        assert result.failure_stage == "evaluation"
+        assert result.decision is None
+
+        failure = cm._step_history[-1]
+        assert failure.failure_stage == "evaluation"
+        assert failure.decision is None
+        assert failure.protocol_result is not None
+        assert failure.protocol_result.gate_outcome == "fail"
+        assert failure.protocol_result.reason_codes == ("EVALUATION_FAILED",)
+
 
 class TestFrozenBudgetLedger:
     def test_frozen_budget_consumes_before_attempt_and_blocks_second_branch(
@@ -214,13 +308,38 @@ class TestProgrammaticRuntimeVerificationDefault:
             canary=[4],
         )
 
-    def _production_protocol(self) -> _MockProtocol:
+    def _metric_specs(self, *names: str) -> tuple[ObjectiveMetricSpec, ...]:
+        metric_names = names or ("cost",)
+        return tuple(
+            ObjectiveMetricSpec(
+                name=name,
+                direction="minimize",
+                priority=index,
+            )
+            for index, name in enumerate(metric_names, start=1)
+        )
+
+    def _production_protocol(
+        self,
+        *,
+        metric_specs: (
+            tuple[ObjectiveMetricSpec, ...] | tuple[object, ...] | None
+        ) = None,
+        problem_spec: object | None = None,
+        time_limit_sec: int | None = None,
+    ) -> _MockProtocol:
         proto = _MockProtocol()
         proto.runner = object()
         proto.config = ProtocolConfig()
-        proto._metric_specs = (object(),)
+        if time_limit_sec is not None:
+            proto.time_limit_sec = time_limit_sec
+        proto._metric_specs = metric_specs or self._metric_specs()
         proto._require_metric_specs = True
+        proto._problem_spec = problem_spec
         return proto
+
+    def _adapter_for(self, problem_spec: object) -> SimpleNamespace:
+        return SimpleNamespace(spec=problem_spec)
 
     def _legacy_spec(self, base: ProblemSpec) -> ProblemSpec:
         return base.model_copy(
@@ -232,19 +351,17 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
     def test_adapter_protocol_runner_builds_strict_verification_gate(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=None)
+        problem_spec = self._production_spec(base._spec)
         proto = _MockProtocol()
         proto.runner = object()
         proto.config = ProtocolConfig()
-        proto._metric_specs = (object(),)
+        proto._metric_specs = self._metric_specs()
         proto._require_metric_specs = True
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=proto,
-            verification_gate=None,
-        )
-        cm_adapter = object()
+        proto._problem_spec = problem_spec
+        cm_adapter = self._adapter_for(problem_spec)
         cm = CampaignManager(
-            problem_spec=cm._spec,
+            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -252,7 +369,7 @@ class TestProgrammaticRuntimeVerificationDefault:
                 hypothesis_response=_VALID_HYPOTHESIS,
                 patch_response=_VALID_PATCH,
             ),
-            champion=cm._champion,
+            champion=base._champion,
             campaign_dir=str(tmp_path / "strict-campaign"),
             experiment_protocol=proto,
             adapter=cm_adapter,
@@ -265,10 +382,11 @@ class TestProgrammaticRuntimeVerificationDefault:
 
     def test_adapter_without_runner_fails_closed_by_default(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
-        proto = self._production_protocol()
+        problem_spec = self._production_spec(base._spec)
+        proto = self._production_protocol(problem_spec=problem_spec)
         proto.runner = None
         cm = CampaignManager(
-            problem_spec=base._spec,
+            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -279,7 +397,7 @@ class TestProgrammaticRuntimeVerificationDefault:
             champion=base._champion,
             campaign_dir=str(tmp_path / "missing-runner-campaign"),
             experiment_protocol=proto,
-            adapter=object(),
+            adapter=self._adapter_for(problem_spec),
         )
         result = cm._vgate.run(
             str(tmp_path / "champion_code"),
@@ -432,7 +550,7 @@ class TestProgrammaticRuntimeVerificationDefault:
         proto = _MockProtocol()
         proto.runner = object()
         proto.config = ProtocolConfig()
-        proto._metric_specs = (object(),)
+        proto._metric_specs = self._metric_specs()
         proto._require_metric_specs = True
 
         with pytest.raises(ValueError, match="split_manifest.canary is required"):
@@ -453,6 +571,250 @@ class TestProgrammaticRuntimeVerificationDefault:
                 champion=base._champion,
                 campaign_dir=str(tmp_path / "production-no-canary"),
                 experiment_protocol=proto,
+                adapter=object(),
+            )
+
+    def test_production_campaign_rejects_dummy_metric_specs(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(ValueError, match=r"metric_specs\[0\]\.name is required"):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-dummy-metrics"),
+                experiment_protocol=self._production_protocol(
+                    metric_specs=(object(),),
+                ),
+                adapter=object(),
+            )
+
+    def test_production_campaign_rejects_protocol_problem_spec_mismatch(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(
+            ValueError,
+            match="experiment_protocol.problem_spec must match",
+        ):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-protocol-spec-mismatch"),
+                experiment_protocol=self._production_protocol(
+                    problem_spec=SimpleNamespace(id="other_problem"),
+                ),
+                adapter=object(),
+            )
+
+    def test_production_campaign_rejects_adapter_spec_mismatch(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+
+        with pytest.raises(ValueError, match="adapter.spec must match"):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-adapter-spec-mismatch"),
+                experiment_protocol=self._production_protocol(),
+                adapter=SimpleNamespace(spec=SimpleNamespace(id="other_problem")),
+            )
+
+    def test_production_boundary_rejects_same_generic_id_different_protocol_spec(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        protocol_spec = campaign_spec.model_copy(
+            update={"description": "different generic declaration"}
+        )
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=protocol_spec,
+            ),
+            adapter=self._adapter_for(campaign_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert any(
+            "experiment_protocol.problem_spec stable identity hash must match"
+            in error
+            for error in errors
+        )
+
+    def test_production_boundary_rejects_different_adapter_problem_id(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        adapter_spec = SimpleNamespace(id="other_problem")
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=self._adapter_for(adapter_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert any(
+            "adapter.spec must match campaign problem_spec identity" in error
+            for error in errors
+        )
+
+    def test_production_boundary_accepts_legacy_adapter_spec_with_matching_id(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        adapter_spec = SimpleNamespace(
+            name=campaign_spec.name,
+            description="legacy adapter-visible compatibility view",
+        )
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=self._adapter_for(adapter_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert errors == ()
+
+    def test_production_boundary_rejects_adapter_explicit_problem_hash_mismatch(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        adapter_spec = SimpleNamespace(
+            name=campaign_spec.name,
+            problem_spec_hash="wrong-v1-hash",
+        )
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=self._adapter_for(adapter_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert any(
+            "adapter.spec problem_spec_hash must match campaign problem_spec"
+            in error
+            for error in errors
+        )
+
+    def test_production_boundary_rejects_adapter_without_visible_generic_spec(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=object(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+        )
+
+        assert "adapter.spec is required" in errors
+
+    def test_production_boundary_accepts_matching_generic_runtime_identity(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+        protocol = self._production_protocol(problem_spec=campaign_spec)
+        adapter = self._adapter_for(campaign_spec)
+        split_manifest = self._production_split()
+        seed_ledger = self._production_seeds()
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=protocol,
+            adapter=adapter,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+        )
+        hashes = production_boundary_identity_hashes(
+            problem_spec=campaign_spec,
+            experiment_protocol=protocol,
+            adapter=adapter,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+        )
+
+        assert errors == ()
+        assert hashes["problem_spec_hash"] == hashes["protocol_problem_spec_hash"]
+        assert hashes["adapter_spec_hash"]
+        assert hashes["split_manifest_hash"]
+        assert hashes["seed_ledger_hash"]
+
+    def test_production_campaign_rejects_metric_names_mismatch(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._spec).model_copy(
+            update={"objectives": self._metric_specs("cost")}
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="metric_specs must match problem_spec.objectives names",
+        ):
+            CampaignManager(
+                problem_spec=problem_spec,
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-metric-mismatch"),
+                experiment_protocol=self._production_protocol(
+                    metric_specs=self._metric_specs("quality"),
+                ),
                 adapter=object(),
             )
 
@@ -484,7 +846,7 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         with pytest.raises(
             ValueError,
-            match="verification_gate must enable strict runtime checks",
+            match="custom verification_gate is not allowed",
         ):
             CampaignManager(
                 problem_spec=self._production_spec(base._spec),
@@ -502,12 +864,65 @@ class TestProgrammaticRuntimeVerificationDefault:
                 verification_gate=_AlwaysPassVerification(),
             )
 
-    def test_production_campaign_accepts_custom_strict_gate(self, tmp_path):
+    def test_production_campaign_rejects_custom_strict_always_pass_gate(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        gate = _StrictAlwaysPassVerification()
+
+        with pytest.raises(
+            ValueError,
+            match="custom verification_gate is not allowed",
+        ):
+            CampaignManager(
+                problem_spec=self._production_spec(base._spec),
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-custom-strict"),
+                experiment_protocol=self._production_protocol(),
+                adapter=object(),
+                verification_gate=gate,
+            )
+
+    def test_skeleton_mode_allows_custom_test_gate(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         gate = _StrictAlwaysPassVerification()
 
         cm = CampaignManager(
             problem_spec=self._production_spec(base._spec),
+            protocol_config=ProtocolConfig(),
+            split_manifest=SplitManifest(),
+            seed_ledger=SeedLedgerConfig(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "skeleton-custom-gate"),
+            experiment_protocol=_MockProtocol(),
+            adapter=object(),
+            verification_gate=gate,
+            allow_skeleton_mode=True,
+        )
+
+        assert cm._vgate is gate
+
+    def test_protocol_time_limit_configures_verification_runtime_budget(
+        self,
+        tmp_path,
+    ):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._spec)
+
+        cm = CampaignManager(
+            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -516,19 +931,23 @@ class TestProgrammaticRuntimeVerificationDefault:
                 patch_response=_VALID_PATCH,
             ),
             champion=base._champion,
-            campaign_dir=str(tmp_path / "production-custom-strict"),
-            experiment_protocol=self._production_protocol(),
-            adapter=object(),
-            verification_gate=gate,
+            campaign_dir=str(tmp_path / "production-runtime-budget"),
+            experiment_protocol=self._production_protocol(
+                problem_spec=problem_spec,
+                time_limit_sec=17,
+            ),
+            adapter=self._adapter_for(problem_spec),
+            verification_gate=None,
         )
 
-        assert cm._vgate is gate
+        assert cm._vgate._runtime_time_limit_sec == 17
 
     def test_production_campaign_without_custom_gate_builds_strict_gate(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._spec)
 
         cm = CampaignManager(
-            problem_spec=self._production_spec(base._spec),
+            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -538,8 +957,10 @@ class TestProgrammaticRuntimeVerificationDefault:
             ),
             champion=base._champion,
             campaign_dir=str(tmp_path / "production-default-strict"),
-            experiment_protocol=self._production_protocol(),
-            adapter=object(),
+            experiment_protocol=self._production_protocol(
+                problem_spec=problem_spec,
+            ),
+            adapter=self._adapter_for(problem_spec),
             verification_gate=None,
         )
 
@@ -548,9 +969,10 @@ class TestProgrammaticRuntimeVerificationDefault:
 
     def test_agentic_production_campaign_enables_anchor_preflight(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._legacy_spec(base._spec)
 
         cm = CampaignManager(
-            problem_spec=self._legacy_spec(base._spec),
+            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -560,8 +982,10 @@ class TestProgrammaticRuntimeVerificationDefault:
             ),
             champion=base._champion,
             campaign_dir=str(tmp_path / "agentic-production-anchors"),
-            experiment_protocol=self._production_protocol(),
-            adapter=object(),
+            experiment_protocol=self._production_protocol(
+                problem_spec=problem_spec,
+            ),
+            adapter=self._adapter_for(problem_spec),
             use_agentic_proposal=True,
         )
 

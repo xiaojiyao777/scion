@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-06-07*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -57,6 +57,10 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 - A research surface is the declared object the agent may modify or tune:
   operator, policy, config, portfolio, construction, acceptance/restart, or a
   solver-design boundary.
+- `solver_design` is a generic v0.4 Scion surface kind for an algorithm-level
+  research object. Core may route it as a first-class surface, but concrete
+  solver APIs, telemetry field meanings, smoke behavior, and integration checks
+  remain problem-owned declarations/providers.
 - Runtime evidence is part of the contract. Missing, empty, or invalid required
   fields fail closed when the selected surface declares them.
 - Frozen/holdout detail is exposure-controlled. Proposal agents should receive
@@ -67,6 +71,16 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
   follow-up while the scheduler opens sibling branches up to the active-branch
   cap. Clear regressions, boundary failures, runtime failures, and exhausted
   zero-signal streaks can still abandon.
+- `--rounds` / `max_rounds` is the requested effective screened/formal candidate
+  budget. It is not total loop iterations, proposal attempts, or repair/lifecycle
+  attempts. Read `effective_rounds_completed`, `formal_screened_candidates`,
+  `protocol_evaluated_candidates`, `proposal_attempts_consumed`, and the
+  non-counted repair/lifecycle counters separately in status/summary artifacts.
+- Scheduler governance is not a Decision-layer shortcut and should not be
+  reduced to a simple fixed-priority queue. v0.4 still prioritizes ready
+  validation/frozen/stale work, but current branch selection also includes
+  active-slot capacity, lifecycle routing, same-mechanism follow-up, clean-fork
+  preference, park/reclaim, and diagnostic repair routing.
 
 ## Architecture Governance
 

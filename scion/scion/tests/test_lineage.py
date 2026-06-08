@@ -66,6 +66,7 @@ def test_campaign_summary_separates_screening_pair_and_case_win_rates(tmp_path):
             "screening_case_wins": 0,
             "screening_case_losses": 0,
             "screening_case_ties": 4,
+            "screening_case_total": 4,
             "screening_case_win_rate": 0.0,
             "screening_gate_win_rate": 0.0,
             "screening_pair_wins": 2,
@@ -81,8 +82,50 @@ def test_campaign_summary_separates_screening_pair_and_case_win_rates(tmp_path):
     assert summary["screening_win_rate"] == 0.0
     assert summary["screening_win_rate_scope"] == "case_level_gate"
     assert summary["screening_case_win_rate"] == 0.0
+    assert summary["screening_case_level_gate_wins"] == summary["screening_case_wins"]
+    assert summary["screening_case_level_gate_losses"] == summary[
+        "screening_case_losses"
+    ]
+    assert summary["screening_case_level_gate_ties"] == summary["screening_case_ties"]
+    assert summary["screening_case_level_gate_total"] == summary["screening_case_total"]
+    assert summary["screening_case_level_gate_win_rate"] == summary[
+        "screening_case_win_rate"
+    ]
     assert summary["screening_gate_win_rate"] == 0.0
     assert summary["screening_pair_wins"] == 2
     assert summary["screening_pair_losses"] == 2
     assert summary["screening_pair_ties"] == 12
     assert summary["screening_pair_win_rate"] == 0.125
+
+
+def test_registry_accepts_screening_case_level_gate_aliases(tmp_path):
+    registry = LineageRegistry(str(tmp_path / "scion.db"))
+    registry.record_event(
+        {
+            "branch_id": "br_gate_alias",
+            "timestamp": "t0",
+            "stage": "screening",
+            "screening_case_level_gate_wins": 1,
+            "screening_case_level_gate_losses": 2,
+            "screening_case_level_gate_ties": 1,
+            "screening_case_level_gate_total": 4,
+            "screening_case_level_gate_win_rate": 0.25,
+        }
+    )
+
+    summary = registry.get_campaign_summary()
+
+    assert summary["screening_case_wins"] == 1
+    assert summary["screening_case_losses"] == 2
+    assert summary["screening_case_ties"] == 1
+    assert summary["screening_case_total"] == 4
+    assert summary["screening_case_win_rate"] == 0.25
+    assert summary["screening_case_level_gate_wins"] == summary["screening_case_wins"]
+    assert summary["screening_case_level_gate_losses"] == summary[
+        "screening_case_losses"
+    ]
+    assert summary["screening_case_level_gate_ties"] == summary["screening_case_ties"]
+    assert summary["screening_case_level_gate_total"] == summary["screening_case_total"]
+    assert summary["screening_case_level_gate_win_rate"] == summary[
+        "screening_case_win_rate"
+    ]

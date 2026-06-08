@@ -90,6 +90,42 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
     assert raw["pairs"][0]["decisive_metric"] == "shared_process_failure"
 
 
+def test_mixed_screening_champion_failures_are_explicit_partial_evidence(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_failure("timeout"),
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 1
+    assert result.gate_outcome == "unclear"
+    assert "SCREENING_PARTIAL_CHAMPION_EVIDENCE" in result.reason_codes
+    assert "champion_failures=1" in result.exposed_summary
+    assert "screening_evidence_status=partial_champion_evidence" in (
+        result.exposed_summary
+    )
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["screening_evidence_status"] == "partial_champion_evidence"
+    partial = raw["screening_partial_champion_evidence"]
+    assert partial["reason_code"] == "SCREENING_PARTIAL_CHAMPION_EVIDENCE"
+    assert partial["champion_failed_pairs"] == 1
+    assert partial["valid_pairs"] == 3
+    assert partial["decision_complete_evidence"] is False
+
+
 def test_candidate_failure_summary_preserves_traceback_terminal_exception(tmp_path):
     runner = MagicMock()
     stderr = """Traceback (most recent call last):

@@ -36,6 +36,8 @@ def _run_validity_completion_projection(payload: dict) -> dict:
         "completed_requested_rounds": validity["completed_requested_rounds"],
         "complete": validity["complete"],
         "interrupted": validity["interrupted"],
+        "partial_campaign_evidence": validity["partial_campaign_evidence"],
+        "protocol_in_flight": validity["protocol_in_flight"],
         "partial_in_flight": validity["partial_in_flight"],
         "completeness_status": validity["completeness_status"],
         "stopped_reason": validity["stopped_reason"],
@@ -47,6 +49,135 @@ def _run_validity_completion_projection(payload: dict) -> dict:
         "top_run_complete": payload["run_complete"],
         "top_run_completeness_status": payload["run_completeness_status"],
     }
+
+
+def test_status_last_result_exposes_structured_decision_provenance(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-provenance", campaign_dir=tmp_path)
+
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="explore",
+            branch_id="branch-1",
+            decision=None,
+            failure_stage="evaluation",
+            failure_detail="evaluation failed",
+            decision_layer_source="evaluation_bypass",
+            bypass_reason_codes=("EVALUATION_FAILED",),
+        )
+    )
+
+    last_result = status["last_result"]
+    assert last_result["decision"] is None
+    assert last_result["failure_stage"] == "evaluation"
+    assert last_result["decision_layer_source"] == "evaluation_bypass"
+    assert last_result["bypass_reason_codes"] == ["EVALUATION_FAILED"]
+    assert last_result["decision_engine_reason_codes"] == []
+
+
+def test_campaign_summary_exposes_structured_step_reason_provenance(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-provenance", campaign_dir=tmp_path)
+    step = replace(
+        _step("/tmp/metrics-round-1.json"),
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            "SCREENING_WEAK_SIGNAL_CONTINUE",
+            "SCREENING_RUNTIME_BUDGET_SATURATION",
+        ),
+        decision_layer_source="stage_decision",
+        decision_engine_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            "SCREENING_WEAK_SIGNAL_CONTINUE",
+        ),
+        diagnostic_reason_codes=("SCREENING_RUNTIME_BUDGET_SATURATION",),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    summary_step = summary["steps"][0]
+    protocol = summary_step["protocol_result"]
+    assert summary_step["decision_layer_source"] == "stage_decision"
+    assert summary_step["decision_engine_reason_codes"] == [
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_WEAK_SIGNAL_CONTINUE",
+    ]
+    assert summary_step["diagnostic_reason_codes"] == [
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    ]
+    assert protocol["effective_reason_source"] == "stage_decision"
+    assert protocol["diagnostic_reason_codes"] == [
+        "SCREENING_RUNTIME_BUDGET_SATURATION"
+    ]
+
+
+def test_campaign_summary_exposes_contract_diagnostics(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-contract-diag", campaign_dir=tmp_path)
+    diagnostic = {
+        "name": "C10_novelty",
+        "passed": True,
+        "severity": "light",
+        "detail": "duplicate structured novelty_signature",
+        "metadata": {
+            "gate_action": "diagnostic",
+            "diagnostic_kind": "semantic_identity_duplicate",
+        },
+    }
+    step = replace(
+        _step("/tmp/metrics-round-1.json"),
+        contract_diagnostics=(diagnostic,),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    assert summary["steps"][0]["contract_diagnostics"] == [diagnostic]
+
+
+def test_campaign_summary_marks_evaluation_failure_as_bypass_provenance(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-provenance", campaign_dir=tmp_path)
+    base_step = _step("/tmp/metrics-evaluation-failed.json")
+    step = replace(
+        base_step,
+        decision=None,
+        failure_stage="evaluation",
+        failure_detail="evaluation failed",
+        protocol_result=replace(
+            base_step.protocol_result,
+            gate_outcome="fail",
+            reason_codes=("EVALUATION_FAILED",),
+        ),
+        decision_reason_codes=("EVALUATION_FAILED",),
+        decision_layer_source="evaluation_bypass",
+        decision_engine_reason_codes=(),
+        bypass_reason_codes=("EVALUATION_FAILED",),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    summary_step = summary["steps"][0]
+    protocol = summary_step["protocol_result"]
+    assert summary_step["decision"] is None
+    assert summary_step["decision_layer_source"] == "evaluation_bypass"
+    assert summary_step["bypass_reason_codes"] == ["EVALUATION_FAILED"]
+    assert summary_step["decision_engine_reason_codes"] == []
+    assert protocol["effective_reason_source"] == "evaluation_bypass"
+    assert protocol["bypass_reason_codes"] == ["EVALUATION_FAILED"]
 
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
@@ -103,6 +234,21 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["raw_metrics_internal_only"] is True
     assert summary_step["protocol_result"]["win_rate_scope"] == "case_level_gate"
     assert summary_step["protocol_result"]["screening_case_win_rate"] == 0.67
+    assert summary_step["protocol_result"]["screening_case_level_gate_wins"] == (
+        summary_step["protocol_result"]["screening_case_wins"]
+    )
+    assert summary_step["protocol_result"]["screening_case_level_gate_losses"] == (
+        summary_step["protocol_result"]["screening_case_losses"]
+    )
+    assert summary_step["protocol_result"]["screening_case_level_gate_ties"] == (
+        summary_step["protocol_result"]["screening_case_ties"]
+    )
+    assert summary_step["protocol_result"]["screening_case_level_gate_total"] == (
+        summary_step["protocol_result"]["screening_case_total"]
+    )
+    assert summary_step["protocol_result"]["screening_case_level_gate_win_rate"] == (
+        summary_step["protocol_result"]["screening_case_win_rate"]
+    )
     assert summary_step["protocol_result"]["screening_gate_win_rate"] == 0.67
     assert summary_step["protocol_result"]["screening_win_rate"] == 0.67
     assert summary_step["protocol_result"]["screening_win_rate_scope"] == (
@@ -1543,6 +1689,8 @@ def test_campaign_summary_reports_api_balance_partial_completion_aliases(
     assert validity["completed_requested_rounds"] is False
     assert validity["complete"] is False
     assert validity["partial_in_flight"] is True
+    assert validity["partial_campaign_evidence"] is True
+    assert validity["protocol_in_flight"] is False
     assert validity["completeness_status"] == "partial_interrupted"
     assert summary["last_stop_reason"] == "api_balance_exhausted"
     assert summary["completed_requested_rounds"] is False
@@ -1591,8 +1739,12 @@ def test_status_and_summary_consistent_for_partial_api_balance_interrupted(
     )
     assert status["run_validity"]["reason"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
     assert status["run_validity"]["partial_in_flight"] is True
+    assert status["run_validity"]["partial_campaign_evidence"] is True
+    assert status["run_validity"]["protocol_in_flight"] is False
     assert status["run_validity"]["completeness_status"] == "partial_interrupted"
     assert summary["run_validity"]["partial_in_flight"] is True
+    assert summary["run_validity"]["partial_campaign_evidence"] is True
+    assert summary["run_validity"]["protocol_in_flight"] is False
     assert summary["run_completeness_status"] == "partial_interrupted"
 
 
@@ -1655,6 +1807,8 @@ def test_status_reports_valid_partial_interrupted_run_completeness(
     assert validity["complete"] is False
     assert validity["interrupted"] is True
     assert validity["partial_in_flight"] is True
+    assert validity["partial_campaign_evidence"] is True
+    assert validity["protocol_in_flight"] is True
     assert validity["completeness_status"] == "partial_interrupted"
     assert validity["stopped_reason"] == "signal:SIGTERM"
     assert "partial evidence" in validity["operator_action"]
@@ -1706,6 +1860,8 @@ def test_campaign_summary_reports_valid_but_incomplete_sigterm_run(
     assert validity["complete"] is False
     assert validity["interrupted"] is True
     assert validity["partial_in_flight"] is True
+    assert validity["partial_campaign_evidence"] is True
+    assert validity["protocol_in_flight"] is False
     assert validity["completeness_status"] == "partial_interrupted"
     assert summary["run_validity_status"] == RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED
 
@@ -1897,6 +2053,70 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
         "quality_block_ledger_count": 1,
         "blocked_attempts": 4,
         "proposal_quality_blocks_remaining": 2,
+        "fresh_runtime_replay_drain": {
+            "schema_version": "fresh_runtime_replay_drain.v1",
+            "status": "selected_blocked",
+            "attempts": 2,
+            "executed": 1,
+            "skipped": 1,
+            "limit": 4,
+            "stopped_reason": "no_fresh_runtime_replay_pending",
+            "accepted_replay_last_result": {
+                "branch_id": "branch-1",
+                "attempt_kind": "fresh_runtime_replay",
+                "accepted_for_drain": True,
+                "fresh_runtime_replay": {
+                    "closure_status": "blocked_missing_candidate_state"
+                },
+            },
+            "final_attempt_last_result": {
+                "attempt_kind": "other",
+                "action": "skip",
+                "accepted_for_drain": False,
+            },
+            "last_result": {
+                "attempt_kind": "other",
+                "action": "skip",
+                "accepted_for_drain": False,
+            },
+            "blocked_count": 1,
+            "unresolved_closures": [
+                {
+                    "branch_id": "branch-1",
+                    "closure_status": "blocked_missing_candidate_state",
+                }
+            ],
+            "counts_toward_max_rounds": False,
+            "decision_features_excluded": True,
+        },
+        "fresh_runtime_replay_drain_status": "selected_blocked",
+        "fresh_runtime_replay_drain_attempts": 2,
+        "fresh_runtime_replay_drain_executed": 1,
+        "fresh_runtime_replay_drain_skipped": 1,
+        "fresh_runtime_replay_drain_limit": 4,
+        "fresh_runtime_replay_drain_stopped_reason": (
+            "no_fresh_runtime_replay_pending"
+        ),
+        "fresh_runtime_replay_drain_accepted_replay_last_result": {
+            "branch_id": "branch-1",
+            "attempt_kind": "fresh_runtime_replay",
+            "accepted_for_drain": True,
+            "fresh_runtime_replay": {
+                "closure_status": "blocked_missing_candidate_state"
+            },
+        },
+        "fresh_runtime_replay_drain_final_attempt_last_result": {
+            "attempt_kind": "other",
+            "action": "skip",
+            "accepted_for_drain": False,
+        },
+        "fresh_runtime_replay_drain_blocked_count": 1,
+        "fresh_runtime_replay_drain_unresolved_closures": [
+            {
+                "branch_id": "branch-1",
+                "closure_status": "blocked_missing_candidate_state",
+            }
+        ],
     }
 
     status = recorder.write_status(loop_status=loop_status)
@@ -1927,6 +2147,17 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     )
     assert status["proposal_accounting"]["quality_block_ledger_count"] == 4
     assert status["blocked_attempts"] == 4
+    assert status["fresh_runtime_replay_drain_status"] == "selected_blocked"
+    assert status["fresh_runtime_replay_drain_attempts"] == 2
+    assert status["fresh_runtime_replay_drain_executed"] == 1
+    assert status["fresh_runtime_replay_drain_skipped"] == 1
+    assert status["fresh_runtime_replay_drain_blocked_count"] == 1
+    assert status["fresh_runtime_replay_drain"]["final_attempt_last_result"][
+        "accepted_for_drain"
+    ] is False
+    assert status["fresh_runtime_replay_drain_accepted_replay_last_result"][
+        "fresh_runtime_replay"
+    ]["closure_status"] == "blocked_missing_candidate_state"
     assert status["campaign_loop"]["attempt_limit"] == 3
     assert status["campaign_loop"]["effective_rounds_completed"] == 0
     assert status["campaign_loop"]["proposal_quality_limit"] == 6
@@ -1949,6 +2180,14 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     )
     assert summary["proposal_accounting"]["quality_block_ledger_count"] == 4
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
+    assert summary["fresh_runtime_replay_drain_status"] == "selected_blocked"
+    assert summary["fresh_runtime_replay_drain_attempts"] == 2
+    assert summary["fresh_runtime_replay_drain_executed"] == 1
+    assert summary["fresh_runtime_replay_drain_skipped"] == 1
+    assert summary["fresh_runtime_replay_drain_blocked_count"] == 1
+    assert summary["fresh_runtime_replay_drain"]["accepted_replay_last_result"][
+        "accepted_for_drain"
+    ] is True
 
 
 def test_branch_lifecycle_routing_diagnostic_does_not_enter_run_validity(

@@ -119,6 +119,44 @@ def test_activation_rejects_unbound_phase_runtime_subpath_for_new_mechanism() ->
     assert "solver_algorithm_phase_runtime_ms.intra_reinsertion_vns" in errors[1]
 
 
+def test_budget_rejects_unbound_phase_runtime_subpath_for_new_mechanism() -> None:
+    errors = validate_expected_telemetry_contract(
+        problem_spec=_surface_spec(),
+        selected_surface="solver_design",
+        expected_telemetry={
+            "budget": [
+                "solver_algorithm_phase_runtime_ms.alns",
+            ],
+        },
+        declared_mechanisms=[
+            MechanismChange(id="adaptive_neighborhood_budget", change_type="modify")
+        ],
+    )
+
+    assert errors[0] == (
+        "expected_telemetry.budget references undeclared runtime field(s): "
+        "solver_algorithm_phase_runtime_ms.alns"
+    )
+    assert "solver_algorithm_phase_runtime_ms.adaptive_neighborhood_budget" in errors[1]
+
+
+def test_budget_accepts_mechanism_specific_runtime_map_path() -> None:
+    errors = validate_expected_telemetry_contract(
+        problem_spec=_surface_spec(),
+        selected_surface="solver_design",
+        expected_telemetry={
+            "budget": [
+                "solver_algorithm_phase_runtime_ms.adaptive_neighborhood_budget",
+            ],
+        },
+        declared_mechanisms=[
+            MechanismChange(id="adaptive_neighborhood_budget", change_type="modify")
+        ],
+    )
+
+    assert errors == ()
+
+
 def test_activation_accepts_adapter_declared_phase_subpath_evidence() -> None:
     spec = SimpleNamespace(
         research_surfaces=[

@@ -1,6 +1,7 @@
 """Focused tests split from test_contract.py."""
 
 from .contract_test_support import *  # noqa: F401,F403
+from scion.contract.result_payload import diagnostic_checks
 
 
 def _gate_with_declared_complexity_terms(*terms: str) -> ContractGate:
@@ -335,6 +336,15 @@ class TestC10Novelty:
         assert result.passed
         assert c10.metadata["gate_action"] == "diagnostic"
         assert c10.metadata["diagnostic_kind"] == "semantic_identity_duplicate"
+        assert diagnostic_checks(result) == (
+            {
+                "name": "C10_novelty",
+                "passed": True,
+                "severity": "light",
+                "detail": c10.detail,
+                "metadata": c10.metadata,
+            },
+        )
 
     def test_duplicate_blacklist_is_diagnostic(self, gate: ContractGate):
         h = HypothesisProposal(

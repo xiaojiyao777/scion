@@ -1,20 +1,27 @@
 """Tests for T19: ProposalEngine Pydantic validation layer."""
+
 from __future__ import annotations
 
 import pytest
 
 from scion.proposal.context_manager import _format_hypothesis
-from scion.proposal.engine import ProposalValidationError, _parse_hypothesis, _parse_patch
+from scion.proposal.engine import (
+    ProposalValidationError,
+    _parse_hypothesis,
+    _parse_patch,
+    _split_hypothesis_context,
+)
 from scion.proposal.schemas import (
+    HYPOTHESIS_PROMPT_TEMPLATE,
     HYPOTHESIS_PROPOSAL_SCHEMA,
     PATCH_PROPOSAL_SCHEMA,
     HypothesisProposalInput,
 )
 
-
 # ---------------------------------------------------------------------------
 # HypothesisProposalInput validation tests
 # ---------------------------------------------------------------------------
+
 
 def test_hypothesis_validation_missing_fields():
     """Empty hypothesis_text should raise ProposalValidationError."""
@@ -259,12 +266,12 @@ def test_hypothesis_duplicate_id_with_parameterize_alias_canonicalizes_legal_act
 
 
 def test_mechanism_change_schema_guidance_keeps_action_labels_out_of_enum():
-    change_type_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
-        "mechanism_changes"
-    ]["items"]["properties"]["change_type"]
-    patch_change_type_schema = PATCH_PROPOSAL_SCHEMA["properties"][
-        "mechanism_changes"
-    ]["items"]["properties"]["change_type"]
+    change_type_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"]["mechanism_changes"][
+        "items"
+    ]["properties"]["change_type"]
+    patch_change_type_schema = PATCH_PROPOSAL_SCHEMA["properties"]["mechanism_changes"][
+        "items"
+    ]["properties"]["change_type"]
 
     assert change_type_schema["enum"] == [
         "add",
@@ -334,12 +341,14 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
 
 def test_hypothesis_runtime_intent_fields_default_when_missing():
     """Old LLM outputs without runtime intent fields remain valid."""
-    result = _parse_hypothesis({
-        "hypothesis_text": "Improve the existing move operator.",
-        "change_locus": "vehicle_level",
-        "action": "modify",
-        "target_file": "operators/move.py",
-    })
+    result = _parse_hypothesis(
+        {
+            "hypothesis_text": "Improve the existing move operator.",
+            "change_locus": "vehicle_level",
+            "action": "modify",
+            "target_file": "operators/move.py",
+        }
+    )
 
     assert result.target_runtime_effect is None
     assert result.complexity_claim is None
@@ -365,6 +374,170 @@ def test_hypothesis_schema_exposes_optional_runtime_intent_fields():
     ):
         assert field_name in properties
         assert field_name not in required
+
+
+def test_hypothesis_branch_lesson_usage_round_trips_and_filters_raw_text():
+    raw = {
+        "hypothesis_text": "Change the generic search surface using visible lessons.",
+        "change_locus": "search_surface",
+        "action": "modify",
+        "target_file": "surfaces/search.py",
+        "branch_lesson_usage": {
+            "borrowed_lessons": [
+                {
+                    "lesson_id": "lesson:weak-positive",
+                    "source_branch_ids": ["b2"],
+                    "borrowed_signal": "activation_policy",
+                    "rationale": "drop rationale",
+                    "trace": {"tool": "drop trace"},
+                    "prompt_excerpt": "drop prompt text",
+                }
+            ],
+            "avoided_lessons": [
+                {
+                    "lesson_id": "lesson:no-effect",
+                    "avoid_reason": "no_effect_cluster",
+                    "transcript": "drop transcript",
+                    "hypothesis_text": "drop repeated hypothesis prose",
+                }
+            ],
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:nearby",
+                    "contrast_dimensions": ["target_file", "effect_path"],
+                    "new_path": "bounded_variant",
+                    "raw_cross_branch_text": "drop raw text",
+                }
+            ],
+            "preserved_same_branch_lesson": {
+                "lesson_id": "lesson:local",
+                "preserved_signal": "weak_positive",
+                "risk_to_avoid": "runtime_regression",
+                "prose_summary": "drop prose field",
+            },
+            "rejected_weak_positive_lessons": [
+                {
+                    "lesson_id": "lesson:weak-positive",
+                    "reject_reason_code": "target_action_mismatch",
+                    "target_file": "surfaces/search.py",
+                    "action": "modify",
+                    "mechanism": "search_surface",
+                    "rationale": "drop rationale",
+                }
+            ],
+            "clean_fork_diversity_claim": {
+                "changed_dimensions": ["mechanism_family"],
+                "sibling_duplication_allowed": False,
+                "long_claim": "x" * 121,
+            },
+            "observation": "drop observation",
+            "llm_reasoning": "drop reasoning",
+        },
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert result.branch_lesson_usage == {
+        "borrowed_lessons": [
+            {
+                "lesson_id": "lesson:weak-positive",
+                "source_branch_ids": ["b2"],
+                "borrowed_signal": "activation_policy",
+            }
+        ],
+        "avoided_lessons": [
+            {
+                "lesson_id": "lesson:no-effect",
+                "avoid_reason": "no_effect_cluster",
+            }
+        ],
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:nearby",
+                "contrast_dimensions": ["target_file", "effect_path"],
+                "new_path": "bounded_variant",
+            }
+        ],
+        "preserved_same_branch_lesson": {
+            "lesson_id": "lesson:local",
+            "preserved_signal": "weak_positive",
+            "risk_to_avoid": "runtime_regression",
+        },
+        "rejected_weak_positive_lessons": [
+            {
+                "lesson_id": "lesson:weak-positive",
+                "reject_reason_code": "target_action_mismatch",
+                "target_file": "surfaces/search.py",
+                "action": "modify",
+                "mechanism": "search_surface",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["mechanism_family"],
+            "sibling_duplication_allowed": False,
+        },
+    }
+
+
+def test_hypothesis_branch_lesson_usage_schema_and_prompt_are_proposal_only():
+    required = set(HYPOTHESIS_PROPOSAL_SCHEMA["required"])
+    schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"]["branch_lesson_usage"]
+    description = schema["description"]
+
+    assert "branch_lesson_usage" not in required
+    assert "proposal-only" in description
+    assert "Excluded from DecisionFeatures" in description
+    for field_name in (
+        "borrowed_lessons",
+        "avoided_lessons",
+        "contrasted_lessons",
+        "preserved_same_branch_lesson",
+        "rejected_weak_positive_lessons",
+        "clean_fork_diversity_claim",
+    ):
+        assert field_name in schema["properties"]
+        assert field_name in description or field_name == "clean_fork_diversity_claim"
+    assert "branch_lesson_usage" in HYPOTHESIS_PROMPT_TEMPLATE
+    assert "raw lesson text" in HYPOTHESIS_PROMPT_TEMPLATE
+
+
+def test_hypothesis_prompt_requires_branch_lesson_usage_when_context_visible():
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "generic problem",
+            "champion_operators_code": "def champion():\n    return None\n",
+            "champion_stats": "baseline",
+            "operator_categories": "search_surface",
+            "available_actions": "modify",
+            "targetable_files": "surfaces/search.py",
+            "branch_lesson_usage_requirement": {
+                "schema_version": "branch_lesson_usage_requirement.v1",
+                "required": True,
+                "required_for": "clean_fork_new_branch",
+                "required_output_field": "branch_lesson_usage",
+            },
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:abc123",
+                    "lesson_role": "avoid",
+                    "required_response": {
+                        "required_output_field": "branch_lesson_usage",
+                    },
+                }
+            ],
+        }
+    )
+
+    rendered_system = "\n\n".join(block["text"] for block in system_blocks)
+    assert "Branch Lesson Usage Context" in rendered_system
+    assert "proposal-only" in rendered_system
+    assert "lesson:abc123" in rendered_system
+    assert "branch_lesson_usage" in user_prompt
+    assert "borrowed_lessons" in user_prompt
+    assert "avoided_lessons" in user_prompt
+    assert "contrasted_lessons" in user_prompt
+    assert "changed generic contrast dimensions" in user_prompt
 
 
 def test_valid_hypothesis_modify_action():
@@ -395,6 +568,7 @@ def test_valid_hypothesis_remove_action():
 # ---------------------------------------------------------------------------
 # PatchProposalInput validation tests
 # ---------------------------------------------------------------------------
+
 
 def test_patch_validation_missing_code():
     """Empty code_content should raise ProposalValidationError."""

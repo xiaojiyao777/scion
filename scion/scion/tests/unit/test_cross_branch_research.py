@@ -87,9 +87,7 @@ def _screening_step(
             change_locus=change_locus,
             action=action,
             target_file=target_file,
-            mechanism_changes=(
-                MechanismChange(id=mechanism_id, change_type="modify"),
-            ),
+            mechanism_changes=(MechanismChange(id=mechanism_id, change_type="modify"),),
         ),
         patch=None,
         contract_passed=True,
@@ -166,9 +164,7 @@ def test_cross_branch_research_map_is_tainted_and_finds_near_duplicates() -> Non
         "branch-b",
     }
     assert "branch-hidden" not in {
-        item["branch_id"]
-        for item in payload["branches"]
-        if item.get("recent_attempts")
+        item["branch_id"] for item in payload["branches"] if item.get("recent_attempts")
     }
 
     hint_types = {item["hint_type"] for item in payload["similarity_hints"]}
@@ -178,9 +174,9 @@ def test_cross_branch_research_map_is_tainted_and_finds_near_duplicates() -> Non
     assert first_hint["shared_signature"]["target_file"] == "policies/base.py"
     assert first_hint["shared_signature"]["change_locus"] == "algorithm_design"
     assert first_hint["shared_signature"]["action"] == "modify"
-    sibling_summary = {
-        item["branch_id"]: item for item in payload["branches"]
-    }["branch-b"]
+    sibling_summary = {item["branch_id"]: item for item in payload["branches"]}[
+        "branch-b"
+    ]
     lifecycle = sibling_summary["lifecycle_summary"]
     assert lifecycle["rollback_count"] == 1
     assert lifecycle["best_quality_checkpoint_id"] == "checkpoint-1"
@@ -421,6 +417,76 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
     assert payload["cross_branch_research_metadata"][
         "material_difference_record_ids"
     ] == [record["record_id"]]
+    lesson_records = payload["branch_lesson_records"]
+    assert lesson_records
+    assert payload["cross_branch_research_metadata"][
+        "branch_lesson_record_count"
+    ] == len(lesson_records)
+    assert payload["cross_branch_research_metadata"]["branch_lesson_record_ids"] == [
+        item["lesson_id"] for item in lesson_records
+    ]
+
+    roles = {item["lesson_role"] for item in lesson_records}
+    assert {"preserve", "avoid", "contrast"} <= roles
+    required_lesson_fields = {
+        "schema_version",
+        "lesson_id",
+        "source",
+        "decision_input_policy",
+        "scope",
+        "lesson_role",
+        "lesson_type",
+        "maturity",
+        "source_branch_ids",
+        "shared_signature",
+        "evidence_basis",
+        "required_response",
+        "reason_codes",
+    }
+    for lesson in lesson_records:
+        assert required_lesson_fields <= set(lesson)
+        assert lesson["schema_version"] == "branch_lesson.v1"
+        assert lesson["lesson_id"].startswith("lesson:")
+        assert lesson["source"] == "proposal_only"
+        assert lesson["decision_input_policy"] == ("excluded_from_decision_features")
+        assert lesson["required_response"]["required_output_field"] == (
+            "branch_lesson_usage"
+        )
+        assert lesson["required_response"]["sibling_duplication_allowed"] is False
+        assert (
+            "runtime_budget_strategy"
+            in lesson["required_response"]["required_contrast_dimensions"]
+        )
+        assert "BRANCH_LESSON_REQUIRED" in lesson["reason_codes"]
+
+    flat_lessons = [
+        lesson
+        for lesson in lesson_records
+        if set(lesson["source_branch_ids"]) == {"branch-flat-a", "branch-flat-b"}
+    ]
+    assert any(lesson["lesson_role"] == "contrast" for lesson in flat_lessons)
+    assert any(lesson["lesson_role"] == "avoid" for lesson in flat_lessons)
+    contrast_requirements = [
+        lesson for lesson in flat_lessons if lesson["lesson_role"] == "contrast"
+    ]
+    assert any(
+        lesson["required_response"]["required_for"] == "sibling_nearby_attempt"
+        for lesson in contrast_requirements
+    )
+    sibling_requirement = contrast_requirements[0]["required_response"]
+    assert sibling_requirement["required_for"] in {
+        "clean_fork_new_branch",
+        "sibling_nearby_attempt",
+    }
+    assert all(
+        lesson["required_response"]["minimum_requirement"]
+        == "name_borrowed_or_avoided_lesson_and_contrast_dimension"
+        for lesson in contrast_requirements
+    )
+    assert sibling_requirement["minimum_requirement"] == (
+        "name_borrowed_or_avoided_lesson_and_contrast_dimension"
+    )
+    assert sibling_requirement["same_branch_refinement_allowed"] is False
 
     repeat_payload = build_cross_branch_research_map(
         current,
@@ -430,16 +496,17 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
     repeat_record = repeat_payload["material_difference_audit_records"][0]
     assert repeat_record["record_id"] == record["record_id"]
     assert repeat_record["record_digest"] == record["record_digest"]
+    assert [item["lesson_id"] for item in repeat_payload["branch_lesson_records"]] == [
+        item["lesson_id"] for item in lesson_records
+    ]
     weak_allowance = {
-        item["branch_id"]: item
-        for item in novelty["same_branch_refinement_allowances"]
+        item["branch_id"]: item for item in novelty["same_branch_refinement_allowances"]
     }["branch-weak"]
     assert weak_allowance["same_branch_refinement_allowed"] is True
     assert weak_allowance["sibling_duplication_allowed"] is False
     assert weak_allowance["recommended_action"] == "refine"
     assert any(
-        item["dimension"] == "action"
-        and item["pressure"] == "overused_action"
+        item["dimension"] == "action" and item["pressure"] == "overused_action"
         for item in novelty["overused_dimensions"]
     )
     assert "create_new" in novelty["unexplored_action_pressure"]["unexplored_actions"]
@@ -458,14 +525,16 @@ def test_cross_branch_research_structured_guidance_is_generic() -> None:
     )
     assert guidance_by_type["avoid_closed_lineage"]["recommended_action"] == "avoid"
     assert (
-        guidance_by_type[
-            "diversify_when_recent_signatures_saturated"
-        ]["recommended_action"]
+        guidance_by_type["diversify_when_recent_signatures_saturated"][
+            "recommended_action"
+        ]
         == "diversify"
     )
 
 
-def test_cross_branch_portfolio_steering_builds_signatures_and_no_effect_lessons() -> None:
+def test_cross_branch_portfolio_steering_builds_signatures_and_no_effect_lessons() -> (
+    None
+):
     current = _branch(
         "branch-weak",
         mechanism_ids=("bounded_signal_refine",),
@@ -563,12 +632,14 @@ def test_cross_branch_portfolio_steering_builds_signatures_and_no_effect_lessons
     }
     assert signatures_by_branch["branch-flat-a"]["surface"] == "activation_policy"
     assert signatures_by_branch["branch-flat-a"]["outcome_pattern"] == "no_effect"
-    assert signatures_by_branch["branch-flat-a"]["failure_signature"][
-        "status"
-    ] == "present"
-    assert signatures_by_branch["branch-weak"]["weak_signal_signature"][
-        "status"
-    ] == "present"
+    assert (
+        signatures_by_branch["branch-flat-a"]["failure_signature"]["status"]
+        == "present"
+    )
+    assert (
+        signatures_by_branch["branch-weak"]["weak_signal_signature"]["status"]
+        == "present"
+    )
 
     repeat_digests = {
         signature["branch_id"]: signature["signature_digest"]
@@ -704,20 +775,18 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     }
 
     target_clusters = {
-        item["value"]: item
-        for item in coverage["dimension_coverage"]["target_file"]
+        item["value"]: item for item in coverage["dimension_coverage"]["target_file"]
     }
     shared_target = target_clusters["policies/shared.py"]
     assert shared_target["branch_count"] == 2
     assert shared_target["outcome_patterns"] == {"no_effect": 2}
-    assert shared_target["runtime_evidence_quality"] == {
-        "low_or_incomplete": 2
-    }
+    assert shared_target["runtime_evidence_quality"] == {"low_or_incomplete": 2}
 
     combined = [
         item
         for item in coverage["combined_clusters"]
-        if item["signature"] == {
+        if item["signature"]
+        == {
             "mechanism_family": "flat",
             "target_file": "policies/shared.py",
             "action": "modify",
@@ -748,16 +817,16 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     assert "target_diversity_gap" in gap_types
     assert "observability_path_gap" in gap_types
     assert "runtime_evidence_confidence_gap" in gap_types
-    runtime_gap = {
-        item["gap_type"]: item for item in payload["opportunity_gaps"]
-    }["runtime_evidence_confidence_gap"]
+    runtime_gap = {item["gap_type"]: item for item in payload["opportunity_gaps"]}[
+        "runtime_evidence_confidence_gap"
+    ]
     assert runtime_gap["runtime_signal_role"] == "audit_or_proposal_guidance_only"
     assert runtime_gap["standalone_optimization_signal"] is False
     assert "standalone optimization signal" in runtime_gap["proposal_guidance"]
 
-    current_summary = {
-        item["branch_id"]: item for item in payload["branches"]
-    }["branch-current"]
+    current_summary = {item["branch_id"]: item for item in payload["branches"]}[
+        "branch-current"
+    ]
     assert current_summary["evidence_profile"]["effect_tier"] == "weak_positive"
     assert current_summary["evidence_profile"]["activation_status"] == "observed"
     assert current_summary["research_descriptors"][0]["mechanism_family"] == (
@@ -773,6 +842,12 @@ def test_cross_branch_research_map_builds_coverage_guidance_and_gaps() -> None:
     assert low_policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
     assert low_policy["proposal_guidance_only"] is True
     assert low_policy["decision_features_excluded"] is True
+    assert any(
+        lesson["lesson_role"] == "bridge"
+        and lesson["required_response"]["required_output_field"]
+        == "branch_lesson_usage"
+        for lesson in payload["branch_lesson_records"]
+    )
 
     assert "excluded_from_decision_features" in rendered
     assert "raw_metrics_ref" not in rendered
@@ -818,13 +893,8 @@ def test_cross_branch_research_filters_unavailable_actions() -> None:
     assert novelty["allowed_actions"] == ["modify"]
     assert "unexplored_action_pressure" not in novelty
     assert novelty["in_action_diversity_pressure"]["dominant_action"] == "modify"
-    assert (
-        novelty["in_action_diversity_pressure"]["recommended_action"]
-        == "diversify"
-    )
-    guidance = {
-        item["guidance_type"]: item for item in payload["portfolio_guidance"]
-    }
+    assert novelty["in_action_diversity_pressure"]["recommended_action"] == "diversify"
+    guidance = {item["guidance_type"]: item for item in payload["portfolio_guidance"]}
     assert (
         guidance["diversify_within_executable_action"]["recommended_action"]
         == "diversify"
@@ -899,35 +969,140 @@ def test_cross_branch_research_keeps_active_weak_positive_refinement_allowed() -
         "change_locus": "activation_policy",
     }
     assert avoid["same_branch_refinement_allowed"] is True
-    assert avoid["same_branch_refinement_allowed_branch_ids"] == [
-        "branch-current"
-    ]
+    assert avoid["same_branch_refinement_allowed_branch_ids"] == ["branch-current"]
     assert set(avoid["sibling_branch_ids"]) == {
         "branch-sibling-a",
         "branch-sibling-b",
     }
     assert avoid["material_difference_required_for"] == "sibling_nearby_attempt"
-    assert avoid["material_difference_requirements"][
-        "same_branch_refinement_allowed"
-    ] is True
-    assert avoid["material_difference_requirements"][
-        "sibling_duplication_allowed"
-    ] is False
+    assert (
+        avoid["material_difference_requirements"]["same_branch_refinement_allowed"]
+        is True
+    )
+    assert (
+        avoid["material_difference_requirements"]["sibling_duplication_allowed"]
+        is False
+    )
 
     blocked = novelty["blocked_signature_pressure"][0]
     assert blocked["deterministic_screening_block"] is False
-    assert blocked["same_branch_refinement_allowed_branch_ids"] == [
-        "branch-current"
-    ]
+    assert blocked["same_branch_refinement_allowed_branch_ids"] == ["branch-current"]
 
     allowance = {
-        item["branch_id"]: item
-        for item in novelty["same_branch_refinement_allowances"]
+        item["branch_id"]: item for item in novelty["same_branch_refinement_allowances"]
     }["branch-current"]
     assert allowance["is_current_branch"] is True
     assert allowance["same_branch_refinement_allowed"] is True
     assert allowance["sibling_duplication_allowed"] is False
     assert allowance["signatures"][0]["mechanism_family"] == "bounded_signal"
+    preserve_lesson = [
+        lesson
+        for lesson in payload["branch_lesson_records"]
+        if lesson["lesson_role"] == "preserve"
+        and lesson["source_branch_ids"] == ["branch-current"]
+    ][0]
+    assert preserve_lesson["lesson_type"] == "weak_positive"
+    assert preserve_lesson["maturity"] == "fresh"
+    assert preserve_lesson["required_response"]["required_for"] == (
+        "same_branch_refinement"
+    )
+    assert (
+        preserve_lesson["required_response"]["same_branch_refinement_allowed"] is True
+    )
+    assert preserve_lesson["required_response"]["sibling_duplication_allowed"] is False
+    contrast_lesson = [
+        lesson
+        for lesson in payload["branch_lesson_records"]
+        if lesson["lesson_role"] == "contrast"
+        and set(lesson["source_branch_ids"])
+        == {"branch-current", "branch-sibling-a", "branch-sibling-b"}
+    ][0]
+    assert set(contrast_lesson["source_branch_ids"]) == {
+        "branch-current",
+        "branch-sibling-a",
+        "branch-sibling-b",
+    }
+    assert contrast_lesson["required_response"]["required_for"] == (
+        "sibling_nearby_attempt"
+    )
+
+
+def test_cross_branch_research_exposes_sibling_weak_positive_borrow_lesson() -> None:
+    current = _branch("branch-clean", mechanism_ids=("clean_probe",))
+    weak = _branch(
+        "branch-weak",
+        mechanism_ids=("bounded_signal_probe",),
+    )
+    steps = [
+        _screening_step(
+            "branch-weak",
+            round_num=1,
+            mechanism_id="bounded_signal_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            wins=1,
+            reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "weak"},
+            },
+        ),
+    ]
+
+    payload = build_cross_branch_research_map(current, [current, weak], steps)
+
+    borrow = [
+        lesson
+        for lesson in payload["branch_lesson_records"]
+        if lesson["lesson_role"] == "borrow"
+        and lesson["lesson_type"] == "weak_positive"
+        and lesson["source_branch_ids"] == ["branch-weak"]
+    ][0]
+    assert borrow["scope"] == "cross_branch"
+    assert borrow["required_response"]["required_for"] == "clean_fork_new_branch"
+    assert borrow["required_response"]["required_output_field"] == (
+        "branch_lesson_usage"
+    )
+    assert borrow["required_response"]["minimum_requirement"] == (
+        "borrow_or_preserve_or_machine_reject_with_activation_effect_linkage"
+    )
+    assert borrow["required_response"]["required_path_fields"] == [
+        "activation_path",
+        "effect_path",
+    ]
+    assert borrow["required_response"]["required_linkage_fields"] == [
+        "target_file",
+        "action",
+        "mechanism_or_mechanism_change_id",
+    ]
+    assert "mechanism_or_change_locus" not in borrow["required_response"][
+        "required_linkage_fields"
+    ]
+    assert borrow["required_response"]["one_of_required_fields"] == [
+        "risk_to_avoid",
+        "contrast_dimensions",
+    ]
+    assert borrow["required_response"]["reuse_or_reject_required"] is True
+    assert borrow["required_response"]["machine_reject_fields"] == [
+        "rejected_weak_positive_lessons.lesson_id",
+        "rejected_weak_positive_lessons.reject_reason_code",
+        "rejected_weak_positive_lessons.target_file",
+        "rejected_weak_positive_lessons.action",
+        "rejected_weak_positive_lessons.mechanism_or_mechanism_change_id",
+    ]
+    assert borrow["transfer_contract"]["trigger_mechanism"] == "bounded_signal"
+    assert borrow["transfer_contract"]["activation_path"] == "activation_policy"
+    assert borrow["transfer_contract"]["entry_file"] == "policies/shared.py"
+    assert (
+        borrow["transfer_contract"]["reuse_requirements"]["required_output_field"]
+        == "branch_lesson_usage"
+    )
+    assert (
+        borrow["transfer_contract"]["reject_requirements"]["required_usage"]
+        == "rejected_weak_positive_lessons"
+    )
+    assert borrow["required_response"]["sibling_duplication_allowed"] is False
+    assert borrow["decision_input_policy"] == "excluded_from_decision_features"
 
 
 def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
@@ -950,6 +1125,9 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "material_difference_audit_records" not in decision_fields
     assert "cross_branch_research_session_metadata" not in decision_fields
     assert "same_branch_refinement_allowances" not in decision_fields
+    assert "branch_lesson_records" not in decision_fields
+    assert "branch_lesson_usage" not in decision_fields
+    assert "branch_lesson_usage_requirement" not in decision_fields
     assert "portfolio_steering" not in decision_fields
     assert "branch_research_signatures" not in decision_fields
     assert "similarity_graph" not in decision_fields

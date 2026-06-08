@@ -5,6 +5,7 @@ from typing import Any
 
 from scion.core.async_weight_opt import AsyncWeightOptCoordinator
 from scion.core.campaign import CampaignManager
+import scion.core.campaign as campaign_module
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.step_result import StepResult
@@ -83,6 +84,60 @@ def test_campaign_summary_reconciles_weight_opt_and_stopped_progress(tmp_path) -
     assert summary["stopped_reason"] == "max_rounds_exhausted"
     assert "current_progress" not in summary
     assert summary["weight_optimization"] == weight_optimization
+
+
+def test_status_and_summary_state_snapshot_does_not_reconcile_active_slots(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manager = CampaignManager.__new__(CampaignManager)
+    recorder = EvidenceRecorder(
+        campaign_id="camp-read-only",
+        campaign_dir=tmp_path,
+        state_provider=manager.get_state_snapshot,
+    )
+    manager._campaign_id = "camp-read-only"
+    manager._campaign_dir = tmp_path
+    manager._branch_ctrl = SimpleNamespace(get_reportable_branches=lambda: [])
+    manager._scheduler = SimpleNamespace(max_active_branches=1)
+    manager._persist_branch_state = lambda _branch_id: (_ for _ in ()).throw(
+        AssertionError("status snapshot must not persist branch state")
+    )
+    manager._step_history = []
+    manager._n_experiments = 0
+    manager._telemetry_failed_experiments = 0
+    manager._round_num = 0
+    manager._champion = _champion()
+    manager._budget = SimpleNamespace(remaining_ratio=1.0)
+    manager._balance_exhausted = False
+    manager._circuit_breaker = SimpleNamespace(is_tripped=False)
+    manager._frozen_budget_ledger = SimpleNamespace(snapshot=lambda: {})
+    manager._evidence_recorder = recorder
+    manager._proposal_pipeline = SimpleNamespace(agentic_artifact_dir=None)
+    manager._weight_opt_coord = SimpleNamespace(
+        status_snapshot=lambda: {"pending_threads": 0, "active": [], "runs": []}
+    )
+    manager._current_status_progress = None
+
+    def fail_reconcile(*_args, **_kwargs):
+        raise AssertionError("status snapshot must not reconcile active slots")
+
+    monkeypatch.setattr(
+        campaign_module,
+        "reconcile_active_slot_overflow",
+        fail_reconcile,
+    )
+
+    status = recorder.write_status(stopped_reason="max_rounds_exhausted")
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=0,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    assert status["campaign_id"] == "camp-read-only"
+    assert summary["campaign_id"] == "camp-read-only"
 
 
 def test_async_weight_opt_final_wait_timeout_marks_detached_active_run() -> None:

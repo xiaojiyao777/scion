@@ -500,3 +500,70 @@ class TestPerfGuardCheck:
         assert r.metadata["ratio"] == pytest.approx(3.0)
         assert r.metadata["limit_ratio"] == 2.0
         assert "limit=2x" in r.detail
+
+    def test_configured_timeout_budget_is_used_and_exposed(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        champ_ws = str(tmp_path / "champ")
+        Path(champ_ws).mkdir()
+        spec = _make_spec(canary=canary)
+        seen_limits = []
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            seen_limits.append(time_limit_sec)
+            fd, path = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            with open(path, "w") as f:
+                json.dump(_solver_output_dict(), f)
+            return RunResult(
+                success=True, exit_code=0, stdout="", stderr="",
+                elapsed_ms=100, output=None, output_path=path, error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+        r = check_perf(spec, runner, str(tmp_path), champ_ws, timeout_sec=17)
+
+        assert r.passed is True
+        assert seen_limits == [17, 17]
+        assert r.metadata["timeout_sec"] == 17
+
+    def test_strict_champion_failure_is_non_passing(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        champ_ws = str(tmp_path / "champ")
+        Path(champ_ws).mkdir()
+        spec = _make_spec(canary=canary)
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            if workdir == champ_ws:
+                return RunResult(
+                    success=False, exit_code=1, stdout="", stderr="boom",
+                    elapsed_ms=50, output=None, output_path=None,
+                    error_category="crash",
+                )
+            fd, path = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            with open(path, "w") as f:
+                json.dump(_solver_output_dict(), f)
+            return RunResult(
+                success=True, exit_code=0, stdout="", stderr="",
+                elapsed_ms=100, output=None, output_path=path,
+                error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+        r = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            champ_ws,
+            timeout_sec=17,
+            strict_runtime_checks=True,
+        )
+
+        assert r.passed is False
+        assert r.metadata["comparison_valid"] is False
+        assert r.metadata["champion_error_category"] == "crash"
+        assert "comparison invalid" in r.detail

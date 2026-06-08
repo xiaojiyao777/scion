@@ -8,12 +8,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scion.cli.commands.data_roots import (
+    activate_declared_problem_data_root,
+    validate_declared_problem_data_cases,
+    with_declared_problem_data_roots,
+)
 from scion.config.problem import ProblemSpec, ProtocolConfig, SeedLedgerConfig, SplitManifest
+from scion.protocol.experiment.selection import (
+    resolve_case_path_details,
+    validate_case_path_resolution,
+)
 from scion.problems.cvrp.evidence import load_cvrp_case_manifest
 
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 FORMAL_DIR = CVRP_DIR / "formal"
+VRP_DIR = CVRP_DIR.parents[3] / "vrp"
 STAGES = ("screening", "validation", "frozen", "final")
 
 
@@ -85,6 +95,44 @@ def test_formal_split_manifest_matches_stage_manifests() -> None:
     assert split.validation == [case.source_path for case in validation.cases]
     assert split.frozen == [case.source_path for case in frozen.cases]
     assert split.canary == ["controlled/data/synthetic_controlled_canary_5.vrp"]
+
+
+def test_formal_split_case_resolves_strict_via_declared_problem_data_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case = "cvrplib/A/A-n32-k5.vrp"
+    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(VRP_DIR))
+    split = SplitManifest(
+        version="0.4-cvrp-formal-readiness",
+        screening=[case],
+        validation=[],
+        frozen=[],
+    )
+
+    activation = activate_declared_problem_data_root(
+        problem_yaml=CVRP_DIR / "problem.yaml",
+        protocol_path=FORMAL_DIR / "protocol.yaml",
+    )
+    validate_declared_problem_data_cases(
+        activation=activation,
+        problem_yaml=CVRP_DIR / "problem.yaml",
+        split_manifest=split,
+    )
+    wired_split = with_declared_problem_data_roots(
+        activation=activation,
+        split_manifest=split,
+    )
+
+    resolution = resolve_case_path_details(
+        case,
+        workspace=str(tmp_path / "workspace"),
+        safe_data_roots=wired_split.safe_data_roots,
+    )
+    validate_case_path_resolution(resolution, strict=True)
+    assert resolution.status == "resolved_safe_data_root"
+    assert resolution.resolved == str((VRP_DIR / case).resolve())
+    assert resolution.matched_root == str(VRP_DIR.resolve())
 
 
 def test_formal_final_evidence_contract_is_post_campaign_only() -> None:

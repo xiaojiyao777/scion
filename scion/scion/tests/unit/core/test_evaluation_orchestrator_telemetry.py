@@ -29,7 +29,10 @@ from scion.core.models import (
     OperatorConfig,
     ProtocolResult,
 )
-from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
+from scion.core.runtime_budget_diagnostics import (
+    CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    SCREENING_RUNTIME_BUDGET_SATURATION,
+)
 from scion.core.telemetry_validation import TELEMETRY_EFFECT_ZERO_DIAGNOSTIC
 
 
@@ -114,6 +117,14 @@ class _Protocol:
                 },
             },
         )
+
+
+class _RaisingProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        raise RuntimeError("protocol boom")
 
 
 class _ActivityTelemetryFailureProtocol:
@@ -366,6 +377,8 @@ class _RuntimeBudgetSaturationProtocol(_WeakPositiveProtocol):
             "total_pairs": 8,
             "threshold_ratio": 0.9,
             "saturation_ratio": 0.96,
+            "saturated_side": "candidate",
+            "reason_codes": [CANDIDATE_RUNTIME_BUDGET_SATURATION],
         }
         return replace(
             result,
@@ -435,6 +448,63 @@ class _RuntimeSlowLowMidProtocol:
                 "telemetry_guard": {"passed": True, "candidate_runs": 10},
             },
         )
+
+
+def test_evaluation_exception_returns_structured_failure_without_decision() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+    failures = []
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_RaisingProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda _branch, failure: failures.append(failure),
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+    )
+
+    decision, protocol_result, canary_result = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision is None
+    assert canary_result.passed is False
+    assert canary_result.reason == "evaluation failed"
+    assert protocol_result is not None
+    assert protocol_result.gate_outcome == "fail"
+    assert protocol_result.reason_codes == ("EVALUATION_FAILED",)
+    assert decision_reason_codes[branch.branch_id] == ("EVALUATION_FAILED",)
+    assert orchestrator.decision_layer_sources[branch.branch_id] == "evaluation_bypass"
+    assert orchestrator.bypass_reason_codes[branch.branch_id] == ("EVALUATION_FAILED",)
+    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == ()
+    assert branch_controller.soft_abandoned is False
+    assert failures and failures[-1].category == "evaluation"
+    assert "protocol boom" in failures[-1].detail
 
 
 def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
@@ -762,6 +832,13 @@ def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_re
         "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
         TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     )
+    assert orchestrator.decision_layer_sources[branch.branch_id] == "stage_decision"
+    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
+        TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
+    )
+    assert TELEMETRY_EFFECT_ZERO_DIAGNOSTIC not in (
+        orchestrator.decision_engine_reason_codes[branch.branch_id]
+    )
     assert branch_controller.soft_abandoned is False
     assert branch.branch_id not in diagnostic_streaks
     assert experiment_count == 1
@@ -1026,6 +1103,14 @@ def test_runtime_budget_saturation_reaches_decision_reason_codes() -> None:
         "SCREENING_FAIL_WIN_RATE",
         "SCREENING_WEAK_SIGNAL_CONTINUE",
         SCREENING_RUNTIME_BUDGET_SATURATION,
+        CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    )
+    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
+        SCREENING_RUNTIME_BUDGET_SATURATION,
+        CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    )
+    assert SCREENING_RUNTIME_BUDGET_SATURATION not in (
+        orchestrator.decision_engine_reason_codes[branch.branch_id]
     )
     assert branch_controller.soft_abandoned is False
     assert experiment_count == 1

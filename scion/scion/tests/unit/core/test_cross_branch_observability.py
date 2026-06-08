@@ -40,6 +40,7 @@ def _step(
     losses: int = 0,
     reason_codes: tuple[str, ...] = (),
     scheduler_audit_metadata: dict | None = None,
+    proposal_session_ref: dict | None = None,
 ) -> StepRecord:
     ties = max(0, 4 - wins - losses)
     return StepRecord(
@@ -50,9 +51,7 @@ def _step(
             change_locus="selection_policy",
             action="modify",
             target_file="components/common.py",
-            mechanism_changes=(
-                MechanismChange(id=mechanism_id, change_type="modify"),
-            ),
+            mechanism_changes=(MechanismChange(id=mechanism_id, change_type="modify"),),
         ),
         patch=None,
         contract_passed=True,
@@ -79,6 +78,7 @@ def _step(
         failure_detail=None,
         decision_reason_codes=reason_codes,
         scheduler_audit_metadata=scheduler_audit_metadata or {},
+        proposal_session_ref=proposal_session_ref,
     )
 
 
@@ -88,6 +88,41 @@ def _material_difference_record(record_id: str) -> dict:
         "schema_version": "material_difference_requirement.v1",
         "record_id": record_id,
         "record_digest": f"{record_id}:digest",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+    }
+
+
+def _branch_lesson_record(lesson_id: str) -> dict:
+    return {
+        "schema_version": "branch_lesson.v1",
+        "lesson_id": lesson_id,
+        "source": "proposal_only",
+        "decision_input_policy": "excluded_from_decision_features",
+        "scope": "cross_branch",
+        "lesson_role": "contrast",
+        "lesson_type": "near_duplicate",
+        "maturity": "repeated",
+        "source_branch_ids": ["branch-a"],
+        "required_response": {
+            "required_for": "clean_fork_new_branch",
+            "required_output_field": "branch_lesson_usage",
+            "required_contrast_dimensions": ["target_file"],
+            "sibling_duplication_allowed": False,
+        },
+    }
+
+
+def _branch_lesson_requirement(record_id: str) -> dict:
+    return {
+        "schema_version": "branch_lesson_usage_requirement.v1",
+        "record_type": "branch_lesson_usage_requirement",
+        "record_id": record_id,
+        "record_digest": f"{record_id}:digest",
+        "required": True,
+        "required_for": "clean_fork_new_branch",
+        "required_fors": ["clean_fork_new_branch"],
+        "required_output_field": "branch_lesson_usage",
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
     }
@@ -168,10 +203,8 @@ def test_cross_branch_observability_counts_generic_proposal_context() -> None:
         },
         {
             "id": "branch-rerouted",
-            "branch_lifecycle_reroute_reason": (
-                "repeated_contract_signature_reroute"
-            ),
-        }
+            "branch_lifecycle_reroute_reason": ("repeated_contract_signature_reroute"),
+        },
     ]
 
     payload = build_cross_branch_research_observability(
@@ -199,9 +232,7 @@ def test_cross_branch_observability_counts_generic_proposal_context() -> None:
     assert payload["novelty_pressure_seen_count"] == 6
     assert payload["cross_branch_map_seen_count"] == 3
     assert payload["reason_code_counts"]["CROSS_BRANCH_NEAR_DUPLICATE"] == 1
-    assert (
-        payload["reason_code_counts"]["repeated_contract_signature_reroute"] == 1
-    )
+    assert payload["reason_code_counts"]["repeated_contract_signature_reroute"] == 1
     assert "Sensitive proposal text" not in json.dumps(payload)
     assert "compact public result" not in json.dumps(payload)
 
@@ -297,6 +328,289 @@ def test_cross_branch_observability_counts_map_coverage_without_pressure() -> No
     assert payload["novelty_pressure_seen_count"] == 0
 
 
+def test_cross_branch_observability_counts_branch_lesson_usage_quality() -> None:
+    borrowed = _step("branch-borrow", round_num=1, mechanism_id="alpha_probe")
+    borrowed.hypothesis.branch_lesson_usage = {
+        "borrowed_lessons": [
+            {
+                "lesson_id": "lesson:borrow",
+                "lesson_type": "weak_positive",
+                "source_branch_ids": ["branch-a"],
+                "activation_path": "observed_activation",
+                "effect_path": "weak_effect",
+                "borrowed_signal": "weak_positive_signal",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "alpha_probe",
+            }
+        ],
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:borrow",
+                "contrast_dimensions": ["target_file"],
+                "new_path": "generic_path",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "alpha_probe",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["target_file"],
+            "sibling_duplication_allowed": False,
+        },
+    }
+    borrowed.scheduler_audit_metadata = {
+        "branch_lesson_usage_requirement": _branch_lesson_requirement("blur:borrow")
+    }
+    avoided = _step("branch-avoid", round_num=2, mechanism_id="beta_probe")
+    avoided.hypothesis.branch_lesson_usage = {
+        "avoided_lessons": [
+            {
+                "lesson_id": "lesson:avoid",
+                "avoid_reason": "no_effect_cluster",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "beta_probe",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["mechanism_family"],
+            "sibling_duplication_allowed": False,
+        },
+    }
+    preserved = _step("branch-preserve", round_num=3, mechanism_id="gamma_probe")
+    preserved.hypothesis.branch_lesson_usage = {
+        "preserved_same_branch_lesson": {
+            "lesson_id": "lesson:local",
+            "preserved_signal": "weak_signal",
+            "risk_to_avoid": "known_gap",
+            "target_file": "components/common.py",
+            "action": "modify",
+            "mechanism": "gamma_probe",
+        }
+    }
+    missing = replace(
+        _step("branch-missing", round_num=4, mechanism_id="delta_probe"),
+        protocol_result=None,
+        decision=None,
+        contract_passed=True,
+        verification_passed=False,
+        failure_stage="proposal",
+        failure_detail=(
+            "agent_quality_blocked:branch_lesson_usage_required_missing: "
+            "structured branch_lesson_usage is required"
+        ),
+        counts_toward_max_rounds=False,
+        attempt_kind="proposal_block",
+    )
+
+    payload = build_cross_branch_research_observability(
+        steps=[borrowed, avoided, preserved, missing],
+        context_records=[
+            _branch_lesson_requirement("blur:context"),
+            {
+                "cross_branch_research_payload": {
+                    "branch_lesson_records": [
+                        _branch_lesson_record("lesson:borrow"),
+                        _branch_lesson_record("lesson:avoid"),
+                    ]
+                }
+            },
+        ],
+    )
+
+    assert payload["branch_lesson_record_count"] == 2
+    assert payload["branch_lesson_usage_requirement_count"] == 3
+    assert payload["branch_lesson_usage_present_count"] == 3
+    assert payload["branch_lesson_usage_satisfied_count"] == 1
+    assert payload["branch_lesson_usage_present_not_semantic_count"] == 2
+    assert payload["branch_lesson_usage_missing_block_count"] == 1
+    assert payload["borrowed_lesson_count"] == 1
+    assert payload["avoided_lesson_count"] == 1
+    assert payload["contrasted_lesson_count"] == 1
+    assert payload["preserved_same_branch_lesson_count"] == 1
+    assert payload["clean_fork_contrast_satisfied_count"] == 2
+    assert payload["weak_positive_transfer_count"] == 1
+    assert payload["weak_positive_transfer_reject_count"] == 0
+    assert payload["policy"] == "proposal_observability_only"
+    assert payload["decision_input_policy"] == "excluded_from_decision_features"
+    assert "Sensitive proposal text" not in json.dumps(payload)
+
+
+def test_branch_lesson_usage_satisfied_requires_attached_requirement() -> None:
+    voluntary = _step("branch-voluntary", round_num=1, mechanism_id="alpha_probe")
+    voluntary.hypothesis.branch_lesson_usage = {
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:voluntary",
+                "contrast_dimensions": ["target_file"],
+                "new_path": "generic_path",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["target_file"],
+        },
+    }
+    required = _step(
+        "branch-required",
+        round_num=2,
+        mechanism_id="beta_probe",
+        proposal_session_ref={
+            "schema_version": "proposal-context-ref.v1",
+            "branch_lesson_usage_requirement": _branch_lesson_requirement(
+                "blur:required"
+            ),
+        },
+    )
+    required.hypothesis.branch_lesson_usage = {
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:required",
+                "contrast_dimensions": ["target_file"],
+                "new_path": "generic_path",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "beta_probe",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["target_file"],
+        },
+    }
+
+    voluntary_payload = build_cross_branch_research_observability(
+        steps=[voluntary],
+    )
+    required_payload = build_cross_branch_research_observability(
+        steps=[required],
+    )
+
+    assert voluntary_payload["branch_lesson_usage_present_count"] == 1
+    assert voluntary_payload["branch_lesson_usage_satisfied_count"] == 0
+    assert required_payload["branch_lesson_usage_present_count"] == 1
+    assert required_payload["branch_lesson_usage_satisfied_count"] == 1
+
+
+def test_branch_lesson_usage_observability_distinguishes_linkage_unrecognized() -> None:
+    step = _step("branch-linkage", round_num=1, mechanism_id="alpha_probe")
+    step.hypothesis.branch_lesson_usage = {
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:linkage",
+                "contrast_dimensions": ["mechanism"],
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism_linkage_token": "alpha_probe",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["mechanism"],
+            "sibling_duplication_allowed": False,
+        },
+    }
+    step.scheduler_audit_metadata = {
+        "branch_lesson_usage_requirement": _branch_lesson_requirement(
+            "lesson:linkage"
+        )
+    }
+
+    blocked = replace(
+        _step("branch-blocked", round_num=2, mechanism_id="alpha_probe"),
+        protocol_result=None,
+        decision=None,
+        contract_passed=True,
+        verification_passed=False,
+        failure_stage="proposal",
+        failure_detail=(
+            "agent_quality_blocked:branch_lesson_usage_linkage_unrecognized: "
+            "target/action/mechanism linkage is unrecognized"
+        ),
+        counts_toward_max_rounds=False,
+        attempt_kind="proposal_block",
+    )
+
+    payload = build_cross_branch_research_observability(steps=[step, blocked])
+
+    assert payload["branch_lesson_usage_present_count"] == 1
+    assert payload["branch_lesson_usage_present_not_semantic_count"] == 1
+    assert payload["branch_lesson_usage_missing_block_count"] == 0
+    assert payload["branch_lesson_usage_linkage_unrecognized_count"] == 1
+    assert payload["branch_lesson_usage_linkage_unrecognized_block_count"] == 1
+
+
+def test_weak_positive_reject_satisfies_without_counting_transfer() -> None:
+    rejected = _step("branch-reject", round_num=1, mechanism_id="reject_probe")
+    rejected.hypothesis.branch_lesson_usage = {
+        "rejected_weak_positive_lessons": [
+            {
+                "lesson_id": "lesson:weak-reject",
+                "lesson_type": "weak_positive",
+                "reject_reason_code": "target_action_mismatch",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "reject_probe",
+            }
+        ],
+    }
+    rejected.scheduler_audit_metadata = {
+        "branch_lesson_usage_requirement": {
+            **_branch_lesson_requirement("blur:weak-reject"),
+            "requirement_source": "weak_positive_transfer",
+            "candidate_lesson_ids": ["lesson:weak-reject"],
+            "candidate_lesson_types": ["weak_positive"],
+            "candidate_lesson_roles": ["borrow"],
+        }
+    }
+
+    payload = build_cross_branch_research_observability(steps=[rejected])
+
+    assert payload["branch_lesson_usage_present_count"] == 1
+    assert payload["branch_lesson_usage_satisfied_count"] == 1
+    assert payload["weak_positive_transfer_count"] == 0
+    assert payload["weak_positive_transfer_reject_count"] == 1
+
+
+def test_step_visibility_audit_sees_proposal_session_branch_lessons(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-visibility", campaign_dir=tmp_path)
+    step = _step(
+        "branch-visible",
+        round_num=1,
+        mechanism_id="alpha_probe",
+        proposal_session_ref={
+            "schema_version": "proposal-context-ref.v1",
+            "branch_lesson_records": [_branch_lesson_record("lesson:visible")],
+            "branch_lesson_usage_requirement": _branch_lesson_requirement(
+                "blur:visible"
+            ),
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    visibility = summary["steps"][0]["step_visibility_audit"][
+        "cross_branch_research_visibility"
+    ]
+    assert visibility["status"] == "available"
+    assert visibility["record_count"] > 0
+    assert (
+        summary["cross_branch_research_observability"]["branch_lesson_record_count"]
+        == 1
+    )
+    assert (
+        summary["cross_branch_research_observability"][
+            "branch_lesson_usage_requirement_count"
+        ]
+        == 1
+    )
+
+
 def test_campaign_summary_and_status_write_observability_payload(
     tmp_path: Path,
 ) -> None:
@@ -333,16 +647,14 @@ def test_campaign_summary_and_status_write_observability_payload(
         },
         {
             "id": "branch-rerouted",
-            "branch_lifecycle_reroute_reason": (
-                "repeated_contract_signature_reroute"
-            ),
+            "branch_lifecycle_reroute_reason": ("repeated_contract_signature_reroute"),
             "branch_card": {
                 "branch_id": "branch-rerouted",
                 "branch_lifecycle_reroute_reason": (
                     "repeated_contract_signature_reroute"
                 ),
             },
-        }
+        },
     ]
     recorder = EvidenceRecorder(
         campaign_id="camp-compact",
@@ -363,6 +675,11 @@ def test_campaign_summary_and_status_write_observability_payload(
             "mdr:step-alpha"
         ),
     }
+    first.proposal_session_ref = {
+        "schema_version": "proposal-context-ref.v1",
+        "branch_lesson_records": [_branch_lesson_record("lesson:summary")],
+        "branch_lesson_usage_requirement": _branch_lesson_requirement("blur:summary"),
+    }
     second = _step("branch-b", round_num=2, mechanism_id="alpha_variant")
     summary = recorder.write_campaign_summary(
         step_history=[first, second],
@@ -378,15 +695,21 @@ def test_campaign_summary_and_status_write_observability_payload(
     assert summary["evidence_scope_reconciliation"]["branch_state_scope"] == (
         "branch_rows_snapshot"
     )
-    assert summary["evidence_scope_reconciliation"]["source_counts"][
-        "step_history_total"
-    ] == 2
-    assert summary["evidence_scope_reconciliation"]["source_counts"][
-        "cross_branch_observable_step_count"
-    ] == 2
+    assert (
+        summary["evidence_scope_reconciliation"]["source_counts"]["step_history_total"]
+        == 2
+    )
+    assert (
+        summary["evidence_scope_reconciliation"]["source_counts"][
+            "cross_branch_observable_step_count"
+        ]
+        == 2
+    )
     assert payload["near_duplicate_count"] == 1
     assert payload["saturated_signature_count"] == 1
     assert payload["material_difference_requirement_count"] == 3
+    assert payload["branch_lesson_record_count"] == 1
+    assert payload["branch_lesson_usage_requirement_count"] == 1
     assert payload["repeated_contract_reroute_count"] == 1
     assert "cross_branch_research_observability" in json.loads(
         (tmp_path / "campaign_summary.json").read_text()
@@ -398,12 +721,16 @@ def test_campaign_summary_and_status_write_observability_payload(
     assert step_audit["material_difference_requirement_visibility"]["status"] == (
         "available"
     )
-    assert step_audit["cross_branch_research_visibility"]["records"][0][
-        "record_id"
-    ] == "cbr:summary-alpha"
-    assert step_audit["material_difference_requirement_visibility"]["records"][0][
-        "record_id"
-    ] == "mdr:step-alpha"
+    assert (
+        step_audit["cross_branch_research_visibility"]["records"][0]["record_id"]
+        == "cbr:summary-alpha"
+    )
+    assert (
+        step_audit["material_difference_requirement_visibility"]["records"][0][
+            "record_id"
+        ]
+        == "mdr:step-alpha"
+    )
 
     status = recorder.write_status(
         last_result=StepResult(
@@ -415,6 +742,13 @@ def test_campaign_summary_and_status_write_observability_payload(
                 "clean_fork_selected": True,
                 "same_branch_refinement_not_selected_reason": (
                     "scheduler_selected_clean_exploration_branch"
+                ),
+            },
+            proposal_session_ref={
+                "schema_version": "proposal-context-ref.v1",
+                "branch_lesson_records": [_branch_lesson_record("lesson:status")],
+                "branch_lesson_usage_requirement": _branch_lesson_requirement(
+                    "blur:status"
                 ),
             },
         )
@@ -436,9 +770,93 @@ def test_campaign_summary_and_status_write_observability_payload(
     assert status_payload["near_duplicate_count"] == 1
     assert status_payload["saturated_signature_count"] == 1
     assert status_payload["material_difference_requirement_count"] == 2
+    assert status_payload["branch_lesson_record_count"] == 1
+    assert status_payload["branch_lesson_usage_requirement_count"] == 1
     assert status_payload["same_branch_refinement_not_selected_count"] == 1
     assert status_payload["repeated_contract_reroute_count"] == 1
     assert "cross_branch_research_observability" in json.loads(
         (tmp_path / "status.json").read_text()
     )
     assert "Sensitive proposal text" not in json.dumps(status_payload)
+
+
+def test_terminal_status_uses_summary_grade_branch_lesson_usage_counters(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-terminal-branch-lessons",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_experiments": 1,
+            "proposal_attempts": 1,
+            "screened_experiments": 1,
+            "effective_rounds_completed": 1,
+            "requested_rounds": 1,
+            "stopped": True,
+            "branches": [],
+        },
+    )
+    proposal_session_ref = {
+        "schema_version": "proposal-context-ref.v1",
+        "branch_lesson_records": [_branch_lesson_record("lesson:terminal")],
+        "branch_lesson_usage_requirement": _branch_lesson_requirement("blur:terminal"),
+    }
+    step = _step(
+        "branch-terminal",
+        round_num=1,
+        mechanism_id="terminal_probe",
+        proposal_session_ref=proposal_session_ref,
+    )
+    step.hypothesis.branch_lesson_usage = {
+        "contrasted_lessons": [
+            {
+                "lesson_id": "lesson:terminal",
+                "contrast_dimensions": ["target_file"],
+                "new_path": "generic_path",
+                "target_file": "components/common.py",
+                "action": "modify",
+                "mechanism": "terminal_probe",
+            }
+        ],
+        "clean_fork_diversity_claim": {
+            "changed_dimensions": ["target_file"],
+        },
+    }
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds",
+    )
+    summary_observability = summary["cross_branch_research_observability"]
+    assert summary_observability["branch_lesson_usage_present_count"] == 1
+    assert summary_observability["branch_lesson_usage_satisfied_count"] == 1
+
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="explore",
+            branch_id="branch-terminal",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="terminal status refresh",
+            protocol_stage="screening",
+            formal_protocol_evaluated=True,
+            screened_experiment_effective=True,
+            proposal_session_ref=proposal_session_ref,
+        ),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    status_observability = status["cross_branch_research_observability"]
+    assert status["evidence_scope_reconciliation"]["step_history_scope"] == (
+        "not_available"
+    )
+    assert status_observability["step_history_scope"] == "none"
+    assert status_observability["branch_lesson_usage_counter_scope"] == (
+        "summary_step_history"
+    )
+    assert status_observability["branch_lesson_usage_counter_reason"] == (
+        "status_step_history_not_available; copied_summary_grade_step_history_counters"
+    )
+    assert status_observability["branch_lesson_usage_present_count"] == 1
+    assert status_observability["branch_lesson_usage_satisfied_count"] == 1

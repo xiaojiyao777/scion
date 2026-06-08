@@ -20,6 +20,9 @@ from scion.proposal.engine import (
     _split_hypothesis_context,
     _split_hypothesis_target_intent_context,
 )
+from scion.proposal.target_intent_binding import (
+    target_intent_binding_retry_feedback,
+)
 from scion.proposal.agentic_utils import _json_ready
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
@@ -140,6 +143,98 @@ def test_schema_retry_identity_helpers_keep_existing_behavior() -> None:
     )
     assert feedback["corrective_retry"] is True
     assert "Do not explore" in feedback["retry_constraint"]
+
+
+def test_target_intent_binding_retry_feedback_names_allowed_repair_paths() -> None:
+    selected = {
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/baseline_modules/local_search.py",
+        "mechanism_id": "adaptive_vns_operator_weights",
+        "mechanism_family": "adaptive_vns_operator_weights",
+    }
+    drifted = replace(
+        _vns_hypothesis(_good_vns_mechanism_telemetry()),
+        action="create_new",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_changes=(
+            MechanismChange(
+                id="unrelated_search_gate",
+                change_type="add",
+            ),
+        ),
+    )
+
+    feedback = target_intent_binding_retry_feedback(
+        selected,
+        drifted,
+        attempt=1,
+        manifest=None,
+    )
+
+    assert feedback is not None
+    assert feedback["failure_code"] == "target_intent_binding_mismatch"
+    assert feedback["allowed_repair_paths"] == [
+        "preserve_selected_target_intent",
+        "request_fresh_target_intent_reselection",
+    ]
+    assert "preserve selected_target_intent exactly" in feedback[
+        "retry_constraint"
+    ]
+    assert "fresh target-intent selection" in feedback["retry_constraint"]
+    assert "not drift mechanism, action, or target_file" in feedback[
+        "retry_constraint"
+    ]
+
+
+def test_schema_retry_preserves_selected_target_intent_binding() -> None:
+    selected = {
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/baseline_modules/local_search.py",
+        "mechanism_id": "adaptive_vns_operator_weights",
+        "mechanism_family": "adaptive_vns_operator_weights",
+    }
+    bound = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    drifted = replace(
+        bound,
+        action="create_new",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_changes=(
+            MechanismChange(
+                id="clustered_worst_removal",
+                change_type="add",
+            ),
+        ),
+    )
+    binding_feedback = target_intent_binding_retry_feedback(
+        selected,
+        drifted,
+        attempt=1,
+        manifest=None,
+    )
+    assert binding_feedback is not None
+
+    assert (
+        hypothesis_facade._schema_retry_preservation_drift(
+            bound,
+            [binding_feedback],
+            attempt=2,
+        )
+        is None
+    )
+    drift = hypothesis_facade._schema_retry_preservation_drift(
+        drifted,
+        [binding_feedback],
+        attempt=2,
+    )
+
+    assert drift is not None
+    assert drift["failure_code"] == "schema_retry_drift"
+    assert drift["retry_failure_code"] == "target_intent_binding_mismatch"
+    assert drift["drift_fields"] == ["action", "target_file", "mechanism_id"]
+    assert drift["expected"]["target_file"] == selected["target_file"]
+    assert drift["observed"]["target_file"] == drifted.target_file
 
 
 def test_material_difference_requirement_is_first_class_in_manifest() -> None:
@@ -738,6 +833,88 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
         in feedback_refs
         for event in artifact["compact_transcript"]
     )
+
+
+def test_existing_file_create_new_preview_feedback_preempts_c11(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+    bad = replace(
+        _vns_hypothesis(_bad_vns_phase_telemetry()),
+        action="create_new",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+
+    schema_preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _json_ready(bad)},
+        context,
+    )
+    permission_preview = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": bad.change_locus,
+            "action": bad.action,
+            "target_file": bad.target_file,
+        },
+        context,
+    )
+    feedback = _hypothesis_preview_retry_feedback(
+        [schema_preview, permission_preview],
+        detail="schema or target preview did not pass: C11_expected_telemetry",
+        attempt=1,
+        previous_hypothesis=bad,
+    )
+
+    payload = schema_preview.structured_payload["hypothesis"]
+    assert schema_preview.structured_payload["passed"] is False
+    assert payload["target_action_guard"]["reason"] == (
+        "existing_file_create_new_rejected"
+    )
+    assert payload["expected_telemetry_contract"]["passed"] is False
+    assert any(
+        check["name"] == "C11_expected_telemetry"
+        and check["passed"] is False
+        for check in payload["checks"]
+    )
+    assert feedback is not None
+    assert feedback["failure_code"] == "existing_file_create_new_rejected"
+    assert feedback["source"] == "hypothesis_preview_target_action_guard"
+    assert feedback["attempt_kind"] == "target_action_permission_repair"
+    assert feedback["requested_action"] == "create_new"
+    assert feedback["required_action"] == "modify"
+    assert feedback["allowed_file_action"]["action"] == "modify"
+    assert feedback["allowed_file_action"]["edit_intent"] == "exact_replace"
+    assert feedback["source_digest"]
+    assert feedback["preserve_hypothesis"]["action"] == "modify"
+    assert feedback["preserve_hypothesis"]["target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
+    assert feedback["protected_identity"].get("action") != "create_new"
+    assert "Do not preserve the invalid file-level action=create_new" in (
+        feedback["retry_constraint"]
+    )
+    assert "Mechanism-level wording may say add or integrate" in (
+        feedback["retry_constraint"]
+    )
+
+    repaired = replace(bad, action="modify")
+    assert (
+        hypothesis_facade._schema_retry_preservation_drift(
+            repaired,
+            [feedback],
+            attempt=2,
+        )
+        is None
+    )
+    still_invalid = hypothesis_facade._schema_retry_preservation_drift(
+        bad,
+        [feedback],
+        attempt=2,
+    )
+    assert still_invalid is not None
+    assert still_invalid["drift_fields"] == ["action"]
 
 
 def test_hypothesis_preview_c10_missing_fields_feedback_uses_repair_template(

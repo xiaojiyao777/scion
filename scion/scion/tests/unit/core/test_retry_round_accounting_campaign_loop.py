@@ -3,7 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from scion.core.campaign_loop import CampaignLoop, _proposal_attempt_limit
+from scion.core.campaign_loop import (
+    CampaignLoop,
+    _fresh_runtime_replay_drain_status,
+    _proposal_attempt_limit,
+)
 from scion.core.models import Decision
 from scion.core.step_result import StepResult
 
@@ -151,6 +155,359 @@ def test_campaign_loop_does_not_count_active_slot_skip_against_max_rounds() -> N
     assert final_status["protocol_evaluated_candidates"] == 1
     assert final_status["active_slot_blocked_attempts"] == 1
     assert final_status["scheduler_active_slot_blocked_attempts"] == 1
+
+
+def test_campaign_loop_drains_fresh_runtime_replay_after_max_rounds() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        if drain_calls == 1:
+            return StepResult(
+                action="replay",
+                branch_id="b1",
+                reason="fresh runtime replay complete",
+                counts_toward_max_rounds=False,
+                attempt_kind="fresh_runtime_replay",
+                scheduler_audit_metadata={
+                    "scheduler_action": "replay_existing",
+                    "fresh_runtime_replay": {
+                        "schema_version": "fresh_runtime_replay.v1",
+                        "closure_status": "fresh_evidence_recorded",
+                        "counts_toward_max_rounds": False,
+                        "decision_features_excluded": True,
+                    },
+                },
+            )
+        return StepResult(
+            action="skip",
+            reason="no pending replay",
+            counts_toward_max_rounds=False,
+            attempt_kind="other",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        fresh_runtime_replay_drain_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 2
+    assert last_results[-1].attempt_kind == "fresh_runtime_replay"
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["proposal_attempts_consumed"] == 1
+    assert final_status["fresh_runtime_replay_drain_executed"] == 1
+    assert final_status["fresh_runtime_replay_drain_skipped"] == 1
+    assert final_status["fresh_runtime_replay_drain_status"] == "selected_succeeded"
+    assert final_status["fresh_runtime_replay_drain"]["status"] == (
+        "selected_succeeded"
+    )
+    assert final_status["fresh_runtime_replay_drain"][
+        "accepted_replay_last_result"
+    ]["accepted_for_drain"] is True
+    assert final_status["fresh_runtime_replay_drain"][
+        "final_attempt_last_result"
+    ]["attempt_kind"] == "other"
+    assert (
+        final_status["fresh_runtime_replay_drain"]["last_result"][
+            "accepted_for_drain"
+        ]
+        is False
+    )
+
+
+def test_campaign_loop_does_not_drain_arbitrary_non_counted_result_after_max_rounds() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        return StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="ordinary proposal block",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 1
+    assert [result.reason for result in last_results] == ["screening complete"]
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["proposal_attempts_consumed"] == 1
+    assert final_status["fresh_runtime_replay_drain_executed"] == 0
+    assert final_status["fresh_runtime_replay_drain_skipped"] == 1
+    assert final_status["fresh_runtime_replay_drain"]["last_result"][
+        "attempt_kind"
+    ] == "proposal_block"
+    assert final_status["fresh_runtime_replay_drain_status"] == (
+        "not_selected_no_pending"
+    )
+
+
+def test_campaign_loop_preserves_blocked_replay_and_final_skip_in_drain_status() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        if drain_calls == 1:
+            return StepResult(
+                action="replay",
+                branch_id="b1",
+                reason="fresh runtime replay missing workspace,hypothesis",
+                counts_toward_max_rounds=False,
+                attempt_kind="fresh_runtime_replay",
+                failure_stage="fresh_runtime_replay",
+                failure_detail="fresh runtime replay missing workspace,hypothesis",
+                scheduler_audit_metadata={
+                    "scheduler_action": "replay_existing",
+                    "fresh_runtime_replay": {
+                        "schema_version": "fresh_runtime_replay.v1",
+                        "closure_status": "blocked_missing_candidate_state",
+                        "detail": "fresh runtime replay missing workspace,hypothesis",
+                        "counts_toward_max_rounds": False,
+                        "decision_features_excluded": True,
+                    },
+                },
+            )
+        return StepResult(
+            action="skip",
+            reason="no pending replay",
+            counts_toward_max_rounds=False,
+            attempt_kind="other",
+        )
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: statuses.append(dict(kwargs["loop_status"]))
+        if "loop_status" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        fresh_runtime_replay_drain_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    drain = final_status["fresh_runtime_replay_drain"]
+    accepted = drain["accepted_replay_last_result"]
+    final_attempt = drain["final_attempt_last_result"]
+    assert main_calls == 1
+    assert drain_calls == 2
+    assert final_status["fresh_runtime_replay_drain_status"] == "selected_blocked"
+    assert drain["status"] == "selected_blocked"
+    assert drain["attempts"] == 2
+    assert drain["executed"] == 1
+    assert drain["skipped"] == 1
+    assert drain["blocked_count"] == 1
+    assert drain["unresolved_closures"][0]["closure_status"] == (
+        "blocked_missing_candidate_state"
+    )
+    assert accepted["accepted_for_drain"] is True
+    assert accepted["fresh_runtime_replay"]["closure_status"] == (
+        "blocked_missing_candidate_state"
+    )
+    assert final_attempt["accepted_for_drain"] is False
+    assert final_attempt["attempt_kind"] == "other"
+    assert drain["last_result"] == final_attempt
+
+
+def test_fresh_runtime_replay_drain_status_distinguishes_failed_from_blocked() -> None:
+    assert (
+        _fresh_runtime_replay_drain_status(
+            attempts=1,
+            executed=1,
+            skipped=0,
+            stopped_reason="",
+            accepted_replay_last_result={
+                "attempt_kind": "fresh_runtime_replay",
+                "failure_stage": "fresh_runtime_replay",
+                "failure_detail": "runtime error",
+                "fresh_runtime_replay": {"closure_status": "failed"},
+            },
+            blocked_count=0,
+        )
+        == "selected_failed"
+    )
+
+
+def test_campaign_loop_caps_fresh_runtime_replay_drain_after_max_rounds() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+
+    def drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        return StepResult(
+            action="replay",
+            branch_id=f"b{drain_calls}",
+            reason="fresh runtime replay still pending",
+            counts_toward_max_rounds=False,
+            attempt_kind="fresh_runtime_replay",
+            scheduler_audit_metadata={"scheduler_action": "replay_existing"},
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_fresh_runtime_replay_drain_step=drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        fresh_runtime_replay_drain_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 2
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["proposal_attempts_consumed"] == 1
+    assert final_status["fresh_runtime_replay_drain_executed"] == 2
+    assert final_status["fresh_runtime_replay_drain_stopped_reason"] == (
+        "fresh_runtime_replay_drain_cap_exhausted"
+    )
+    assert final_status["fresh_runtime_replay_drain"]["last_result"][
+        "cap_exhausted"
+    ] is True
 
 
 def test_campaign_loop_active_slot_skip_has_independent_stop_budget() -> None:
@@ -1181,6 +1538,70 @@ def test_campaign_loop_counts_clean_fork_screening_as_formal_candidate() -> None
             reason="clean fork screening complete",
             attempt_kind="screening",
             counts_toward_max_rounds=True,
+        ),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 1
+    assert "max_rounds_exhausted" in stopped_reasons
+    final_status = loop_statuses[-1]
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["protocol_evaluated_candidates"] == 1
+    assert final_status["protocol_stage_counts"] == {
+        "screening": 1,
+        "validation": 0,
+        "frozen": 0,
+    }
+
+
+def test_campaign_loop_counts_completed_screening_hidden_by_lifecycle_result() -> None:
+    results = [
+        StepResult(
+            action="soft_abandon",
+            branch_id="branch-1",
+            decision=Decision.ABANDON,
+            reason="soft_abandon: screening abandon lifecycle policy",
+            attempt_kind="branch_lifecycle_policy",
+            protocol_stage="screening",
+            formal_protocol_evaluated=True,
+            screened_experiment_effective=True,
         ),
     ]
     calls = 0

@@ -8,6 +8,7 @@ import pytest
 from scion.core.branch import BranchController
 from scion.core.models import Branch, BranchState, ChampionState, OperatorConfig
 from scion.core.promotion_service import (
+    PromotionCommitError,
     PromotionPlan,
     PromotionRequest,
     PromotionService,
@@ -258,11 +259,59 @@ def test_commit_champion_store_failure_aborts_mutating_side_effects() -> None:
         after_commit=lambda prepared: calls.append(("after", prepared.new_champion_version)),
     )
 
-    with pytest.raises(OSError, match="store unavailable"):
+    with pytest.raises(
+        PromotionCommitError,
+        match="persist_champion: store unavailable",
+    ) as exc_info:
         service.commit(plan)
 
+    assert exc_info.value.phase == "persist_champion"
+    assert exc_info.value.champion_persisted is False
+    assert exc_info.value.completed_phases == ()
     assert calls == [
         ("persist", 2),
+    ]
+
+
+def test_commit_later_hook_failure_reports_durable_promotion_phase() -> None:
+    calls: list[tuple[str, object]] = []
+    plan = PromotionPlan(
+        branch_id="branch-1",
+        candidate_snapshot_ref="/tmp/champion_v2",
+        new_champion_version=2,
+        registry_hash="registry-hash",
+        weight_revision=0,
+        champion=_champion(version=2),
+        current_weights={"ls": 1.0},
+    )
+
+    def fail_commit_champion(committed: ChampionState) -> None:
+        calls.append(("champion", committed.version))
+        raise RuntimeError("memory install failed")
+
+    service = PromotionService(
+        before_commit=lambda prepared: calls.append(("before", prepared.new_champion_version)),
+        commit_champion=fail_commit_champion,
+        persist_champion=lambda committed: calls.append(("persist", committed.version)),
+        promote_branch=lambda branch_id, committed: calls.append(
+            ("promote_branch", (branch_id, committed.version))
+        ),
+        mark_stale=lambda version: calls.append(("stale", version)) or ("branch-2",),
+    )
+
+    with pytest.raises(
+        PromotionCommitError,
+        match="commit_champion: memory install failed",
+    ) as exc_info:
+        service.commit(plan)
+
+    assert exc_info.value.phase == "commit_champion"
+    assert exc_info.value.champion_persisted is True
+    assert exc_info.value.completed_phases == ("persist_champion", "before_commit")
+    assert calls == [
+        ("persist", 2),
+        ("before", 2),
+        ("champion", 2),
     ]
 
 

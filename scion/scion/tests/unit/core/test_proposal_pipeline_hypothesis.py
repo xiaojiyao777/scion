@@ -59,6 +59,25 @@ def test_generate_hypothesis_passes_filtered_prompt_context_to_creative() -> Non
                     "summary": "Keep a compact lesson.",
                 }
             ],
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:hidden-full",
+                    "source": "proposal_only",
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "scope": "cross_branch",
+                    "lesson_role": "contrast",
+                    "lesson_type": "near_duplicate",
+                    "maturity": "repeated",
+                    "source_branch_ids": ["sibling"],
+                    "required_response": {
+                        "required_for": "sibling_nearby_attempt",
+                        "required_output_field": "branch_lesson_usage",
+                        "required_contrast_dimensions": ["target_file"],
+                    },
+                    "raw_text": "hidden branch lesson raw text",
+                }
+            ],
             "material_difference_audit_records": [{"audit": "hidden"}],
             "cross_branch_research_metadata": {"session_id": "hidden"},
         },
@@ -69,6 +88,27 @@ def test_generate_hypothesis_passes_filtered_prompt_context_to_creative() -> Non
             "record_id": "material_difference_requirement:test",
             "required_for": "branch-1",
         },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:test",
+            "required_for": "sibling_nearby_attempt",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:visible",
+                "scope": "cross_branch",
+                "lesson_role": "contrast",
+                "lesson_type": "near_duplicate",
+                "required_response": {
+                    "required_for": "sibling_nearby_attempt",
+                    "required_output_field": "branch_lesson_usage",
+                    "required_contrast_dimensions": ["target_file"],
+                },
+            }
+        ],
     }
 
     def build_hypothesis_context(**kwargs):
@@ -93,6 +133,15 @@ def test_generate_hypothesis_passes_filtered_prompt_context_to_creative() -> Non
     assert "cross_branch_research.v1" not in prompt_context["cross_branch_research"]
     assert "Keep a compact lesson." in prompt_context["cross_branch_research"]
     assert prompt_context["material_difference_requirement"]["required"] is True
+    assert prompt_context["branch_lesson_usage_requirement"]["required"] is True
+    assert prompt_context["branch_lesson_records"][0]["lesson_id"] == "lesson:visible"
+    assert "hidden branch lesson raw text" not in str(prompt_context)
+    session_ref = pipeline.agentic_session_refs[branch.branch_id]
+    assert session_ref["schema_version"] == "proposal-context-ref.v1"
+    assert session_ref["cross_branch_research_status"] == "available"
+    assert session_ref["branch_lesson_usage_requirement"]["required"] is True
+    assert session_ref["branch_lesson_records"][0]["lesson_id"] == "lesson:visible"
+    assert "hidden branch lesson raw text" not in str(session_ref)
 
 
 def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:

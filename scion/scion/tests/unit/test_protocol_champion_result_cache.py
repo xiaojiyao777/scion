@@ -12,6 +12,7 @@ from scion.core.evidence_recording.artifact_refs import _read_partial_metrics_sn
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.cache import ChampionResultCache
+from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
 
 def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
@@ -191,6 +192,44 @@ def test_cache_key_changes_for_case_content_and_workspace_digest(tmp_path):
 
     assert changed_workspace_key["digest"] != base_key["digest"]
     assert cache.get(changed_workspace_key) is None
+
+
+def test_cache_key_tracks_scion_env_and_ignores_unrelated_env(tmp_path, monkeypatch):
+    case_path = tmp_path / "cases" / "case.json"
+    case_path.parent.mkdir()
+    case_path.write_text('{"input": 1}\n', encoding="utf-8")
+    champion_ws = _workspace(tmp_path, "champion")
+    cache = ChampionResultCache(tmp_path / "cache")
+    runner = LocalSubprocessRunner()
+    base_args = {
+        "champion_workspace": str(champion_ws),
+        "case_path": str(case_path),
+        "seed": 7,
+        "time_limit_sec": 10,
+        "selected_surface": "surface_a",
+        "runner": runner,
+        "metric_specs": None,
+        "objective_policy": SimpleNamespace(
+            mode="lexicographic",
+            expose_weights_to_llm=False,
+        ),
+        "problem_spec": None,
+        "workspace_digest": None,
+    }
+    monkeypatch.delenv("SCION_TEST_CHAMPION_CACHE_INPUT", raising=False)
+    monkeypatch.setenv("UNRELATED_CHAMPION_CACHE_INPUT", "old")
+    base_key = cache.build_key(**base_args)
+    assert cache.put(base_key, _run_result(score=2, elapsed_ms=100))
+
+    monkeypatch.setenv("UNRELATED_CHAMPION_CACHE_INPUT", "new")
+    unrelated_key = cache.build_key(**base_args)
+    assert unrelated_key["digest"] == base_key["digest"]
+    assert cache.get(unrelated_key) is not None
+
+    monkeypatch.setenv("SCION_TEST_CHAMPION_CACHE_INPUT", "new")
+    scion_key = cache.build_key(**base_args)
+    assert scion_key["digest"] != base_key["digest"]
+    assert cache.get(scion_key) is None
 
 
 def test_cache_preserves_solution_payload(tmp_path):

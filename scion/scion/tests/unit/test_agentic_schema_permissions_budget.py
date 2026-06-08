@@ -1,6 +1,133 @@
 """Focused tests split from test_agentic_proposal_tools_schema.py."""
 
 from .agentic_schema_test_support import *  # noqa: F401,F403
+from pydantic import BaseModel
+from scion.proposal.tools.models import (
+    ProposalExposureLevel,
+    ProposalToolContext,
+    ProposalToolPermission,
+)
+
+
+class _EmptyMaliciousInput(BaseModel):
+    pass
+
+
+class _SuccessfulPayloadTool:
+    name = "malicious.success_payload"
+    input_schema = _EmptyMaliciousInput
+    permission = ProposalToolPermission.READ_PUBLIC_CONTEXT
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 4000
+
+    def __init__(self, payload: dict, summary: str = "malicious payload") -> None:
+        self._payload = payload
+        self._summary = summary
+
+    def call(
+        self,
+        args: _EmptyMaliciousInput,
+        context: ProposalToolContext,
+    ) -> ProposalObservation:
+        del args
+        return ProposalObservation(
+            observation_id="malicious-observation",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="before-registry",
+            observation_type="malicious_success",
+            summary=self._summary,
+            structured_payload=self._payload,
+            exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
+        )
+
+
+def test_registry_sanitizes_successful_tool_payload_forbidden_keys(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry(
+        [
+            _SuccessfulPayloadTool(
+                {
+                    "safe": {"field": "kept"},
+                    "raw_metrics_ref": "/SECRET/raw/screening.json",
+                    "nested": {
+                        "case_ids": ["case-1"],
+                        "kept": 1,
+                    },
+                }
+            )
+        ]
+    )
+    context = _context(tmp_path)
+
+    observation = registry.call("malicious.success_payload", {}, context)
+
+    assert observation.is_error is False
+    assert observation.structured_payload == {
+        "safe": {"field": "kept"},
+        "nested": {"kept": 1},
+    }
+    rendered = json.dumps(observation.structured_payload, sort_keys=True)
+    assert "raw_metrics_ref" not in rendered
+    assert "case_ids" not in rendered
+    assert "SECRET" not in rendered
+
+
+def test_registry_rejects_successful_tool_payload_raw_markers(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry(
+        [
+            _SuccessfulPayloadTool(
+                {
+                    "safe": "screening aggregate",
+                    "leaked_ref": "raw://frozen_raw/promotion_raw.json",
+                }
+            )
+        ]
+    )
+    context = _context(tmp_path)
+
+    observation = registry.call("malicious.success_payload", {}, context)
+
+    assert observation.is_error is True
+    assert observation.failure_code == ProposalToolFailureCode.EXPOSURE_DENIED
+    assert observation.structured_payload["reason"] == "forbidden_raw_marker"
+
+
+def test_registry_phase_policy_separates_model_tools_from_framework_previews(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+
+    hypothesis_policy = registry.phase_policy_projection(
+        context,
+        "hypothesis_planning",
+    )
+    code_policy = registry.phase_policy_projection(context, "code_planning")
+
+    assert "proposal.contract_preview" not in hypothesis_policy[
+        "model_selectable_tools"
+    ]
+    assert "proposal.algorithm_smoke" not in hypothesis_policy[
+        "model_selectable_tools"
+    ]
+    assert "proposal.contract_preview" in hypothesis_policy[
+        "framework_preview_tools"
+    ]
+    assert "proposal.algorithm_smoke" in hypothesis_policy[
+        "framework_preview_tools"
+    ]
+    assert "feedback.query_holdout_summary" not in hypothesis_policy[
+        "model_selectable_tools"
+    ]
+    assert "proposal.contract_preview" not in code_policy["model_selectable_tools"]
+    assert "context.read_algorithm_file" in code_policy["model_selectable_tools"]
+    assert "proposal.draft_patch" not in code_policy["model_selectable_tools"]
+
 
 def test_unsupported_or_unsafe_file_targets_fail_closed(tmp_path: Path) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -86,6 +213,16 @@ def test_contract_preview_patch_only_is_incomplete_without_hypothesis(
     assert preview.structured_payload["passed"] is False
     assert preview.structured_payload["needs_hypothesis"] is True
     assert preview.structured_payload["patch"]["needs_hypothesis"] is True
+    assert preview.structured_payload["validation_mode"] == "preview"
+    assert preview.structured_payload["stateful_checks_excluded"] == [
+        "C10_active_blacklist_rejected"
+    ]
+    assert "C12_patch_mechanism_echo" in preview.structured_payload[
+        "hypothesis_bound_checks_skipped"
+    ]
+    assert "C12_patch_mechanism_echo" in preview.structured_payload["patch"][
+        "hypothesis_bound_checks_skipped"
+    ]
 
 
 def test_contract_preview_rejects_nested_wildcard_target_and_allows_direct(

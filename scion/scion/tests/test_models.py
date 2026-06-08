@@ -77,6 +77,7 @@ def test_decision_features_no_free_text_guard():
     import dataclasses
     fields = {f.name: f.type for f in dataclasses.fields(DecisionFeatures)}
     assert "material_difference" not in fields
+    assert "branch_lesson_usage" not in fields
     
     for name, expected_type in allowed_fields.items():
         assert name in fields, f"Missing field: {name}"

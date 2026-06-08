@@ -90,6 +90,10 @@ def test_schema_target_and_interface_previews_catch_static_issues(
 
     assert schema.is_error is False
     assert schema.structured_payload["passed"] is False
+    assert schema.structured_payload["hypothesis"]["validation_mode"] == "preview"
+    assert schema.structured_payload["hypothesis"][
+        "stateful_checks_excluded"
+    ] == ["C10_active_blacklist_rejected"]
     assert unknown_surface.structured_payload["passed"] is False
     assert "unknown research surface" in unknown_surface.structured_payload["issues"][0]
     assert disallowed_action.structured_payload["passed"] is False
@@ -164,6 +168,14 @@ def test_contract_preview_is_static_and_does_not_materialize_workspace(
     assert observation.structured_payload["verification_run"] is False
     assert observation.structured_payload["protocol_run"] is False
     assert observation.structured_payload["decision_run"] is False
+    assert observation.structured_payload["validation_mode"] == "preview"
+    assert observation.structured_payload["stateful_checks_excluded"] == [
+        "C10_active_blacklist_rejected"
+    ]
+    assert observation.structured_payload["hypothesis"]["validation_mode"] == "preview"
+    assert observation.structured_payload["hypothesis"][
+        "stateful_checks_excluded"
+    ] == ["C10_active_blacklist_rejected"]
     assert after == before
 
 

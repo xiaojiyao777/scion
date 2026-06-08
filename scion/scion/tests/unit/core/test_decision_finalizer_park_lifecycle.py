@@ -624,6 +624,16 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
             SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
         ),
         lifecycle_action="park_lineage",
+        lifecycle_policy_evidence={
+            "schema": "scion.branch_lifecycle_policy_evidence.v1",
+            "action": "park_lineage",
+            "reason_codes": [SCREENING_ZERO_WIN_STREAK_EXHAUSTED],
+            "thresholds": {"zero_win_streak_limit": 3},
+            "counters": {
+                "input_zero_win_streak": 2,
+                "next_zero_win_streak": 3,
+            },
+        },
     )
 
     stored = controller.get_branch(branch.branch_id)
@@ -633,6 +643,12 @@ def test_no_effect_exhausted_parks_lineage_and_opens_capacity() -> None:
     assert stored.branch_code_status == "parked_lineage"
     assert stored.state == BranchState.PARKED_LINEAGE
     assert stored.lifecycle_no_effect_diagnostic_followups == 2
+    assert stored.last_branch_lifecycle_policy_block[
+        "lifecycle_policy_thresholds"
+    ]["zero_win_streak_limit"] == 3
+    assert stored.last_branch_lifecycle_policy_block[
+        "lifecycle_policy_counters"
+    ]["next_zero_win_streak"] == 3
     assert controller.get_active_branches() == []
     assert controller.get_reportable_branches() == [stored]
     assert action.action == "create_new"

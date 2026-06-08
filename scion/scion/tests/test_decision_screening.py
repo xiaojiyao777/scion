@@ -44,6 +44,42 @@ def test_decision_candidate_runtime_failure_vetoes_objective_win():
     assert "CANDIDATE_RUNTIME_FAILURE" in out.reason_codes
 
 
+def test_decision_candidate_runtime_failure_preempts_lifecycle_policy():
+    class ExplodingLifecyclePolicy:
+        def decide(self, *_args, **_kwargs):
+            raise AssertionError("lifecycle policy should not run")
+
+        def evidence_metadata(self, *_args, **_kwargs):
+            raise AssertionError("lifecycle evidence should not be requested")
+
+    engine = DecisionEngine(_cfg, lifecycle_policy=ExplodingLifecyclePolicy())
+    f = _features(
+        stage="screening",
+        win_rate=0.0,
+        median_delta=0.0,
+        candidate_failed_pairs=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.ABANDON
+    assert out.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+    assert out.decision_layer_source == "stage_decision"
+
+
+def test_decision_screening_champion_partial_evidence_blocks_validation_queue():
+    f = _features(
+        stage="screening",
+        win_rate=1.0,
+        median_delta=100.0,
+        failed_pairs=1,
+        champion_failed_pairs=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert out.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
+
+
 def test_decision_runtime_regression_vetoes_objective_win():
     f = _features(
         stage="frozen",

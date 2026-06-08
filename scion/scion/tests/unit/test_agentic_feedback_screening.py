@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.core.models import MechanismChange
+from scion.proposal.screening_feedback import screening_feedback_summary
 from scion.proposal.context.feedback import _build_experiment_history
 from scion.tests.unit.agentic_feedback_test_support import *
 
@@ -91,6 +92,142 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert "raw_metrics_ref" not in rendered
 
 
+def test_screening_feedback_exposes_bounded_phase_causal_summary(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    positive_guard = {
+        "telemetry_guard": {
+            "passed": True,
+            "mechanism_diagnostics": [
+                {
+                    "mechanism": "generic_phase",
+                    "activation_status": "observed",
+                    "runtime_status": "observed",
+                    "effect_status": "observed",
+                }
+            ],
+        }
+    }
+    pair_win_case_tie = replace(
+        context.step_history[0],
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(
+                n_cases=4,
+                wins=0,
+                losses=0,
+                ties=4,
+                win_rate=0.0,
+                median_delta=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="case-level gate failed",
+            raw_metrics_ref="/SECRET/raw/pair-win.json",
+            candidate_surface_runtime_summary=positive_guard,
+            pair_feedback=(
+                PairwiseCaseFeedback("case-a", 1, "win", 1.0),
+                PairwiseCaseFeedback("case-a", 2, "tie", 0.0),
+            ),
+        ),
+    )
+    final_loss = replace(
+        context.step_history[0],
+        round_num=2,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(
+                n_cases=2,
+                wins=0,
+                losses=1,
+                ties=1,
+                win_rate=0.0,
+                median_delta=-1.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="loss signal",
+            raw_metrics_ref="/SECRET/raw/loss.json",
+            candidate_surface_runtime_summary=positive_guard,
+            pair_feedback=(
+                PairwiseCaseFeedback("case-b", 1, "loss", -1.0),
+            ),
+        ),
+    )
+    zero_effect = replace(
+        context.step_history[0],
+        round_num=3,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(
+                n_cases=2,
+                wins=0,
+                losses=0,
+                ties=2,
+                win_rate=0.0,
+                median_delta=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="zero effect",
+            raw_metrics_ref="/SECRET/raw/zero.json",
+            candidate_surface_runtime_summary=positive_guard,
+            pair_feedback=(
+                PairwiseCaseFeedback("case-c", 1, "tie", 0.0),
+            ),
+        ),
+    )
+    context = replace(
+        context,
+        step_history=(pair_win_case_tie, final_loss, zero_effect),
+    )
+
+    pair_summary = screening_feedback_summary(pair_win_case_tie.protocol_result)
+    loss_summary = screening_feedback_summary(final_loss.protocol_result)
+    zero_summary = screening_feedback_summary(zero_effect.protocol_result)
+
+    assert pair_summary.phase_causal_summary["classification"] == (
+        "phase_positive_pair_win_case_tie"
+    )
+    assert "case-level evidence remained tied" in (
+        pair_summary.phase_causal_summary["summary"]
+    )
+    assert loss_summary.phase_causal_summary["classification"] == (
+        "phase_positive_final_objective_loss"
+    )
+    assert "final objective evidence had a loss signal" in (
+        loss_summary.phase_causal_summary["summary"]
+    )
+    assert zero_summary.phase_causal_summary["classification"] == (
+        "zero_effect_activation"
+    )
+    assert zero_summary.phase_causal_summary["decision_features_excluded"] is True
+
+    screening_observation = registry.call("feedback.query_screening", {}, context)
+    row_summary = screening_observation.structured_payload["screening_steps"][0][
+        "screening_feedback"
+    ]["phase_causal_summary"]
+    assert row_summary["classification"] == "zero_effect_activation"
+    assert row_summary["proposal_visibility_only"] is True
+    assert "SECRET" not in json.dumps(
+        screening_observation.structured_payload,
+        sort_keys=True,
+    )
+
+    runtime_observation = registry.call("feedback.query_runtime", {}, context)
+    runtime_rows = runtime_observation.structured_payload[
+        "screening_phase_causal_summaries"
+    ]
+    assert runtime_rows[0]["phase_causal_summary"]["classification"] == (
+        "zero_effect_activation"
+    )
+    assert runtime_observation.structured_payload["runtime_observation_status"][
+        "active_phase_causal_summary_count"
+    ] == 3
+
+
 def test_feedback_query_screening_exposes_typed_telemetry_details(
     tmp_path: Path,
 ) -> None:
@@ -139,6 +276,54 @@ def test_feedback_query_screening_exposes_typed_telemetry_details(
     assert detail["surface_field_id"] == "activity_counter"
     assert detail["runtime_role"] == "activity"
     assert detail["declaration_source_digest"] == "guard-digest-feedback"
+    rendered = json.dumps(observation.structured_payload, sort_keys=True)
+    assert "raw_metrics_ref" not in rendered
+    assert "SECRET" not in rendered
+
+
+def test_feedback_query_runtime_exposes_false_active_surface_failure(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    runtime_step = replace(
+        context.step_history[0],
+        hypothesis=_hyp("solver_algorithm"),
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(n_cases=4, wins=0, losses=4, ties=0, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("CANDIDATE_RUNTIME_FAILURE",),
+            exposed_summary="candidate runtime failed",
+            raw_metrics_ref="/SECRET/raw/runtime.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_algorithm",
+                "fields": {
+                    "solver_algorithm_active": {
+                        "present": 4,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 4,
+                        "numeric_summary": {},
+                        "values": [{"value": "false", "count": 4}],
+                    }
+                },
+            },
+        ),
+    )
+    context = replace(context, step_history=(runtime_step,))
+
+    observation = registry.call(
+        "feedback.query_runtime",
+        {"surface": "solver_algorithm"},
+        context,
+    )
+
+    assert observation.is_error is False
+    attribution = observation.structured_payload["screening_runtime_attribution"][0]
+    highlight = attribution["runtime_field_highlights"][0]
+    assert highlight["field"] == "solver_algorithm_active"
+    assert highlight["failed"] == 4
     rendered = json.dumps(observation.structured_payload, sort_keys=True)
     assert "raw_metrics_ref" not in rendered
     assert "SECRET" not in rendered

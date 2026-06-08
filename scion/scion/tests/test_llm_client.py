@@ -663,6 +663,37 @@ def test_tool_call_hard_timeout_interrupts_blocking_provider_call() -> None:
     assert isinstance(exc_info.value.last_error, LLMTimeoutError)
 
 
+def test_json_call_hard_timeout_interrupts_blocking_provider_call() -> None:
+    client = LLMClient(timeout_sec=0.05, max_retries=0)
+
+    def _slow_call_once(*args, **kwargs):
+        time.sleep(1.0)
+        return '{"result": "late"}'
+
+    client._call_once = MagicMock(side_effect=_slow_call_once)  # type: ignore[method-assign]
+
+    with pytest.raises(LLMRetryExhaustedError) as exc_info:
+        client.call(
+            "prompt",
+            {"type": "object", "required": ["result"]},
+        )
+
+    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
+
+
+def test_call_text_hard_timeout_interrupts_blocking_provider_call() -> None:
+    client = LLMClient(timeout_sec=0.05, max_retries=0)
+
+    def _slow_call_once(*args, **kwargs):
+        time.sleep(1.0)
+        return "late"
+
+    client._call_once = MagicMock(side_effect=_slow_call_once)  # type: ignore[method-assign]
+
+    with pytest.raises(LLMTimeoutError):
+        client.call_text("prompt")
+
+
 def test_tool_call_masks_connection_error_at_hard_timeout_as_timeout() -> None:
     client = LLMClient(timeout_sec=0.05, max_retries=0)
 

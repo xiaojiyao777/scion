@@ -1,11 +1,14 @@
 """Tests for LocalSubprocessRunner (T06)."""
 from __future__ import annotations
 
+import io
 import os
+import subprocess
 import sys
 import tempfile
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -43,6 +46,23 @@ def run(workdir: Path, limits: ResourceLimits | None = None) -> RunResult:
         time_limit_sec=5,
         registry_path=str(workdir / "registry.json"),
     )
+
+
+class _FakeTimeoutProc:
+    def __init__(self, communicate_results, *, returncode):
+        self.pid = 12345
+        self.returncode = returncode
+        self.stdout = io.BytesIO()
+        self.stderr = io.BytesIO()
+        self._communicate_results = list(communicate_results)
+        self.communicate_timeouts = []
+
+    def communicate(self, timeout=None):
+        self.communicate_timeouts.append(timeout)
+        result = self._communicate_results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +239,65 @@ class TestRunnerTimeout:
         )
         assert result.success is True
         assert result.output_path is not None
+
+    def test_timeout_drain_is_bounded_when_pipes_do_not_close(self, workdir: Path):
+        _write_solver(workdir, "raise AssertionError('Popen is mocked')")
+        proc = _FakeTimeoutProc(
+            [
+                subprocess.TimeoutExpired(
+                    cmd="solver",
+                    timeout=1,
+                    output=b"partial stdout",
+                    stderr=b"partial stderr",
+                ),
+                subprocess.TimeoutExpired(cmd="solver", timeout=1),
+            ],
+            returncode=None,
+        )
+
+        with (
+            patch("scion.runtime.subprocess_runner.subprocess.Popen", return_value=proc),
+            patch("scion.runtime.subprocess_runner._kill_proc") as kill_proc,
+        ):
+            result = run(workdir, limits=ResourceLimits(timeout_sec=1))
+
+        assert result.success is False
+        assert result.error_category == "timeout"
+        assert result.exit_code == -9
+        assert result.output_path is None
+        assert "partial stdout" in result.stdout
+        assert "partial stderr" in result.stderr
+        assert "stdout/stderr drain did not finish within" in result.stderr
+        assert proc.communicate_timeouts == [1, 1]
+        assert proc.stdout.closed is True
+        assert proc.stderr.closed is True
+        kill_proc.assert_called_once_with(proc)
+
+    def test_timeout_cleanup_preserves_drained_stdout_and_stderr(self, workdir: Path):
+        _write_solver(workdir, "raise AssertionError('Popen is mocked')")
+        proc = _FakeTimeoutProc(
+            [
+                subprocess.TimeoutExpired(cmd="solver", timeout=1),
+                (b"final stdout tail", b"final stderr tail"),
+            ],
+            returncode=-9,
+        )
+
+        with (
+            patch("scion.runtime.subprocess_runner.subprocess.Popen", return_value=proc),
+            patch("scion.runtime.subprocess_runner._kill_proc") as kill_proc,
+        ):
+            result = run(workdir, limits=ResourceLimits(timeout_sec=1))
+
+        assert result.success is False
+        assert result.error_category == "timeout"
+        assert result.exit_code == -9
+        assert result.output_path is None
+        assert result.stdout == "final stdout tail"
+        assert result.stderr == "final stderr tail"
+        assert "stdout/stderr drain did not finish within" not in result.stderr
+        assert proc.communicate_timeouts == [1, 1]
+        kill_proc.assert_called_once_with(proc)
 
 
 # ---------------------------------------------------------------------------

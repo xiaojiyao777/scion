@@ -644,7 +644,7 @@ def test_repeated_weak_signal_does_not_bypass_hard_cap():
         ),
     ],
 )
-def test_low_value_branch_reclaim_without_marker_returns_blocked_audit(
+def test_low_value_branch_reclaim_without_marker_parks_with_scheduler_origin(
     status: str,
     tier: str,
     extra: dict,
@@ -662,17 +662,39 @@ def test_low_value_branch_reclaim_without_marker_returns_blocked_audit(
     )
     inventory = active_slot_inventory([branch], max_active_branches=1)
 
-    assert reconciliation.changed is False
-    assert reconciliation.blocked is True
+    assert reconciliation.changed is True
+    assert reconciliation.blocked is False
     assert reconciliation.candidate_branch_ids == (branch.branch_id,)
-    assert reconciliation.marker_missing_branch_ids == (branch.branch_id,)
+    assert reconciliation.marker_missing_branch_ids == ()
+    assert reconciliation.scheduler_origin_parked_branch_ids == (branch.branch_id,)
+    assert reconciliation.after_used == 0
+    assert branch.state == BranchState.PARKED_LINEAGE
+    assert branch.branch_code_status == "parked_lineage"
+    audit = reconciliation.as_audit_metadata()
+    assert audit["lifecycle_action"] == "park_lineage"
+    assert audit["lifecycle_action_origin"] == "scheduler_active_slot_reclaim"
+    assert audit["reclaimed_branch_ids"] == [branch.branch_id]
+    assert audit["scheduler_origin_reclaimed_branch_ids"] == [branch.branch_id]
+    assert "decision_origin_marker_required" not in audit
+    assert inventory["used"] == 0
+    assert inventory["parked_lineage_ids"] == [branch.branch_id]
+
+
+def test_branch_without_reclaim_signal_still_blocks_when_slots_full() -> None:
+    branch = _branch(BranchState.EXPLORE)
+    branch.direction = "solver: still actionable"
+
+    reconciliation = reclaim_active_slot_for_new_branch(
+        [branch],
+        max_active_branches=1,
+    )
+    inventory = active_slot_inventory([branch], max_active_branches=1)
+
+    assert reconciliation.changed is False
+    assert reconciliation.blocked is False
+    assert reconciliation.candidate_branch_ids == ()
     assert reconciliation.after_used == 1
     assert branch.state == BranchState.EXPLORE
-    assert branch.branch_code_status == status
-    audit = reconciliation.as_audit_metadata()
-    assert audit["blocked_reason"] == "decision_origin_lifecycle_marker_missing"
-    assert audit["decision_origin_marker_required"] is True
-    assert audit["marker_missing_branch_ids"] == [branch.branch_id]
     assert inventory["used"] == 1
     assert inventory["parked_lineage_ids"] == []
 

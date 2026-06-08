@@ -2,9 +2,21 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scion.core.models import MechanismChange
+from scion.core.models import (
+    EvalStats,
+    ExperimentStage,
+    MechanismChange,
+    ProtocolResult,
+)
+from scion.core.telemetry_validation import (
+    is_repairable_telemetry_validation_failure,
+    screened_experiment_effective,
+    telemetry_validation_failure_codes,
+)
+from scion.runtime import surface_telemetry as surface_decl
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
+    declared_runtime_field_roles,
     declared_surface_telemetry_fields,
     format_telemetry_guard_issue,
     normalize_declared_mechanisms,
@@ -71,6 +83,57 @@ def test_telemetry_guard_flags_stage_budget_starvation() -> None:
         format_telemetry_guard_issue(summary)
         == "telemetry guard observed stage budget starvation: "
         "solver_phase_runtime_ms had no positive candidate runtime evidence"
+    )
+
+
+def test_screening_telemetry_repairable_is_not_effective_formal_candidate() -> None:
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=8,
+            wins=0,
+            losses=1,
+            ties=7,
+            win_rate=0.0,
+            median_delta=-0.5,
+            ci_low=-9.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("TELEMETRY_GUARD_FAILED", "TELEMETRY_BUDGET_STARVED"),
+        exposed_summary=(
+            "telemetry guard observed stage budget starvation: "
+            "solver_algorithm_phase_runtime_ms.alns had no positive evidence"
+        ),
+        raw_metrics_ref="/tmp/screening.json",
+        candidate_surface_runtime_summary={
+            "telemetry_guard": {
+                "schema": "scion.telemetry_guard.v1",
+                "selected_surface": "solver_design",
+                "passed": False,
+                "expected_telemetry_present": True,
+                "failures": [
+                    {
+                        "code": "TELEMETRY_BUDGET_STARVED",
+                        "severity": "fail",
+                        "category": "budget",
+                        "field": "solver_algorithm_phase_runtime_ms.alns",
+                        "candidate_positive": 0,
+                        "candidate_present": 0,
+                        "candidate_missing": 16,
+                        "champion_positive": 0,
+                    }
+                ],
+            }
+        },
+    )
+
+    assert is_repairable_telemetry_validation_failure(protocol) is True
+    assert screened_experiment_effective(protocol) is False
+    assert telemetry_validation_failure_codes(protocol) == (
+        "TELEMETRY_VALIDATION_REPAIRABLE",
+        "SCREENING_TELEMETRY_REPAIRABLE",
+        "TELEMETRY_BUDGET_STARVED",
     )
 
 
@@ -456,6 +519,67 @@ def test_expected_telemetry_missing_declared_fields_fails_closed() -> None:
     )
 
 
+def test_guard_declaration_fields_match_surface_telemetry_source() -> None:
+    surface = SimpleNamespace(
+        name="solver",
+        evidence=SimpleNamespace(
+            required_runtime_fields=[
+                "solver_loaded",
+                "solver_active",
+                "solver_errors",
+            ],
+            optional_runtime_fields=["solver_optional_counter"],
+            activity_runtime_fields=["solver_iterations"],
+            activation_runtime_fields={
+                "{mechanism}": ["mechanisms.{mechanism}.active"]
+            },
+            effect_probe_runtime_fields=[
+                "mechanisms.{mechanism}.delta",
+                "solver_best_delta",
+            ],
+            stage_budget_runtime_fields=["solver_budget_ms"],
+            phase_runtime_fields=["solver_phase_runtime_ms"],
+            runtime_field_roles={
+                "diagnostic": ["solver_errors"],
+                "protected_outcome": ["solution_cost"],
+            },
+        ),
+    )
+    problem_spec = SimpleNamespace(research_surfaces=[surface])
+    declared_mechanisms = ("target_probe",)
+
+    guard_fields = declared_surface_telemetry_fields(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=declared_mechanisms,
+    )
+    surface_fields = surface_decl.declared_surface_telemetry_fields(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=declared_mechanisms,
+    )
+
+    assert guard_fields == surface_fields
+    assert "solver_phase_runtime_ms" in guard_fields
+    assert "mechanisms.target_probe.active" in guard_fields
+    assert "mechanisms.{mechanism}.active" not in guard_fields
+    assert validate_expected_telemetry_contract(
+        problem_spec=problem_spec,
+        selected_surface="solver",
+        expected_telemetry={"budget": ["solver_phase_runtime_ms"]},
+        declared_mechanisms=declared_mechanisms,
+    ) == ()
+    assert declared_runtime_field_roles(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=declared_mechanisms,
+    ) == surface_decl.declared_runtime_field_roles(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=declared_mechanisms,
+    )
+
+
 def test_mechanism_telemetry_fields_are_declared_and_guarded() -> None:
     surface = SimpleNamespace(
         name="solver",
@@ -471,13 +595,14 @@ def test_mechanism_telemetry_fields_are_declared_and_guarded() -> None:
     )
     problem_spec = SimpleNamespace(research_surfaces=[surface])
 
-    assert "mechanisms.{mechanism}.active" in declared_surface_telemetry_fields(
-        surface
+    assert "mechanisms.search_seed.active" in declared_surface_telemetry_fields(
+        surface,
+        declared_mechanisms=("search_seed",),
     )
     assert validate_expected_telemetry_contract(
         problem_spec=problem_spec,
         selected_surface="solver",
-        expected_telemetry={"activation": ["mechanisms.{mechanism}.active"]},
+        expected_telemetry={"activation": ["mechanisms.search_seed.active"]},
         declared_mechanisms=["search_seed"],
     ) == ()
 

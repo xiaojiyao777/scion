@@ -1,6 +1,10 @@
 """Focused tests split from test_protocol.py."""
 
-from scion.core.runtime_budget_diagnostics import TINY_RUNTIME_BUDGET_SATURATION
+from scion.core.runtime_budget_diagnostics import (
+    CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    CHAMPION_RUNTIME_BUDGET_SATURATION,
+    TINY_RUNTIME_BUDGET_SATURATION,
+)
 
 from .protocol_test_support import *  # noqa: F401,F403
 
@@ -22,18 +26,56 @@ def test_run_experiment_records_tiny_runtime_budget_saturation(tmp_path):
     )
 
     assert TINY_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    assert CANDIDATE_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    assert CHAMPION_RUNTIME_BUDGET_SATURATION not in result.reason_codes
     diagnostic = result.candidate_surface_runtime_summary[
         "runtime_budget_diagnostic"
     ]
     assert diagnostic["code"] == TINY_RUNTIME_BUDGET_SATURATION
     assert diagnostic["repairable"] is True
+    assert diagnostic["saturated_side"] == "candidate"
     assert "runtime_budget_diagnostic=TINY_RUNTIME_BUDGET_SATURATION" in (
         result.exposed_summary
     )
+    assert "saturated_side=candidate" in result.exposed_summary
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["candidate_surface_runtime_summary"][
         "runtime_budget_diagnostic"
     ] == diagnostic
+
+
+def test_run_experiment_records_champion_only_runtime_budget_saturation(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=8100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=900, runtime={}),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert TINY_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CANDIDATE_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CHAMPION_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    diagnostic = result.candidate_surface_runtime_summary[
+        "runtime_budget_diagnostic"
+    ]
+    assert diagnostic["code"] == TINY_RUNTIME_BUDGET_SATURATION
+    assert diagnostic["repairable"] is False
+    assert diagnostic["saturated_side"] == "champion"
+    assert "do not direct candidate repair" in diagnostic["guidance"]
+    assert "saturated_side=champion" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"][
+        "runtime_budget_diagnostic"
+    ] == diagnostic
+
 
 def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
     runner = MagicMock()
@@ -73,6 +115,54 @@ def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
     assert surface_summary["fields"]["dispatch_errors"]["missing"] == 4
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["selected_surface"] == "dispatch_policy"
+    assert raw["candidate_surface_runtime_summary"] == surface_summary
+
+
+def test_run_experiment_counts_false_active_runtime_field_as_failed(tmp_path):
+    runner = MagicMock()
+    champ = _make_run_result(2, 1000, runtime={})
+    cand = _make_run_result(
+        1,
+        900,
+        runtime={
+            "solver_algorithm_loaded": True,
+            "solver_algorithm_active": False,
+            "solver_algorithm_errors": 0,
+        },
+    )
+    runner.run_solver.side_effect = [champ, cand] * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_design",
+            required_runtime_fields=(
+                "solver_algorithm_loaded",
+                "solver_algorithm_active",
+                "solver_algorithm_errors",
+            ),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_design",
+    )
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.candidate_failed_pairs == 4
+    assert result.candidate_first_runtime_failure is not None
+    assert (
+        "solver_algorithm_active"
+        in result.candidate_first_runtime_failure["detail_summary"]
+    )
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["fields"]["solver_algorithm_active"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_active"]["failed"] == 4
+    raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["candidate_surface_runtime_summary"] == surface_summary
 
 

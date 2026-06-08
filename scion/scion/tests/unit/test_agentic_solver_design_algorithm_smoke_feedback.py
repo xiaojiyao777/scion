@@ -406,7 +406,15 @@ def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
     assert diagnostic["telemetry_failure_field"] == (
         "solver_algorithm_context_records.new_probe_iterations"
     )
-    assert any("Wire new_probe" in hint for hint in payload["repair_hints"])
+    assert "proposal smoke did not exercise" in (
+        diagnostic["proposal_smoke_interpretation"]
+    )
+    assert "not proof that formal screening cannot activate" in (
+        diagnostic["proposal_smoke_interpretation"]
+    )
+    assert "smoke coverage or trigger-limitation" in diagnostic["screening_policy"]
+    assert "guarantee-positive" in diagnostic["forbidden_repair"]
+    assert "wire new_probe" in " ".join(payload["repair_hints"]).lower()
 
 
 def test_algorithm_smoke_activation_diagnostic_uses_declared_non_cvrp_activity_fields() -> None:

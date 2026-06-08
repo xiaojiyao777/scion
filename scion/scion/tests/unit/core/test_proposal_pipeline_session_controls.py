@@ -145,6 +145,29 @@ def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
             "material_difference_audit_records": [{"audit": "hidden"}],
         },
         "cross_branch_research_audit_records": [{"audit": "hidden"}],
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "record_type": "branch_lesson_usage_requirement",
+            "record_id": "branch_lesson_usage_requirement:test",
+            "required": True,
+            "required_for": "sibling_nearby_attempt",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:agentic-visible",
+                "scope": "cross_branch",
+                "lesson_role": "contrast",
+                "lesson_type": "near_duplicate",
+                "required_response": {
+                    "required_for": "sibling_nearby_attempt",
+                    "required_output_field": "branch_lesson_usage",
+                    "required_contrast_dimensions": ["target_file"],
+                },
+                "raw_text": "hidden raw lesson text",
+            }
+        ],
     }
 
     def build_hypothesis_context(**kwargs):
@@ -171,6 +194,12 @@ def test_agentic_hypothesis_request_uses_filtered_prompt_context() -> None:
     )
     assert "cross_branch_research.v1" not in prompt_context["cross_branch_research"]
     assert "Compact agentic lesson." in prompt_context["cross_branch_research"]
+    ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+    assert ref is not None
+    assert ref["cross_branch_research_status"] == "available"
+    assert ref["branch_lesson_usage_requirement"]["required"] is True
+    assert ref["branch_lesson_records"][0]["lesson_id"] == "lesson:agentic-visible"
+    assert "hidden raw lesson text" not in str(ref)
 
 
 def test_agentic_hypothesis_request_records_repair_context_profile() -> None:

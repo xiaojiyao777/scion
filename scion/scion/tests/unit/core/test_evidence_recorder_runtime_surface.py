@@ -71,6 +71,17 @@ def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
     assert protocol["screening_win_rate"] == 0.0
     assert protocol["screening_win_rate_scope"] == "case_level_gate"
     assert protocol["screening_case_win_rate"] == 0.0
+    assert protocol["screening_case_level_gate_wins"] == protocol["screening_case_wins"]
+    assert protocol["screening_case_level_gate_losses"] == protocol[
+        "screening_case_losses"
+    ]
+    assert protocol["screening_case_level_gate_ties"] == protocol["screening_case_ties"]
+    assert protocol["screening_case_level_gate_total"] == protocol[
+        "screening_case_total"
+    ]
+    assert protocol["screening_case_level_gate_win_rate"] == protocol[
+        "screening_case_win_rate"
+    ]
     assert protocol["screening_gate_win_rate"] == 0.0
     assert protocol["screening_pair_wins"] == 2
     assert protocol["screening_pair_losses"] == 2

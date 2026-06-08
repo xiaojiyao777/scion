@@ -36,6 +36,7 @@ def _request(
     expand_round: int = 0,
     selected_surface: str | None = None,
     mechanism_changes: tuple[object, ...] = (),
+    force_fresh_champion: bool = False,
 ) -> EvaluationRequest:
     return EvaluationRequest(
         branch_id=str(uuid.uuid4()),
@@ -47,6 +48,7 @@ def _request(
         expand_round=expand_round,
         selected_surface=selected_surface,
         mechanism_changes=mechanism_changes,
+        force_fresh_champion=force_fresh_champion,
     )
 
 
@@ -101,6 +103,21 @@ class RecordingProtocol:
     def run_experiment(self, **kwargs: object) -> ProtocolResult:
         self.experiment_calls.append(kwargs)
         return self.result
+
+
+class RuntimePolicyRecordingProtocol(RecordingProtocol):
+    def __init__(self, result: ProtocolResult) -> None:
+        super().__init__(result)
+        self.config = SimpleNamespace(
+            runtime=SimpleNamespace(
+                champion_runtime_policy="fresh_required_for_runtime_tie"
+            )
+        )
+        self.policies_seen: list[str] = []
+
+    def run_experiment(self, **kwargs: object) -> ProtocolResult:
+        self.policies_seen.append(self.config.runtime.champion_runtime_policy)
+        return super().run_experiment(**kwargs)
 
 
 class SurfaceRecordingProtocol:
@@ -186,6 +203,20 @@ def test_screening_pass_generates_expected_decision_features() -> None:
             "expand_round": 1,
         }
     ]
+
+
+def test_force_fresh_champion_temporarily_bypasses_champion_cache_policy() -> None:
+    protocol = RuntimePolicyRecordingProtocol(_protocol_result())
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    pipeline.evaluate(
+        _request(state=BranchState.EXPLORE, force_fresh_champion=True)
+    )
+
+    assert protocol.policies_seen == ["fresh_always"]
+    assert protocol.config.runtime.champion_runtime_policy == (
+        "fresh_required_for_runtime_tie"
+    )
 
 
 def test_selected_surface_forwards_to_surface_aware_protocol() -> None:

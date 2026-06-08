@@ -86,6 +86,52 @@ class TestFullSuccessPath:
             ).fetchone()
         assert event == ("experiment", "promote")
 
+    def test_promotion_lineage_record_event_failure_is_visible_degraded(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """PROMOTE cannot look normal when the champion link has no lineage row."""
+        protocol = MockExperimentProtocol(results=[
+            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+            _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+        original_record_event = cm._registry.record_event
+
+        def fail_promote_record_event(event):
+            if event.get("decision") == "promote":
+                raise OSError("registry event unavailable")
+            return original_record_event(event)
+
+        monkeypatch.setattr(cm._registry, "record_event", fail_promote_record_event)
+
+        cm.run_one_step()
+        cm.run_one_step()
+        result = cm.run_one_step()
+
+        assert result.decision == Decision.PROMOTE
+        assert result.reason.startswith("promotion_lineage_degraded")
+        assert result.failure_category == "promotion_recovery"
+        marker = cm._branch_ctrl.get_branch(result.branch_id).branch_evidence_summary[
+            "promotion_integrity"
+        ]
+        assert marker["status"] == "lineage_degraded"
+        assert marker["lineage_status"] == "degraded"
+
+        promoted = cm._champion_store.get_by_version(2)
+        assert promoted is not None
+        assert promoted.promotion_experiment_id == marker["promotion_event_id"]
+        with sqlite3.connect(Path(cm._campaign_dir) / "scion.db") as conn:
+            event = conn.execute(
+                "SELECT event_id FROM experiment_events WHERE event_id = ?",
+                (promoted.promotion_experiment_id,),
+            ).fetchone()
+        assert event is None
+
     def test_promote_marks_other_branches_stale(self, tmp_path):
         """After PROMOTE, all sibling branches should be STALE."""
         protocol = MockExperimentProtocol(results=[

@@ -46,6 +46,47 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
                     "summary": "Use a materially different structure.",
                 }
             ],
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:abc123",
+                    "source": "proposal_only",
+                    "decision_input_policy": "excluded_from_decision_features",
+                    "scope": "branch_local",
+                    "lesson_role": "preserve",
+                    "lesson_type": "weak_positive",
+                    "maturity": "fresh",
+                    "source_branch_ids": ["branch-a"],
+                    "shared_signature": {
+                        "mechanism_family": "bounded",
+                        "target_file": "policies/base.py",
+                        "action": "modify",
+                        "change_locus": "activation_policy",
+                    },
+                    "evidence_basis": {
+                        "outcome_patterns": {"weak_positive": 1},
+                        "activation_statuses": {"observed": 1},
+                    },
+                    "required_response": {
+                        "required_for": "same_branch_refinement",
+                        "required_output_field": "branch_lesson_usage",
+                        "minimum_requirement": (
+                            "name_borrowed_or_avoided_lesson_and_contrast_dimension"
+                        ),
+                        "required_contrast_dimensions": [
+                            "mechanism_family",
+                            "target_file",
+                            "runtime_budget_strategy",
+                        ],
+                        "same_branch_refinement_allowed": True,
+                        "sibling_duplication_allowed": False,
+                    },
+                    "full_audit": {"hidden": True},
+                    "raw_text": "hidden raw audit text",
+                    "material_difference_audit": {"hidden": True},
+                    "reason_codes": ["BRANCH_LESSON_REQUIRED"],
+                }
+            ],
             "avoid_bridge_guidance": [
                 {
                     "hint_type": "avoid",
@@ -165,6 +206,13 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert "avoid same mechanism family" in compact
     assert "coverage_gap" in compact
     assert "Use a materially different structure." in compact
+    assert "lesson:abc123" in compact
+    assert "preserve" in compact
+    assert "fresh" in compact
+    assert "branch_lesson_usage" in compact
+    assert "runtime_budget_strategy" in compact
+    assert "same_branch_refinement_allowed" in compact
+    assert "sibling_duplication_allowed" in compact
     assert "compact_portfolio_steering.v1" in compact
     assert "portfolio_steering.v1" in compact
     assert "no_effect_plateau" in compact
@@ -175,6 +223,9 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert "same_family_surface" not in compact
     assert "hidden-audit" not in compact
     assert "hidden-session" not in compact
+    assert "hidden raw audit text" not in compact
+    assert "full_audit" not in compact
+    assert "material_difference_audit" not in compact
     assert "material_difference_requirements" not in compact
 
 
@@ -237,6 +288,9 @@ def test_context_profile_metadata_does_not_enter_decision_features():
 
     assert "context_profile" not in decision_fields
     assert "context_profile_metadata" not in decision_fields
+    assert "branch_lesson_records" not in decision_fields
+    assert "branch_lesson_usage" not in decision_fields
+    assert "branch_lesson_usage_requirement" not in decision_fields
 
 
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():
@@ -272,5 +326,92 @@ def test_material_difference_requirement_only_kept_when_required_and_nonempty():
         filter_hypothesis_context_for_prompt(inactive)
     )
     assert "material_difference_requirement" not in (
+        filter_hypothesis_context_for_prompt(empty_required)
+    )
+
+
+def test_branch_lesson_requirement_and_records_remain_top_level_after_filter():
+    context = {
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:full-hidden",
+                    "raw_text": "hidden raw branch lesson text",
+                    "required_response": {
+                        "required_for": "clean_fork_new_branch",
+                        "required_output_field": "branch_lesson_usage",
+                    },
+                }
+            ],
+        },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:visible",
+            "required_for": "clean_fork_new_branch",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:visible",
+                "scope": "cross_branch",
+                "lesson_role": "contrast",
+                "lesson_type": "near_duplicate",
+                "required_response": {
+                    "required_for": "clean_fork_new_branch",
+                    "required_output_field": "branch_lesson_usage",
+                    "required_contrast_dimensions": ["target_file"],
+                },
+            }
+        ],
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+
+    assert "cross_branch_research_payload" not in filtered
+    assert (
+        filtered["branch_lesson_usage_requirement"]["record_id"]
+        == "branch_lesson_usage_requirement:visible"
+    )
+    assert filtered["branch_lesson_records"][0]["lesson_id"] == "lesson:visible"
+    assert "hidden raw branch lesson text" not in str(filtered)
+
+
+def test_branch_lesson_requirement_only_kept_when_required_and_nonempty():
+    active = {
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_for": "clean_fork_new_branch",
+            "record_id": "branch_lesson_usage_requirement:branch-a",
+        }
+    }
+    inactive = {
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": False,
+            "record_id": "branch_lesson_usage_requirement:branch-a",
+        }
+    }
+    empty_required = {
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+        }
+    }
+
+    assert (
+        filter_hypothesis_context_for_prompt(active)[
+            "branch_lesson_usage_requirement"
+        ]["record_id"]
+        == "branch_lesson_usage_requirement:branch-a"
+    )
+    assert "branch_lesson_usage_requirement" not in (
+        filter_hypothesis_context_for_prompt(inactive)
+    )
+    assert "branch_lesson_usage_requirement" not in (
         filter_hypothesis_context_for_prompt(empty_required)
     )

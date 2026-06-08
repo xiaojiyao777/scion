@@ -159,6 +159,31 @@ def test_extract_protocol_runtime_facts_without_free_text():
     _validate_no_free_text(features)
 
 
+def test_extract_ignores_telemetry_free_text_from_exposed_summary():
+    branch = _branch()
+    protocol = replace(
+        _protocol(),
+        exposed_summary=(
+            "telemetry guard observed stage budget starvation: "
+            "solver_algorithm_phase_runtime_ms.alns had no positive runtime evidence"
+        ),
+    )
+
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=protocol,
+        budget=BudgetState(total=100, used=0),
+    )
+
+    _validate_no_free_text(features)
+    assert "alns" not in repr(features)
+    assert "solver_algorithm_phase_runtime_ms" not in repr(features)
+
+
 def test_extract_protocol_runtime_confidence_from_cached_champion():
     branch = _branch()
     features = _extractor.extract(

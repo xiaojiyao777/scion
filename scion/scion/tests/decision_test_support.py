@@ -166,6 +166,7 @@ def _features(
     runtime_evidence_status: str = "sufficient",
     failed_pairs: int = 0,
     candidate_failed_pairs: int = 0,
+    champion_failed_pairs: int = 0,
     protocol_gate_outcome=None,
 ):
     from scion.core.models import DecisionFeatures
@@ -195,6 +196,7 @@ def _features(
         runtime_evidence_status=runtime_evidence_status,
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
+        champion_failed_pairs=champion_failed_pairs,
         protocol_gate_outcome=protocol_gate_outcome,
     )
 

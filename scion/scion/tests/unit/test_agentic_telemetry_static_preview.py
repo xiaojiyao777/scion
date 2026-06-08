@@ -208,6 +208,80 @@ def test_static_preview_allows_cache_mechanism_without_direct_effect(
     assert "neighbor_list_cache" not in preview.get("required_calls", {})
 
 
+def test_static_preview_accepts_scheduler_budget_mechanism_runtime(
+    tmp_path,
+) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(
+            mechanism_id="adaptive_neighborhood_budget",
+            expected_telemetry={
+                "activation": [
+                    "solver_algorithm_context_records."
+                    "adaptive_neighborhood_budget_iterations",
+                ],
+                "budget": [
+                    "solver_algorithm_phase_runtime_ms."
+                    "adaptive_neighborhood_budget",
+                ],
+            },
+        ),
+        _patch(
+            "def apply(context):\n"
+            "    phase_start = context.elapsed_ms()\n"
+            "    context.record_iteration('adaptive_neighborhood_budget', 1)\n"
+            "    elapsed = context.elapsed_ms() - phase_start\n"
+            "    context.record_phase('adaptive_neighborhood_budget', elapsed)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is True
+    assert preview.get("issues", []) == []
+    assert preview["helper_evidence"]["adaptive_neighborhood_budget"][
+        "record_iteration"
+    ] is True
+    assert preview["helper_evidence"]["adaptive_neighborhood_budget"][
+        "record_phase_runtime_evidence"
+    ] is True
+
+
+def test_static_preview_flags_unbound_runtime_map_subfield(
+    tmp_path,
+) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(
+            mechanism_id="adaptive_neighborhood_budget",
+            expected_telemetry={
+                "budget": [
+                    "solver_algorithm_phase_runtime_ms.alns",
+                ],
+            },
+        ),
+        _patch(
+            "def apply(context):\n"
+            "    phase_start = context.elapsed_ms()\n"
+            "    context.record_iteration('adaptive_neighborhood_budget', 1)\n"
+            "    elapsed = context.elapsed_ms() - phase_start\n"
+            "    context.record_phase('adaptive_neighborhood_budget', elapsed)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is True
+    assert preview["status"] == "diagnostic"
+    assert preview["diagnostic_passed"] is True
+    assert "DECLARED_MECHANISM_FIELD_MISMATCH" in preview["issue_codes"]
+    assert "DECLARED_MECHANISM_FIELD_MISMATCH" in (
+        preview["diagnostic_issue_codes"]
+    )
+    assert preview["field_mismatches"][0]["field"] == (
+        "solver_algorithm_phase_runtime_ms.alns"
+    )
+    assert "adaptive_neighborhood_budget" in preview["issues"][0]
+
+
 def test_static_preview_rejects_literal_zero_phase_runtime(tmp_path) -> None:
     preview = _mechanism_telemetry_static_preview(
         _cvrp_context(tmp_path),

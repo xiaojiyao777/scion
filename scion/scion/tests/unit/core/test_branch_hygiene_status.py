@@ -534,6 +534,7 @@ def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
     )
     payload = branch_hygiene_context(branch)
     text = branch_prompt_card(branch)
+    evidence_summary = branch.branch_evidence_summary
 
     assert payload["case_level_winners"] == [
         {
@@ -543,15 +544,23 @@ def test_branch_card_exposes_case_activation_and_runtime_confidence() -> None:
             "effect_counters": {"wins": 2, "losses": 0, "ties": 1, "pairs": 3},
         }
     ]
+    assert evidence_summary["case_level_positive_cases"] == evidence_summary[
+        "case_level_winners"
+    ]
     assert payload["case_level_losses"][0]["case_id"] == "case-b"
+    assert evidence_summary["case_level_negative_cases"] == evidence_summary[
+        "case_level_losses"
+    ]
     assert payload["phase_activation_summary"]["stage"] == "screening"
     assert payload["phase_activation_summary"]["activation_status"] == "observed"
     assert payload["runtime_evidence_confidence"] == "low_cached_champion"
     assert payload["generic_evidence_summary"]["runtime_evidence_confidence"] == (
         "low_cached_champion"
     )
-    assert "case_level_winners=case-a:win:delta=0.4:w2l0t1" in text
-    assert "case_level_losses=case-b:loss:delta=-0.2:w0l2t1" in text
+    assert "case_level_positive_cases=case-a:win:delta=0.4:w2l0t1" in text
+    assert "case_level_negative_cases=case-b:loss:delta=-0.2:w0l2t1" in text
+    assert "case_level_winners=" not in text
+    assert "case_level_losses=" not in text
     assert "phase_activation_summary=stage:screening" in text
     assert "runtime_evidence_confidence=low_cached_champion" in text
 
@@ -582,6 +591,64 @@ def test_branch_card_exposes_runtime_evidence_pressure_count() -> None:
     ] == 2
     assert "runtime_evidence_pressure_count:2" in text
     assert "runtime_evidence_pressure_count=2" in text
+
+
+def test_branch_card_separates_discarded_head_from_retained_evidence_followup() -> None:
+    branch = Branch(
+        branch_id="discarded-weak-positive-fresh-runtime",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="discarded",
+        last_screening_feedback_tier="weak_positive",
+        branch_evidence_summary={
+            "stage": "screening",
+            "tier": "weak_positive",
+            "evidence_retention_status": "retained",
+            "wins": 0,
+            "losses": 0,
+            "ties": 4,
+            "pair_wins": 1,
+            "pair_losses": 0,
+            "pair_ties": 3,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "fresh_champion_required",
+            "fresh_runtime_followup": {
+                "schema_version": "fresh_runtime_followup.v1",
+                "queue_intent": "fresh_champion_runtime_replay",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "trigger": "pair_level_win_no_loss",
+                "fresh_runtime_pending": True,
+                "fresh_runtime_required": True,
+                "followup_recommended": True,
+                "followup_required": True,
+                "followup_policy": (
+                    "fresh_champion_runtime_required_before_runtime_based_escalation"
+                ),
+                "decision_features_excluded": True,
+            },
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+
+    assert payload["candidate_code_retention_status"] == "discarded"
+    assert payload["candidate_code_retained"] is False
+    assert payload["evidence_retention_status"] == "retained"
+    assert payload["candidate_evidence_retained"] is True
+    assert payload["followup_recommended"] is True
+    assert payload["followup_required"] is True
+    assert payload["fresh_runtime_pending"] is True
+    assert payload["fresh_runtime_required"] is True
+    assert payload["generic_evidence_summary"]["fresh_runtime_pending"] is True
+    assert payload["generic_evidence_summary"]["fresh_runtime_required"] is True
+    assert "current_head_status=discarded" in text
+    assert "candidate_code_retention=discarded" in text
+    assert "evidence_retention=retained" in text
+    assert "followup_required=true" in text
+    assert "fresh_runtime_pending=true" in text
+    assert "fresh_runtime_followup=pair_level_win_no_loss" in text
 
 
 def test_branch_card_and_prompt_guidance_include_runtime_low_confidence_advisory() -> None:

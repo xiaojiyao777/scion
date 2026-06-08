@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-07*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -8,6 +8,25 @@ handoff. Historical repair and experiment notes were moved to
 [`../experiments/v0.4/`](../experiments/v0.4/).
 
 ## Status
+
+The v0.4 architecture-audit remediation tracker is
+[`../../reports/architecture-audit-v0.4/remediation-status.md`](../../reports/architecture-audit-v0.4/remediation-status.md).
+For post-run analysis, treat R-CORE-001 and R-CORE-002 as terminology/status
+alignment findings, not current code-behavior findings. Scheduler selection is
+deterministic governance, but it is no longer accurately described as a simple
+fixed-priority queue: v0.4 branch routing includes active-slot capacity,
+lifecycle-driven same-mechanism follow-up, clean-fork preference, park/reclaim,
+and diagnostic repair routing. `--rounds` / `max_rounds` means requested
+effective screened/formal candidate budget, tracked through
+`effective_rounds_completed` and `counts_toward_max_rounds`; proposal attempts,
+protocol evaluated candidates, formal screened candidates, telemetry/validation
+repair attempts, lifecycle policy blocks, reconcile lifecycle steps, and
+scheduler active-slot blocks are separate counters. Remaining validation is
+experiment-analysis validation: the next run report must reconcile
+`run_validity`, `campaign_loop.max_rounds_semantics`,
+`formal_screened_candidates`, `protocol_evaluated_candidates`,
+`non_counted_lifecycle_steps`, and `scheduler_active_slot_blocked_attempts`
+before interpreting scheduler choice or candidate quality.
 
 The 2026-05-31 smoke-lineage 8-round local `gpt-5.5` validation completed
 cleanly (`8/8`, no quality blocks, no telemetry failed experiments) but showed

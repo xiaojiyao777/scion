@@ -10,7 +10,19 @@ from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_PARK_LINEAGE,
     BRANCH_LIFECYCLE_RETAIN_CHECKPOINT,
 )
-from scion.core.models import Branch, BranchState, ChampionState
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CanaryResult,
+    ChampionState,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    HypothesisRecord,
+    PatchProposal,
+    ProtocolResult,
+)
 from scion.core.scheduler import (
     ACTIVE_SLOT_RECLAIMED_FOR_NEW_BRANCH,
     Scheduler,
@@ -299,14 +311,261 @@ def test_scheduler_action_audit_metadata_reaches_result() -> None:
     assert metadata["scheduler_action"] == "run_existing"
 
 
-def test_clean_fork_does_not_reclaim_low_value_slot_without_decision_marker() -> None:
+def test_fresh_runtime_replay_scheduler_action_skips_proposal_and_is_non_counted() -> None:
+    branch = _branch("fresh-replay-branch")
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_evidence_summary = {
+        "fresh_runtime_followup": {
+            "schema_version": "fresh_runtime_followup.v1",
+            "queue_intent": "fresh_champion_runtime_replay",
+            "scheduler_marker": "fresh_champion_runtime_replay_pending",
+            "fresh_runtime_pending": True,
+            "decision_features_excluded": True,
+        }
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Replay the current candidate against fresh champion runtime.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-fresh-replay",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        exposed_summary="fresh replay complete",
+        raw_metrics_ref="/tmp/fresh-replay.json",
+        champion_cache_hits=0,
+        champion_cache_misses=8,
+        champion_cached_runtime_pairs=0,
+        runtime_confidence="high",
+        runtime_evidence_status="sufficient",
+    )
+    steps = []
+    evaluated = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("fresh replay must not call proposal explore")
+
+    def evaluate(selected: Branch, workspace: str, replay_hypothesis: HypothesisProposal):
+        evaluated.append(
+            (
+                selected.branch_id,
+                workspace,
+                replay_hypothesis.hypothesis_text,
+                getattr(selected, "fresh_runtime_replay_step", False),
+            )
+        )
+        return Decision.CONTINUE_EXPLORE, protocol, CanaryResult(passed=True)
+
+    def finalize(**kwargs):
+        selected = kwargs["branch"]
+        selected.branch_evidence_summary["fresh_runtime_followup"] = {
+            "scheduler_marker": "fresh_champion_runtime_replay_closed",
+            "fresh_runtime_pending": False,
+            "decision_features_excluded": True,
+        }
+        selected.branch_evidence_summary["fresh_runtime_replay_closure"] = {
+            "schema_version": "fresh_runtime_replay_closure.v1",
+            "closure_status": "fresh_evidence_recorded",
+            "decision_features_excluded": True,
+        }
+        return StepResult(
+            action="explore",
+            branch_id=selected.branch_id,
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="fresh replay complete",
+        )
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="replay_existing",
+            branch=branch,
+            slot="exploit_weak_positive",
+            reason="fresh_champion_runtime_replay_followup",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.branch_workspaces[branch.branch_id] = "/tmp/workspace"
+    runner.branch_hypotheses[branch.branch_id] = hypothesis
+    runner.branch_current_hypothesis[branch.branch_id] = h_record
+    runner.branch_patches[branch.branch_id] = patch
+    runner.evaluate = evaluate
+    runner.apply_decision_and_finalize = finalize
+    runner.record_step = steps.append
+
+    result = runner.run_one_step()
+
+    assert evaluated == [
+        (
+            branch.branch_id,
+            "/tmp/workspace",
+            "Replay the current candidate against fresh champion runtime.",
+            True,
+        )
+    ]
+    assert result.action == "replay"
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "fresh_runtime_replay"
+    assert result.scheduler_audit_metadata["scheduler_action"] == "replay_existing"
+    assert result.scheduler_audit_metadata["fresh_runtime_replay_selected"] is True
+    assert result.scheduler_audit_metadata["fresh_runtime_replay"][
+        "closure_status"
+    ] == "fresh_evidence_recorded"
+    assert steps[0].attempt_kind == "fresh_runtime_replay"
+    assert steps[0].counts_toward_max_rounds is False
+    assert steps[0].cache_stats == {
+        "champion_cache_hits": 0,
+        "champion_cache_misses": 8,
+        "champion_cached_runtime_pairs": 0,
+    }
+    assert (
+        branch.branch_evidence_summary["fresh_runtime_followup"][
+            "fresh_runtime_pending"
+        ]
+        is False
+    )
+
+
+def test_fresh_runtime_replay_with_artifact_but_no_live_state_blocks_materialization() -> None:
+    branch = _branch("fresh-replay-artifact-only")
+    branch.branch_evidence_summary = {
+        "fresh_runtime_followup": {
+            "schema_version": "fresh_runtime_followup.v1",
+            "queue_intent": "fresh_champion_runtime_replay",
+            "scheduler_marker": "fresh_champion_runtime_replay_pending",
+            "fresh_runtime_pending": True,
+            "fresh_runtime_required": True,
+            "decision_features_excluded": True,
+        },
+        "formal_candidate_patch_artifact_ref": (
+            "artifacts/formal_candidates/branch/screening-h/candidate.patch.json"
+        ),
+    }
+    persisted: list[str] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("fresh replay must not call proposal explore")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="replay_existing",
+            branch=branch,
+            slot="exploit_weak_positive",
+            reason="fresh_champion_runtime_replay_followup",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.persist_branch_state = persisted.append
+
+    result = runner.run_one_step()
+
+    replay_metadata = result.scheduler_audit_metadata["fresh_runtime_replay"]
+    closure = branch.branch_evidence_summary["fresh_runtime_replay_closure"]
+
+    assert result.action == "replay"
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "fresh_runtime_replay"
+    assert result.failure_stage == "fresh_runtime_replay"
+    assert "formal_candidate_patch_artifact_ref present" in result.reason
+    assert replay_metadata["closure_status"] == (
+        "blocked_missing_replay_materialization"
+    )
+    assert replay_metadata["formal_candidate_patch_artifact_ref"].endswith(
+        "candidate.patch.json"
+    )
+    assert replay_metadata["missing_live_state"] == [
+        "workspace",
+        "hypothesis",
+        "hypothesis_record",
+        "patch",
+    ]
+    assert "patch_from_candidate_patch_json" in replay_metadata[
+        "missing_replay_materialization"
+    ]
+    assert closure["closure_status"] == "blocked_missing_replay_materialization"
+    assert "formal_candidate_patch_artifact_ref present" in closure["detail"]
+    assert branch.branch_evidence_summary["fresh_runtime_pending"] is False
+    assert branch.branch_evidence_summary["fresh_runtime_followup"][
+        "fresh_runtime_pending"
+    ] is False
+    assert branch.branch_evidence_summary["fresh_runtime_followup"][
+        "closure_status"
+    ] == "blocked_missing_replay_materialization"
+    assert persisted == [branch.branch_id]
+
+
+def test_fresh_runtime_replay_drain_step_does_not_execute_non_replay_action() -> None:
+    branch = _branch("ordinary-branch")
+    recorded: list[StepResult] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("replay drain must not execute ordinary proposal")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="run_existing",
+            branch=branch,
+            slot="exploit_weak_positive",
+            reason="weak_positive_signal_followup",
+        ),
+        branch=branch,
+        recorded_scheduler_results=recorded,
+        run_explore_step=fail_proposal,
+    )
+
+    result = runner.run_fresh_runtime_replay_drain_step()
+
+    assert result.action == "skip"
+    assert result.counts_toward_max_rounds is False
+    assert result.attempt_kind == "other"
+    assert result.scheduler_audit_metadata["scheduler_action"] == "run_existing"
+    assert result.scheduler_audit_metadata["fresh_runtime_replay_drain"][
+        "executed"
+    ] is False
+    assert recorded == []
+
+
+def test_clean_fork_reclaims_scheduler_origin_slot_before_create_new() -> None:
     champion = _champion()
     controller = BranchController()
-    stale_low_signal = controller.create_branch(champion)
-    stale_low_signal.direction = "solver: no-effect follow-up"
-    stale_low_signal.branch_code_status = "active_no_effect"
-    stale_low_signal.last_screening_feedback_tier = "no_effect"
-    stale_low_signal.branch_mechanism_ids = ("probe",)
+    stale_branches = []
+    for index in range(3):
+        branch = controller.create_branch(champion)
+        branch.direction = f"solver: no-effect follow-up {index}"
+        branch.branch_code_status = "active_no_effect"
+        branch.last_screening_feedback_tier = "no_effect"
+        branch.branch_mechanism_ids = (f"probe-{index}",)
+        branch.best_quality_checkpoint_id = f"checkpoint-{index}"
+        branch.last_valid_checkpoint_id = f"checkpoint-{index}"
+        stale_branches.append(branch)
+    reclaim_target = stale_branches[0]
     recorded: list[StepResult] = []
     saved: list[tuple[str, BranchState]] = []
 
@@ -315,7 +574,7 @@ def test_clean_fork_does_not_reclaim_low_value_slot_without_decision_marker() ->
 
     runner = BranchStepRunner(
         branch_controller=controller,
-        scheduler=Scheduler(max_active_branches=1),
+        scheduler=Scheduler(max_active_branches=3),
         champion_lock=nullcontext(),
         get_champion=lambda: champion,
         branch_store=SimpleNamespace(save=save_branch),
@@ -357,28 +616,30 @@ def test_clean_fork_does_not_reclaim_low_value_slot_without_decision_marker() ->
     result = runner.run_one_step()
     inventory = active_slot_inventory(
         controller.get_reportable_branches(),
-        max_active_branches=1,
+        max_active_branches=3,
     )
 
-    assert result.action == "skip"
-    assert result.reason == "max_active_branches reached"
-    assert stale_low_signal.state == BranchState.EXPLORE
-    assert inventory["used"] == 1
-    assert inventory["parked_lineage_ids"] == []
-    assert len(controller.get_reportable_branches()) == 1
-    assert saved == []
+    assert result.action == "create_branch"
+    assert result.attempt_kind == "screening"
+    assert result.reason != "max_active_branches reached"
+    assert reclaim_target.state == BranchState.PARKED_LINEAGE
+    assert inventory["used"] == 3
+    assert inventory["parked_lineage_ids"] == [reclaim_target.branch_id]
+    assert len(controller.get_reportable_branches()) == 4
+    assert saved[0] == (reclaim_target.branch_id, BranchState.PARKED_LINEAGE)
     assert result.scheduler_audit_metadata["active_slot_reconciliation"][
         "mode"
     ] == "new_branch_reclaim"
     assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "decision_origin_marker_required"
-    ] is True
+        "lifecycle_action_origin"
+    ] == "scheduler_active_slot_reclaim"
     assert result.scheduler_audit_metadata["active_slot_reconciliation"][
-        "marker_missing_branch_ids"
-    ] == [stale_low_signal.branch_id]
-    assert result.scheduler_audit_metadata["active_slot_hard_cap"][
-        "branch_ids"
-    ] == [stale_low_signal.branch_id]
+        "reclaimed_branch_ids"
+    ] == [reclaim_target.branch_id]
+    assert result.scheduler_audit_metadata["active_slot_reconciliation"][
+        "scheduler_origin_reclaimed_branch_ids"
+    ] == [reclaim_target.branch_id]
+    assert "active_slot_hard_cap" not in result.scheduler_audit_metadata
     assert recorded == [result]
 
 

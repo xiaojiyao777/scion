@@ -1,6 +1,6 @@
 # Post-Run Analysis Handoff
 
-*Last updated: 2026-06-06*
+*Last updated: 2026-06-07*
 
 Use this handoff after every real-cost v0.4 agentic campaign. The main session
 should delegate raw-artifact inspection to a subagent and keep the main thread
@@ -41,6 +41,20 @@ The subagent must inspect these artifacts when present:
 
 If the run is `invalid_infra_only`, the analysis should stop after proving the
 infra-only status. Do not interpret it as Scion research behavior.
+
+Counter semantics:
+
+- `--rounds` / `max_rounds` is the requested effective screened/formal candidate
+  budget, not total loop steps or total proposal attempts.
+- `effective_rounds_completed` is the requested-round budget counter.
+- `formal_screened_candidates` counts formal screening candidates.
+- `protocol_evaluated_candidates` counts Protocol-evaluated candidates across
+  screening/validation/frozen.
+- Proposal attempts, telemetry/validation repair attempts, branch lifecycle
+  policy blocks, reconcile lifecycle steps, and scheduler active-slot blocks are
+  separate explanatory counters.
+- `total_rounds` is a legacy/external attempt surface; do not use it alone to
+  decide run validity or scheduler behavior.
 
 ## Analysis Scope
 
@@ -88,7 +102,7 @@ infra/provider stops:
 The final report must answer these questions directly:
 
 1. Did the run complete enough formal candidates to be valid for its requested
-   round count?
+   effective screened/formal candidate budget?
 2. Did the agent perform effective research, or only satisfy framework controls?
 3. Were branch hypotheses and code changes internally coherent?
 4. Did branch-local follow-up and rollback/checkpoint behavior make sense?

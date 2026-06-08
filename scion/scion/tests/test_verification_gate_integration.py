@@ -117,6 +117,88 @@ class TestVerificationGateIntegration:
         assert "problem adapter is required" in result.checks[-1].detail
         assert "legacy runtime fallback disabled" in result.checks[-1].detail
 
+    def test_strict_v9_champion_failure_fails_verification_result(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        import scion.verification.gate as gate_module
+
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+
+        def _passed_check(name: str) -> CheckResult:
+            return CheckResult(
+                name=name,
+                passed=True,
+                severity="heavy",
+                detail="ok",
+                elapsed_ms=0,
+            )
+
+        monkeypatch.setattr(
+            gate_module,
+            "check_state_mutation",
+            lambda *args, **kwargs: _passed_check("V5_solution_consistency"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_feasibility",
+            lambda *args, **kwargs: _passed_check("V6_feasibility"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_objective",
+            lambda *args, **kwargs: _passed_check("V7_objective"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_nondeterminism",
+            lambda *args, **kwargs: _passed_check("V8_nondeterminism"),
+        )
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            if workdir == str(champion_ws):
+                return RunResult(
+                    success=False, exit_code=1, stdout="", stderr="boom",
+                    elapsed_ms=50, output=None, output_path=None,
+                    error_category="crash",
+                )
+            fd, output_path = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            with open(output_path, "w") as f:
+                json.dump(_solver_output_dict(), f)
+            return RunResult(
+                success=True, exit_code=0, stdout="", stderr="",
+                elapsed_ms=100, output=None, output_path=output_path,
+                error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=runner,
+            strict_runtime_checks=True,
+            runtime_time_limit_sec=17,
+        )
+
+        result = gate.run(str(tmp_path), str(champion_ws), _make_patch(_VALID_CODE))
+
+        assert result.passed is False
+        assert result.first_failure == "V9_perf_guard"
+        assert result.checks[-1].metadata["comparison_valid"] is False
+        runtime_checks = [
+            check for check in result.checks if check.name.startswith("V")
+        ][-5:]
+        assert [
+            check.metadata["verification_time_limit_sec"]
+            for check in runtime_checks
+        ] == [17, 17, 17, 17, 17]
+
     def test_adapter_backed_problem_v1_without_adapter_fails_v5(self, tmp_path):
         canary = tmp_path / "small.json"
         canary.write_text("{}")

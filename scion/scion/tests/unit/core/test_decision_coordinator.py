@@ -188,6 +188,10 @@ def test_lifecycle_park_lineage_is_decision_engine_structured_action() -> None:
         BRANCH_LIFECYCLE_PARK_LINEAGE,
         TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
     )
+    evidence = result.lifecycle_policy_evidence or {}
+    assert evidence["thresholds"]["telemetry_diagnostic_streak_limit"] == 3
+    assert evidence["counters"]["input_telemetry_diagnostic_streak"] == 2
+    assert evidence["counters"]["next_telemetry_diagnostic_streak"] == 3
 
 
 def test_frozen_telemetry_guard_failure_fails_closed() -> None:
