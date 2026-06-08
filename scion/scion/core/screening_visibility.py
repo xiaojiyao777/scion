@@ -16,11 +16,15 @@ from scion.core.screening_visibility_runtime import (
 )
 
 _EPS = 1e-12
+_ALGORITHM_QUALITY_CANDIDATE = "algorithm_quality_candidate"
+_OBSERVABILITY_CANDIDATE = "observability_candidate"
+_REPAIR_OR_INFRA_CANDIDATE = "repair_or_infra_candidate"
+_UNKNOWN_CANDIDATE = "unknown"
 _CANDIDATE_INTENT_COUNT_KEYS = (
-    "quality_candidate",
-    "observability_candidate",
-    "diagnostic_candidate",
-    "unknown",
+    _ALGORITHM_QUALITY_CANDIDATE,
+    _OBSERVABILITY_CANDIDATE,
+    _REPAIR_OR_INFRA_CANDIDATE,
+    _UNKNOWN_CANDIDATE,
 )
 _OBSERVABILITY_VALUE_COUNT_KEYS = (
     "observability_value_observed",
@@ -54,6 +58,20 @@ _DIAGNOSTIC_INTENT_TERMS = {
     "tool_budget",
     "tool_loop",
 }
+_REPAIR_OR_INFRA_INTENT_TERMS = {
+    "contract",
+    "failure_repair",
+    "infra",
+    "infrastructure",
+    "interface_repair",
+    "repair",
+    "schema_repair",
+    "telemetry_wiring",
+    "verification_repair",
+}
+_REPAIR_OR_INFRA_DECLARED_INTENT_TERMS = (
+    _REPAIR_OR_INFRA_INTENT_TERMS - {"repair"}
+)
 _STRUCTURED_TEXT_EXCLUDE_KEYS = {
     "detail",
     "detail_summary",
@@ -77,11 +95,11 @@ def candidate_intent_counts_for_steps(steps: Any) -> dict[str, int]:
     for step in steps or ():
         intent = candidate_intent_visibility_for_step(step).get(
             "candidate_intent",
-            "unknown",
+            _UNKNOWN_CANDIDATE,
         )
-        key = str(intent or "unknown")
+        key = _canonical_candidate_intent(intent)
         if key not in counts:
-            key = "unknown"
+            key = _UNKNOWN_CANDIDATE
         counts[key] += 1
     return counts
 
@@ -132,9 +150,11 @@ def observability_value_visibility_for_step(step: Any) -> dict[str, Any]:
     """
 
     intent_visibility = candidate_intent_visibility_for_step(step)
-    intent = str(intent_visibility.get("candidate_intent") or "unknown")
+    intent = _canonical_candidate_intent(
+        intent_visibility.get("candidate_intent") or _UNKNOWN_CANDIDATE
+    )
     protocol = getattr(step, "protocol_result", None)
-    if intent not in {"observability_candidate", "diagnostic_candidate"}:
+    if intent not in {_OBSERVABILITY_CANDIDATE, _REPAIR_OR_INFRA_CANDIDATE}:
         return _observability_value_payload(
             candidate_intent=intent,
             status="observability_value_not_applicable",
@@ -170,20 +190,24 @@ def observability_value_visibility_from_payload(
     if isinstance(existing, Mapping):
         base = dict(existing)
         base.setdefault("schema_version", "observability_value_visibility.v1")
+        base["candidate_intent"] = (
+            _canonical_candidate_intent(base.get("candidate_intent"))
+            or _UNKNOWN_CANDIDATE
+        )
         base.setdefault("proposal_visibility_only", True)
         base.setdefault("decision_features_excluded", True)
         return base
-    intent = str(payload.get("candidate_intent") or "").strip()
+    intent = _canonical_candidate_intent(payload.get("candidate_intent"))
     if not intent:
         kind = str(payload.get("attempt_kind") or "").strip().lower()
         intent = (
-            "diagnostic_candidate"
-            if "diagnostic" in kind
-            else "observability_candidate"
+            _REPAIR_OR_INFRA_CANDIDATE
+            if "diagnostic" in kind or "repair" in kind or "infra" in kind
+            else _OBSERVABILITY_CANDIDATE
             if "observability" in kind
-            else "unknown"
+            else _UNKNOWN_CANDIDATE
         )
-    if intent not in {"observability_candidate", "diagnostic_candidate"}:
+    if intent not in {_OBSERVABILITY_CANDIDATE, _REPAIR_OR_INFRA_CANDIDATE}:
         return {}
     evidence = _observability_value_evidence_from_sources(
         mechanism_evidence=payload.get("mechanism_evidence"),
@@ -216,14 +240,25 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
     """
 
     protocol = getattr(step, "protocol_result", None)
-    tokens = list(_candidate_intent_tokens_for_step(step))
-    token_text = " ".join(tokens).lower()
+    intent_tokens = list(_candidate_declared_intent_tokens_for_step(step))
+    diagnostic_tokens = list(_candidate_diagnostic_tokens_for_step(step))
+    intent_token_text = " ".join(intent_tokens).lower()
+    diagnostic_token_text = " ".join(diagnostic_tokens).lower()
     quality_hits = _quality_intent_hits_for_step(step)
     observability_hits = sorted(
-        term for term in _OBSERVABILITY_INTENT_TERMS if term in token_text
+        term for term in _OBSERVABILITY_INTENT_TERMS if term in intent_token_text
     )
     diagnostic_hits = sorted(
-        term for term in _DIAGNOSTIC_INTENT_TERMS if term in token_text
+        {
+            term
+            for term in _DIAGNOSTIC_INTENT_TERMS | _REPAIR_OR_INFRA_INTENT_TERMS
+            if term in diagnostic_token_text
+        }
+        | {
+            term
+            for term in _REPAIR_OR_INFRA_DECLARED_INTENT_TERMS
+            if term in intent_token_text
+        }
     )
     no_effect = False
     if protocol is not None:
@@ -231,35 +266,38 @@ def candidate_intent_visibility_for_step(step: Any) -> dict[str, Any]:
             no_effect = no_objective_effect_for_protocol(protocol)
         except Exception:  # pragma: no cover - defensive visibility only
             no_effect = False
-    if observability_hits:
-        intent = "observability_candidate"
+    if quality_hits:
+        intent = _ALGORITHM_QUALITY_CANDIDATE
+        reason_codes = [
+            f"CANDIDATE_INTENT_ALGORITHM_QUALITY_{_reason_suffix(hit)}"
+            for hit in quality_hits[:4]
+        ]
+    elif observability_hits:
+        intent = _OBSERVABILITY_CANDIDATE
         reason_codes = [
             f"CANDIDATE_INTENT_OBSERVABILITY_{_reason_suffix(hit)}"
             for hit in observability_hits[:4]
         ]
-    elif quality_hits:
-        intent = "quality_candidate"
-        reason_codes = [
-            f"CANDIDATE_INTENT_QUALITY_{_reason_suffix(hit)}"
-            for hit in quality_hits[:4]
-        ]
     elif diagnostic_hits:
-        intent = "diagnostic_candidate"
+        intent = _REPAIR_OR_INFRA_CANDIDATE
         reason_codes = [
-            f"CANDIDATE_INTENT_DIAGNOSTIC_{_reason_suffix(hit)}"
+            f"CANDIDATE_INTENT_REPAIR_OR_INFRA_{_reason_suffix(hit)}"
             for hit in diagnostic_hits[:4]
         ]
     elif protocol is not None:
-        intent = "quality_candidate"
-        reason_codes = ["CANDIDATE_INTENT_QUALITY_FORMAL_PROTOCOL"]
+        intent = _ALGORITHM_QUALITY_CANDIDATE
+        reason_codes = ["CANDIDATE_INTENT_ALGORITHM_QUALITY_FORMAL_PROTOCOL"]
     else:
-        intent = "unknown"
+        intent = _UNKNOWN_CANDIDATE
         reason_codes = ["CANDIDATE_INTENT_UNKNOWN"]
     interpretation = None
-    if intent in {"observability_candidate", "diagnostic_candidate"} and no_effect:
+    if (
+        intent in {_OBSERVABILITY_CANDIDATE, _REPAIR_OR_INFRA_CANDIDATE}
+        and no_effect
+    ):
         interpretation = "diagnostic_not_quality_failure"
-    elif intent == "quality_candidate":
-        interpretation = "quality_candidate_evidence"
+    elif intent == _ALGORITHM_QUALITY_CANDIDATE:
+        interpretation = "algorithm_quality_candidate_evidence"
     return _drop_empty(
         {
             "schema_version": "candidate_intent_visibility.v1",
@@ -283,7 +321,8 @@ def _observability_value_payload(
     return _drop_empty(
         {
             "schema_version": "observability_value_visibility.v1",
-            "candidate_intent": candidate_intent or "unknown",
+            "candidate_intent": _canonical_candidate_intent(candidate_intent)
+            or _UNKNOWN_CANDIDATE,
             "observability_value_status": status,
             "reason_codes": list(reason_codes),
             "details": dict(details),
@@ -761,9 +800,8 @@ def no_objective_effect_for_protocol(protocol: Any) -> bool:
     )
 
 
-def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
+def _candidate_declared_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
     tokens: list[str] = []
-    protocol = getattr(step, "protocol_result", None)
     hypothesis = getattr(step, "hypothesis", None)
     if hypothesis is not None:
         tokens.extend(
@@ -801,9 +839,31 @@ def _candidate_intent_tokens_for_step(step: Any) -> tuple[str, ...]:
                         "mechanism_changes",
                         (),
                     ),
+                    "target_file": getattr(hypothesis, "target_file", ""),
                 }
             )
         )
+    patch = getattr(step, "patch", None)
+    if patch is not None:
+        tokens.extend(
+            _structured_tokens(
+                {
+                    "patch_action": getattr(patch, "action", ""),
+                    "patch_file_path": getattr(patch, "file_path", ""),
+                    "patch_mechanism_changes": getattr(
+                        patch,
+                        "mechanism_changes",
+                        (),
+                    ),
+                }
+            )
+        )
+    return tuple(dict.fromkeys(token for token in tokens if token))
+
+
+def _candidate_diagnostic_tokens_for_step(step: Any) -> tuple[str, ...]:
+    tokens: list[str] = []
+    protocol = getattr(step, "protocol_result", None)
     tokens.extend(_structured_tokens(getattr(step, "decision_reason_codes", ()) or ()))
     tokens.extend(
         _structured_tokens(
@@ -864,11 +924,42 @@ def _quality_intent_hits_for_step(step: Any) -> list[str]:
     predicted_direction = str(
         getattr(hypothesis, "predicted_direction", "") or ""
     ).strip()
-    if predicted_direction == "improve":
-        hits.append("predicted_direction_improve")
+    if predicted_direction in {"improve", "tradeoff"}:
+        hits.append("predicted_direction_quality")
     if tuple(getattr(hypothesis, "target_objectives", ()) or ()):
         hits.append("target_objectives")
+    non_observability_mechanism_changes = [
+        change
+        for change in getattr(hypothesis, "mechanism_changes", ()) or ()
+        if not _mechanism_change_is_observability_or_repair(change)
+    ]
+    if non_observability_mechanism_changes:
+        hits.append("mechanism_changes")
     return list(dict.fromkeys(hits))
+
+
+def _mechanism_change_is_observability_or_repair(change: Any) -> bool:
+    tokens = " ".join(_structured_tokens(change)).lower()
+    if not tokens:
+        return False
+    return any(term in tokens for term in _OBSERVABILITY_INTENT_TERMS) or any(
+        term in tokens for term in _REPAIR_OR_INFRA_DECLARED_INTENT_TERMS
+    )
+
+
+def _canonical_candidate_intent(value: Any) -> str:
+    intent = str(value or "").strip()
+    if not intent:
+        return ""
+    aliases = {
+        "quality_candidate": _ALGORITHM_QUALITY_CANDIDATE,
+        "algorithm_quality_candidate": _ALGORITHM_QUALITY_CANDIDATE,
+        "observability_candidate": _OBSERVABILITY_CANDIDATE,
+        "diagnostic_candidate": _REPAIR_OR_INFRA_CANDIDATE,
+        "repair_or_infra_candidate": _REPAIR_OR_INFRA_CANDIDATE,
+        "unknown": _UNKNOWN_CANDIDATE,
+    }
+    return aliases.get(intent, intent)
 
 
 def _structured_tokens(value: Any, *, key: str = "") -> tuple[str, ...]:

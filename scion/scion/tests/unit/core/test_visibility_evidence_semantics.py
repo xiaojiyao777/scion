@@ -139,9 +139,9 @@ def test_observability_no_effect_is_reported_as_diagnostic_not_quality_failure(
     )
 
     assert summary["candidate_intent_counts"] == {
-        "quality_candidate": 0,
+        "algorithm_quality_candidate": 0,
         "observability_candidate": 1,
-        "diagnostic_candidate": 0,
+        "repair_or_infra_candidate": 0,
         "unknown": 0,
     }
     assert summary["observability_value_counts"][
@@ -227,9 +227,9 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     )
 
     assert summary["candidate_intent_counts"] == {
-        "quality_candidate": 1,
+        "algorithm_quality_candidate": 1,
         "observability_candidate": 0,
-        "diagnostic_candidate": 0,
+        "repair_or_infra_candidate": 0,
         "unknown": 0,
     }
     counts = summary["runtime_evidence_policy_counts"]
@@ -247,10 +247,10 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
         "runtime_evidence_policy"
     ]
     assert summary["steps"][0]["protocol_result"]["candidate_intent"] == (
-        "quality_candidate"
+        "algorithm_quality_candidate"
     )
     assert summary["steps"][0]["protocol_result"]["quality_search_interpretation"] == (
-        "quality_candidate_evidence"
+        "algorithm_quality_candidate_evidence"
     )
     assert protocol_policy["standalone_optimization_signal"] is False
     assert protocol_policy["runtime_signal_role"] == (
@@ -317,7 +317,7 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     progress = recorder.record_protocol_progress(
         branch_id="branch-beta",
         stage="screening",
-        candidate_intent="diagnostic_candidate",
+        candidate_intent="repair_or_infra_candidate",
         mechanism_evidence={
             "primary_mechanism": "activation_probe",
             "primary_activation_status": "observed",
@@ -336,7 +336,7 @@ def test_cached_runtime_policy_counts_and_status_payload_are_audit_only(
     )
     status = json.loads((tmp_path / "status.json").read_text())
     visibility = progress["observability_value_visibility"]
-    assert visibility["candidate_intent"] == "diagnostic_candidate"
+    assert visibility["candidate_intent"] == "repair_or_infra_candidate"
     assert visibility["observability_value_status"] == (
         "observability_value_observed"
     )
@@ -409,7 +409,7 @@ def test_runtime_gate_visibility_separates_objective_incomplete_and_budget(
     assert visibility["decision_features_excluded"] is True
 
 
-def test_quality_candidate_with_expected_telemetry_stays_quality(
+def test_algorithm_quality_candidate_with_expected_telemetry_stays_quality(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="camp-generic", campaign_dir=tmp_path)
@@ -450,17 +450,20 @@ def test_quality_candidate_with_expected_telemetry_stays_quality(
     )
 
     assert summary["candidate_intent_counts"] == {
-        "quality_candidate": 1,
+        "algorithm_quality_candidate": 1,
         "observability_candidate": 0,
-        "diagnostic_candidate": 0,
+        "repair_or_infra_candidate": 0,
         "unknown": 0,
     }
     protocol = summary["steps"][0]["protocol_result"]
-    assert protocol["candidate_intent"] == "quality_candidate"
-    assert protocol["quality_search_interpretation"] == "quality_candidate_evidence"
+    assert protocol["candidate_intent"] == "algorithm_quality_candidate"
+    assert (
+        protocol["quality_search_interpretation"]
+        == "algorithm_quality_candidate_evidence"
+    )
     assert protocol["candidate_intent_visibility"]["decision_features_excluded"] is True
     visibility = protocol["observability_value_visibility"]
-    assert visibility["candidate_intent"] == "quality_candidate"
+    assert visibility["candidate_intent"] == "algorithm_quality_candidate"
     assert visibility["observability_value_status"] == (
         "observability_value_not_applicable"
     )
@@ -469,6 +472,133 @@ def test_quality_candidate_with_expected_telemetry_stays_quality(
     assert summary["observability_value_counts"][
         "observability_value_not_applicable"
     ] == 1
+
+
+def test_candidate_intent_counts_separate_algorithm_observability_and_repair(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-generic", campaign_dir=tmp_path)
+    algorithmic_step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=8,
+                wins=0,
+                losses=0,
+                ties=8,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=(
+                "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",
+                "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+            ),
+            runtime_confidence="low_cached_champion",
+            runtime_evidence_status="fresh_champion_required",
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "candidate_elapsed_ms": {"present": 8, "missing": 0},
+                    "mechanism_effect_delta": {"present": 8, "missing": 0},
+                },
+            },
+        ),
+        predicted_direction="improve",
+        target_objectives=("primary_objective",),
+        expected_telemetry={
+            "activation": ["mechanism_activation_count"],
+            "effect": ["mechanism_effect_delta"],
+        },
+        mechanism_changes=(
+            MechanismChange(id="bounded_search_refinement", change_type="modify"),
+        ),
+    )
+    observability_step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=8,
+                wins=0,
+                losses=0,
+                ties=8,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_NO_EFFECT",),
+            mechanism_evidence={
+                "primary_mechanism": "observability_bridge",
+                "primary_activation_status": "observed",
+                "primary_effect_status": "zero",
+                "telemetry_outcome": "observed",
+            },
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "observability_bridge_activation_count": {
+                        "present": 8,
+                        "missing": 0,
+                    }
+                },
+            },
+        ),
+        expected_telemetry={"intent": "observability_bridge"},
+        mechanism_changes=(
+            MechanismChange(id="search_observability_bridge", change_type="add"),
+        ),
+        target_file="components/telemetry.py",
+    )
+    repair_step = _generic_step(
+        protocol=_generic_protocol(
+            stats=EvalStats(
+                n_cases=1,
+                wins=0,
+                losses=0,
+                ties=1,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("CONTRACT_SCHEMA_REPAIR_REQUIRED",),
+        ),
+        attempt_kind="repair",
+        repair_policy_reason="schema_repair",
+        repair_mechanism_ids=("interface_repair",),
+        mechanism_changes=(
+            MechanismChange(id="schema_repair_bridge", change_type="integrate"),
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[algorithmic_step, observability_step, repair_step],
+        round_num=3,
+        champion=_generic_champion(),
+        stopped_reason="max_rounds",
+    )
+
+    assert summary["candidate_intent_counts"] == {
+        "algorithm_quality_candidate": 1,
+        "observability_candidate": 1,
+        "repair_or_infra_candidate": 1,
+        "unknown": 0,
+    }
+    intents = [
+        step["protocol_result"]["candidate_intent"] for step in summary["steps"]
+    ]
+    assert intents == [
+        "algorithm_quality_candidate",
+        "observability_candidate",
+        "repair_or_infra_candidate",
+    ]
+    assert summary["steps"][0]["protocol_result"][
+        "observability_value_visibility"
+    ]["observability_value_status"] == "observability_value_not_applicable"
+    assert summary["steps"][1]["protocol_result"][
+        "observability_value_visibility"
+    ]["observability_value_status"] == "observability_value_observed"
 
 
 def _generic_step(
@@ -480,6 +610,10 @@ def _generic_step(
     mechanism_changes: tuple[MechanismChange, ...] = (),
     predicted_direction: str = "exploratory",
     target_objectives: tuple[str, ...] = (),
+    target_file: str = "components/component_alpha.py",
+    attempt_kind: str = "screening",
+    repair_policy_reason: str | None = None,
+    repair_mechanism_ids: tuple[str, ...] = (),
 ) -> StepRecord:
     return StepRecord(
         round_num=1,
@@ -488,14 +622,14 @@ def _generic_step(
             hypothesis_text="Structured candidate for generic evidence visibility.",
             change_locus="component_alpha",
             action="modify",
-            target_file="components/component_alpha.py",
+            target_file=target_file,
             predicted_direction=predicted_direction,  # type: ignore[arg-type]
             target_objectives=target_objectives,
             expected_telemetry=expected_telemetry or {},
             mechanism_changes=mechanism_changes,
         ),
         patch=PatchProposal(
-            file_path="components/component_alpha.py",
+            file_path=target_file,
             action="modify",
             code_content="class ComponentAlpha:\n    pass\n",
         ),
@@ -506,6 +640,9 @@ def _generic_step(
         failure_stage=None,
         failure_detail=None,
         decision_reason_codes=decision_reason_codes,
+        attempt_kind=attempt_kind,
+        repair_policy_reason=repair_policy_reason,
+        repair_mechanism_ids=repair_mechanism_ids,
     )
 
 
