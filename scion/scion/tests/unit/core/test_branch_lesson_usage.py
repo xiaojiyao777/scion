@@ -312,7 +312,9 @@ def test_near_duplicate_clean_fork_without_contrast_or_reject_fails() -> None:
     assert "branch_lesson_usage_semantic_mismatch" in reason
 
 
-def test_actionable_sibling_near_duplicate_without_contrast_or_reject_fails() -> None:
+def test_actionable_sibling_near_duplicate_without_contrast_or_reject_is_advisory() -> (
+    None
+):
     branch = _branch()
     branch.branch_evidence_summary = {
         "branch_lesson_records": [
@@ -336,11 +338,51 @@ def test_actionable_sibling_near_duplicate_without_contrast_or_reject_fails() ->
         }
     )
 
-    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+    metadata = branch_lesson_usage_requirement_metadata(branch)
 
-    assert reason is not None
-    assert "required_for=sibling_nearby_attempt" in reason
-    assert "branch_lesson_usage_semantic_mismatch" in reason
+    assert metadata["required"] is True
+    assert metadata["required_for"] == "sibling_nearby_attempt"
+    assert metadata["pre_code_block_required"] is False
+    assert metadata["advisory_only"] is True
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            hypothesis.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "semantic_mismatch"
+    )
+
+
+def test_actionable_sibling_nearby_missing_usage_does_not_pre_code_block() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [
+            _record(
+                "lesson:sibling-missing",
+                required_for="sibling_nearby_attempt",
+                lesson_role="avoid",
+                lesson_type="no_effect",
+            )
+        ]
+    }
+
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert metadata["required"] is True
+    assert metadata["required_for"] == "sibling_nearby_attempt"
+    assert metadata["pre_code_block_required"] is False
+    assert metadata["advisory_only"] is True
+    assert branch_lesson_usage_pre_code_block_reason(_hypothesis(), branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            {},
+            metadata=metadata,
+            hypothesis=_hypothesis(),
+        )
+        == "missing"
+    )
 
 
 def test_clean_fork_accepts_machine_readable_near_duplicate_reject() -> None:

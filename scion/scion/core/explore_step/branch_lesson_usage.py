@@ -38,6 +38,12 @@ _STRICT_REQUIRED_FOR = frozenset(
         "sibling_nearby_attempt",
     }
 )
+_HARD_PRE_CODE_REQUIRED_FOR = frozenset(
+    {
+        "clean_fork_new_branch",
+        "same_branch_refinement",
+    }
+)
 _LESSON_APPLICATION_FIELDS = frozenset(
     {
         "borrowed_lessons",
@@ -363,6 +369,8 @@ def branch_lesson_usage_requirement_from_records(
             "proposal_visibility_only": True,
             "proposal_guidance_only": True,
             "decision_features_excluded": True,
+            "advisory_only": not _pre_code_block_required(required_fors),
+            "pre_code_block_required": _pre_code_block_required(required_fors),
             "same_branch_refinement_allowed": (
                 "same_branch_refinement" in required_fors
             ),
@@ -416,6 +424,8 @@ def branch_lesson_usage_pre_code_block_reason(
     )
     if not metadata.get("required"):
         return None
+    if not _metadata_pre_code_block_required(metadata):
+        return None
     diagnostic = branch_lesson_usage_requirement_diagnostic(
         getattr(hypothesis, "branch_lesson_usage", None),
         metadata=metadata,
@@ -439,10 +449,12 @@ def branch_lesson_usage_pre_code_block_reason(
         "branch_lesson_usage is required before code generation "
         f"(source={source}, required_for={required_for}). Regenerate the "
         "hypothesis with compact lesson ids and generic dimensions. Clean "
-        "fork or sibling-nearby proposals must include at least one "
-        "`borrowed_lessons`, `avoided_lessons`, or `contrasted_lessons` entry "
+        "fork proposals must include at least one `contrasted_lessons` entry "
+        "or `rejected_lessons` entry "
         "with target_file/action/mechanism linkage plus changed generic "
-        "dimensions. Weak-positive transfer must borrow/preserve the lesson "
+        "dimensions. Sibling-nearby lesson usage is advisory by default and "
+        "should still be emitted for audit when practical. Weak-positive "
+        "transfer must borrow/preserve the lesson "
         "with activation/effect path and target linkage, or emit "
         "`rejected_weak_positive_lessons` with a machine-readable reject "
         "reason and the same linkage. Same-branch weak-positive "
@@ -808,6 +820,18 @@ def _metadata_required_fors(metadata: Mapping[str, Any]) -> tuple[str, ...]:
     if single:
         values.append(single)
     return tuple(item for item in dict.fromkeys(values) if item in _ACTIVE_REQUIRED_FOR)
+
+
+def _metadata_pre_code_block_required(metadata: Mapping[str, Any]) -> bool:
+    if metadata.get("pre_code_block_required") is False:
+        return False
+    if metadata.get("advisory_only") is True:
+        return False
+    return _pre_code_block_required(_metadata_required_fors(metadata))
+
+
+def _pre_code_block_required(required_fors: Iterable[str]) -> bool:
+    return bool(set(required_fors) & _HARD_PRE_CODE_REQUIRED_FOR)
 
 
 def _metadata_candidate_lesson_ids(
