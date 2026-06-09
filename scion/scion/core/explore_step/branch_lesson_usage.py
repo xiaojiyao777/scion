@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Any, Iterable, Mapping
 
-from scion.core.models import Branch, HypothesisProposal
+from scion.core.models import Branch, HypothesisProposal, mechanism_changes
 
 BRANCH_LESSON_USAGE_REQUIREMENT_SCHEMA = "branch_lesson_usage_requirement.v1"
 BRANCH_LESSON_RECORD_SCHEMA = "branch_lesson.v1"
@@ -66,11 +66,17 @@ _WEAK_POSITIVE_APPLICATION_FIELDS = frozenset(
 _CHANGED_DIMENSION_FIELDS = frozenset(
     {
         "changed_dimension",
+        "changed_dimension_id",
+        "changed_dimension_ids",
         "changed_dimensions",
         "changed_generic_dimension",
         "changed_generic_dimensions",
         "contrast_dimension",
+        "contrast_dimension_id",
+        "contrast_dimension_ids",
         "contrast_dimensions",
+        "delta_dimension",
+        "delta_dimensions",
         "dimension_delta",
         "dimension_deltas",
         "generic_dimension_delta",
@@ -79,15 +85,19 @@ _CHANGED_DIMENSION_FIELDS = frozenset(
 )
 _WEAK_POSITIVE_ACTIVATION_FIELDS = frozenset(
     {
+        "activation_signal",
         "activation_path",
         "borrowed_activation_path",
         "preserved_activation_path",
+        "trigger_path",
     }
 )
 _WEAK_POSITIVE_EFFECT_FIELDS = frozenset(
     {
         "borrowed_effect_path",
         "effect_path",
+        "effect_signal",
+        "outcome_path",
         "preserved_effect_path",
     }
 )
@@ -95,6 +105,7 @@ _WEAK_POSITIVE_RISK_FIELDS = frozenset(
     {
         "borrowed_risk_to_avoid",
         "preserved_risk_to_avoid",
+        "risk",
         "risk_to_avoid",
         "risk_to_avoidance",
         "risks_to_avoid",
@@ -105,8 +116,12 @@ _TARGET_LINKAGE_FIELDS = frozenset(
         "borrowed_target_file",
         "code_target_file",
         "entry_file",
+        "file_path",
         "implementation_target_file",
+        "implementation_file",
+        "implementation_path",
         "preserved_target_file",
+        "proposal_target_file",
         "target_file",
         "target_files",
         "target_path",
@@ -117,8 +132,10 @@ _ACTION_LINKAGE_FIELDS = frozenset(
     {
         "action",
         "borrowed_action",
+        "change_action",
         "implementation_action",
         "preserved_action",
+        "proposal_change_action",
         "proposal_action",
         "target_action",
     }
@@ -133,6 +150,12 @@ _MECHANISM_LINKAGE_FIELDS = frozenset(
         "mechanism_change_ids",
         "mechanism_id",
         "mechanism_ids",
+        "mechanism_linkage",
+        "mechanism_linkage_token",
+        "mechanism_name",
+        "mechanism_token",
+        "operator_id",
+        "operator_name",
         "preserved_mechanism",
         "proposal_mechanism",
         "target_mechanism",
@@ -156,6 +179,8 @@ _REJECT_REASON_FIELDS = frozenset(
         "rejection_reason",
         "rejection_reason_code",
         "rejection_reason_codes",
+        "machine_reject_reason_code",
+        "machine_reject_reason_codes",
         "reuse_decision",
     }
 )
@@ -444,6 +469,13 @@ def branch_lesson_usage_pre_code_block_reason(
         "The branch_lesson_usage object is present but does not satisfy the "
         "semantic requirement.",
     )
+    repair_hint = _repair_skeleton_hint(
+        branch_lesson_usage_repair_skeleton(
+            getattr(hypothesis, "branch_lesson_usage", None),
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+    )
     return (
         f"{reason_prefix}: {guidance} structured "
         "branch_lesson_usage is required before code generation "
@@ -464,7 +496,8 @@ def branch_lesson_usage_pre_code_block_reason(
         "`mechanism_ids`, and `target_mechanism_id` are accepted aliases. "
         "Do not satisfy the mechanism field with only a broad family token. "
         "Do not use raw lesson text, LLM "
-        "rationale, trace, prompt, transcript, or repeated hypothesis prose."
+        "rationale, trace, prompt, transcript, or repeated hypothesis prose. "
+        f"{repair_hint}"
     )
 
 
@@ -590,6 +623,48 @@ def branch_lesson_usage_reason_prefixes() -> Mapping[str, str]:
     return dict(_BRANCH_LESSON_USAGE_REASON_PREFIXES)
 
 
+def branch_lesson_usage_repair_skeleton(
+    value: Any,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+    hypothesis: HypothesisProposal | None = None,
+    allow_machine_reject: bool = True,
+) -> dict[str, Any]:
+    """Return deterministic canonical fields for repairing lesson usage.
+
+    The skeleton is proposal/audit guidance only. It projects compact ids,
+    target/action/mechanism linkage, generic dimensions, and machine-readable
+    reason-code fields; raw lesson text and rationale-like fields are omitted.
+    """
+
+    metadata = metadata or {}
+    diagnostic = branch_lesson_usage_requirement_diagnostic(
+        value,
+        metadata=metadata,
+        hypothesis=hypothesis,
+        allow_machine_reject=allow_machine_reject,
+    )
+    normalized = _normalized_usage_projection(
+        value if isinstance(value, Mapping) else {}
+    )
+    expected = _expected_linkage_projection(metadata, hypothesis)
+    missing = _repair_missing_fields(normalized, expected, diagnostic)
+    corrected = _corrected_fields_projection(normalized, expected)
+    return _drop_empty(
+        {
+            "schema_version": "branch_lesson_usage_repair_skeleton.v1",
+            "proposal_visibility_only": True,
+            "proposal_guidance_only": True,
+            "decision_features_excluded": True,
+            "diagnostic": diagnostic,
+            "expected_linkage": expected,
+            "corrected_fields": corrected,
+            "missing_fields": missing,
+            "normalized_usage": normalized,
+        }
+    )
+
+
 _BRANCH_LESSON_USAGE_REASON_PREFIXES = {
     "missing": _BRANCH_LESSON_USAGE_REQUIRED_MISSING,
     "metadata_only": _BRANCH_LESSON_USAGE_METADATA_ONLY,
@@ -613,6 +688,292 @@ _BRANCH_LESSON_USAGE_REASON_GUIDANCE = {
         "or concrete target/action/mechanism linkage."
     ),
 }
+
+
+def _repair_skeleton_hint(skeleton: Mapping[str, Any]) -> str:
+    corrected = skeleton.get("corrected_fields")
+    missing = skeleton.get("missing_fields")
+    parts: list[str] = []
+    if isinstance(corrected, Mapping) and corrected:
+        rendered = ",".join(
+            f"{key}={value}"
+            for key, value in corrected.items()
+            if value not in (None, "", [], {}, ())
+        )
+        if rendered:
+            parts.append(f"corrected_fields:{rendered}")
+    if isinstance(missing, (list, tuple)) and missing:
+        parts.append("missing_fields:" + ",".join(str(item) for item in missing))
+    if not parts:
+        return ""
+    return (
+        "Repair skeleton branch_lesson_usage_repair_skeleton.v1 suggests "
+        + "; ".join(parts)
+        + "."
+    )
+
+
+def _normalized_usage_projection(value: Mapping[str, Any]) -> dict[str, Any]:
+    projected: dict[str, Any] = {}
+    for field in (
+        "borrowed_lessons",
+        "avoided_lessons",
+        "contrasted_lessons",
+        "preserved_same_branch_lesson",
+        "rejected_lessons",
+        "rejected_weak_positive_lessons",
+    ):
+        items = [
+            item
+            for item in (
+                _normalized_lesson_item(raw)
+                for raw in _lesson_item_mappings(value.get(field))
+            )
+            if item
+        ]
+        if not items:
+            continue
+        projected[field] = (
+            items[0] if field == "preserved_same_branch_lesson" else items
+        )
+    claim = _normalized_signal_record(value.get("clean_fork_diversity_claim"))
+    if claim:
+        projected["clean_fork_diversity_claim"] = claim
+    return projected
+
+
+def _normalized_lesson_item(item: Mapping[str, Any]) -> dict[str, Any]:
+    aliases = _recognized_aliases(item)
+    return _drop_empty(
+        {
+            "lesson_id": _lesson_id_from_item(item),
+            "lesson_type": _first_present(
+                item,
+                (
+                    "lesson_type",
+                    "source_lesson_type",
+                    "borrowed_lesson_type",
+                    "preserved_lesson_type",
+                ),
+            ),
+            "lesson_role": _first_present(
+                item,
+                ("lesson_role", "usage_role", "reuse_role"),
+            ),
+            "source_branch_ids": _string_list(item.get("source_branch_ids")),
+            "target_file": _first_field_value(item, _TARGET_LINKAGE_FIELDS),
+            "action": _first_field_value(item, _ACTION_LINKAGE_FIELDS),
+            "mechanism": _first_field_value(item, _MECHANISM_LINKAGE_FIELDS),
+            "mechanism_family": _first_field_value(
+                item,
+                _BROAD_MECHANISM_LINKAGE_FIELDS,
+            ),
+            "changed_dimensions": sorted(
+                _field_values(item, _CHANGED_DIMENSION_FIELDS)
+            ),
+            "activation_path": _first_field_value(
+                item,
+                _WEAK_POSITIVE_ACTIVATION_FIELDS,
+            ),
+            "effect_path": _first_field_value(item, _WEAK_POSITIVE_EFFECT_FIELDS),
+            "risk_to_avoid": _first_field_value(item, _WEAK_POSITIVE_RISK_FIELDS),
+            "reject_reason_code": _first_machine_reason_code(item),
+            "recognized_aliases": aliases,
+        }
+    )
+
+
+def _normalized_signal_record(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return _drop_empty(
+        {
+            "changed_dimensions": sorted(
+                _field_values(value, _CHANGED_DIMENSION_FIELDS)
+            ),
+            "sibling_duplication_allowed": value.get("sibling_duplication_allowed"),
+        }
+    )
+
+
+def _expected_linkage_projection(
+    metadata: Mapping[str, Any],
+    hypothesis: HypothesisProposal | None,
+) -> dict[str, Any]:
+    target = _path_token(getattr(hypothesis, "target_file", None))
+    if not target:
+        targets = _string_list(metadata.get("candidate_target_files"))
+        target = _path_token(targets[0]) if targets else ""
+    action = _token(getattr(hypothesis, "action", None))
+    if not action:
+        actions = _string_list(metadata.get("candidate_actions"))
+        action = _token(actions[0]) if actions else ""
+    mechanisms = sorted(_hypothesis_mechanism_tokens(hypothesis)) if hypothesis else []
+    if not mechanisms:
+        mechanisms = sorted(
+            {
+                _token(value)
+                for value in _string_list(metadata.get("candidate_mechanism_families"))
+                if _token(value)
+            }
+        )
+    return _drop_empty(
+        {
+            "target_file": target,
+            "action": action,
+            "mechanisms": mechanisms,
+            "candidate_lesson_ids": sorted(_metadata_candidate_lesson_ids(metadata)),
+        }
+    )
+
+
+def _corrected_fields_projection(
+    normalized: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> dict[str, Any]:
+    first_item = _first_normalized_item(normalized)
+    mechanisms = expected.get("mechanisms")
+    mechanism = ""
+    if isinstance(mechanisms, (list, tuple)) and mechanisms:
+        mechanism = str(mechanisms[0])
+    return _drop_empty(
+        {
+            "target_file": (
+                expected.get("target_file")
+                or (first_item.get("target_file") if first_item else "")
+            ),
+            "action": (
+                expected.get("action")
+                or (first_item.get("action") if first_item else "")
+            ),
+            "mechanism": (
+                mechanism
+                or (first_item.get("mechanism") if first_item else "")
+                or (first_item.get("mechanism_family") if first_item else "")
+            ),
+        }
+    )
+
+
+def _repair_missing_fields(
+    normalized: Mapping[str, Any],
+    expected: Mapping[str, Any],
+    diagnostic: str,
+) -> list[str]:
+    if diagnostic == "satisfied":
+        return []
+    first_item = _first_normalized_item(normalized)
+    if not first_item:
+        return ["branch_lesson_usage"]
+    missing: list[str] = []
+    if expected.get("candidate_lesson_ids") and not first_item.get("lesson_id"):
+        missing.append("lesson_id")
+    for field in ("target_file", "action"):
+        if not first_item.get(field):
+            missing.append(field)
+    if not (first_item.get("mechanism") or first_item.get("mechanism_family")):
+        missing.append("mechanism")
+    if diagnostic == "semantic_mismatch" and not first_item.get("changed_dimensions"):
+        missing.append("changed_dimensions")
+    if diagnostic == "linkage_unrecognized":
+        missing.append("recognized_linkage_fields")
+    return list(dict.fromkeys(missing))
+
+
+def _first_normalized_item(normalized: Mapping[str, Any]) -> Mapping[str, Any]:
+    for field in (
+        "contrasted_lessons",
+        "borrowed_lessons",
+        "avoided_lessons",
+        "preserved_same_branch_lesson",
+        "rejected_lessons",
+        "rejected_weak_positive_lessons",
+    ):
+        value = normalized.get(field)
+        if isinstance(value, Mapping):
+            return value
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, Mapping):
+                    return item
+    return {}
+
+
+def _lesson_id_from_item(item: Mapping[str, Any]) -> str:
+    return _first_present(
+        item,
+        (
+            "lesson_id",
+            "source_lesson_id",
+            "branch_lesson_id",
+            "borrowed_lesson_id",
+            "preserved_lesson_id",
+        ),
+    )
+
+
+def _first_present(item: Mapping[str, Any], keys: Iterable[str]) -> str:
+    for key in keys:
+        text = _clean_text(item.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _first_field_value(value: Any, field_names: frozenset[str]) -> str:
+    values = sorted(_field_values(value, field_names))
+    return values[0] if values else ""
+
+
+def _first_machine_reason_code(item: Mapping[str, Any]) -> str:
+    for raw_key, value in item.items():
+        key = _key(raw_key)
+        if key not in _REJECT_REASON_FIELDS:
+            continue
+        for candidate in sorted(_scalar_values(value)):
+            text = _clean_text(candidate)
+            if not _specific_signal_present(text):
+                continue
+            if (
+                key.endswith("_code")
+                or key.endswith("_codes")
+                or "_" in text
+                or "-" in text
+            ):
+                return text
+    return ""
+
+
+def _recognized_aliases(item: Mapping[str, Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for raw_key in item:
+        key = _key(raw_key)
+        canonical = _canonical_alias_field(key)
+        if canonical and key != canonical:
+            aliases[str(raw_key)] = canonical
+    return aliases
+
+
+def _canonical_alias_field(key: str) -> str:
+    if key in _TARGET_LINKAGE_FIELDS:
+        return "target_file"
+    if key in _ACTION_LINKAGE_FIELDS:
+        return "action"
+    if key in _MECHANISM_LINKAGE_FIELDS:
+        return "mechanism"
+    if key in _BROAD_MECHANISM_LINKAGE_FIELDS:
+        return "mechanism_family"
+    if key in _CHANGED_DIMENSION_FIELDS:
+        return "changed_dimensions"
+    if key in _WEAK_POSITIVE_ACTIVATION_FIELDS:
+        return "activation_path"
+    if key in _WEAK_POSITIVE_EFFECT_FIELDS:
+        return "effect_path"
+    if key in _WEAK_POSITIVE_RISK_FIELDS:
+        return "risk_to_avoid"
+    if key in _REJECT_REASON_FIELDS:
+        return "reject_reason_code"
+    return ""
 
 
 def _find_branch_lesson_usage_requirement(
@@ -945,8 +1306,8 @@ def _proposal_linkage_diagnostic(
 
 def _hypothesis_mechanism_tokens(hypothesis: HypothesisProposal) -> set[str]:
     values = set()
-    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
-        values.add(_token(getattr(change, "id", None)))
+    for change in mechanism_changes(hypothesis):
+        values.add(_token(change.id))
     if not values:
         values.add(_token(getattr(hypothesis, "change_locus", None)))
     return {value for value in values if value}
@@ -964,6 +1325,8 @@ def _values_correspond_to_expected_path(
     normalized_values = {_path_token(value) for value in values if value}
     if expected in normalized_values:
         return True
+    if any(_paths_compatible(value, expected) for value in normalized_values):
+        return True
     candidate_targets = {
         _path_token(value)
         for value in _string_list(metadata.get("candidate_target_files"))
@@ -977,7 +1340,7 @@ def _values_correspond_to_expected_token(values: set[str], expected: str) -> boo
     if not expected:
         return any(_specific_signal_present(value) for value in values)
     normalized_values = {_token(value) for value in values if value}
-    return expected in normalized_values
+    return any(_tokens_compatible(value, expected) for value in normalized_values)
 
 
 def _values_correspond_to_any_token(
@@ -989,6 +1352,12 @@ def _values_correspond_to_any_token(
     normalized_values = {_token(value) for value in values if value}
     expected_values = {_token(value) for value in expected if value}
     if expected_values and normalized_values & expected_values:
+        return True
+    if expected_values and any(
+        _tokens_compatible(value, expected_value)
+        for value in normalized_values
+        for expected_value in expected_values
+    ):
         return True
     if expected_values:
         return False
@@ -1009,8 +1378,20 @@ def _broad_mechanism_values_correspond(
     }
     if candidate_families and normalized_values & candidate_families:
         return True
+    if candidate_families and any(
+        _tokens_compatible(value, family)
+        for value in normalized_values
+        for family in candidate_families
+    ):
+        return True
     expected_values = {_token(value) for value in expected_mechanisms if value}
     if expected_values and normalized_values & expected_values:
+        return True
+    if expected_values and any(
+        _tokens_compatible(value, expected)
+        for value in normalized_values
+        for expected in expected_values
+    ):
         return True
     return any(_specific_signal_present(value) for value in values)
 
@@ -1510,6 +1891,44 @@ def _token(value: Any) -> str:
 
 def _path_token(value: Any) -> str:
     return _clean_text(value).replace("\\", "/").strip().lower()
+
+
+def _tokens_compatible(left: str, right: str) -> bool:
+    left = _token(left)
+    right = _token(right)
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if left.startswith(f"{right}_") or right.startswith(f"{left}_"):
+        return True
+    left_parts = [part for part in left.split("_") if part]
+    right_parts = [part for part in right.split("_") if part]
+    if not left_parts or not right_parts:
+        return False
+    short, long = (
+        (left_parts, right_parts)
+        if len(left_parts) <= len(right_parts)
+        else (right_parts, left_parts)
+    )
+    for start in range(0, len(long) - len(short) + 1):
+        if long[start : start + len(short)] == short:
+            return True
+    return False
+
+
+def _paths_compatible(value: str, expected: str) -> bool:
+    value = _path_token(value)
+    expected = _path_token(expected)
+    if not value or not expected:
+        return False
+    if value == expected:
+        return True
+    if value.endswith(f"/{expected}") or expected.endswith(f"/{value}"):
+        return True
+    value_name = value.rsplit("/", 1)[-1]
+    expected_name = expected.rsplit("/", 1)[-1]
+    return bool(value_name and value_name == expected_name)
 
 
 def _key(value: Any) -> str:

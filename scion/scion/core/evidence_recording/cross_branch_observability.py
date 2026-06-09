@@ -12,7 +12,12 @@ from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_requirement_from_records,
     branch_lesson_usage_requirement_satisfied,
 )
-from scion.core.models import StepRecord, mechanism_changes
+from scion.core.explore_step.generic_mechanism_signature import (
+    generic_signature_key_from_hypothesis,
+    generic_signature_key_from_parts,
+    generic_signature_payload_from_key,
+)
+from scion.core.models import StepRecord
 
 _SCHEMA_VERSION = "cross_branch_research_observability.v1"
 _POLICY = "proposal_observability_only"
@@ -34,20 +39,6 @@ _NON_POSITIVE_OUTCOMES = {
     "parked",
     "pre_protocol_failure",
     "regression",
-}
-_FAMILY_SUFFIXES = {
-    "attempt",
-    "candidate",
-    "experimental",
-    "followup",
-    "probe",
-    "refine",
-    "refined",
-    "refinement",
-    "retry",
-    "test",
-    "tuned",
-    "variant",
 }
 _REPEATED_CONTRACT_REROUTE_REASON = "repeated_contract_signature_reroute"
 
@@ -101,6 +92,15 @@ def build_cross_branch_research_observability(
     signature_groups = _signature_groups(safe_steps, branch_row_list)
     near_duplicate_count = _near_duplicate_count(signature_groups)
     saturated_signature_count = _saturated_signature_count(signature_groups)
+    near_duplicate_diagnostics = _signature_group_diagnostics(
+        signature_groups,
+        diagnostic_kind="near_duplicate_signature",
+    )
+    saturated_signature_diagnostics = _signature_group_diagnostics(
+        signature_groups,
+        diagnostic_kind="saturated_signature",
+        saturated_only=True,
+    )
     avoid_signature_count = saturated_signature_count
     same_branch_refinement_allowance_count = _same_branch_refinement_allowance_count(
         safe_steps, scheduler_metadata
@@ -163,6 +163,8 @@ def build_cross_branch_research_observability(
         "near_duplicate_count": near_duplicate_count,
         "saturated_signature_count": saturated_signature_count,
         "avoid_signature_count": avoid_signature_count,
+        "near_duplicate_diagnostics": near_duplicate_diagnostics,
+        "saturated_signature_diagnostics": saturated_signature_diagnostics,
         "material_difference_requirement_count": material_difference_requirement_count,
         "branch_lesson_record_count": branch_lesson_record_count,
         "branch_lesson_usage_requirement_count": (
@@ -319,22 +321,8 @@ def _signature_groups(
 
 def _step_signature_key(step: StepRecord) -> tuple[str, str, str, str]:
     hypothesis = step.hypothesis
-    mechanism_ids = [
-        _clean_token(item.id)
-        for item in mechanism_changes(hypothesis)
-        if _clean_token(item.id)
-    ]
-    mechanism_family = _mechanism_family(
-        mechanism_ids[0] if mechanism_ids else "",
-        _clean_token(getattr(hypothesis, "change_locus", None)),
-        _clean_path(getattr(hypothesis, "target_file", None)),
-    )
-    return (
-        mechanism_family,
-        _clean_path(getattr(hypothesis, "target_file", None)),
-        _clean_token(getattr(hypothesis, "action", None)),
-        _clean_token(getattr(hypothesis, "change_locus", None)),
-    )
+    key = generic_signature_key_from_hypothesis(hypothesis)
+    return key if _signature_key_usable(key) else ("", "", "", "")
 
 
 def _row_signature_key(row: Mapping[str, Any]) -> tuple[str, str, str, str]:
@@ -357,24 +345,33 @@ def _row_signature_key(row: Mapping[str, Any]) -> tuple[str, str, str, str]:
     change_locus = _clean_token(change_locus)
     if not any((mechanism_id, target_file, action, change_locus)):
         return ("", "", "", "")
-    return (
-        _mechanism_family(mechanism_id, change_locus, target_file),
-        target_file,
-        action,
-        change_locus,
+    key = generic_signature_key_from_parts(
+        mechanism_ids=[mechanism_id] if mechanism_id else (),
+        signature=_row_signature_mapping(row, card_map),
+        target_file=target_file,
+        action=action,
+        change_locus=change_locus,
     )
+    return key if _signature_key_usable(key) else ("", "", "", "")
 
 
-def _mechanism_family(
-    mechanism_id: str,
-    change_locus: str,
-    target_file: str,
-) -> str:
-    source = mechanism_id or change_locus or target_file or "unknown"
-    tokens = [token for token in _clean_token(source).split("_") if token]
-    while len(tokens) > 1 and tokens[-1] in _FAMILY_SUFFIXES:
-        tokens.pop()
-    return "_".join(tokens) if tokens else "unknown"
+def _row_signature_mapping(
+    row: Mapping[str, Any],
+    card_map: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    for value in (
+        row.get("generic_mechanism_signature"),
+        row.get("shared_signature"),
+        card_map.get("generic_mechanism_signature"),
+        card_map.get("shared_signature"),
+    ):
+        if isinstance(value, Mapping):
+            return value
+    return {}
+
+
+def _signature_key_usable(key: tuple[str, str, str, str]) -> bool:
+    return bool(key[0] and key[0] != "unknown" and (key[1] or key[2]))
 
 
 def _outcome_pattern(step: StepRecord) -> str:
@@ -431,6 +428,41 @@ def _saturated_signature_count(
         for outcomes in groups.values()
         if sum(1 for outcome in outcomes if outcome in _NON_POSITIVE_OUTCOMES) >= 2
     )
+
+
+def _signature_group_diagnostics(
+    groups: Mapping[tuple[str, str, str, str], list[str]],
+    *,
+    diagnostic_kind: str,
+    saturated_only: bool = False,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for key, outcomes in sorted(groups.items()):
+        non_positive = sum(
+            1 for outcome in outcomes if outcome in _NON_POSITIVE_OUTCOMES
+        )
+        if saturated_only:
+            if non_positive < 2:
+                continue
+        elif len(outcomes) < 2:
+            continue
+        outcome_counts = Counter(outcomes)
+        diagnostics.append(
+            {
+                "diagnostic_kind": diagnostic_kind,
+                "proposal_visibility_only": True,
+                "advisory_only": True,
+                "decision_features_excluded": True,
+                "signature": generic_signature_payload_from_key(key),
+                "signature_observation_count": len(outcomes),
+                "non_positive_outcome_count": non_positive,
+                "outcome_pattern_counts": dict(sorted(outcome_counts.items())),
+            }
+        )
+        if len(diagnostics) >= limit:
+            break
+    return diagnostics
 
 
 def _same_branch_refinement_allowance_count(

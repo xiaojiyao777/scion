@@ -9,6 +9,10 @@ from inspect import signature
 from typing import Any, Mapping, Protocol, Sequence
 
 from scion.core.models import HypothesisProposal
+from scion.core.explore_step.generic_mechanism_signature import (
+    generic_signature_key_from_hypothesis,
+    generic_signature_payload_from_hypothesis,
+)
 from scion.problem.providers import active_subject_taxonomy_payload
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.proposal.mechanism_labels import (
@@ -197,12 +201,20 @@ class MechanismNoveltyGate:
         active_solver_snapshot: Mapping[str, Any] | None = None,
         observations: Sequence[ProposalObservation] = (),
     ) -> MechanismNoveltyResult | None:
-        repeated = _recent_repeated_mechanism_result(hypothesis, context=context)
+        repeated = _recent_repeated_mechanism_result(
+            hypothesis,
+            context=context,
+            include_generic_signature=False,
+        )
         if repeated is not None:
             return repeated
         provider = _provider_from_context(context)
         if provider is None:
-            return None
+            return _recent_repeated_mechanism_result(
+                hypothesis,
+                context=context,
+                include_generic_signature=True,
+            )
         snapshot = active_solver_snapshot or _active_solver_snapshot_from_observations(
             observations
         )
@@ -212,7 +224,14 @@ class MechanismNoveltyGate:
         }
         if _method_accepts_keyword(provider.evaluate_mechanism_novelty, "context"):
             kwargs["context"] = context
-        return provider.evaluate_mechanism_novelty(hypothesis, **kwargs)
+        provider_result = provider.evaluate_mechanism_novelty(hypothesis, **kwargs)
+        if provider_result is not None:
+            return provider_result
+        return _recent_repeated_mechanism_result(
+            hypothesis,
+            context=context,
+            include_generic_signature=True,
+        )
 
 
 def _method_accepts_keyword(method: Any, keyword: str) -> bool:
@@ -262,6 +281,7 @@ def _recent_repeated_mechanism_result(
     *,
     context: ProposalToolContext | None,
     window: int = 6,
+    include_generic_signature: bool = True,
 ) -> MechanismNoveltyResult | None:
     if context is None or _has_material_difference_claim(hypothesis):
         return None
@@ -273,6 +293,22 @@ def _recent_repeated_mechanism_result(
     candidate_signature = _novelty_signature_key(hypothesis, context=context)
     candidate_family = _mechanism_family(hypothesis, context=context)
     candidate_target = str(hypothesis.target_file or "").strip()
+    broad_families: set[str] = set()
+    candidate_generic_signature = ("", "", "", "")
+    candidate_generic_payload: dict[str, Any] = {}
+    if include_generic_signature:
+        broad_families = _active_subject_broad_family_ids(
+            context,
+            surface=getattr(hypothesis, "change_locus", None),
+        )
+        candidate_generic_signature = generic_signature_key_from_hypothesis(
+            hypothesis,
+            broad_family_ids=broad_families,
+        )
+        candidate_generic_payload = generic_signature_payload_from_hypothesis(
+            hypothesis,
+            broad_family_ids=broad_families,
+        )
 
     for step in reversed(recent_steps):
         step_hypothesis = getattr(step, "hypothesis", None)
@@ -319,6 +355,43 @@ def _recent_repeated_mechanism_result(
                 evidence=(_step_evidence(step),),
             )
 
+        if (
+            include_generic_signature
+            and _generic_signature_usable(candidate_generic_signature)
+            and candidate_generic_signature
+            == generic_signature_key_from_hypothesis(
+                step_hypothesis,
+                broad_family_ids=broad_families,
+            )
+        ):
+            mechanism = candidate_generic_signature[0]
+            evidence = [_step_evidence(step)]
+            if candidate_generic_payload:
+                evidence.append(
+                    "generic_signature="
+                    + json.dumps(
+                        candidate_generic_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                )
+            return MechanismNoveltyResult(
+                premise_check="duplicate",
+                failure_category="near_duplicate_mechanism_signature",
+                mechanism=mechanism,
+                reason=(
+                    "Recent campaign history contains a structurally similar "
+                    "generic mechanism signature "
+                    f"{candidate_generic_signature!r} that failed with "
+                    f"{failure_code}. This is proposal-side advisory context "
+                    "only; code generation remains allowed. If continuing this "
+                    "line, state the changed trigger, activation path, effect "
+                    "path, or runtime-budget strategy in compact structured "
+                    "metadata."
+                ),
+                evidence=tuple(evidence),
+            )
+
         step_family = _mechanism_family(step_hypothesis, context=context)
         step_target = str(getattr(step_hypothesis, "target_file", "") or "").strip()
         if candidate_ids or step_ids:
@@ -346,6 +419,13 @@ def _recent_repeated_mechanism_result(
                 evidence=(_step_evidence(step),),
             )
     return None
+
+
+def _generic_signature_usable(key: tuple[str, str, str, str]) -> bool:
+    family = key[0]
+    if not family or family == "unknown":
+        return False
+    return bool(key[1] or key[2])
 
 
 def _mechanism_ids(

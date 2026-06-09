@@ -300,6 +300,35 @@ def test_cross_branch_observability_counts_material_requirements_from_records() 
     assert payload["material_difference_requirement_count"] == 2
 
 
+def test_cross_branch_observability_flags_generic_near_duplicate_diagnostics() -> None:
+    payload = build_cross_branch_research_observability(
+        steps=[
+            _step(
+                "branch-seed-a",
+                round_num=1,
+                mechanism_id="construction_seed_selector",
+            ),
+            _step(
+                "branch-seed-b",
+                round_num=2,
+                mechanism_id="regret_seed_select_variant",
+            ),
+        ],
+    )
+
+    assert payload["near_duplicate_count"] == 1
+    assert payload["saturated_signature_count"] == 1
+    near = payload["near_duplicate_diagnostics"][0]
+    saturated = payload["saturated_signature_diagnostics"][0]
+    assert near["advisory_only"] is True
+    assert near["decision_features_excluded"] is True
+    assert near["signature"]["mechanism_family"] == "construction_seed_selector"
+    assert near["signature_observation_count"] == 2
+    assert saturated["diagnostic_kind"] == "saturated_signature"
+    assert saturated["non_positive_outcome_count"] == 2
+    assert "Sensitive proposal text" not in json.dumps(payload)
+
+
 def test_cross_branch_observability_counts_direct_material_requirement_record() -> None:
     payload = build_cross_branch_research_observability(
         steps=[
@@ -507,7 +536,7 @@ def test_branch_lesson_usage_observability_distinguishes_linkage_unrecognized() 
                 "contrast_dimensions": ["mechanism"],
                 "target_file": "components/common.py",
                 "action": "modify",
-                "mechanism_linkage_token": "alpha_probe",
+                "mechanism_story": "alpha_probe",
             }
         ],
         "clean_fork_diversity_claim": {

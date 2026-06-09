@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_pre_code_block_reason,
+    branch_lesson_usage_repair_skeleton,
     branch_lesson_usage_requirement_diagnostic,
     branch_lesson_usage_requirement_from_records,
     branch_lesson_usage_requirement_satisfied,
@@ -206,6 +207,47 @@ def test_same_branch_weak_positive_preserve_satisfies_requirement() -> None:
     )
 
     assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+
+
+def test_same_branch_weak_positive_followup_aliases_do_not_pre_code_block() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [
+            _record(
+                "lesson:local-alias",
+                required_for="same_branch_refinement",
+                lesson_role="preserve",
+                lesson_type="weak_positive",
+            )
+        ]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "preserved_same_branch_lesson": {
+                "source_lesson_id": "lesson:local-alias",
+                "preserved_signal": "weak_signal",
+                "changed_dimension_ids": ["activation_threshold"],
+                "risk": "known_gap",
+                "file_path": "common.py",
+                "proposal_change_action": "modify_existing",
+                "mechanism_linkage_token": "generic_signal_refinement",
+            }
+        }
+    )
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    skeleton = branch_lesson_usage_repair_skeleton(
+        hypothesis.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
+    assert skeleton["diagnostic"] == "satisfied"
+    normalized = skeleton["normalized_usage"]["preserved_same_branch_lesson"]
+    assert normalized["lesson_id"] == "lesson:local-alias"
+    assert normalized["target_file"] == "common.py"
+    assert normalized["mechanism"] == "generic_signal_refinement"
+    assert normalized["recognized_aliases"]["mechanism_linkage_token"] == "mechanism"
 
 
 def test_metadata_only_lesson_usage_fails_requirement() -> None:
@@ -941,10 +983,13 @@ def test_branch_lesson_usage_fields_do_not_enter_decision_features() -> None:
     assert "branch_lesson_usage_metadata_only_count" not in decision_fields
     assert "branch_lesson_usage_linkage_unrecognized_count" not in decision_fields
     assert "branch_lesson_usage_semantic_mismatch_count" not in decision_fields
+    assert "branch_lesson_usage_repair_skeleton" not in decision_fields
     assert "borrowed_lesson_count" not in decision_fields
     assert "avoided_lesson_count" not in decision_fields
     assert "contrasted_lesson_count" not in decision_fields
     assert "preserved_same_branch_lesson_count" not in decision_fields
+    assert "near_duplicate_diagnostics" not in decision_fields
+    assert "saturated_signature_diagnostics" not in decision_fields
 
 
 def _strict_requirement() -> dict:
@@ -1061,7 +1106,7 @@ def test_linkage_unrecognized_reason_distinguishes_present_usage() -> None:
                     "contrast_dimensions": ["mechanism"],
                     "target_file": "components/common.py",
                     "action": "modify",
-                    "mechanism_linkage_token": "generic_signal",
+                    "mechanism_story": "generic_signal",
                 }
             ],
             "clean_fork_diversity_claim": {
@@ -1076,3 +1121,4 @@ def test_linkage_unrecognized_reason_distinguishes_present_usage() -> None:
     assert reason is not None
     assert "branch_lesson_usage_linkage_unrecognized" in reason
     assert "branch_lesson_usage_required_missing" not in reason
+    assert "Repair skeleton branch_lesson_usage_repair_skeleton.v1" in reason

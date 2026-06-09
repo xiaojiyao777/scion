@@ -178,6 +178,33 @@ def test_shared_broad_algorithm_family_does_not_block_distinct_mechanism_ids() -
     assert result is None
 
 
+def test_generic_near_duplicate_signature_is_advisory_not_hard_block() -> None:
+    previous = _hypothesis(
+        "inter_route_exchange",
+        text="Try an inter-route exchange local-search variant.",
+    )
+    candidate = _hypothesis(
+        "intra_route_swap",
+        text="Try an intra-route swap local-search variant.",
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous)),
+    )
+
+    assert result is not None
+    assert result.premise_check == "duplicate"
+    assert result.failure_category == "near_duplicate_mechanism_signature"
+    assert result.result_kind == "duplicate_diagnostic"
+    assert result.gate_action == "diagnostic"
+    assert result.is_hard_block is False
+    diagnostic = result.to_diagnostic(candidate)
+    assert diagnostic["blocking"] is False
+    assert diagnostic["screening_allowed"] is True
+    assert "generic_signature" in diagnostic["evidence"][1]
+
+
 def test_registry_wiring_id_does_not_block_distinct_primary_mechanism() -> None:
     previous = _hypothesis(
         "vns_operator_registry",
