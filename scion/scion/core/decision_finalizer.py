@@ -785,12 +785,8 @@ class DecisionFinalizer:
     ) -> None:
         if self.record_formal_candidate_artifact is None:
             return
-        if not _should_record_formal_candidate_artifact(
-            patch=patch,
+        if not _should_reconcile_formal_candidate_artifact(
             protocol_result=protocol_result,
-            canary_result=canary_result,
-            contract_result=contract_result,
-            verification_result=verification_result,
         ):
             return
         try:
@@ -1078,6 +1074,17 @@ def _should_record_formal_candidate_artifact(
         and verification_result.passed
         and canary_result.passed
     ):
+        return False
+    if getattr(protocol_result, "stats", None) is None:
+        return False
+    return _stage_value(protocol_result) == "screening"
+
+
+def _should_reconcile_formal_candidate_artifact(
+    *,
+    protocol_result: Optional[ProtocolResult],
+) -> bool:
+    if protocol_result is None:
         return False
     if getattr(protocol_result, "stats", None) is None:
         return False

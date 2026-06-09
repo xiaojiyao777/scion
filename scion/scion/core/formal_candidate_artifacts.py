@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from scion.core.evidence_recording.replay_identity import (
+    formal_replay_identity_missing_keys,
     formal_replay_identity_payload,
     stable_patch_digest,
 )
@@ -71,42 +72,11 @@ class FormalCandidatePatchArtifactRecorder:
         base_workspace: str | None = None,
     ) -> str | None:
         """Write one canonical patch artifact and return its public metadata ref."""
-        if patch is None or protocol_result is None:
-            return None
-        if not (
-            contract_result.passed
-            and verification_result.passed
-            and canary_result.passed
-        ):
+        if protocol_result is None:
             return None
         stage = _stage_value(protocol_result)
-        if stage != "screening":
+        if stage != "screening" or getattr(protocol_result, "stats", None) is None:
             return None
-
-        changes = patch_file_changes(patch)
-        patch_digest = _patch_digest(changes)
-        candidate_id = _candidate_id(
-            branch_id=branch.branch_id,
-            hypothesis_id=h_record.hypothesis_id,
-            stage=stage,
-            patch_digest=patch_digest,
-        )
-        dest = (
-            self.artifact_dir
-            / _safe_path_part(branch.branch_id[:8] or "branch")
-            / f"{stage}-{_safe_path_part(h_record.hypothesis_id or 'hypothesis')}-{candidate_id}"
-        )
-        metadata_path = dest / "candidate.patch.json"
-        diff_path = dest / "candidate.diff"
-        if metadata_path.exists() and diff_path.exists():
-            return public_artifact_ref(metadata_path, base_dir=self.campaign_dir)
-
-        dest.mkdir(parents=True, exist_ok=True)
-        diff_text = _render_candidate_diff(
-            changes,
-            base_workspace=base_workspace,
-        )
-        diff_path.write_text(diff_text, encoding="utf-8")
         raw_metrics_ref = public_artifact_ref(
             protocol_result.raw_metrics_ref,
             base_dir=self.campaign_dir,
@@ -117,16 +87,95 @@ class FormalCandidatePatchArtifactRecorder:
             or hypothesis.change_locus
             or ""
         )
-        replay_identity = formal_replay_identity_payload(
-            problem_spec_hash=self.problem_spec_hash,
-            split_manifest_hash=self.split_manifest_hash,
-            seed_ledger_hash=self.seed_ledger_hash,
-            patch_digest=patch_digest,
-            selected_surface=selected_surface,
-            protocol_version=self.protocol_version,
-            raw_metrics_ref=raw_metrics_ref,
-            code_hash=getattr(branch, "current_code_hash", None),
+        changes = patch_file_changes(patch) if patch is not None else ()
+        patch_digest = _patch_digest(changes) if patch is not None else ""
+        replay_identity = (
+            formal_replay_identity_payload(
+                problem_spec_hash=self.problem_spec_hash,
+                split_manifest_hash=self.split_manifest_hash,
+                seed_ledger_hash=self.seed_ledger_hash,
+                patch_digest=patch_digest,
+                selected_surface=selected_surface,
+                protocol_version=self.protocol_version,
+                raw_metrics_ref=raw_metrics_ref,
+                code_hash=getattr(branch, "current_code_hash", None),
+            )
+            if patch is not None
+            else None
         )
+        missing_replay_identity_keys = formal_replay_identity_missing_keys(
+            replay_identity
+        )
+        omitted_reasons = _artifact_omitted_reasons(
+            patch=patch,
+            contract_result=contract_result,
+            verification_result=verification_result,
+            canary_result=canary_result,
+            missing_replay_identity_keys=missing_replay_identity_keys,
+        )
+        candidate_id = _candidate_id(
+            branch_id=branch.branch_id,
+            hypothesis_id=h_record.hypothesis_id,
+            stage=stage,
+            patch_digest=patch_digest
+            or _omitted_candidate_digest(
+                branch=branch,
+                h_record=h_record,
+                stage=stage,
+                raw_metrics_ref=raw_metrics_ref,
+                omitted_reasons=omitted_reasons,
+            ),
+        )
+        if omitted_reasons:
+            self._record_omitted(
+                branch=branch,
+                h_record=h_record,
+                stage=stage,
+                candidate_id=candidate_id,
+                patch_digest=patch_digest,
+                raw_metrics_ref=raw_metrics_ref,
+                selected_surface=selected_surface,
+                replay_identity=replay_identity,
+                missing_replay_identity_keys=missing_replay_identity_keys,
+                omitted_reasons=omitted_reasons,
+                decision=decision,
+                decision_reason_codes=decision_reason_codes,
+            )
+            return None
+        assert patch is not None
+        assert replay_identity is not None
+        if not (
+            contract_result.passed
+            and verification_result.passed
+            and canary_result.passed
+        ):
+            return None
+        dest = (
+            self.artifact_dir
+            / _safe_path_part(branch.branch_id[:8] or "branch")
+            / f"{stage}-{_safe_path_part(h_record.hypothesis_id or 'hypothesis')}-{candidate_id}"
+        )
+        metadata_path = dest / "candidate.patch.json"
+        diff_path = dest / "candidate.diff"
+        artifact_ref = public_artifact_ref(metadata_path, base_dir=self.campaign_dir)
+        if metadata_path.exists() and diff_path.exists():
+            _attach_formal_candidate_summary(
+                branch,
+                artifact_ref=artifact_ref,
+                stage=stage,
+                raw_metrics_ref=raw_metrics_ref,
+                selected_surface=selected_surface,
+                replay_identity=replay_identity,
+                patch_digest=patch_digest,
+            )
+            return artifact_ref
+
+        dest.mkdir(parents=True, exist_ok=True)
+        diff_text = _render_candidate_diff(
+            changes,
+            base_workspace=base_workspace,
+        )
+        diff_path.write_text(diff_text, encoding="utf-8")
         metadata = {
             "schema": self.schema,
             "created_at": datetime.now().isoformat(),
@@ -190,6 +239,9 @@ class FormalCandidatePatchArtifactRecorder:
                     "code_content is canonical full-file candidate content; "
                     "base/current hashes and diff support audit replay"
                 ),
+                "formal_replay_identity_ref": (
+                    f"{artifact_ref}#/replay_identity" if artifact_ref else ""
+                ),
             },
             "hypothesis": {
                 "change_locus": h_record.change_locus,
@@ -211,19 +263,237 @@ class FormalCandidatePatchArtifactRecorder:
                 "stage": stage,
                 "branch_code_status": metadata["branch_code_status"],
                 "patch_digest": patch_digest,
-                "artifact_ref": public_artifact_ref(
-                    metadata_path,
-                    base_dir=self.campaign_dir,
-                ),
+                "artifact_ref": artifact_ref,
                 "diff_ref": public_artifact_ref(diff_path, base_dir=self.campaign_dir),
+                "artifact_status": "recorded",
+                "replay_identity_status": replay_identity["identity_status"],
+                "missing_replay_identity_keys": [],
             },
         )
-        return public_artifact_ref(metadata_path, base_dir=self.campaign_dir)
+        _attach_formal_candidate_summary(
+            branch,
+            artifact_ref=artifact_ref,
+            stage=stage,
+            raw_metrics_ref=raw_metrics_ref,
+            selected_surface=selected_surface,
+            replay_identity=replay_identity,
+            patch_digest=patch_digest,
+        )
+        return artifact_ref
+
+    def _record_omitted(
+        self,
+        *,
+        branch: Branch,
+        h_record: HypothesisRecord,
+        stage: str,
+        candidate_id: str,
+        patch_digest: str,
+        raw_metrics_ref: str | None,
+        selected_surface: str,
+        replay_identity: dict[str, Any] | None,
+        missing_replay_identity_keys: list[str],
+        omitted_reasons: list[str],
+        decision: Decision,
+        decision_reason_codes: Iterable[str] | None,
+    ) -> None:
+        primary_reason = omitted_reasons[0] if omitted_reasons else "unknown"
+        payload = {
+            "schema": self.schema,
+            "created_at": datetime.now().isoformat(),
+            "candidate_id": candidate_id,
+            "campaign_artifact_kind": "formal_screening_candidate_patch",
+            "artifact_status": "omitted",
+            "artifact_omitted": True,
+            "artifact_omitted_reason": primary_reason,
+            "artifact_omitted_reasons": list(omitted_reasons),
+            "non_replayable_reason": f"formal_candidate_artifact_omitted:{primary_reason}",
+            "branch_id": branch.branch_id,
+            "lineage_id": getattr(branch, "lineage_id", None) or branch.branch_id,
+            "hypothesis_id": h_record.hypothesis_id,
+            "stage": stage,
+            "decision": decision.value,
+            "decision_reason_codes": list(decision_reason_codes or ()),
+            "branch_code_status": str(
+                getattr(branch, "branch_code_status", "") or ""
+            ),
+            "patch_digest": patch_digest,
+            "raw_metrics_ref": raw_metrics_ref,
+            "selected_surface": selected_surface,
+            "replay_identity_status": (
+                replay_identity.get("identity_status")
+                if isinstance(replay_identity, dict)
+                else "missing"
+            ),
+            "missing_replay_identity_keys": list(missing_replay_identity_keys),
+            "artifact_ref": None,
+            "diff_ref": None,
+        }
+        _append_index(self.artifact_dir / "index.jsonl", payload)
+        _attach_formal_candidate_omission_summary(
+            branch,
+            stage=stage,
+            raw_metrics_ref=raw_metrics_ref,
+            selected_surface=selected_surface,
+            replay_identity=replay_identity,
+            patch_digest=patch_digest,
+            omitted_reasons=omitted_reasons,
+            missing_replay_identity_keys=missing_replay_identity_keys,
+        )
 
 
 def _stage_value(protocol_result: ProtocolResult) -> str:
     stage = getattr(protocol_result, "stage", "")
     return str(getattr(stage, "value", stage) or "")
+
+
+def _artifact_omitted_reasons(
+    *,
+    patch: PatchProposal | None,
+    contract_result: ContractResult,
+    verification_result: VerificationResult,
+    canary_result: CanaryResult,
+    missing_replay_identity_keys: list[str],
+) -> list[str]:
+    reasons: list[str] = []
+    if patch is None:
+        reasons.append("missing_patch")
+    if not contract_result.passed:
+        reasons.append("contract_failed")
+    if not verification_result.passed:
+        reasons.append("verification_failed")
+    if not canary_result.passed:
+        reasons.append("canary_failed")
+    if missing_replay_identity_keys:
+        reasons.append("missing_replay_identity")
+    return list(dict.fromkeys(reasons))
+
+
+def _omitted_candidate_digest(
+    *,
+    branch: Branch,
+    h_record: HypothesisRecord,
+    stage: str,
+    raw_metrics_ref: str | None,
+    omitted_reasons: Iterable[str],
+) -> str:
+    raw = json.dumps(
+        {
+            "branch_id": branch.branch_id,
+            "hypothesis_id": h_record.hypothesis_id,
+            "stage": stage,
+            "raw_metrics_ref": raw_metrics_ref,
+            "artifact_omitted_reasons": list(omitted_reasons),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _attach_formal_candidate_summary(
+    branch: Branch,
+    *,
+    artifact_ref: str | None,
+    stage: str,
+    raw_metrics_ref: str | None,
+    selected_surface: str,
+    replay_identity: dict[str, Any],
+    patch_digest: str,
+) -> None:
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    if artifact_ref:
+        summary["formal_candidate_patch_artifact_ref"] = artifact_ref
+        summary["formal_replay_identity_ref"] = f"{artifact_ref}#/replay_identity"
+    summary["formal_candidate_artifact_status"] = "recorded"
+    summary["formal_candidate_artifact_omitted"] = False
+    summary.pop("artifact_omitted_reason", None)
+    summary.pop("artifact_omitted_reasons", None)
+    summary.pop("non_replayable_reason", None)
+    summary.pop("non_replayable", None)
+    summary["protocol_stage"] = stage
+    summary["stage"] = stage
+    summary["raw_metrics_ref"] = raw_metrics_ref
+    summary["selected_surface"] = selected_surface
+    summary["patch_digest"] = patch_digest
+    summary["patch_hash"] = patch_digest
+    summary["replay_identity"] = replay_identity
+    summary["formal_replay_identity"] = replay_identity
+    code_hash = str(replay_identity.get("code_hash") or "").strip()
+    if code_hash and code_hash != "unknown":
+        summary["candidate_code_hash"] = code_hash
+        summary["code_hash"] = code_hash
+        summary["current_code_hash"] = code_hash
+    summary["replay_metadata"] = {
+        "schema_version": "formal_candidate_replay_metadata.v1",
+        "raw_metrics_ref": raw_metrics_ref,
+        "selected_surface": selected_surface,
+        "replay_identity_status": replay_identity["identity_status"],
+        "replay_identity_ref": (
+            f"{artifact_ref}#/replay_identity" if artifact_ref else ""
+        ),
+        "decision_features_excluded": True,
+    }
+    summary["formal_candidate_artifact_report"] = {
+        "schema_version": "formal_candidate_artifact_report.v1",
+        "artifact_status": "recorded",
+        "artifact_ref": artifact_ref,
+        "replay_identity_status": replay_identity["identity_status"],
+        "missing_replay_identity_keys": [],
+    }
+    branch.branch_evidence_summary = summary
+
+
+def _attach_formal_candidate_omission_summary(
+    branch: Branch,
+    *,
+    stage: str,
+    raw_metrics_ref: str | None,
+    selected_surface: str,
+    replay_identity: dict[str, Any] | None,
+    patch_digest: str,
+    omitted_reasons: list[str],
+    missing_replay_identity_keys: list[str],
+) -> None:
+    primary_reason = omitted_reasons[0] if omitted_reasons else "unknown"
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    summary["formal_candidate_artifact_status"] = "omitted"
+    summary["formal_candidate_artifact_omitted"] = True
+    summary["artifact_omitted_reason"] = primary_reason
+    summary["artifact_omitted_reasons"] = list(omitted_reasons)
+    summary["non_replayable"] = True
+    summary["non_replayable_reason"] = (
+        f"formal_candidate_artifact_omitted:{primary_reason}"
+    )
+    summary["protocol_stage"] = stage
+    summary["stage"] = stage
+    summary["raw_metrics_ref"] = raw_metrics_ref
+    summary["selected_surface"] = selected_surface
+    if patch_digest:
+        summary["patch_digest"] = patch_digest
+        summary["patch_hash"] = patch_digest
+    if replay_identity is not None:
+        summary["replay_identity"] = replay_identity
+        summary["formal_replay_identity"] = replay_identity
+        code_hash = str(replay_identity.get("code_hash") or "").strip()
+        if code_hash and code_hash != "unknown":
+            summary["candidate_code_hash"] = code_hash
+            summary["code_hash"] = code_hash
+            summary["current_code_hash"] = code_hash
+    summary["formal_candidate_artifact_report"] = {
+        "schema_version": "formal_candidate_artifact_report.v1",
+        "artifact_status": "omitted",
+        "artifact_omitted_reason": primary_reason,
+        "artifact_omitted_reasons": list(omitted_reasons),
+        "non_replayable_reason": summary["non_replayable_reason"],
+        "replay_identity_status": (
+            replay_identity.get("identity_status")
+            if isinstance(replay_identity, dict)
+            else "missing"
+        ),
+        "missing_replay_identity_keys": list(missing_replay_identity_keys),
+    }
+    branch.branch_evidence_summary = summary
 
 
 def _candidate_id(
@@ -352,6 +622,28 @@ def _safe_path_part(value: str) -> str:
 
 def _append_index(index_path: Path, payload: dict[str, Any]) -> None:
     index_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_id = str(payload.get("candidate_id") or "")
+    artifact_status = str(payload.get("artifact_status") or "")
+    omitted_reason = str(payload.get("artifact_omitted_reason") or "")
+    artifact_ref = str(payload.get("artifact_ref") or "")
+    if candidate_id and index_path.exists():
+        try:
+            for line in index_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                existing = json.loads(line)
+                if not isinstance(existing, dict):
+                    continue
+                if (
+                    str(existing.get("candidate_id") or "") == candidate_id
+                    and str(existing.get("artifact_status") or "") == artifact_status
+                    and str(existing.get("artifact_omitted_reason") or "")
+                    == omitted_reason
+                    and str(existing.get("artifact_ref") or "") == artifact_ref
+                ):
+                    return
+        except (OSError, json.JSONDecodeError):
+            pass
     with index_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(_jsonable(payload), sort_keys=True) + "\n")
 

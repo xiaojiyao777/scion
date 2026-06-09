@@ -826,6 +826,11 @@ def test_quality_regression_discarded_candidate_records_patch_artifact(
         "candidate.patch.json#/replay_identity"
     )
     assert metadata["replay_metadata"]["replay_identity_status"] == "complete"
+    summary = branch.branch_evidence_summary
+    assert summary["formal_candidate_artifact_status"] == "recorded"
+    assert summary["formal_candidate_artifact_report"]["artifact_status"] == "recorded"
+    assert summary["replay_identity"]["identity_status"] == "complete"
+    assert summary["formal_replay_identity_ref"].endswith("#/replay_identity")
     diff_text = (metadata_paths[0].parent / "candidate.diff").read_text(
         encoding="utf-8"
     )
@@ -837,6 +842,133 @@ def test_quality_regression_discarded_candidate_records_patch_artifact(
         tmp_path / "artifacts" / "formal_candidates" / "index.jsonl"
     ).read_text(encoding="utf-8")
     assert "h-quality-regression" in index_text
+
+
+def test_formal_candidate_artifact_omission_reports_missing_replay_identity(
+    tmp_path: Path,
+) -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion-hash",
+        )
+    )
+    branch.current_code_hash = "candidate-hash"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a bounded repair scoring change.",
+        change_locus="repair",
+        action="modify",
+        target_file="solver.py",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-missing-identity",
+        branch_id=branch.branch_id,
+        change_locus="repair",
+        action="modify",
+        status="running",
+        target_file="solver.py",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="def score():\n    return 2\n",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "solver.py").write_text(patch.code_content, encoding="utf-8")
+    recorder = FormalCandidatePatchArtifactRecorder(tmp_path)
+    workspaces = {branch.branch_id: str(workspace)}
+    patches = {branch.branch_id: patch}
+    hyp_store = _HypothesisStore()
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches=patches,
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: workspaces.pop(branch_id, None),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+        record_formal_candidate_artifact=lambda **kwargs: recorder.record(**kwargs),
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+        exposed_summary="weak signal",
+        raw_metrics_ref=str(tmp_path / "metrics" / "screening.json"),
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+    )
+
+    metadata_paths = list(
+        (tmp_path / "artifacts" / "formal_candidates").glob(
+            "**/candidate.patch.json"
+        )
+    )
+    index_rows = [
+        json.loads(line)
+        for line in (
+            tmp_path / "artifacts" / "formal_candidates" / "index.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    summary = branch.branch_evidence_summary
+    report = summary["formal_candidate_artifact_report"]
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert metadata_paths == []
+    assert len(index_rows) == 1
+    assert index_rows[0]["artifact_status"] == "omitted"
+    assert index_rows[0]["artifact_omitted_reason"] == "missing_replay_identity"
+    assert "problem_spec_hash" in index_rows[0]["missing_replay_identity_keys"]
+    assert summary["formal_candidate_artifact_status"] == "omitted"
+    assert summary["artifact_omitted_reason"] == "missing_replay_identity"
+    assert summary["non_replayable_reason"] == (
+        "formal_candidate_artifact_omitted:missing_replay_identity"
+    )
+    assert report["artifact_status"] == "omitted"
+    assert report["artifact_omitted_reason"] == "missing_replay_identity"
+    assert "seed_ledger_hash" in report["missing_replay_identity_keys"]
+    assert summary["replay_identity"]["identity_status"] == "degraded"
 
 
 def test_abandon_syncs_terminal_branch_evidence_before_lineage_and_persist() -> None:

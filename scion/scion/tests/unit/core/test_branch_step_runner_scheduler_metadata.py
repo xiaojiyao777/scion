@@ -337,6 +337,8 @@ def test_fresh_runtime_replay_scheduler_action_skips_proposal_and_is_non_counted
     branch.current_code_hash = "candidate-hash"
     branch.last_clean_code_hash = "candidate-hash"
     branch.branch_evidence_summary = {
+        "protocol_stage": "screening",
+        "replay_identity": _complete_replay_identity(),
         "fresh_runtime_followup": {
             "schema_version": "fresh_runtime_followup.v1",
             "queue_intent": "fresh_champion_runtime_replay",
@@ -473,6 +475,87 @@ def test_fresh_runtime_replay_scheduler_action_skips_proposal_and_is_non_counted
         ]
         is False
     )
+
+
+def test_fresh_runtime_replay_selected_without_identity_blocks_materialization() -> None:
+    branch = _branch("fresh-replay-missing-identity")
+    branch.branch_code_status = "active_weak_positive"
+    branch.last_screening_feedback_tier = "weak_positive"
+    branch.current_code_hash = "candidate-hash"
+    branch.branch_evidence_summary = {
+        "protocol_stage": "screening",
+        "fresh_runtime_followup": {
+            "schema_version": "fresh_runtime_followup.v1",
+            "queue_intent": "fresh_champion_runtime_replay",
+            "scheduler_marker": "fresh_champion_runtime_replay_pending",
+            "fresh_runtime_pending": True,
+            "fresh_runtime_required": True,
+            "decision_features_excluded": True,
+        },
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Replay current candidate against fresh champion runtime.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-fresh-replay-missing-identity",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    persisted: list[str] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("fresh replay must not call proposal explore")
+
+    def fail_evaluate(*_args, **_kwargs):
+        raise AssertionError("missing replay identity must block evaluation")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="replay_existing",
+            branch=branch,
+            slot="exploit_weak_positive",
+            reason="fresh_champion_runtime_replay_followup",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.branch_workspaces[branch.branch_id] = "/tmp/workspace"
+    runner.branch_hypotheses[branch.branch_id] = hypothesis
+    runner.branch_current_hypothesis[branch.branch_id] = h_record
+    runner.branch_patches[branch.branch_id] = patch
+    runner.evaluate = fail_evaluate
+    runner.persist_branch_state = persisted.append
+
+    result = runner.run_one_step()
+    replay_metadata = result.scheduler_audit_metadata["fresh_runtime_replay"]
+    closure = branch.branch_evidence_summary["fresh_runtime_replay_closure"]
+
+    assert result.action == "replay"
+    assert result.counts_toward_max_rounds is False
+    assert result.failure_stage == "fresh_runtime_replay"
+    assert replay_metadata["closure_status"] == (
+        "blocked_missing_replay_materialization"
+    )
+    assert replay_metadata["missing_materialization_keys"] == ["replay_identity"]
+    assert replay_metadata["missing_replay_identity_keys"] == ["replay_identity"]
+    assert replay_metadata["non_replayable_reason"] == (
+        "fresh_runtime_replay:missing_replay_identity"
+    )
+    assert closure["closure_status"] == "blocked_missing_replay_materialization"
+    assert branch.branch_evidence_summary["fresh_runtime_pending"] is False
+    assert branch.branch_evidence_summary["fresh_runtime_non_replayable"][
+        "reason"
+    ] == "fresh_runtime_replay:missing_replay_identity"
+    assert persisted == [branch.branch_id]
 
 
 def test_fresh_runtime_replay_with_artifact_but_no_live_state_blocks_materialization() -> None:
@@ -705,6 +788,87 @@ def test_fresh_runtime_replay_drain_materializes_pressure_and_prefers_replay() -
         "fresh_champion_runtime_replay_pending"
     )
     assert evaluated_pending_markers[0]["decision_features_excluded"] is True
+    assert persisted == [branch.branch_id]
+
+
+def test_fresh_runtime_pressure_missing_replay_identity_marks_non_replayable() -> None:
+    branch = _branch("fresh-pressure-missing-identity")
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.current_code_hash = "candidate-hash"
+    branch.branch_evidence_summary = {
+        "runtime_evidence_status": "fresh_champion_required",
+        "fresh_runtime_required": True,
+        "fresh_runtime_pending": False,
+        "runtime_evidence_pressure_count": 2,
+        "reason_codes": ["RUNTIME_TIE_FRESH_CHAMPION_REQUIRED"],
+        "protocol_stage": "screening",
+    }
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Replay current candidate against fresh champion runtime.",
+        change_locus="generic_surface",
+        action="modify",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-fresh-pressure-missing-identity",
+        branch_id=branch.branch_id,
+        change_locus="generic_surface",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    persisted: list[str] = []
+
+    def fail_proposal(selected: Branch) -> StepResult:
+        raise AssertionError("replay drain must not execute ordinary proposal")
+
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="create_new",
+            branch=None,
+            slot="explore_new",
+            reason="runtime_evidence_completeness_clean_fork",
+        ),
+        branch=branch,
+        run_explore_step=fail_proposal,
+    )
+    runner.branch_workspaces[branch.branch_id] = "/tmp/workspace"
+    runner.branch_hypotheses[branch.branch_id] = hypothesis
+    runner.branch_current_hypothesis[branch.branch_id] = h_record
+    runner.branch_patches[branch.branch_id] = patch
+    runner.persist_branch_state = persisted.append
+
+    result = runner.run_fresh_runtime_replay_drain_step()
+    metadata = result.scheduler_audit_metadata
+    marker = branch.branch_evidence_summary["fresh_runtime_followup"]
+    non_replayable = branch.branch_evidence_summary["fresh_runtime_non_replayable"]
+    candidate = metadata["fresh_runtime_replay"][
+        "fresh_runtime_pressure_candidates"
+    ][0]
+
+    assert result.action == "skip"
+    assert result.counts_toward_max_rounds is False
+    assert marker["fresh_runtime_pending"] is False
+    assert marker["scheduler_marker"] == (
+        "fresh_champion_runtime_replay_non_replayable"
+    )
+    assert marker["non_replayable_reason"] == (
+        "fresh_runtime_replay:missing_replay_identity"
+    )
+    assert non_replayable["missing_materialization_keys"] == ["replay_identity"]
+    assert non_replayable["missing_replay_identity_keys"] == ["replay_identity"]
+    assert metadata["fresh_runtime_replay_drain"][
+        "fresh_runtime_non_replayable_marked"
+    ][0]["branch_id"] == branch.branch_id
+    assert candidate["replay_materializable"] is False
+    assert candidate["missing_materialization_keys"] == ["replay_identity"]
+    assert candidate["non_replayable_reason"] == (
+        "fresh_runtime_replay:missing_replay_identity"
+    )
     assert persisted == [branch.branch_id]
 
 

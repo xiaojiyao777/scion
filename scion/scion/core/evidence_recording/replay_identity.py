@@ -5,18 +5,11 @@ import hashlib
 import json
 from typing import Any, Dict, Iterable
 
-UNKNOWN_REPLAY_IDENTITY_VALUE = "unknown"
-FORMAL_REPLAY_IDENTITY_SCHEMA = "scion.formal_replay_identity.v1"
-FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS = (
-    "problem_spec_hash",
-    "split_manifest_hash",
-    "seed_ledger_hash",
-    "patch_digest",
-    "patch_hash",
-    "selected_surface",
-    "protocol_version",
-    "raw_metrics_ref",
-    "code_hash",
+from scion.core.replay_identity_contract import (
+    FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS,
+    FORMAL_REPLAY_IDENTITY_SCHEMA,
+    UNKNOWN_REPLAY_IDENTITY_VALUE,
+    formal_replay_identity_missing_keys as _contract_missing_keys,
 )
 
 
@@ -79,6 +72,18 @@ def formal_replay_identity_payload(
         "identity_degraded": bool(missing_keys),
         "degraded_markers": ["missing_replay_identity"] if missing_keys else [],
     }
+
+
+def formal_replay_identity_missing_keys(
+    replay_identity: Dict[str, Any] | None,
+) -> list[str]:
+    """Return required replay-identity keys that are absent or placeholder-only."""
+    return _contract_missing_keys(replay_identity)
+
+
+def formal_replay_identity_complete(replay_identity: Dict[str, Any] | None) -> bool:
+    """Return whether a formal replay identity can be used for materialization."""
+    return not formal_replay_identity_missing_keys(replay_identity)
 
 
 def _clean_value(value: Any) -> str:
