@@ -48,3 +48,6 @@ vrp/results/logs/
 .DS_Store
 *.swp
 *.swo
+
+# Generated experiment analysis reports
+scion/reports/experiments/
