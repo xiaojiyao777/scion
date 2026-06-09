@@ -78,6 +78,7 @@ from scion.core.branch_hygiene import (
     branch_code_status,
     branch_has_retained_checkpoint,
     branch_is_parked_lineage,
+    branch_lifecycle_closure_classification,
     branch_lifecycle_reroute_context,
     branch_lineage_status,
     branch_mechanism_ids,
@@ -125,12 +126,19 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         or last_screening_feedback_tier == "weak_positive"
     )
     parked_lineage = branch_is_parked_lineage(branch)
+    final_classification = branch_lifecycle_closure_classification(branch)
+    classification = str(final_classification.get("classification") or "")
+    replay_blocked = classification == "replay_blocked"
     strict_same_mechanism_followup = (
-        same_mechanism_followup_required and not weak_positive_followup
+        same_mechanism_followup_required
+        and not weak_positive_followup
+        and not replay_blocked
     )
     followup_policy = (
         "parked_lineage_clean_fork_only"
         if parked_lineage
+        else "fresh_runtime_replay_blocked_clean_fork_required"
+        if replay_blocked
         else
         BRANCH_LOCAL_FOLLOWUP_OR_EXPLICIT_BRIDGE
         if weak_positive_followup
@@ -141,7 +149,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     )
     generation_mode = (
         "clean_fork_only"
-        if parked_lineage
+        if parked_lineage or replay_blocked
         else
         BRANCH_LOCAL_FOLLOWUP_MODE
         if weak_positive_followup
@@ -153,6 +161,8 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     clean_fork_policy = (
         "parked_lineage_clean_fork_required"
         if parked_lineage
+        else "fresh_runtime_replay_blocked_missing_identity"
+        if replay_blocked
         else
         CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM
         if strict_same_mechanism_followup
@@ -170,6 +180,9 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     elif parked_lineage:
         baseline_policy = "parked_lineage_clean_fork_required"
         repair_focus_reason = None
+    elif replay_blocked:
+        baseline_policy = "fresh_runtime_replay_blocked_clean_fork_required"
+        repair_focus_reason = None
     elif weak_positive_followup:
         baseline_policy = "branch_workspace_branch_local_followup"
         repair_focus_reason = None
@@ -185,9 +198,15 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
     counts_toward_active_slots = (
         branch_counts_toward_active_slots(branch) if branch is not None else False
     )
+    if replay_blocked:
+        counts_toward_active_slots = False
     current_head_active_slot_release_reason = (
         branch_active_slot_release_reason(branch) if branch is not None else ""
     )
+    if replay_blocked and not current_head_active_slot_release_reason:
+        current_head_active_slot_release_reason = (
+            "fresh_runtime_replay_blocked_missing_identity"
+        )
     runtime_evidence_pressure_count = _branch_runtime_evidence_pressure_count(branch)
     fresh_runtime_followup = _branch_fresh_runtime_followup(branch)
     fresh_runtime_pending = bool(
@@ -261,11 +280,17 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "fresh_runtime_pending": fresh_runtime_pending,
         "fresh_runtime_required": fresh_runtime_required,
         "fresh_runtime_followup": fresh_runtime_followup,
+        "final_branch_classification": final_classification,
+        "branch_final_classification": classification,
+        "branch_next_action": final_classification.get("next_action"),
+        "branch_classification_reason": final_classification.get("reason"),
         "active_slot_status": (
             "active_slot"
             if counts_toward_active_slots
             else "parked_lineage"
             if branch_is_parked_lineage(branch)
+            else "released_active_slot"
+            if replay_blocked
             else "inactive"
         ),
         "counts_toward_active_slots": counts_toward_active_slots,

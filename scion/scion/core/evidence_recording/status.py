@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
+from scion.core.branch_hygiene import campaign_remaining_branch_classification
 from scion.core.public_refs import redact_public_refs
 from scion.core.research_process_guidance_audit import (
     extract_research_process_guidance_audit,
@@ -190,6 +191,16 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "agentic_sessions": "agentic_sessions",
         "hypothesis_calls": "hypothesis_calls",
         "code_calls": "code_calls",
+        "llm_request_kind_counts": "llm_request_kind_counts",
+        "llm_model_counts": "llm_model_counts",
+        "llm_provider_counts": "llm_provider_counts",
+        "llm_token_sums": "llm_token_sums",
+        "llm_token_field_availability": "llm_token_field_availability",
+        "llm_accounting": "llm_accounting",
+        "formal_candidate_count_reconciliation": (
+            "formal_candidate_count_reconciliation"
+        ),
+        "candidate_count_reconciliation": "candidate_count_reconciliation",
     }
     for top_key, loop_key in aliases.items():
         value = loop.get(loop_key)
@@ -596,6 +607,7 @@ class StatusWriterMixin:
                 effective_rounds_completed=payload.get(
                     "effective_rounds_completed"
                 ),
+                campaign_dir=self.campaign_dir,
             )
             payload.update(accounting)
             payload["accounting_reconciliation"] = accounting_reconciliation
@@ -701,6 +713,10 @@ class StatusWriterMixin:
         terminal_stopped_reason = payload.get("stopped_reason")
         branch_rows = _branch_rows(payload)
         _reconcile_active_slots_from_branch_cards(payload, branch_rows)
+        if _is_max_rounds_stop(terminal_stopped_reason):
+            payload["remaining_branch_classification"] = (
+                campaign_remaining_branch_classification(branch_rows)
+            )
         current_progress = self.current_status_progress
         if current_progress is None and isinstance(state_current_progress, Mapping):
             current_progress = dict(state_current_progress)
@@ -887,6 +903,11 @@ class StatusWriterMixin:
         self.in_flight_protocol = _in_flight_protocol_snapshot(progress)
         self.write_status()
         return progress
+
+
+def _is_max_rounds_stop(reason: Any) -> bool:
+    text = str(reason or "").strip()
+    return text in {"max_rounds", "max_rounds_exhausted"}
 
 
 def _merge_status_cross_branch_map_coverage(payload: Dict[str, Any]) -> None:

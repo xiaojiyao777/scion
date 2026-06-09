@@ -736,6 +736,124 @@ def test_status_and_summary_cap_active_slots_from_branch_cards(
         assert payload["active_slots"]["overflow_branch_ids"] == ["branch-c"]
 
 
+def test_max_round_status_and_summary_classify_remaining_branch_closure(
+    tmp_path: Path,
+) -> None:
+    def row(branch_id: str, classification: str, *, slot_status: str) -> dict:
+        return {
+            "id": branch_id,
+            "state": "explore",
+            "branch_card": {
+                "branch_id": branch_id,
+                "status": (
+                    "parked_lineage"
+                    if classification == "parked"
+                    else "abandoned"
+                    if classification == "abandoned"
+                    else "explore"
+                ),
+                "lineage_status": classification,
+                "branch_code_status": (
+                    "parked_lineage"
+                    if classification == "parked"
+                    else "active_no_effect"
+                ),
+                "active_slot_status": slot_status,
+                "counts_toward_active_slots": slot_status == "active_slot",
+                "current_head_active_slot_release_reason": (
+                    "fresh_runtime_replay_blocked_missing_identity"
+                    if classification == "replay_blocked"
+                    else ""
+                ),
+                "final_branch_classification": {
+                    "schema_version": "scion.branch_final_classification.v1",
+                    "classification": classification,
+                    "next_action": (
+                        "clean_fork_or_restore_replay_identity"
+                        if classification == "replay_blocked"
+                        else "required_follow_up"
+                        if classification == "active_with_required_follow_up"
+                        else "clean_fork"
+                        if classification == "parked"
+                        else "do_not_schedule"
+                    ),
+                    "reason": (
+                        "fresh_runtime_replay_blocked_missing_identity"
+                        if classification == "replay_blocked"
+                        else classification
+                    ),
+                    "branch_state": "explore",
+                    "branch_code_status": "active_no_effect",
+                    "decision_features_excluded": True,
+                },
+            },
+        }
+
+    state = {
+        "campaign_id": "camp-closure",
+        "n_experiments": 4,
+        "screened_experiments": 4,
+        "branches": [
+            row(
+                "branch-replay-blocked",
+                "replay_blocked",
+                slot_status="released_active_slot",
+            ),
+            row(
+                "branch-followup",
+                "active_with_required_follow_up",
+                slot_status="active_slot",
+            ),
+            row("branch-parked", "parked", slot_status="parked_lineage"),
+            row("branch-abandoned", "abandoned", slot_status="inactive"),
+        ],
+        "active_slots": {
+            "used": 4,
+            "max": 4,
+            "available": 0,
+            "branch_ids": [
+                "branch-replay-blocked",
+                "branch-followup",
+                "branch-parked",
+                "branch-abandoned",
+            ],
+        },
+    }
+    recorder = EvidenceRecorder(
+        campaign_id="camp-closure",
+        campaign_dir=tmp_path,
+        state_provider=lambda: state,
+    )
+
+    status = recorder.write_status(stopped_reason="max_rounds_exhausted")
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=4,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    for payload in (status, summary):
+        closure = payload["remaining_branch_classification"]
+        assert closure["counts"] == {
+            "replay_blocked": 1,
+            "active_with_required_follow_up": 1,
+            "parked": 1,
+            "abandoned": 1,
+        }
+        assert closure["branch_ids_by_classification"]["replay_blocked"] == [
+            "branch-replay-blocked"
+        ]
+        assert closure["branches"][0]["next_action"] == (
+            "clean_fork_or_restore_replay_identity"
+        )
+        assert payload["active_slots"]["used"] == 1
+        assert payload["active_slots"]["branch_ids"] == ["branch-followup"]
+        assert payload["active_slots"]["released_active_slot_ids"] == [
+            "branch-replay-blocked"
+        ]
+
+
 def test_campaign_summary_branch_cards_keep_runtime_evidence_pressure_count(
     tmp_path: Path,
 ) -> None:
@@ -1109,6 +1227,24 @@ def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     assert repeated[0]["cache_create_calls"] == 2
     assert repeated[0]["cache_read_calls"] == 0
     assert "multiple cache writes without a read" in repeated[0]["diagnosis"]
+    assert cache_stats["llm_accounting"] == summary["llm_accounting"]
+    assert summary["llm_request_kind_counts"] == {"code": 2}
+    assert summary["llm_provider_counts"] == {"anthropic": 2}
+    assert summary["llm_model_counts"] == {"claude-sonnet-4-6": 2}
+    assert summary["llm_token_sums"]["input_tokens"] == 220
+    assert summary["llm_token_sums"]["output_tokens"] == 45
+    assert summary["llm_token_sums"]["prompt_tokens_total"] == 620
+    assert summary["llm_token_sums"]["total_tokens"] == 665
+    assert summary["llm_token_sums"]["reasoning_tokens"] is None
+    assert summary["llm_token_sums"]["cache_creation_input_tokens"] == 400
+    assert summary["llm_token_sums"]["cache_read_input_tokens"] == 0
+    assert summary["llm_token_sums"]["cache_miss_input_tokens"] == 220
+    reasoning_availability = summary["llm_token_field_availability"][
+        "reasoning_tokens"
+    ]
+    assert reasoning_availability["known_usage_traces"] == 0
+    assert reasoning_availability["missing_usage_traces"] == 2
+    assert reasoning_availability["sum_is_null_when_all_values_unavailable"] is True
 
 
 def test_summary_cache_helper_preserves_step_record_fallback_schema(
@@ -1119,6 +1255,7 @@ def test_summary_cache_helper_preserves_step_record_fallback_schema(
         campaign_dir=tmp_path,
     )
 
+    llm_accounting = cache_stats.pop("llm_accounting")
     assert cache_stats == {
         "total_tokens": 100,
         "prompt_tokens_total": 100,
@@ -1136,6 +1273,14 @@ def test_summary_cache_helper_preserves_step_record_fallback_schema(
         "repeated_cache_key_groups": [],
         "repeated_cache_key_no_read": [],
     }
+    assert llm_accounting["source"] == "step_records"
+    assert llm_accounting["request_kind_counts"] == {}
+    assert llm_accounting["provider_counts"] == {}
+    assert llm_accounting["model_counts"] == {}
+    assert llm_accounting["token_sums"]["input_tokens"] is None
+    assert llm_accounting["token_field_availability"]["input_tokens"][
+        "sum_is_null_when_all_values_unavailable"
+    ] is True
 
 
 def test_campaign_summary_uses_provider_aware_openai_cache_accounting(
@@ -1253,6 +1398,27 @@ def test_campaign_summary_uses_provider_aware_openai_cache_accounting(
     assert cache_stats["cache_accounting_modes"] == {
         "provider_prompt_tokens_include_cache_read": 4
     }
+    assert cache_stats["llm_accounting"] == summary["llm_accounting"]
+    assert summary["llm_accounting"]["trace_file_count"] == 5
+    assert summary["llm_accounting"]["usage_trace_count"] == 4
+    assert summary["llm_accounting"]["no_usage_trace_count"] == 1
+    assert summary["llm_request_kind_counts"] == {"code": 3, "hypothesis": 2}
+    assert summary["llm_provider_counts"] == {"openai_compatible": 5}
+    assert summary["llm_model_counts"] == {"gpt-5.5": 5}
+    assert summary["llm_token_sums"]["input_tokens"] == 310
+    assert summary["llm_token_sums"]["output_tokens"] == 31
+    assert summary["llm_token_sums"]["prompt_tokens_total"] == 310
+    assert summary["llm_token_sums"]["total_tokens"] == 341
+    assert summary["llm_token_sums"]["cache_read_input_tokens"] == 40
+    assert summary["llm_token_sums"]["cache_miss_input_tokens"] == 270
+    assert summary["llm_token_sums"]["cache_tokens_total"] == 40
+    assert summary["llm_token_sums"]["reasoning_tokens"] is None
+    assert summary["llm_token_field_availability"]["input_tokens"][
+        "no_usage_traces"
+    ] == 1
+    assert summary["llm_token_field_availability"]["reasoning_tokens"][
+        "missing_usage_traces"
+    ] == 4
 
     by_kind = {
         (row["request_kind"], row["provider"]): row
@@ -2441,6 +2607,23 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["agentic_sessions"] == 2
         assert payload["hypothesis_calls"] == 1
         assert payload["code_calls"] == 2
+        assert payload["llm_request_kind_counts"] == {
+            "code": 2,
+            "hypothesis": 1,
+        }
+        assert payload["llm_provider_counts"] == {"unknown": 3}
+        assert payload["llm_model_counts"] == {"unknown": 3}
+        assert payload["llm_token_sums"]["input_tokens"] == 30
+        assert payload["llm_token_sums"]["output_tokens"] == 6
+        assert payload["llm_token_sums"]["total_tokens"] == 36
+        assert payload["llm_token_sums"]["reasoning_tokens"] is None
+        candidate_reconciliation = payload["formal_candidate_count_reconciliation"]
+        assert candidate_reconciliation["db_screening_rows"] == 2
+        assert candidate_reconciliation["formal_candidates_index_entries"] is None
+        assert candidate_reconciliation["formal_candidates_index_status"] == "missing"
+        assert "formal_candidates_index_missing_or_not_written" in (
+            candidate_reconciliation["omitted_reasons"]
+        )
         assert payload["proposal_accounting"]["campaign_steps"] == 7
         assert payload["proposal_accounting"]["screened_rounds"] == 2
         assert payload["proposal_accounting"]["proposal_attempts_total"] == 7
@@ -2462,6 +2645,12 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["proposal_accounting"]["agentic_sessions"] == 2
         assert payload["proposal_accounting"]["hypothesis_calls"] == 1
         assert payload["proposal_accounting"]["code_calls"] == 2
+        assert payload["proposal_accounting"]["llm_accounting"] == (
+            payload["llm_accounting"]
+        )
+        assert payload["proposal_accounting"][
+            "formal_candidate_count_reconciliation"
+        ] == candidate_reconciliation
         trace_index = payload["proposal_accounting"]["agentic_session_trace_index"]
         assert payload["agentic_session_trace_index"] == trace_index
         assert trace_index["artifact_ref"] == (
@@ -2678,6 +2867,12 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
         "requested_rounds": 4,
         "effective_rounds_completed": 4,
     }
+    formal_index = tmp_path / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text(
+        json.dumps({"candidate_id": "candidate-screening-1"}) + "\n",
+        encoding="utf-8",
+    )
 
     summary = recorder.write_campaign_summary(
         step_history=[
@@ -2726,10 +2921,29 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
         summary["proposal_accounting"]["verification_failure_consumed_candidates"]
         == 1
     )
+    candidate_reconciliation = summary["formal_candidate_count_reconciliation"]
+    assert candidate_reconciliation["warehouse_formal_screened_candidates"] == 1
+    assert candidate_reconciliation["db_screening_rows"] == 3
+    assert candidate_reconciliation["formal_candidates_index_entries"] == 1
+    assert candidate_reconciliation["formal_candidates_index_status"] == "available"
+    assert {
+        "relation": "db_screening_rows_minus_warehouse_formal_screened_candidates",
+        "delta": 2,
+        "primary_reason": (
+            "screening_protocol_results_include_non_effective_or_"
+            "non_counted_screening_rows"
+        ),
+    } in candidate_reconciliation["differences"]
+    assert "formal_screened_candidates_excludes_non_effective_or_non_counted_screening_rows" in (
+        candidate_reconciliation["omitted_reasons"]
+    )
     reconciliation = summary["accounting_reconciliation"]
     assert reconciliation["formal_screened_candidates"] == 1
     assert reconciliation["protocol_evaluated_candidates"] == 5
     assert reconciliation["protocol_metric_results"] == 5
+    assert reconciliation["formal_candidate_count_reconciliation"] == (
+        candidate_reconciliation
+    )
     assert reconciliation["fresh_runtime_replay_protocol_results"] == 1
     assert reconciliation["verification_consumed_candidates"] == 4
     assert reconciliation["verification_failure_consumed_candidates"] == 1

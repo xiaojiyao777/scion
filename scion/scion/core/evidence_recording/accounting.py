@@ -20,6 +20,8 @@ from scion.core.telemetry_validation import (
 )
 from scion.proposal.session_trace_index import SESSION_TRACE_INDEX_NAME
 
+from .summary_cache import _campaign_llm_accounting
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,15 @@ def proposal_accounting_fields(
     has_step_history = bool(step_list)
     loop = loop_status if isinstance(loop_status, Mapping) else {}
     state_map = state if isinstance(state, Mapping) else {}
-    request_counts = llm_request_kind_counts(campaign_dir)
+    llm_accounting = _campaign_llm_accounting(campaign_dir)
+    request_counts = {
+        str(kind): _first_int(value, default=0)
+        for kind, value in (
+            llm_accounting.get("request_kind_counts") or {}
+        ).items()
+    }
+    if not request_counts:
+        request_counts = llm_request_kind_counts(campaign_dir)
     if not request_counts and isinstance(
         state_map.get("llm_request_kind_counts"),
         Mapping,
@@ -122,6 +132,7 @@ def proposal_accounting_fields(
         campaign_steps=campaign_steps,
         round_num=round_num,
         screened_rounds=screened,
+        campaign_dir=campaign_dir,
     )
     fields = {
         "campaign_accounting_schema_version": "campaign_accounting.v1",
@@ -140,6 +151,13 @@ def proposal_accounting_fields(
         "hypothesis_calls": hypothesis_calls,
         "code_calls": code_calls,
         "llm_request_kind_counts": dict(request_counts),
+        "llm_model_counts": dict(llm_accounting.get("model_counts") or {}),
+        "llm_provider_counts": dict(llm_accounting.get("provider_counts") or {}),
+        "llm_token_sums": dict(llm_accounting.get("token_sums") or {}),
+        "llm_token_field_availability": dict(
+            llm_accounting.get("token_field_availability") or {}
+        ),
+        "llm_accounting": llm_accounting,
     }
     trace_index = agentic_session_trace_index_artifact(
         campaign_dir=campaign_dir,
@@ -160,6 +178,7 @@ def accounting_reconciliation_fields(
     effective_rounds_completed: int | None = None,
     counted_experiment_steps: int | None = None,
     telemetry_failed_experiments: int | None = None,
+    campaign_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Return a compact audit trail explaining run-level counter differences."""
     step_list = list(steps)
@@ -360,6 +379,7 @@ def accounting_reconciliation_fields(
         campaign_steps=campaign_steps,
         round_num=round_num,
         screened_rounds=screened,
+        campaign_dir=campaign_dir,
     )
     return {
         "schema_version": "campaign_accounting_reconciliation.v1",
@@ -598,6 +618,7 @@ def _candidate_accounting_fields(
     campaign_steps: int,
     round_num: int | None,
     screened_rounds: int,
+    campaign_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Return stable run-level candidate counters with explicit semantics."""
     has_step_history = bool(steps)
@@ -734,6 +755,13 @@ def _candidate_accounting_fields(
         state_map.get("quality_blocks"),
         default=0,
     )
+    formal_candidate_reconciliation = _formal_candidate_count_reconciliation(
+        campaign_dir=campaign_dir,
+        formal_screened_candidates=formal_screened_candidates,
+        screening_protocol_results=screening_protocol_results,
+        protocol_evaluated_candidates=protocol_evaluated_candidates,
+        protocol_metric_results=protocol_metric_results,
+    )
     return {
         "proposal_attempts_total": proposal_attempts_total,
         "formal_screened_candidates": formal_screened_candidates,
@@ -752,6 +780,10 @@ def _candidate_accounting_fields(
         "proposal_quality_blocks": proposal_quality_blocks,
         "protocol_metric_stage_counts": protocol_metric_stage_counts,
         "protocol_stage_counts": stage_counts,
+        "formal_candidate_count_reconciliation": (
+            formal_candidate_reconciliation
+        ),
+        "candidate_count_reconciliation": formal_candidate_reconciliation,
         "max_rounds_budget_counter": "effective_rounds_completed",
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; proposal, "
@@ -795,6 +827,197 @@ def _candidate_accounting_fields(
             "proposal/schema quality blocks that consumed proposal attempts but "
             "did not produce verification or protocol metrics"
         ),
+    }
+
+
+def _formal_candidate_count_reconciliation(
+    *,
+    campaign_dir: str | Path | None,
+    formal_screened_candidates: int,
+    screening_protocol_results: int,
+    protocol_evaluated_candidates: int,
+    protocol_metric_results: int,
+) -> dict[str, Any]:
+    """Explain count differences between loop, protocol rows, and artifacts."""
+    index_info = _formal_candidates_index_info(campaign_dir)
+    differences: list[dict[str, Any]] = []
+    omitted_reasons: list[str] = []
+
+    screening_delta = screening_protocol_results - formal_screened_candidates
+    if screening_delta:
+        differences.append(
+            {
+                "relation": (
+                    "db_screening_rows_minus_warehouse_formal_screened_candidates"
+                ),
+                "delta": screening_delta,
+                "primary_reason": (
+                    "screening_protocol_results_include_non_effective_or_"
+                    "non_counted_screening_rows"
+                )
+                if screening_delta > 0
+                else "warehouse_counter_exceeds_visible_screening_protocol_rows",
+            }
+        )
+        if screening_delta > 0:
+            omitted_reasons.append(
+                "formal_screened_candidates_excludes_non_effective_or_non_counted_screening_rows"
+            )
+
+    protocol_delta = protocol_evaluated_candidates - protocol_metric_results
+    if protocol_delta:
+        differences.append(
+            {
+                "relation": (
+                    "protocol_evaluated_candidates_minus_protocol_metric_results"
+                ),
+                "delta": protocol_delta,
+                "primary_reason": (
+                    "legacy_protocol_evaluated_candidates_may_include_attempts_"
+                    "without_completed_protocol_metric_rows"
+                )
+                if protocol_delta > 0
+                else "protocol_metric_results_exceed_legacy_evaluated_candidate_counter",
+            }
+        )
+
+    index_count = index_info["count"]
+    if index_count is None:
+        omitted_reasons.append(index_info["omitted_reason"])
+    else:
+        artifact_delta = index_count - formal_screened_candidates
+        if artifact_delta:
+            differences.append(
+                {
+                    "relation": (
+                        "formal_candidates_index_entries_minus_"
+                        "warehouse_formal_screened_candidates"
+                    ),
+                    "delta": artifact_delta,
+                    "primary_reason": (
+                        "formal_candidate_artifacts_record_only_replayable_"
+                        "screening_patch_candidates"
+                    )
+                    if artifact_delta < 0
+                    else (
+                        "formal_candidate_index_contains_entries_outside_current_"
+                        "warehouse_counter_scope"
+                    ),
+                }
+            )
+            if artifact_delta < 0:
+                omitted_reasons.append(
+                    "formal_candidate_patch_artifact_omitted_for_candidates_without_replayable_patch_or_passing_gates"
+                )
+        artifact_screening_delta = index_count - screening_protocol_results
+        if artifact_screening_delta:
+            differences.append(
+                {
+                    "relation": (
+                        "formal_candidates_index_entries_minus_db_screening_rows"
+                    ),
+                    "delta": artifact_screening_delta,
+                    "primary_reason": (
+                        "formal_candidate_artifacts_are_a_replayable_patch_subset_"
+                        "of_screening_rows"
+                    )
+                    if artifact_screening_delta < 0
+                    else (
+                        "formal_candidate_index_contains_entries_not_visible_in_"
+                        "current_screening_row_scope"
+                    ),
+                }
+            )
+    if index_info["unreadable_rows"]:
+        omitted_reasons.append("formal_candidates_index_has_unreadable_rows")
+
+    return {
+        "schema_version": "formal_candidate_count_reconciliation.v1",
+        "warehouse_formal_screened_candidates": formal_screened_candidates,
+        "db_screening_rows": screening_protocol_results,
+        "protocol_evaluated_candidates": protocol_evaluated_candidates,
+        "protocol_metric_results": protocol_metric_results,
+        "formal_candidates_index_entries": index_count,
+        "formal_candidates_index_count": index_count,
+        "formal_candidates_index_status": index_info["status"],
+        "formal_candidates_index_ref": index_info["artifact_ref"],
+        "formal_candidates_index_unreadable_rows": index_info["unreadable_rows"],
+        "sources": {
+            "warehouse_formal_screened_candidates": {
+                "count": formal_screened_candidates,
+                "source": "campaign_loop.formal_screened_candidates",
+            },
+            "db_screening_rows": {
+                "count": screening_protocol_results,
+                "source": "protocol_metric_stage_counts.screening",
+            },
+            "protocol_metric_results": {
+                "count": protocol_metric_results,
+                "source": "completed_protocol_metric_rows",
+            },
+            "formal_candidates_index": {
+                "count": index_count,
+                "source": "artifacts/formal_candidates/index.jsonl",
+                "status": index_info["status"],
+                "artifact_ref": index_info["artifact_ref"],
+            },
+        },
+        "differences": differences,
+        "omitted_reasons": list(dict.fromkeys(omitted_reasons)),
+    }
+
+
+def _formal_candidates_index_info(
+    campaign_dir: str | Path | None,
+) -> dict[str, Any]:
+    if campaign_dir is None:
+        return {
+            "count": None,
+            "status": "unavailable",
+            "artifact_ref": None,
+            "unreadable_rows": 0,
+            "omitted_reason": "campaign_dir_unavailable_for_formal_candidates_index",
+        }
+    index_path = Path(campaign_dir) / "artifacts" / "formal_candidates" / "index.jsonl"
+    artifact_ref = public_artifact_ref(index_path, base_dir=campaign_dir)
+    if not index_path.exists():
+        return {
+            "count": None,
+            "status": "missing",
+            "artifact_ref": artifact_ref,
+            "unreadable_rows": 0,
+            "omitted_reason": "formal_candidates_index_missing_or_not_written",
+        }
+    count = 0
+    unreadable = 0
+    try:
+        with index_path.open(encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    unreadable += 1
+                    continue
+                if isinstance(payload, Mapping):
+                    count += 1
+                else:
+                    unreadable += 1
+    except OSError:
+        return {
+            "count": None,
+            "status": "unavailable",
+            "artifact_ref": artifact_ref,
+            "unreadable_rows": unreadable,
+            "omitted_reason": "formal_candidates_index_unreadable",
+        }
+    return {
+        "count": count,
+        "status": "available",
+        "artifact_ref": artifact_ref,
+        "unreadable_rows": unreadable,
+        "omitted_reason": "",
     }
 
 

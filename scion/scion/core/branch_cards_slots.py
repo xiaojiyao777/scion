@@ -13,6 +13,8 @@ def active_slot_inventory_from_branch_cards(
     """Reconcile status/summary active-slot fields from branch card payloads."""
     active_ids: list[str] = []
     parked_ids: list[str] = []
+    released_ids: list[str] = []
+    released_reasons: dict[str, str] = {}
     saw_slot_metadata = False
     for card in cards:
         if not isinstance(card, Mapping):
@@ -28,10 +30,20 @@ def active_slot_inventory_from_branch_cards(
             active_ids.append(branch_id)
         elif slot_status == "parked_lineage":
             parked_ids.append(branch_id)
+        elif slot_status == "released_active_slot":
+            released_ids.append(branch_id)
+            reason = str(
+                card.get("current_head_active_slot_release_reason")
+                or card.get("branch_classification_reason")
+                or ""
+            ).strip()
+            if reason:
+                released_reasons[branch_id] = reason
     if not saw_slot_metadata:
         return None
     unique_active_ids = list(dict.fromkeys(active_ids))
     parked_ids = list(dict.fromkeys(parked_ids))
+    released_ids = list(dict.fromkeys(released_ids))
     has_limit = max_active_branches is not None
     limit = max(0, int(max_active_branches or 0))
     overflow_ids: list[str] = []
@@ -46,7 +58,11 @@ def active_slot_inventory_from_branch_cards(
         "branch_ids": unique_active_ids,
         "parked_lineages": len(parked_ids),
         "parked_lineage_ids": parked_ids,
+        "released_active_slots": len(released_ids),
+        "released_active_slot_ids": released_ids,
     }
+    if released_reasons:
+        inventory["released_active_slot_reasons"] = released_reasons
     if overflow_ids:
         inventory["overflow_branch_ids"] = overflow_ids
         inventory["overflow_count"] = len(overflow_ids)

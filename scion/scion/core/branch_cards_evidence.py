@@ -515,6 +515,8 @@ def _branch_card_allowed_actions(
 ) -> list[str]:
     if branch_is_parked_lineage(branch):
         return ["clean_fork"]
+    if lineage_status == "replay_blocked":
+        return ["clean_fork"]
     if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(
         branch
     ):
@@ -555,6 +557,8 @@ def _branch_card_forbidden_actions(
     forbidden: list[str] = []
     if branch_is_parked_lineage(branch):
         forbidden.append("consume_active_slot")
+    if lineage_status == "replay_blocked":
+        forbidden.extend(["consume_active_slot", "replay_without_identity"])
     if strict_same_mechanism_followup:
         forbidden.append("unrelated_mechanism")
     if lineage_status == "active_no_effect" and not branch_has_actionable_diagnostic(

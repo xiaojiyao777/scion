@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
+from scion.core.branch_hygiene import campaign_remaining_branch_classification
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
 from scion.core.research_process_guidance_audit import (
@@ -448,6 +449,7 @@ class CampaignSummaryMixin:
                     else {}
                 ),
                 "source": cache_stats["source"],
+                "llm_accounting": cache_stats["llm_accounting"],
                 **(
                     {
                         "repeated_cache_create_groups": cache_stats[
@@ -609,6 +611,7 @@ class CampaignSummaryMixin:
             effective_rounds_completed=effective_rounds_completed,
             counted_experiment_steps=counted_experiment_steps,
             telemetry_failed_experiments=telemetry_failed_experiments,
+            campaign_dir=self.campaign_dir,
         )
         summary.update(accounting)
         summary["accounting_reconciliation"] = accounting_reconciliation
@@ -659,6 +662,10 @@ class CampaignSummaryMixin:
                         summary["active_slots"] = existing_active_slots
                 summary["branches"] = branch_rows
                 summary["branch_cards"] = branch_cards
+                if _is_max_rounds_stop(effective_stopped_reason):
+                    summary["remaining_branch_classification"] = (
+                        campaign_remaining_branch_classification(branch_rows)
+                    )
                 summary["branch_history_cards"] = _branch_history_cards(steps, branch_cards)
                 current_progress = _summary_current_progress(
                     state,
@@ -1118,6 +1125,11 @@ class CampaignSummaryMixin:
                     for cf in pr.case_feedback[:20]
                 ]
         return step_data
+
+
+def _is_max_rounds_stop(reason: Any) -> bool:
+    text = str(reason or "").strip()
+    return text in {"max_rounds", "max_rounds_exhausted"}
 
 
 def _annotate_proposal_session_ref_diagnostic(

@@ -8,6 +8,18 @@ from typing import Any, Iterable, Mapping
 
 logger = logging.getLogger(__name__)
 
+_LLM_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "reasoning_tokens",
+    "prompt_tokens_total",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "cache_miss_input_tokens",
+    "cache_tokens_total",
+)
+
 
 def _campaign_cache_stats(
     steps: Iterable[Any],
@@ -57,7 +69,22 @@ def _step_cache_stats(steps: Iterable[Any]) -> dict[str, Any]:
         "repeated_cache_create_groups": [],
         "repeated_cache_key_groups": [],
         "repeated_cache_key_no_read": [],
+        "llm_accounting": _empty_llm_accounting(
+            source="step_records",
+            unavailability_reason=(
+                "llm_trace_usage_unavailable; step cache stats do not carry "
+                "request_kind, model, provider, output, or reasoning token fields"
+            ),
+        ),
     }
+
+
+def _campaign_llm_accounting(campaign_dir: Any) -> dict[str, Any]:
+    """Return trace-level LLM usage accounting with explicit availability."""
+    return _llm_trace_cache_stats(campaign_dir).get(
+        "llm_accounting",
+        _empty_llm_accounting(source="llm_traces"),
+    )
 
 
 def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
@@ -78,6 +105,10 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
     accounting_modes: dict[str, int] = {}
     groups: dict[tuple[str, str, str], dict[str, Any]] = {}
     if not llm_dir.exists():
+        llm_accounting = _empty_llm_accounting(
+            source="llm_traces",
+            unavailability_reason="llm_traces_directory_missing",
+        )
         return {
             "total_tokens": 0,
             "prompt_tokens_total": 0,
@@ -94,12 +125,16 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
             "repeated_cache_create_groups": [],
             "repeated_cache_key_groups": [],
             "repeated_cache_key_no_read": [],
+            "llm_accounting": llm_accounting,
         }
-    for trace_path in sorted(llm_dir.glob("*.json")):
+    trace_paths = sorted(llm_dir.glob("*.json"))
+    llm_accounting = _new_llm_accounting(trace_file_count=len(trace_paths))
+    for trace_path in trace_paths:
         try:
             payload = json.loads(trace_path.read_text())
         except Exception as exc:  # pragma: no cover - best-effort summary
             logger.debug("failed to read llm trace cache stats %s: %s", trace_path, exc)
+            llm_accounting["unreadable_trace_count"] += 1
             continue
         request_kind = str(payload.get("request_kind") or "")
         audit = payload.get("prompt_cache_audit")
@@ -108,6 +143,14 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
         usage = payload.get("llm_usage")
         if not isinstance(usage, Mapping):
             provider = audit_provider or _provider_from_model(payload.get("model"))
+            model = str(payload.get("model") or "")
+            _record_llm_trace_identity(
+                llm_accounting,
+                request_kind=request_kind,
+                provider=provider,
+                model=model,
+                has_usage=False,
+            )
             pending_key = (request_kind, provider or "unknown")
             pending_no_usage[pending_key] = pending_no_usage.get(pending_key, 0) + 1
             continue
@@ -115,10 +158,18 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
             payload.get("request_kind") or usage.get("request_kind") or ""
         )
         provider = str(usage.get("provider") or audit_provider or "unknown")
+        model = str(usage.get("model") or payload.get("model") or "")
         accounting_mode = str(
             usage.get("cache_accounting_mode")
             or audit_map.get("cache_accounting_mode")
             or _default_cache_accounting_mode(provider)
+        )
+        _record_llm_trace_identity(
+            llm_accounting,
+            request_kind=request_kind,
+            provider=provider,
+            model=model,
+            has_usage=True,
         )
         prompt_tokens = _usage_prompt_tokens_total(usage, accounting_mode)
         input_only_tokens = _safe_int(usage.get("input_tokens"))
@@ -129,6 +180,12 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
             prompt_tokens,
             cache_read,
             accounting_mode,
+        )
+        _record_llm_token_usage(
+            llm_accounting,
+            usage=usage,
+            prompt_tokens_total=prompt_tokens,
+            cache_miss_tokens=cache_miss,
         )
         completion_tokens = _safe_int(usage.get("output_tokens"))
         calls += 1
@@ -199,7 +256,6 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
             group["last_trace"] = trace_path.name
             group["prompt_tokens_total"] += prompt_tokens
             group["providers"][provider] = group["providers"].get(provider, 0) + 1
-            model = str(usage.get("model") or payload.get("model") or "")
             if model:
                 group["models"][model] = group["models"].get(model, 0) + 1
             if cache_create > 0:
@@ -289,6 +345,7 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
     repeated_no_read = [
         group for group in repeated_key_groups if group["cache_read_calls"] == 0
     ]
+    _finalize_llm_accounting(llm_accounting)
     return {
         "total_tokens": total_tokens,
         "prompt_tokens_total": total_tokens,
@@ -305,7 +362,297 @@ def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
         "repeated_cache_create_groups": repeated,
         "repeated_cache_key_groups": repeated_key_groups,
         "repeated_cache_key_no_read": repeated_no_read,
+        "llm_accounting": llm_accounting,
     }
+
+
+def _empty_llm_accounting(
+    *,
+    source: str,
+    unavailability_reason: str = "",
+) -> dict[str, Any]:
+    accounting = _new_llm_accounting(trace_file_count=0, source=source)
+    if unavailability_reason:
+        accounting["unavailability_reason"] = unavailability_reason
+    _finalize_llm_accounting(accounting)
+    return accounting
+
+
+def _new_llm_accounting(
+    *,
+    trace_file_count: int,
+    source: str = "llm_traces",
+) -> dict[str, Any]:
+    return {
+        "schema_version": "campaign_llm_accounting.v1",
+        "source": source,
+        "trace_file_count": max(0, int(trace_file_count or 0)),
+        "usage_trace_count": 0,
+        "no_usage_trace_count": 0,
+        "unreadable_trace_count": 0,
+        "request_kind_counts": {},
+        "provider_counts": {},
+        "model_counts": {},
+        "unknown_counts": {
+            "request_kind": 0,
+            "provider": 0,
+            "model": 0,
+        },
+        "token_sums": {field: None for field in _LLM_TOKEN_FIELDS},
+        "token_field_availability": {},
+        "token_sum_semantics": {
+            "input_tokens": "provider-reported input/prompt token field",
+            "output_tokens": "provider-reported completion/output token field",
+            "total_tokens": (
+                "provider total_tokens when present; otherwise "
+                "prompt_tokens_total + output_tokens when both are available"
+            ),
+            "reasoning_tokens": (
+                "provider-reported reasoning output tokens; null when unavailable"
+            ),
+            "prompt_tokens_total": (
+                "provider prompt total, with cache-aware derivation matching "
+                "cache_stats.prompt_tokens_total"
+            ),
+            "cache_creation_input_tokens": "provider-reported cache write tokens",
+            "cache_read_input_tokens": "provider-reported cache read tokens",
+            "cache_miss_input_tokens": (
+                "provider-reported or cache-accounting-derived uncached input tokens"
+            ),
+            "cache_tokens_total": (
+                "cache_creation_input_tokens + cache_read_input_tokens for traces "
+                "where at least one cache subfield is available"
+            ),
+        },
+        "_token_accumulator": _new_token_accumulator(),
+    }
+
+
+def _new_token_accumulator() -> dict[str, dict[str, int]]:
+    return {
+        field: {
+            "sum": 0,
+            "known_usage_traces": 0,
+            "missing_usage_traces": 0,
+            "null_usage_traces": 0,
+            "no_usage_traces": 0,
+            "partial_known_usage_traces": 0,
+        }
+        for field in _LLM_TOKEN_FIELDS
+    }
+
+
+def _record_llm_trace_identity(
+    accounting: dict[str, Any],
+    *,
+    request_kind: str,
+    provider: str,
+    model: str,
+    has_usage: bool,
+) -> None:
+    if has_usage:
+        accounting["usage_trace_count"] += 1
+    else:
+        accounting["no_usage_trace_count"] += 1
+    _increment_identity_count(
+        accounting,
+        "request_kind",
+        _nonempty_label(request_kind),
+    )
+    _increment_identity_count(accounting, "provider", _nonempty_label(provider))
+    _increment_identity_count(accounting, "model", _nonempty_label(model))
+
+
+def _increment_identity_count(
+    accounting: dict[str, Any],
+    identity: str,
+    value: str,
+) -> None:
+    label = value if value else "unknown"
+    counts_key = f"{identity}_counts"
+    counts = accounting[counts_key]
+    counts[label] = counts.get(label, 0) + 1
+    if label == "unknown":
+        accounting["unknown_counts"][identity] += 1
+
+
+def _record_llm_token_usage(
+    accounting: dict[str, Any],
+    *,
+    usage: Mapping[str, Any],
+    prompt_tokens_total: int,
+    cache_miss_tokens: int,
+) -> None:
+    input_known, input_value, input_null = _token_value(usage, ("input_tokens",))
+    output_known, output_value, output_null = _token_value(
+        usage,
+        ("output_tokens", "completion_tokens"),
+    )
+    prompt_known, prompt_value, prompt_null = _token_value(
+        usage,
+        ("prompt_tokens_total", "prompt_tokens"),
+    )
+    if not prompt_known and input_known:
+        prompt_known = True
+        prompt_value = prompt_tokens_total
+    cache_create_known, cache_create_value, cache_create_null = _token_value(
+        usage,
+        ("cache_creation_input_tokens",),
+    )
+    cache_read_known, cache_read_value, cache_read_null = _token_value(
+        usage,
+        ("cache_read_input_tokens", "prompt_cache_hit_tokens"),
+    )
+    cache_miss_known, cache_miss_value, cache_miss_null = _token_value(
+        usage,
+        ("cache_miss_input_tokens", "prompt_cache_miss_tokens"),
+    )
+    if not cache_miss_known and (prompt_known or input_known):
+        cache_miss_known = True
+        cache_miss_value = cache_miss_tokens
+    reasoning_known, reasoning_value, reasoning_null = _token_value(
+        usage,
+        ("reasoning_output_tokens", "reasoning_tokens"),
+    )
+    total_known, total_value, total_null = _token_value(
+        usage,
+        ("total_tokens",),
+    )
+    if not total_known and prompt_known and output_known:
+        total_known = True
+        total_value = int(prompt_value or 0) + int(output_value or 0)
+    cache_total_known = cache_create_known or cache_read_known
+    cache_total_value = int(cache_create_value or 0) + int(cache_read_value or 0)
+    cache_total_null = cache_create_null and cache_read_null
+    cache_total_partial = int(cache_create_known) + int(cache_read_known) == 1
+
+    _record_token_field(
+        accounting,
+        "input_tokens",
+        known=input_known,
+        value=input_value,
+        null=input_null,
+    )
+    _record_token_field(
+        accounting,
+        "output_tokens",
+        known=output_known,
+        value=output_value,
+        null=output_null,
+    )
+    _record_token_field(
+        accounting,
+        "total_tokens",
+        known=total_known,
+        value=total_value,
+        null=total_null,
+    )
+    _record_token_field(
+        accounting,
+        "reasoning_tokens",
+        known=reasoning_known,
+        value=reasoning_value,
+        null=reasoning_null,
+    )
+    _record_token_field(
+        accounting,
+        "prompt_tokens_total",
+        known=prompt_known,
+        value=prompt_value,
+        null=prompt_null,
+    )
+    _record_token_field(
+        accounting,
+        "cache_creation_input_tokens",
+        known=cache_create_known,
+        value=cache_create_value,
+        null=cache_create_null,
+    )
+    _record_token_field(
+        accounting,
+        "cache_read_input_tokens",
+        known=cache_read_known,
+        value=cache_read_value,
+        null=cache_read_null,
+    )
+    _record_token_field(
+        accounting,
+        "cache_miss_input_tokens",
+        known=cache_miss_known,
+        value=cache_miss_value,
+        null=cache_miss_null,
+    )
+    _record_token_field(
+        accounting,
+        "cache_tokens_total",
+        known=cache_total_known,
+        value=cache_total_value,
+        null=cache_total_null,
+        partial=cache_total_partial,
+    )
+
+
+def _record_token_field(
+    accounting: dict[str, Any],
+    field: str,
+    *,
+    known: bool,
+    value: int | None,
+    null: bool,
+    partial: bool = False,
+) -> None:
+    accumulator = accounting["_token_accumulator"][field]
+    if known:
+        accumulator["known_usage_traces"] += 1
+        accumulator["sum"] += int(value or 0)
+        if partial:
+            accumulator["partial_known_usage_traces"] += 1
+        return
+    if null:
+        accumulator["null_usage_traces"] += 1
+    else:
+        accumulator["missing_usage_traces"] += 1
+
+
+def _token_value(
+    usage: Mapping[str, Any],
+    keys: tuple[str, ...],
+) -> tuple[bool, int | None, bool]:
+    saw_null = False
+    for key in keys:
+        if key not in usage:
+            continue
+        value = usage.get(key)
+        if value in (None, ""):
+            saw_null = True
+            continue
+        try:
+            return True, int(value), False
+        except (TypeError, ValueError):
+            saw_null = True
+    return False, None, saw_null
+
+
+def _finalize_llm_accounting(accounting: dict[str, Any]) -> None:
+    token_accumulator = accounting.pop("_token_accumulator", _new_token_accumulator())
+    no_usage_traces = int(accounting.get("no_usage_trace_count") or 0)
+    token_sums: dict[str, int | None] = {}
+    token_availability: dict[str, dict[str, int | bool]] = {}
+    for field in _LLM_TOKEN_FIELDS:
+        availability = dict(token_accumulator[field])
+        availability["no_usage_traces"] = no_usage_traces
+        known_count = int(availability["known_usage_traces"])
+        token_sums[field] = availability["sum"] if known_count > 0 else None
+        availability["sum_is_null_when_all_values_unavailable"] = known_count == 0
+        token_availability[field] = availability
+    accounting["token_sums"] = token_sums
+    accounting["token_field_availability"] = token_availability
+    for key in ("request_kind_counts", "provider_counts", "model_counts"):
+        accounting[key] = dict(sorted(accounting[key].items()))
+
+
+def _nonempty_label(value: Any) -> str:
+    return str(value or "").strip() or "unknown"
 
 
 def _safe_int(value: Any) -> int:

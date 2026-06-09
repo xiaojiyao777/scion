@@ -824,6 +824,76 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
     )
 
 
+def test_repeated_no_effect_fresh_runtime_missing_replay_identity_is_replay_blocked() -> None:
+    branch = Branch(
+        branch_id="no-effect-missing-replay",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_no_effect",
+        last_screening_feedback_tier="no_effect",
+        last_telemetry_outcome="no_objective_effect",
+        lifecycle_marginal_no_effect_streak=2,
+        lifecycle_no_effect_diagnostic_followups=2,
+        lifecycle_signal_repeat_count=2,
+        branch_mechanism_ids=("bounded_probe",),
+        branch_evidence_summary={
+            "stage": "screening",
+            "tier": "no_effect",
+            "wins": 0,
+            "losses": 0,
+            "ties": 8,
+            "pair_wins": 0,
+            "pair_losses": 0,
+            "pair_ties": 8,
+            "runtime_evidence_confidence": "low_cached_champion",
+            "runtime_evidence_status": "fresh_champion_required",
+            "runtime_evidence_pressure_count": 2,
+            "fresh_runtime_required": True,
+            "fresh_runtime_pending": True,
+            "fresh_runtime_followup": {
+                "schema_version": "fresh_runtime_followup.v1",
+                "queue_intent": "fresh_champion_runtime_replay",
+                "scheduler_marker": "fresh_champion_runtime_replay_pending",
+                "trigger": "fresh_runtime_required",
+                "fresh_runtime_pending": True,
+                "fresh_runtime_required": True,
+                "followup_required": True,
+                "decision_features_excluded": True,
+            },
+        },
+    )
+
+    payload = branch_hygiene_context(branch)
+    text = branch_prompt_card(branch)
+    decision_field_names = {field.name for field in fields(DecisionFeatures)}
+
+    assert payload["lineage_status"] == "replay_blocked"
+    assert payload["branch_final_classification"] == "replay_blocked"
+    assert payload["final_branch_classification"]["reason"] == (
+        "fresh_runtime_replay_blocked_missing_identity"
+    )
+    assert payload["final_branch_classification"]["detail"][
+        "missing_replay_identity_keys"
+    ] == ["replay_identity"]
+    assert payload["active_slot_status"] == "released_active_slot"
+    assert payload["counts_toward_active_slots"] is False
+    assert payload["current_head_active_slot_release_reason"] in {
+        "fresh_runtime_replay_blocked_missing_identity",
+        "repeated_no_effect_zero_effect_slot_release",
+    }
+    assert payload["allowed_next_actions"] == ["clean_fork"]
+    assert "replay_without_identity" in payload["forbidden_next_actions"]
+    assert payload["hypothesis_generation_mode"] == "clean_fork_only"
+    assert payload["baseline_policy"] == (
+        "fresh_runtime_replay_blocked_clean_fork_required"
+    )
+    assert payload["final_branch_classification"]["decision_features_excluded"] is True
+    assert "branch_final_classification" not in decision_field_names
+    assert "final_branch_classification" not in decision_field_names
+    assert "lineage_status=replay_blocked" in text
+
+
 def test_lifecycle_policy_block_marks_branch_for_clean_fork_reroute() -> None:
     branch = Branch(
         branch_id="blocked-no-effect",
