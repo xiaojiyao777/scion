@@ -468,7 +468,10 @@ class CampaignLoop:
 
 def _attempt_kind(result: StepResult) -> str:
     kind = str(getattr(result, "attempt_kind", "") or "")
-    if kind == "proposal_block" and _is_soft_proposal_diagnostic(result):
+    if kind in {"proposal_block", "schema_quality_block"} and (
+        _is_soft_proposal_diagnostic(result)
+        or not _is_countable_quality_block_result(result)
+    ):
         return "proposal_diagnostic"
     if kind and kind != "screening":
         return kind
@@ -630,6 +633,45 @@ def _is_soft_proposal_diagnostic(result: StepResult) -> bool:
             "novelty_warning",
         )
     )
+
+
+def _is_countable_quality_block_result(result: StepResult) -> bool:
+    if _is_stale_source_failure(result):
+        return False
+    stage = str(getattr(result, "failure_stage", "") or "").strip()
+    category = str(getattr(result, "failure_category", "") or "").strip()
+    detail = str(getattr(result, "failure_detail", "") or "").strip()
+    if stage or category or detail:
+        return True
+    reason = str(getattr(result, "reason", "") or "").strip().lower()
+    if not reason:
+        return False
+    if "continue_explore" in reason:
+        return False
+    return any(
+        marker in reason
+        for marker in (
+            "agent_quality_blocked",
+            "schema_quality_block",
+            "branch_lesson_usage_",
+            "code generation failed",
+            "hypothesis generation failed",
+            "material_difference_required_missing",
+            "proposal block",
+        )
+    )
+
+
+def _is_stale_source_failure(result: StepResult) -> bool:
+    combined = " ".join(
+        str(value or "")
+        for value in (
+            getattr(result, "reason", None),
+            getattr(result, "failure_detail", None),
+            getattr(result, "failure_category", None),
+        )
+    ).lower()
+    return "stale_source" in combined
 
 
 def _result_failure_category(result: StepResult) -> str:

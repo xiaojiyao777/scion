@@ -41,6 +41,8 @@ def _quality_block_ledger_from_steps(
         attempt_kind = _attempt_kind(step)
         if attempt_kind not in QUALITY_BLOCK_KINDS:
             continue
+        if not _is_countable_quality_block_step(step):
+            continue
         sequence = len(ledger) + 1
         failure_reason = str(getattr(step, "failure_detail", "") or "")
         failure_stage = getattr(step, "failure_stage", None)
@@ -119,6 +121,31 @@ def _with_sequence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _attempt_kind(step: StepRecord) -> str:
     return str(getattr(step, "attempt_kind", "") or "").strip()
+
+
+def _is_countable_quality_block_step(step: StepRecord) -> bool:
+    if _is_stale_source_step(step):
+        return False
+    stage = str(getattr(step, "failure_stage", "") or "").strip()
+    category = str(_step_failure_category(step) or "").strip()
+    detail = str(getattr(step, "failure_detail", "") or "").strip()
+    if stage or category or detail:
+        return True
+    decision = str(getattr(step, "decision", "") or "").lower()
+    if "continue_explore" in decision:
+        return False
+    return False
+
+
+def _is_stale_source_step(step: StepRecord) -> bool:
+    combined = " ".join(
+        str(value or "")
+        for value in (
+            getattr(step, "failure_detail", None),
+            getattr(step, "failure_category", None),
+        )
+    ).lower()
+    return "stale_source" in combined
 
 
 def _step_failure_category(step: StepRecord) -> str | None:

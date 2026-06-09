@@ -144,24 +144,32 @@ def _non_actionable_sibling_record() -> dict:
     }
 
 
-def test_clean_fork_requirement_blocks_missing_branch_lesson_usage() -> None:
+def test_clean_fork_requirement_is_advisory_for_missing_branch_lesson_usage() -> None:
     branch = _branch()
     branch.branch_evidence_summary = {
         "cross_branch_research_payload": {
             "branch_lesson_records": [_record("lesson:clean")]
         }
     }
+    metadata = branch_lesson_usage_requirement_metadata(branch)
 
     detail = branch_lesson_usage_pre_code_block_reason(
         _hypothesis(),
         branch,
     )
 
-    assert detail is not None
-    assert detail.startswith(
-        "agent_quality_blocked:branch_lesson_usage_required_missing"
+    assert detail is None
+    assert metadata["required_for"] == "clean_fork_new_branch"
+    assert metadata["pre_code_block_required"] is False
+    assert metadata["advisory_only"] is True
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            {},
+            metadata=metadata,
+            hypothesis=_hypothesis(),
+        )
+        == "missing"
     )
-    assert "required_for=clean_fork_new_branch" in detail
 
 
 def test_non_actionable_sibling_unknown_record_does_not_require_usage() -> None:
@@ -250,6 +258,40 @@ def test_same_branch_weak_positive_followup_aliases_do_not_pre_code_block() -> N
     assert normalized["recognized_aliases"]["mechanism_linkage_token"] == "mechanism"
 
 
+def test_same_branch_weak_positive_imperfect_usage_is_advisory() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [
+            _record(
+                "lesson:local-imperfect",
+                required_for="same_branch_refinement",
+                lesson_role="preserve",
+                lesson_type="weak_positive",
+            )
+        ]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "preserved_same_branch_lesson": {
+                "lesson_id": "lesson:local-imperfect",
+                "preserved_signal": "weak_signal",
+            }
+        }
+    )
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert metadata["required_for"] == "same_branch_refinement"
+    assert metadata["pre_code_block_required"] is False
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    skeleton = branch_lesson_usage_repair_skeleton(
+        hypothesis.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
+    assert skeleton["diagnostic"] == "semantic_mismatch"
+    assert set(skeleton["missing_fields"]) >= {"target_file", "action", "mechanism"}
+
+
 def test_metadata_only_lesson_usage_fails_requirement() -> None:
     branch = _branch()
     branch.branch_evidence_summary = {
@@ -264,10 +306,17 @@ def test_metadata_only_lesson_usage_fails_requirement() -> None:
         }
     )
 
-    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+    metadata = branch_lesson_usage_requirement_metadata(branch)
 
-    assert reason is not None
-    assert "branch_lesson_usage_metadata_only" in reason
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            hypothesis.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "metadata_only"
+    )
 
 
 def test_clean_fork_contrast_requires_changed_dimensions() -> None:
@@ -298,8 +347,21 @@ def test_clean_fork_contrast_requires_changed_dimensions() -> None:
         }
     )
 
-    assert branch_lesson_usage_pre_code_block_reason(only_id, branch) is not None
     assert branch_lesson_usage_pre_code_block_reason(with_dimensions, branch) is None
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            only_id.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=only_id,
+        )
+        == "semantic_mismatch"
+    )
+    assert branch_lesson_usage_requirement_satisfied(
+        with_dimensions.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=with_dimensions,
+    )
 
 
 def test_clean_fork_action_linked_usage_accepts_generic_mechanism_family() -> None:
@@ -348,10 +410,17 @@ def test_near_duplicate_clean_fork_without_contrast_or_reject_fails() -> None:
         }
     )
 
-    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+    metadata = branch_lesson_usage_requirement_metadata(branch)
 
-    assert reason is not None
-    assert "branch_lesson_usage_semantic_mismatch" in reason
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            hypothesis.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "semantic_mismatch"
+    )
 
 
 def test_actionable_sibling_near_duplicate_without_contrast_or_reject_is_advisory() -> (
@@ -459,8 +528,21 @@ def test_clean_fork_accepts_machine_readable_near_duplicate_reject() -> None:
         }
     )
 
-    assert branch_lesson_usage_pre_code_block_reason(vague_reject, branch) is not None
     assert branch_lesson_usage_pre_code_block_reason(linked_reject, branch) is None
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            vague_reject.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=vague_reject,
+        )
+        == "semantic_mismatch"
+    )
+    assert branch_lesson_usage_requirement_satisfied(
+        linked_reject.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=linked_reject,
+    )
 
 
 def test_requirement_metadata_derives_compact_record_from_branch_lessons() -> None:
@@ -546,8 +628,20 @@ def test_weak_positive_borrow_requirement_requires_paths_and_risk_or_contrast() 
     assert requirement["requirement_source"] == "weak_positive_transfer"
     assert requirement["candidate_lesson_types"] == ["weak_positive"]
     assert requirement["candidate_lesson_roles"] == ["borrow"]
-    assert branch_lesson_usage_pre_code_block_reason(missing_paths, branch) is not None
     assert branch_lesson_usage_pre_code_block_reason(with_paths, branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            missing_paths.branch_lesson_usage,
+            metadata=requirement,
+            hypothesis=missing_paths,
+        )
+        == "semantic_mismatch"
+    )
+    assert branch_lesson_usage_requirement_satisfied(
+        with_paths.branch_lesson_usage,
+        metadata=requirement,
+        hypothesis=with_paths,
+    )
 
 
 def test_weak_positive_clean_fork_accepts_machine_readable_reject_reason() -> None:
@@ -588,8 +682,21 @@ def test_weak_positive_clean_fork_accepts_machine_readable_reject_reason() -> No
         }
     )
 
-    assert branch_lesson_usage_pre_code_block_reason(vague_reject, branch) is not None
     assert branch_lesson_usage_pre_code_block_reason(linked_reject, branch) is None
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            vague_reject.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=vague_reject,
+        )
+        == "semantic_mismatch"
+    )
+    assert branch_lesson_usage_requirement_satisfied(
+        linked_reject.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=linked_reject,
+    )
 
 
 def test_context_manager_records_compact_requirement_for_pre_code_gate() -> None:
@@ -611,7 +718,9 @@ def test_context_manager_records_compact_requirement_for_pre_code_gate() -> None
         branch.branch_evidence_summary["branch_lesson_records"][0]["lesson_id"]
         == "lesson:context"
     )
-    assert branch_lesson_usage_pre_code_block_reason(_hypothesis(), branch) is not None
+    assert branch_lesson_usage_pre_code_block_reason(_hypothesis(), branch) is None
+    assert requirement["pre_code_block_required"] is False
+    assert requirement["advisory_only"] is True
 
     _record_proposal_branch_lesson_usage_requirement(
         branch,
@@ -623,7 +732,7 @@ def test_context_manager_records_compact_requirement_for_pre_code_gate() -> None
     assert "branch_lesson_records" not in branch.branch_evidence_summary
 
 
-def test_pipeline_records_branch_lesson_usage_pre_code_proposal_block() -> None:
+def test_pipeline_allows_clean_fork_branch_lesson_usage_advisory_to_code() -> None:
     branch = _branch()
     branch.branch_evidence_summary = {
         "branch_lesson_records": [_record("lesson:pipeline")]
@@ -694,16 +803,16 @@ def test_pipeline_records_branch_lesson_usage_pre_code_proposal_block() -> None:
 
     assert result.attempt_kind == "proposal_block"
     assert result.counts_toward_max_rounds is False
-    assert result.failure_stage == "proposal"
+    assert result.failure_stage == "code_generation"
     assert result.failure_detail is not None
-    assert "branch_lesson_usage_required_missing" in result.failure_detail
-    assert code_calls["count"] == 0
-    assert statuses == [("hypothesis-1", "rejected")]
-    assert len(failures) == 1
+    assert "branch_lesson_usage_required_missing" not in result.failure_detail
+    assert code_calls["count"] == 1
+    assert statuses == [("hypothesis-1", "code_failed")]
+    assert failures == []
     assert len(steps) == 1
     assert steps[0].attempt_kind == "proposal_block"
     assert steps[0].counts_toward_max_rounds is False
-    assert steps[0].failure_stage == "proposal"
+    assert steps[0].failure_stage == "code_generation"
 
 
 def test_pipeline_reuses_destructive_proposal_ref_for_pre_code_checks() -> None:
@@ -798,7 +907,7 @@ def test_pipeline_reuses_destructive_proposal_ref_for_pre_code_checks() -> None:
 
     assert provider_calls == [branch.branch_id]
     assert refs == {}
-    assert code_calls["count"] == 0
+    assert code_calls["count"] == 1
     assert result.attempt_kind == "proposal_block"
     assert result.proposal_session_ref is ref
     assert (
@@ -809,7 +918,8 @@ def test_pipeline_reuses_destructive_proposal_ref_for_pre_code_checks() -> None:
         result.proposal_session_ref["branch_lesson_usage_requirement"]["required"]
         is True
     )
-    assert "branch_lesson_usage_required_missing" in str(result.failure_detail)
+    assert "branch_lesson_usage_required_missing" not in str(result.failure_detail)
+    assert result.failure_stage == "code_generation"
     assert steps[0].proposal_session_ref is ref
 
 
@@ -1037,12 +1147,36 @@ def test_real_payload_mechanism_id_target_action_contrast_lesson_passes() -> Non
 def test_mechanism_linkage_field_aliases_pass() -> None:
     hypothesis = _hypothesis()
 
-    for field_name in ("mechanism", "mechanism_id", "mechanism_change_id"):
+    for field_name in (
+        "mechanism",
+        "mechanism_id",
+        "mechanism_change_id",
+        "mechanism_or_mechanism_change_id",
+        "mechanism_or_mechanism_change_ids",
+    ):
         assert branch_lesson_usage_requirement_satisfied(
             _usage_with_mechanism_linkage(field_name),
             metadata=_strict_requirement(),
             hypothesis=hypothesis,
         ), field_name
+
+
+def test_mechanism_or_mechanism_change_alias_is_projected_for_repair() -> None:
+    hypothesis = _hypothesis()
+    usage = _usage_with_mechanism_linkage("mechanism_or_mechanism_change_id")
+
+    skeleton = branch_lesson_usage_repair_skeleton(
+        usage,
+        metadata=_strict_requirement(),
+        hypothesis=hypothesis,
+    )
+
+    assert skeleton["diagnostic"] == "satisfied"
+    normalized = skeleton["normalized_usage"]["contrasted_lessons"][0]
+    assert normalized["mechanism"] == "generic_signal"
+    assert normalized["recognized_aliases"][
+        "mechanism_or_mechanism_change_id"
+    ] == "mechanism"
 
 
 def test_target_action_mechanism_linkage_are_all_required() -> None:
@@ -1116,9 +1250,21 @@ def test_linkage_unrecognized_reason_distinguishes_present_usage() -> None:
         }
     )
 
-    reason = branch_lesson_usage_pre_code_block_reason(hypothesis, branch)
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+    skeleton = branch_lesson_usage_repair_skeleton(
+        hypothesis.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
 
-    assert reason is not None
-    assert "branch_lesson_usage_linkage_unrecognized" in reason
-    assert "branch_lesson_usage_required_missing" not in reason
-    assert "Repair skeleton branch_lesson_usage_repair_skeleton.v1" in reason
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            hypothesis.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "linkage_unrecognized"
+    )
+    assert skeleton["diagnostic"] == "linkage_unrecognized"
+    assert "recognized_linkage_fields" in skeleton["missing_fields"]

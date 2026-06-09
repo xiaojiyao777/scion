@@ -55,6 +55,25 @@ def expected_telemetry_retry_feedback(
         or problem_telemetry.get("offending_fields")
         or requested_activation
     )
+    template_expected_fields = _template_expected_fields(allowed_template)
+    telemetry_unsupported = _telemetry_unsupported_for_surface(
+        reason_full,
+        requested_fields=requested_fields,
+        offending_fields=offending_fields_full,
+        template_expected_fields=template_expected_fields,
+    )
+    clear_repair_shape = (
+        {
+            "expected_telemetry": {},
+            "reason": (
+                "selected surface declares no supported telemetry/evidence "
+                "fields for expected_telemetry; clear the proposal telemetry "
+                "claim instead of inventing runtime keys"
+            ),
+        }
+        if telemetry_unsupported
+        else {}
+    )
     protected_mechanism_ids = sorted(
         dict.fromkeys(
             [
@@ -114,10 +133,15 @@ def expected_telemetry_retry_feedback(
             "telemetry_category_guidance": problem_telemetry.get(
                 "telemetry_category_guidance"
             ),
-            "allowed_repair_shape": problem_telemetry.get("allowed_repair_shape"),
+            "unsupported_expected_telemetry": telemetry_unsupported,
+            "clear_expected_telemetry_allowed": telemetry_unsupported,
+            "allowed_repair_shape": (
+                problem_telemetry.get("allowed_repair_shape") or clear_repair_shape
+            ),
             "forbidden_repair_shape": problem_telemetry.get("forbidden_repair_shape"),
             "final_task": (
                 problem_telemetry.get("allowed_repair_shape")
+                or clear_repair_shape
                 or "Repair the expected_telemetry contract for the same mechanism."
             ),
             "allowed_expected_telemetry_template": (
@@ -133,10 +157,50 @@ def expected_telemetry_retry_feedback(
                 "mechanisms or targets for a C11/schema retry. This is a "
                 "schema/accounting repair, not a new algorithmic hypothesis. "
                 "Natural-language hypothesis and novelty_signature wording may "
-                "be clarified."
+                "be clarified. If the selected surface declares no supported "
+                "telemetry/evidence fields, set expected_telemetry to {} for "
+                "this retry and keep the same mechanism and target."
             ),
         }
     )
+
+
+def _template_expected_fields(value: Mapping[str, Any]) -> list[str]:
+    expected = value.get("expected_telemetry")
+    fields: list[str] = []
+    if isinstance(expected, Mapping):
+        for raw_fields in expected.values():
+            if not isinstance(raw_fields, (list, tuple)):
+                continue
+            fields.extend(
+                str(field).strip()
+                for field in raw_fields
+                if str(field).strip()
+            )
+    return sorted(dict.fromkeys(fields))
+
+
+def _telemetry_unsupported_for_surface(
+    reason: Any,
+    *,
+    requested_fields: Any,
+    offending_fields: list[str],
+    template_expected_fields: list[str],
+) -> bool:
+    reason_text = str(reason or "").lower()
+    if "does not declare telemetry fields" in reason_text:
+        return True
+    if "does not declare telemetry" in reason_text:
+        return True
+    if "surface.evidence" in reason_text and not template_expected_fields:
+        return True
+    if template_expected_fields:
+        return False
+    if offending_fields:
+        return True
+    if isinstance(requested_fields, Mapping):
+        return any(bool(fields) for fields in requested_fields.values())
+    return False
 
 
 def _compact_expected_telemetry_template(value: Mapping[str, Any]) -> dict[str, Any]:

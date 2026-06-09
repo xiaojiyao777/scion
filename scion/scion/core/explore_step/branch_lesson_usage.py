@@ -38,12 +38,7 @@ _STRICT_REQUIRED_FOR = frozenset(
         "sibling_nearby_attempt",
     }
 )
-_HARD_PRE_CODE_REQUIRED_FOR = frozenset(
-    {
-        "clean_fork_new_branch",
-        "same_branch_refinement",
-    }
-)
+_HARD_PRE_CODE_REQUIRED_FOR = frozenset()
 _LESSON_APPLICATION_FIELDS = frozenset(
     {
         "borrowed_lessons",
@@ -153,6 +148,11 @@ _MECHANISM_LINKAGE_FIELDS = frozenset(
         "mechanism_linkage",
         "mechanism_linkage_token",
         "mechanism_name",
+        "mechanism_or_change_id",
+        "mechanism_or_change_ids",
+        "mechanism_or_mechanism_change",
+        "mechanism_or_mechanism_change_id",
+        "mechanism_or_mechanism_change_ids",
         "mechanism_token",
         "operator_id",
         "operator_name",
@@ -907,7 +907,9 @@ def _lesson_id_from_item(item: Mapping[str, Any]) -> str:
             "source_lesson_id",
             "branch_lesson_id",
             "borrowed_lesson_id",
+            "candidate_lesson_id",
             "preserved_lesson_id",
+            "referenced_lesson_id",
         ),
     )
 
@@ -1752,7 +1754,7 @@ def _lesson_item_semantic(
     )
     if not candidate_ids:
         return True
-    lesson_id = _clean_text(item.get("lesson_id") or item.get("source_lesson_id"))
+    lesson_id = _lesson_id_from_item(item)
     return lesson_id in candidate_ids
 
 

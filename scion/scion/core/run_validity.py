@@ -95,6 +95,8 @@ def failure_category_for_run_validity(
     )
     if _is_infra_text(combined):
         return "infra"
+    if "stale_source" in combined.lower():
+        return "code_generation"
     if explicit_category:
         return explicit_category
     stage = str(failure_stage or "").strip()

@@ -919,6 +919,12 @@ def _expected_telemetry_contract_preview(
     )
     passed = None if c11_check is None else bool(_attr(c11_check, "passed"))
     detail = "" if c11_check is None or passed else str(_attr(c11_check, "detail", ""))
+    clear_expected_telemetry_allowed = bool(
+        not passed
+        and requested_fields
+        and not declared_fields
+        and not mechanism_fields
+    )
     return _drop_empty_items(
         {
             "name": "C11_expected_telemetry",
@@ -942,12 +948,29 @@ def _expected_telemetry_contract_preview(
             "declared_mechanism_runtime_fields": mechanism_fields[
                 : _PREVIEW_MAX_CHECKS * 4
             ],
+            "clear_expected_telemetry_allowed": clear_expected_telemetry_allowed,
+            "allowed_repair_shape": (
+                {
+                    "expected_telemetry": {},
+                    "reason": (
+                        "selected surface declares no supported telemetry/evidence "
+                        "fields"
+                    ),
+                }
+                if clear_expected_telemetry_allowed
+                else {}
+            ),
             "allowed_expected_telemetry_template": (
                 allowed_template
                 if not passed
                 else {}
             ),
             "repair_hint": (
+                "Clear expected_telemetry to {} for this retry; the selected "
+                "surface does not declare supported telemetry/evidence fields. "
+                "Do not switch mechanism or target to satisfy C11."
+                if clear_expected_telemetry_allowed
+                else (
                 "Use only allowed expected_telemetry categories and exact runtime "
                 "keys declared by the selected research surface evidence contract. "
                 "Do not put explanatory prose in expected_telemetry values; if "
@@ -959,6 +982,7 @@ def _expected_telemetry_contract_preview(
                 "is declared in mechanism_changes."
                 if not passed
                 else ""
+                )
             ),
         }
     )

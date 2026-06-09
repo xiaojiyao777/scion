@@ -15,6 +15,9 @@ from scion.core.models import (
 from scion.proposal.agentic_session_hypothesis import (
     _hypothesis_preview_retry_feedback,
 )
+from scion.proposal.hypothesis_telemetry_retry import (
+    expected_telemetry_retry_feedback,
+)
 from scion.proposal import agentic_session_hypothesis_schema_retry as schema_retry
 from scion.proposal.engine import (
     _split_hypothesis_context,
@@ -833,6 +836,61 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
         in feedback_refs
         for event in artifact["compact_transcript"]
     )
+
+
+def test_hypothesis_preview_c11_feedback_can_clear_unsupported_telemetry() -> None:
+    feedback = expected_telemetry_retry_feedback(
+        {
+            "branch_continuation_guard": {},
+        },
+        {
+            "passed": False,
+            "detail_full": (
+                "research surface 'solver_design' does not declare telemetry "
+                "fields in surface.evidence"
+            ),
+            "requested_fields": {
+                "activation": ["solver_algorithm_phase_runtime_ms.vns"],
+            },
+            "exact_allowed_top_level_categories": [
+                "activation",
+                "activity",
+                "budget",
+                "effect",
+            ],
+            "declared_mechanism_ids": ["adaptive_vns_operator_weights"],
+            "allowed_expected_telemetry_template": {
+                "selected_surface": "solver_design",
+                "expected_telemetry": {},
+                "template_is_exact": True,
+                "template_truncated": False,
+            },
+        },
+        {},
+        detail="schema or target preview did not pass: C11_expected_telemetry",
+        attempt=1,
+        c11_detail="C11_expected_telemetry",
+        telemetry_detail=(
+            "research surface 'solver_design' does not declare telemetry "
+            "fields in surface.evidence"
+        ),
+        preserve_hypothesis={
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_changes": [
+                {"id": "adaptive_vns_operator_weights", "change_type": "add"}
+            ],
+        },
+        protected_identity={
+            "target_file": "policies/baseline_modules/local_search.py",
+            "protected_mechanism_ids": ["adaptive_vns_operator_weights"],
+        },
+    )
+
+    assert feedback["failure_code"] == "C11_expected_telemetry"
+    assert feedback["unsupported_expected_telemetry"] is True
+    assert feedback["clear_expected_telemetry_allowed"] is True
+    assert feedback["allowed_repair_shape"]["expected_telemetry"] == {}
+    assert "set expected_telemetry to {}" in feedback["retry_constraint"]
 
 
 def test_existing_file_create_new_preview_feedback_preempts_c11(

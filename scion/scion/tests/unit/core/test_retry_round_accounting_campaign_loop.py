@@ -917,6 +917,122 @@ def test_campaign_loop_does_not_count_mechanism_novelty_diagnostics_as_quality_b
     assert loop_statuses[-1]["quality_blocks"] == 0
 
 
+def test_campaign_loop_does_not_count_continue_explore_without_failure_as_quality_block() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="CONTINUE_EXPLORE: weak-positive same-branch follow-up",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: loop_statuses.append(
+            dict(kwargs["loop_status"])
+        )
+        if "loop_status" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_quality_loop_limit=1,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 2
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 0
+    assert loop_statuses[-1]["quality_blocks"] == 0
+    assert loop_statuses[-1]["quality_block_ledger"] == []
+
+
+def test_campaign_loop_classifies_stale_source_as_code_generation_not_quality_block() -> (
+    None
+):
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="code generation failed: stale_source",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+            failure_stage="code_generation",
+            failure_category="code_generation",
+            failure_detail=(
+                "patch.changes.0: stale_source for components/common.py: "
+                "expected old digest"
+            ),
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: loop_statuses.append(
+            dict(kwargs["loop_status"])
+        )
+        if "loop_status" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_quality_loop_limit=1,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 2
+    assert loop_statuses[-1]["failure_categories"]["code_generation"] == 1
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 0
+    assert loop_statuses[-1]["quality_blocks"] == 0
+    assert loop_statuses[-1]["quality_block_ledger"] == []
+
+
 def test_campaign_loop_counts_generic_proposal_blocks_in_quality_ceiling() -> None:
     results = [
         StepResult(

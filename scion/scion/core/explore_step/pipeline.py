@@ -1200,6 +1200,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             return "proposal_retry", (), str(failure_detail or "")
         if _is_schema_quality_block_detail(failure_detail):
             return "schema_quality_block", (), str(failure_detail or "")
+        if "stale_source" in str(failure_detail or "").lower():
+            return "proposal_retry", (), "stale_source_refresh"
         if is_branch_lifecycle_policy_block_detail(failure_detail):
             ids = branch_continuation_mechanism_ids(
                 branch,

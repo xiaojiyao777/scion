@@ -250,11 +250,13 @@ def _failure_category_value(category: AgenticFailureCategory | str | None) -> st
 
 def _structured_output_failure_category(
     exc: BaseException,
-) -> AgenticFailureCategory:
+) -> AgenticFailureCategory | str:
     if is_llm_transient_api_error(exc):
         return AgenticFailureCategory.LLM_TRANSIENT_API_ERROR
     if isinstance(exc, LLMRetryExhaustedError):
         return AgenticFailureCategory.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
+    if _is_stale_source_detail(str(exc)):
+        return "code_generation"
     return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
 
 
@@ -443,6 +445,8 @@ def _preview_failure_category(
             continue
         if _preview_skip_is_agentic_budget_control(observation):
             return AgenticFailureCategory.AGENTIC_BUDGET_CONTROL
+        if _preview_indicates_stale_source(observation):
+            return "code_generation"
         if observation.tool_name == "proposal.schema_preview":
             return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
         if observation.tool_name == "proposal.algorithm_smoke":
@@ -456,6 +460,27 @@ def _preview_failure_category(
         if observation.tool_name == "proposal.target_permission_preview":
             return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
     return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+
+
+def _preview_indicates_stale_source(observation: ProposalObservation) -> bool:
+    text_values = [
+        str(value).strip().lower()
+        for value in _preview_text_values(observation.structured_payload)
+        if str(value).strip()
+    ]
+    text_values.extend(
+        value
+        for value in (
+            str(observation.summary or "").strip().lower(),
+            str(_enum_value(observation.failure_code) or "").strip().lower(),
+        )
+        if value
+    )
+    return any(_is_stale_source_detail(value) for value in text_values)
+
+
+def _is_stale_source_detail(value: str) -> bool:
+    return "stale_source" in str(value or "").lower()
 
 
 def _algorithm_smoke_activation_diagnostic(
