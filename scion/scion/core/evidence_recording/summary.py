@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.branch_cards import active_slot_inventory_from_branch_cards
 from scion.core.branch_hygiene import campaign_remaining_branch_classification
+from scion.core.decision_features_serialization import decision_features_to_payload
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
 from scion.core.research_process_guidance_audit import (
@@ -425,6 +426,11 @@ class CampaignSummaryMixin:
             ],
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
+            "promotion_dossier_ref": getattr(
+                champion,
+                "promotion_dossier_ref",
+                None,
+            ),
             "stopped_reason": effective_stopped_reason,
             "stopped": effective_stopped_reason not in (None, "run_complete"),
             "balance_exhausted": inferred_balance_exhausted,
@@ -810,6 +816,11 @@ class CampaignSummaryMixin:
         if observability_value_visibility:
             step_data["observability_value_visibility"] = (
                 observability_value_visibility
+            )
+        decision_features_snapshot = getattr(step, "decision_features_snapshot", None)
+        if decision_features_snapshot is not None:
+            step_data["decision_features"] = decision_features_to_payload(
+                decision_features_snapshot
             )
         step_data["step_visibility_audit"] = _step_visibility_audit(
             step,

@@ -141,6 +141,7 @@ class WeightOptCommitter:
                 code_snapshot_hash=event.snapshot_hash,
                 promotion_experiment_id=current.promotion_experiment_id,
                 promoted_at=current.promoted_at,
+                promotion_dossier_ref=current.promotion_dossier_ref,
                 weight_revision=event.new_revision,
             )
             try:

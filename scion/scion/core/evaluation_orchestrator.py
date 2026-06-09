@@ -101,6 +101,9 @@ class EvaluationOrchestrator:
     lifecycle_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
         default_factory=dict
     )
+    decision_feature_snapshots: MutableMapping[str, DecisionFeatures] = field(
+        default_factory=dict
+    )
 
     def evaluate(
         self,
@@ -109,6 +112,7 @@ class EvaluationOrchestrator:
         hypothesis: HypothesisProposal,
     ) -> Tuple[Optional[Decision], Optional[ProtocolResult], CanaryResult]:
         bid = branch.branch_id
+        self.decision_feature_snapshots.pop(bid, None)
         self.decision_lifecycle_actions[bid] = ""
         self.decision_lifecycle_policy_evidence.pop(bid, None)
         self.decision_lifecycle_bookkeeping.pop(bid, None)
@@ -219,6 +223,7 @@ class EvaluationOrchestrator:
             ),
         )
         coordinated = self.decision_coordinator.decide(features)
+        self.decision_feature_snapshots[bid] = coordinated.features_snapshot
         self.decision_reason_codes[bid] = coordinated.reason_codes
         self.decision_lifecycle_actions[bid] = getattr(
             coordinated,

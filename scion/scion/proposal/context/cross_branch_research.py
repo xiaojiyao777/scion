@@ -4,6 +4,7 @@ This module only builds tainted proposal guidance from generic branch,
 mechanism, target, and screening/pre-protocol feedback fields. It deliberately
 does not read or create DecisionFeatures.
 """
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -51,7 +52,6 @@ from scion.proposal.context.cross_branch_research_support import (
     unique as _unique,
 )
 from scion.proposal.context.research_portfolio import build_portfolio_steering
-
 
 _SIMILARITY_BASIS = (
     "mechanism_family",
@@ -176,6 +176,11 @@ def build_cross_branch_research_map(
             ),
             "portfolio_guidance": portfolio_guidance,
             "portfolio_steering": portfolio_steering,
+            "family_saturation_summary": (
+                portfolio_steering.get("family_saturation_summary")
+                if isinstance(portfolio_steering, dict)
+                else {}
+            ),
         }
     )
 
@@ -411,7 +416,9 @@ def _novelty_pressure(
     saturated_signatures: list[dict[str, Any]] = []
     for hint in similarity_hints:
         hint_type = hint.get("hint_type", "near_duplicate")
-        target = saturated_signatures if hint_type == "saturated_family" else near_duplicates
+        target = (
+            saturated_signatures if hint_type == "saturated_family" else near_duplicates
+        )
         target.append(
             _drop_empty(
                 {
@@ -450,11 +457,11 @@ def _novelty_pressure(
                 outcome_by_dimension[("mechanism_family", family)][pattern] += 1
 
     allowed_actions = _available_action_set(available_actions)
-    observed_actions = sorted(action for action in action_counts if action in allowed_actions)
+    observed_actions = sorted(
+        action for action in action_counts if action in allowed_actions
+    )
     unexplored_actions = [
-        action
-        for action in allowed_actions
-        if action not in action_counts
+        action for action in allowed_actions if action not in action_counts
     ]
     avoid_signature_set = _avoid_signature_set(records)
     material_difference_audit_records = _material_difference_audit_records(
@@ -528,9 +535,7 @@ def _overused_dimensions(
                 continue
             patterns = outcome_by_dimension[(dimension, value)]
             recommended_action = (
-                "diversify"
-                if _non_positive_count(patterns) > 0
-                else "refine"
+                "diversify" if _non_positive_count(patterns) > 0 else "refine"
             )
             items.append(
                 _drop_empty(

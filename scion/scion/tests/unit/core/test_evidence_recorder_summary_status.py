@@ -2544,6 +2544,7 @@ def test_status_and_summary_expose_proposal_accounting_fields(
             "n_steps": 7,
             "n_active_branches": 1,
             "branches": [],
+            "unique_hypothesis_ids": ["hyp-1"],
         },
     )
     loop_status = {
@@ -2588,6 +2589,7 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["protocol_metric_results"] == 2
         assert payload["screening_protocol_results"] == 2
         assert payload["fresh_runtime_replay_protocol_results"] == 0
+        assert payload["effective_protocol_rounds"] == 2
         assert payload["validation_protocol_results"] == 0
         assert payload["frozen_protocol_results"] == 0
         assert payload["verification_consumed_candidates"] == 2
@@ -2617,6 +2619,37 @@ def test_status_and_summary_expose_proposal_accounting_fields(
         assert payload["llm_token_sums"]["output_tokens"] == 6
         assert payload["llm_token_sums"]["total_tokens"] == 36
         assert payload["llm_token_sums"]["reasoning_tokens"] is None
+        breakdown = payload["research_accounting_breakdown"]
+        assert breakdown["proposal_attempts"]["proposal_attempts_total"] == 7
+        assert breakdown["proposal_attempts"]["quality_blocks"] == 3
+        assert breakdown["llm_requests"]["llm_request_kind_counts"] == {
+            "code": 2,
+            "hypothesis": 1,
+        }
+        assert breakdown["llm_requests"]["hypothesis_calls"] == 1
+        assert breakdown["llm_requests"]["code_calls"] == 2
+        assert breakdown["proposal_sessions"]["agentic_sessions"] == 2
+        assert breakdown["hypotheses"]["unique_hypotheses"] == 1
+        assert breakdown["hypotheses"]["source"] in {
+            "state.unique_hypothesis_ids",
+            "step_history.hypothesis_id",
+        }
+        assert breakdown["protocol_rows"]["effective_protocol_rounds"] == 2
+        assert breakdown["protocol_rows"]["protocol_metric_results"] == 2
+        assert breakdown["protocol_rows"]["screening_protocol_results"] == 2
+        assert (
+            breakdown["legacy_candidate_counters"]["formal_screened_candidates"]
+            == 2
+        )
+        assert (
+            breakdown["formal_candidate_artifacts"][
+                "formal_candidate_artifact_count"
+            ]
+            is None
+        )
+        assert payload["proposal_accounting"]["research_accounting_breakdown"] == (
+            breakdown
+        )
         candidate_reconciliation = payload["formal_candidate_count_reconciliation"]
         assert candidate_reconciliation["db_screening_rows"] == 2
         assert candidate_reconciliation["formal_candidates_index_entries"] is None
@@ -2894,6 +2927,7 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
     assert summary["formal_screened_candidates"] == 1
     assert summary["protocol_evaluated_candidates"] == 5
     assert summary["protocol_metric_results"] == 5
+    assert summary["effective_protocol_rounds"] == 3
     assert summary["screening_protocol_results"] == 3
     assert summary["fresh_runtime_replay_protocol_results"] == 1
     assert summary["validation_protocol_results"] == 1
@@ -2913,6 +2947,7 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
     assert summary["proposal_accounting"]["formal_screened_candidates"] == 1
     assert summary["proposal_accounting"]["protocol_evaluated_candidates"] == 5
     assert summary["proposal_accounting"]["protocol_metric_results"] == 5
+    assert summary["proposal_accounting"]["effective_protocol_rounds"] == 3
     assert (
         summary["proposal_accounting"]["fresh_runtime_replay_protocol_results"]
         == 1
@@ -2941,6 +2976,7 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
     assert reconciliation["formal_screened_candidates"] == 1
     assert reconciliation["protocol_evaluated_candidates"] == 5
     assert reconciliation["protocol_metric_results"] == 5
+    assert reconciliation["effective_protocol_rounds"] == 3
     assert reconciliation["formal_candidate_count_reconciliation"] == (
         candidate_reconciliation
     )
@@ -2962,7 +2998,161 @@ def test_campaign_summary_separates_formal_screening_from_holdout_protocol_count
         ]
         == 1
     )
+    breakdown = summary["research_accounting_breakdown"]
+    assert breakdown["protocol_rows"]["effective_protocol_rounds"] == 3
+    assert breakdown["protocol_rows"]["effective_rounds_completed"] == 4
+    assert breakdown["protocol_rows"]["protocol_metric_results"] == 5
+    assert breakdown["protocol_rows"]["screening_protocol_results"] == 3
+    assert breakdown["protocol_rows"]["validation_protocol_results"] == 1
+    assert breakdown["protocol_rows"]["frozen_protocol_results"] == 1
+    assert breakdown["protocol_rows"]["fresh_runtime_replay_protocol_results"] == 1
+    assert breakdown["formal_candidate_artifacts"][
+        "formal_candidate_artifact_count"
+    ] == 1
+    assert breakdown["hypotheses"]["unique_hypotheses"] == 1
+    assert "fresh-runtime replay rows are not new hypotheses" in (
+        breakdown["protocol_rows"]["semantics"]
+    )
 
+
+def test_campaign_accounting_breakdown_separates_warehouse_rows_and_artifacts(
+    tmp_path: Path,
+) -> None:
+    for index, request_kind in enumerate(
+        ["hypothesis"] * 14 + ["code"] * 5,
+        start=1,
+    ):
+        trace_path = tmp_path / "llm_traces" / f"{index:04d}_{request_kind}.json"
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_path.write_text(
+            json.dumps({"request_kind": request_kind, "llm_usage": {}}),
+            encoding="utf-8",
+        )
+
+    formal_index = tmp_path / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text(
+        "".join(
+            json.dumps({"candidate_id": f"formal-candidate-{index}"}) + "\n"
+            for index in range(1, 5)
+        ),
+        encoding="utf-8",
+    )
+
+    def _warehouse_step(index: int, stage: ExperimentStage) -> StepRecord:
+        step = replace(
+            _step(f"/tmp/warehouse-{index}.json"),
+            round_num=index,
+            hypothesis_id=f"hyp-{index}",
+            proposal_session_ref={
+                "session_id": f"session-{((index - 1) // 2) + 1}"
+            },
+        )
+        step.protocol_result = replace(
+            step.protocol_result,
+            stage=stage,
+            raw_metrics_ref=f"/tmp/warehouse-{index}.json",
+        )
+        if stage == ExperimentStage.VALIDATION:
+            step = replace(step, decision=Decision.QUEUE_FROZEN)
+        elif stage == ExperimentStage.FROZEN:
+            step = replace(step, decision=Decision.PROMOTE)
+        return step
+
+    steps = [
+        *(_warehouse_step(index, ExperimentStage.SCREENING) for index in range(1, 11)),
+        _warehouse_step(11, ExperimentStage.VALIDATION),
+        _warehouse_step(12, ExperimentStage.FROZEN),
+    ]
+    hypothesis_ids = [f"hyp-{index}" for index in range(1, 13)]
+    loop_status = {
+        "requested_rounds": 12,
+        "campaign_steps": 18,
+        "proposal_attempts": 15,
+        "proposal_attempts_consumed": 15,
+        "proposal_attempts_total": 18,
+        "effective_rounds_completed": 12,
+        "effective_protocol_rounds": 12,
+        "formal_screened_candidates": 10,
+        "protocol_evaluated_candidates": 12,
+        "protocol_metric_results": 12,
+        "screening_protocol_results": 10,
+        "validation_protocol_results": 1,
+        "frozen_protocol_results": 1,
+        "fresh_runtime_replay_protocol_results": 0,
+        "protocol_metric_stage_counts": {
+            "screening": 10,
+            "validation": 1,
+            "frozen": 1,
+        },
+        "quality_blocks": 3,
+    }
+    recorder = EvidenceRecorder(
+        campaign_id="camp-warehouse",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-warehouse",
+            "screened_experiments": 10,
+            "n_steps": 18,
+            "n_active_branches": 1,
+            "branches": [],
+            "agentic_sessions": 6,
+            "unique_hypothesis_ids": hypothesis_ids,
+        },
+    )
+
+    status = recorder.write_status(loop_status=loop_status)
+    summary = recorder.write_campaign_summary(
+        step_history=steps,
+        round_num=18,
+        champion=_champion(),
+    )
+
+    for payload in (status, summary):
+        assert payload["proposal_attempts_total"] == 18
+        assert payload["effective_protocol_rounds"] == 12
+        assert payload["protocol_metric_results"] == 12
+        assert payload["screening_protocol_results"] == 10
+        assert payload["validation_protocol_results"] == 1
+        assert payload["frozen_protocol_results"] == 1
+        assert payload["fresh_runtime_replay_protocol_results"] == 0
+        assert payload["formal_screened_candidates"] == 10
+        assert payload["formal_candidate_artifact_count"] == 4
+        assert payload["unique_hypotheses"] == 12
+        assert payload["agentic_sessions"] == 6
+        assert payload["hypothesis_calls"] == 14
+        assert payload["code_calls"] == 5
+        assert payload["llm_request_kind_counts"] == {
+            "code": 5,
+            "hypothesis": 14,
+        }
+        breakdown = payload["research_accounting_breakdown"]
+        assert breakdown["proposal_attempts"]["proposal_attempts_total"] == 18
+        assert breakdown["proposal_attempts"]["quality_blocks"] == 3
+        assert breakdown["proposal_sessions"]["agentic_sessions"] == 6
+        assert breakdown["hypotheses"]["unique_hypotheses"] == 12
+        assert breakdown["llm_requests"]["hypothesis_calls"] == 14
+        assert breakdown["llm_requests"]["code_calls"] == 5
+        assert breakdown["protocol_rows"]["effective_protocol_rounds"] == 12
+        assert breakdown["protocol_rows"]["protocol_metric_results"] == 12
+        assert breakdown["protocol_rows"]["screening_protocol_results"] == 10
+        assert breakdown["protocol_rows"]["validation_protocol_results"] == 1
+        assert breakdown["protocol_rows"]["frozen_protocol_results"] == 1
+        assert (
+            breakdown["formal_candidate_artifacts"][
+                "formal_candidate_artifact_count"
+            ]
+            == 4
+        )
+        assert "not a count of unique hypotheses" in (
+            breakdown["proposal_attempts"]["semantics"]
+        )
+        assert "do not imply unique hypotheses" in (
+            breakdown["llm_requests"]["semantics"]
+        )
+        assert "not equivalent to screening protocol rows" in (
+            breakdown["formal_candidate_artifacts"]["semantics"]
+        )
 
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(
     tmp_path: Path,

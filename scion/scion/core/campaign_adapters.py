@@ -74,6 +74,9 @@ def _lookup_decision_provenance(
         "lifecycle_bookkeeping": dict(
             mapping("decision_lifecycle_bookkeeping").get(branch_id, {}) or {}
         ),
+        "decision_features_snapshot": mapping("decision_feature_snapshots").get(
+            branch_id
+        ),
     }
 
 
@@ -405,6 +408,7 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         diagnostic_reason_codes=getattr(owner, "_diagnostic_reason_codes", {}),
         bypass_reason_codes=getattr(owner, "_bypass_reason_codes", {}),
         lifecycle_reason_codes=getattr(owner, "_lifecycle_reason_codes", {}),
+        decision_feature_snapshots=getattr(owner, "_decision_feature_snapshots", {}),
         decision_lifecycle_bookkeeping=getattr(
             owner,
             "_decision_lifecycle_bookkeeping",

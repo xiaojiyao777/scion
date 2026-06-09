@@ -852,7 +852,30 @@ class DecisionFinalizer:
             promote_plan.champion,
             promotion_experiment_id=promotion_event_id,
         )
-        promote_plan = replace(promote_plan, champion=promoted_champion)
+        promotion_metadata = dict(promote_plan.metadata or {})
+        promotion_metadata.update(
+            {
+                "promotion_experiment_id": promotion_event_id,
+                "branch_id": bid,
+                "hypothesis_id": h_record.hypothesis_id,
+                "base_champion_version": getattr(branch, "base_champion_id", None),
+                "candidate_code_hash": (
+                    getattr(branch, "current_code_hash", None)
+                    or getattr(branch, "last_clean_code_hash", None)
+                ),
+                "patch": self.branch_patches.get(bid),
+                "protocol_result": protocol_result,
+                "decision_reason_codes": tuple(decision_reason_codes or ()),
+                "branch_evidence_summary": dict(
+                    getattr(branch, "branch_evidence_summary", {}) or {}
+                ),
+            }
+        )
+        promote_plan = replace(
+            promote_plan,
+            champion=promoted_champion,
+            metadata=promotion_metadata,
+        )
         try:
             self.commit_promote_plan(promote_plan)
         except PromotionCommitError as exc:

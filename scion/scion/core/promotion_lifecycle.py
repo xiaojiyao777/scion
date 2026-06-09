@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from scion.core.branch import BranchController, StateTransitionError
@@ -41,6 +41,7 @@ class PromotionLifecycleService:
     get_weight_opt_committer: Callable[[], Any]
     get_parameter_search_execution: Callable[[], str]
     get_round_num: Callable[[], int]
+    promotion_dossier_ref_for: Callable[[int], str | None]
     reset_promotion_counters: Callable[[str], None]
     set_rounds_since_last_promote: Callable[[int], None]
 
@@ -74,13 +75,20 @@ class PromotionLifecycleService:
 
         with self.champion_lock:
             champion_for_prepare = self.get_champion()
-        return self.promotion_service.prepare(
+        plan = self.promotion_service.prepare(
             PromotionRequest.from_champion(
                 branch_id=bid,
                 candidate_workspace=workspace,
                 champion=champion_for_prepare,
             )
         )
+        dossier_ref = self.promotion_dossier_ref_for(plan.new_champion_version)
+        if dossier_ref:
+            plan = replace(
+                plan,
+                champion=replace(plan.champion, promotion_dossier_ref=dossier_ref),
+            )
+        return plan
 
     def require_promotable_branch(self, branch: Branch) -> None:
         current = self.branch_controller.get_branch(branch.branch_id)

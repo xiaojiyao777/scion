@@ -36,6 +36,10 @@ def _step(
     *,
     round_num: int,
     mechanism_id: str,
+    target_file: str = "components/common.py",
+    change_locus: str = "selection_policy",
+    action: str = "modify",
+    novelty_signature: dict | None = None,
     wins: int = 0,
     losses: int = 0,
     reason_codes: tuple[str, ...] = (),
@@ -48,9 +52,10 @@ def _step(
         branch_id=branch_id,
         hypothesis=HypothesisProposal(
             hypothesis_text="Sensitive proposal text must not appear here.",
-            change_locus="selection_policy",
-            action="modify",
-            target_file="components/common.py",
+            change_locus=change_locus,
+            action=action,
+            target_file=target_file,
+            novelty_signature=novelty_signature or {},
             mechanism_changes=(MechanismChange(id=mechanism_id, change_type="modify"),),
         ),
         patch=None,
@@ -329,6 +334,73 @@ def test_cross_branch_observability_flags_generic_near_duplicate_diagnostics() -
     assert "Sensitive proposal text" not in json.dumps(payload)
 
 
+def test_cross_branch_observability_counts_broad_family_saturation() -> None:
+    payload = build_cross_branch_research_observability(
+        steps=[
+            _step(
+                "branch-local-a",
+                round_num=1,
+                mechanism_id="local_search_alpha",
+                target_file="components/a.py",
+                novelty_signature={"mechanism_family": "local_search"},
+            ),
+            _step(
+                "branch-local-b",
+                round_num=2,
+                mechanism_id="local_search_beta",
+                target_file="components/b.py",
+                novelty_signature={"mechanism_family": "local_search"},
+            ),
+            _step(
+                "branch-local-c",
+                round_num=3,
+                mechanism_id="local_search_gamma",
+                target_file="components/c.py",
+                novelty_signature={"mechanism_family": "local_search"},
+                wins=1,
+                reason_codes=("SCREENING_WEAK_SIGNAL_CONTINUE",),
+            ),
+        ],
+    )
+
+    assert payload["near_duplicate_count"] == 0
+    summary = payload["family_saturation_summary"]
+    assert summary["schema_version"] == "cross_branch_family_saturation_summary.v1"
+    assert summary["visibility_marker"] == (
+        "advisory proposal-only excluded_from_DecisionFeatures"
+    )
+    assert summary["proposal_visibility_only"] is True
+    assert summary["advisory_only"] is True
+    assert summary["decision_input_policy"] == "excluded_from_decision_features"
+    assert summary["grouping_keys"] == [
+        "mechanism_family",
+        "intervention_type",
+        "surface",
+        "outcome_tier",
+    ]
+    assert summary["saturated_family_count"] == 1
+    item = summary["summaries"][0]
+    assert item["mechanism_family"] == "local_search"
+    assert item["intervention_type"] == "modify"
+    assert item["surface"] == "selection_policy"
+    assert item["attempt_count"] == 3
+    assert item["branch_count"] == 3
+    assert item["outcome_tier_counts"] == {
+        "no_effect": 2,
+        "weak_positive": 1,
+    }
+    assert item["case_level_counts"] == {
+        "wins": 1,
+        "losses": 0,
+        "no_effect": 11,
+    }
+    assert item["lifecycle_counts"]["weak_positive"] == 1
+    assert "consider diversifying" in item["proposal_advisory"]
+    assert "must switch" not in json.dumps(summary).lower()
+    assert "forbidden" not in json.dumps(summary).lower()
+    assert "Sensitive proposal text" not in json.dumps(payload)
+
+
 def test_cross_branch_observability_counts_direct_material_requirement_record() -> None:
     payload = build_cross_branch_research_observability(
         steps=[
@@ -545,9 +617,7 @@ def test_branch_lesson_usage_observability_distinguishes_linkage_unrecognized() 
         },
     }
     step.scheduler_audit_metadata = {
-        "branch_lesson_usage_requirement": _branch_lesson_requirement(
-            "lesson:linkage"
-        )
+        "branch_lesson_usage_requirement": _branch_lesson_requirement("lesson:linkage")
     }
 
     blocked = replace(

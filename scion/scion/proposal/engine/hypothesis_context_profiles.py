@@ -212,6 +212,13 @@ def _compact_cross_branch_research(payload: Any) -> str:
             "portfolio_steering": _compact_portfolio_steering(
                 payload.get("portfolio_steering")
             ),
+            "family_saturation_summary": _compact_family_saturation_summary(
+                payload.get("family_saturation_summary")
+                or _project_mapping(
+                    payload.get("portfolio_steering"),
+                    fields=("family_saturation_summary",),
+                ).get("family_saturation_summary")
+            ),
             "novelty_pressure": _project_mapping(
                 payload.get("novelty_pressure"),
                 fields=(
@@ -300,6 +307,43 @@ def _compact_portfolio_steering(value: Any) -> dict[str, Any]:
                     "confidence",
                 ),
                 limit=4,
+            ),
+            "family_saturation_summary": _compact_family_saturation_summary(
+                value.get("family_saturation_summary")
+            ),
+        }
+    )
+
+
+def _compact_family_saturation_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return _drop_empty(
+        {
+            "schema_version": value.get("schema_version"),
+            "visibility_marker": value.get("visibility_marker"),
+            "proposal_visibility_only": value.get("proposal_visibility_only"),
+            "advisory_only": value.get("advisory_only"),
+            "decision_features_excluded": value.get("decision_features_excluded"),
+            "decision_input_policy": value.get("decision_input_policy"),
+            "grouping_keys": _project_generic_value(value.get("grouping_keys")),
+            "saturated_family_count": value.get("saturated_family_count"),
+            "summaries": _project_items(
+                value.get("summaries"),
+                fields=(
+                    "mechanism_family",
+                    "intervention_type",
+                    "surface",
+                    "attempt_count",
+                    "branch_count",
+                    "outcome_tier_counts",
+                    "case_level_counts",
+                    "lifecycle_counts",
+                    "advisory_label",
+                    "proposal_advisory",
+                    "reason_codes",
+                ),
+                limit=6,
             ),
         }
     )

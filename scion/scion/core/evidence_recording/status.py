@@ -124,7 +124,15 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "proposal_attempts": "proposal_attempts",
         "proposal_attempts_consumed": "proposal_attempts_consumed",
         "proposal_attempts_total": "proposal_attempts_total",
+        "proposal_attempts_total_semantics": "proposal_attempts_total_semantics",
         "effective_rounds_completed": "effective_rounds_completed",
+        "effective_rounds_completed_semantics": (
+            "effective_rounds_completed_semantics"
+        ),
+        "effective_protocol_rounds": "effective_protocol_rounds",
+        "effective_protocol_rounds_semantics": (
+            "effective_protocol_rounds_semantics"
+        ),
         "formal_screened_candidates": "formal_screened_candidates",
         "protocol_evaluated_candidates": "protocol_evaluated_candidates",
         "protocol_metric_results": "protocol_metric_results",
@@ -180,6 +188,13 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "quality_blocks": "quality_blocks",
         "quality_block_ledger": "quality_block_ledger",
         "quality_block_ledger_count": "quality_block_ledger_count",
+        "research_accounting_breakdown": "research_accounting_breakdown",
+        "unique_hypotheses": "unique_hypotheses",
+        "unique_hypotheses_semantics": "unique_hypotheses_semantics",
+        "formal_candidate_artifact_count": "formal_candidate_artifact_count",
+        "formal_candidate_artifact_count_semantics": (
+            "formal_candidate_artifact_count_semantics"
+        ),
         "non_effective_screenings": "non_effective_screenings",
         "non_effective_screening_count": "non_effective_screening_count",
         "blocked_attempts": "blocked_attempts",
@@ -189,9 +204,15 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "campaign_steps": "campaign_steps",
         "screened_rounds": "screened_rounds",
         "agentic_sessions": "agentic_sessions",
+        "agentic_sessions_semantics": "agentic_sessions_semantics",
         "hypothesis_calls": "hypothesis_calls",
+        "hypothesis_calls_semantics": "hypothesis_calls_semantics",
         "code_calls": "code_calls",
+        "code_calls_semantics": "code_calls_semantics",
         "llm_request_kind_counts": "llm_request_kind_counts",
+        "llm_request_kind_counts_semantics": (
+            "llm_request_kind_counts_semantics"
+        ),
         "llm_model_counts": "llm_model_counts",
         "llm_provider_counts": "llm_provider_counts",
         "llm_token_sums": "llm_token_sums",

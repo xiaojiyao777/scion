@@ -33,6 +33,10 @@ from scion.core.features import BudgetState
 from scion.core.formal_candidate_artifacts import (
     FormalCandidatePatchArtifactRecorder,
 )
+from scion.core.promotion_dossier import (
+    promotion_dossier_ref,
+    write_promotion_dossier,
+)
 from scion.core.frozen_budget import FrozenBudgetLedger
 from scion.core.models import ChampionState, OperatorConfig
 from scion.core.plateau_controller import PlateauController
@@ -234,6 +238,12 @@ def compose_campaign_services(
         mark_stale=owner._branch_ctrl.mark_all_stale,
         persist_branch_states=owner._persist_all_branch_states,
         on_promoted_branch=owner._record_promoted_branch,
+        after_commit=lambda plan: write_promotion_dossier(
+            campaign_dir=owner._campaign_dir,
+            campaign_id=owner._campaign_id,
+            plan=plan,
+            step_history=owner._step_history,
+        ),
         read_weights_fn=_read_promotion_weights,
     )
 
@@ -274,6 +284,7 @@ def compose_campaign_services(
     owner._diagnostic_reason_codes = {}
     owner._bypass_reason_codes = {}
     owner._lifecycle_reason_codes = {}
+    owner._decision_feature_snapshots = {}
     owner._branch_current_hypothesis = {}
     owner._pending_hypotheses = {}
     owner._step_history = []
@@ -382,6 +393,10 @@ def compose_campaign_services(
             "async",
         ),
         get_round_num=lambda: owner._round_num,
+        promotion_dossier_ref_for=lambda version: promotion_dossier_ref(
+            owner._campaign_dir,
+            version,
+        ),
         reset_promotion_counters=owner._reset_promotion_counters,
         set_rounds_since_last_promote=lambda value: setattr(
             owner,
@@ -453,6 +468,7 @@ def compose_campaign_services(
         diagnostic_reason_codes=owner._diagnostic_reason_codes,
         bypass_reason_codes=owner._bypass_reason_codes,
         lifecycle_reason_codes=owner._lifecycle_reason_codes,
+        decision_feature_snapshots=owner._decision_feature_snapshots,
         branch_zero_win_streaks=owner._branch_zero_win_streaks,
         branch_telemetry_diagnostic_streaks=(
             owner._branch_telemetry_diagnostic_streaks
@@ -726,6 +742,7 @@ def _persist_initial_champion(owner: Any) -> None:
         code_snapshot_hash=owner._materializer.compute_snapshot_hash(snapshot_path),
         promotion_experiment_id=champion.promotion_experiment_id,
         promoted_at=champion.promoted_at,
+        promotion_dossier_ref=champion.promotion_dossier_ref,
         weight_revision=champion.weight_revision,
     )
     owner._champion_store.promote(persisted)

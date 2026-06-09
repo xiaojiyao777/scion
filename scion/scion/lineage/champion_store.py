@@ -56,6 +56,7 @@ class ChampionStore:
                 code_snapshot_path      TEXT NOT NULL,
                 code_snapshot_hash      TEXT NOT NULL,
                 promotion_experiment_id TEXT,
+                promotion_dossier_ref    TEXT,
                 promoted_at             TEXT,
                 PRIMARY KEY (version, weight_revision)
             )
@@ -71,6 +72,11 @@ class ChampionStore:
             columns["weight_revision"]["pk"] if "weight_revision" in columns else 0
         )
         if version_pk > 0 and revision_pk > 0:
+            if "promotion_dossier_ref" not in columns:
+                with self._conn:
+                    self._conn.execute(
+                        "ALTER TABLE champions ADD COLUMN promotion_dossier_ref TEXT"
+                    )
             return
 
         with self._conn:
@@ -84,6 +90,7 @@ class ChampionStore:
                     code_snapshot_path      TEXT NOT NULL,
                     code_snapshot_hash      TEXT NOT NULL,
                     promotion_experiment_id TEXT,
+                    promotion_dossier_ref    TEXT,
                     promoted_at             TEXT,
                     PRIMARY KEY (version, weight_revision)
                 )
@@ -96,19 +103,25 @@ class ChampionStore:
                 "COALESCE(weight_revision, 0)"
                 if "weight_revision" in legacy_cols else "0"
             )
+            dossier_expr = (
+                "promotion_dossier_ref"
+                if "promotion_dossier_ref" in legacy_cols
+                else "NULL"
+            )
             self._conn.execute(f"""
                 INSERT OR IGNORE INTO champions (
                     version, weight_revision, operator_pool_json,
                     solver_config_hash, code_snapshot_path, code_snapshot_hash,
-                    promotion_experiment_id, promoted_at
+                    promotion_experiment_id, promotion_dossier_ref, promoted_at
                 )
                 SELECT
                     version, {revision_expr}, operator_pool_json,
                     solver_config_hash, code_snapshot_path, code_snapshot_hash,
-                    promotion_experiment_id, promoted_at
+                    promotion_experiment_id, {dossier_expr}, promoted_at
                 FROM champions_legacy
             """)
             self._conn.execute("DROP TABLE champions_legacy")
+            return
 
     # ──────────────────────────────────────────────────────────────────────
     # 写入接口（INSERT only）
@@ -139,11 +152,11 @@ class ChampionStore:
             INSERT INTO champions (
                 version, weight_revision, operator_pool_json, solver_config_hash,
                 code_snapshot_path, code_snapshot_hash,
-                promotion_experiment_id, promoted_at
+                promotion_experiment_id, promotion_dossier_ref, promoted_at
             ) VALUES (
                 :version, :weight_revision, :operator_pool_json, :solver_config_hash,
                 :code_snapshot_path, :code_snapshot_hash,
-                :promotion_experiment_id, :promoted_at
+                :promotion_experiment_id, :promotion_dossier_ref, :promoted_at
             )
         """
         params = {
@@ -154,6 +167,7 @@ class ChampionStore:
             "code_snapshot_path": new_champion.code_snapshot_path,
             "code_snapshot_hash": new_champion.code_snapshot_hash,
             "promotion_experiment_id": new_champion.promotion_experiment_id,
+            "promotion_dossier_ref": new_champion.promotion_dossier_ref,
             "promoted_at": new_champion.promoted_at,
         }
         with self._conn:
@@ -251,6 +265,7 @@ class ChampionStore:
             code_snapshot_hash=d["code_snapshot_hash"],
             promotion_experiment_id=d.get("promotion_experiment_id"),
             promoted_at=d.get("promoted_at"),
+            promotion_dossier_ref=d.get("promotion_dossier_ref"),
             weight_revision=d.get("weight_revision", 0),
         )
 

@@ -18,9 +18,7 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
         "cross_branch_research": "full cross_branch_research.v1 payload",
         "cross_branch_research_payload": {
             "schema_version": "cross_branch_research.v1",
-            "material_difference_audit_records": [
-                {"audit_token": "hidden-audit"}
-            ],
+            "material_difference_audit_records": [{"audit_token": "hidden-audit"}],
             "cross_branch_research_metadata": {"session_id": "hidden-session"},
             "similarity_hints": [
                 {
@@ -128,9 +126,7 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
                         "signature_digest": "hidden-full-signature",
                     }
                 ],
-                "similarity_graph": {
-                    "edges": [{"edge_type": "same_family_surface"}]
-                },
+                "similarity_graph": {"edges": [{"edge_type": "same_family_surface"}]},
                 "clusters": [
                     {
                         "cluster_id": "cluster-flat",
@@ -169,6 +165,50 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
                         "reason_codes": ["PORTFOLIO_NO_EFFECT_PLATEAU"],
                     }
                 ],
+                "family_saturation_summary": {
+                    "schema_version": ("cross_branch_family_saturation_summary.v1"),
+                    "visibility_marker": (
+                        "advisory proposal-only " "excluded_from_DecisionFeatures"
+                    ),
+                    "proposal_visibility_only": True,
+                    "advisory_only": True,
+                    "decision_features_excluded": True,
+                    "decision_input_policy": ("excluded_from_decision_features"),
+                    "grouping_keys": [
+                        "mechanism_family",
+                        "intervention_type",
+                        "surface",
+                        "outcome_tier",
+                    ],
+                    "saturated_family_count": 1,
+                    "summaries": [
+                        {
+                            "mechanism_family": "flat",
+                            "intervention_type": "modify",
+                            "surface": "activation_policy",
+                            "attempt_count": 3,
+                            "branch_count": 3,
+                            "outcome_tier_counts": {
+                                "no_effect": 2,
+                                "weak_positive": 1,
+                            },
+                            "case_level_counts": {
+                                "wins": 1,
+                                "losses": 0,
+                                "no_effect": 11,
+                            },
+                            "lifecycle_counts": {"weak_positive": 1},
+                            "advisory_label": "spent_family",
+                            "proposal_advisory": (
+                                "Spent family with weak/no-effect history; "
+                                "consider diversifying mechanism family, "
+                                "intervention type, or surface when planning "
+                                "the next proposal."
+                            ),
+                            "reason_codes": ["CROSS_BRANCH_FAMILY_SATURATION_ADVISORY"],
+                        }
+                    ],
+                },
                 "opportunity_gaps": [
                     {
                         "gap_type": "no_effect_contrast_gap",
@@ -214,6 +254,10 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert "same_branch_refinement_allowed" in compact
     assert "sibling_duplication_allowed" in compact
     assert "compact_portfolio_steering.v1" in compact
+    assert "cross_branch_family_saturation_summary.v1" in compact
+    assert "advisory proposal-only excluded_from_DecisionFeatures" in compact
+    assert "consider diversifying" in compact
+    assert "spent_family" in compact
     assert "portfolio_steering.v1" in compact
     assert "no_effect_plateau" in compact
     assert "no_effect_contrast_gap" in compact
@@ -291,6 +335,8 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "branch_lesson_records" not in decision_fields
     assert "branch_lesson_usage" not in decision_fields
     assert "branch_lesson_usage_requirement" not in decision_fields
+    assert "family_saturation_summary" not in decision_fields
+    assert "cross_branch_family_saturation_summary" not in decision_fields
 
 
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():
@@ -317,9 +363,9 @@ def test_material_difference_requirement_only_kept_when_required_and_nonempty():
     }
 
     assert (
-        filter_hypothesis_context_for_prompt(active)[
-            "material_difference_requirement"
-        ]["record_id"]
+        filter_hypothesis_context_for_prompt(active)["material_difference_requirement"][
+            "record_id"
+        ]
         == "material_difference_requirement:branch-a"
     )
     assert "material_difference_requirement" not in (
@@ -404,9 +450,9 @@ def test_branch_lesson_requirement_only_kept_when_required_and_nonempty():
     }
 
     assert (
-        filter_hypothesis_context_for_prompt(active)[
-            "branch_lesson_usage_requirement"
-        ]["record_id"]
+        filter_hypothesis_context_for_prompt(active)["branch_lesson_usage_requirement"][
+            "record_id"
+        ]
         == "branch_lesson_usage_requirement:branch-a"
     )
     assert "branch_lesson_usage_requirement" not in (

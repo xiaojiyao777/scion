@@ -241,12 +241,14 @@ class LineageRegistry:
                     code_snapshot_path       TEXT NOT NULL,
                     code_snapshot_hash       TEXT NOT NULL,
                     promotion_experiment_id  TEXT,
+                    promotion_dossier_ref     TEXT,
                     promoted_at              TEXT,
                     PRIMARY KEY (version, weight_revision)
                 )
             """)
             self._ensure_columns(conn, "champions", {
                 "weight_revision": "INTEGER DEFAULT 0",
+                "promotion_dossier_ref": "TEXT",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS weight_optimizations (

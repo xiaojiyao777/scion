@@ -101,6 +101,10 @@ def build_cross_branch_research_observability(
         diagnostic_kind="saturated_signature",
         saturated_only=True,
     )
+    family_saturation_summary = _family_saturation_summary(
+        safe_steps,
+        branch_row_list,
+    )
     avoid_signature_count = saturated_signature_count
     same_branch_refinement_allowance_count = _same_branch_refinement_allowance_count(
         safe_steps, scheduler_metadata
@@ -165,6 +169,7 @@ def build_cross_branch_research_observability(
         "avoid_signature_count": avoid_signature_count,
         "near_duplicate_diagnostics": near_duplicate_diagnostics,
         "saturated_signature_diagnostics": saturated_signature_diagnostics,
+        "family_saturation_summary": family_saturation_summary,
         "material_difference_requirement_count": material_difference_requirement_count,
         "branch_lesson_record_count": branch_lesson_record_count,
         "branch_lesson_usage_requirement_count": (
@@ -463,6 +468,236 @@ def _signature_group_diagnostics(
         if len(diagnostics) >= limit:
             break
     return diagnostics
+
+
+def _family_saturation_summary(
+    steps: Iterable[StepRecord],
+    branch_rows: Iterable[Mapping[str, Any]],
+    *,
+    limit: int = 8,
+) -> dict[str, Any]:
+    records = _family_saturation_records(steps, branch_rows)
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        family = str(record.get("mechanism_family") or "")
+        if not family or family == "unknown":
+            continue
+        groups[
+            (
+                family,
+                str(record.get("intervention_type") or "unknown"),
+                str(record.get("surface") or "unknown"),
+            )
+        ].append(record)
+
+    summaries: list[dict[str, Any]] = []
+    for (family, intervention_type, surface), group in sorted(groups.items()):
+        attempt_count = len(group)
+        if attempt_count < 2:
+            continue
+        outcome_tiers = Counter(
+            str(item.get("outcome_tier") or "unknown") for item in group
+        )
+        weak_no_effect_count = (
+            outcome_tiers.get("weak_positive", 0)
+            + outcome_tiers.get("no_effect", 0)
+            + outcome_tiers.get("regression", 0)
+            + outcome_tiers.get("blocked", 0)
+            + outcome_tiers.get("pre_protocol_failure", 0)
+        )
+        non_positive_count = sum(
+            count
+            for tier, count in outcome_tiers.items()
+            if tier in _NON_POSITIVE_OUTCOMES
+        )
+        if weak_no_effect_count < 2 and non_positive_count < 2:
+            continue
+        lifecycle_counts = Counter(
+            str(item.get("lifecycle_tier") or "")
+            for item in group
+            if str(item.get("lifecycle_tier") or "")
+        )
+        summaries.append(
+            {
+                "mechanism_family": family,
+                "intervention_type": intervention_type,
+                "surface": surface,
+                "attempt_count": attempt_count,
+                "branch_count": len(
+                    {
+                        str(item.get("branch_id") or "")
+                        for item in group
+                        if str(item.get("branch_id") or "")
+                    }
+                ),
+                "outcome_tier_counts": dict(sorted(outcome_tiers.items())),
+                "case_level_counts": {
+                    "wins": sum(int(item.get("case_wins") or 0) for item in group),
+                    "losses": sum(int(item.get("case_losses") or 0) for item in group),
+                    "no_effect": sum(
+                        int(item.get("case_no_effect") or 0) for item in group
+                    ),
+                },
+                "lifecycle_counts": dict(sorted(lifecycle_counts.items())),
+                "advisory_label": "spent_family",
+                "proposal_advisory": (
+                    "Spent family with weak/no-effect history; consider "
+                    "diversifying mechanism family, intervention type, or "
+                    "surface when planning the next proposal."
+                ),
+                "reason_codes": ["CROSS_BRANCH_FAMILY_SATURATION_ADVISORY"],
+            }
+        )
+
+    summaries = sorted(
+        summaries,
+        key=lambda item: (
+            -int(item.get("attempt_count", 0)),
+            item.get("mechanism_family", ""),
+            item.get("intervention_type", ""),
+            item.get("surface", ""),
+        ),
+    )[:limit]
+    return {
+        "schema_version": "cross_branch_family_saturation_summary.v1",
+        "policy": "proposal_observability_only",
+        "visibility_marker": ("advisory proposal-only excluded_from_DecisionFeatures"),
+        "proposal_visibility_only": True,
+        "advisory_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": _DECISION_INPUT_POLICY,
+        "grouping_keys": [
+            "mechanism_family",
+            "intervention_type",
+            "surface",
+            "outcome_tier",
+        ],
+        "saturated_family_count": len(summaries),
+        "summaries": summaries,
+    }
+
+
+def _family_saturation_records(
+    steps: Iterable[StepRecord],
+    branch_rows: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    for step in steps:
+        record = _step_family_saturation_record(step)
+        if not record:
+            continue
+        key = _family_record_key(record)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(record)
+    for row in branch_rows:
+        record = _row_family_saturation_record(row)
+        if not record:
+            continue
+        key = _family_record_key(record)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(record)
+    return records
+
+
+def _step_family_saturation_record(step: StepRecord) -> dict[str, Any]:
+    key = _step_signature_key(step)
+    if not key[0]:
+        return {}
+    stats = getattr(getattr(step, "protocol_result", None), "stats", None)
+    wins = int(getattr(stats, "wins", 0) or 0) if stats is not None else 0
+    losses = int(getattr(stats, "losses", 0) or 0) if stats is not None else 0
+    n_cases = int(getattr(stats, "n_cases", 0) or 0) if stats is not None else 0
+    ties = int(getattr(stats, "ties", 0) or 0) if stats is not None else 0
+    no_effect_cases = ties if ties else max(0, n_cases - wins - losses)
+    hypothesis = step.hypothesis
+    change_type = ""
+    changes = list(getattr(hypothesis, "mechanism_changes", ()) or ())
+    if changes:
+        change_type = _clean_token(getattr(changes[0], "change_type", ""))
+    outcome_tier = _outcome_pattern(step)
+    return {
+        "branch_id": str(step.branch_id or ""),
+        "mechanism_family": key[0],
+        "intervention_type": _intervention_type(
+            _clean_token(getattr(hypothesis, "action", "")),
+            change_type,
+        ),
+        "surface": key[3] or _clean_token(getattr(hypothesis, "change_locus", "")),
+        "target_file": key[1],
+        "outcome_tier": outcome_tier,
+        "lifecycle_tier": _lifecycle_tier(outcome_tier),
+        "case_wins": wins,
+        "case_losses": losses,
+        "case_no_effect": no_effect_cases,
+    }
+
+
+def _row_family_saturation_record(row: Mapping[str, Any]) -> dict[str, Any]:
+    key = _row_signature_key(row)
+    if not key[0]:
+        return {}
+    card = row.get("branch_card")
+    card_map = card if isinstance(card, Mapping) else {}
+    signature = _row_signature_mapping(row, card_map)
+    outcome_tier = _row_outcome_pattern(row)
+    return {
+        "branch_id": str(row.get("id") or row.get("branch_id") or ""),
+        "mechanism_family": key[0],
+        "intervention_type": _intervention_type(
+            key[2],
+            _clean_token(signature.get("intervention_type"))
+            or _clean_token(signature.get("change_type")),
+        ),
+        "surface": key[3],
+        "target_file": key[1],
+        "outcome_tier": outcome_tier,
+        "lifecycle_tier": _lifecycle_tier(
+            _clean_token(row.get("state") or card_map.get("status")) or outcome_tier
+        ),
+        "case_wins": 0,
+        "case_losses": 0,
+        "case_no_effect": 0,
+    }
+
+
+def _family_record_key(record: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
+    return (
+        str(record.get("branch_id") or ""),
+        str(record.get("mechanism_family") or ""),
+        str(record.get("intervention_type") or ""),
+        str(record.get("surface") or ""),
+        str(record.get("target_file") or ""),
+    )
+
+
+def _intervention_type(action: str, change_type: str = "") -> str:
+    action_token = _clean_token(action) or "unknown"
+    change_type_token = _clean_token(change_type) or "unspecified"
+    if action_token in {"create_new", "add"} or change_type_token in {"add", "create"}:
+        return "create"
+    if action_token == "remove" or change_type_token == "remove":
+        return "remove"
+    if action_token == "modify" and change_type_token in {"modify", "unspecified"}:
+        return "modify"
+    if change_type_token == "unspecified":
+        return action_token
+    return f"{action_token}_{change_type_token}"
+
+
+def _lifecycle_tier(value: str) -> str:
+    token = _clean_token(value)
+    if token in {"parked", "parked_lineage"}:
+        return "parked"
+    if token in {"abandoned", "weak_positive", "promoted"}:
+        return token
+    if token == "positive":
+        return "promotion"
+    return ""
 
 
 def _same_branch_refinement_allowance_count(

@@ -603,6 +603,21 @@ def test_cross_branch_portfolio_steering_builds_signatures_and_no_effect_lessons
     assert portfolio["decision_features_excluded"] is True
     assert portfolio["decision_input_policy"] == "excluded_from_decision_features"
     assert portfolio["signature_schema_version"] == "branch_research_signature.v1"
+    family_summary = payload["family_saturation_summary"]
+    assert family_summary == portfolio["family_saturation_summary"]
+    assert family_summary["schema_version"] == (
+        "cross_branch_family_saturation_summary.v1"
+    )
+    assert family_summary["visibility_marker"] == (
+        "advisory proposal-only excluded_from_DecisionFeatures"
+    )
+    assert family_summary["advisory_only"] is True
+    assert family_summary["decision_input_policy"] == (
+        "excluded_from_decision_features"
+    )
+    assert family_summary["summaries"][0]["proposal_advisory"].startswith(
+        "Spent family with weak/no-effect history; consider diversifying"
+    )
 
     required_signature_fields = {
         "branch_id",
@@ -1075,9 +1090,10 @@ def test_cross_branch_research_exposes_sibling_weak_positive_borrow_lesson() -> 
         "action",
         "mechanism_or_mechanism_change_id",
     ]
-    assert "mechanism_or_change_locus" not in borrow["required_response"][
-        "required_linkage_fields"
-    ]
+    assert (
+        "mechanism_or_change_locus"
+        not in borrow["required_response"]["required_linkage_fields"]
+    )
     assert borrow["required_response"]["one_of_required_fields"] == [
         "risk_to_avoid",
         "contrast_dimensions",
@@ -1127,6 +1143,8 @@ def test_cross_branch_research_map_does_not_extend_decision_features() -> None:
     assert "same_branch_refinement_allowances" not in decision_fields
     assert "branch_lesson_records" not in decision_fields
     assert "branch_lesson_usage" not in decision_fields
+    assert "family_saturation_summary" not in decision_fields
+    assert "cross_branch_family_saturation_summary" not in decision_fields
     assert "branch_lesson_usage_requirement" not in decision_fields
     assert "portfolio_steering" not in decision_fields
     assert "branch_research_signatures" not in decision_fields

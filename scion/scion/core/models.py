@@ -518,6 +518,7 @@ class ChampionState:
     code_snapshot_hash: str
     promotion_experiment_id: Optional[str] = None
     promoted_at: Optional[str] = None
+    promotion_dossier_ref: Optional[str] = None
     weight_revision: int = 0
 
 @dataclass
@@ -696,6 +697,7 @@ class StepRecord:
     bypass_reason_codes: Tuple[str, ...] = ()
     lifecycle_reason_codes: Tuple[str, ...] = ()
     lifecycle_bookkeeping: Dict[str, Any] = field(default_factory=dict)
+    decision_features_snapshot: Optional[DecisionFeatures] = None
     contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
     counts_toward_max_rounds: bool = True

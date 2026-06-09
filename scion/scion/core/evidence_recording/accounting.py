@@ -79,6 +79,11 @@ def proposal_accounting_fields(
         if has_step_history
         else 0,
     )
+    unique_hypothesis_info = _unique_hypothesis_info(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+    )
     screened_not_effective = max(0, screened - effective)
     non_effective_screenings = _non_effective_screenings(
         steps=step_list,
@@ -134,6 +139,20 @@ def proposal_accounting_fields(
         screened_rounds=screened,
         campaign_dir=campaign_dir,
     )
+    formal_candidate_artifact_count = candidate_accounting[
+        "formal_candidate_artifact_count"
+    ]
+    research_accounting_breakdown = _research_accounting_breakdown(
+        candidate_accounting=candidate_accounting,
+        effective_rounds_completed=effective,
+        unique_hypothesis_info=unique_hypothesis_info,
+        agentic_sessions=agentic_sessions,
+        hypothesis_calls=hypothesis_calls,
+        code_calls=code_calls,
+        request_counts=request_counts,
+        quality_blocks=quality_blocks,
+        quality_block_ledger_count=len(quality_block_ledger),
+    )
     fields = {
         "campaign_accounting_schema_version": "campaign_accounting.v1",
         "campaign_steps": campaign_steps,
@@ -147,10 +166,39 @@ def proposal_accounting_fields(
         "active_slot_blocked_attempts": active_slot_blocked_attempts,
         "scheduler_active_slot_blocked_attempts": active_slot_blocked_attempts,
         **candidate_accounting,
+        "research_accounting_breakdown": research_accounting_breakdown,
+        "unique_hypotheses": unique_hypothesis_info["count"],
+        "unique_hypotheses_semantics": (
+            "distinct hypothesis ids visible in step history or persisted "
+            "state; unavailable means the artifact did not expose hypothesis "
+            "identity, and this is not an LLM request/session counter"
+        ),
+        "formal_candidate_artifact_count": formal_candidate_artifact_count,
+        "formal_candidate_artifact_count_semantics": (
+            "formal_candidates/index.jsonl entries; this is a replayable "
+            "formal candidate artifact subset, not the same as screening rows "
+            "or legacy formal_screened_candidates"
+        ),
         "agentic_sessions": agentic_sessions,
+        "agentic_sessions_semantics": (
+            "distinct agentic proposal session records, not unique hypotheses "
+            "and not protocol metric rows"
+        ),
         "hypothesis_calls": hypothesis_calls,
+        "hypothesis_calls_semantics": (
+            "LLM hypothesis request traces; includes retries/internal calls "
+            "when traced and is not a unique hypothesis count"
+        ),
         "code_calls": code_calls,
+        "code_calls_semantics": (
+            "LLM code/patch request traces; includes retries/internal calls "
+            "when traced and is not a formal candidate artifact count"
+        ),
         "llm_request_kind_counts": dict(request_counts),
+        "llm_request_kind_counts_semantics": (
+            "trace-level LLM request counts by kind; request/session counts do "
+            "not imply unique hypotheses, formal candidates, or protocol rows"
+        ),
         "llm_model_counts": dict(llm_accounting.get("model_counts") or {}),
         "llm_provider_counts": dict(llm_accounting.get("provider_counts") or {}),
         "llm_token_sums": dict(llm_accounting.get("token_sums") or {}),
@@ -354,6 +402,11 @@ def accounting_reconciliation_fields(
         state_map=state_map,
         screened_not_effective=screened_not_effective,
     )
+    unique_hypothesis_info = _unique_hypothesis_info(
+        steps=step_list,
+        loop=loop,
+        state_map=state_map,
+    )
     loop_counted_delta = (
         effective - counted
         if has_step_history or counted_experiment_steps is not None
@@ -381,6 +434,45 @@ def accounting_reconciliation_fields(
         screened_rounds=screened,
         campaign_dir=campaign_dir,
     )
+    llm_accounting = _campaign_llm_accounting(campaign_dir) if campaign_dir else {}
+    request_counts = {
+        str(kind): _first_int(value, default=0)
+        for kind, value in (
+            llm_accounting.get("request_kind_counts") or {}
+        ).items()
+    }
+    if not request_counts and campaign_dir is not None:
+        request_counts = llm_request_kind_counts(campaign_dir)
+    if not request_counts and isinstance(
+        state_map.get("llm_request_kind_counts"),
+        Mapping,
+    ):
+        request_counts = {
+            str(kind): _first_int(value, default=0)
+            for kind, value in state_map["llm_request_kind_counts"].items()
+        }
+    agentic_sessions = _first_int(
+        state_map.get("agentic_sessions"),
+        loop.get("agentic_sessions"),
+        default=0,
+    )
+    hypothesis_calls = _hypothesis_calls(request_counts)
+    if hypothesis_calls == 0:
+        hypothesis_calls = _first_int(state_map.get("hypothesis_calls"), default=0)
+    code_calls = _code_calls(request_counts)
+    if code_calls == 0:
+        code_calls = _first_int(state_map.get("code_calls"), default=0)
+    research_accounting_breakdown = _research_accounting_breakdown(
+        candidate_accounting=candidate_accounting,
+        effective_rounds_completed=effective,
+        unique_hypothesis_info=unique_hypothesis_info,
+        agentic_sessions=agentic_sessions,
+        hypothesis_calls=hypothesis_calls,
+        code_calls=code_calls,
+        request_counts=request_counts,
+        quality_blocks=quality_blocks,
+        quality_block_ledger_count=len(quality_block_ledger),
+    )
     return {
         "schema_version": "campaign_accounting_reconciliation.v1",
         "requested_rounds": requested_rounds,
@@ -389,6 +481,11 @@ def accounting_reconciliation_fields(
         "proposal_attempts": proposal_attempts,
         "proposal_attempts_consumed": proposal_attempts,
         **candidate_accounting,
+        "research_accounting_breakdown": research_accounting_breakdown,
+        "unique_hypotheses": unique_hypothesis_info["count"],
+        "formal_candidate_artifact_count": candidate_accounting[
+            "formal_candidate_artifact_count"
+        ],
         "effective_rounds_completed": effective,
         "screened_rounds": screened,
         "screened_experiments": screened,
@@ -418,6 +515,9 @@ def accounting_reconciliation_fields(
         "attempt_breakdown": {
             "proposal_attempts_total": candidate_accounting[
                 "proposal_attempts_total"
+            ],
+            "effective_protocol_rounds": candidate_accounting[
+                "effective_protocol_rounds"
             ],
             "formal_screened_candidates": candidate_accounting[
                 "formal_screened_candidates"
@@ -727,6 +827,15 @@ def _candidate_accounting_fields(
             else 0
         ),
     )
+    effective_protocol_rounds = _first_int(
+        loop.get("effective_protocol_rounds"),
+        state_map.get("effective_protocol_rounds"),
+        default=(
+            sum(1 for step in steps if _step_counts_effective(step))
+            if has_step_history
+            else effective_rounds_completed
+        ),
+    )
     verification_failure_consumed_candidates = _first_int(
         loop.get("verification_failure_consumed_candidates"),
         state_map.get("verification_failure_consumed_candidates"),
@@ -762,8 +871,24 @@ def _candidate_accounting_fields(
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         protocol_metric_results=protocol_metric_results,
     )
+    formal_candidate_artifact_count = formal_candidate_reconciliation.get(
+        "formal_candidates_index_count"
+    )
     return {
         "proposal_attempts_total": proposal_attempts_total,
+        "proposal_attempts_total_semantics": (
+            "total proposal-attempt budget events reported by the campaign "
+            "loop; includes proposal quality blocks and internal proposal "
+            "retries when the loop accounts them, and is not a count of unique "
+            "hypotheses, protocol metric rows, or formal candidate artifacts"
+        ),
+        "effective_protocol_rounds": effective_protocol_rounds,
+        "effective_protocol_rounds_semantics": (
+            "completed protocol rows that count toward the max-round budget; "
+            "validation and frozen rows may be included when counted, while "
+            "fresh-runtime replay rows and verification-only failures are "
+            "reported separately"
+        ),
         "formal_screened_candidates": formal_screened_candidates,
         "protocol_evaluated_candidates": protocol_evaluated_candidates,
         "protocol_metric_results": protocol_metric_results,
@@ -784,7 +909,14 @@ def _candidate_accounting_fields(
             formal_candidate_reconciliation
         ),
         "candidate_count_reconciliation": formal_candidate_reconciliation,
+        "formal_candidate_artifact_count": formal_candidate_artifact_count,
         "max_rounds_budget_counter": "effective_rounds_completed",
+        "effective_rounds_completed_semantics": (
+            "legacy max-round completion counter; may include consumed "
+            "verification-only candidate failures in addition to counted "
+            "protocol rows, so use effective_protocol_rounds when comparing "
+            "only protocol metrics"
+        ),
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; proposal, "
             "quality-blocked proposal, non-counted replay, validation, frozen, "
@@ -827,6 +959,140 @@ def _candidate_accounting_fields(
             "proposal/schema quality blocks that consumed proposal attempts but "
             "did not produce verification or protocol metrics"
         ),
+    }
+
+
+def _research_accounting_breakdown(
+    *,
+    candidate_accounting: Mapping[str, Any],
+    effective_rounds_completed: int,
+    unique_hypothesis_info: Mapping[str, Any],
+    agentic_sessions: int,
+    hypothesis_calls: int,
+    code_calls: int,
+    request_counts: Mapping[str, int],
+    quality_blocks: int,
+    quality_block_ledger_count: int,
+) -> dict[str, Any]:
+    formal_reconciliation = candidate_accounting.get(
+        "formal_candidate_count_reconciliation"
+    )
+    formal_reconciliation_map = (
+        formal_reconciliation if isinstance(formal_reconciliation, Mapping) else {}
+    )
+    formal_candidate_artifact_count = candidate_accounting.get(
+        "formal_candidate_artifact_count"
+    )
+    return {
+        "schema_version": "research_accounting_breakdown.v1",
+        "purpose": (
+            "disambiguate proposal sessions, unique hypotheses, protocol rows, "
+            "screening/holdout rows, and formal candidate artifacts"
+        ),
+        "proposal_attempts": {
+            "proposal_attempts_total": candidate_accounting.get(
+                "proposal_attempts_total"
+            ),
+            "quality_blocks": quality_blocks,
+            "quality_block_ledger_count": quality_block_ledger_count,
+            "semantics": candidate_accounting.get(
+                "proposal_attempts_total_semantics"
+            ),
+        },
+        "llm_requests": {
+            "llm_request_kind_counts": dict(request_counts),
+            "hypothesis_calls": hypothesis_calls,
+            "code_calls": code_calls,
+            "semantics": (
+                "trace-level request counts; hypothesis/code retries and "
+                "internal repair calls do not imply unique hypotheses or "
+                "formal candidates"
+            ),
+        },
+        "proposal_sessions": {
+            "agentic_sessions": agentic_sessions,
+            "semantics": (
+                "agentic proposal session records; a session can contain "
+                "retries or multiple LLM calls and is not a protocol row"
+            ),
+        },
+        "hypotheses": {
+            "unique_hypotheses": unique_hypothesis_info.get("count"),
+            "available": bool(unique_hypothesis_info.get("available")),
+            "source": unique_hypothesis_info.get("source"),
+            "unique_hypothesis_ids": list(unique_hypothesis_info.get("ids") or []),
+            "semantics": (
+                "distinct hypothesis identities when available; not inferred "
+                "from LLM request counts or proposal session counts"
+            ),
+        },
+        "protocol_rows": {
+            "effective_protocol_rounds": candidate_accounting.get(
+                "effective_protocol_rounds"
+            ),
+            "effective_rounds_completed": effective_rounds_completed,
+            "protocol_metric_results": candidate_accounting.get(
+                "protocol_metric_results"
+            ),
+            "screening_protocol_results": candidate_accounting.get(
+                "screening_protocol_results"
+            ),
+            "validation_protocol_results": candidate_accounting.get(
+                "validation_protocol_results"
+            ),
+            "frozen_protocol_results": candidate_accounting.get(
+                "frozen_protocol_results"
+            ),
+            "fresh_runtime_replay_protocol_results": candidate_accounting.get(
+                "fresh_runtime_replay_protocol_results"
+            ),
+            "protocol_metric_stage_counts": dict(
+                candidate_accounting.get("protocol_metric_stage_counts") or {}
+            ),
+            "semantics": (
+                "completed protocol metric rows, split by stage; validation, "
+                "frozen, and fresh-runtime replay rows are not new hypotheses"
+            ),
+        },
+        "legacy_candidate_counters": {
+            "formal_screened_candidates": candidate_accounting.get(
+                "formal_screened_candidates"
+            ),
+            "protocol_evaluated_candidates": candidate_accounting.get(
+                "protocol_evaluated_candidates"
+            ),
+            "verification_consumed_candidates": candidate_accounting.get(
+                "verification_consumed_candidates"
+            ),
+            "verification_failure_consumed_candidates": candidate_accounting.get(
+                "verification_failure_consumed_candidates"
+            ),
+            "semantics": (
+                "backward-compatible counters; prefer protocol_rows and "
+                "formal_candidate_artifacts for row/artifact comparisons"
+            ),
+        },
+        "formal_candidate_artifacts": {
+            "formal_candidate_artifact_count": formal_candidate_artifact_count,
+            "status": formal_reconciliation_map.get(
+                "formal_candidates_index_status"
+            ),
+            "artifact_ref": formal_reconciliation_map.get(
+                "formal_candidates_index_ref"
+            ),
+            "semantics": (
+                "formal_candidates/index.jsonl artifact entries; this is a "
+                "replayable artifact subset and not equivalent to screening "
+                "protocol rows or unique hypotheses"
+            ),
+        },
+        "reconciliation_refs": {
+            "formal_candidate_count_reconciliation": (
+                "formal_candidate_count_reconciliation"
+            ),
+            "candidate_count_reconciliation": "candidate_count_reconciliation",
+            "accounting_reconciliation": "accounting_reconciliation",
+        },
     }
 
 
@@ -1079,6 +1345,74 @@ def _verification_consumed_candidate_count_from_steps(
             or _verification_failure_consumed_candidate(step)
         )
     )
+
+
+def _unique_hypothesis_info(
+    *,
+    steps: Iterable[StepRecord],
+    loop: Mapping[str, Any],
+    state_map: Mapping[str, Any],
+) -> dict[str, Any]:
+    ids = sorted(
+        {
+            str(getattr(step, "hypothesis_id", "") or "").strip()
+            for step in steps
+            if str(getattr(step, "hypothesis_id", "") or "").strip()
+        }
+    )
+    if ids:
+        return {
+            "available": True,
+            "count": len(ids),
+            "ids": ids,
+            "source": "step_history.hypothesis_id",
+        }
+
+    for source_name, source in (
+        ("state.unique_hypothesis_ids", state_map.get("unique_hypothesis_ids")),
+        ("campaign_loop.unique_hypothesis_ids", loop.get("unique_hypothesis_ids")),
+    ):
+        if not isinstance(source, Iterable) or isinstance(source, (str, bytes)):
+            continue
+        source_ids = sorted(
+            {
+                str(item or "").strip()
+                for item in source
+                if str(item or "").strip()
+            }
+        )
+        if source_ids:
+            return {
+                "available": True,
+                "count": len(source_ids),
+                "ids": source_ids,
+                "source": source_name,
+            }
+
+    for source_name, value in (
+        ("state.unique_hypotheses", state_map.get("unique_hypotheses")),
+        ("state.unique_hypothesis_count", state_map.get("unique_hypothesis_count")),
+        ("campaign_loop.unique_hypotheses", loop.get("unique_hypotheses")),
+        (
+            "campaign_loop.unique_hypothesis_count",
+            loop.get("unique_hypothesis_count"),
+        ),
+    ):
+        count = _optional_nonnegative_int(value)
+        if count is not None:
+            return {
+                "available": True,
+                "count": count,
+                "ids": [],
+                "source": source_name,
+            }
+
+    return {
+        "available": False,
+        "count": None,
+        "ids": [],
+        "source": "unavailable",
+    }
 
 
 def _protocol_stage_counts_from_mapping(value: Any) -> dict[str, int]:
@@ -1351,3 +1685,12 @@ def _first_int(*values: Any, default: int) -> int:
         except (TypeError, ValueError):
             continue
     return max(0, int(default))
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None

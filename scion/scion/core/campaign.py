@@ -531,6 +531,11 @@ class CampaignManager:
             "active_slots": active_slots,
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
+            "promotion_dossier_ref": getattr(
+                self._champion,
+                "promotion_dossier_ref",
+                None,
+            ),
             "budget_remaining": self._budget.remaining_ratio,
             "balance_exhausted": self._balance_exhausted,
             "circuit_breaker_tripped": self._circuit_breaker.is_tripped,
@@ -665,6 +670,11 @@ class CampaignManager:
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
+            "promotion_dossier_ref": getattr(
+                self._champion,
+                "promotion_dossier_ref",
+                None,
+            ),
             "expand": expand,
             "expand_round": expand_round,
             "step_started_at": datetime.now().isoformat(),
@@ -897,6 +907,11 @@ class CampaignManager:
         strict: bool = False,
     ) -> None:
         """Write one experiment_event + one decision row to the registry."""
+        decision_features = None
+        if protocol_result is not None and decision is not None:
+            decision_features = getattr(self, "_decision_feature_snapshots", {}).get(
+                branch.branch_id
+            )
         self._evidence_recorder.record_step_lineage(
             branch=branch,
             hypothesis=hypothesis,
@@ -909,6 +924,7 @@ class CampaignManager:
             champion=self._champion,
             hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
+            decision_features=decision_features,
             event_id=event_id,
             strict=strict,
         )

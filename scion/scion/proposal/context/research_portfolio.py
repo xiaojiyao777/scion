@@ -4,6 +4,7 @@ This module projects existing cross-branch summaries into generic signatures
 and similarity clusters. The output is tainted proposal guidance only; it is
 not a DecisionFeatures input and it does not alter scheduling behavior.
 """
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -18,7 +19,6 @@ from scion.proposal.context.cross_branch_research_support import (
     drop_empty as _drop_empty,
     unique as _unique,
 )
-
 
 _SCHEMA_VERSION = "portfolio_steering.v1"
 _GRAPH_SCHEMA_VERSION = "branch_similarity_graph.v1"
@@ -60,6 +60,10 @@ def build_portfolio_steering(
     edges = _similarity_edges(signatures)[:max_edges]
     clusters = _cluster_summary(signatures, edges)[:max_clusters]
     no_effect_lessons = _no_effect_lessons(clusters, max_lessons=max_lessons)
+    family_saturation_summary = _family_saturation_summary(
+        branch_summaries,
+        max_groups=max_lessons,
+    )
     gaps = _portfolio_opportunity_gaps(
         signatures,
         no_effect_lessons,
@@ -91,6 +95,7 @@ def build_portfolio_steering(
             ),
             "clusters": clusters,
             "no_effect_lessons": no_effect_lessons,
+            "family_saturation_summary": family_saturation_summary,
             "opportunity_gaps": gaps,
             "summary": _portfolio_summary(signatures, clusters, no_effect_lessons),
         }
@@ -109,9 +114,7 @@ def _branch_research_signatures(
         outcome = _as_mapping(summary.get("outcome_summary"))
         profile = _as_mapping(summary.get("evidence_profile"))
         lifecycle = _as_mapping(summary.get("lifecycle_summary"))
-        rollback_reason = (
-            _clean_token(lifecycle.get("last_rollback_reason")) or "none"
-        )
+        rollback_reason = _clean_token(lifecycle.get("last_rollback_reason")) or "none"
         for descriptor in descriptors:
             signature = _signature_record(
                 branch_id=branch_id,
@@ -149,14 +152,11 @@ def _summary_descriptors(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
             if isinstance(raw, Mapping):
                 descriptors.append(
                     {
-                        "mechanism_family": _clean_token(
-                            raw.get("mechanism_family")
-                        )
+                        "mechanism_family": _clean_token(raw.get("mechanism_family"))
                         or "unknown",
                         "change_locus": _clean_token(raw.get("change_locus"))
                         or "unknown",
-                        "target_file": _clean_path(raw.get("target_file"))
-                        or "unknown",
+                        "target_file": _clean_path(raw.get("target_file")) or "unknown",
                         "action": _clean_token(raw.get("action")) or "unknown",
                         "change_type": _clean_token(raw.get("change_type"))
                         or "unspecified",
@@ -183,10 +183,8 @@ def _summary_descriptors(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
             descriptors.append(
                 {
                     "mechanism_family": mechanism_family,
-                    "change_locus": _clean_token(raw.get("change_locus"))
-                    or "unknown",
-                    "target_file": _clean_path(raw.get("target_file"))
-                    or "unknown",
+                    "change_locus": _clean_token(raw.get("change_locus")) or "unknown",
+                    "target_file": _clean_path(raw.get("target_file")) or "unknown",
                     "action": _clean_token(raw.get("action")) or "unknown",
                     "change_type": "unspecified",
                 }
@@ -223,17 +221,13 @@ def _signature_record(
     target_file = _clean_path(descriptor.get("target_file")) or "unknown"
     action = _clean_token(descriptor.get("action")) or "unknown"
     change_type = _clean_token(descriptor.get("change_type")) or "unspecified"
-    mechanism_family = (
-        _clean_token(descriptor.get("mechanism_family")) or "unknown"
-    )
+    mechanism_family = _clean_token(descriptor.get("mechanism_family")) or "unknown"
     outcome_pattern = (
         _clean_token(profile.get("outcome_pattern"))
         or _clean_token(outcome.get("outcome_pattern"))
         or "unknown"
     )
-    activation_status = (
-        _clean_token(profile.get("activation_status")) or "unknown"
-    )
+    activation_status = _clean_token(profile.get("activation_status")) or "unknown"
     effect_status = _clean_token(profile.get("effect_status")) or "unknown"
     runtime_evidence_status = (
         _clean_token(profile.get("runtime_evidence_status")) or "unknown"
@@ -286,17 +280,13 @@ def _signature_record(
 
 def _mechanism_ids(summary: Mapping[str, Any]) -> list[str]:
     return _unique(
-        _clean_token(item)
-        for item in (summary.get("mechanism_ids", []) or [])
+        _clean_token(item) for item in (summary.get("mechanism_ids", []) or [])
     )[:8] or ["unknown"]
 
 
 def _reason_codes(outcome: Mapping[str, Any]) -> list[str]:
     return sorted(
-        _unique(
-            _clean_token(item)
-            for item in (outcome.get("reason_codes", []) or [])
-        )
+        _unique(_clean_token(item) for item in (outcome.get("reason_codes", []) or []))
     )[:8]
 
 
@@ -384,7 +374,9 @@ def _similarity_edges(signatures: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for right in group[left_index + 1 :]:
                 if left["branch_id"] == right["branch_id"]:
                     continue
-                pair = tuple(sorted((left["signature_digest"], right["signature_digest"])))
+                pair = tuple(
+                    sorted((left["signature_digest"], right["signature_digest"]))
+                )
                 seen_key = (edge_type, pair[0], pair[1], group_key)
                 if seen_key in seen:
                     continue
@@ -455,9 +447,7 @@ def _cluster_summary(
         outcome_patterns = Counter(item["outcome_pattern"] for item in group)
         activation_statuses = Counter(item["activation_status"] for item in group)
         effect_statuses = Counter(item["effect_status"] for item in group)
-        runtime_statuses = Counter(
-            item["runtime_evidence_status"] for item in group
-        )
+        runtime_statuses = Counter(item["runtime_evidence_status"] for item in group)
         clusters.append(
             _drop_empty(
                 {
@@ -475,9 +465,7 @@ def _cluster_summary(
                     "outcome_patterns": dict(sorted(outcome_patterns.items())),
                     "activation_statuses": dict(sorted(activation_statuses.items())),
                     "effect_statuses": dict(sorted(effect_statuses.items())),
-                    "runtime_evidence_statuses": dict(
-                        sorted(runtime_statuses.items())
-                    ),
+                    "runtime_evidence_statuses": dict(sorted(runtime_statuses.items())),
                     "cluster_signal": _cluster_signal(
                         outcome_patterns,
                         activation_statuses,
@@ -542,6 +530,163 @@ def _no_effect_lessons(
     return lessons
 
 
+def _family_saturation_summary(
+    branch_summaries: Sequence[Mapping[str, Any]],
+    *,
+    max_groups: int,
+) -> dict[str, Any]:
+    records = _family_saturation_records(branch_summaries)
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        family = str(record.get("mechanism_family") or "")
+        if not family or family == "unknown":
+            continue
+        groups[
+            (
+                family,
+                str(record.get("intervention_type") or "unknown"),
+                str(record.get("surface") or "unknown"),
+            )
+        ].append(record)
+
+    summaries: list[dict[str, Any]] = []
+    for (family, intervention_type, surface), group in sorted(groups.items()):
+        if len(group) < 2:
+            continue
+        outcome_tiers = Counter(
+            str(item.get("outcome_tier") or "unknown") for item in group
+        )
+        weak_no_effect_count = (
+            outcome_tiers.get("weak_positive", 0)
+            + outcome_tiers.get("no_effect", 0)
+            + outcome_tiers.get("regression", 0)
+            + outcome_tiers.get("blocked", 0)
+            + outcome_tiers.get("pre_protocol_failure", 0)
+        )
+        if weak_no_effect_count < 2:
+            continue
+        lifecycle_counts = Counter(
+            str(item.get("lifecycle_tier") or "")
+            for item in group
+            if str(item.get("lifecycle_tier") or "")
+        )
+        summaries.append(
+            {
+                "mechanism_family": family,
+                "intervention_type": intervention_type,
+                "surface": surface,
+                "attempt_count": len(group),
+                "branch_count": len(_branch_ids(group)),
+                "outcome_tier_counts": dict(sorted(outcome_tiers.items())),
+                "case_level_counts": {
+                    "wins": sum(int(item.get("case_wins") or 0) for item in group),
+                    "losses": sum(int(item.get("case_losses") or 0) for item in group),
+                    "no_effect": sum(
+                        int(item.get("case_no_effect") or 0) for item in group
+                    ),
+                },
+                "lifecycle_counts": dict(sorted(lifecycle_counts.items())),
+                "advisory_label": "spent_family",
+                "proposal_advisory": (
+                    "Spent family with weak/no-effect history; consider "
+                    "diversifying mechanism family, intervention type, or "
+                    "surface when planning the next proposal."
+                ),
+                "reason_codes": ["CROSS_BRANCH_FAMILY_SATURATION_ADVISORY"],
+            }
+        )
+
+    summaries = sorted(
+        summaries,
+        key=lambda item: (
+            -int(item.get("attempt_count", 0)),
+            item.get("mechanism_family", ""),
+            item.get("intervention_type", ""),
+            item.get("surface", ""),
+        ),
+    )[:max_groups]
+    return _drop_empty(
+        {
+            "schema_version": "cross_branch_family_saturation_summary.v1",
+            "visibility_marker": (
+                "advisory proposal-only excluded_from_DecisionFeatures"
+            ),
+            "proposal_visibility_only": True,
+            "advisory_only": True,
+            "decision_features_excluded": True,
+            "decision_input_policy": "excluded_from_decision_features",
+            "grouping_keys": [
+                "mechanism_family",
+                "intervention_type",
+                "surface",
+                "outcome_tier",
+            ],
+            "saturated_family_count": len(summaries),
+            "summaries": summaries,
+        }
+    )
+
+
+def _family_saturation_records(
+    branch_summaries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    for summary in branch_summaries:
+        branch_id = _clean_token(summary.get("branch_id")) or "unknown"
+        outcome = _as_mapping(summary.get("outcome_summary"))
+        case_summary = _as_mapping(outcome.get("case_summary"))
+        lifecycle = _as_mapping(summary.get("lifecycle_summary"))
+        outcome_tier = _clean_token(outcome.get("outcome_pattern")) or "unknown"
+        for descriptor in _summary_descriptors(summary):
+            action = _clean_token(descriptor.get("action")) or "unknown"
+            change_type = _clean_token(descriptor.get("change_type")) or "unspecified"
+            record = {
+                "branch_id": branch_id,
+                "mechanism_family": (
+                    _clean_token(descriptor.get("mechanism_family")) or "unknown"
+                ),
+                "intervention_type": _intervention_type(action, change_type),
+                "surface": (_clean_token(descriptor.get("change_locus")) or "unknown"),
+                "target_file": _clean_path(descriptor.get("target_file")) or "unknown",
+                "outcome_tier": outcome_tier,
+                "lifecycle_tier": _family_lifecycle_tier(
+                    outcome_tier,
+                    _clean_token(outcome.get("branch_state"))
+                    or _clean_token(lifecycle.get("state")),
+                ),
+                "case_wins": int(case_summary.get("wins") or 0),
+                "case_losses": int(case_summary.get("losses") or 0),
+                "case_no_effect": int(case_summary.get("ties") or 0),
+            }
+            key = (
+                record["branch_id"],
+                record["mechanism_family"],
+                record["intervention_type"],
+                record["surface"],
+                record["target_file"],
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(record)
+    return records
+
+
+def _family_lifecycle_tier(outcome_tier: str, branch_state: str) -> str:
+    state = _clean_token(branch_state)
+    if state in {"parked", "parked_lineage"}:
+        return "parked"
+    if state in {"abandoned", "promoted"}:
+        return state
+    tier = _clean_token(outcome_tier)
+    if tier in {"weak_positive", "abandoned", "parked"}:
+        return tier
+    if tier == "positive":
+        return "promotion"
+    return ""
+
+
 def _portfolio_opportunity_gaps(
     signatures: list[dict[str, Any]],
     no_effect_lessons: list[dict[str, Any]],
@@ -559,9 +704,7 @@ def _portfolio_opportunity_gaps(
                     "gap_type": _clean_token(raw.get("gap_type"))
                     or _clean_token(raw.get("opportunity_type"))
                     or "unknown",
-                    "recommended_action": _clean_token(
-                        raw.get("recommended_action")
-                    )
+                    "recommended_action": _clean_token(raw.get("recommended_action"))
                     or "observe",
                     "priority": _clean_token(raw.get("priority")) or "medium",
                     "basis": _bounded_mapping(raw.get("basis")),
@@ -698,11 +841,7 @@ def _intervention_type(action: str, change_type: str) -> str:
 
 
 def _family_from_id(value: Any) -> str:
-    tokens = [
-        token
-        for token in str(value or "").replace("-", "_").split("_")
-        if token
-    ]
+    tokens = [token for token in str(value or "").replace("-", "_").split("_") if token]
     if len(tokens) >= 2:
         return "_".join(tokens[:2])
     return tokens[0] if tokens else "unknown"
@@ -725,9 +864,7 @@ def _bounded_mapping(value: Any) -> dict[str, Any]:
         elif isinstance(child, (list, tuple)):
             projected[clean_key] = [
                 item
-                for item in (
-                    _bounded_scalar(grandchild) for grandchild in child[:8]
-                )
+                for item in (_bounded_scalar(grandchild) for grandchild in child[:8])
                 if item not in ("", None)
             ]
         else:

@@ -6,12 +6,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterable
 
+from scion.core.decision_features_serialization import decision_features_to_json
 from scion.core.models import (
     Branch,
     CanaryResult,
     ChampionState,
     ContractResult,
     Decision,
+    DecisionFeatures,
     HypothesisProposal,
     PatchProposal,
     ProtocolResult,
@@ -203,6 +205,7 @@ class LineageRecorderMixin:
         champion: ChampionState,
         hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
+        decision_features: DecisionFeatures | None = None,
         event_id: str | None = None,
     ) -> Dict[str, Any]:
         """Build the experiment event payload currently written to lineage."""
@@ -326,6 +329,12 @@ class LineageRecorderMixin:
             ),
         }
         evidence_metadata.update(_runtime_guard_decision_features(runtime_guard))
+        internal_audit_payload["lineage_metadata"] = evidence_metadata
+        decision_features_json = (
+            decision_features_to_json(decision_features)
+            if decision_features is not None
+            else json.dumps(evidence_metadata, sort_keys=True)
+        )
         event = {
             "campaign_id": self.campaign_id,
             "branch_id": branch.branch_id,
@@ -360,7 +369,7 @@ class LineageRecorderMixin:
                 list(telemetry_failure_categories(protocol_result))
             ),
             "telemetry_failure_details_json": json.dumps(telemetry_details),
-            "decision_features_json": json.dumps(evidence_metadata),
+            "decision_features_json": decision_features_json,
             "decision": decision.value,
             "model_id": self.model_id,
             "protocol_version": self.protocol_version,
@@ -381,6 +390,7 @@ class LineageRecorderMixin:
         canary_result: CanaryResult,
         decision: Decision,
         decision_reason_codes: Iterable[str] | None = None,
+        decision_features: DecisionFeatures | None = None,
     ) -> Dict[str, str]:
         """Build the append-only decision payload for LineageRegistry.record_decision."""
         stats = protocol_result.stats if protocol_result else None
@@ -444,7 +454,11 @@ class LineageRecorderMixin:
                 _extract_runtime_guard_evidence(verification_result)
             )
         )
-        features_json = json.dumps(features)
+        features_json = (
+            decision_features_to_json(decision_features)
+            if decision_features is not None
+            else json.dumps(features, sort_keys=True)
+        )
         return {
             "branch_id": branch.branch_id,
             "features_json": features_json,
@@ -466,6 +480,7 @@ class LineageRecorderMixin:
         champion: ChampionState,
         hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
+        decision_features: DecisionFeatures | None = None,
         event_id: str | None = None,
         strict: bool = False,
     ) -> Dict[str, Any]:
@@ -490,6 +505,7 @@ class LineageRecorderMixin:
             champion=champion,
             hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
+            decision_features=decision_features,
             event_id=event_id,
         )
         if self.registry is None:
@@ -522,6 +538,7 @@ class LineageRecorderMixin:
             canary_result=canary_result,
             decision=decision,
             decision_reason_codes=decision_reason_codes,
+            decision_features=decision_features,
         )
         try:
             self.registry.record_decision(**decision_payload)

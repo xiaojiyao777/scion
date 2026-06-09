@@ -4,12 +4,17 @@ from dataclasses import replace
 
 import pytest
 
+from scion.core.decision_features_serialization import DECISION_FEATURES_SCHEMA
 from scion.core.evidence_recording.replay_identity import (
     FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS,
     FORMAL_REPLAY_IDENTITY_SCHEMA,
 )
+from scion.core.models import DecisionFeatures
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
+
+
+_FEATURE_BRANCH_ID = "00000000-0000-4000-8000-000000000001"
 
 
 class _FaultyLineageRegistry:
@@ -30,6 +35,48 @@ class _FaultyLineageRegistry:
         if self.fail_decision:
             raise RuntimeError("lineage decision write unavailable")
         self.decisions.append(dict(payload))
+
+
+def _decision_features(
+    *,
+    stage: str = "screening",
+    protocol_gate_outcome: str = "pass",
+) -> DecisionFeatures:
+    return DecisionFeatures(
+        branch_id=_FEATURE_BRANCH_ID,
+        hypothesis_action="modify",
+        stage=stage,  # type: ignore[arg-type]
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=6,
+        wins=4,
+        losses=1,
+        ties=1,
+        win_rate=0.67,
+        median_delta=0.12,
+        ci_low=0.03,
+        ci_high=0.21,
+        stale=False,
+        recent_retry_count=1,
+        recent_failure_codes=(),
+        budget_remaining_ratio=0.8,
+        runtime_guard_passed=True,
+        runtime_guard_ratio=1.2,
+        runtime_ratio_median=1.18,
+        runtime_delta_median_ms=24.0,
+        runtime_regression_rate=0.5,
+        runtime_pairs=4,
+        protocol_gate_outcome=protocol_gate_outcome,  # type: ignore[arg-type]
+        total_pairs=6,
+        attempted_pairs=6,
+        valid_pairs=6,
+        pair_wins=4,
+        pair_losses=1,
+        pair_ties=1,
+        statistical_status="positive",
+        statistical_metric="total_cost",
+    )
 
 
 def test_public_summary_and_status_redact_nested_diagnostics_and_branches(
@@ -304,6 +351,130 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert payload_features["runtime_guard_elapsed_ms"] == 7
     assert payload_features["runtime_stats"]["runtime_regression_rate"] == 0.5
     assert reason_codes == ["frozen_positive", "runtime_ok"]
+
+
+def test_protocol_decision_persists_explicit_decision_features_snapshot(
+    tmp_path: Path,
+) -> None:
+    registry = _FaultyLineageRegistry()
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        registry=registry,
+    )
+    features = _decision_features()
+    branch = _branch()
+    branch.branch_id = _FEATURE_BRANCH_ID
+    protocol_result = _protocol_result("/tmp/formal-metrics.json")
+    verification_result = VerificationResult(
+        passed=True,
+        checks=(
+            CheckResult(
+                "V9_perf_guard",
+                True,
+                "heavy",
+                "perf ok: candidate=120ms champion=100ms",
+                7,
+                metadata={"ratio": 1.2},
+            ),
+        ),
+    )
+
+    event = recorder.build_step_lineage_event(
+        branch=branch,
+        hypothesis=_hypothesis("Free-text hypothesis must stay out."),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=verification_result,
+        canary_result=CanaryResult(passed=True),
+        protocol_result=protocol_result,
+        decision=Decision.QUEUE_VALIDATE,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+        decision_reason_codes=("screening_positive",),
+        decision_features=features,
+    )
+    decision_payload = recorder.build_decision_lineage_payload(
+        branch=branch,
+        protocol_result=protocol_result,
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=verification_result,
+        canary_result=CanaryResult(passed=True),
+        decision=Decision.QUEUE_VALIDATE,
+        decision_reason_codes=("screening_positive",),
+        decision_features=features,
+    )
+
+    event_features = json.loads(event["decision_features_json"])
+    decision_features = json.loads(decision_payload["features_json"])
+
+    assert event_features == decision_features
+    assert event_features["schema"] == DECISION_FEATURES_SCHEMA
+    assert event_features["branch_id"] == _FEATURE_BRANCH_ID
+    assert event_features["stage"] == "screening"
+    assert event_features["protocol_gate_outcome"] == "pass"
+    assert event_features["contract_passed"] is True
+    assert event_features["verification_passed"] is True
+    assert event_features["canary_passed"] is True
+    assert event_features["win_rate"] == 0.67
+    assert event_features["runtime_guard_passed"] is True
+    assert event_features["runtime_ratio_median"] == 1.18
+    assert event_features["recent_failure_codes"] == []
+
+    forbidden_keys = {
+        "hypothesis_text",
+        "contract_diagnostics",
+        "verification_detail",
+        "verification_checks",
+        "runtime_guard_elapsed_ms",
+        "runtime_stats",
+        "telemetry_failure_details",
+        "telemetry_validation_feedback",
+        "current_champion_version",
+    }
+    assert forbidden_keys.isdisjoint(event_features)
+    serialized = event["decision_features_json"]
+    assert "Free-text hypothesis" not in serialized
+    assert "perf ok:" not in serialized
+    assert "formal-metrics.json" not in serialized
+
+    audit_payload = json.loads(event["audit_payload_json"])
+    assert audit_payload["lineage_metadata"]["current_champion_version"] == 7
+    assert audit_payload["verification_checks"][0]["detail"].startswith("perf ok:")
+
+    outcome = recorder.record_step_lineage(
+        branch=branch,
+        hypothesis=_hypothesis("Free-text hypothesis must stay out."),
+        patch=_patch(),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=verification_result,
+        canary_result=CanaryResult(passed=True),
+        protocol_result=protocol_result,
+        decision=Decision.QUEUE_VALIDATE,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+        decision_reason_codes=("screening_positive",),
+        decision_features=features,
+    )
+
+    assert outcome["status"] == "complete"
+    assert registry.events
+    assert registry.decisions
+    assert json.loads(registry.events[0]["decision_features_json"]) == event_features
+    assert json.loads(registry.decisions[0]["features_json"]) == event_features
+
+    summary = recorder.write_campaign_summary(
+        step_history=[
+            replace(
+                _step("/tmp/formal-metrics.json"),
+                decision=Decision.QUEUE_VALIDATE,
+                decision_features_snapshot=features,
+            )
+        ],
+        round_num=1,
+        champion=_champion(),
+    )
+    assert summary["steps"][0]["decision_features"] == event_features
 
 
 def test_formal_lineage_audit_payload_includes_replay_identity_key_set(
