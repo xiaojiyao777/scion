@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 from contextlib import contextmanager
@@ -19,6 +20,8 @@ from scion.cli.commands.data_roots import (
     with_declared_problem_data_roots,
 )
 from scion.core.research_surface_index import editable_identity_patterns
+
+logger = logging.getLogger(__name__)
 
 
 class _CampaignSignalStop(KeyboardInterrupt):
@@ -77,6 +80,16 @@ def _compute_initial_champion_snapshot_hash(
 ) -> str:
     materializer = _build_workspace_materializer(campaign_path, problem_spec)
     return materializer.compute_snapshot_hash(problem_spec.root_dir)
+
+
+def _close_llm_client(llm_client: Any) -> None:
+    close = getattr(llm_client, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:
+        logger.warning("Failed to close LLM client resources", exc_info=True)
 
 
 class _RunAudit:
@@ -584,19 +597,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 else SeedLedgerConfig(screening=[42], validation=[1, 2], frozen=[10])
             )
 
-        if mock_llm:
-            from scion.proposal.mock_client import MockLLMClient
-
-            llm_client = MockLLMClient(mode="success")
-        else:
-            try:
-                from scion.proposal.llm_client import LLMClient
-
-                llm_client = LLMClient()
-            except Exception as exc:
-                typer.echo(f"ERROR: failed to create LLMClient: {exc}", err=True)
-                raise typer.Exit(code=1)
-
         from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
         from scion.verification.gate import VerificationGate
@@ -690,6 +690,19 @@ def register_init_run_commands(app: typer.Typer) -> None:
 
         from scion.core.campaign import CampaignManager
 
+        if mock_llm:
+            from scion.proposal.mock_client import MockLLMClient
+
+            llm_client = MockLLMClient(mode="success")
+        else:
+            try:
+                from scion.proposal.llm_client import LLMClient
+
+                llm_client = LLMClient()
+            except Exception as exc:
+                typer.echo(f"ERROR: failed to create LLMClient: {exc}", err=True)
+                raise typer.Exit(code=1)
+
         resolved_agentic_artifact_dir = (
             str(Path(agentic_artifact_dir).resolve())
             if agentic_artifact_dir is not None
@@ -698,76 +711,79 @@ def register_init_run_commands(app: typer.Typer) -> None:
             else None
         )
 
-        mgr = CampaignManager(
-            problem_spec=spec,
-            protocol_config=proto_cfg,
-            split_manifest=split_manifest,
-            seed_ledger=seed_ledger,
-            llm_client=llm_client,
-            champion=champion,
-            campaign_dir=str(campaign_path),
-            verification_gate=verification_gate,
-            experiment_protocol=experiment_protocol,
-            adapter=adapter,
-            operator_execute_signature=operator_execute_signature,
-            force_continue_early_stop=disable_early_stop,
-            use_agentic_proposal=agentic_proposal,
-            agentic_artifact_dir=resolved_agentic_artifact_dir,
-            agentic_session_timeout_sec=agentic_session_timeout_sec,
-            allow_skeleton_mode=allow_skeleton,
-            force_surface=forced_request.surface if forced_request else None,
-            force_action=forced_request.action if forced_request else None,
-            force_target_file=forced_request.target_file if forced_request else None,
-            proposal_quality_loop_limit=proposal_quality_loop_limit,
-            proposal_attempt_limit=proposal_attempt_limit,
-        )
-
-        forced_surface_note = (
-            f", force_surface={forced_request.surface}" if forced_request else ""
-        )
-        typer.echo(
-            f"Starting campaign: {spec.name} "
-            f"(max_rounds={rounds}, mock_llm={mock_llm}, "
-            f"disable_early_stop={disable_early_stop}{forced_surface_note})"
-        )
-        run_audit = _RunAudit(campaign_path)
-        run_audit.start()
         try:
-            with _campaign_signal_handlers(mgr):
-                mgr.run(max_rounds=rounds)
-        except _CampaignSignalStop as exc:
-            mgr.finalize_requested_stop(exc.reason)
-            run_audit.finish(
-                exit_status=128 + int(exc.signum),
-                reason=exc.reason,
-                signal_name=signal.Signals(exc.signum).name,
+            mgr = CampaignManager(
+                problem_spec=spec,
+                protocol_config=proto_cfg,
+                split_manifest=split_manifest,
+                seed_ledger=seed_ledger,
+                llm_client=llm_client,
+                champion=champion,
+                campaign_dir=str(campaign_path),
+                verification_gate=verification_gate,
+                experiment_protocol=experiment_protocol,
+                adapter=adapter,
+                operator_execute_signature=operator_execute_signature,
+                force_continue_early_stop=disable_early_stop,
+                use_agentic_proposal=agentic_proposal,
+                agentic_artifact_dir=resolved_agentic_artifact_dir,
+                agentic_session_timeout_sec=agentic_session_timeout_sec,
+                allow_skeleton_mode=allow_skeleton,
+                force_surface=forced_request.surface if forced_request else None,
+                force_action=forced_request.action if forced_request else None,
+                force_target_file=forced_request.target_file if forced_request else None,
+                proposal_quality_loop_limit=proposal_quality_loop_limit,
+                proposal_attempt_limit=proposal_attempt_limit,
             )
-            typer.echo(f"Campaign stopped: {exc.reason}", err=True)
-            raise typer.Exit(code=128 + int(exc.signum))
-        except Exception as exc:
-            run_audit.finish(
-                exit_status=1,
-                reason=f"exception:{type(exc).__name__}",
-            )
-            raise
-        else:
-            exit_status, exit_reason, exit_extra = _wrapper_completion_from_campaign(
-                campaign_path
-            )
-            run_audit.finish(
-                exit_status=exit_status,
-                reason=exit_reason,
-                extra=exit_extra,
-            )
-            if exit_status != 0:
-                typer.echo(f"Campaign incomplete: {exit_reason}", err=True)
-                raise typer.Exit(code=exit_status)
 
-        state_data = mgr.get_state()
-        typer.echo("Campaign finished.")
-        typer.echo(f"  experiments  : {state_data['n_experiments']}")
-        typer.echo(f"  champion ver : {state_data['champion_version']}")
-        typer.echo(f"  active branches: {state_data['n_active_branches']}")
+            forced_surface_note = (
+                f", force_surface={forced_request.surface}" if forced_request else ""
+            )
+            typer.echo(
+                f"Starting campaign: {spec.name} "
+                f"(max_rounds={rounds}, mock_llm={mock_llm}, "
+                f"disable_early_stop={disable_early_stop}{forced_surface_note})"
+            )
+            run_audit = _RunAudit(campaign_path)
+            run_audit.start()
+            try:
+                with _campaign_signal_handlers(mgr):
+                    mgr.run(max_rounds=rounds)
+            except _CampaignSignalStop as exc:
+                mgr.finalize_requested_stop(exc.reason)
+                run_audit.finish(
+                    exit_status=128 + int(exc.signum),
+                    reason=exc.reason,
+                    signal_name=signal.Signals(exc.signum).name,
+                )
+                typer.echo(f"Campaign stopped: {exc.reason}", err=True)
+                raise typer.Exit(code=128 + int(exc.signum))
+            except Exception as exc:
+                run_audit.finish(
+                    exit_status=1,
+                    reason=f"exception:{type(exc).__name__}",
+                )
+                raise
+            else:
+                exit_status, exit_reason, exit_extra = _wrapper_completion_from_campaign(
+                    campaign_path
+                )
+                run_audit.finish(
+                    exit_status=exit_status,
+                    reason=exit_reason,
+                    extra=exit_extra,
+                )
+                if exit_status != 0:
+                    typer.echo(f"Campaign incomplete: {exit_reason}", err=True)
+                    raise typer.Exit(code=exit_status)
+
+            state_data = mgr.get_state()
+            typer.echo("Campaign finished.")
+            typer.echo(f"  experiments  : {state_data['n_experiments']}")
+            typer.echo(f"  champion ver : {state_data['champion_version']}")
+            typer.echo(f"  active branches: {state_data['n_active_branches']}")
+        finally:
+            _close_llm_client(llm_client)
 
 
 __all__ = ["register_init_run_commands"]

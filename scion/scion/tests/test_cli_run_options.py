@@ -236,6 +236,103 @@ def test_run_writes_wrapper_audit_status_and_exit_files(
     assert "RUN_PID:" in exit_text
 
 
+def test_run_closes_llm_client_after_campaign_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    closed: list[str] = []
+
+    class ClosingMockLLMClient:
+        def __init__(self, mode: str = "success") -> None:
+            self.mode = mode
+
+        def close(self) -> None:
+            closed.append(self.mode)
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def run(self, max_rounds: int = 1000) -> None:
+            pass
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+    import scion.proposal.mock_client as mock_client_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+    monkeypatch.setattr(mock_client_module, "MockLLMClient", ClosingMockLLMClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert closed == ["success"]
+
+
+def test_run_closes_llm_client_when_campaign_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    closed: list[str] = []
+
+    class ClosingMockLLMClient:
+        def __init__(self, mode: str = "success") -> None:
+            self.mode = mode
+
+        def close(self) -> None:
+            closed.append(self.mode)
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def run(self, max_rounds: int = 1000) -> None:
+            raise RuntimeError("boom")
+
+    import scion.core.campaign as campaign_module
+    import scion.proposal.mock_client as mock_client_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+    monkeypatch.setattr(mock_client_module, "MockLLMClient", ClosingMockLLMClient)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert closed == ["success"]
+
+
 def test_run_returns_nonzero_for_incomplete_infra_stop(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

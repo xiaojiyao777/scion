@@ -294,6 +294,22 @@ def test_openai_client_receives_sdk_retry_limit():
     assert fake_openai.OpenAI.call_args.kwargs["max_retries"] == 0
 
 
+def test_llm_client_close_releases_cached_provider_clients():
+    client = LLMClient()
+    openai_client = MagicMock()
+    anthropic_client = MagicMock()
+    client._openai_client = openai_client
+    client._anthropic_client = anthropic_client
+
+    client.close()
+    client.close()
+
+    openai_client.close.assert_called_once()
+    anthropic_client.close.assert_called_once()
+    assert client._openai_client is None
+    assert client._anthropic_client is None
+
+
 def test_llm_client_strips_config_values(monkeypatch):
     monkeypatch.setenv("SCION_MODEL", " claude-sonnet-4-6 ")
     monkeypatch.setenv("SCION_API_KEY", " sk-test ")

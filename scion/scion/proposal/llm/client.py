@@ -130,6 +130,10 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
         """W13: Attach a TokenUsageTracker for per-call recording."""
         self._token_tracker = tracker
 
+    def close(self) -> None:
+        """Close cached provider SDK clients and their HTTP transports."""
+        self.close_provider_clients()
+
     def get_last_usage_metadata(self) -> dict[str, Any] | None:
         """Return normalized provider usage for the most recent SDK response."""
         if self._last_usage_metadata is None:

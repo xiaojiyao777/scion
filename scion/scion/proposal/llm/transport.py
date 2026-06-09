@@ -1,6 +1,8 @@
 """Provider transport methods for LLMClient."""
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Dict
@@ -29,6 +31,35 @@ logger = logging.getLogger(__name__)
 
 
 class TransportMixin:
+    def close_provider_clients(self) -> None:
+        """Close cached provider SDK clients and release their HTTP transports."""
+        errors: list[Exception] = []
+        for attr in ("_openai_client", "_anthropic_client"):
+            client = getattr(self, attr, None)
+            if client is None:
+                continue
+            try:
+                self._close_provider_client(client)
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                setattr(self, attr, None)
+        if errors:
+            raise LLMError(
+                "Failed to close one or more LLM provider clients"
+            ) from errors[0]
+
+    @staticmethod
+    def _close_provider_client(client: Any) -> None:
+        close = getattr(client, "close", None)
+        if callable(close):
+            close_result = close()
+        else:
+            aclose = getattr(client, "aclose", None)
+            close_result = aclose() if callable(aclose) else None
+        if inspect.isawaitable(close_result):
+            asyncio.run(close_result)
+
     def _tool_call_once(
         self,
         prompt: str,
