@@ -165,8 +165,32 @@ def test_async_weight_opt_final_wait_timeout_marks_detached_active_run() -> None
     assert active[2]["detached"] is True
     assert active[2]["final_wait_timeout"] is True
     assert active[2]["final_wait_timeout_sec"] == 0.01
-    assert alive_thread.join_timeouts == [0.01]
+    assert 0.0 < (alive_thread.join_timeouts[0] or 0.0) <= 0.01
+    assert alive_thread.join_timeouts[1:] == [1.0]
     assert manager.write_count >= 1
+
+
+def test_async_weight_opt_terminal_wait_is_capped_and_terminates_runner() -> None:
+    runner = _RecordingTerminateRunner()
+    manager = _StatusPublishingManager()
+    manager._experiment_protocol = SimpleNamespace(runner=runner)
+    coordinator = AsyncWeightOptCoordinator(manager)  # type: ignore[arg-type]
+    alive_thread = _AlwaysAliveThread("weight-opt-v2")
+    coordinator._pending_threads.append(alive_thread)  # type: ignore[arg-type]
+    coordinator._set_status(2, mode="async", phase="running", active=True)
+
+    coordinator.wait_all(timeout=600.0)
+
+    assert coordinator.shutdown_requested is True
+    assert runner.terminate_reasons == ["final_wait_timeout"]
+    assert 4.9 < (alive_thread.join_timeouts[0] or 0.0) <= 5.0
+    assert alive_thread.join_timeouts[1:] == [1.0]
+    active = {
+        run["version"]: run
+        for run in coordinator.status_snapshot()["active"]
+    }
+    assert active[2]["detached"] is True
+    assert active[2]["final_wait_timeout_sec"] == 5.0
 
 
 def test_campaign_loop_final_summary_sees_reconciled_stopped_status() -> None:
@@ -255,6 +279,7 @@ def test_campaign_status_refresh_preserves_final_stop_reason() -> None:
 class _StatusPublishingManager:
     def __init__(self) -> None:
         self.write_count = 0
+        self._experiment_protocol = None
 
     def _write_status(self) -> None:
         self.write_count += 1
@@ -270,6 +295,15 @@ class _AlwaysAliveThread:
 
     def is_alive(self) -> bool:
         return True
+
+
+class _RecordingTerminateRunner:
+    def __init__(self) -> None:
+        self.terminate_reasons: list[str] = []
+
+    def terminate_active_processes(self, *, reason: str) -> int:
+        self.terminate_reasons.append(reason)
+        return 1
 
 
 class _RecordingEvidenceRecorder:

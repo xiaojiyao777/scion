@@ -290,6 +290,14 @@ class CampaignManager:
             self._last_stop_reason = reason
         elif not self._last_stop_reason:
             self._last_stop_reason = "external_stop_requested"
+        coordinator = getattr(self, "_weight_opt_coord", None)
+        if coordinator is not None:
+            try:
+                coordinator.wait_all(timeout=0.0)
+            except Exception:
+                logger.exception(
+                    "Failed to shut down weight opt after requested stop"
+                )
         self._write_campaign_summary()
         self._write_status(stopped_reason=self._last_stop_reason)
 
@@ -303,6 +311,12 @@ class CampaignManager:
         """Best-effort terminal campaign artifacts for unexpected run crashes."""
         self._last_stop_reason = reason
         self._external_stop_requested = True
+        coordinator = getattr(self, "_weight_opt_coord", None)
+        if coordinator is not None:
+            try:
+                coordinator.wait_all(timeout=0.0)
+            except Exception:
+                logger.exception("Failed to shut down weight opt after %s", reason)
         loop_status = self._crashed_campaign_loop_status(
             reason=reason,
             exc=exc,

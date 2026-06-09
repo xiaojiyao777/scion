@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -107,10 +108,28 @@ class LocalSubprocessRunner:
     def __init__(self, limits: Optional[ResourceLimits] = None) -> None:
         self._limits = limits or ResourceLimits()
         self._progress_callback: Callable[..., None] | None = None
+        self._active_proc_lock = threading.Lock()
+        self._active_procs: set[subprocess.Popen] = set()
 
     def set_progress_callback(self, callback: Callable[..., None] | None) -> None:
         """Register a best-effort subprocess lifecycle callback."""
         self._progress_callback = callback
+
+    def terminate_active_processes(self, *, reason: str = "shutdown") -> int:
+        """Best-effort kill for solver subprocesses currently owned by this runner."""
+        with self._active_proc_lock:
+            procs = list(self._active_procs)
+        terminated = 0
+        for proc in procs:
+            if _proc_is_running(proc):
+                logger.warning(
+                    "Terminating solver subprocess pid=%s due to %s",
+                    getattr(proc, "pid", None),
+                    reason,
+                )
+                _kill_proc(proc)
+                terminated += 1
+        return terminated
 
     def cache_identity(self, *, selected_surface: str | None = None) -> dict[str, Any]:
         """Return subprocess inputs that affect cacheable champion results."""
@@ -197,6 +216,7 @@ class LocalSubprocessRunner:
                 env=env,
                 preexec_fn=_make_preexec_fn(effective_limits),
             )
+            self._register_proc(proc)
             self._emit_progress(
                 child_pid=proc.pid,
                 child_phase="solver_subprocess",
@@ -256,6 +276,9 @@ class LocalSubprocessRunner:
                 output_path=None,
                 error_category="crash",
             )
+        finally:
+            if proc is not None:
+                self._unregister_proc(proc)
 
         elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
 
@@ -355,6 +378,14 @@ class LocalSubprocessRunner:
         logger.info("Output offloaded to disk (%d KB): %s", len(output) // 1024, path)
         return f"{_OFFLOAD_PREFIX}{path}"
 
+    def _register_proc(self, proc: subprocess.Popen) -> None:
+        with self._active_proc_lock:
+            self._active_procs.add(proc)
+
+    def _unregister_proc(self, proc: subprocess.Popen) -> None:
+        with self._active_proc_lock:
+            self._active_procs.discard(proc)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -375,6 +406,16 @@ def _kill_proc(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+
+
+def _proc_is_running(proc: subprocess.Popen) -> bool:
+    poll = getattr(proc, "poll", None)
+    if callable(poll):
+        try:
+            return poll() is None
+        except Exception:
+            pass
+    return getattr(proc, "returncode", None) is None
 
 
 def _drain_after_timeout(

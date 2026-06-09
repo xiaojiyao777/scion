@@ -13,7 +13,10 @@ from datetime import datetime
 from typing import Any
 
 from scion.contract.gate import ContractGate
-from scion.core.async_weight_opt import AsyncWeightOptCoordinator
+from scion.core.async_weight_opt import (
+    AsyncWeightOptCoordinator,
+    bounded_terminal_wait_timeout,
+)
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_adapters import _workspace_service_for
@@ -670,10 +673,12 @@ def compose_campaign_services(
         terminalize_active_branches=lambda reason: owner._terminalize_active_branches(
             reason
         ),
-        get_final_wait_timeout=lambda: getattr(
-            owner._spec.parameter_search,
-            "final_wait_timeout_sec",
-            600.0,
+        get_final_wait_timeout=lambda: bounded_terminal_wait_timeout(
+            getattr(
+                owner._spec.parameter_search,
+                "final_wait_timeout_sec",
+                600.0,
+            )
         ),
         wait_weight_opt_all=lambda timeout: owner._weight_opt_coord.wait_all(
             timeout=timeout

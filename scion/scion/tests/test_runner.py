@@ -299,6 +299,17 @@ class TestRunnerTimeout:
         assert proc.communicate_timeouts == [1, 1]
         kill_proc.assert_called_once_with(proc)
 
+    def test_terminate_active_processes_kills_registered_solver(self):
+        runner = LocalSubprocessRunner()
+        proc = _FakeTimeoutProc([], returncode=None)
+
+        runner._register_proc(proc)  # type: ignore[arg-type]
+        with patch("scion.runtime.subprocess_runner._kill_proc") as kill_proc:
+            terminated = runner.terminate_active_processes(reason="final_wait_timeout")
+
+        assert terminated == 1
+        kill_proc.assert_called_once_with(proc)
+
 
 # ---------------------------------------------------------------------------
 # Tests: ResourceLimits dataclass
