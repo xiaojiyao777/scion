@@ -21,6 +21,7 @@ def runtime_budget_diagnostic(
     *,
     stage: Any,
     time_limit_sec: float | int | Sequence[Any] | None,
+    runtime_model: str = "comparative",
     candidate_elapsed_ms: Sequence[Any] = (),
     champion_elapsed_ms: Sequence[Any] = (),
     candidate_time_limit_sec: Sequence[Any] = (),
@@ -80,10 +81,11 @@ def runtime_budget_diagnostic(
     )
     scope = "Tiny runtime" if tiny else "Screening runtime"
     side_codes = _side_reason_codes(saturated_side)
-    return {
+    diagnostic = {
         "schema": RUNTIME_BUDGET_DIAGNOSTIC_SCHEMA,
         "code": code,
         "stage": stage_value,
+        "runtime_model": runtime_model,
         "severity": "warn",
         "repairable": candidate_saturated,
         "total_pairs": observed_pairs,
@@ -102,11 +104,28 @@ def runtime_budget_diagnostic(
             champion_saturated=champion_saturated,
         ),
     }
+    if _runtime_model(runtime_model) == "budget_exhausting":
+        diagnostic.update(
+            {
+                "severity": "info",
+                "repairable": False,
+                "reason_codes": [],
+                "guidance": (
+                    f"{scope} is close to the per-run time limit under a "
+                    "budget-exhausting runtime model. Keep the observation for "
+                    "evidence interpretation, but do not direct candidate repair "
+                    "from budget saturation alone."
+                ),
+            }
+        )
+    return diagnostic
 
 
 def format_runtime_budget_diagnostic(summary: Mapping[str, Any] | None) -> str:
     """Return a compact prompt-facing runtime budget diagnostic suffix."""
     if not isinstance(summary, Mapping) or not summary:
+        return ""
+    if _diagnostic_is_info(summary):
         return ""
     code = str(summary.get("code") or "").strip()
     if not code:
@@ -154,6 +173,8 @@ def runtime_budget_diagnostic_code(protocol_result: Any) -> str:
     diagnostic = protocol_runtime_budget_diagnostic(protocol_result)
     if not diagnostic:
         return ""
+    if _diagnostic_is_info(diagnostic):
+        return ""
     if str(diagnostic.get("saturated_side") or "").strip().lower() == "champion":
         return ""
     code = str(diagnostic.get("code") or "").strip()
@@ -169,6 +190,8 @@ def runtime_budget_diagnostic_detected(protocol_result: Any) -> bool:
 def runtime_budget_candidate_saturation_detected(protocol_result: Any) -> bool:
     diagnostic = protocol_runtime_budget_diagnostic(protocol_result)
     if not diagnostic:
+        return False
+    if _diagnostic_is_info(diagnostic):
         return False
     side = str(diagnostic.get("saturated_side") or "").strip().lower()
     if side in {"candidate", "both"}:
@@ -194,6 +217,8 @@ def runtime_budget_summary_reason_codes(
 ) -> tuple[str, ...]:
     if not diagnostic:
         return ()
+    if _diagnostic_is_info(diagnostic):
+        return ()
     base_code = _diagnostic_base_code(diagnostic)
     side = str(diagnostic.get("saturated_side") or "").strip().lower()
     if side in {"candidate", "both"}:
@@ -213,6 +238,15 @@ def _diagnostic_base_code(diagnostic: Mapping[str, Any]) -> str:
     if code in {TINY_RUNTIME_BUDGET_SATURATION, SCREENING_RUNTIME_BUDGET_SATURATION}:
         return code
     return ""
+
+
+def _diagnostic_is_info(diagnostic: Mapping[str, Any]) -> bool:
+    return str(diagnostic.get("severity") or "").strip().lower() == "info"
+
+
+def _runtime_model(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text in {"comparative", "budget_exhausting"} else "comparative"
 
 
 def _elapsed_samples(values: Sequence[Any]) -> list[float]:

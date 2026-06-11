@@ -625,3 +625,11 @@ def test_run_threads_problem_v1_objective_policy_into_protocol() -> None:
 
     assert "objective_policy = bridge.objective_policy" in text
     assert "objective_policy=objective_policy" in text
+
+
+def test_weight_optimization_resolves_problem_v1_measurement_into_protocol() -> None:
+    source = Path(__file__).resolve().parents[1] / "cli" / "commands" / "weights.py"
+    text = source.read_text(encoding="utf-8")
+
+    assert "problem_v1 = None" in text
+    assert "with_problem_measurement(problem_v1 or spec)" in text

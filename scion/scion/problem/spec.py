@@ -436,6 +436,25 @@ class ObjectivePolicySpec(_Strict):
     expose_weights_to_llm: bool = False
 
 
+class MeasurementEffectScaleSpec(_Strict):
+    metric: str = ""
+    unit: Literal["raw_delta", "relative_pct"] = "raw_delta"
+    practical_delta_screen: float = Field(default=0.001, ge=0.0)
+    practical_delta_validate: float = Field(default=0.001, ge=0.0)
+
+
+class MeasurementSpec(_Strict):
+    runtime_model: Literal["comparative", "budget_exhausting"] = "comparative"
+    pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
+        "trajectory_stable"
+    )
+    effect_scale: MeasurementEffectScaleSpec = Field(
+        default_factory=MeasurementEffectScaleSpec
+    )
+    calibration_ref: str = ""
+    calibration_max_age_days: int = Field(default=90, ge=0)
+
+
 class SearchSpaceSpec(_Strict):
     editable: list[str]
     frozen: list[str]
@@ -475,6 +494,7 @@ class ProblemSpecV1(_Strict):
     research_surfaces: list[ResearchSurfaceSpec] | None = None
     objective_policy: ObjectivePolicySpec = ObjectivePolicySpec()
     objectives: list[ObjectiveMetricSpec]
+    measurement: MeasurementSpec = Field(default_factory=MeasurementSpec)
     llm_hints: LLMHintsSpec = LLMHintsSpec()
     family_taxonomy: FamilyTaxonomySpec | None = None
     runtime_dependencies: RuntimeDependencySpec = RuntimeDependencySpec()
@@ -497,6 +517,12 @@ class ProblemSpecV1(_Strict):
         names = [m.name for m in self.objectives]
         if len(names) != len(set(names)):
             raise ValueError("objective metric names must be unique")
+        measurement_metric = str(self.measurement.effect_scale.metric or "").strip()
+        if measurement_metric and measurement_metric not in set(names):
+            raise ValueError(
+                "measurement.effect_scale.metric must reference a declared "
+                f"objective metric: got '{measurement_metric}'"
+            )
 
         if self.research_surfaces is not None:
             surface_names = [surface.name for surface in self.research_surfaces]

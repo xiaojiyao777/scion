@@ -62,6 +62,7 @@ def _load_controlled_runtime(
     tmp_path: Path,
 ) -> tuple[ExperimentProtocol, ProblemSpecV1, ProtocolConfig, SplitManifest, SeedLedgerConfig]:
     spec_v1 = _problem_v1()
+    bridge = bridge_problem_spec_v1(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
     seed_ledger = SeedLedgerConfig.from_yaml(CONTROLLED_DIR / "seed_ledger.yaml")
@@ -73,10 +74,10 @@ def _load_controlled_runtime(
         runner=runner,
         time_limit_sec=1,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=tuple(spec_v1.objectives),
-        objective_policy=spec_v1.objective_policy,
+        metric_specs=bridge.metric_specs,
+        objective_policy=bridge.objective_policy,
         require_metric_specs=True,
-        problem_spec=spec_v1,
+        problem_spec=bridge.problem_spec,
     )
     return protocol, spec_v1, protocol_config, split_manifest, seed_ledger
 

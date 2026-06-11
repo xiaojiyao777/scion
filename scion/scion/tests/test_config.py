@@ -78,6 +78,37 @@ def test_protocol_config_defaults():
     assert 0.0 < config.validation_win_rate_threshold <= 1.0
     assert config.min_practical_delta > 0.0
 
+
+def test_protocol_config_resolves_problem_measurement_practical_delta():
+    """Problem-owned measurement thresholds replace the legacy dead default."""
+    measurement = type(
+        "Measurement",
+        (),
+        {
+            "effect_scale": type(
+                "EffectScale",
+                (),
+                {
+                    "practical_delta_screen": 2.5,
+                    "practical_delta_validate": 1.25,
+                },
+            )()
+        },
+    )()
+    problem_spec = type("ProblemSpec", (), {"measurement": measurement})()
+
+    config = ProtocolConfig().with_problem_measurement(problem_spec)
+
+    assert config.min_practical_delta == 2.5
+    assert config.screening_min_practical_delta == 2.5
+    assert config.validation_min_practical_delta == 1.25
+
+
+def test_protocol_config_rejects_unknown_delta_reference():
+    """Gate practical-delta refs must be numeric or declared symbolic names."""
+    with pytest.raises(ValueError, match="median_delta_min"):
+        ProtocolConfig(gates={"screening": {"median_delta_min": "missing_delta"}})
+
 def test_protocol_config_from_yaml(tmp_path):
     """ProtocolConfig.from_yaml() loads the new nested format correctly."""
     p_file = tmp_path / "protocol.yaml"

@@ -494,6 +494,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
         objective_policy = None
         operator_execute_signature = None
         forced_request = None
+        problem_v1 = None
         problem_v1_path = problem_dir / "problem-v1.yaml"
         if problem_v1_path.exists():
             from scion.problem.preflight import (
@@ -553,6 +554,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 if proto_path.exists()
                 else ProtocolConfig()
             )
+        proto_cfg = proto_cfg.with_problem_measurement(problem_v1 or spec)
 
         if split:
             split_manifest = SplitManifest.from_yaml(split)

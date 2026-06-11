@@ -81,6 +81,9 @@ class CanaryProtocolConfig(BaseModel):
 class RuntimeGovernanceConfig(BaseModel):
     """Runtime/algorithm-efficiency promotion governance."""
 
+    runtime_model: Literal["comparative", "budget_exhausting"] = "comparative"
+    """Runtime interpretation model declared by the problem measurement layer."""
+
     max_runtime_ratio: float = Field(gt=0.0, default=2.0)
     """Maximum accepted candidate/champion median runtime ratio."""
 
@@ -246,6 +249,28 @@ def _case_dimension(case_path: str) -> int | None:
     return None
 
 
+def _problem_measurement(problem_spec: Any | None) -> Any | None:
+    if problem_spec is None:
+        return None
+    measurement = getattr(problem_spec, "measurement", None)
+    if measurement is not None:
+        return measurement
+    spec_v1 = getattr(problem_spec, "spec_v1", None)
+    if spec_v1 is not None:
+        return getattr(spec_v1, "measurement", None)
+    return None
+
+
+def _nonnegative_float(name: str, value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a non-negative number") from exc
+    if number < 0.0:
+        raise ValueError(f"{name} must be a non-negative number")
+    return number
+
+
 class EvaluationStageConfig(BaseModel):
     """Generic staged evaluation step.
 
@@ -345,7 +370,7 @@ class ScreeningGate(BaseModel):
     win_rate_min: float = Field(ge=0.0, le=1.0, default=0.667)
     """最小胜率阈值。"""
 
-    median_delta_min: str = "practical_delta_screen"
+    median_delta_min: str | float = "practical_delta_screen"
     """最小中位 delta（可引用 problem.yaml 中的配置键名）。"""
 
 
@@ -355,7 +380,7 @@ class ValidationGate(BaseModel):
     win_rate_min: float = Field(ge=0.0, le=1.0, default=0.667)
     """最小胜率阈值。"""
 
-    median_delta_min: str = "practical_delta_validate"
+    median_delta_min: str | float = "practical_delta_validate"
     """最小中位 delta（引用 problem.yaml 的键名）。"""
 
     bootstrap_ci_low_min: float = 0.0
@@ -411,6 +436,12 @@ class ProtocolConfig(BaseModel):
     runtime: RuntimeGovernanceConfig = Field(default_factory=RuntimeGovernanceConfig)
     """Runtime and algorithm-efficiency governance."""
 
+    practical_delta_screen: float = Field(default=0.001, ge=0.0)
+    """Resolved screening practical delta in the protocol's current delta units."""
+
+    practical_delta_validate: float = Field(default=0.001, ge=0.0)
+    """Resolved validation practical delta in the protocol's current delta units."""
+
     evaluation_pipeline: EvaluationPipelineConfig = Field(
         default_factory=EvaluationPipelineConfig
     )
@@ -418,6 +449,12 @@ class ProtocolConfig(BaseModel):
 
     smoke_prescreen: SmokePrescreenConfig = Field(default_factory=SmokePrescreenConfig)
     """Optional cheap pre-screen diagnostic hook."""
+
+    @model_validator(mode="after")
+    def _validate_delta_references(self) -> "ProtocolConfig":
+        self._resolve_delta_reference(self.gates.screening.median_delta_min)
+        self._resolve_delta_reference(self.gates.validation.median_delta_min)
+        return self
 
     # ------------------------------------------------------------------
     # Backward-compatibility properties (used by gates.py and old tests)
@@ -435,13 +472,77 @@ class ProtocolConfig(BaseModel):
 
     @property
     def min_practical_delta(self) -> float:
-        """Numeric practical delta threshold (default 0.001)."""
-        return 0.001
+        """Backward-compatible alias for the resolved screening practical delta."""
+        return self.screening_min_practical_delta
+
+    @property
+    def screening_min_practical_delta(self) -> float:
+        """Resolved screening practical delta."""
+        return self._resolve_delta_reference(self.gates.screening.median_delta_min)
+
+    @property
+    def validation_min_practical_delta(self) -> float:
+        """Resolved validation practical delta."""
+        return self._resolve_delta_reference(self.gates.validation.median_delta_min)
 
     @property
     def max_runtime_ratio(self) -> float:
         """Alias for runtime.max_runtime_ratio."""
         return self.runtime.max_runtime_ratio
+
+    def with_problem_measurement(self, problem_spec: Any | None) -> "ProtocolConfig":
+        """Return a copy with problem-owned measurement thresholds resolved.
+
+        Measurement facts remain problem-owned diagnostics/configuration.  This
+        method only copies declared practical-delta numbers into protocol
+        thresholds; it does not expose readiness, BKS, gap, or calibration data
+        to DecisionFeatures.
+        """
+
+        measurement = _problem_measurement(problem_spec)
+        effect_scale = getattr(measurement, "effect_scale", None)
+        if effect_scale is None:
+            return self
+
+        updates: dict[str, float] = {}
+        for field_name in ("practical_delta_screen", "practical_delta_validate"):
+            value = getattr(effect_scale, field_name, None)
+            if value is not None:
+                updates[field_name] = _nonnegative_float(field_name, value)
+        runtime_model = getattr(measurement, "runtime_model", None)
+        if runtime_model is not None:
+            runtime_model_text = str(runtime_model).strip()
+            if runtime_model_text not in {"comparative", "budget_exhausting"}:
+                raise ValueError(
+                    "measurement.runtime_model must be comparative or "
+                    "budget_exhausting"
+                )
+            runtime_payload = dict(self.runtime.model_dump())
+            runtime_payload["runtime_model"] = runtime_model_text
+            data = self.model_dump()
+            data["runtime"] = runtime_payload
+        else:
+            data = self.model_dump()
+        if not updates:
+            return type(self).model_validate(data) if data != self.model_dump() else self
+        data.update(updates)
+        return type(self).model_validate(data)
+
+    def _resolve_delta_reference(self, value: str | float | int) -> float:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return _nonnegative_float("median_delta_min", value)
+        text = str(value).strip()
+        if text == "practical_delta_screen":
+            return float(self.practical_delta_screen)
+        if text == "practical_delta_validate":
+            return float(self.practical_delta_validate)
+        try:
+            return _nonnegative_float("median_delta_min", text)
+        except ValueError as exc:
+            raise ValueError(
+                "median_delta_min must be numeric or one of "
+                "'practical_delta_screen', 'practical_delta_validate'"
+            ) from exc
 
     def evaluation_stage_summary(self) -> list[dict[str, object]]:
         """Return protocol-stage reporting metadata.

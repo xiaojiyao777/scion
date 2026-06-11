@@ -130,6 +130,20 @@ class TestProblemSpecV1:
         assert spec.objective_policy.mode == "weighted_sum"
         assert spec.objectives[0].weight == 1.0
 
+    def test_measurement_metric_must_reference_declared_objective(self) -> None:
+        data = _minimal_spec_data()
+        data["measurement"] = {
+            "runtime_model": "comparative",
+            "effect_scale": {
+                "metric": "missing_cost",
+                "unit": "raw_delta",
+                "practical_delta_screen": 0.1,
+                "practical_delta_validate": 0.1,
+            },
+        }
+        with pytest.raises(ValueError, match="measurement.effect_scale.metric"):
+            ProblemSpecV1(**data)
+
     def test_operator_execute_signature_validated(self) -> None:
         data = _minimal_spec_data()
         data["operator_interface"]["execute_signature"] = (

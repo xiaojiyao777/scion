@@ -104,6 +104,15 @@ objectives:
     priority: 2
     tie_tolerance: 0
 
+measurement:
+  runtime_model: comparative
+  pairing_validity: trajectory_stable
+  effect_scale:
+    metric: total_cost
+    unit: raw_delta
+    practical_delta_screen: 0.001
+    practical_delta_validate: 0.001
+
 llm_hints:
   problem_summary: >-
     Vehicle assignment problem with subcategory consolidation.

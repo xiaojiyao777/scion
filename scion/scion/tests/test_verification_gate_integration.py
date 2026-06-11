@@ -199,6 +199,103 @@ class TestVerificationGateIntegration:
             for check in runtime_checks
         ] == [17, 17, 17, 17, 17]
 
+    def test_v9_budget_exhausting_checks_candidate_budget_not_champion_ratio(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+        object.__setattr__(
+            spec,
+            "measurement",
+            SimpleNamespace(runtime_model="budget_exhausting"),
+        )
+
+        calls = []
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            calls.append(workdir)
+            if workdir == str(champion_ws):
+                raise AssertionError("budget-exhausting V9 must not run champion")
+            return RunResult(
+                success=True,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                elapsed_ms=250,
+                output=SolverOutput(
+                    objective={"total_cost": 10},
+                    feasible=True,
+                    runtime={},
+                ),
+                output_path=None,
+                error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+
+        result = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            str(champion_ws),
+            timeout_sec=3,
+            strict_runtime_checks=True,
+        )
+
+        assert result.passed is True
+        assert result.metadata["runtime_model"] == "budget_exhausting"
+        assert result.metadata["comparison_valid"] is False
+        assert result.metadata["budget_compliance_valid"] is True
+        assert calls == [str(tmp_path)]
+
+    def test_v9_budget_exhausting_candidate_timeout_still_fails_closed(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+        object.__setattr__(
+            spec,
+            "measurement",
+            SimpleNamespace(runtime_model="budget_exhausting"),
+        )
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            return RunResult(
+                success=False,
+                exit_code=-9,
+                stdout="",
+                stderr="timeout",
+                elapsed_ms=3000,
+                output=None,
+                output_path=None,
+                error_category="timeout",
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+
+        result = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            str(champion_ws),
+            timeout_sec=3,
+            strict_runtime_checks=True,
+        )
+
+        assert result.passed is False
+        assert result.metadata["candidate_timeout"] is True
+        assert result.metadata["candidate_error_category"] == "timeout"
+
     def test_adapter_backed_problem_v1_without_adapter_fails_v5(self, tmp_path):
         canary = tmp_path / "small.json"
         canary.write_text("{}")

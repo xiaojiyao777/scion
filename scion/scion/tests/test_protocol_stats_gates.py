@@ -189,6 +189,53 @@ def test_runtime_tie_with_cached_champion_requires_fresh_runtime():
     assert result.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
 
 
+def test_budget_exhausting_cached_runtime_tie_does_not_require_fresh_runtime():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_ratio_median=None,
+        runtime_delta_median_ms=None,
+        runtime_pairs=0,
+        champion_cached_runtime_pairs=10,
+    )
+    config = ProtocolConfig.model_validate(
+        {"runtime": {"runtime_model": "budget_exhausting"}}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.reason_codes != ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+    assert "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" not in result.reason_codes
+
+
+def test_budget_exhausting_runtime_tie_speedup_still_passes_screening():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-1000.0,
+        runtime_pairs=10,
+    )
+    config = ProtocolConfig.model_validate(
+        {"runtime": {"runtime_model": "budget_exhausting"}}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+
+
 @pytest.mark.parametrize("gate_func", (validation_gate, frozen_gate))
 def test_validation_and_frozen_cached_runtime_tie_cannot_pass(gate_func):
     stats = _make_stats(

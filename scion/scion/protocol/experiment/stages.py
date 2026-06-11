@@ -920,6 +920,11 @@ def run_experiment(
             or champion_time_limit_samples_sec
             or [protocol.time_limit_sec]
         ),
+        runtime_model=getattr(
+            protocol.config.runtime,
+            "runtime_model",
+            "comparative",
+        ),
         candidate_elapsed_ms=candidate_elapsed_samples_ms,
         champion_elapsed_ms=champion_elapsed_samples_ms,
         candidate_time_limit_sec=candidate_time_limit_samples_sec,

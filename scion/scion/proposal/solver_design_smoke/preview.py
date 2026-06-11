@@ -389,6 +389,7 @@ def _runtime_algorithm_smoke_preview(
             runtime_budget_diagnostic_summary = runtime_budget_diagnostic(
                 stage="proposal_smoke",
                 time_limit_sec=_ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+                runtime_model=_runtime_model_for_problem_spec(context.problem_spec),
                 candidate_elapsed_ms=candidate_elapsed_samples_ms,
                 champion_elapsed_ms=champion_elapsed_samples_ms,
                 total_pairs=len(runs),
@@ -695,6 +696,13 @@ def _provider_case_missing_issues(missing_cases: list[str]) -> list[str]:
             continue
         issues.append(f"provider representative smoke case missing: {text}")
     return issues
+
+
+def _runtime_model_for_problem_spec(problem_spec: Any) -> str:
+    measurement = _attr(problem_spec, "measurement", None)
+    runtime_model = _attr(measurement, "runtime_model", "comparative")
+    text = str(runtime_model or "").strip()
+    return text if text in {"comparative", "budget_exhausting"} else "comparative"
 
 
 def _runtime_smoke_case_execution_ledger(

@@ -119,7 +119,7 @@ class DecisionEngine:
         wr = features.win_rate
         md = features.median_delta
         threshold = self.config.screening_win_rate_threshold
-        min_delta = self.config.min_practical_delta
+        min_delta = self.config.screening_min_practical_delta
 
         if wr is None:
             # No stats yet (pre-protocol call) — continue exploring

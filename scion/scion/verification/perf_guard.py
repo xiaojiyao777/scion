@@ -27,9 +27,10 @@ def check_perf(
     timeout_sec: int | float | None = None,
     strict_runtime_checks: bool = False,
 ) -> CheckResult:
-    """V9_perf_guard: candidate solve time must stay within configured slowdown."""
+    """V9_perf_guard: runtime compliance for the problem's runtime model."""
     t0 = time.monotonic_ns()
     limit_ratio = float(max_slowdown)
+    runtime_model = _runtime_model(problem_spec)
 
     perf_case = os.environ.get("SCION_PERF_GUARD_CASE") or problem_spec.canary_case_path
     perf_case = resolve_problem_path(problem_spec, perf_case)
@@ -135,6 +136,29 @@ def check_perf(
             detail += f" detail={cand['detail']}"
         return _cr(False, "heavy", detail, t0, metadata=metadata)
 
+    if runtime_model == "budget_exhausting":
+        cand_ms = int(cand["elapsed_ms"] or 0)
+        metadata = {
+            "case_id": case_id,
+            "timeout_sec": timeout_sec,
+            "candidate_ms": cand_ms,
+            "champion_ms": None,
+            "ratio": None,
+            "limit_ratio": None,
+            "comparison_valid": False,
+            "runtime_model": runtime_model,
+            "budget_compliance_valid": True,
+            "candidate_timeout": bool(cand["timeout"]),
+            "champion_timeout": False,
+            "candidate_error_category": cand["error_category"],
+            "champion_error_category": None,
+        }
+        detail = (
+            f"budget compliant: case={case_id} candidate={cand_ms}ms "
+            f"timeout={timeout_sec}s runtime_model=budget_exhausting"
+        )
+        return _cr(True, "heavy", detail, t0, metadata=metadata)
+
     champ = _run(champion_workspace)
     if not champ["success"]:
         metadata = {
@@ -198,6 +222,8 @@ def check_perf(
         "ratio": ratio,
         "limit_ratio": limit_ratio,
         "comparison_valid": True,
+        "runtime_model": runtime_model,
+        "budget_compliance_valid": True,
         "candidate_timeout": bool(cand["timeout"]),
         "champion_timeout": bool(champ["timeout"]),
         "candidate_error_category": cand["error_category"],
@@ -227,6 +253,15 @@ def _timeout_sec(value: int | float | None) -> int:
     if numeric <= 0:
         numeric = _DEFAULT_PERF_TIMEOUT_SEC
     return max(1, int(numeric))
+
+
+def _runtime_model(problem_spec: object) -> str:
+    measurement = getattr(problem_spec, "measurement", None)
+    if measurement is None:
+        spec_v1 = getattr(problem_spec, "spec_v1", None)
+        measurement = getattr(spec_v1, "measurement", None)
+    value = str(getattr(measurement, "runtime_model", "") or "").strip()
+    return value if value in {"comparative", "budget_exhausting"} else "comparative"
 
 
 def _invalid_comparison(

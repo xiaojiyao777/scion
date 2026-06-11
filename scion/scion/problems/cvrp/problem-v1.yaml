@@ -48,6 +48,17 @@ solver:
 parameter_search:
   enabled: false
 
+measurement:
+  runtime_model: budget_exhausting
+  pairing_validity: trajectory_divergent
+  effect_scale:
+    metric: total_distance
+    unit: raw_delta
+    practical_delta_screen: 2.0
+    practical_delta_validate: 1.0
+  calibration_ref: formal/calibration/aa_noise_floor.json
+  calibration_max_age_days: 90
+
 runtime_dependencies:
   required_python_modules:
     - numpy
@@ -159,10 +170,15 @@ research_surfaces:
         - solver_algorithm_phase_delta_sum
         - solver_algorithm_phase_best_delta
         - solver_algorithm_phase_improvement_counts
+        - solver_algorithm_actionability_summary
         - solver_algorithm_stop_reason
       optional_runtime_fields:
         - solver_algorithm_path
         - solver_algorithm_events
+        - solver_algorithm_phase_move_attempts
+        - solver_algorithm_phase_accepted_moves
+        - solver_algorithm_runtime_budget_hit
+        - solver_algorithm_solution_progress
       activation_runtime_fields:
         "{mechanism}":
           - solver_algorithm_context_records.{mechanism}_iterations
@@ -183,6 +199,8 @@ research_surfaces:
           - solver_algorithm_move_attempts
           - solver_algorithm_accepted_moves
           - solver_algorithm_neutral_accepted_moves
+          - solver_algorithm_phase_move_attempts
+          - solver_algorithm_phase_accepted_moves
         aggregate_effect:
           - solver_algorithm_improving_moves
           - solver_algorithm_best_improving_moves
@@ -208,6 +226,9 @@ research_surfaces:
           - solver_algorithm_errors
           - solver_algorithm_events
           - solver_algorithm_stop_reason
+          - solver_algorithm_runtime_budget_hit
+          - solver_algorithm_solution_progress
+          - solver_algorithm_actionability_summary
     novelty:
       strategy: semantic_signature
       signature_fields:

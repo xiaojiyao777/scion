@@ -108,6 +108,11 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         bridge.operator_execute_signature
         == "execute(self, solution, instance, rng) -> CvrpSolution"
     )
+    assert spec.measurement.runtime_model == "budget_exhausting"
+    assert spec.measurement.pairing_validity == "trajectory_divergent"
+    assert spec.measurement.effect_scale.metric == "total_distance"
+    assert spec.measurement.effect_scale.practical_delta_screen == 2.0
+    assert legacy.measurement is spec.measurement
     assert spec.runtime_dependencies.required_python_modules == ["numpy"]
     assert legacy.runtime_dependencies.required_python_modules == ["numpy"]
 
@@ -117,12 +122,26 @@ def test_warehouse_problem_spec_declares_legacy_family_taxonomy() -> None:
     spec = _load_spec(warehouse_dir / "problem-v1.yaml")
 
     assert spec.family_taxonomy is not None
+    assert spec.measurement.runtime_model == "comparative"
+    assert spec.measurement.effect_scale.metric == "total_cost"
     assert "subcategory_consolidation" in spec.family_taxonomy.families
     assert "order_swap" in spec.family_taxonomy.families
     assert "cost_reduction" in spec.family_taxonomy.families
     assert "subcategory swap" in spec.family_taxonomy.aliases["subcategory_consolidation"]
     assert "swap orders" in spec.family_taxonomy.aliases["order_swap"]
     assert "downsize" in spec.family_taxonomy.aliases["cost_reduction"]
+
+
+def test_warehouse_legacy_and_package_specs_share_measurement_declaration() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    legacy_path = repo_root / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    package_path = PROBLEMS_DIR / "warehouse_delivery" / "problem-v1.yaml"
+
+    legacy = load_problem_spec_v1_from_yaml(legacy_path)
+    package = load_problem_spec_v1_from_yaml(package_path)
+
+    assert legacy.measurement == package.measurement
+    assert legacy.measurement.effect_scale.metric == "total_cost"
 
 
 def test_load_problem_spec_v1_resolves_placeholder_root_dir() -> None:

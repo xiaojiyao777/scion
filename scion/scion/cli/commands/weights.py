@@ -72,6 +72,7 @@ def register_weight_commands(app: typer.Typer) -> None:
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
         spec = ProblemSpec.from_yaml(str(problem_yaml))
+        problem_v1 = None
         problem_dir = problem_yaml.parent
         metric_specs = None
         problem_v1_path = problem_dir / "problem-v1.yaml"
@@ -102,6 +103,7 @@ def register_weight_commands(app: typer.Typer) -> None:
                 if proto_path.exists()
                 else ProtocolConfig()
             )
+        proto_cfg = proto_cfg.with_problem_measurement(problem_v1 or spec)
 
         if split:
             split_manifest = SplitManifest.from_yaml(split)

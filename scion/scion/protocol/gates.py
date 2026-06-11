@@ -28,7 +28,7 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
             outcome="unclear",
             reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
         )
-    if wr >= threshold and stats.median_delta >= config.min_practical_delta:
+    if wr >= threshold and stats.median_delta >= config.screening_min_practical_delta:
         return GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
     elif _runtime_tie_improvement(stats, config):
         return GateResult(
@@ -142,6 +142,8 @@ def _runtime_tie_fresh_champion_required(
     stats: EvalStats,
     config: ProtocolConfig,
 ) -> bool:
+    if getattr(config.runtime, "runtime_model", "comparative") == "budget_exhausting":
+        return False
     if config.runtime.champion_runtime_policy != "fresh_required_for_runtime_tie":
         return False
     if stats.champion_cached_runtime_pairs <= 0:
