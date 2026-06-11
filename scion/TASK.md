@@ -1,68 +1,302 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: implementation in progress*
+*Status: Phase 0 evidence baseline captured - Phase 1 A/A calibration next*
+*Updated: 2026-06-11*
 
-This task supersedes the stale v0.3 Sprint N1 checklist. The current objective
-is to close the v0.4 repair/readiness gap before v0.5 runs broad controlled
-experiments.
+This task defines the v0.4 closeout objective before v0.5 broad controlled
+experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
+to prove whether the measurement instrument can detect useful effects, repair
+the framework so agents can do effective research, introduce the minimal
+measurement declaration layer needed for self-diagnosis, and then run a
+governance on/off comparison to test whether that layer improves research
+efficiency and evidence quality.
+
+## Operating Principle
+
+1. First prove whether the measurement instrument is effective.
+2. Then repair Scion framework behavior that prevents effective agent research.
+3. Then implement the minimal viable measurement declaration layer.
+4. Finally run governance on/off comparisons for CVRP and warehouse.
+
+Do not begin additional framework code repair until Phase 1 A/A calibration has
+quantified whether the current protocol can detect the effects being claimed.
 
 ## Required Reading
 
+Every main-thread phase and every new subagent brief must start with the v3
+architecture baseline:
+
 1. `scion/design/scion-architecture-v3.md`
-2. `scion/docs/AGENT_ONBOARDING.md`
-3. `scion/docs/status/current-state.md`
-4. `scion/reports/v04-audit-agent-experiment-guide-20260609.md`
-5. `scion/reports/v04-core-framework-review-20260611.md`
-6. `scion/reports/v04-core-framework-code-review-20260611.md`
-7. `scion/design/v0.5-evidence-uplift-roadmap.md`
+
+Task-specific references:
+
+2. `scion/reports/v04-core-framework-code-review-20260611.md`
+3. `scion/reports/v04-core-framework-review-20260611.md`
+4. `scion/design/v0.5-evidence-uplift-roadmap.md`
+5. `scion/reports/v04-audit-agent-experiment-guide-20260609.md`
+6. `scion/docs/AGENT_ONBOARDING.md`
+7. `scion/docs/status/current-state.md`
 8. `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 
-## Workstreams
+## Roles
 
-- R1 Measurement and practical delta:
-  add problem-owned measurement/readiness declarations, resolve practical delta
-  values into protocol gates, and build A/A noise-floor calibration.
-- R2 Runtime governance:
-  support budget-exhausting solver semantics, remove meaningless runtime replay
-  for saturated ties, and preserve quality-tie runtime speedup promotion.
-- R3 Branch depth:
-  expose branch-depth and mechanism-family evidence, and keep marginal
-  same-mechanism follow-up deep enough to learn without weakening fail-closed
-  regressions.
-- R4 Context signal density:
-  profile and compact model-visible context while preserving problem mechanics,
-  target source, branch history, runtime/screening feedback, and cross-branch
-  lessons.
-- R5 Focused validation:
-  run VRP/CVRP and warehouse campaigns only after R1-R4 instrumentation is
-  ready, then audit with the 2026-06-09 guide.
+Main thread owns:
 
-## Acceptance
+- v3 boundary alignment and architecture decisions.
+- Task decomposition, subagent brief design, and acceptance criteria.
+- Git hygiene, branch/commit management, and conflict resolution.
+- Experiment design, launch decisions, postrun acceptance, and status updates.
+- Final integration review before any repair is accepted.
 
-- No CVRP/VRP/warehouse semantics leak into generic Decision input.
-- `DecisionFeatures` remains free of measurement diagnostics, BKS/gap, case
-  hardness, and LLM text.
-- Focused tests cover each code repair before real-cost experiments.
-- Experiment reports reconcile copied configs, counters, prompt visibility,
-  pair-level metrics, branch lifecycle, and Decision evidence.
-- Git changes are kept by slice; unrelated dirty files are not reverted.
+Subagents own bounded execution slices:
+
+- Code changes in explicitly assigned, disjoint file scopes.
+- Read-only design audits for focused questions.
+- Experiment postrun analysis, prompt/context analysis, and branch-level
+  research analysis.
+
+Every subagent brief must require:
+
+- Read `scion/design/scion-architecture-v3.md` first.
+- State how the proposed work preserves the v3 boundary.
+- Keep CVRP/VRP/warehouse semantics in problem-owned layers.
+- Report changed files, tests run, experiment artifacts inspected, and residual
+  risks.
+- Avoid reverting unrelated work in the shared worktree.
+
+## V3 Boundary Acceptance
+
+- LLM output remains tainted proposal material.
+- Decision may read only `DecisionFeatures`.
+- `DecisionFeatures` must not contain raw BKS, case gap, case hardness,
+  mechanism rankings, LLM text, prompt ratios, cross-branch lessons, or raw
+  problem diagnostics.
+- Problem-owned diagnostics may guide proposal context, protocol configuration,
+  runtime governance, lifecycle policy, and readiness checks only through
+  deterministic, schema-validated fields.
+- Validation/frozen details must not leak into proposal context in a way that
+  violates staged exposure control.
+
+## Phase 0 - Freeze Current Evidence Baseline
+
+Purpose: finish and audit the current CVRP/warehouse validation runs before any
+new repair changes.
+
+Tasks:
+
+- Wait for current experiments to finish.
+- Record commit, branch, run directories, launch command, copied problem
+  configs, protocol/split/seed hashes, and wrapper exit status.
+- Reconcile counters: proposal sessions, unique hypotheses, formal candidates,
+  screening rows, validation rows, frozen rows, fresh-runtime replays, and
+  effective rounds.
+- Audit pair-level metrics rather than only aggregate win rate.
+- Inspect prompt manifests and selected LLM contexts for each candidate,
+  including hypothesis, target intent, code, tool observations, compact signals,
+  cross-branch map, and source visibility.
+- Analyze branch dimensions: branch depth, mechanism family continuity,
+  sibling/ancestor lessons, active/park/archive transitions, and whether branch
+  experience transfers into later prompts.
+
+Exit criteria:
+
+- A postrun report explains why each candidate stopped and whether the run
+  reached validation/frozen.
+- Runtime saturation/fresh replay behavior is explicitly checked.
+- Prompt signal density is measured separately for governance, research signal,
+  problem-domain diagnostics, source/code, and cross-branch material.
+- Status docs are updated before Phase 1.
+
+Status docs to update:
+
+- `scion/docs/status/current-state.md`
+- `scion/docs/status/v0.4-history.md`
+- `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
+- `scion/TASK.md`
+
+## Phase 1 - A/A Calibration and Measurement Power
+
+Purpose: prove whether the current protocol can detect useful effects before
+changing gates or lifecycle policy.
+
+Tasks:
+
+- Run champion vs champion A/A calibration for CVRP with independent RNG streams
+  on the formal screening set.
+- Run champion vs champion A/A calibration for warehouse with its production
+  protocol shape.
+- Report MDE, false-positive win rate, pair delta distribution, case-level
+  variance, seed-level variance, practical-delta detectability, and runtime
+  saturation profile.
+- Compare MDE against expected mechanism effects and against
+  `practical_delta_screen` / `practical_delta_validate`.
+
+Exit criteria:
+
+- CVRP and warehouse both have calibration reports.
+- If MDE is larger than the expected mechanism effect, the protocol is marked
+  measurement-power insufficient and framework repair must focus on measurement
+  and protocol design before more campaign runs.
+- Calibration results become proposal-visible diagnostics only; they are not
+  promotion evidence.
+
+## Phase 2 - Framework Repairs for Effective Research
+
+Purpose: repair the v0.4 blockers identified by the 2026-06-11 audits while
+preserving v3 boundaries.
+
+Required repair slices:
+
+- F-1 practical delta: resolve problem-owned practical delta declarations into
+  protocol gates and remove dead hard-coded behavior from effective decisions.
+- F-2 runtime semantics: support `runtime_model: budget_exhausting`, downgrade
+  budget saturation to info for anytime solvers, disable meaningless runtime-tie
+  fresh replay, and preserve quality-tie runtime speedup semantics where valid.
+- F-3 low-SNR screening: make screening expand reachable for declared
+  trajectory-divergent problems when evidence is low-signal but not
+  regressively negative.
+- Lifecycle depth: prevent low-SNR CVRP branches from being parked before
+  same-mechanism follow-up can happen, while still fail-closing hard negative
+  delta, infeasibility, candidate failures, and runtime regressions.
+- Context signal density: add problem-owned CVRP proposal diagnostics such as
+  per-case residual opportunity, gap-to-BKS where available, noise/MDE summary,
+  and mechanism effect ranking.
+- Source visibility: protect champion/current branch/target source visibility,
+  especially during code phase. Context compression may target governance
+  boilerplate, raw duplicated logs, and generic cross-branch payloads, not the
+  research object code.
+
+Exit criteria:
+
+- Focused tests cover each repair slice.
+- Warehouse `trajectory_stable` behavior is unchanged unless explicitly covered
+  by a problem-owned declaration.
+- CVRP `trajectory_divergent` behavior can expand/continue low-SNR research
+  without admitting negative-effect candidates.
+- Prompt manifests show better problem-domain signal density without removing
+  required source/code context.
+
+## Phase 3 - Minimal Measurement Declaration Layer
+
+Purpose: give Scion a problem-owned, schema-validated way to know whether its
+instrument is likely to measure the claimed effect.
+
+Minimum viable fields:
+
+- `runtime_model`: `comparative` or `budget_exhausting`.
+- `pairing_validity`: `trajectory_stable` or `trajectory_divergent`.
+- `effect_scale`: metric, unit, practical screening delta, practical validation
+  delta.
+- `calibration_ref`: path to the latest compatible A/A calibration report.
+- `calibration_max_age_days`.
+- Optional readiness summary: MDE, noise band, effect-to-MDE ratio, and
+  signal-to-noise tier.
+
+Consumers:
+
+- Protocol gates may resolve practical deltas and low-SNR expand policy.
+- Runtime governance may switch between comparative and budget-exhausting
+  semantics.
+- Lifecycle may use deterministic measurement-readiness tiers.
+- Proposal context may receive problem-owned diagnostics and opportunity
+  summaries.
+- Decision must not read raw calibration diagnostics or free-form explanations.
+
+Exit criteria:
+
+- The declaration layer is documented and tested.
+- Missing or stale calibration is visible as readiness/status, not silently
+  ignored.
+- Measurement diagnostics are excluded from `DecisionFeatures` unless reduced to
+  approved deterministic enums/numeric features.
+
+## Phase 4 - Focused Validation
+
+Purpose: verify that repaired v0.4 can support effective research before the
+governance value experiment.
+
+CVRP acceptance signals:
+
+- Validation/frozen can be reached when evidence justifies it.
+- Branch depth increases beyond shallow one-off attempts.
+- Same-mechanism follow-up occurs when low-SNR evidence is inconclusive.
+- Mechanism-family lessons are visible in later prompts and affect proposal
+  choices.
+- Runtime saturation/fresh replay no longer pollutes feedback for
+  budget-exhausting solvers.
+- Results are interpreted against A/A MDE, not only raw win rate.
+
+Warehouse acceptance signals:
+
+- Existing promotion path does not regress.
+- Repeated campaigns clarify whether warehouse has continuous promotion
+  potential or a real plateau.
+- Runtime budget calibration explains why actual warehouse runs finish quickly
+  despite high configured caps.
+
+Required analysis:
+
+- Inspect every LLM call context relevant to the experiment purpose.
+- Audit branch-level research: within-branch depth, sibling divergence,
+  cross-branch transfer, and whether failed hypotheses improve later proposals.
+- Reconcile final evidence with protocol metrics, lifecycle state, prompt
+  visibility, and copied configs.
+
+## Phase 5 - Governance On/Off Comparison
+
+Purpose: test whether measurement-aware governance improves research efficiency
+and evidence quality after baseline repairs are complete.
+
+Experiment design:
+
+- Same problem, champion start, model, round budget, cases, seeds, and runtime
+  budgets.
+- ON arm: measurement-aware protocol/runtime/lifecycle/context enabled.
+- OFF arm: calibration and diagnostics recorded, but not allowed to drive
+  protocol/runtime/lifecycle/context.
+- At least three independent repeats per problem when budget permits.
+
+Primary metrics:
+
+- Promotions above A/A MDE.
+- Validation/frozen reach rate.
+- Branch depth and same-mechanism follow-up rate.
+- Useful cross-branch transfer rate.
+- Prompt problem-domain signal density.
+- Runtime replay/saturation noise rate.
+- Cost per effective protocol row and cost per accepted research insight.
+
+Exit criteria:
+
+- The on/off result supports or rejects the claim that measurement-aware
+  governance improves Scion research quality.
+- v0.5 can start from a clean experiment matrix rather than unresolved v0.4
+  framework debt.
 
 ## Current Status
 
 - Implemented: problem-owned `measurement` schema, protocol practical-delta
   resolution, runtime model resolution, budget-exhausting runtime governance,
   V9 budget-compliance semantics, read-only branch research-shape diagnostics,
-  prompt block-family accounting, and compact research signals in hypothesis
-  prompts.
-- Implemented: `scion/tools/calibrate_aa_noise.py` plus calibration math tests.
-  CVRP controlled smoke passed at 5s/10s with `n_pairs=1`; this validates the
-  chain but is not a formal MDE report.
-- Pending: full CVRP and warehouse A/A calibration reports, then focused
-  VRP/CVRP and warehouse validation campaigns audited with the 2026-06-09 guide.
+  prompt block-family accounting, compact research signals, and
+  `scion/tools/calibrate_aa_noise.py`.
+- Partially implemented: A/A calibration tooling exists, but full CVRP and
+  warehouse formal calibration reports are still required.
+- Partially implemented: context compaction is observable, but CVRP-specific
+  problem-domain diagnostics and phase-aware source protection still need repair.
+- Completed: Phase 0 postrun baseline for the paired 2026-06-11 CVRP and
+  warehouse 4R verification runs is captured in
+  `scion/docs/experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`.
+  CVRP finished `4/4` screening-only rounds; warehouse finished `4/4` with a
+  full promotion path to champion v2.
+- Pending: Phase 1 formal A/A calibration for CVRP and warehouse, then Phase 2
+  repairs.
 
-## Current Coordination
+## Git Hygiene
 
-Main thread owns integration, git hygiene, final task ordering, and experiment
-launch decisions. Subagents may own disjoint code or analysis slices, but each
-must report changed files and focused validation evidence.
+- Keep commits sliced by phase or repair surface.
+- Do not mix experiment reports, framework repairs, and unrelated cleanup in one
+  commit unless explicitly accepted.
+- Do not revert user or subagent changes unless explicitly instructed.
+- Before each commit, record tests and experiment artifacts used for acceptance.

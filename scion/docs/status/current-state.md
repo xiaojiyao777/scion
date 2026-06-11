@@ -99,6 +99,35 @@ The active v0.4 task breakdown is
 - Verification: focused regression currently covers measurement/runtime/V9,
   prompt context density, campaign observability, and CVRP actionability paths.
 
+## 2026-06-11 Phase 0 Evidence Baseline
+
+The paired 4R verification runs launched from commit `0a6a2f5` have both
+finished with wrapper exit status 0. The frozen postrun baseline is
+[`../experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`](../experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md).
+
+- CVRP run:
+  `/home/clawd/research/scion-experiments/v04-evidence-verify-cvrp-4r-tl30-20260611-4r-gpt55-20260611T145506Z-claw`
+  ended at `2026-06-11T16:26:59Z`. It completed `4/4` effective rounds, all
+  screening rows; validation and frozen rows were both 0. Pair-level movement
+  existed, but case-level gate win rates remained below threshold and no
+  candidate advanced.
+- Warehouse run:
+  `/home/clawd/research/scion-experiments/v04-evidence-verify-warehouse-4r-defaultbudget-20260611-4r-gpt55-20260611T145506Z-claw`
+  ended at `2026-06-11T15:30:12Z`. It completed `4/4` effective rounds with a
+  full screening -> validation -> frozen -> promotion path for
+  `operators/consolidate_subcategory.py`, producing champion v2, followed by a
+  failed modify attempt.
+- Runtime governance check: neither run consumed fresh-runtime replay rows.
+  CVRP cached champion runtime aggregates were excluded from standalone speed
+  claims; warehouse runtime evidence remained high-confidence.
+- Context check: CVRP prompt manifests remain much larger than warehouse and
+  still need problem-owned diagnostics for per-case opportunity, MDE/noise, and
+  mechanism-effect ranking. Source/code visibility was present and must remain
+  protected during any context compression.
+
+The next step is Phase 1 from `TASK.md`: formal A/A calibration for CVRP and
+warehouse before additional gate, lifecycle, or budget tuning.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09
