@@ -7,6 +7,19 @@ from scion.runtime.audit import (
 )
 
 
+def _actionability_summary() -> dict[str, object]:
+    return {
+        "schema": "scion.cvrp.solver_actionability.v1",
+        "attempted": True,
+        "move_attempts": 1,
+        "accepted_moves": 0,
+        "no_accepted_moves": True,
+        "candidate_emitted_no_measurable_objective_effect": True,
+        "runtime_budget_hit": False,
+        "phases": {},
+    }
+
+
 def test_solver_design_surface_declares_active_algorithm_runtime_fields(
     tmp_path: Path,
 ) -> None:
@@ -31,6 +44,7 @@ def test_solver_design_surface_declares_active_algorithm_runtime_fields(
     assert "solver_algorithm_loaded" in required_fields
     assert "solver_algorithm_active" in required_fields
     assert "solver_algorithm_phase_runtime_ms" in required_fields
+    assert "solver_algorithm_actionability_summary" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
     assert runtime["solver_algorithm_loaded"] is True
@@ -115,6 +129,7 @@ def test_solver_design_runtime_audit_rejects_inactive_surface_without_error_coun
             "solver_algorithm_phase_delta_sum": {"construction": 0},
             "solver_algorithm_phase_best_delta": {"construction": 0},
             "solver_algorithm_phase_improvement_counts": {"construction": 0},
+            "solver_algorithm_actionability_summary": _actionability_summary(),
             "solver_algorithm_stop_reason": "inactive",
         },
         problem_spec=legacy_spec,
@@ -151,6 +166,7 @@ def test_solver_design_runtime_audit_rejects_surface_fallback_event() -> None:
             "solver_algorithm_phase_delta_sum": {"construction": 0},
             "solver_algorithm_phase_best_delta": {"construction": 0},
             "solver_algorithm_phase_improvement_counts": {"construction": 0},
+            "solver_algorithm_actionability_summary": _actionability_summary(),
             "solver_algorithm_stop_reason": "completed",
             "solver_algorithm_events": [
                 {
@@ -266,6 +282,13 @@ def test_solver_design_context_exposes_objective_and_budget_helpers(
                 "    assert context.is_valid(solution)",
                 "    assert context.remaining_time() >= 0.0",
                 "    assert context.remaining_time_ms() >= 0",
+                "    context.record_solution_progress(",
+                "        initial_route_count=2,",
+                "        final_route_count=1,",
+                "        initial_total_distance=10.0,",
+                "        final_total_distance=8.0,",
+                "        budget_hit=True,",
+                "    )",
                 "    context.record_iteration('objective_probe', 1)",
                 "    context.record_move('objective_probe', attempted=1, accepted=0)",
                 "    return context.make_solution(solution.routes)",
@@ -289,5 +312,15 @@ def test_solver_design_context_exposes_objective_and_budget_helpers(
     assert runtime["solver_algorithm_accepted_moves"] == 0
     assert runtime["solver_algorithm_neutral_accepted_moves"] == 0
     assert runtime["solver_algorithm_improving_moves"] == 0
+    assert runtime["solver_algorithm_runtime_budget_hit"] is True
+    assert runtime["solver_algorithm_phase_move_attempts"]["objective_probe"] == 1
+    assert runtime["solver_algorithm_phase_accepted_moves"]["objective_probe"] == 0
     assert runtime["solver_algorithm_phase_improvement_counts"]["objective_probe"] == 0
+    summary = runtime["solver_algorithm_actionability_summary"]
+    assert summary["schema"] == "scion.cvrp.solver_actionability.v1"
+    assert summary["candidate_emitted_no_measurable_objective_effect"] is True
+    assert summary["runtime_budget_hit"] is True
+    assert summary["route_count_delta_final_minus_initial"] == -1
+    assert summary["total_distance_improvement_from_initial"] == 2.0
+    assert summary["phases"]["objective_probe"]["status"] == "attempted_no_acceptance"
     assert runtime["solver_algorithm_solution_valid"] is True

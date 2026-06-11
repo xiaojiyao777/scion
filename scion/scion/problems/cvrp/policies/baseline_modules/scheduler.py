@@ -58,6 +58,8 @@ class _ALNSVNSSolver:
         phase_ms = self.context.elapsed_ms()
         current = self._initial_solution(instance, reserve)
         self.context.record_phase("construction", self.context.elapsed_ms() - phase_ms)
+        initial_route_count = len(current.routes)
+        initial_total_distance = float(current.total_cost)
         best = current.copy()
 
         destroy_ops = [
@@ -78,6 +80,13 @@ class _ALNSVNSSolver:
 
         if instance.customer_count > self.alns_threshold or self.time_limit <= 0:
             best.stop_reason = "alns_threshold"
+            self.context.record_solution_progress(
+                initial_route_count=initial_route_count,
+                final_route_count=len(best.routes),
+                initial_total_distance=initial_total_distance,
+                final_total_distance=float(best.total_cost),
+                budget_hit=False,
+            )
             return best
 
         low, high = self.destroy_ratio
@@ -177,7 +186,15 @@ class _ALNSVNSSolver:
 
         destroy_weights.update()
         repair_weights.update()
-        best.stop_reason = "time_limit" if self.context.remaining_time() <= reserve else "completed"
+        budget_hit = self.context.remaining_time() <= reserve
+        best.stop_reason = "time_limit" if budget_hit else "completed"
+        self.context.record_solution_progress(
+            initial_route_count=initial_route_count,
+            final_route_count=len(best.routes),
+            initial_total_distance=initial_total_distance,
+            final_total_distance=float(best.total_cost),
+            budget_hit=budget_hit,
+        )
         return best
 
     def _initial_solution(self, instance, reserve):

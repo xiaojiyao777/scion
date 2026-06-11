@@ -62,6 +62,7 @@ class CvrpActiveSolverMapProvider:
             "algorithm_slices": _algorithm_slice_refs(file_digests),
             "telemetry_fields": _telemetry_fields(context),
             "known_mechanism_facts": _known_mechanism_facts(snapshot),
+            "research_lever_digest": _research_lever_digest(),
             "source_policy": {
                 "max_total_tokens": _MAX_TOTAL_TOKENS,
                 "max_body_tokens_per_tool_call": _MAX_BODY_TOKENS,
@@ -652,6 +653,95 @@ def _known_mechanism_facts(snapshot: Mapping[str, Any]) -> tuple[dict[str, Any],
             }
         )
     return tuple(rows)
+
+
+def _research_lever_digest() -> dict[str, Any]:
+    """Return bounded CVRP-owned proposal guidance for mechanism diversity."""
+
+    return {
+        "digest_id": "cvrp_solver_design_research_lever_digest_v1",
+        "scope": "CVRP solver_design proposal context",
+        "visibility": "proposal-only advisory",
+        "proposal_visibility_only": True,
+        "excluded_from": (
+            "DecisionFeatures",
+            "promotion_gates",
+            "scheduler_decisions",
+        ),
+        "summary": (
+            "The active solver has several distinct CVRP causal levers. Use this "
+            "digest to choose a mechanism family deliberately before reading the "
+            "owner file; do not treat it as evidence that a proposal will pass."
+        ),
+        "active_lever_families": (
+            {
+                "family": "construction",
+                "owner_files": ("policies/baseline_modules/construction.py",),
+                "causal_lever": (
+                    "seed route geometry, savings merges, route-cap guarded "
+                    "fallbacks, and initial route load distribution"
+                ),
+            },
+            {
+                "family": "destroy",
+                "owner_files": ("policies/baseline_modules/destroy_repair.py",),
+                "causal_lever": (
+                    "which customers or route fragments are removed before repair"
+                ),
+            },
+            {
+                "family": "repair",
+                "owner_files": ("policies/baseline_modules/destroy_repair.py",),
+                "causal_lever": (
+                    "customer reinsertion order, regret scoring, capacity slack, "
+                    "and insertion tie-breaks"
+                ),
+            },
+            {
+                "family": "local_search",
+                "owner_files": ("policies/baseline_modules/local_search.py",),
+                "causal_lever": (
+                    "intra-route cleanup, cross-route relocation, segment moves, "
+                    "swaps, and tail exchanges after repair"
+                ),
+            },
+            {
+                "family": "acceptance_and_weights",
+                "owner_files": ("policies/baseline_modules/acceptance.py",),
+                "causal_lever": (
+                    "operator choice, score update, exploration temperature, and "
+                    "whether bounded worse moves remain useful"
+                ),
+            },
+            {
+                "family": "scheduler_orchestration",
+                "owner_files": ("policies/baseline_modules/scheduler.py",),
+                "causal_lever": (
+                    "phase ordering, budget allocation, trigger policy, and narrow "
+                    "integration wiring for module-owned mechanisms"
+                ),
+            },
+        ),
+        "diversity_guidance": (
+            "Avoid concentrating every proposal in one local route absorption, "
+            "route compaction, or slack-preservation family.",
+            (
+                "Prefer a different causal lever when recent branch context is "
+                "already dominated by variants of the same route-local mechanism."
+            ),
+            (
+                "Concrete alternatives include construction seed diversity, "
+                "destroy selection, repair scoring, acceptance/weight adaptation, "
+                "local-search neighborhood design, or scheduler budget/trigger "
+                "policy."
+            ),
+            (
+                "Scheduler edits should usually be narrow orchestration or wiring; "
+                "put construction, destroy, repair, local-search, and acceptance "
+                "semantics in their owner modules."
+            ),
+        ),
+    }
 
 
 def _integration_points(registry_id: str) -> tuple[dict[str, Any], ...]:

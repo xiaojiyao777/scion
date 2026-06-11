@@ -166,6 +166,7 @@ def _load_algorithm_file(
         audit["solver_algorithm_phase_runtime_ms"] = {
             "solve": audit["solver_algorithm_elapsed_ms"]
         }
+    _refresh_solver_algorithm_actionability_summary(audit)
     return solution, audit
 
 
@@ -196,6 +197,12 @@ def solver_algorithm_defaults(
         "solver_algorithm_phase_delta_sum": {"none": 0.0},
         "solver_algorithm_phase_best_delta": {"none": 0.0},
         "solver_algorithm_phase_improvement_counts": {"none": 0},
+        "solver_algorithm_phase_move_attempts": {"none": 0},
+        "solver_algorithm_phase_accepted_moves": {"none": 0},
+        "solver_algorithm_runtime_budget_hit": False,
+        "solver_algorithm_time_limit_ms": 0,
+        "solver_algorithm_solution_progress": _solution_progress_template(),
+        "solver_algorithm_actionability_summary": _actionability_summary_template(),
         "solver_algorithm_context_records": {"inactive": 0},
         "solver_algorithm_stop_reason": "inactive",
     }
@@ -280,6 +287,9 @@ class SolverAlgorithmContext:
         self._start_time = start_time
         self._adapter = adapter
         self._audit = audit
+        self._audit["solver_algorithm_time_limit_ms"] = _as_nonnegative_int(
+            float(time_limit_sec) * 1000.0
+        )
 
     def remaining_time(self) -> float:
         return _remaining_time_sec(self._start_time, self.time_limit_sec)
@@ -378,6 +388,28 @@ class SolverAlgorithmContext:
         self._audit["solver_algorithm_accepted_moves"] = _as_nonnegative_int(
             self._audit.get("solver_algorithm_accepted_moves")
         ) + accepts
+        phase_attempts = self._audit.setdefault(
+            "solver_algorithm_phase_move_attempts",
+            {},
+        )
+        if not isinstance(phase_attempts, dict):
+            phase_attempts = {}
+            self._audit["solver_algorithm_phase_move_attempts"] = phase_attempts
+        phase_attempts.pop("none", None)
+        phase_attempts[phase_name] = _as_nonnegative_int(
+            phase_attempts.get(phase_name)
+        ) + attempts
+        phase_accepts = self._audit.setdefault(
+            "solver_algorithm_phase_accepted_moves",
+            {},
+        )
+        if not isinstance(phase_accepts, dict):
+            phase_accepts = {}
+            self._audit["solver_algorithm_phase_accepted_moves"] = phase_accepts
+        phase_accepts.pop("none", None)
+        phase_accepts[phase_name] = _as_nonnegative_int(
+            phase_accepts.get(phase_name)
+        ) + accepts
         try:
             delta_value = max(0.0, float(delta))
         except (TypeError, ValueError):
@@ -429,6 +461,36 @@ class SolverAlgorithmContext:
         value = str(reason or "").strip()
         if value:
             self._audit["solver_algorithm_stop_reason"] = value
+
+    def record_solution_progress(
+        self,
+        *,
+        initial_route_count: int,
+        final_route_count: int,
+        initial_total_distance: int | float,
+        final_total_distance: int | float,
+        budget_hit: bool = False,
+    ) -> None:
+        """Record solver-local progress diagnostics without affecting comparison."""
+
+        initial_routes = _as_nonnegative_int(initial_route_count)
+        final_routes = _as_nonnegative_int(final_route_count)
+        initial_distance = _as_nonnegative_float(initial_total_distance)
+        final_distance = _as_nonnegative_float(final_total_distance)
+        self._audit["solver_algorithm_runtime_budget_hit"] = bool(budget_hit)
+        self._audit["solver_algorithm_solution_progress"] = {
+            "initial_route_count": initial_routes,
+            "final_route_count": final_routes,
+            "route_count_delta_final_minus_initial": final_routes - initial_routes,
+            "initial_total_distance": initial_distance,
+            "final_total_distance": final_distance,
+            "total_distance_delta_final_minus_initial": (
+                final_distance - initial_distance
+            ),
+            "total_distance_improvement_from_initial": (
+                initial_distance - final_distance
+            ),
+        }
 
 
 def nearest_neighbor_solution(instance: CvrpInstance) -> CvrpSolution:
@@ -488,6 +550,7 @@ def _finalize_solver_algorithm_timing(
     phase_runtime = audit.get("solver_algorithm_phase_runtime_ms")
     if not isinstance(phase_runtime, dict) or not phase_runtime:
         audit["solver_algorithm_phase_runtime_ms"] = {"solve": elapsed_ms}
+    _refresh_solver_algorithm_actionability_summary(audit)
 
 
 def _drop_inactive_solver_algorithm_records(audit: dict[str, Any]) -> None:
@@ -498,6 +561,173 @@ def _drop_inactive_solver_algorithm_records(audit: dict[str, Any]) -> None:
         values = audit.get(key)
         if isinstance(values, dict) and len(values) > 1:
             values.pop("inactive", None)
+
+
+def _refresh_solver_algorithm_actionability_summary(audit: dict[str, Any]) -> None:
+    attempts = _as_nonnegative_int(audit.get("solver_algorithm_move_attempts"))
+    accepted = _as_nonnegative_int(audit.get("solver_algorithm_accepted_moves"))
+    improving = _as_nonnegative_int(audit.get("solver_algorithm_improving_moves"))
+    best_delta = _as_nonnegative_float(audit.get("solver_algorithm_best_delta"))
+    iterations = _as_nonnegative_int(audit.get("solver_algorithm_search_iterations"))
+    elapsed_ms = _as_nonnegative_int(audit.get("solver_algorithm_elapsed_ms"))
+    time_limit_ms = _as_nonnegative_int(audit.get("solver_algorithm_time_limit_ms"))
+    stop_reason = str(audit.get("solver_algorithm_stop_reason") or "").strip()
+    budget_hit = bool(audit.get("solver_algorithm_runtime_budget_hit")) or (
+        stop_reason == "time_limit"
+    )
+    if time_limit_ms > 0 and elapsed_ms >= int(time_limit_ms * 0.98):
+        budget_hit = True
+
+    progress = audit.get("solver_algorithm_solution_progress")
+    if not isinstance(progress, dict) or not progress:
+        progress = _solution_progress_template()
+        audit["solver_algorithm_solution_progress"] = progress
+
+    phase_attempts = _dict_ints(audit.get("solver_algorithm_phase_move_attempts"))
+    phase_accepts = _dict_ints(audit.get("solver_algorithm_phase_accepted_moves"))
+    phase_improvements = _dict_ints(
+        audit.get("solver_algorithm_phase_improvement_counts")
+    )
+    phase_best_delta = _dict_floats(audit.get("solver_algorithm_phase_best_delta"))
+    phase_delta_sum = _dict_floats(audit.get("solver_algorithm_phase_delta_sum"))
+    phase_runtime = _dict_ints(audit.get("solver_algorithm_phase_runtime_ms"))
+    context_records = _dict_ints(audit.get("solver_algorithm_context_records"))
+
+    phases: dict[str, Any] = {}
+    phase_names = set(phase_attempts) | set(phase_accepts) | set(phase_improvements)
+    phase_names |= set(phase_best_delta) | set(phase_delta_sum) | set(phase_runtime)
+    for record_name in context_records:
+        if record_name.endswith("_iterations"):
+            phase_names.add(record_name[: -len("_iterations")])
+    phase_names.discard("none")
+    phase_names.discard("inactive")
+    no_effect_phase_count = 0
+    no_accept_phase_count = 0
+    for phase in sorted(phase_names):
+        phase_iteration_count = context_records.get(f"{phase}_iterations", 0)
+        phase_attempt_count = phase_attempts.get(phase, 0)
+        phase_accept_count = phase_accepts.get(phase, 0)
+        phase_improvement_count = phase_improvements.get(phase, 0)
+        phase_best = phase_best_delta.get(phase, 0.0)
+        phase_attempted = (
+            phase_attempt_count > 0
+            or phase_iteration_count > 0
+            or phase_runtime.get(phase, 0) > 0
+        )
+        measurable_effect = phase_improvement_count > 0 or phase_best > 0.0
+        if phase_attempted and phase_accept_count <= 0:
+            status = "attempted_no_acceptance"
+            no_accept_phase_count += 1
+        elif phase_accept_count > 0 and not measurable_effect:
+            status = "accepted_no_measurable_objective_effect"
+            no_effect_phase_count += 1
+        elif measurable_effect:
+            status = "measurable_objective_effect"
+        else:
+            status = "observed_no_move"
+        phases[phase] = {
+            "status": status,
+            "attempted": bool(phase_attempted),
+            "move_attempts": phase_attempt_count,
+            "accepted_moves": phase_accept_count,
+            "iterations": phase_iteration_count,
+            "runtime_ms": phase_runtime.get(phase, 0),
+            "improvement_count": phase_improvement_count,
+            "best_delta": phase_best,
+            "delta_sum": phase_delta_sum.get(phase, 0.0),
+        }
+
+    no_measurable_effect = attempts > 0 and improving <= 0 and best_delta <= 0.0
+    audit["solver_algorithm_runtime_budget_hit"] = bool(budget_hit)
+    audit["solver_algorithm_actionability_summary"] = {
+        "schema": "scion.cvrp.solver_actionability.v1",
+        "attempted": bool(attempts > 0 or iterations > 0),
+        "move_attempts": attempts,
+        "accepted_moves": accepted,
+        "no_accepted_moves": bool(attempts > 0 and accepted <= 0),
+        "accepted_no_measurable_objective_effect": bool(
+            accepted > 0 and improving <= 0 and best_delta <= 0.0
+        ),
+        "candidate_emitted_no_measurable_objective_effect": bool(
+            no_measurable_effect
+        ),
+        "improving_moves": improving,
+        "best_delta": best_delta,
+        "runtime_budget_hit": bool(budget_hit),
+        "stop_reason": stop_reason or "inactive",
+        "elapsed_ms": elapsed_ms,
+        "time_limit_ms": time_limit_ms,
+        "route_count_delta_final_minus_initial": progress.get(
+            "route_count_delta_final_minus_initial"
+        ),
+        "total_distance_delta_final_minus_initial": progress.get(
+            "total_distance_delta_final_minus_initial"
+        ),
+        "total_distance_improvement_from_initial": progress.get(
+            "total_distance_improvement_from_initial"
+        ),
+        "phase_no_acceptance_count": no_accept_phase_count,
+        "phase_no_measurable_effect_count": no_effect_phase_count,
+        "phases": phases,
+    }
+
+
+def _solution_progress_template() -> dict[str, Any]:
+    return {
+        "initial_route_count": None,
+        "final_route_count": None,
+        "route_count_delta_final_minus_initial": None,
+        "initial_total_distance": None,
+        "final_total_distance": None,
+        "total_distance_delta_final_minus_initial": None,
+        "total_distance_improvement_from_initial": None,
+    }
+
+
+def _actionability_summary_template() -> dict[str, Any]:
+    return {
+        "schema": "scion.cvrp.solver_actionability.v1",
+        "attempted": False,
+        "move_attempts": 0,
+        "accepted_moves": 0,
+        "no_accepted_moves": False,
+        "accepted_no_measurable_objective_effect": False,
+        "candidate_emitted_no_measurable_objective_effect": False,
+        "improving_moves": 0,
+        "best_delta": 0.0,
+        "runtime_budget_hit": False,
+        "stop_reason": "inactive",
+        "elapsed_ms": 0,
+        "time_limit_ms": 0,
+        "route_count_delta_final_minus_initial": None,
+        "total_distance_delta_final_minus_initial": None,
+        "total_distance_improvement_from_initial": None,
+        "phase_no_acceptance_count": 0,
+        "phase_no_measurable_effect_count": 0,
+        "phases": {},
+    }
+
+
+def _dict_ints(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): _as_nonnegative_int(item) for key, item in value.items()}
+
+
+def _dict_floats(value: Any) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): _as_nonnegative_float(item) for key, item in value.items()}
+
+
+def _as_nonnegative_float(value: Any) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, number)
 
 
 def _as_nonnegative_int(value: Any) -> int:

@@ -446,6 +446,10 @@ def test_cvrp_prompt_provider_demotes_legacy_surfaces() -> None:
     assert "not optimization directions" in rendered
     assert "initial construction is route-limit guarded" in rendered
     assert "positive fleet_violation or route-limit excess" in rendered
+    assert "context.read_active_solver_map.research_lever_digest" in rendered
+    assert "proposal-only advisory" in rendered
+    assert "excluded from DecisionFeatures and promotion gates" in rendered
+    assert "local route absorption, route compaction, or slack-preservation" in rendered
     assert "explicitly repairs that compatibility hook" not in rendered
 
 

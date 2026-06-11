@@ -91,6 +91,23 @@ class KnownMechanismFact(_FrozenSchema):
     )
 
 
+class ResearchLeverFamily(_FrozenSchema):
+    family: str = ""
+    owner_files: tuple[str, ...] = ()
+    causal_lever: str = ""
+
+
+class ResearchLeverDigest(_FrozenSchema):
+    digest_id: str = ""
+    scope: str = ""
+    visibility: str = ""
+    proposal_visibility_only: bool = True
+    excluded_from: tuple[str, ...] = ()
+    summary: str = ""
+    active_lever_families: tuple[ResearchLeverFamily, ...] = ()
+    diversity_guidance: tuple[str, ...] = ()
+
+
 class SourcePolicy(_FrozenSchema):
     max_total_tokens: int = Field(default=0, ge=0)
     max_body_tokens_per_tool_call: int = Field(default=0, ge=0)
@@ -109,6 +126,7 @@ class ActiveSolverMap(_FrozenSchema):
     algorithm_slices: tuple[AlgorithmSliceRef, ...] = ()
     telemetry_fields: tuple[TelemetryField, ...] = ()
     known_mechanism_facts: tuple[KnownMechanismFact, ...] = ()
+    research_lever_digest: ResearchLeverDigest | None = None
     source_policy: SourcePolicy = Field(default_factory=SourcePolicy)
 
 
@@ -194,6 +212,8 @@ __all__ = [
     "OperatorRegistry",
     "OperatorRegistryReadResult",
     "ReadReceipt",
+    "ResearchLeverDigest",
+    "ResearchLeverFamily",
     "SchedulerIntegration",
     "SourcePolicy",
     "SourcePolicyReceipt",

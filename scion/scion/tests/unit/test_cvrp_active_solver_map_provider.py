@@ -52,6 +52,46 @@ def test_cvrp_active_solver_map_exposes_entrypoint_scheduler_and_registries(
     ]["role"] == "budget"
 
 
+def test_cvrp_active_solver_map_exposes_proposal_only_research_lever_digest(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call(
+        "context.read_active_solver_map",
+        {"surface": "solver_design"},
+        context,
+    )
+
+    assert observation.is_error is False
+    payload = observation.structured_payload
+    digest = payload["research_lever_digest"]
+    rendered = json.dumps(digest, sort_keys=True)
+
+    assert digest["digest_id"] == "cvrp_solver_design_research_lever_digest_v1"
+    assert digest["visibility"] == "proposal-only advisory"
+    assert digest["proposal_visibility_only"] is True
+    assert "DecisionFeatures" in digest["excluded_from"]
+    assert "promotion_gates" in digest["excluded_from"]
+    assert "promotion_gates" in rendered
+    families = {item["family"] for item in digest["active_lever_families"]}
+    assert {
+        "construction",
+        "destroy",
+        "repair",
+        "local_search",
+        "acceptance_and_weights",
+        "scheduler_orchestration",
+    } <= families
+    assert "route compaction" in rendered
+    assert "slack-preservation" in rendered
+    assert "construction seed diversity" in rendered
+    assert "branch_" not in rendered
+    assert "BKS" not in rendered
+    assert "gap" not in rendered.lower()
+
+
 def test_cvrp_vns_local_search_registry_is_readable(tmp_path: Path) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = _cvrp_context_with_champion(tmp_path)

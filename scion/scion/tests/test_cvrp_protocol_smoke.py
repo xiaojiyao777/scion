@@ -224,6 +224,13 @@ def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(
                 "    context.record_phase('construction', 1)",
                 "    context.record_iteration('route_pool_recombination', 2)",
                 "    context.record_move('route_pool_recombination', attempted=3, accepted=1, delta=0.0)",
+                "    context.record_solution_progress(",
+                "        initial_route_count=3,",
+                "        final_route_count=2,",
+                "        initial_total_distance=12.0,",
+                "        final_total_distance=10.5,",
+                "        budget_hit=False,",
+                "    )",
                 "    context.set_stop_reason('phase_probe_completed')",
                 "    return solution",
                 "",
@@ -245,6 +252,9 @@ def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(
     assert surface_summary["selected_surface"] == "solver_design"
     assert surface_summary["fields"]["solver_algorithm_phase_runtime_ms"]["present"] == 4
     assert surface_summary["fields"]["solver_algorithm_accepted_moves"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_actionability_summary"][
+        "present"
+    ] == 4
 
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
     pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
@@ -253,6 +263,20 @@ def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(
     assert pair_runtime["solver_algorithm_neutral_accepted_moves"] == 1
     assert pair_runtime["solver_algorithm_search_iterations"] == 2
     assert pair_runtime["solver_algorithm_move_attempts"] == 3
+    assert pair_runtime["solver_algorithm_phase_move_attempts"][
+        "route_pool_recombination"
+    ] == 3
+    assert pair_runtime["solver_algorithm_phase_accepted_moves"][
+        "route_pool_recombination"
+    ] == 1
+    summary = pair_runtime["solver_algorithm_actionability_summary"]
+    assert summary["accepted_no_measurable_objective_effect"] is True
+    assert summary["candidate_emitted_no_measurable_objective_effect"] is True
+    assert summary["route_count_delta_final_minus_initial"] == -1
+    assert summary["total_distance_improvement_from_initial"] == 1.5
+    assert summary["phases"]["route_pool_recombination"]["status"] == (
+        "accepted_no_measurable_objective_effect"
+    )
 
 
 def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Path) -> None:

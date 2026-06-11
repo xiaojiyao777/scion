@@ -150,6 +150,16 @@ class CvrpSolverDesignProvider:
                 "mechanism module or a stable-entrypoint algorithm-body change "
                 "over another phase-order or weight tweak."
             ),
+            (
+                "Before selecting a `solver_design` hypothesis target, read "
+                "`context.read_active_solver_map.research_lever_digest` as "
+                "CVRP-owned proposal-only advisory context. Use it to compare "
+                "construction, destroy, repair, local-search, acceptance/weights, "
+                "and scheduler causal levers; avoid putting every proposal into "
+                "the same local route absorption, route compaction, or "
+                "slack-preservation family. This digest is excluded from "
+                "DecisionFeatures and promotion gates."
+            ),
         )
 
     def solver_design_plateau_target_guidance(
