@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -94,6 +96,154 @@ class RuntimeGovernanceConfig(BaseModel):
         "fresh_always",
     ] = "fresh_required_for_runtime_tie"
     """Champion runtime freshness policy for runtime-sensitive promotion evidence."""
+
+    time_limits: "RuntimeTimeLimitConfig" = Field(
+        default_factory=lambda: RuntimeTimeLimitConfig()
+    )
+    """Optional stage/case runtime budget overrides for protocol execution."""
+
+
+class RuntimeTimeLimitRule(BaseModel):
+    """Optional ordered runtime budget override for matching case/stage pairs."""
+
+    time_limit_sec: int = Field(gt=0)
+    """Solver budget for matching pairs."""
+
+    stages: tuple[
+        Literal["screening", "validation", "frozen", "canary"],
+        ...,
+    ] = ()
+    """Stages this rule applies to; empty means all formal stages."""
+
+    case_globs: tuple[str, ...] = ()
+    """fnmatch patterns matched against the full case path and basename."""
+
+    min_dimension: Optional[int] = Field(default=None, ge=0)
+    """Minimum parsed case dimension, inclusive."""
+
+    max_dimension: Optional[int] = Field(default=None, ge=0)
+    """Maximum parsed case dimension, inclusive."""
+
+    @model_validator(mode="after")
+    def _validate_bounds(self) -> "RuntimeTimeLimitRule":
+        if (
+            self.min_dimension is not None
+            and self.max_dimension is not None
+            and self.min_dimension > self.max_dimension
+        ):
+            raise ValueError("min_dimension must be <= max_dimension")
+        return self
+
+    def matches(self, *, stage: str, case_path: str) -> bool:
+        if self.stages and stage not in self.stages:
+            return False
+        normalized_case = str(case_path or "")
+        basename = Path(normalized_case).name
+        if self.case_globs and not any(
+            fnmatch.fnmatch(normalized_case, pattern)
+            or fnmatch.fnmatch(basename, pattern)
+            for pattern in self.case_globs
+        ):
+            return False
+        dimension = _case_dimension(normalized_case)
+        if self.min_dimension is not None and (
+            dimension is None or dimension < self.min_dimension
+        ):
+            return False
+        if self.max_dimension is not None and (
+            dimension is None or dimension > self.max_dimension
+        ):
+            return False
+        return True
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "time_limit_sec": self.time_limit_sec,
+            "stages": list(self.stages),
+            "case_globs": list(self.case_globs),
+            "min_dimension": self.min_dimension,
+            "max_dimension": self.max_dimension,
+        }
+
+
+class RuntimeTimeLimitConfig(BaseModel):
+    """Stage defaults plus ordered case-size runtime budget overrides."""
+
+    stage_defaults: dict[
+        Literal["screening", "validation", "frozen", "canary"],
+        int,
+    ] = Field(default_factory=dict)
+    """Default solver budget by stage; absent stages use CLI/problem default."""
+
+    rules: tuple[RuntimeTimeLimitRule, ...] = ()
+    """Ordered overrides; later matching rules take precedence."""
+
+    @model_validator(mode="after")
+    def _validate_stage_defaults(self) -> "RuntimeTimeLimitConfig":
+        invalid = [
+            f"{stage}={value}"
+            for stage, value in self.stage_defaults.items()
+            if int(value) <= 0
+        ]
+        if invalid:
+            raise ValueError(
+                "runtime.time_limits.stage_defaults must be positive: "
+                + ", ".join(invalid)
+            )
+        return self
+
+    def resolve(
+        self,
+        *,
+        stage: str,
+        case_path: str,
+        fallback_time_limit_sec: int | float,
+    ) -> int:
+        stage_key = str(stage or "").strip().lower()
+        fallback = max(1, int(fallback_time_limit_sec))
+        limit = int(self.stage_defaults.get(stage_key, fallback))
+        for rule in self.rules:
+            if rule.matches(stage=stage_key, case_path=case_path):
+                limit = int(rule.time_limit_sec)
+        return max(1, int(limit))
+
+    def summary(
+        self,
+        *,
+        stage: str,
+        cases: list[str] | tuple[str, ...],
+        fallback_time_limit_sec: int | float,
+    ) -> dict[str, Any]:
+        resolved = [
+            self.resolve(
+                stage=stage,
+                case_path=case,
+                fallback_time_limit_sec=fallback_time_limit_sec,
+            )
+            for case in cases
+        ]
+        return {
+            "stage": stage,
+            "fallback_time_limit_sec": max(1, int(fallback_time_limit_sec)),
+            "stage_default_sec": self.stage_defaults.get(stage),
+            "resolved_min_sec": min(resolved) if resolved else None,
+            "resolved_max_sec": max(resolved) if resolved else None,
+            "resolved_unique_sec": sorted(set(resolved)),
+            "rules": [rule.summary() for rule in self.rules],
+        }
+
+
+def _case_dimension(case_path: str) -> int | None:
+    stem = Path(str(case_path or "")).stem
+    patterns = (
+        r"(?:^|[-_])n(?P<dimension>\d+)(?:[-_]|$)",
+        r"(?:^|[-_])tai(?P<dimension>\d+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, stem, flags=re.IGNORECASE)
+        if match:
+            return int(match.group("dimension"))
+    return None
 
 
 class EvaluationStageConfig(BaseModel):

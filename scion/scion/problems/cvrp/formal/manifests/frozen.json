@@ -1,14 +1,6 @@
 {
   "cases": [
     {
-      "bks": 26362.0,
-      "bks_routes": 14,
-      "case_id": "X-n106-k14",
-      "dimension": 106,
-      "source_path": "cvrplib/X/X-n106-k14.vrp",
-      "subset": "X"
-    },
-    {
       "bks": 13590.0,
       "bks_routes": 10,
       "case_id": "X-n139-k10",
@@ -33,11 +25,11 @@
       "subset": "X"
     },
     {
-      "bks": 27042.0,
-      "bks_routes": 14,
-      "case_id": "X-n237-k14",
-      "dimension": 237,
-      "source_path": "cvrplib/X/X-n237-k14.vrp",
+      "bks": 38684.0,
+      "bks_routes": 28,
+      "case_id": "X-n251-k28",
+      "dimension": 251,
+      "source_path": "cvrplib/X/X-n251-k28.vrp",
       "subset": "X"
     },
     {
@@ -65,11 +57,19 @@
       "subset": "X"
     },
     {
-      "bks": 24201.0,
-      "bks_routes": 21,
-      "case_id": "X-n513-k21",
-      "dimension": 513,
-      "source_path": "cvrplib/X/X-n513-k21.vrp",
+      "bks": 69226.0,
+      "bks_routes": 39,
+      "case_id": "X-n502-k39",
+      "dimension": 502,
+      "source_path": "cvrplib/X/X-n502-k39.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 50673.0,
+      "bks_routes": 30,
+      "case_id": "X-n573-k30",
+      "dimension": 573,
+      "source_path": "cvrplib/X/X-n573-k30.vrp",
       "subset": "X"
     },
     {
@@ -105,7 +105,8 @@
     "require_bks_routes": true,
     "seeds": [
       61,
-      67
+      67,
+      89
     ],
     "source_label": "vrp_results_full_experiment_seed0_final",
     "subsets": [
@@ -113,31 +114,40 @@
     ]
   },
   "metadata": {
-    "n_eligible_rows": 149,
-    "n_input_rows": 149,
-    "n_rejected_rows": 0,
+    "baseline_gap_pct_summary": {
+      "max": 8.673543513003052,
+      "median": 5.7476150861494855,
+      "min": 3.2054430416317565,
+      "n_ge_2_5_pct": 12,
+      "n_le_1_pct": 0
+    },
+    "n_eligible_cases": 140,
+    "n_eligible_rows": 140,
+    "n_input_rows": 220,
+    "n_rejected_rows": 80,
     "n_selected_cases": 12,
     "rejection_counts_by_reason": {
-      "benchmark": 0,
+      "benchmark": 72,
       "bks": 0,
       "bks_routes": 0,
       "feasible": 0,
       "missing_path": 0,
-      "status": 0,
-      "subset": 0
+      "route_gap": 80,
+      "status": 0
     },
     "seed_list": [
       61,
-      67
+      67,
+      89
     ],
-    "selection_policy": "eligible benchmark-feasible rows with BKS and BKS routes; deterministic dimension-spread per subset",
+    "selection_policy": "explicit benchmark-feasible route-clean X holdout rows distinct from screening and validation; medium-to-large X cases mostly within 3% to 9% seed-0 gap",
     "source_label": "vrp_results_full_experiment_seed0_final",
     "source_path": "vrp/results/full_experiment_seed0_final.csv",
     "stage": "frozen",
     "subset_filters": [
       "X"
     ],
-    "time_limit_sec": 8
+    "time_limit_sec": 60
   },
   "problem_id": "cvrp",
   "schema": "scion.cvrp_case_manifest.v1"

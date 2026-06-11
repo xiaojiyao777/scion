@@ -135,6 +135,8 @@ def run_experiment(
     runtime_budget_diagnostic_summary: dict[str, Any] | None = None
     candidate_elapsed_samples_ms: list[float] = []
     champion_elapsed_samples_ms: list[float] = []
+    candidate_time_limit_samples_sec: list[float] = []
+    champion_time_limit_samples_sec: list[float] = []
     champion_cache_hits = 0
     champion_cache_misses = 0
     champion_cache_writes = 0
@@ -227,6 +229,10 @@ def run_experiment(
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
                     "case_ids": cases,
+                    "time_limit_policy": protocol.time_limit_policy_summary(
+                        stage=stage,
+                        cases=tuple(cases),
+                    ),
                     "case_path_resolution": {
                         "strict": bool(
                             getattr(protocol, "_strict_case_paths", False)
@@ -310,10 +316,16 @@ def run_experiment(
             resolved_for_case = resolved_case_paths[case]
             champion_case_path = resolved_for_case["champion"]
             candidate_case_path = resolved_for_case["candidate"]
+            pair_time_limit_sec = protocol.resolve_time_limit_sec(
+                stage=stage,
+                case_path=case,
+            )
+            pair_budget_fields = {"time_limit_sec": pair_time_limit_sec}
             protocol._emit_progress(
                 stage=stage.value,
                 case=case,
                 seed=seed,
+                time_limit_sec=pair_time_limit_sec,
                 attempted_pairs=attempted_pairs,
                 completed_pairs=valid_pairs,
                 total_pairs=total_pairs,
@@ -326,7 +338,7 @@ def run_experiment(
                     champion_workspace=champion_ws,
                     case_path=champion_case_path,
                     seed=seed,
-                    time_limit_sec=protocol.time_limit_sec,
+                    time_limit_sec=pair_time_limit_sec,
                     selected_surface=normalized_selected_surface,
                     runner=protocol.runner,
                     metric_specs=protocol._metric_specs,
@@ -348,7 +360,7 @@ def run_experiment(
                     workdir=champion_ws,
                     instance_path=champion_case_path,
                     seed=seed,
-                    time_limit_sec=protocol.time_limit_sec,
+                    time_limit_sec=pair_time_limit_sec,
                     registry_path=os.path.join(champion_ws, "registry.yaml"),
                     selected_surface=normalized_selected_surface,
                 )
@@ -356,7 +368,7 @@ def run_experiment(
                 workdir=candidate_ws,
                 instance_path=candidate_case_path,
                 seed=seed,
-                time_limit_sec=protocol.time_limit_sec,
+                time_limit_sec=pair_time_limit_sec,
                 registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 selected_surface=normalized_selected_surface,
             )
@@ -378,8 +390,10 @@ def run_experiment(
             if champion_result_source == "cached":
                 champion_cached_runtime_pairs += 1
             else:
-                _append_elapsed_sample(champion_elapsed_samples_ms, champ_r.elapsed_ms)
-            _append_elapsed_sample(candidate_elapsed_samples_ms, cand_r.elapsed_ms)
+                if _append_elapsed_sample(champion_elapsed_samples_ms, champ_r.elapsed_ms):
+                    champion_time_limit_samples_sec.append(float(pair_time_limit_sec))
+            if _append_elapsed_sample(candidate_elapsed_samples_ms, cand_r.elapsed_ms):
+                candidate_time_limit_samples_sec.append(float(pair_time_limit_sec))
             _record_surface_runtime_sample(
                 cand_r,
                 candidate_surface_runtime_summary,
@@ -454,6 +468,7 @@ def run_experiment(
                     "champion_exit_code": champ_r.exit_code,
                     "candidate_exit_code": cand_r.exit_code if side == "both" else None,
                     "elapsed_ms": champ_r.elapsed_ms,
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "stderr_tail": (champ_r.stderr or "")[-1000:],
@@ -473,6 +488,7 @@ def run_experiment(
                         else "champion_runtime_failure"
                     ),
                     "metric_deltas": {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "failure": failure_record,
@@ -518,6 +534,7 @@ def run_experiment(
                     "error_category": cand_r.error_category or "unknown",
                     "exit_code": cand_r.exit_code,
                     "elapsed_ms": cand_r.elapsed_ms,
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "stderr_tail": (cand_r.stderr or "")[-1000:],
@@ -530,6 +547,7 @@ def run_experiment(
                     "delta": -1.0,
                     "decisive_metric": "runtime_failure",
                     "metric_deltas": {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "failure": failure_record,
@@ -580,6 +598,7 @@ def run_experiment(
                     "side": "unknown",
                     "comparison": "invalid",
                     "error_category": "missing_output",
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                 }
@@ -591,6 +610,7 @@ def run_experiment(
                     "delta": None,
                     "decisive_metric": "missing_output",
                     "metric_deltas": {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "failure": failure_record,
@@ -632,6 +652,7 @@ def run_experiment(
                     "error_category": cand_audit_failure["error_category"],
                     "exit_code": cand_r.exit_code,
                     "elapsed_ms": cand_r.elapsed_ms,
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "runtime_audit": cand_audit_failure,
@@ -644,6 +665,7 @@ def run_experiment(
                     "delta": -1.0,
                     "decisive_metric": cand_audit_failure["error_category"],
                     "metric_deltas": {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "failure": failure_record,
@@ -687,6 +709,7 @@ def run_experiment(
                     "error_category": champ_audit_failure["error_category"],
                     "exit_code": champ_r.exit_code,
                     "elapsed_ms": champ_r.elapsed_ms,
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "runtime_audit": champ_audit_failure,
@@ -699,6 +722,7 @@ def run_experiment(
                     "delta": None,
                     "decisive_metric": f"champion_{champ_audit_failure['error_category']}",
                     "metric_deltas": {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                     "failure": failure_record,
@@ -737,6 +761,7 @@ def run_experiment(
                     "metric_deltas": {
                         m.name: m.signed_delta for m in breakdown.metrics
                     } if breakdown.metrics else {},
+                    **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
                 }
@@ -890,9 +915,15 @@ def run_experiment(
         )
     runtime_budget_diagnostic_summary = runtime_budget_diagnostic(
         stage=stage,
-        time_limit_sec=protocol.time_limit_sec,
+        time_limit_sec=(
+            candidate_time_limit_samples_sec
+            or champion_time_limit_samples_sec
+            or [protocol.time_limit_sec]
+        ),
         candidate_elapsed_ms=candidate_elapsed_samples_ms,
         champion_elapsed_ms=champion_elapsed_samples_ms,
+        candidate_time_limit_sec=candidate_time_limit_samples_sec,
+        champion_time_limit_sec=champion_time_limit_samples_sec,
         total_pairs=total_pairs,
     )
     if runtime_budget_diagnostic_summary:
@@ -1108,13 +1139,15 @@ def run_experiment(
     )
 
 
-def _append_elapsed_sample(samples: list[float], value: Any) -> None:
+def _append_elapsed_sample(samples: list[float], value: Any) -> bool:
     try:
         elapsed = float(value)
     except (TypeError, ValueError):
-        return
+        return False
     if elapsed >= 0:
         samples.append(elapsed)
+        return True
+    return False
 
 
 def _runtime_evidence_status(

@@ -55,6 +55,10 @@ def run_canary(
     for case in canary_cases:
         for seed in canary_seeds:
             attempted_pairs += 1
+            pair_time_limit_sec = protocol.resolve_time_limit_sec(
+                stage="canary",
+                case_path=case,
+            )
             candidate_case_path = protocol._resolve_case_path(
                 case,
                 workspace=candidate_ws,
@@ -68,6 +72,7 @@ def run_canary(
                 phase="canary",
                 case=case,
                 seed=seed,
+                time_limit_sec=pair_time_limit_sec,
                 attempted_pairs=attempted_pairs,
                 completed_pairs=attempted_pairs - 1,
                 total_pairs=total_pairs,
@@ -77,7 +82,7 @@ def run_canary(
                 workdir=candidate_ws,
                 instance_path=candidate_case_path,
                 seed=seed,
-                time_limit_sec=protocol.time_limit_sec,
+                time_limit_sec=pair_time_limit_sec,
                 registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 selected_surface=selected_surface,
             )
@@ -128,7 +133,7 @@ def run_canary(
                 workdir=champion_ws,
                 instance_path=champion_case_path,
                 seed=seed,
-                time_limit_sec=protocol.time_limit_sec,
+                time_limit_sec=pair_time_limit_sec,
                 registry_path=os.path.join(champion_ws, "registry.yaml"),
                 selected_surface=selected_surface,
             )

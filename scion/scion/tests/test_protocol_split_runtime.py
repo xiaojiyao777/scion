@@ -60,6 +60,40 @@ def test_run_experiment_records_runtime_telemetry_for_successful_pairs(tmp_path)
     assert all(p["runtime_ratio"] == pytest.approx(1.5) for p in raw["pairs"])
 
 
+def test_run_experiment_uses_protocol_stage_time_limit_override(tmp_path):
+    runner = MagicMock()
+    pair = [_make_run_result(2, 1000), _make_run_result(1, 900)]
+    runner.run_solver.side_effect = pair * 4
+    proto = ExperimentProtocol(
+        protocol_config=ProtocolConfig.model_validate({
+            "runtime": {
+                "time_limits": {
+                    "stage_defaults": {
+                        "screening": 30,
+                    },
+                },
+            },
+        }),
+        split_manager=SplitManager(_make_manifest()),
+        seed_ledger=SeedLedger(_make_ledger()),
+        runner=runner,
+        time_limit_sec=10,
+        metrics_dir=str(tmp_path / "metrics"),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert {
+        call.kwargs["time_limit_sec"]
+        for call in runner.run_solver.call_args_list
+    } == {30}
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["time_limit_policy"]["resolved_unique_sec"] == [30]
+    assert all(pair["time_limit_sec"] == 30 for pair in raw["pairs"])
+
+
 def test_explicit_legacy_protocol_marks_objective_semantics(tmp_path):
     runner = MagicMock()
     pair = [_make_run_result(2, 1000), _make_run_result(1, 900)]

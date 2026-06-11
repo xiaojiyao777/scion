@@ -2,16 +2,16 @@ version: 0.4-cvrp-formal-readiness
 screening:
   n_cases_modify: 8
   n_cases_create: 12
-  n_seeds: 2
+  n_seeds: 4
   expand_to_modify: 12
   expand_to_create: 16
 validation:
   n_cases: 8
-  n_seeds: 2
+  n_seeds: 4
   expand_to: 12
 frozen:
   n_cases: 8
-  n_seeds: 2
+  n_seeds: 3
   max_uses_per_campaign: 2
 canary:
   cases:
@@ -22,6 +22,45 @@ runtime:
   max_runtime_ratio: 2.0
   tie_speedup_ratio: 0.75
   tie_min_runtime_pairs: 1
+  time_limits:
+    stage_defaults:
+      canary: 10
+      screening: 30
+      validation: 30
+      frozen: 60
+    rules:
+    - stages:
+      - screening
+      min_dimension: 150
+      max_dimension: 250
+      time_limit_sec: 45
+    - stages:
+      - screening
+      min_dimension: 251
+      time_limit_sec: 60
+    - stages:
+      - validation
+      min_dimension: 101
+      max_dimension: 149
+      time_limit_sec: 45
+    - stages:
+      - validation
+      min_dimension: 150
+      max_dimension: 250
+      time_limit_sec: 60
+    - stages:
+      - validation
+      min_dimension: 251
+      time_limit_sec: 90
+    - stages:
+      - frozen
+      min_dimension: 251
+      max_dimension: 500
+      time_limit_sec: 90
+    - stages:
+      - frozen
+      min_dimension: 501
+      time_limit_sec: 120
 gates:
   screening:
     win_rate_min: 0.6

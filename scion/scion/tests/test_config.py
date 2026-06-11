@@ -123,3 +123,46 @@ def test_protocol_config_runtime_governance_from_yaml(tmp_path):
     config = ProtocolConfig.from_yaml(str(p_file))
     assert config.runtime.max_runtime_ratio == pytest.approx(1.5)
     assert config.max_runtime_ratio == pytest.approx(1.5)
+
+
+def test_protocol_config_runtime_time_limits_from_yaml(tmp_path):
+    p_file = tmp_path / "protocol.yaml"
+    p_file.write_text(yaml.dump({
+        "version": "runtime-time-limit-test",
+        "runtime": {
+            "time_limits": {
+                "stage_defaults": {
+                    "screening": 30,
+                    "validation": 30,
+                    "frozen": 60,
+                    "canary": 10,
+                },
+                "rules": [
+                    {
+                        "stages": ["screening"],
+                        "min_dimension": 300,
+                        "time_limit_sec": 60,
+                    }
+                ],
+            }
+        },
+    }))
+
+    config = ProtocolConfig.from_yaml(str(p_file))
+
+    time_limits = config.runtime.time_limits
+    assert time_limits.resolve(
+        stage="screening",
+        case_path="cvrplib/E/E-n101-k8.vrp",
+        fallback_time_limit_sec=10,
+    ) == 30
+    assert time_limits.resolve(
+        stage="screening",
+        case_path="cvrplib/X/X-n401-k29.vrp",
+        fallback_time_limit_sec=10,
+    ) == 60
+    assert time_limits.resolve(
+        stage="frozen",
+        case_path="cvrplib/X/X-n401-k29.vrp",
+        fallback_time_limit_sec=10,
+    ) == 60

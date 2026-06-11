@@ -20,20 +20,19 @@ _SCREENING_SATURATION_RATIO = 0.90
 def runtime_budget_diagnostic(
     *,
     stage: Any,
-    time_limit_sec: float | int | None,
+    time_limit_sec: float | int | Sequence[Any] | None,
     candidate_elapsed_ms: Sequence[Any] = (),
     champion_elapsed_ms: Sequence[Any] = (),
+    candidate_time_limit_sec: Sequence[Any] = (),
+    champion_time_limit_sec: Sequence[Any] = (),
     total_pairs: int | None = None,
 ) -> dict[str, Any] | None:
     """Return a repairable diagnostic when tiny/screening runs saturate budget."""
     stage_value = str(getattr(stage, "value", stage) or "").strip().lower()
     if stage_value not in {"screening", "smoke", "proposal_smoke"}:
         return None
-    limit_ms = _positive_float(time_limit_sec)
-    if limit_ms is None:
-        return None
-    limit_ms *= 1000.0
-    if limit_ms <= 0:
+    default_limits_ms = _positive_limit_samples_ms(time_limit_sec)
+    if not default_limits_ms:
         return None
 
     candidate_samples = _elapsed_samples(candidate_elapsed_ms)
@@ -44,8 +43,16 @@ def runtime_budget_diagnostic(
     observed_pairs = int(total_pairs or 0)
     if observed_pairs <= 0:
         observed_pairs = max(len(candidate_samples), len(champion_samples))
-    candidate_summary = _sample_summary(candidate_samples, limit_ms)
-    champion_summary = _sample_summary(champion_samples, limit_ms)
+    candidate_limits_ms = _limit_samples_for_side(
+        candidate_time_limit_sec,
+        default_limits_ms=default_limits_ms,
+    )
+    champion_limits_ms = _limit_samples_for_side(
+        champion_time_limit_sec,
+        default_limits_ms=default_limits_ms,
+    )
+    candidate_summary = _sample_summary(candidate_samples, candidate_limits_ms)
+    champion_summary = _sample_summary(champion_samples, champion_limits_ms)
     saturation_ratio = max(
         candidate_summary.get("max_budget_ratio") or 0.0,
         champion_summary.get("max_budget_ratio") or 0.0,
@@ -80,7 +87,7 @@ def runtime_budget_diagnostic(
         "severity": "warn",
         "repairable": candidate_saturated,
         "total_pairs": observed_pairs,
-        "time_limit_ms": round(limit_ms, 3),
+        "time_limit_ms": _time_limit_payload(default_limits_ms),
         "threshold_ratio": threshold,
         "saturation_ratio": round(saturation_ratio, 4),
         "saturated_side": saturated_side,
@@ -227,6 +234,42 @@ def _positive_float(value: Any) -> float | None:
     return number
 
 
+def _positive_limit_samples_ms(value: Any) -> list[float]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        samples = [
+            number * 1000.0
+            for raw in value
+            if (number := _positive_float(raw)) is not None and number > 0
+        ]
+        return samples
+    number = _positive_float(value)
+    if number is None or number <= 0:
+        return []
+    return [number * 1000.0]
+
+
+def _limit_samples_for_side(
+    values: Sequence[Any],
+    *,
+    default_limits_ms: Sequence[float],
+) -> list[float]:
+    side_limits = _positive_limit_samples_ms(values)
+    return side_limits or list(default_limits_ms)
+
+
+def _time_limit_payload(limits_ms: Sequence[float]) -> Any:
+    if not limits_ms:
+        return None
+    unique = sorted({round(value, 3) for value in limits_ms})
+    if len(unique) == 1:
+        return unique[0]
+    return {
+        "min": unique[0],
+        "max": unique[-1],
+        "unique": unique,
+    }
+
+
 def _summary_saturated(summary: Mapping[str, Any], threshold: float) -> bool:
     return (
         (summary.get("max_budget_ratio") or 0.0) >= threshold
@@ -290,18 +333,42 @@ def _guidance_for_side(
     )
 
 
-def _sample_summary(samples: Sequence[float], limit_ms: float) -> dict[str, Any]:
+def _sample_summary(samples: Sequence[float], limits_ms: Sequence[float]) -> dict[str, Any]:
     if not samples:
         return {"count": 0}
+    if not limits_ms:
+        return {"count": len(samples)}
     median_ms = statistics.median(samples)
     max_ms = max(samples)
+    expanded_limits = _expand_limits(limits_ms, len(samples))
+    budget_ratios = [
+        sample / limit
+        for sample, limit in zip(samples, expanded_limits)
+        if limit > 0
+    ]
     return {
         "count": len(samples),
         "median_elapsed_ms": round(median_ms, 3),
         "max_elapsed_ms": round(max_ms, 3),
-        "median_budget_ratio": round(median_ms / limit_ms, 4),
-        "max_budget_ratio": round(max_ms / limit_ms, 4),
+        "time_limit_ms": _time_limit_payload(expanded_limits),
+        "median_budget_ratio": (
+            round(statistics.median(budget_ratios), 4)
+            if budget_ratios
+            else None
+        ),
+        "max_budget_ratio": round(max(budget_ratios), 4) if budget_ratios else None,
     }
+
+
+def _expand_limits(limits_ms: Sequence[float], count: int) -> list[float]:
+    if len(limits_ms) == count:
+        return list(limits_ms)
+    if len(limits_ms) == 1:
+        return [float(limits_ms[0])] * count
+    if len(limits_ms) > count:
+        return list(limits_ms[:count])
+    fallback = statistics.median(limits_ms)
+    return [*list(limits_ms), *([float(fallback)] * (count - len(limits_ms)))]
 
 
 __all__ = [

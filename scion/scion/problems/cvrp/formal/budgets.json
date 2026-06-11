@@ -17,7 +17,7 @@
       1,
       2
     ],
-    "time_limit_sec": 10
+    "time_limit_sec": 60
   },
   "models": [
     "sonnet",
@@ -26,9 +26,11 @@
   "output_root_template": "~/research/scion-experiments/v04-cvrp-formal-{date}",
   "problem_id": "cvrp",
   "readiness_notes": [
-    "Manifests keep CSV case paths data-root-relative, e.g. cvrplib/A/A-n32-k5.vrp.",
+    "Manifests keep CSV case paths data-root-relative, e.g. cvrplib/A/A-n64-k9.vrp.",
     "Set SCION_PROBLEM_DATA_ROOT to the repo-local vrp directory before running formal campaigns.",
-    "Do not use BKS/gap for promotion; BKS/gap remains final evidence only."
+    "Do not use BKS/gap for promotion; BKS/gap remains final evidence only.",
+    "Formal stage seeds are deterministic odd-prime ledgers: screening 11/29/43/59, validation 47/53/71/83, frozen 61/67/89.",
+    "Screening cases are selected from seed-0 final ALNS/VNS rows with route_gap=0 and enough BKS gap headroom for measurable movement."
   ],
   "schema": "scion.cvrp_formal_readiness_budgets.v1",
   "source_csv": "vrp/results/full_experiment_seed0_final.csv",
@@ -42,37 +44,42 @@
         2
       ],
       "selected_by_protocol_cases": 24,
-      "time_limit_sec": 10
+      "time_limit_sec": 60
     },
     "frozen": {
       "cases": 12,
       "manifest": "manifests/frozen.json",
       "seeds": [
         61,
-        67
+        67,
+        89
       ],
       "selected_by_protocol_cases": 8,
-      "time_limit_sec": 8
+      "time_limit_sec": 60
     },
     "screening": {
       "cases": 16,
       "manifest": "manifests/screening.json",
       "seeds": [
         11,
-        29
+        29,
+        43,
+        59
       ],
       "selected_by_protocol_cases": 12,
-      "time_limit_sec": 3
+      "time_limit_sec": 30
     },
     "validation": {
       "cases": 12,
       "manifest": "manifests/validation.json",
       "seeds": [
         47,
-        53
+        53,
+        71,
+        83
       ],
       "selected_by_protocol_cases": 8,
-      "time_limit_sec": 5
+      "time_limit_sec": 30
     }
   }
 }

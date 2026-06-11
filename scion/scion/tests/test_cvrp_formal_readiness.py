@@ -5,6 +5,7 @@ They do not open or adapter-load raw CVRPLIB instances.
 """
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -25,10 +26,27 @@ CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 FORMAL_DIR = CVRP_DIR / "formal"
 VRP_DIR = CVRP_DIR.parents[3] / "vrp"
 STAGES = ("screening", "validation", "frozen", "final")
+PROTOCOL_STAGES = ("screening", "validation", "frozen")
 
 
 def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_final_ledger_rows_by_path() -> dict[str, dict[str, str]]:
+    source = VRP_DIR / "results" / "full_experiment_seed0_final.csv"
+    with source.open(newline="", encoding="utf-8") as handle:
+        return {
+            row["path"]: row
+            for row in csv.DictReader(handle)
+            if row["mode"] == "clarke_wright_alns_vns"
+        }
+
+
+def _load_reference_bad_instances() -> set[str]:
+    source = VRP_DIR / "results" / "reference_validation_bad.csv"
+    with source.open(newline="", encoding="utf-8") as handle:
+        return {row["instance"] for row in csv.DictReader(handle)}
 
 
 def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
@@ -54,6 +72,15 @@ def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
     assert matrix["models"] == ["sonnet", "gpt-mini"]
     assert matrix["campaign_seeds"] == [11, 29, 47]
     assert matrix["rounds_per_campaign"] == 100
+    assert protocol.screening.n_seeds == 4
+    assert protocol.validation.n_seeds == 4
+    assert protocol.frozen.n_seeds == 3
+    assert protocol.runtime.time_limits.stage_defaults == {
+        "canary": 10,
+        "screening": 30,
+        "validation": 30,
+        "frozen": 60,
+    }
 
 
 def test_formal_manifests_are_fixed_disjoint_and_data_root_relative() -> None:
@@ -95,6 +122,57 @@ def test_formal_split_manifest_matches_stage_manifests() -> None:
     assert split.validation == [case.source_path for case in validation.cases]
     assert split.frozen == [case.source_path for case in frozen.cases]
     assert split.canary == ["controlled/data/synthetic_controlled_canary_5.vrp"]
+
+
+def test_formal_stage_seeds_are_consistent_across_assets() -> None:
+    protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
+    seeds = SeedLedgerConfig.from_yaml(FORMAL_DIR / "seed_ledger.yaml")
+    budgets = _load_json(FORMAL_DIR / "budgets.json")
+
+    for stage in PROTOCOL_STAGES:
+        ledger_seeds = getattr(seeds, stage)
+        manifest = load_cvrp_case_manifest(FORMAL_DIR / "manifests" / f"{stage}.json")
+        stage_protocol = getattr(protocol, stage)
+
+        assert len(ledger_seeds) == stage_protocol.n_seeds
+        assert budgets["stages"][stage]["seeds"] == ledger_seeds
+        assert manifest.config["seeds"] == ledger_seeds
+        assert manifest.metadata["seed_list"] == ledger_seeds
+
+    final = load_cvrp_case_manifest(FORMAL_DIR / "manifests" / "final.json")
+    assert final.config["seeds"] == budgets["final_evidence"]["seeds"] == [0, 1, 2]
+    assert budgets["stages"]["screening"]["time_limit_sec"] == 30
+    assert budgets["stages"]["validation"]["time_limit_sec"] == 30
+    assert budgets["stages"]["frozen"]["time_limit_sec"] == 60
+    assert budgets["final_evidence"]["time_limit_sec"] == 60
+
+
+def test_formal_cases_are_reference_clean_and_screening_has_gap_headroom() -> None:
+    rows_by_path = _load_final_ledger_rows_by_path()
+    reference_bad = _load_reference_bad_instances()
+    manifests = {
+        stage: load_cvrp_case_manifest(FORMAL_DIR / "manifests" / f"{stage}.json")
+        for stage in STAGES
+    }
+
+    screening_gaps: list[float] = []
+    for stage, manifest in manifests.items():
+        for case in manifest.cases:
+            row = rows_by_path.get(case.source_path)
+            assert row is not None, f"{stage} case missing from final seed-0 ledger"
+            assert row["status"] == "ok"
+            assert row["feasible"] == "True"
+            assert row["benchmark_feasible"] == "True"
+            assert row["route_gap"] == "0"
+            assert row["instance"] not in reference_bad
+            assert float(row["gap_pct"]) > 1.0
+            if stage == "screening":
+                screening_gaps.append(float(row["gap_pct"]))
+
+    assert len(screening_gaps) == 16
+    assert min(screening_gaps) >= 2.5
+    assert max(screening_gaps) <= 10.0
+    assert sum(gap >= 3.0 for gap in screening_gaps) >= 12
 
 
 def test_formal_split_case_resolves_strict_via_declared_problem_data_root(

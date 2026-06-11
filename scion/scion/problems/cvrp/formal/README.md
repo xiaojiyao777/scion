@@ -20,3 +20,39 @@ Files:
 
 BKS, gap, and BKS route counts are final-report fields only. Promotion remains
 lexicographic on `fleet_violation` and `total_distance`.
+
+## 2026-06 Formal Split Redesign
+
+Screening was rebuilt from the seed-0 final ALNS/VNS ledger so it has measurable
+headroom. The 16 screening cases are all `benchmark_feasible=True`, reference
+clean, `route_gap=0`, and in the 2.5% to 10% seed-0 BKS-gap band. A/B/E/P
+provide the cheap base coverage; CMT/M/tai add medium structure; one small X
+case (`X-n110-k13`) adds a cheap X-family signal without moving the harder X
+holdout into screening.
+
+Validation keeps a distinct 12-case mix: near-threshold A/B/P/tai rows, harder
+tai and F rows, plus small-to-medium X rows. This keeps validation meaningful
+without duplicating screening. Frozen is now a 12-case X-only holdout in the
+roughly 3% to 9% seed-0 gap band, replacing the previous near-solved `X-n106`
+and >10% `X-n237`/`X-n513` rows with route-clean medium/large X cases. Final
+evidence remains a separate X holdout and is not part of promotion.
+
+Stage seeds are deterministic odd-prime ledgers:
+
+- screening: `11, 29, 43, 59`
+- validation: `47, 53, 71, 83`
+- frozen: `61, 67, 89`
+- final evidence: `0, 1, 2`
+
+Runtime budgets are staged by case scale:
+
+- canary/smoke: `10s`
+- screening: `30s`
+- validation: `30s`
+- frozen: `60s`
+- final evidence: `60s`
+
+The formal protocol declares these budgets in `protocol.yaml` so campaign
+execution uses them instead of the CLI fallback time limit. The CLI
+`--time-limit-sec` remains a fallback for stages that do not declare an
+override.

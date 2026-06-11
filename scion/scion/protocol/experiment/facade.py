@@ -233,6 +233,46 @@ class ExperimentProtocol:
     def _select_seeds(self, stage: ExperimentStage) -> List[int]:
         return select_seeds(seed_ledger=self.seed_ledger, stage=stage)
 
+    def resolve_time_limit_sec(
+        self,
+        *,
+        stage: ExperimentStage | str,
+        case_path: str,
+    ) -> int:
+        stage_key = str(getattr(stage, "value", stage) or "").strip().lower()
+        config = getattr(getattr(self.config, "runtime", None), "time_limits", None)
+        if config is None:
+            return max(1, int(self.time_limit_sec))
+        return config.resolve(
+            stage=stage_key,
+            case_path=case_path,
+            fallback_time_limit_sec=self.time_limit_sec,
+        )
+
+    def time_limit_policy_summary(
+        self,
+        *,
+        stage: ExperimentStage | str,
+        cases: Sequence[str],
+    ) -> dict[str, Any]:
+        stage_key = str(getattr(stage, "value", stage) or "").strip().lower()
+        config = getattr(getattr(self.config, "runtime", None), "time_limits", None)
+        if config is None:
+            limit = max(1, int(self.time_limit_sec))
+            return {
+                "stage": stage_key,
+                "fallback_time_limit_sec": limit,
+                "resolved_min_sec": limit,
+                "resolved_max_sec": limit,
+                "resolved_unique_sec": [limit],
+                "rules": [],
+            }
+        return config.summary(
+            stage=stage_key,
+            cases=tuple(cases),
+            fallback_time_limit_sec=self.time_limit_sec,
+        )
+
     def _resolve_case_path(self, instance_path: str, *, workspace: str) -> str:
         return self._resolve_case_path_status(
             instance_path,
