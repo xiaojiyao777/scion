@@ -197,7 +197,7 @@ CAMPAIGN_DIR="$RUN_ROOT/campaign"
 mkdir -p "$RUN_ROOT"
 ```
 
-启动真实 Sonnet + APS 的 formal VRP smoke：
+启动真实 Sonnet + APS 的 preliminary formal VRP run：
 
 ```bash
 SCION_MODEL=claude-sonnet-4-6 \
@@ -210,7 +210,7 @@ SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
   --seeds scion/problems/cvrp/formal/seed_ledger.yaml \
   --campaign-dir "$CAMPAIGN_DIR" \
   --rounds 5 \
-  --time-limit-sec 10 \
+  --time-limit-sec 30 \
   --disable-early-stop \
   --agentic-proposal
 ```
@@ -219,10 +219,10 @@ SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
 
 - `--agentic-proposal` 启用 APS，是 v0.4 当前 proposal 主路径。
 - `--disable-early-stop` 用于固定轮数诊断，避免 idle/stagnation 提前截断。
-- `--time-limit-sec 10` 是当前 formal smoke 常用预算，不是最终 benchmark
-  预算结论。
-- 不要把 5-round smoke 当 solver-quality 证据；它通常只证明控制路径和
-  artifact 是否健康。
+- `--time-limit-sec 30` 是 CVRP preliminary screening 验证的最低常用预算。
+  `10s` 只适合 Stage 0 小样本 smoke，不能作为 solver-quality 验收。
+- 不要把 5-round preliminary run 当最终 benchmark 证据；它主要证明控制路径、
+  artifact、prompt/context 和 screening 统计是否健康。
 
 ## 5. 可复现后台启动模板
 
@@ -249,6 +249,10 @@ cd /home/clawd/research/or-autoresearch-agent
 
 `--launch` 会写 `pid`，主要运行日志仍看 `run.log`。需要重启或复现时，优先
 复用这个工具生成的 `launch.env` 和 `command.txt`。
+
+CVRP launcher 默认 `--time-limit-sec 30`。需要快速检查进程、artifact 写入或
+小样本控制路径时，可以显式传 `--time-limit-sec 10`，但这种 run 必须标记为
+smoke，不能用于 solver-quality 或 MDE 结论。
 
 手写模板只在需要特殊诊断时使用。长一点的手动实验建议后台跑，并显式写
 `launch.env`、`pid.txt`、`pgid.txt`、
@@ -424,7 +428,7 @@ SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
   --seeds scion/problems/cvrp/formal/seed_ledger.yaml \
   --campaign-dir "$CAMPAIGN_DIR" \
   --rounds 5 \
-  --time-limit-sec 10 \
+  --time-limit-sec 30 \
   --disable-early-stop \
   --agentic-proposal \
   --force-surface algorithm_blueprint

@@ -17,7 +17,7 @@ DEFAULT_EXPERIMENTS_ROOT = Path("/home/clawd/research/scion-experiments")
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
-DEFAULT_TIME_LIMIT_SEC = 10
+DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
 DEFAULT_USER_SUFFIX = "claw"
@@ -292,7 +292,15 @@ def parse_args() -> argparse.Namespace:
             "use an explicit value for other proxies."
         ),
     )
-    parser.add_argument("--time-limit-sec", type=int, default=DEFAULT_TIME_LIMIT_SEC)
+    parser.add_argument(
+        "--time-limit-sec",
+        type=int,
+        default=DEFAULT_TIME_LIMIT_SEC,
+        help=(
+            "Per solver run budget. Defaults to 30s for CVRP preliminary "
+            "screening validation; pass 10 explicitly only for small smoke runs."
+        ),
+    )
     parser.add_argument(
         "--agentic-session-timeout-sec",
         type=int,
