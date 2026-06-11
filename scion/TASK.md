@@ -12,6 +12,14 @@ measurement declaration layer needed for self-diagnosis, and then run a
 governance on/off comparison to test whether that layer improves research
 efficiency and evidence quality.
 
+The primary task basis is `v04-core-framework-code-review-20260611.md`,
+`v04-core-framework-review-20260611.md`, and
+`v0.5-evidence-uplift-roadmap.md`. The v3 architecture blueprint remains the
+boundary authority. v0.4 owns measurement proof, framework debt repair, and
+demonstrating effective research behavior on CVRP/warehouse. v0.5 should start
+only after that, as a broader matrix of controlled experiments across different
+purposes, problem classes, and governance directions.
+
 ## Operating Principle
 
 1. First prove whether the measurement instrument is effective.
@@ -30,6 +38,8 @@ framework repair.
 - Phase 1 gate: CVRP and warehouse both have usable A/A conclusions, including
   MDE, false-pass risk, variance structure, runtime behavior, selected
   cases/seeds, runtime budget policy, and any calibration-tooling caveats.
+  The conclusion must say whether the protocol can detect the mechanism effects
+  being pursued; if not, later gate/lifecycle tuning is not accepted as a fix.
 - Phase 2 gate: every repair is accepted only after a v3 boundary check,
   focused tests, prompt/context evidence where relevant, and a status update.
 - Phase 3 gate: the measurement declaration layer is problem-owned,
@@ -40,6 +50,9 @@ framework repair.
   same-mechanism follow-up, and evidence interpreted against A/A MDE.
 - Phase 5 gate: governance on/off arms must be matched on problem, champion
   start, model, round budget, cases, seeds, and runtime budgets.
+- No phase closes until `scion/TASK.md`, current state, v0.4 history, and the
+  v0.4 repair plan have been updated with artifact paths, commands, caveats,
+  and the next owner.
 
 ## Experiment Defaults
 
