@@ -342,7 +342,9 @@ Exit criteria:
   `tl30` run failed on `M/M-n200-k17.vrp` timeout; a corrected uniform-60s CVRP
   run is active. That active run was launched before the Phase 1 prerequisite
   tooling repair above, so its final artifact, if successful, will still be a
-  uniform-60s legacy-schema calibration. The in-progress report is
+  uniform-60s legacy-schema calibration. A repaired formal protocol-time CVRP
+  run directory has been prepared and should be launched after the legacy run
+  exits. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.

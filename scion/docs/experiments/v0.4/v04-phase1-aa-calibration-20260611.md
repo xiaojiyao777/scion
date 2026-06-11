@@ -17,6 +17,7 @@ and must not enter `DecisionFeatures`.
 |---|---|---|---|
 | CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl30-saferoot-20260611T164539Z-claw` | failed, exit 1 |
 | CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw` | running |
+| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw` | prepared, not launched |
 | Warehouse | `create_new` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-create-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 | Warehouse | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-modify-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 
@@ -123,6 +124,17 @@ repair and will not retroactively gain the new schema or protocol-time-limit
 behavior. If that run succeeds, it remains a legacy uniform-60s first estimate.
 The next formal CVRP calibration should use the repaired CLI with
 `--runtime-policy protocol_time_limits`.
+
+A repaired formal protocol-time run directory has been prepared but not
+launched:
+
+`/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`
+
+It uses commit `74e983966f3f327cca1a0cc3eb615ae09c181911`, the formal CVRP
+split and seed ledger, declared data-root wiring through `formal/budgets.json`,
+and `--runtime-policy protocol_time_limits`. Launch it after the legacy
+uniform-60s run exits to avoid resource contention contaminating runtime
+evidence.
 
 ## Warehouse Results
 

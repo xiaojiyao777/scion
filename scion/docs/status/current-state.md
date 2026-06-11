@@ -157,6 +157,11 @@ Phase 1 is in progress and recorded in
   needs protocol runtime-rule support. A corrected uniform-60s CVRP A/A run is
   now active:
   `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw`.
+- A repaired formal protocol-time CVRP A/A run directory is prepared but not
+  launched:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`.
+  Launch it after the legacy uniform-60s run exits so runtime evidence is not
+  contaminated by two concurrent solver calibrations.
 - Phase 1 closure now has an explicit acceptance checklist in the calibration
   note. If the active CVRP run succeeds, it is only the first uniform-60s MDE
   estimate, not a faithful formal per-case-runtime reproduction. If it fails,
