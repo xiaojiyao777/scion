@@ -22,6 +22,7 @@ from scion.core.explore_step.branch_lesson_usage import (
 from scion.core.repeated_contract_failures import (
     contract_preview_failure_signature_feedback,
 )
+from scion.measurement.readiness import measurement_readiness_status
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
     active_subject_taxonomy_payload,
@@ -219,6 +220,7 @@ def _problem_measurement_diagnostics(problem_spec: ProblemSpec) -> dict[str, Any
     if measurement is None:
         return {}
     effect_scale = getattr(measurement, "effect_scale", None)
+    readiness = measurement_readiness_status(problem_spec)
     payload = {
         "schema_version": "problem_measurement_proposal_diagnostic.v1",
         "taint": "problem_owned_proposal_diagnostic",
@@ -250,6 +252,7 @@ def _problem_measurement_diagnostics(problem_spec: ProblemSpec) -> dict[str, Any
             }.items()
             if value not in ("", None, [], {}, ())
         },
+        "measurement_readiness": readiness.to_diagnostic_payload(),
         "calibration": {
             key: value
             for key, value in {

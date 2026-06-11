@@ -135,11 +135,12 @@ finished with wrapper exit status 0. The frozen postrun baseline is
   mechanism-effect ranking. Source/code visibility was present and must remain
   protected during any context compression.
 
-The current step is Phase 3 from `TASK.md`: finish minimal measurement
-readiness consumption. The Phase 2 framework repair is integrated, but current
-problem specs still point at `calibration_ref` paths that are not installed in
-the problem packages, and missing/stale calibration is not yet surfaced as
-readiness/status.
+The current step is Phase 4 from `TASK.md`: run focused validation for repaired
+v0.4 before governance on/off comparisons. Phase 3 measurement readiness is
+integrated: compact Phase 1 A/A artifacts are installed, CVRP and warehouse
+`calibration_ref` paths resolve, and missing/stale/incompatible calibration is
+visible as readiness/status without exposing raw A/A diagnostics to
+`DecisionFeatures`.
 
 ## 2026-06-11 Phase 1 A/A Calibration
 
@@ -218,10 +219,35 @@ Phase 2 first repair slice is integrated in
   `test_v3_problem_boundary_no_cvrp_terms_in_generic_layers.py` plus key Phase
   2 tests passed with `149 passed`.
 
-Remaining before focused validation: install or reference compatible A/A
-calibration artifacts through the measurement declaration layer and make
-missing/stale calibration visible as readiness/status without exposing raw
-calibration diagnostics to `DecisionFeatures`.
+## 2026-06-11 Phase 3 Measurement Readiness
+
+Phase 3 minimal measurement readiness is integrated.
+
+- `scion.measurement.readiness.measurement_readiness_status()` resolves
+  problem-owned `calibration_ref` paths, checks schema/problem/metric/unit
+  compatibility, reports missing/unreadable/incompatible/incomplete/stale
+  states, and reduces compatible A/A artifacts to deterministic status fields:
+  MDE, noise band, effect-to-MDE ratio, signal-to-noise tier, age, and reason
+  code.
+- `ProtocolConfig.measurement_readiness` carries only reduced enum/numeric
+  readiness status. Proposal context may see the tainted problem-owned
+  `calibration_ref`, but raw pair rows, per-case details beyond the reduced
+  noise band, BKS/gap detail, and free-form text remain excluded from
+  `DecisionFeatures`.
+- Compact Phase 1 calibration artifacts are installed at
+  `scion/scion/problems/cvrp/formal/calibration/aa_noise_floor.json` and
+  `surrogate/calibration/aa_noise_floor.json`. These compact artifacts include
+  source artifact refs and SHA256 hashes but omit raw `pair_evidence`.
+- As of 2026-06-11, CVRP readiness is `ready`, MDE `9.9`, effect-to-MDE ratio
+  `0.202`, tier `low_power`; warehouse readiness is `ready`, MDE `577.5`,
+  effect-to-MDE ratio about `1.7e-6`, tier `low_power`.
+- Focused Phase 3 verification passed with `34 passed` across measurement
+  readiness, problem bridge, config, and hypothesis-context tests.
+
+Next: Phase 4 focused validation. Run short CVRP and warehouse campaigns with
+local `gpt5.5`, then audit branch depth, same-mechanism continuation,
+cross-branch transfer, prompt context, runtime semantics, and candidate
+evidence against A/A MDE.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

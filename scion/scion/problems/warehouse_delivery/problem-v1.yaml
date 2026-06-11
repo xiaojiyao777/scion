@@ -112,6 +112,8 @@ measurement:
     unit: raw_delta
     practical_delta_screen: 0.001
     practical_delta_validate: 0.001
+  calibration_ref: calibration/aa_noise_floor.json
+  calibration_max_age_days: 90
 
 llm_hints:
   problem_summary: >-

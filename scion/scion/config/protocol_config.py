@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
+
+from scion.measurement.readiness import measurement_readiness_status
 
 
 class ScreeningConfig(BaseModel):
@@ -408,6 +411,32 @@ class GatesConfig(BaseModel):
     frozen: FrozenGate = Field(default_factory=FrozenGate)
 
 
+class MeasurementReadinessConfig(BaseModel):
+    """Reduced measurement readiness status safe for generic config consumers."""
+
+    status: Literal["ready", "degraded", "not_ready"] = "not_ready"
+    reason_code: Literal[
+        "ok",
+        "missing_measurement",
+        "missing_calibration_ref",
+        "calibration_not_found",
+        "calibration_unreadable",
+        "calibration_incompatible",
+        "calibration_incomplete",
+        "calibration_stale",
+    ] = "missing_measurement"
+    calibration_age_days: int | None = Field(default=None, ge=0)
+    calibration_max_age_days: int = Field(default=0, ge=0)
+    n_pairs: int = Field(default=0, ge=0)
+    mde_at_power_80: float | None = Field(default=None, ge=0.0)
+    noise_band_p90_abs: float | None = Field(default=None, ge=0.0)
+    effect_to_mde_ratio: float | None = Field(default=None, ge=0.0)
+    signal_to_noise_tier: Literal["ready", "marginal", "low_power", "unknown"] = (
+        "unknown"
+    )
+    decision_features_excluded: bool = True
+
+
 class ProtocolConfig(BaseModel):
     """protocol.yaml 的完整 schema。
 
@@ -446,6 +475,11 @@ class ProtocolConfig(BaseModel):
         "trajectory_stable"
     )
     """Problem-declared solver trajectory pairing model for gate/lifecycle policy."""
+
+    measurement_readiness: MeasurementReadinessConfig = Field(
+        default_factory=MeasurementReadinessConfig
+    )
+    """Reduced measurement readiness status derived from problem-owned calibration."""
 
     evaluation_pipeline: EvaluationPipelineConfig = Field(
         default_factory=EvaluationPipelineConfig
@@ -495,19 +529,30 @@ class ProtocolConfig(BaseModel):
         """Alias for runtime.max_runtime_ratio."""
         return self.runtime.max_runtime_ratio
 
-    def with_problem_measurement(self, problem_spec: Any | None) -> "ProtocolConfig":
+    def with_problem_measurement(
+        self,
+        problem_spec: Any | None,
+        *,
+        measurement_readiness_as_of: date | datetime | None = None,
+    ) -> "ProtocolConfig":
         """Return a copy with problem-owned measurement thresholds resolved.
 
         Measurement facts remain problem-owned diagnostics/configuration.  This
         method only copies declared practical-delta numbers into protocol
-        thresholds; it does not expose readiness, BKS, gap, or calibration data
-        to DecisionFeatures.
+        thresholds and reduced readiness status into config; it does not expose
+        raw calibration diagnostics, BKS, gap, or free-form text to
+        DecisionFeatures.
         """
 
         measurement = _problem_measurement(problem_spec)
+        data = self.model_dump()
+        data["measurement_readiness"] = measurement_readiness_status(
+            problem_spec,
+            as_of=measurement_readiness_as_of,
+        ).to_status_payload()
         effect_scale = getattr(measurement, "effect_scale", None)
         if effect_scale is None:
-            return self
+            return type(self).model_validate(data)
 
         updates: dict[str, float] = {}
         for field_name in ("practical_delta_screen", "practical_delta_validate"):
@@ -515,7 +560,6 @@ class ProtocolConfig(BaseModel):
             if value is not None:
                 updates[field_name] = _nonnegative_float(field_name, value)
         runtime_model = getattr(measurement, "runtime_model", None)
-        data = self.model_dump()
         if runtime_model is not None:
             runtime_model_text = str(runtime_model).strip()
             if runtime_model_text not in {"comparative", "budget_exhausting"}:

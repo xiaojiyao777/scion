@@ -1,11 +1,13 @@
 """Tests for ProblemSpecV1 -> legacy ProblemSpec bridge."""
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import yaml
 
 from scion.config.problem import ParameterSearchConfig, ProblemSpec
+from scion.measurement.readiness import measurement_readiness_status
 from scion.problem.bridge import (
     bridge_problem_spec_v1,
     legacy_problem_spec_from_v1,
@@ -112,9 +114,37 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
     assert spec.measurement.pairing_validity == "trajectory_divergent"
     assert spec.measurement.effect_scale.metric == "total_distance"
     assert spec.measurement.effect_scale.practical_delta_screen == 2.0
+    assert spec.measurement.calibration_ref == (
+        "formal/calibration/aa_noise_floor.json"
+    )
     assert legacy.measurement is spec.measurement
     assert spec.runtime_dependencies.required_python_modules == ["numpy"]
     assert legacy.runtime_dependencies.required_python_modules == ["numpy"]
+    readiness = measurement_readiness_status(spec, as_of=date(2026, 6, 11))
+    assert readiness.status == "ready"
+    assert readiness.reason_code == "ok"
+    assert readiness.mde_at_power_80 == 9.9
+    assert readiness.signal_to_noise_tier == "low_power"
+
+
+def test_measurement_schema_accepts_reduced_readiness_summary_only() -> None:
+    cvrp_dir = PROBLEMS_DIR / "cvrp"
+    with open(cvrp_dir / "problem-v1.yaml", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    data["root_dir"] = str(cvrp_dir)
+    data["measurement"]["readiness_summary"] = {
+        "mde_at_power_80": 9.9,
+        "noise_band_p90_abs": 2.5,
+        "effect_to_mde_ratio": 0.2,
+        "signal_to_noise_tier": "low_power",
+        "n_pairs": 96,
+    }
+
+    spec = ProblemSpecV1(**data)
+
+    assert spec.measurement.readiness_summary is not None
+    assert spec.measurement.readiness_summary.mde_at_power_80 == 9.9
+    assert spec.measurement.readiness_summary.signal_to_noise_tier == "low_power"
 
 
 def test_warehouse_problem_spec_declares_legacy_family_taxonomy() -> None:
@@ -142,6 +172,13 @@ def test_warehouse_legacy_and_package_specs_share_measurement_declaration() -> N
 
     assert legacy.measurement == package.measurement
     assert legacy.measurement.effect_scale.metric == "total_cost"
+    assert legacy.measurement.calibration_ref == "calibration/aa_noise_floor.json"
+    for spec in (legacy, package):
+        readiness = measurement_readiness_status(spec, as_of=date(2026, 6, 11))
+        assert readiness.status == "ready"
+        assert readiness.reason_code == "ok"
+        assert readiness.mde_at_power_80 == 577.5
+        assert readiness.signal_to_noise_tier == "low_power"
 
 
 def test_load_problem_spec_v1_resolves_placeholder_root_dir() -> None:

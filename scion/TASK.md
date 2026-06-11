@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 2 framework repair integrated; Phase 3 readiness layer pending*
+*Status: Phase 3 measurement readiness integrated; Phase 4 focused validation pending*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -460,11 +460,24 @@ Exit criteria:
   `scion/docs/experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`.
   CVRP finished `4/4` screening-only rounds; warehouse finished `4/4` with a
   full promotion path to champion v2.
-- Pending: Phase 3 readiness consumption. Current problem specs declare
-  `calibration_ref`, but the referenced A/A artifacts are not yet installed
-  under the problem packages, and missing/stale calibration is not yet surfaced
-  as readiness/status. Do that before focused Phase 4 validation and governance
-  on/off experiments.
+- Completed: Phase 3 minimal measurement readiness consumption. The
+  problem-owned measurement schema now includes optional reduced readiness
+  summary fields, `measurement_readiness_status()` resolves `calibration_ref`
+  and reports missing, unreadable, incompatible, incomplete, stale, and ready
+  states, and `ProtocolConfig.measurement_readiness` carries only deterministic
+  enum/numeric status. Compact Phase 1 A/A artifacts are installed at
+  `scion/scion/problems/cvrp/formal/calibration/aa_noise_floor.json` and
+  `surrogate/calibration/aa_noise_floor.json`; warehouse package and legacy
+  specs point to the latter through `calibration/aa_noise_floor.json`.
+  As of 2026-06-11, CVRP readiness is `ready` with MDE `9.9`,
+  effect-to-MDE ratio `0.202`, and signal tier `low_power`; warehouse readiness
+  is `ready` with MDE `577.5`, effect-to-MDE ratio about `1.7e-6`, and signal
+  tier `low_power`. Raw A/A pair evidence remains outside
+  `DecisionFeatures`.
+- Pending: Phase 4 focused validation. Run short CVRP and warehouse campaigns
+  with local `gpt5.5`, then audit branch depth, same-mechanism follow-up,
+  prompt context, runtime semantics, and evidence against A/A MDE before
+  governance on/off experiments.
 
 ## Status Cadence
 

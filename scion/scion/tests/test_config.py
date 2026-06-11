@@ -1,3 +1,6 @@
+import json
+from datetime import date
+
 import pytest
 import os
 import yaml
@@ -106,6 +109,68 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
     assert config.validation_min_practical_delta == 1.25
     assert config.runtime.runtime_model == "budget_exhausting"
     assert config.pairing_validity == "trajectory_divergent"
+    assert config.measurement_readiness.status == "not_ready"
+    assert config.measurement_readiness.reason_code == "missing_calibration_ref"
+
+
+def test_protocol_config_surfaces_stale_measurement_calibration(tmp_path):
+    artifact = tmp_path / "formal" / "calibration" / "aa_noise_floor.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps(
+            {
+                "schema": "scion.aa_noise_floor.v1",
+                "problem_id": "demo",
+                "measurement_metric": "total_cost",
+                "measurement_unit": "raw_delta",
+                "calibrated_at": "2026-01-01T00:00:00Z",
+                "n_pairs": 6,
+                "protocol_power": {"mde_at_power_80": 4.0},
+                "per_case": [{"delta_p90_abs": 1.0}],
+                "decision_features_excluded": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    effect_scale = type(
+        "EffectScale",
+        (),
+        {
+            "metric": "total_cost",
+            "unit": "raw_delta",
+            "practical_delta_screen": 2.0,
+            "practical_delta_validate": 1.0,
+        },
+    )()
+    measurement = type(
+        "Measurement",
+        (),
+        {
+            "runtime_model": "comparative",
+            "pairing_validity": "trajectory_stable",
+            "effect_scale": effect_scale,
+            "calibration_ref": "formal/calibration/aa_noise_floor.json",
+            "calibration_max_age_days": 30,
+            "readiness_summary": None,
+        },
+    )()
+    problem_spec = type(
+        "ProblemSpec",
+        (),
+        {"id": "demo", "root_dir": str(tmp_path), "measurement": measurement},
+    )()
+
+    config = ProtocolConfig().with_problem_measurement(
+        problem_spec,
+        measurement_readiness_as_of=date(2026, 6, 11),
+    )
+
+    assert config.measurement_readiness.status == "degraded"
+    assert config.measurement_readiness.reason_code == "calibration_stale"
+    assert config.measurement_readiness.calibration_age_days == 161
+    assert config.measurement_readiness.mde_at_power_80 == 4.0
+    assert config.measurement_readiness.effect_to_mde_ratio == 0.5
+    assert config.measurement_readiness.signal_to_noise_tier == "marginal"
 
 
 def test_protocol_config_rejects_unknown_delta_reference():

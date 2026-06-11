@@ -438,6 +438,19 @@ def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden(
                 "false_pass_rate_at_current_gate": 0.0,
                 "selected_cases": ["secret-screening-case"],
             },
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "calibration_age_days": 1,
+                "calibration_max_age_days": 90,
+                "n_pairs": 96,
+                "mde_at_power_80": 9.9,
+                "noise_band_p90_abs": 2.4,
+                "effect_to_mde_ratio": 0.2,
+                "signal_to_noise_tier": "low_power",
+                "calibration_ref": "formal/calibration/aa_noise_floor.json",
+                "raw_pair_rows": [{"case": "secret-readiness-row"}],
+            },
             "opportunity_diagnostics": [
                 {
                     "diagnostic_type": "low_snr",
@@ -465,8 +478,11 @@ def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden(
     assert "excluded_from_decision_features" in diagnostic
     assert "total_distance" in diagnostic
     assert "mde_at_power_80" in diagnostic
+    assert "signal_to_noise_tier" in diagnostic
+    assert "low_power" in diagnostic
     assert "MEASUREMENT_POWER_LOW" in diagnostic
     assert "secret-screening-case" not in diagnostic
+    assert "secret-readiness-row" not in diagnostic
     assert "secret-validation-case-detail" not in diagnostic
     assert "secret-frozen-case-detail" not in diagnostic
     assert "secret-raw-row" not in diagnostic

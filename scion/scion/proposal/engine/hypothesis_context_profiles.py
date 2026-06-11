@@ -295,6 +295,22 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "runtime_policy",
                 ),
             ),
+            "measurement_readiness": _project_mapping(
+                payload.get("measurement_readiness"),
+                fields=(
+                    "status",
+                    "reason_code",
+                    "calibration_age_days",
+                    "calibration_max_age_days",
+                    "n_pairs",
+                    "mde_at_power_80",
+                    "noise_band_p90_abs",
+                    "effect_to_mde_ratio",
+                    "signal_to_noise_tier",
+                    "decision_features_excluded",
+                    "calibration_ref",
+                ),
+            ),
             "noise_floor": _project_mapping(
                 payload.get("noise_floor") or payload.get("noise_summary"),
                 fields=(

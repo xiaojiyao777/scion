@@ -443,6 +443,16 @@ class MeasurementEffectScaleSpec(_Strict):
     practical_delta_validate: float = Field(default=0.001, ge=0.0)
 
 
+class MeasurementReadinessSummarySpec(_Strict):
+    mde_at_power_80: float | None = Field(default=None, ge=0.0)
+    noise_band_p90_abs: float | None = Field(default=None, ge=0.0)
+    effect_to_mde_ratio: float | None = Field(default=None, ge=0.0)
+    signal_to_noise_tier: Literal["ready", "marginal", "low_power", "unknown"] = (
+        "unknown"
+    )
+    n_pairs: int = Field(default=0, ge=0)
+
+
 class MeasurementSpec(_Strict):
     runtime_model: Literal["comparative", "budget_exhausting"] = "comparative"
     pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
@@ -453,6 +463,7 @@ class MeasurementSpec(_Strict):
     )
     calibration_ref: str = ""
     calibration_max_age_days: int = Field(default=90, ge=0)
+    readiness_summary: MeasurementReadinessSummarySpec | None = None
 
 
 class SearchSpaceSpec(_Strict):
