@@ -150,6 +150,12 @@ Phase 1 is in progress and recorded in
   needs protocol runtime-rule support. A corrected uniform-60s CVRP A/A run is
   now active:
   `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw`.
+- Phase 1 closure now has an explicit acceptance checklist in the calibration
+  note. If the active CVRP run succeeds, it is only the first uniform-60s MDE
+  estimate, not a faithful formal per-case-runtime reproduction. If it fails,
+  or if the payload is insufficient to explain selected cases/seeds, runtime
+  behavior, raw pair evidence, and case resolution, Worker F becomes a Phase 1
+  prerequisite tooling repair.
 - No Phase 2 framework code repair should start until the CVRP result is
   available and the Phase 1 measurement-power conclusion is finalized.
 

@@ -57,6 +57,36 @@ complete first CVRP noise-floor artifact. The final report must label the CVRP
 number as a uniform-60s calibration until Worker F adds per-case runtime-rule
 support.
 
+## Phase 1 Acceptance Checklist
+
+Phase 1 can close only when the final report can support these checks:
+
+- CVRP `modify`, warehouse `create_new`, and warehouse `modify` all have a
+  usable calibration conclusion, or a failed run is classified as a
+  tooling/runtime diagnostic rather than an MDE estimate.
+- Each run records run root, wrapper exit status, start/end time, launch
+  command, branch/commit, champion version, copied problem/protocol/split/seed
+  artifacts, and relevant hashes.
+- Each successful artifact reports `n_pairs`, `protocol_power.mde_at_power_80`,
+  `protocol_power.false_pass_rate_at_current_gate`,
+  `protocol_power.recommended_min_seeds`, per-case delta quantiles, tie rate,
+  false-win/loss rates, and practical-delta detectability.
+- CVRP records selected cases/seeds, replicates, seed offset, independent RNG
+  stream rule, case path resolution, and whether runtime used formal per-case
+  policy or a conservative uniform cap.
+- Runtime interpretation records timeout/failure evidence where present. Until
+  Worker F extends the payload, elapsed runtime, budget-hit/saturation, raw
+  pair rows, candidate seeds, and case-resolution details remain known caveats.
+- The conclusion compares measured MDE against expected mechanism effects and
+  against `practical_delta_screen` / `practical_delta_validate`.
+
+If the active CVRP uniform-60s run succeeds, it is acceptable as the first CVRP
+MDE estimate but not as a faithful formal screening reproduction. If it fails,
+or if its payload is insufficient for the checks above, Worker F becomes a
+Phase 1 prerequisite repair: calibration must learn declared data roots,
+per-case runtime rules, and replayable pair/runtime evidence before Phase 1 can
+be closed.
+
 ## Warehouse Results
 
 ### Create
@@ -133,11 +163,11 @@ CVRP MDE estimate.
   formal screening runtime rule needed by `M/M-n200-k17.vrp`. The corrected
   `tl60` run uses the same split hash and should be treated as a conservative
   calibration workaround until the CLI supports protocol runtime rules.
-- The A/A payload records MDE, false pass rate, and per-case summaries, but it
-  does not persist raw pair rows, candidate seeds, elapsed runtime, budget-hit
-  or saturation details, selected cases/seeds, replicate count, seed offset, or
-  case-resolution evidence.
+- The A/A payload records MDE, false pass rate, and per-case summaries under
+  `protocol_power` / `per_case`, but it does not persist raw pair rows,
+  candidate seeds, elapsed runtime, budget-hit or saturation details, selected
+  cases/seeds, replicate count, seed offset, or case-resolution evidence.
 
-These gaps should become Phase 2 repair items after the full A/A calibration
-gate is complete. They are tooling/diagnostic limitations, not Decision-layer
-inputs.
+If CVRP cannot produce a usable calibration conclusion because of these gaps,
+they become Phase 1 prerequisite repairs rather than Phase 2 framework repairs.
+They are tooling/diagnostic limitations, not Decision-layer inputs.
