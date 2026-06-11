@@ -352,14 +352,14 @@ Exit criteria:
   protocol-resolved per-case time limits.
 - In progress: Phase 1 A/A calibration has launched. Warehouse create/modify
   screening calibrations finished with wrapper exit 0. The first CVRP safe-root
-  `tl30` run failed on `M/M-n200-k17.vrp` timeout; a corrected uniform-60s CVRP
-  run is active. That active run was launched before the Phase 1 prerequisite
-  tooling repair above, so its final artifact, if successful, will still be a
-  uniform-60s legacy-schema calibration. A repaired formal protocol-time CVRP
-  run directory has been prepared and should be launched after the legacy run
-  exits. Latest check at `2026-06-11T20:06:50Z`: the legacy run was still
-  active, had not produced `aa_noise_floor.json`, and had reached
-  `M/M-n200-k17.vrp`. The in-progress report is
+  `tl30` run failed on `M/M-n200-k17.vrp` timeout. The corrected uniform-60s
+  CVRP legacy run finished at `2026-06-11T20:34:59Z` with `n_pairs=96`,
+  `mde_at_power_80=8.7` raw `total_distance`, and
+  `false_pass_rate_at_current_gate=0.0`, but it lacks Worker F pair/runtime
+  evidence and is not a formal per-case-runtime reproduction. A repaired formal
+  protocol-time CVRP run started at `2026-06-11T20:36:00Z` from commit
+  `a43dc2be371b5f2f209477df54883708b8750055`; it is now the remaining Phase 1
+  gating artifact. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.

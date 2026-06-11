@@ -149,36 +149,31 @@ Phase 1 is in progress and recorded in
 - Warehouse `modify` A/A finished with `n_pairs=36`,
   `mde_at_power_80=577.5` raw `total_cost`, and
   `false_pass_rate_at_current_gate=0.0`.
-- CVRP `modify` A/A is still running. Its first launch exposed a calibration
-  tooling gap: the CLI does not yet consume CVRP's declared external problem
-  data root, so the active run uses a copied split with the local `vrp` data
-  root added as `safe_data_roots`. The first safe-root `tl30` run then failed
-  on `M/M-n200-k17.vrp` with a solver timeout, confirming that calibration also
-  needs protocol runtime-rule support. A corrected uniform-60s CVRP A/A run is
-  now active:
-  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw`.
-- A repaired formal protocol-time CVRP A/A run directory is prepared but not
-  launched:
+- CVRP `modify` A/A has one successful legacy estimate and one active formal
+  run. The first safe-root `tl30` run failed on `M/M-n200-k17.vrp` with a
+  solver timeout, confirming that calibration needs protocol runtime-rule
+  support. The corrected uniform-60s legacy run finished at
+  `2026-06-11T20:34:59Z` with `n_pairs=96`, `mde_at_power_80=8.7` raw
+  `total_distance`, and `false_pass_rate_at_current_gate=0.0`; its artifact is
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw/aa_noise_floor.json`.
+  This is not enough to close Phase 1 because it lacks Worker F pair/runtime
+  evidence and is a uniform-60s approximation.
+- The repaired formal protocol-time CVRP A/A run started at
+  `2026-06-11T20:36:00Z` from commit
+  `a43dc2be371b5f2f209477df54883708b8750055`:
   `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`.
-  Its wrapper metadata now records current HEAD
-  `ba19e4fae57e4ccc3b7b2c70cf94d90a53c5d6f4`; the calibration command still
-  uses the same formal split, seed ledger, declared data-root wiring, and
-  `--runtime-policy protocol_time_limits`.
-  Launch it after the legacy uniform-60s run exits so runtime evidence is not
-  contaminated by two concurrent solver calibrations.
-- Latest check at `2026-06-11T20:06:50Z`: the legacy uniform-60s CVRP run was
-  still `running`, with no `aa_noise_floor.json` yet, and the live solver had
-  reached `M/M-n200-k17.vrp`. Do not start Phase 2 repairs or the protocol-time
-  rerun until this process exits and its result is classified.
+  It uses the formal split, seed ledger, declared data-root wiring, and
+  `--runtime-policy protocol_time_limits`; the first live solver command used
+  `A/A-n64-k9.vrp` with `--time-limit 30`, confirming protocol time-limit
+  resolution is active.
 - Phase 1 closure now has an explicit acceptance checklist in the calibration
-  note. If the active CVRP run succeeds, it is only the first uniform-60s MDE
-  estimate, not a faithful formal per-case-runtime reproduction. If it fails,
-  or if the payload is insufficient to explain selected cases/seeds, runtime
-  behavior, raw pair evidence, and case resolution, the repaired Worker F
-  calibration tool is ready for a new Phase 1 run using
-  `--runtime-policy protocol_time_limits`.
+  note. The legacy CVRP run is only the first uniform-60s MDE estimate, not a
+  faithful formal per-case-runtime reproduction. The active protocol-time run
+  must explain selected cases/seeds, runtime behavior, raw pair evidence, and
+  case resolution before Phase 1 can close.
 - No Phase 2 framework code repair should start until the CVRP result is
-  available and the Phase 1 measurement-power conclusion is finalized.
+  available from the protocol-time run and the Phase 1 measurement-power
+  conclusion is finalized.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

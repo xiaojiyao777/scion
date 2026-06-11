@@ -16,8 +16,8 @@ and must not enter `DecisionFeatures`.
 | Problem | Action | Run root | Status |
 |---|---|---|---|
 | CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl30-saferoot-20260611T164539Z-claw` | failed, exit 1 |
-| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw` | running |
-| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw` | prepared, not launched |
+| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw` | finished, exit 0 |
+| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw` | running |
 | Warehouse | `create_new` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-create-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 | Warehouse | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-modify-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 
@@ -41,6 +41,12 @@ At `2026-06-11T20:06:50Z`, this run was still active with no
 `M/M-n200-k17.vrp`, confirming continued progress rather than a launch-time
 stall.
 
+The corrected uniform-60s run finished at `2026-06-11T20:34:59Z` with wrapper
+exit status 0 and produced the first complete CVRP A/A MDE estimate. A repaired
+formal protocol-time CVRP run started at `2026-06-11T20:36:00Z` from commit
+`a43dc2be371b5f2f209477df54883708b8750055` using the formal split, formal seed
+ledger, declared data-root wiring, and `--runtime-policy protocol_time_limits`.
+
 ## Expected Workload
 
 The current calibration CLI runs champion vs champion with independent RNG
@@ -57,10 +63,9 @@ The first CVRP launch used uniform `--time-limit-sec 30` and failed on
 `M/M-n200-k17.vrp`. This confirms that the current calibration CLI cannot yet
 be treated as a faithful formal screening runner for CVRP: the formal protocol
 uses screening defaults of 30s plus 45s rules for dimensions 150-250 and 60s
-rules above 250. The active corrected launch uses uniform 60s to produce a
-complete first CVRP noise-floor artifact. The final report must label the CVRP
-number as a uniform-60s calibration until Worker F adds per-case runtime-rule
-support.
+rules above 250. The corrected launch used uniform 60s to produce a complete
+first CVRP noise-floor artifact. It must be labeled as a uniform-60s
+calibration, not the formal protocol-time result.
 
 ## Phase 1 Acceptance Checklist
 
@@ -85,12 +90,10 @@ Phase 1 can close only when the final report can support these checks:
 - The conclusion compares measured MDE against expected mechanism effects and
   against `practical_delta_screen` / `practical_delta_validate`.
 
-If the active CVRP uniform-60s run succeeds, it is acceptable as the first CVRP
-MDE estimate but not as a faithful formal screening reproduction. If it fails,
-or if its payload is insufficient for the checks above, Worker F becomes a
-Phase 1 prerequisite repair: calibration must learn declared data roots,
-per-case runtime rules, and replayable pair/runtime evidence before Phase 1 can
-be closed.
+The CVRP uniform-60s run is acceptable as the first CVRP MDE estimate but not
+as a faithful formal screening reproduction. The protocol-time run remains
+required because Phase 1 needs declared data roots, per-case runtime rules, and
+replayable pair/runtime evidence before the gate can be closed.
 
 ## Phase 1 Prerequisite Tooling Repair
 
@@ -123,22 +126,20 @@ Verification:
 - `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/test_cli_data_roots.py scion/scion/tests/test_cvrp_formal_readiness.py`
 - `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_protocol_split_runtime.py`
 
-Important caveat: the active CVRP uniform-60s run was launched before this
-repair and will not retroactively gain the new schema or protocol-time-limit
-behavior. If that run succeeds, it remains a legacy uniform-60s first estimate.
-The next formal CVRP calibration should use the repaired CLI with
-`--runtime-policy protocol_time_limits`.
+Important caveat: the CVRP uniform-60s run was launched before this repair and
+does not retroactively gain the new schema or protocol-time-limit behavior. It
+remains a legacy uniform-60s first estimate. The active formal CVRP calibration
+uses the repaired CLI with `--runtime-policy protocol_time_limits`.
 
-A repaired formal protocol-time run directory has been prepared but not
-launched:
+A repaired formal protocol-time run directory has been launched:
 
 `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`
 
-It uses commit `ba19e4fae57e4ccc3b7b2c70cf94d90a53c5d6f4`, the formal CVRP
+It uses commit `a43dc2be371b5f2f209477df54883708b8750055`, the formal CVRP
 split and seed ledger, declared data-root wiring through `formal/budgets.json`,
-and `--runtime-policy protocol_time_limits`. Launch it after the legacy
-uniform-60s run exits to avoid resource contention contaminating runtime
-evidence.
+and `--runtime-policy protocol_time_limits`. At launch, the first live solver
+command used `A/A-n64-k9.vrp` with `--time-limit 30`, confirming that protocol
+time-limit resolution is active for small screening cases.
 
 ## Warehouse Results
 
@@ -197,8 +198,49 @@ CVRP remains the gating item for Phase 1 completion.
 The `tl30` CVRP run produced no calibration JSON and must not be interpreted as
 an MDE estimate. Its value is diagnostic: it shows that the A/A tool must either
 consume protocol runtime time-limit rules or expose a sufficiently conservative
-calibration budget. The `tl60` CVRP run is the active run for the first complete
-CVRP MDE estimate.
+calibration budget.
+
+### Uniform-60 Legacy Estimate
+
+Artifact:
+`/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw/aa_noise_floor.json`
+
+SHA-256:
+`8540cf939165bb88a197e54e4a6b8184c2d87d5d0aadb681bf92dd7e338ad6d5`
+
+Summary:
+
+- `n_pairs`: 96
+- `mde_at_power_80`: 8.7 raw `total_distance`
+- `false_pass_rate_at_current_gate`: 0.0
+- `recommended_min_seeds`: 8
+- Average per-case tie rate: about 0.146
+- Highest variance case: `cvrplib/X/X-n110-k13.vrp`, with
+  `delta_max_abs=202.0`, `delta_p90_abs=150.0`, and `seed_var=8472.08333333`
+- Highest tie case: `cvrplib/M/M-n200-k17.vrp`, with `pair_tie_rate=0.9167`
+  and `delta_max_abs=1.0`
+
+Interpretation:
+
+- This is a useful first CVRP measurement-power estimate, but it remains a
+  legacy uniform-60s artifact. It lacks `pair_evidence`, `calibration_run`,
+  candidate seed rows, runtime elapsed rows, case-resolution rows, and explicit
+  runtime-policy metadata because it was launched before the Worker F repair.
+- CVRP declares `practical_delta_screen: 2.0` raw `total_distance`; the legacy
+  A/A MDE of 8.7 is about 4.35x larger. Gate tuning around a 2.0 practical
+  effect would therefore be below this measured detection floor.
+- The Phase 0 CVRP candidates all had screening median delta `0.0`; the best
+  candidate CI upper bound was 8.0. Against this A/A estimate, the observed
+  protocol-level candidate effect-to-MDE ratio is effectively 0 for those
+  candidates, so their `SCREENING_FAIL_WIN_RATE` outcomes are consistent with
+  measurement-power limits rather than sufficient evidence of mechanism failure.
+
+### Protocol-Time Formal Run
+
+The protocol-time run is active and remains the Phase 1 gating CVRP artifact.
+It is needed before closing Phase 1 because it uses the repaired calibration
+CLI, formal data-root resolution, protocol-resolved per-case time limits, and
+the replayable pair/runtime evidence required by the acceptance checklist.
 
 ## Tooling Gaps Found During Phase 1
 
