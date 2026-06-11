@@ -50,6 +50,8 @@ def _branch_history_cards(
         card.update(
             {
                 "branch_id": branch_id,
+                "observed_depth": len(branch_steps),
+                "observed_step_count": len(branch_steps),
                 "direction": card.get("direction")
                 or f"{latest.hypothesis.action}/{latest.hypothesis.change_locus}",
                 "status": status,

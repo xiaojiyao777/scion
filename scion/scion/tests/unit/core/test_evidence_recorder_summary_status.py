@@ -1170,6 +1170,97 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
     assert "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN" in abandoned_text
 
 
+def test_campaign_summary_and_status_report_research_shape_diagnostics(
+    tmp_path: Path,
+) -> None:
+    branch_a_hypothesis = _hypothesis("Tune regret insertion.")
+    branch_a_hypothesis.mechanism_changes = (
+        MechanismChange(id="regret_insertion_refine", change_type="modify"),
+    )
+    branch_b_hypothesis = _hypothesis("Try route merge.")
+    branch_b_hypothesis.mechanism_changes = (
+        MechanismChange(id="route_merge_probe", change_type="add"),
+    )
+    branch_a_step_1 = replace(
+        _step("/tmp/a1.json"),
+        branch_id="branch-a",
+        hypothesis=branch_a_hypothesis,
+    )
+    branch_a_step_2 = replace(
+        _step("/tmp/a2.json"),
+        branch_id="branch-a",
+        hypothesis=branch_a_hypothesis,
+    )
+    branch_b_step = replace(
+        _step("/tmp/b1.json"),
+        branch_id="branch-b",
+        hypothesis=branch_b_hypothesis,
+        decision=Decision.ABANDON,
+    )
+    branch_rows = [
+        {
+            "id": "branch-a",
+            "state": "explore",
+            "branch_mechanism_ids": ["regret_insertion_refine"],
+            "branch_card": {
+                "branch_id": "branch-a",
+                "status": "active_weak_positive",
+                "mechanism_ids": ["regret_insertion_refine"],
+            },
+        },
+        {
+            "id": "branch-b",
+            "state": "abandoned",
+            "branch_mechanism_ids": ["route_merge_probe"],
+            "branch_card": {
+                "branch_id": "branch-b",
+                "status": "abandoned",
+                "mechanism_ids": ["route_merge_probe"],
+            },
+        },
+    ]
+    recorder = EvidenceRecorder(
+        campaign_id="camp-shape",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "branches": branch_rows,
+            "branch_cards": [row["branch_card"] for row in branch_rows],
+            "n_active_branches": 1,
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[branch_a_step_1, branch_a_step_2, branch_b_step],
+        round_num=3,
+        champion=_champion(),
+    )
+    diagnostics = summary["cross_branch_research_observability"][
+        "research_shape_diagnostics"
+    ]
+
+    assert diagnostics["decision_features_excluded"] is True
+    assert diagnostics["branch_depth_distribution"] == {"1": 1, "2": 1}
+    assert diagnostics["branch_depth_by_branch"] == {"branch-a": 2, "branch-b": 1}
+    assert diagnostics["active_research_shape_signal"]["active_branch_count"] == 1
+    assert diagnostics["mechanism_family_breadth"]["family_count"] >= 2
+    assert any(
+        card.get("observed_depth") == 2
+        for card in summary["branch_history_cards"]
+        if card.get("branch_id") == "branch-a"
+    )
+
+    status = recorder.write_status()
+    status_diagnostics = status["cross_branch_research_observability"][
+        "research_shape_diagnostics"
+    ]
+    assert status_diagnostics["decision_input_policy"] == (
+        "excluded_from_decision_features"
+    )
+    assert status_diagnostics["active_research_shape_signal"][
+        "active_branch_ids"
+    ] == ["branch-a"]
+
+
 def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
     tmp_path: Path,
 ) -> None:

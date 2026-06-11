@@ -694,6 +694,7 @@ class CampaignSummaryMixin:
                 build_cross_branch_research_observability(
                     steps=steps,
                     branch_rows=summary.get("branches") or (),
+                    branch_history_cards=summary.get("branch_history_cards") or (),
                     context_records=_proposal_context_records_from_steps(steps),
                 )
             )

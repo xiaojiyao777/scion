@@ -7,6 +7,8 @@ from scion.proposal.engine.hypothesis_context_profiles import (
     derive_hypothesis_context_profile,
     filter_hypothesis_context_for_prompt,
 )
+from scion.proposal.engine.hypothesis_prompts import _split_hypothesis_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 
 
 def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learning():
@@ -332,11 +334,78 @@ def test_context_profile_metadata_does_not_enter_decision_features():
 
     assert "context_profile" not in decision_fields
     assert "context_profile_metadata" not in decision_fields
+    assert "compact_research_signals" not in decision_fields
+    assert "research_signal_ratio" not in decision_fields
     assert "branch_lesson_records" not in decision_fields
     assert "branch_lesson_usage" not in decision_fields
     assert "branch_lesson_usage_requirement" not in decision_fields
     assert "family_saturation_summary" not in decision_fields
     assert "cross_branch_family_saturation_summary" not in decision_fields
+
+
+def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
+    context = {
+        "problem_summary": "CVRP formal screening objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline_modules/local_search.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1 screening complete",
+        "experiment_history": (
+            "branch b1: route_merge_reinsertion lost on large cases; "
+            "effect zero on compact routes."
+        ),
+        "sibling_summary": "sibling b2 explored scheduler compaction with no effect.",
+        "blacklist_summary": "avoid duplicate route_merge_reinsertion shape.",
+        "cross_branch_research": (
+            "compact_cross_branch_learning.v1 lesson:route-slack diversify "
+            "away from no_effect local_search family."
+        ),
+        "branch_lesson_records": [
+            {
+                "lesson_id": "lesson:route-slack",
+                "scope": "cross_branch",
+                "lesson_role": "avoid",
+            }
+        ],
+        "objective_opportunity_profile": "large-case gap remains on E-n101.",
+        "runtime_feedback": "runtime saturated; treat as auxiliary signal.",
+    }
+
+    system_blocks, user_prompt = _split_hypothesis_context(context)
+    rendered_system = "\n".join(str(block["text"]) for block in system_blocks)
+    rendered_prompt = rendered_system + "\n" + user_prompt
+
+    assert "## Compact Research Signals" in rendered_system
+    assert "lesson:route-slack" in rendered_system
+    assert "branch b1: route_merge_reinsertion lost" in rendered_system
+    assert "## Compact Safety and Output Invariants" in user_prompt
+    assert "Telemetry contract:" in user_prompt
+    assert "Objective field contract:" in user_prompt
+    assert "Runtime constraint:" in user_prompt
+    assert "excluded from DecisionFeatures" in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-context-signal-density",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    accounting = manifest["block_family_accounting"]
+
+    assert accounting["decision_features_excluded"] is True
+    assert accounting["research_signal_chars"] > 0
+    assert accounting["governance_chars"] > 0
+    assert accounting["research_signal_char_share"] > 0
+    assert accounting["governance_char_share"] > 0
+    assert accounting["research_signal_ratio"] is not None
+    assert accounting["families"]["research_signal"]["section_count"] >= 4
+    assert accounting["families"]["governance"]["section_count"] >= 2
 
 
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():

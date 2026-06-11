@@ -79,6 +79,10 @@ def _split_hypothesis_context(
     )
 
     branch_context_parts = []
+    compact_research_signals = _compact_research_signals(context, D)
+    if compact_research_signals:
+        branch_context_parts.append(compact_research_signals)
+
     same_mechanism_constraints = _same_mechanism_followup_constraints(D)
     if same_mechanism_constraints:
         branch_context_parts.append(same_mechanism_constraints)
@@ -203,32 +207,22 @@ def _split_hypothesis_context(
         f"3. Identify specific GAPS — what improvements are IMPOSSIBLE with the current pool or active solver design?\n"
         f"4. Check experiment history — which attempts at filling gaps failed, and WHY? Do not target a stable/protected objective or recent no-effect mechanism unless you have new evidence or a materially different mechanism.\n"
         f"5. Only then propose a hypothesis targeting an identified gap and active bottleneck.\n"
-        f"6. In the hypothesis text, state: active bottleneck from feedback; stable/protected objectives to preserve; mechanism novelty evidence from active solver facts and prior feedback; why the target mechanism is likely to affect the bottleneck; and the no-op/failure conditions that avoid wasting runtime or harming protected objectives.\n"
-        f"7. Fill the runtime intent fields: `target_runtime_effect`, `complexity_claim`, "
-        f"and `runtime_budget_strategy`.\n\n"
-        f"Telemetry contract: `expected_telemetry` top-level keys must be only "
-        f"`activity`, `activation`, `effect`, or `budget`. Put declared runtime "
-        f"field paths under those categories as exact strings or arrays of "
-        f"strings; do not write prose descriptions as field values. Do not use "
-        f"metric names or suffixes such as `best_delta`, `improvement_counts`, "
-        f"`phase_runtime`, or `runtime_ms` as categories. Activation must be "
-        f"mechanism-specific activity evidence, not objective/outcome fields. "
-        f"Aggregate outcome/activity fields show effect or activity, not "
-        f"activation. For mapping telemetry, use a mechanism-specific path "
-        f"containing the declared mechanism id; the whole map field alone is "
-        f"not activation evidence. If changing an existing phase or component, "
-        f"name the changed lever as a mechanism id and use that same id in every "
-        f"expected telemetry path. Do not replace the declared mechanism id with "
-        f"a broad aggregate phase, family, or runtime bucket label.\n\n"
+        f"6. In the hypothesis text, state: active bottleneck; objectives to preserve; novelty evidence; why the mechanism can affect the bottleneck; no-op/failure conditions.\n"
+        f"7. Fill `target_runtime_effect`, `complexity_claim`, and `runtime_budget_strategy`.\n\n"
+        f"## Compact Safety and Output Invariants\n"
+        f"Telemetry contract: `expected_telemetry` keys must be only `activity`, "
+        f"`activation`, `effect`, or `budget`; values must be exact field paths "
+        f"or arrays of paths, not prose. Activation is mechanism-specific "
+        f"activity evidence, not objective outcome, aggregate phase, family, or "
+        f"runtime bucket labels. Reuse the declared mechanism id in every "
+        f"expected telemetry path.\n"
         f"Objective field contract: `target_objectives` and "
-        f"`protected_objectives` must contain only declared problem objective ids. "
-        f"Hard constraints, feasibility conditions, parser validity, and "
-        f"solution consistency belong in `risk_to_higher_priority` or "
-        f"`no_op_condition`, not in objective arrays.\n\n"
-        f"Runtime constraint: proposed research-surface changes are evaluated inside the problem solver and "
-        f"algorithmic efficiency is part of the evidence. Do not propose unbounded high-order "
-        f"enumeration over problem entities; describe any top-k, "
-        f"sampling, or early-stop cap needed to keep runtime comparable to the champion.\n\n"
+        f"`protected_objectives` must contain only declared problem objective ids; "
+        f"put constraints, feasibility, parser validity, and solution consistency "
+        f"in `risk_to_higher_priority` or `no_op_condition`.\n"
+        f"Runtime constraint: keep proposed solver changes bounded and comparable "
+        f"to the champion with explicit top-k, sampling, filter, or early-stop "
+        f"caps when needed.\n"
         f"If your hypothesis duplicates an existing surface's capability (even partially), it will be REJECTED.\n\n"
         f"{negative_fact_block + chr(10) + chr(10) if negative_fact_block else ''}"
         f"{_hypothesis_task_prompt(D)}"
@@ -483,6 +477,85 @@ def _prompt_same_mechanism_allowed_actions(guidance: str) -> str:
 def _extract_guidance_value(text: str, key: str) -> str:
     match = re.search(rf"\b{re.escape(key)}=([^;.\n]+)", text)
     return match.group(1).strip() if match else ""
+
+
+def _compact_research_signals(
+    context: Mapping[str, Any],
+    D: Mapping[str, Any],
+) -> str:
+    """Render a short, default-visible research signal index before rules."""
+    payload = _drop_empty_mapping(
+        {
+            "schema_version": "compact_research_signals.v1",
+            "taint": "proposal_research_feedback",
+            "decision_input_policy": "excluded_from_decision_features",
+            "branch_history": _compact_text_signal(D["experiment_history"]),
+            "sibling_branches": _compact_text_signal(D["sibling_summary"]),
+            "blacklist": _compact_text_signal(D["blacklist_summary"]),
+            "objective_opportunity_profile": _compact_text_signal(
+                D.get("objective_opportunity_profile")
+            ),
+            "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
+            "cross_branch_learning": _compact_text_signal(
+                D["cross_branch_research"],
+                max_chars=900,
+            ),
+            "branch_lesson_ids": _lesson_ids_from_context(context),
+            "research_shape": _compact_text_signal(D.get("research_shape_diagnostics")),
+        }
+    )
+    if len(payload) <= 3:
+        return ""
+    return (
+        "## Compact Research Signals\n"
+        "Default-visible proposal context only; excluded from DecisionFeatures. "
+        "Use this before broader rules or raw feedback when choosing the next "
+        "mechanism.\n\n"
+        f"{_bounded_json(payload, 2200)}"
+    )
+
+
+def _drop_empty_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): item
+        for key, item in value.items()
+        if item not in (None, "", [], {}, ())
+    }
+
+
+def _compact_text_signal(value: Any, *, max_chars: int = 420) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text or text in {"(none)", "none", "null"}:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 18].rstrip() + " ... [truncated]"
+
+
+def _lesson_ids_from_context(context: Mapping[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for key in (
+        "branch_lesson_records",
+        "branch_lessons",
+        "cross_branch_lesson_records",
+    ):
+        records = context.get(key)
+        if not isinstance(records, (list, tuple)):
+            continue
+        for record in records:
+            if not isinstance(record, Mapping):
+                continue
+            lesson_id = str(
+                record.get("lesson_id")
+                or record.get("id")
+                or record.get("record_id")
+                or ""
+            ).strip()
+            if lesson_id and lesson_id not in ids:
+                ids.append(lesson_id)
+            if len(ids) >= 8:
+                return ids
+    return ids
 
 
 def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:

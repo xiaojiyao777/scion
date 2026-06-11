@@ -778,6 +778,7 @@ class StatusWriterMixin:
             payload["cross_branch_research_observability"] = (
                 build_cross_branch_research_observability(
                     branch_rows=branch_rows,
+                    branch_history_cards=payload.get("branch_history_cards") or (),
                     scheduler_records=scheduler_records,
                     context_records=_status_context_records(
                         self.last_status_result

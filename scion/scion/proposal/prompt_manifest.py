@@ -33,6 +33,7 @@ from scion.proposal.prompt_manifest_visibility import (
     _section_block_family,
     _section_inclusion_reason,
     _section_prompt_block_profile,
+    _token_estimate,
     _tool_result_visibility_ledger,
     _visibility_ledger,
 )
@@ -162,6 +163,12 @@ def build_api_visible_prompt_manifest(
             material_difference_requirement_visibility_ledger
         ),
     )
+    block_family_accounting = _block_family_accounting(
+        section_records=section_records,
+        included_observations=included_observations,
+        visibility_ledger=visibility_ledger,
+        total_chars=total_chars,
+    )
     projection_diagnostics = _projection_diagnostics(
         section_records=section_records,
         included_observations=included_observations,
@@ -196,7 +203,23 @@ def build_api_visible_prompt_manifest(
             "sections": {
                 record["name"]: record["char_count"] for record in section_records
             },
+            "block_families": block_family_accounting["families"],
         },
+        "token_accounting": {
+            "schema_version": "api-visible-prompt-token-accounting.v1",
+            "method": "char_count_div_4_ceil_estimate",
+            "provider_visible_token_estimate": _token_estimate(total_chars),
+            "system_prompt_token_estimate": _token_estimate(system_chars),
+            "user_prompt_token_estimate": _token_estimate(user_chars),
+            "block_family_token_estimates": {
+                family: record["token_estimate"]
+                for family, record in block_family_accounting["families"].items()
+            },
+            "visibility_entry_token_estimate": block_family_accounting[
+                "visibility_entry_token_estimate"
+            ],
+        },
+        "block_family_accounting": block_family_accounting,
         "provider_visible_prompt": {
             "system_block_count": len(rendered_system_blocks),
             "system_text_chars": system_chars,
@@ -282,6 +305,136 @@ def build_api_visible_prompt_manifest(
         ),
         "raw_prompt_saved": False,
     }
+
+
+def _block_family_accounting(
+    *,
+    section_records: list[Mapping[str, Any]],
+    included_observations: list[Mapping[str, Any]],
+    visibility_ledger: Mapping[str, Any],
+    total_chars: int,
+) -> dict[str, Any]:
+    families: dict[str, dict[str, Any]] = {}
+    for section in section_records:
+        family = str(section.get("block_family") or "general")
+        record = families.setdefault(
+            family,
+            {
+                "section_count": 0,
+                "char_count": 0,
+                "token_estimate": 0,
+                "visible_observation_count": 0,
+                "omitted_section_count": 0,
+                "truncated_section_count": 0,
+            },
+        )
+        char_count = _nonnegative_int(section.get("char_count"))
+        record["section_count"] += 1
+        record["char_count"] += char_count
+        record["token_estimate"] = _token_estimate(record["char_count"])
+        if section.get("omitted"):
+            record["omitted_section_count"] += 1
+        if section.get("truncated"):
+            record["truncated_section_count"] += 1
+
+    observation_family_counts: dict[str, int] = {}
+    for item in included_observations:
+        if not item.get("rendered_visibility_flag"):
+            continue
+        family = "tool_observation"
+        observation_family_counts[family] = (
+            observation_family_counts.get(family, 0) + 1
+        )
+        record = families.setdefault(
+            family,
+            {
+                "section_count": 0,
+                "char_count": 0,
+                "token_estimate": 0,
+                "visible_observation_count": 0,
+                "omitted_section_count": 0,
+                "truncated_section_count": 0,
+            },
+        )
+        record["visible_observation_count"] += 1
+
+    entries = (
+        visibility_ledger.get("entries")
+        if isinstance(visibility_ledger, Mapping)
+        else []
+    )
+    visibility_entry_token_estimate = 0
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            visibility_entry_token_estimate += _nonnegative_int(
+                entry.get("token_estimate")
+            )
+
+    governance_chars = _family_char_count(families, "governance")
+    research_signal_chars = _family_char_count(families, "research_signal")
+    feedback_chars = _family_char_count(families, "feedback")
+    signal_denominator = governance_chars + research_signal_chars
+    if signal_denominator:
+        research_signal_ratio = research_signal_chars / signal_denominator
+    else:
+        research_signal_ratio = None
+    for record in families.values():
+        record["char_share"] = (
+            record["char_count"] / total_chars if total_chars else 0.0
+        )
+        record["token_share"] = (
+            record["token_estimate"] / _token_estimate(total_chars)
+            if total_chars
+            else 0.0
+        )
+
+    return {
+        "schema_version": "api-visible-prompt-block-family-accounting.v1",
+        "policy": "manifest_observability_only",
+        "decision_features_excluded": True,
+        "source": "rendered_provider_prompt_sections_and_visibility_ledger",
+        "total_chars": total_chars,
+        "total_token_estimate": _token_estimate(total_chars),
+        "research_signal_chars": research_signal_chars,
+        "research_signal_token_estimate": _token_estimate(research_signal_chars),
+        "research_signal_char_share": (
+            research_signal_chars / total_chars if total_chars else 0.0
+        ),
+        "governance_chars": governance_chars,
+        "governance_token_estimate": _token_estimate(governance_chars),
+        "governance_char_share": (
+            governance_chars / total_chars if total_chars else 0.0
+        ),
+        "feedback_chars": feedback_chars,
+        "feedback_token_estimate": _token_estimate(feedback_chars),
+        "feedback_char_share": feedback_chars / total_chars if total_chars else 0.0,
+        "research_signal_ratio": research_signal_ratio,
+        "research_signal_ratio_basis": (
+            "research_signal_chars/(research_signal_chars+governance_chars)"
+        ),
+        "family_count": len(families),
+        "families": dict(sorted(families.items())),
+        "visible_observation_family_counts": dict(
+            sorted(observation_family_counts.items())
+        ),
+        "visibility_entry_token_estimate": visibility_entry_token_estimate,
+    }
+
+
+def _nonnegative_int(value: Any, default: int = 0) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return max(0, int(default))
+
+
+def _family_char_count(families: Mapping[str, Mapping[str, Any]], family: str) -> int:
+    record = families.get(family)
+    if not isinstance(record, Mapping):
+        return 0
+    return _nonnegative_int(record.get("char_count"))
 
 
 def _context_profile_from_safe_context(context: Mapping[str, Any]) -> str:

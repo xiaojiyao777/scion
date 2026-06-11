@@ -164,7 +164,32 @@ def _section_block_family(name: str) -> str:
         return "active_facts"
     if "solver_design" in name or "algorithm_file" in name or "source" in name:
         return "source_context"
+    if name in {
+        "compact_research_signals",
+        "experiment_history_this_branch",
+        "globally_failed_blacklisted_approaches",
+        "currently_occupied_c10_reports_duplicate_risk_diagnostics",
+        "sibling_branches",
+        "cross_branch_research_map",
+        "branch_lesson_usage_context",
+        "branch_follow_up_policy",
+        "branch_dossier",
+        "branch_direction",
+        "objective_opportunity_profile",
+        "exploration_coverage",
+        "strategy_guidance",
+        "champion_baseline_hints",
+    }:
+        return "research_signal"
+    if "lesson" in name or "cross_branch" in name or name.startswith("branch_"):
+        return "research_signal"
     if "contract" in name or "schema" in name or "permission" in name:
+        return "governance"
+    if name in {
+        "analysis_steps_follow_in_order",
+        "compact_safety_and_output_invariants",
+        "task",
+    }:
         return "governance"
     if "feedback" in name or "runtime" in name or "screening" in name:
         return "feedback"

@@ -1321,3 +1321,49 @@ def test_prompt_manifest_sections_record_block_profile_and_reason() -> None:
     assert catalog["inclusion_reason"] == "planner_selected"
     assert dynamic["block_family"] == "tool_selection"
     assert dynamic["inclusion_reason"] == "dynamic_phase_context"
+
+
+def test_prompt_manifest_records_block_family_token_accounting() -> None:
+    system_blocks = [
+        {
+            "text": (
+                "## Runtime Feedback\n"
+                "screening signal is sparse\n"
+                "## Solver Design Full Algorithm File Reads\n"
+                "def improve():\n"
+                "    return True\n"
+            ),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    user_prompt = (
+        "## Agentic Proposal Tool Observations\n"
+        "[observation:obs-1 payload_digest=abc123]\n"
+        "compact visible observation\n"
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-manifest-accounting",
+        phase="diagnose",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    accounting = manifest["block_family_accounting"]
+    tokens = manifest["token_accounting"]
+
+    assert accounting["decision_features_excluded"] is True
+    assert accounting["families"]["feedback"]["section_count"] == 1
+    assert accounting["families"]["source_context"]["section_count"] == 1
+    assert accounting["families"]["tool_observation"]["section_count"] == 1
+    assert manifest["char_budget"]["block_families"] == accounting["families"]
+    assert tokens["method"] == "char_count_div_4_ceil_estimate"
+    assert tokens["provider_visible_token_estimate"] == (
+        accounting["total_token_estimate"]
+    )
+    assert tokens["block_family_token_estimates"]["feedback"] == (
+        accounting["families"]["feedback"]["token_estimate"]
+    )

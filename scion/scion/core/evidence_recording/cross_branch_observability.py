@@ -18,6 +18,9 @@ from scion.core.explore_step.generic_mechanism_signature import (
     generic_signature_payload_from_key,
 )
 from scion.core.models import StepRecord
+from scion.core.evidence_recording.research_shape_diagnostics import (
+    build_campaign_research_shape_diagnostics,
+)
 
 _SCHEMA_VERSION = "cross_branch_research_observability.v1"
 _POLICY = "proposal_observability_only"
@@ -49,6 +52,7 @@ def build_cross_branch_research_observability(
     branch_rows: Iterable[Mapping[str, Any]] = (),
     scheduler_records: Iterable[Mapping[str, Any]] = (),
     context_records: Iterable[Mapping[str, Any]] = (),
+    branch_history_cards: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Return proposal-context counters without exposing proposal text.
 
@@ -65,6 +69,9 @@ def build_cross_branch_research_observability(
         and _counts_toward_observability_scope(step)
     ]
     branch_row_list = [row for row in branch_rows if isinstance(row, Mapping)]
+    branch_history_card_list = [
+        row for row in branch_history_cards if isinstance(row, Mapping)
+    ]
     scheduler_record_list = [
         row for row in scheduler_records if isinstance(row, Mapping)
     ]
@@ -224,6 +231,11 @@ def build_cross_branch_research_observability(
         "novelty_pressure_seen_count": novelty_pressure_seen_count,
         "cross_branch_map_seen_count": cross_branch_map_seen_count,
         "reason_code_counts": reason_code_counts,
+        "research_shape_diagnostics": build_campaign_research_shape_diagnostics(
+            steps=step_list,
+            branch_rows=branch_row_list,
+            branch_history_cards=branch_history_card_list,
+        ),
     }
 
 
