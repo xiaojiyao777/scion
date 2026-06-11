@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 focused validation in progress; warehouse canary accounting repair accepted*
+*Status: Phase 4 focused validation in progress; warehouse canary accounting verified, warehouse safe-root repair accepted*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -505,6 +505,24 @@ Exit criteria:
 - Next: rerun warehouse Phase 4 from the repair commit. The current CVRP Phase 4
   run was launched from `32ab596` and remains valid for its own run environment,
   but it does not exercise this later accounting fix.
+- Verified: warehouse accounting rerun from repair commit `a6a34d6` completed at
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-canaryfix-foreground-20260611-4r-gpt55-20260611T234843Z-claw`
+  with wrapper exit 0, four consumed attempts, zero experiments, and correct
+  no-protocol-row accounting:
+  `formal_screened_candidates=0`, `protocol_evaluated_candidates=0`,
+  `effective_protocol_rounds=0`, `screening_protocol_results=0`,
+  `protocol_metric_results=0`, and
+  `run_validity.reason=invalid_no_protocol_rows`. The run is not warehouse
+  research evidence; it exposes the next blocker, a warehouse production canary
+  safe-root failure on
+  `artifact:instance_prod_can_s01.json#64a747f955e8`
+  (`absolute_outside_roots`).
+- Accepted: Curie's warehouse safe-root repair. The production split declares
+  `safe_data_roots: ../../../../scion-data`, so production canary paths resolve
+  through problem-owned safe roots under strict protocol. Acceptance: focused
+  protocol/CLI/e2e subset `12 passed` and `git diff --check`.
+- Next: commit the safe-root repair and rerun warehouse Phase 4 from the new
+  commit.
 
 ## Status Cadence
 

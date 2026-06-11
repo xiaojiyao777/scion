@@ -305,9 +305,42 @@ Verification passed with
 `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_protocol_canary.py scion/scion/tests/unit/protocol/test_protocol_correctness.py scion/scion/tests/test_cvrp_protocol_smoke.py -q`
 (`31 passed`), and `git diff --check`.
 
-Next: rerun warehouse Phase 4 from the canary accounting repair commit. The CVRP
-Phase 4 run remains in progress from commit `32ab596`; do not interpret it as
-exercising the later canary accounting fix.
+Warehouse accounting verification rerun: the canonical rerun is
+`/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-canaryfix-foreground-20260611-4r-gpt55-20260611T234843Z-claw`,
+launched from repair commit `a6a34d6` with the same production warehouse
+protocol/split/seeds and local `gpt5.5`. It finished with wrapper exit 0 at
+`2026-06-11T23:55:48Z`, consumed four attempts, produced `experiments  : 0`,
+and is correctly invalid as scientific evidence:
+`effective_rounds_completed=4`, `formal_screened_candidates=0`,
+`protocol_evaluated_candidates=0`, `effective_protocol_rounds=0`,
+`screening_protocol_results=0`, `protocol_metric_results=0`, and
+`run_validity.reason=invalid_no_protocol_rows`. `campaign_summary.json` contains
+four canary-failed steps with `raw_metrics_unavailable_reason=
+canary_veto_before_formal_protocol`; the DB has four abandoned branches with
+`failure_codes=[CANARY_FAILED]`; no formal candidate index/artifacts were
+written.
+
+The rerun also exposes the next warehouse blocker: strict canary case resolution
+rejects `artifact:instance_prod_can_s01.json#64a747f955e8` as
+`absolute_outside_roots`. Treat that as a warehouse problem-package safe-root
+configuration issue, not as agent research evidence. Curie
+(`019eb91b-4d3c-74c0-b220-793cbe96639d`) is investigating a minimal
+problem-owned fix. The CVRP Phase 4 run remains in progress from commit
+`32ab596`; do not interpret it as exercising the later canary accounting fix.
+
+Warehouse safe-root repair status: Curie's problem-owned fix is accepted. The
+production warehouse split now declares `safe_data_roots:
+../../../../scion-data`, allowing the existing production absolute case paths to
+resolve under strict protocol without moving warehouse semantics into generic
+core. The focused test
+`test_warehouse_prod_canary_paths_run_under_strict_protocol` verifies canary
+paths resolve as `resolved_safe_data_root` and reach `run_canary` with a mock
+runner. Acceptance passed with
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/protocol/test_case_path_safety.py scion/scion/tests/unit/test_cli_data_roots.py scion/scion/tests/test_e2e.py::TestWarehouseDeliveryConfig -q`
+(`12 passed`) and `git diff --check`.
+
+Next: commit the warehouse safe-root repair and rerun warehouse Phase 4 from the
+new commit.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

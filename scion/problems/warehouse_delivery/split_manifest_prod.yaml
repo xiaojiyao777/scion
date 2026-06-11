@@ -14,6 +14,9 @@
 
 version: "prod-1.1"
 
+safe_data_roots:
+  - ../../../../scion-data
+
 canary:
   - /home/clawd/research/scion-data/production/generated/instance_prod_can_s01.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_can_s02.json

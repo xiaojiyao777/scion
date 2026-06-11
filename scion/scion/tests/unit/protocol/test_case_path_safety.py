@@ -9,6 +9,12 @@ import pytest
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+from scion.protocol.experiment.selection import resolve_case_path_details
+
+
+WAREHOUSE_CONFIG_DIR = (
+    Path(__file__).resolve().parents[4] / "problems" / "warehouse_delivery"
+)
 
 
 def test_strict_protocol_rejects_unresolved_relative_case_path(tmp_path: Path) -> None:
@@ -133,6 +139,65 @@ def test_protocol_raw_metrics_record_case_path_resolution_status(
         resolution["cases"]["missing.json"]["champion"]["status"]
         == "unresolved_relative"
     )
+
+
+def test_warehouse_prod_canary_paths_run_under_strict_protocol(
+    tmp_path: Path,
+) -> None:
+    split_manifest = SplitManifest.from_yaml(
+        WAREHOUSE_CONFIG_DIR / "split_manifest_prod.yaml"
+    )
+    data_root = (
+        WAREHOUSE_CONFIG_DIR / "../../../../scion-data"
+    ).resolve(strict=False)
+
+    assert split_manifest.canary
+    assert Path(split_manifest.safe_data_roots[0]) == data_root
+    for case in split_manifest.canary:
+        resolution = resolve_case_path_details(
+            case,
+            workspace=str(tmp_path / "candidate"),
+            safe_data_roots=split_manifest.safe_data_roots,
+        )
+        assert resolution.safe is True
+        assert resolution.status == "resolved_safe_data_root"
+
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _run_result(1, 12000),
+        _run_result(1, 12000),
+    ] * len(split_manifest.canary)
+    (tmp_path / "candidate").mkdir()
+    (tmp_path / "champion").mkdir()
+    proto = ExperimentProtocol(
+        ProtocolConfig.from_yaml(WAREHOUSE_CONFIG_DIR / "protocol_prod.yaml"),
+        SplitManager(split_manifest),
+        SeedLedger(
+            SeedLedgerConfig(
+                version="test",
+                screening=[1],
+                validation=[2],
+                frozen=[3],
+                canary=[99],
+            )
+        ),
+        runner,
+        time_limit_sec=10,
+        metrics_dir=str(tmp_path / "metrics"),
+        strict_case_paths=True,
+    )
+
+    result = proto.run_canary(
+        str(tmp_path / "candidate"),
+        str(tmp_path / "champion"),
+    )
+
+    assert result.passed is True
+    assert runner.run_solver.call_count == len(split_manifest.canary) * 2
+    assert {
+        call.kwargs["instance_path"]
+        for call in runner.run_solver.call_args_list
+    } == set(split_manifest.canary)
 
 
 def _protocol(
