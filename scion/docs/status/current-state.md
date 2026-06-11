@@ -160,8 +160,16 @@ Phase 1 is in progress and recorded in
 - A repaired formal protocol-time CVRP A/A run directory is prepared but not
   launched:
   `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`.
+  Its wrapper metadata now records current HEAD
+  `ba19e4fae57e4ccc3b7b2c70cf94d90a53c5d6f4`; the calibration command still
+  uses the same formal split, seed ledger, declared data-root wiring, and
+  `--runtime-policy protocol_time_limits`.
   Launch it after the legacy uniform-60s run exits so runtime evidence is not
   contaminated by two concurrent solver calibrations.
+- Latest check at `2026-06-11T20:06:50Z`: the legacy uniform-60s CVRP run was
+  still `running`, with no `aa_noise_floor.json` yet, and the live solver had
+  reached `M/M-n200-k17.vrp`. Do not start Phase 2 repairs or the protocol-time
+  rerun until this process exits and its result is classified.
 - Phase 1 closure now has an explicit acceptance checklist in the calibration
   note. If the active CVRP run succeeds, it is only the first uniform-60s MDE
   estimate, not a faithful formal per-case-runtime reproduction. If it fails,

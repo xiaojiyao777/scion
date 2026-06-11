@@ -357,7 +357,9 @@ Exit criteria:
   tooling repair above, so its final artifact, if successful, will still be a
   uniform-60s legacy-schema calibration. A repaired formal protocol-time CVRP
   run directory has been prepared and should be launched after the legacy run
-  exits. The in-progress report is
+  exits. Latest check at `2026-06-11T20:06:50Z`: the legacy run was still
+  active, had not produced `aa_noise_floor.json`, and had reached
+  `M/M-n200-k17.vrp`. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.

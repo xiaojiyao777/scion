@@ -36,6 +36,10 @@ with candidate seed `2000035` under uniform `--time-limit-sec 30`.
 A corrected CVRP run started at `2026-06-11T17:54:50Z` with the same safe-root
 split and `--time-limit-sec 60`. This is still a uniform-budget calibration
 run, not a perfect reproduction of the formal per-case runtime time-limit rules.
+At `2026-06-11T20:06:50Z`, this run was still active with no
+`aa_noise_floor.json` yet; the live solver had reached
+`M/M-n200-k17.vrp`, confirming continued progress rather than a launch-time
+stall.
 
 ## Expected Workload
 
@@ -130,7 +134,7 @@ launched:
 
 `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`
 
-It uses commit `74e983966f3f327cca1a0cc3eb615ae09c181911`, the formal CVRP
+It uses commit `ba19e4fae57e4ccc3b7b2c70cf94d90a53c5d6f4`, the formal CVRP
 split and seed ledger, declared data-root wiring through `formal/budgets.json`,
 and `--runtime-policy protocol_time_limits`. Launch it after the legacy
 uniform-60s run exits to avoid resource contention contaminating runtime
