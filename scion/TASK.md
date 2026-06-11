@@ -21,6 +21,38 @@ efficiency and evidence quality.
 
 Do not begin additional framework code repair until Phase 1 A/A calibration has
 quantified whether the current protocol can detect the effects being claimed.
+If Phase 1 cannot be completed because calibration tooling cannot represent the
+formal protocol, that tooling repair is a Phase 1 prerequisite, not a general
+framework repair.
+
+## Phase Gates
+
+- Phase 1 gate: CVRP and warehouse both have usable A/A conclusions, including
+  MDE, false-pass risk, variance structure, runtime behavior, selected
+  cases/seeds, runtime budget policy, and any calibration-tooling caveats.
+- Phase 2 gate: every repair is accepted only after a v3 boundary check,
+  focused tests, prompt/context evidence where relevant, and a status update.
+- Phase 3 gate: the measurement declaration layer is problem-owned,
+  schema-validated, and consumed through deterministic fields. Raw calibration
+  diagnostics and free-form explanations must not become Decision input.
+- Phase 4 gate: repaired v0.4 must show effective research behavior before the
+  governance value experiment starts, especially CVRP branch depth,
+  same-mechanism follow-up, and evidence interpreted against A/A MDE.
+- Phase 5 gate: governance on/off arms must be matched on problem, champion
+  start, model, round budget, cases, seeds, and runtime budgets.
+
+## Experiment Defaults
+
+- Use the local `gpt5.5` model for Scion runs that involve LLM proposal,
+  diagnosis, or code-generation calls.
+- Treat copied configs, protocol/split/seed hashes, champion versions,
+  workspace commits, and run directories as required evidence.
+- When runtime caps are size-dependent in the formal protocol, experiment
+  reports must say whether a run used the formal policy or a conservative
+  approximation such as a uniform time limit.
+- Do not treat aggregate win rate as sufficient evidence. Pair-level deltas,
+  per-case behavior, seed/RNG sensitivity, runtime events, and branch trajectory
+  must be inspected for experiments whose purpose depends on them.
 
 ## Required Reading
 
@@ -64,6 +96,20 @@ Every subagent brief must require:
 - Report changed files, tests run, experiment artifacts inspected, and residual
   risks.
 - Avoid reverting unrelated work in the shared worktree.
+
+Default subagent brief template:
+
+- Objective: one bounded outcome tied to a phase gate.
+- Required reading: `scion/design/scion-architecture-v3.md` first, then only the
+  audit/design/experiment artifacts needed for the assignment.
+- Scope: exact files, modules, or run directories the subagent may touch or
+  inspect.
+- Boundary requirement: what must remain in generic core, what must remain
+  problem-owned, and what must stay outside `DecisionFeatures`.
+- Acceptance: tests, artifact checks, prompt/context samples, or experiment
+  analyses required before the main thread can accept the work.
+- Deliverables: concise report with changed files, commands run, artifacts
+  inspected, evidence-backed conclusions, and residual risks.
 
 ## V3 Boundary Acceptance
 
@@ -166,6 +212,10 @@ Required repair slices:
   especially during code phase. Context compression may target governance
   boilerplate, raw duplicated logs, and generic cross-branch payloads, not the
   research object code.
+- Context phase policy: proposal/research phases should increase problem-domain
+  signal density, while code phases must preserve direct visibility of the
+  champion/current branch/target source needed to modify or judge the research
+  object.
 
 Exit criteria:
 
@@ -295,6 +345,27 @@ Exit criteria:
   full promotion path to champion v2.
 - Pending: CVRP Phase 1 A/A completion and final calibration report, then
   Phase 2 repairs.
+
+## Status Cadence
+
+The main thread updates status after each material event:
+
+- Experiment launch, completion, failure, or rerun.
+- Subagent brief creation, completion, rejection, or acceptance.
+- Phase gate pass/fail decision.
+- Commit that changes task scope, protocol behavior, measurement behavior,
+  context composition, runtime governance, or lifecycle policy.
+
+Status updates must identify the current phase, artifact path, commit/branch,
+tests or commands used for acceptance, known caveats, next gate, and whether the
+next action belongs to the main thread or a subagent.
+
+Status docs to keep aligned:
+
+- `scion/TASK.md`
+- `scion/docs/status/current-state.md`
+- `scion/docs/status/v0.4-history.md`
+- `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 
 ## Git Hygiene
 
