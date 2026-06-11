@@ -87,6 +87,43 @@ Phase 1 prerequisite repair: calibration must learn declared data roots,
 per-case runtime rules, and replayable pair/runtime evidence before Phase 1 can
 be closed.
 
+## Phase 1 Prerequisite Tooling Repair
+
+Worker F implemented the calibration evidence-closure repair while the active
+CVRP uniform-60s run was already running. The repair keeps calibration evidence
+problem-owned and explicitly excluded from `DecisionFeatures`.
+
+New capability:
+
+- `aa_noise_floor.json` now records replayable `pair_evidence` with case,
+  resolved case path, case resolution, ledger seed, candidate seed, replicate,
+  outcome, delta/raw delta, candidate/champion values, elapsed runtime, and
+  pair time limit.
+- The top-level payload and `calibration_run` record selected cases/seeds,
+  replicate count, seed offset, bootstrap samples, selected surface,
+  runtime-policy metadata, safe data roots, and
+  `decision_features_excluded=true`.
+- `tools/calibrate_aa_noise.py` now wires declared problem data roots through
+  the existing data-root helpers instead of requiring a hand-edited split.
+- The CLI supports `--runtime-policy uniform_time_limit` for compatibility and
+  `--runtime-policy protocol_time_limits` to resolve per-case protocol budgets.
+
+Verification:
+
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/test_aa_calibration.py`
+- `cd scion && python -m py_compile tools/calibrate_aa_noise.py scion/measurement/aa_calibration.py`
+- `cd scion && python tools/calibrate_aa_noise.py --help`
+- `cd scion && python tools/calibrate_aa_noise.py ... --max-cases 1 --max-seeds 1 --replicates 1 --time-limit-sec 5 --runtime-policy protocol_time_limits`
+- `cd scion && unset SCION_PROBLEM_DATA_ROOT && python tools/calibrate_aa_noise.py ... formal ... --replicates 0 --runtime-policy protocol_time_limits`
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/test_cli_data_roots.py scion/scion/tests/test_cvrp_formal_readiness.py`
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_protocol_split_runtime.py`
+
+Important caveat: the active CVRP uniform-60s run was launched before this
+repair and will not retroactively gain the new schema or protocol-time-limit
+behavior. If that run succeeds, it remains a legacy uniform-60s first estimate.
+The next formal CVRP calibration should use the repaired CLI with
+`--runtime-policy protocol_time_limits`.
+
 ## Warehouse Results
 
 ### Create

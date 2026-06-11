@@ -331,10 +331,18 @@ Exit criteria:
   V9 budget-compliance semantics, read-only branch research-shape diagnostics,
   prompt block-family accounting, compact research signals, and
   `scion/tools/calibrate_aa_noise.py`.
+- Implemented during Phase 1 prerequisite repair: A/A artifacts now include
+  replayable pair evidence, selected cases/seeds, replicate count, seed offset,
+  bootstrap samples, selected surface, safe data roots, case resolution,
+  elapsed runtime, and explicit runtime-policy metadata. The calibration CLI can
+  wire declared problem data roots and can run either uniform time limits or
+  protocol-resolved per-case time limits.
 - In progress: Phase 1 A/A calibration has launched. Warehouse create/modify
   screening calibrations finished with wrapper exit 0. The first CVRP safe-root
   `tl30` run failed on `M/M-n200-k17.vrp` timeout; a corrected uniform-60s CVRP
-  run is active. The in-progress report is
+  run is active. That active run was launched before the Phase 1 prerequisite
+  tooling repair above, so its final artifact, if successful, will still be a
+  uniform-60s legacy-schema calibration. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.

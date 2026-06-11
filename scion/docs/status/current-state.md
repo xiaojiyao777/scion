@@ -94,6 +94,13 @@ The active v0.4 task breakdown is
   calibrations finished cleanly, while CVRP formal screening calibration is
   still running. The in-progress note is
   [`../experiments/v0.4/v04-phase1-aa-calibration-20260611.md`](../experiments/v0.4/v04-phase1-aa-calibration-20260611.md).
+- Phase 1 calibration evidence closure: the A/A tool now records replayable
+  pair evidence, selected cases/seeds, replicate count, seed offset, bootstrap
+  samples, selected surface, safe data roots, case resolution, elapsed runtime,
+  and runtime-policy metadata. It can wire declared problem data roots and can
+  use protocol-resolved per-case time limits. The currently running CVRP
+  uniform-60s process was launched before this repair, so its artifact remains a
+  legacy uniform-budget estimate if it finishes successfully.
 - Research shape/context: campaign summary/status expose read-only branch-depth
   and mechanism-family diagnostics; prompt manifests expose block-family token
   accounting and research-signal/governance ratios; hypothesis prompts now show
@@ -154,8 +161,9 @@ Phase 1 is in progress and recorded in
   note. If the active CVRP run succeeds, it is only the first uniform-60s MDE
   estimate, not a faithful formal per-case-runtime reproduction. If it fails,
   or if the payload is insufficient to explain selected cases/seeds, runtime
-  behavior, raw pair evidence, and case resolution, Worker F becomes a Phase 1
-  prerequisite tooling repair.
+  behavior, raw pair evidence, and case resolution, the repaired Worker F
+  calibration tool is ready for a new Phase 1 run using
+  `--runtime-policy protocol_time_limits`.
 - No Phase 2 framework code repair should start until the CVRP result is
   available and the Phase 1 measurement-power conclusion is finalized.
 

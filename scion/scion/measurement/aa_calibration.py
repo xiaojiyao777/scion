@@ -22,6 +22,12 @@ class AAPairRecord:
     raw_delta: float
     candidate_value: float | None = None
     champion_value: float | None = None
+    candidate_seed: int | None = None
+    resolved_case_path: str | None = None
+    case_resolution: Mapping[str, Any] | None = None
+    champion_elapsed_ms: int | None = None
+    candidate_elapsed_ms: int | None = None
+    time_limit_sec: int | None = None
 
 
 def summarize_aa_records(records: Sequence[AAPairRecord]) -> list[dict[str, Any]]:
@@ -132,6 +138,13 @@ def build_aa_noise_floor_payload(
     champion_version: str = "",
     protocol_version: str = "",
     n_boot: int = 400,
+    selected_cases: Sequence[str] = (),
+    selected_seeds: Sequence[int] = (),
+    replicates: int | None = None,
+    seed_offset: int | None = None,
+    selected_surface: str | None = None,
+    runtime_policy: Mapping[str, Any] | None = None,
+    safe_data_roots: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Return a JSON-safe A/A calibration artifact."""
 
@@ -141,6 +154,10 @@ def build_aa_noise_floor_payload(
         practical_delta=practical_delta,
         n_boot=n_boot,
     )
+    selected_cases_payload = list(selected_cases)
+    selected_seeds_payload = [int(seed) for seed in selected_seeds]
+    runtime_policy_payload = dict(runtime_policy or {})
+    safe_data_roots_payload = [str(root) for root in safe_data_roots]
     return {
         "schema": "scion.aa_noise_floor.v1",
         "problem_id": problem_id,
@@ -151,11 +168,123 @@ def build_aa_noise_floor_payload(
         "champion_version": champion_version,
         "protocol_version": protocol_version,
         "n_pairs": len(records),
+        "selected_cases": selected_cases_payload,
+        "selected_seeds": selected_seeds_payload,
+        "replicate_count": replicates,
+        "seed_offset": seed_offset,
+        "bootstrap_samples": n_boot,
+        "selected_surface": selected_surface,
+        "runtime_policy": runtime_policy_payload,
+        "safe_data_roots": safe_data_roots_payload,
+        "calibration_run": {
+            "selected_cases": selected_cases_payload,
+            "selected_seeds": selected_seeds_payload,
+            "replicate_count": replicates,
+            "seed_offset": seed_offset,
+            "bootstrap_samples": n_boot,
+            "selected_surface": selected_surface,
+            "runtime_policy": runtime_policy_payload,
+            "safe_data_roots": safe_data_roots_payload,
+            "decision_features_excluded": True,
+        },
+        "pair_evidence": [_pair_record_payload(record) for record in records],
         "per_case": summarize_aa_records(records),
         "protocol_power": power,
         "decision_features_excluded": True,
         "policy": "problem_owned_measurement_diagnostic",
     }
+
+
+def runtime_policy_summary(
+    *,
+    protocol: Any,
+    stage: Any,
+    cases: Sequence[str],
+    fallback_time_limit_sec: int,
+    selected_policy: str,
+) -> dict[str, Any]:
+    """Summarize uniform vs protocol-resolved runtime budgets for calibration."""
+
+    stage_key = str(getattr(stage, "value", stage) or "").strip().lower()
+    formal_config = getattr(getattr(protocol, "runtime", None), "time_limits", None)
+    formal_summary = (
+        formal_config.summary(
+            stage=stage_key,
+            cases=tuple(cases),
+            fallback_time_limit_sec=fallback_time_limit_sec,
+        )
+        if formal_config is not None
+        else {
+            "stage": stage_key,
+            "fallback_time_limit_sec": max(1, int(fallback_time_limit_sec)),
+            "resolved_min_sec": max(1, int(fallback_time_limit_sec)),
+            "resolved_max_sec": max(1, int(fallback_time_limit_sec)),
+            "resolved_unique_sec": [max(1, int(fallback_time_limit_sec))],
+            "rules": [],
+        }
+    )
+    uniform_limit = max(1, int(fallback_time_limit_sec))
+    if selected_policy == "protocol_time_limits":
+        runner_timeout = int(formal_summary.get("resolved_max_sec") or uniform_limit)
+    else:
+        runner_timeout = uniform_limit
+    return {
+        "selected_policy": selected_policy,
+        "uniform_time_limit_sec": uniform_limit,
+        "formal_time_limits": formal_summary,
+        "runner_timeout_sec": max(1, runner_timeout),
+    }
+
+
+def resolve_calibration_time_limit_sec(
+    *,
+    protocol: Any,
+    stage: Any,
+    case_path: str,
+    fallback_time_limit_sec: int,
+    runtime_policy: str,
+) -> int:
+    """Resolve one calibration pair's solver budget."""
+
+    fallback = max(1, int(fallback_time_limit_sec))
+    if runtime_policy != "protocol_time_limits":
+        return fallback
+    config = getattr(getattr(protocol, "runtime", None), "time_limits", None)
+    if config is None:
+        return fallback
+    stage_key = str(getattr(stage, "value", stage) or "").strip().lower()
+    return config.resolve(
+        stage=stage_key,
+        case_path=case_path,
+        fallback_time_limit_sec=fallback,
+    )
+
+
+def _pair_record_payload(record: AAPairRecord) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "case": record.case_id,
+        "ledger_seed": int(record.seed),
+        "candidate_seed": (
+            int(record.candidate_seed)
+            if record.candidate_seed is not None
+            else int(record.seed)
+        ),
+        "replicate": int(record.replicate),
+        "outcome": record.outcome,
+        "delta": float(record.delta),
+        "raw_delta": float(record.raw_delta),
+        "candidate_value": record.candidate_value,
+        "champion_value": record.champion_value,
+        "champion_elapsed_ms": record.champion_elapsed_ms,
+        "candidate_elapsed_ms": record.candidate_elapsed_ms,
+    }
+    if record.resolved_case_path is not None:
+        payload["resolved_case_path"] = record.resolved_case_path
+    if record.case_resolution is not None:
+        payload["case_resolution"] = dict(record.case_resolution)
+    if record.time_limit_sec is not None:
+        payload["time_limit_sec"] = int(record.time_limit_sec)
+    return payload
 
 
 def _bootstrap_pass_rate(
