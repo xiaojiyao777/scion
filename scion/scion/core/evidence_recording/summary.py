@@ -275,6 +275,9 @@ class CampaignSummaryMixin:
         screened_experiments = sum(
             1 for step in steps if formal_screening_attempted(step.protocol_result)
         )
+        protocol_metric_results_for_validity = sum(
+            1 for step in steps if step.protocol_result is not None
+        )
         counted_experiment_steps = sum(
             1
             for step in steps
@@ -349,6 +352,19 @@ class CampaignSummaryMixin:
             )
             if loop_effective_rounds is not None:
                 effective_rounds_completed = int(loop_effective_rounds)
+            loop_protocol_metric_results = loop_status.get("protocol_metric_results")
+            if loop_protocol_metric_results is not None:
+                protocol_metric_results_for_validity = int(
+                    loop_protocol_metric_results
+                )
+            else:
+                loop_protocol_stage_counts = loop_status.get("protocol_stage_counts")
+                if isinstance(loop_protocol_stage_counts, Mapping):
+                    protocol_metric_results_for_validity = sum(
+                        int(value)
+                        for value in loop_protocol_stage_counts.values()
+                        if isinstance(value, (int, float))
+                    )
         failure_categories = step_failure_categories(steps)
         if isinstance(loop_status, Mapping):
             loop_failure_categories = loop_status.get("failure_categories")
@@ -534,6 +550,7 @@ class CampaignSummaryMixin:
                 else screened_experiments
             ),
             proposal_attempts=summary["proposal_attempts_consumed"],
+            protocol_metric_results=protocol_metric_results_for_validity,
             stopped_reason=effective_stopped_reason,
             failure_categories=failure_categories,
             stopped=True,
@@ -805,6 +822,12 @@ class CampaignSummaryMixin:
                 telemetry_decision_details(step.protocol_result)
             ),
         }
+        canary_payload = _canary_result_payload(
+            getattr(step, "canary_result", None),
+            base_dir=self.campaign_dir,
+        )
+        if canary_payload:
+            step_data["canary_result"] = canary_payload
         if candidate_intent_visibility:
             step_data["candidate_intent"] = candidate_intent_visibility[
                 "candidate_intent"
@@ -1142,6 +1165,30 @@ class CampaignSummaryMixin:
 def _is_max_rounds_stop(reason: Any) -> bool:
     text = str(reason or "").strip()
     return text in {"max_rounds", "max_rounds_exhausted"}
+
+
+def _canary_result_payload(
+    canary_result: Any,
+    *,
+    base_dir: str | Path | None,
+) -> dict[str, Any]:
+    if canary_result is None:
+        return {}
+    details = getattr(canary_result, "details", None)
+    payload: dict[str, Any] = {
+        "passed": bool(getattr(canary_result, "passed", False)),
+        "reason": getattr(canary_result, "reason", None),
+    }
+    if isinstance(details, Mapping):
+        payload.update(dict(details))
+    payload.setdefault("schema_version", "scion.canary_result.v1")
+    if not payload.get("raw_metrics_ref"):
+        payload["raw_metrics_ref"] = None
+        payload.setdefault(
+            "raw_metrics_unavailable_reason",
+            "canary_veto_before_formal_protocol",
+        )
+    return redact_public_refs(payload, base_dir=base_dir)
 
 
 def _annotate_proposal_session_ref_diagnostic(

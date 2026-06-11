@@ -11,6 +11,7 @@ RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED = "valid_partial_interrupted"
 RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS = "invalid_no_effective_rounds"
 RUN_VALIDITY_INVALID_INFRA_ONLY = "invalid_infra_only"
 RUN_VALIDITY_INVALID_NO_EXPERIMENTS = "invalid_no_experiments"
+RUN_VALIDITY_INVALID_NO_PROTOCOL_ROWS = "invalid_no_protocol_rows"
 
 _INFRA_CATEGORY_MARKERS = {
     "infra",
@@ -132,6 +133,8 @@ def build_run_validity(
     effective_rounds_completed: Any = None,
     n_experiments: Any = None,
     proposal_attempts: Any = None,
+    protocol_metric_results: Any = None,
+    effective_protocol_rounds: Any = None,
     stopped_reason: Any = None,
     failure_categories: Mapping[str, Any] | None = None,
     stopped: bool = True,
@@ -147,6 +150,10 @@ def build_run_validity(
     effective = _coerce_int(effective_rounds_completed, default=0)
     experiments = _coerce_int(n_experiments, default=0)
     attempts = _coerce_int(proposal_attempts, default=0)
+    protocol_rows = _coerce_int(
+        protocol_metric_results,
+        default=_coerce_int(effective_protocol_rounds, default=experiments),
+    )
     counts = _normalized_counts(failure_categories or {})
     stopped_reason_infra = _is_infra_category(stopped_reason) or _is_infra_text(
         stopped_reason
@@ -182,6 +189,10 @@ def build_run_validity(
         reason = "running"
         status = "pending"
         valid = None
+    elif effective > 0 and experiments <= 0 and protocol_rows <= 0:
+        reason = RUN_VALIDITY_INVALID_NO_PROTOCOL_ROWS
+        status = "invalid"
+        valid = False
     elif effective > 0 or experiments > 0:
         if completed_requested:
             reason = RUN_VALIDITY_VALID
@@ -239,6 +250,7 @@ def build_run_validity(
         ),
         "complete": completed_requested,
         "n_experiments": experiments,
+        "protocol_metric_results": protocol_rows,
         "proposal_attempts": attempts,
         "stopped_reason": str(stopped_reason or ""),
         "failure_categories": counts,
@@ -253,6 +265,7 @@ def build_run_validity(
     elif reason in {
         RUN_VALIDITY_INVALID_NO_EFFECTIVE_ROUNDS,
         RUN_VALIDITY_INVALID_NO_EXPERIMENTS,
+        RUN_VALIDITY_INVALID_NO_PROTOCOL_ROWS,
     }:
         record["operator_action"] = (
             "Do not treat this invocation as scientific evidence until at least "

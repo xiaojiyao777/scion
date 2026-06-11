@@ -800,15 +800,25 @@ def _candidate_accounting_fields(
         state_map.get("formal_screened_candidates"),
         default=formal_default,
     )
+    legacy_formal_screened_candidates = formal_screened_candidates
+    formal_screened_candidates = min(
+        max(0, formal_screened_candidates),
+        max(0, screening_protocol_results),
+    )
     protocol_default = (
-        max(step_protocol_count, formal_screened_candidates)
+        max(step_protocol_count, protocol_metric_results)
         if has_step_history
-        else max(sum(stage_counts.values()), formal_screened_candidates)
+        else max(sum(stage_counts.values()), protocol_metric_results)
     )
     protocol_evaluated_candidates = _first_int(
         loop.get("protocol_evaluated_candidates"),
         state_map.get("protocol_evaluated_candidates"),
         default=protocol_default,
+    )
+    legacy_protocol_evaluated_candidates = protocol_evaluated_candidates
+    protocol_evaluated_candidates = min(
+        max(0, protocol_evaluated_candidates),
+        max(0, protocol_metric_results),
     )
     if protocol_evaluated_candidates > sum(stage_counts.values()):
         inferred_screening = max(
@@ -833,7 +843,7 @@ def _candidate_accounting_fields(
         default=(
             sum(1 for step in steps if _step_counts_effective(step))
             if has_step_history
-            else effective_rounds_completed
+            else protocol_metric_results
         ),
     )
     verification_failure_consumed_candidates = _first_int(
@@ -909,6 +919,12 @@ def _candidate_accounting_fields(
             formal_candidate_reconciliation
         ),
         "candidate_count_reconciliation": formal_candidate_reconciliation,
+        "legacy_formal_screened_candidates_reported": (
+            legacy_formal_screened_candidates
+        ),
+        "legacy_protocol_evaluated_candidates_reported": (
+            legacy_protocol_evaluated_candidates
+        ),
         "formal_candidate_artifact_count": formal_candidate_artifact_count,
         "max_rounds_budget_counter": "effective_rounds_completed",
         "effective_rounds_completed_semantics": (

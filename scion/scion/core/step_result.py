@@ -59,3 +59,4 @@ class StepResult:
     scheduler_reason: str = ""
     scheduler_audit_metadata: Dict[str, Any] | None = None
     proposal_session_ref: Dict[str, Any] | None = None
+    canary_result: Any | None = None

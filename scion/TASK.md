@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 3 measurement readiness integrated; Phase 4 focused validation pending*
+*Status: Phase 4 focused validation in progress; warehouse canary accounting repair accepted*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -494,9 +494,17 @@ Exit criteria:
   `screening_protocol_results=0`, `effective_protocol_rounds=0`, no formal
   candidate index, and missing protocol `raw_metrics_ref`. Treat this as a
   canary evidence/accounting repair finding, not as warehouse research
-  evidence. Worker H owns a generic repair so canary-vetoed candidates are not
-  misreported as formal screened/effective protocol evidence and canary details
-  are auditable before rerun.
+  evidence.
+- Accepted: Worker H's generic canary evidence/accounting repair in the canary
+  accounting repair commit. Canary-vetoed candidates now persist structured
+  `canary_result` details, do not backfill formal/protocol row counters, keep old
+  loop-reported values under `legacy_*_reported`, and mark terminal
+  consumed-attempt/no-protocol-row runs as `invalid_no_protocol_rows`.
+  Acceptance: full core unit suite `489 passed`, protocol/canary focused suite
+  `31 passed`, and `git diff --check`.
+- Next: rerun warehouse Phase 4 from the repair commit. The current CVRP Phase 4
+  run was launched from `32ab596` and remains valid for its own run environment,
+  but it does not exercise this later accounting fix.
 
 ## Status Cadence
 

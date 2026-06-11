@@ -64,6 +64,9 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
                 action="explore",
                 branch_id="branch-1",
                 reason="synthetic completed screening",
+                protocol_stage="screening",
+                formal_protocol_evaluated=True,
+                screened_experiment_effective=True,
             )
         raise RuntimeError("synthetic step crash")
 

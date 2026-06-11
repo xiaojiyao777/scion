@@ -580,21 +580,6 @@ def _protocol_stage_for_result(result: StepResult) -> str:
         if bool(getattr(result, "formal_protocol_evaluated", False)):
             return explicit_stage
         return ""
-    raw_kind = str(getattr(result, "attempt_kind", "") or "")
-    action = str(getattr(result, "action", "") or "")
-    if (
-        action in {"explore", "create_branch"}
-        and raw_kind in {"", "screening"}
-        and bool(getattr(result, "counts_toward_max_rounds", True))
-    ):
-        return "screening"
-    kind = _attempt_kind(result)
-    if action == "frozen":
-        return "frozen"
-    if action == "validate" or kind == "validation_repair_required":
-        return "validation"
-    if kind == "telemetry_repairable":
-        return "screening"
     return ""
 
 

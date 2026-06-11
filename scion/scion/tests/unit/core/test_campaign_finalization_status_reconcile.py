@@ -8,9 +8,10 @@ from scion.core.campaign import CampaignManager
 import scion.core.campaign as campaign_module
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.evidence_recorder import EvidenceRecorder
+from scion.core.models import CanaryResult, Decision, StepRecord
 from scion.core.step_result import StepResult
 
-from .evidence_recorder_test_support import _champion
+from .evidence_recorder_test_support import _champion, _hypothesis
 
 
 def test_stopped_status_clears_incomplete_current_progress(tmp_path) -> None:
@@ -84,6 +85,115 @@ def test_campaign_summary_reconciles_weight_opt_and_stopped_progress(tmp_path) -
     assert summary["stopped_reason"] == "max_rounds_exhausted"
     assert "current_progress" not in summary
     assert summary["weight_optimization"] == weight_optimization
+
+
+def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
+    canary = CanaryResult(
+        passed=False,
+        reason="Candidate infeasible on canary_x (champion was feasible)",
+        details={
+            "schema_version": "scion.canary_result.v1",
+            "stage": "canary",
+            "case_ids": ["canary_x", "canary_y"],
+            "seed_set": [101],
+            "failed_case_id": "canary_x",
+            "failed_seed": 101,
+            "attempted_pairs": 1,
+            "total_pairs": 2,
+            "raw_metrics_ref": None,
+            "raw_metrics_unavailable_reason": (
+                "canary_veto_before_formal_protocol"
+            ),
+            "candidate_status": "infeasible",
+            "champion_status": "success",
+            "failure_kind": "candidate_infeasible_champion_feasible",
+            "failure_reason": (
+                "Candidate infeasible on canary_x (champion was feasible)"
+            ),
+        },
+    )
+    loop_status = {
+        "requested_rounds": 4,
+        "proposal_attempts_consumed": 4,
+        "effective_rounds_completed": 4,
+        "formal_screened_candidates": 4,
+        "protocol_evaluated_candidates": 4,
+        "protocol_stage_counts": {
+            "screening": 0,
+            "validation": 0,
+            "frozen": 0,
+        },
+        "failure_categories": {},
+    }
+    recorder = EvidenceRecorder(
+        campaign_id="camp-canary",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_experiments": 0,
+            "screened_experiments": 0,
+            "branches": [],
+        },
+    )
+
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="explore",
+            branch_id="branch-1",
+            decision=Decision.ABANDON,
+            reason="CANARY_FAILED",
+            canary_result=canary,
+        ),
+        stopped_reason="max_rounds_exhausted",
+        loop_status=loop_status,
+    )
+
+    assert status["effective_protocol_rounds"] == 0
+    assert status["screening_protocol_results"] == 0
+    assert status["protocol_metric_results"] == 0
+    assert status["formal_screened_candidates"] == 0
+    assert status["protocol_evaluated_candidates"] == 0
+    assert status["legacy_formal_screened_candidates_reported"] == 4
+    assert status["legacy_protocol_evaluated_candidates_reported"] == 4
+    assert status["run_validity"]["status"] == "invalid"
+    assert status["run_validity"]["reason"] == "invalid_no_protocol_rows"
+    status_canary = status["last_result"]["canary_result"]
+    assert status_canary["failed_case_id"] == "canary_x"
+    assert status_canary["failed_seed"] == 101
+    assert status_canary["raw_metrics_ref"] is None
+    assert (
+        status_canary["raw_metrics_unavailable_reason"]
+        == "canary_veto_before_formal_protocol"
+    )
+    assert status_canary["candidate_status"] == "infeasible"
+    assert status_canary["champion_status"] == "success"
+    assert status_canary["failure_reason"]
+
+    summary = recorder.write_campaign_summary(
+        step_history=[
+            StepRecord(
+                round_num=1,
+                branch_id="branch-1",
+                hypothesis=_hypothesis(),
+                patch=None,
+                contract_passed=True,
+                verification_passed=True,
+                protocol_result=None,
+                decision=Decision.ABANDON,
+                failure_stage=None,
+                failure_detail=None,
+                canary_result=canary,
+            )
+        ],
+        round_num=4,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    assert summary["effective_protocol_rounds"] == 0
+    assert summary["screening_protocol_results"] == 0
+    assert summary["formal_screened_candidates"] == 0
+    assert summary["run_validity"]["status"] == "invalid"
+    assert summary["steps"][0]["canary_result"]["failed_case_id"] == "canary_x"
 
 
 def test_status_and_summary_state_snapshot_does_not_reconcile_active_slots(

@@ -12,6 +12,41 @@ from scion.core.models import Decision
 from scion.core.step_result import StepResult
 
 
+def _protocol_stage_result(
+    *,
+    action: str,
+    branch_id: str,
+    reason: str,
+    stage: str,
+    **kwargs: Any,
+) -> StepResult:
+    return StepResult(
+        action=action,
+        branch_id=branch_id,
+        reason=reason,
+        protocol_stage=stage,
+        formal_protocol_evaluated=True,
+        screened_experiment_effective=stage == "screening",
+        **kwargs,
+    )
+
+
+def _screening_result(
+    *,
+    action: str = "explore",
+    branch_id: str = "b1",
+    reason: str = "screening complete",
+    **kwargs: Any,
+) -> StepResult:
+    return _protocol_stage_result(
+        action=action,
+        branch_id=branch_id,
+        reason=reason,
+        stage="screening",
+        **kwargs,
+    )
+
+
 def test_campaign_loop_default_proposal_attempt_limit_includes_repair_headroom() -> None:
     statuses: list[dict[str, Any]] = []
 
@@ -26,11 +61,7 @@ def test_campaign_loop_default_proposal_attempt_limit_includes_repair_headroom()
             last_failure_detail=None,
         ),
         circuit_breaker_threshold=3,
-        run_one_step=lambda: StepResult(
-            action="explore",
-            branch_id="b1",
-            reason="screening complete",
-        ),
+        run_one_step=lambda: _screening_result(),
         run_stagnation_check=lambda: None,
         check_soft_stagnation=lambda: None,
         write_campaign_summary=lambda: None,
@@ -112,7 +143,7 @@ def test_campaign_loop_does_not_count_active_slot_skip_against_max_rounds() -> N
             scheduler_slot="capacity_blocked",
             scheduler_reason="active_branch_limit_reached",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     statuses: list[dict[str, Any]] = []
@@ -167,7 +198,7 @@ def test_campaign_loop_drains_fresh_runtime_replay_after_max_rounds() -> None:
     def run_one_step() -> StepResult:
         nonlocal main_calls
         main_calls += 1
-        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+        return _screening_result()
 
     def drain_step() -> StepResult:
         nonlocal drain_calls
@@ -267,7 +298,7 @@ def test_campaign_loop_does_not_drain_arbitrary_non_counted_result_after_max_rou
     def run_one_step() -> StepResult:
         nonlocal main_calls
         main_calls += 1
-        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+        return _screening_result()
 
     def drain_step() -> StepResult:
         nonlocal drain_calls
@@ -338,7 +369,7 @@ def test_campaign_loop_preserves_blocked_replay_and_final_skip_in_drain_status()
     def run_one_step() -> StepResult:
         nonlocal main_calls
         main_calls += 1
-        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+        return _screening_result()
 
     def drain_step() -> StepResult:
         nonlocal drain_calls
@@ -449,7 +480,7 @@ def test_campaign_loop_reports_fresh_pressure_without_replayable_candidate() -> 
     def run_one_step() -> StepResult:
         nonlocal main_calls
         main_calls += 1
-        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+        return _screening_result()
 
     def drain_step() -> StepResult:
         nonlocal drain_calls
@@ -544,7 +575,7 @@ def test_campaign_loop_caps_fresh_runtime_replay_drain_after_max_rounds() -> Non
     def run_one_step() -> StepResult:
         nonlocal main_calls
         main_calls += 1
-        return StepResult(action="explore", branch_id="b1", reason="screening complete")
+        return _screening_result()
 
     def drain_step() -> StepResult:
         nonlocal drain_calls
@@ -669,7 +700,7 @@ def test_campaign_loop_does_not_count_proposal_only_blocks_against_max_rounds() 
             reason="code generation failed",
             counts_toward_max_rounds=False,
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -727,7 +758,7 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -799,7 +830,7 @@ def test_campaign_loop_records_model_repair_failed_quality_block_ledger() -> Non
             failure_category="model_repair_failed",
             failure_detail="model_repair_failed: code repair exhausted",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     loop_statuses: list[dict[str, Any]] = []
@@ -865,7 +896,7 @@ def test_campaign_loop_does_not_count_mechanism_novelty_diagnostics_as_quality_b
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -927,7 +958,7 @@ def test_campaign_loop_does_not_count_continue_explore_without_failure_as_qualit
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     loop_statuses: list[dict[str, Any]] = []
@@ -988,7 +1019,7 @@ def test_campaign_loop_classifies_stale_source_as_code_generation_not_quality_bl
                 "expected old digest"
             ),
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     loop_statuses: list[dict[str, Any]] = []
@@ -1049,7 +1080,7 @@ def test_campaign_loop_counts_generic_proposal_blocks_in_quality_ceiling() -> No
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+        _screening_result(),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -1108,7 +1139,7 @@ def test_campaign_loop_explicit_attempt_limit_allows_bounded_quality_overflow() 
             )
             for _ in range(5)
         ],
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
         StepResult(action="explore", branch_id="b1", reason="screening 3"),
     ]
@@ -1233,7 +1264,7 @@ def test_campaign_loop_schema_quality_block_does_not_consume_proposal_attempt() 
             counts_toward_max_rounds=False,
             attempt_kind="schema_quality_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
     ]
     calls = 0
@@ -1352,7 +1383,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
             attempt_kind="validation_repair_required",
             repair_mechanism_ids=("validation_probe",),
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
     ]
     calls = 0
@@ -1486,7 +1517,7 @@ def test_campaign_loop_telemetry_repairable_does_not_consume_proposal_attempts()
             attempt_kind="telemetry_repairable",
             repair_mechanism_ids=("other_probe",),
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
     ]
     calls = 0
@@ -1554,7 +1585,7 @@ def test_campaign_loop_branch_lifecycle_policy_block_does_not_consume_proposal_a
             ),
             failure_category="contract_boundary_failure",
         ),
-        StepResult(action="explore", branch_id="b2", reason="screening 1"),
+        _screening_result(branch_id="b2", reason="screening 1"),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -1616,7 +1647,7 @@ def test_campaign_loop_reconcile_lifecycle_step_does_not_count_effective_round()
             counts_toward_max_rounds=False,
             attempt_kind="reconcile_lifecycle",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(action="explore", branch_id="b2", reason="screening 2"),
     ]
     calls = 0
@@ -1676,16 +1707,20 @@ def test_campaign_loop_exposes_candidate_accounting_without_counting_holdouts_as
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         ),
-        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        _screening_result(reason="screening 1"),
         StepResult(
             action="validate",
             branch_id="b1",
             reason="validation complete",
+            protocol_stage="validation",
+            formal_protocol_evaluated=True,
         ),
         StepResult(
             action="frozen",
             branch_id="b1",
             reason="frozen complete",
+            protocol_stage="frozen",
+            formal_protocol_evaluated=True,
         ),
     ]
     calls = 0
@@ -1743,7 +1778,7 @@ def test_campaign_loop_exposes_candidate_accounting_without_counting_holdouts_as
 
 def test_campaign_loop_counts_clean_fork_screening_as_formal_candidate() -> None:
     results = [
-        StepResult(
+        _screening_result(
             action="create_branch",
             branch_id="clean-1",
             reason="clean fork screening complete",
@@ -1868,7 +1903,7 @@ def test_campaign_loop_counts_completed_screening_hidden_by_lifecycle_result() -
 
 def test_campaign_loop_clean_fork_screening_mixes_with_holdout_stages() -> None:
     results = [
-        StepResult(
+        _screening_result(
             action="create_branch",
             branch_id="clean-1",
             reason="clean fork screening complete",
@@ -1879,11 +1914,15 @@ def test_campaign_loop_clean_fork_screening_mixes_with_holdout_stages() -> None:
             action="validate",
             branch_id="clean-1",
             reason="validation complete",
+            protocol_stage="validation",
+            formal_protocol_evaluated=True,
         ),
         StepResult(
             action="frozen",
             branch_id="clean-1",
             reason="frozen complete",
+            protocol_stage="frozen",
+            formal_protocol_evaluated=True,
         ),
     ]
     calls = 0
@@ -1961,8 +2000,8 @@ def test_campaign_loop_repeated_lifecycle_blocks_do_not_stop_before_effective_ro
             attempt_kind="branch_lifecycle_policy",
             repair_mechanism_ids=("other_probe",),
         ),
-        StepResult(action="explore", branch_id="clean-1", reason="screening 1"),
-        StepResult(action="explore", branch_id="clean-2", reason="screening 2"),
+        _screening_result(branch_id="clean-1", reason="screening 1"),
+        _screening_result(branch_id="clean-2", reason="screening 2"),
     ]
     calls = 0
     stopped_reasons: list[str | None] = []

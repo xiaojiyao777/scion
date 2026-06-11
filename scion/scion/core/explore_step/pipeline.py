@@ -39,6 +39,7 @@ from scion.core.repeated_contract_failures import (
 )
 from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
+from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
 from scion.contract.result_payload import diagnostic_checks
 from scion.proposal.context.branch_followup import branch_current_file_sources
@@ -1129,6 +1130,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             verification_result=vresult,
             action_label="explore",
         )
+        _annotate_protocol_accounting(result, protocol_result)
+        result.canary_result = canary_result
         failure_stage, failure_detail = _evaluation_failure_detail(
             protocol_result,
             canary_result=canary_result,
@@ -1175,6 +1178,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 ),
                 **provenance,
                 proposal_session_ref=session_ref,
+                canary_result=canary_result,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
@@ -1344,3 +1348,22 @@ def _evaluation_failure_detail(
         return None, None
     detail = str(getattr(canary_result, "reason", "") or "evaluation failed")
     return "evaluation", detail
+
+
+def _annotate_protocol_accounting(
+    result: StepResult,
+    protocol_result: ProtocolResult | None,
+) -> None:
+    if protocol_result is None:
+        return
+    stage_obj = getattr(protocol_result, "stage", "")
+    stage = str(getattr(stage_obj, "value", stage_obj) or "")
+    if stage not in {"screening", "validation", "frozen"}:
+        return
+    formal_evaluated = (
+        getattr(protocol_result, "stats", None) is not None
+        and screened_experiment_effective(protocol_result)
+    )
+    result.protocol_stage = stage  # type: ignore[assignment]
+    result.formal_protocol_evaluated = formal_evaluated
+    result.screened_experiment_effective = stage == "screening" and formal_evaluated

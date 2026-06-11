@@ -42,6 +42,15 @@ def run_canary(
 
     total_pairs = len(canary_cases) * len(canary_seeds)
     attempted_pairs = 0
+    base_details = {
+        "schema_version": "scion.canary_result.v1",
+        "stage": "canary",
+        "case_ids": list(canary_cases),
+        "seed_set": list(canary_seeds),
+        "total_pairs": total_pairs,
+        "raw_metrics_ref": None,
+        "raw_metrics_unavailable_reason": "canary_veto_before_formal_protocol",
+    }
     protocol._emit_progress(
         stage="canary",
         phase="canary",
@@ -102,6 +111,19 @@ def run_canary(
                 return CanaryResult(
                     passed=False,
                     reason=f"Candidate solver failed on {case}: {cand_result.error_category}",
+                    details=_failure_details(
+                        base_details,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        candidate_result=cand_result,
+                        champion_result=None,
+                        failure_kind="candidate_solver_failed",
+                        failure_reason=(
+                            f"Candidate solver failed on {case}: "
+                            f"{cand_result.error_category}"
+                        ),
+                    ),
                 )
             cand_audit_failure = runtime_audit_failure_from_result(
                 cand_result,
@@ -126,6 +148,19 @@ def run_canary(
                     reason=(
                         f"Candidate runtime audit failed on {case}: "
                         f"{format_runtime_audit_failure(cand_audit_failure)}"
+                    ),
+                    details=_failure_details(
+                        base_details,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        candidate_result=cand_result,
+                        champion_result=None,
+                        failure_kind="candidate_runtime_audit_failed",
+                        failure_reason=(
+                            "Candidate runtime audit failed on "
+                            f"{case}: {format_runtime_audit_failure(cand_audit_failure)}"
+                        ),
                     ),
                 )
 
@@ -167,6 +202,19 @@ def run_canary(
                 return CanaryResult(
                     passed=False,
                     reason=f"Candidate infeasible on {case} (champion was feasible)",
+                    details=_failure_details(
+                        base_details,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        candidate_result=cand_result,
+                        champion_result=champ_result,
+                        failure_kind="candidate_infeasible_champion_feasible",
+                        failure_reason=(
+                            f"Candidate infeasible on {case} "
+                            "(champion was feasible)"
+                        ),
+                    ),
                 )
 
             protocol._emit_progress(
@@ -180,7 +228,79 @@ def run_canary(
                 complete=attempted_pairs >= total_pairs,
             )
 
-    return CanaryResult(passed=True, reason=None)
+    return CanaryResult(
+        passed=True,
+        reason=None,
+        details={
+            **base_details,
+            "passed": True,
+            "attempted_pairs": attempted_pairs,
+            "failure_kind": None,
+            "failure_reason": None,
+            "candidate_status": "passed",
+            "champion_status": "not_applicable",
+        },
+    )
+
+
+def _failure_details(
+    base: dict,
+    *,
+    case: str,
+    seed: int,
+    attempted_pairs: int,
+    candidate_result,
+    champion_result,
+    failure_kind: str,
+    failure_reason: str,
+) -> dict:
+    return {
+        **base,
+        "passed": False,
+        "failed_case_id": case,
+        "failed_seed": seed,
+        "attempted_pairs": attempted_pairs,
+        "failure_kind": failure_kind,
+        "failure_reason": failure_reason,
+        "candidate_status": _run_status(candidate_result),
+        "champion_status": (
+            _run_status(champion_result)
+            if champion_result is not None
+            else "not_run"
+        ),
+        "candidate_outcome": _run_outcome(candidate_result),
+        "champion_outcome": (
+            _run_outcome(champion_result)
+            if champion_result is not None
+            else {"status": "not_run"}
+        ),
+    }
+
+
+def _run_status(result) -> str:
+    if result is None:
+        return "not_run"
+    if not getattr(result, "success", False):
+        return str(getattr(result, "error_category", None) or "failed")
+    output = getattr(result, "output", None)
+    if output is not None and getattr(output, "feasible", None) is False:
+        return "infeasible"
+    return "success"
+
+
+def _run_outcome(result) -> dict:
+    if result is None:
+        return {"status": "not_run"}
+    output = getattr(result, "output", None)
+    return {
+        "status": _run_status(result),
+        "success": bool(getattr(result, "success", False)),
+        "exit_code": getattr(result, "exit_code", None),
+        "error_category": getattr(result, "error_category", None),
+        "elapsed_ms": getattr(result, "elapsed_ms", None),
+        "feasible": getattr(output, "feasible", None) if output is not None else None,
+        "output_path": getattr(result, "output_path", None),
+    }
 
 
 __all__ = ["run_canary"]

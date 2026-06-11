@@ -529,6 +529,7 @@ class BranchStepRunner:
             action_label=action_label,
         )
         _annotate_protocol_accounting(result, protocol_result)
+        result.canary_result = canary_result
         failure_stage, failure_detail = _eval_failure_detail(
             protocol_result,
             canary_result=canary_result,
@@ -560,6 +561,7 @@ class BranchStepRunner:
                     protocol_result,
                 ),
                 **provenance,
+                canary_result=canary_result,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
@@ -742,6 +744,7 @@ class BranchStepRunner:
             result.counts_toward_max_rounds = False
             result.attempt_kind = "fresh_runtime_replay"
             _annotate_protocol_accounting(result, protocol_result)
+            result.canary_result = canary_result
             provenance = self.decision_provenance_for(bid)
             _attach_decision_provenance(result, provenance)
             closure = _fresh_runtime_replay_result_metadata(
@@ -774,6 +777,7 @@ class BranchStepRunner:
                         protocol_result,
                     ),
                     **provenance,
+                    canary_result=canary_result,
                     counts_toward_max_rounds=False,
                     attempt_kind="fresh_runtime_replay",
                 )
@@ -929,6 +933,7 @@ class BranchStepRunner:
             action_label="reconcile",
         )
         _annotate_protocol_accounting(result, protocol_result)
+        result.canary_result = canary_result
         failure_stage, failure_detail = _eval_failure_detail(
             protocol_result,
             canary_result=canary_result,
@@ -957,6 +962,7 @@ class BranchStepRunner:
                     protocol_result,
                 ),
                 **provenance,
+                canary_result=canary_result,
                 counts_toward_max_rounds=result.counts_toward_max_rounds,
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,

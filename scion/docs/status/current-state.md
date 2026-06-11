@@ -289,6 +289,26 @@ repair so canary-vetoed candidates are not misreported as formal
 screened/effective protocol evidence and canary failure details are auditable
 before rerun.
 
+Canary accounting repair status: Worker H's generic repair has passed main
+thread acceptance in the canary accounting repair commit. Canary vetoes now
+persist structured `canary_result` details in status/summary, including case IDs,
+seeds, failed case/seed, candidate and champion outcomes, failure reason, and
+`raw_metrics_unavailable_reason=canary_veto_before_formal_protocol`. A
+canary-vetoed attempt no longer backfills `formal_screened_candidates`,
+`protocol_evaluated_candidates`, `screening_protocol_results`, or
+`effective_protocol_rounds`; legacy reported counters are retained under
+`legacy_*_reported` fields for audit. Terminal runs with consumed effective
+attempts but zero protocol rows are marked `invalid_no_protocol_rows`.
+Verification passed with
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/core -q`
+(`489 passed`),
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_protocol_canary.py scion/scion/tests/unit/protocol/test_protocol_correctness.py scion/scion/tests/test_cvrp_protocol_smoke.py -q`
+(`31 passed`), and `git diff --check`.
+
+Next: rerun warehouse Phase 4 from the canary accounting repair commit. The CVRP
+Phase 4 run remains in progress from commit `32ab596`; do not interpret it as
+exercising the later canary accounting fix.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09

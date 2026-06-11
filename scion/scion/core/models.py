@@ -211,6 +211,7 @@ class VerificationResult:
 class CanaryResult:
     passed: bool
     reason: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class MetricEvalStats:
@@ -703,6 +704,7 @@ class StepRecord:
     decision_features_snapshot: Optional[DecisionFeatures] = None
     contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
     proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
+    canary_result: Optional[CanaryResult] = None
     counts_toward_max_rounds: bool = True
     attempt_kind: str = "screening"
     repair_policy_reason: Optional[str] = None

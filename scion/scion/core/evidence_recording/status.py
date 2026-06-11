@@ -584,6 +584,30 @@ def _mark_branch_lesson_usage_counters_unavailable(
     )
 
 
+def _canary_result_payload(
+    canary_result: Any,
+    *,
+    base_dir: str | Path | None,
+) -> dict[str, Any]:
+    if canary_result is None:
+        return {}
+    details = getattr(canary_result, "details", None)
+    payload: dict[str, Any] = {
+        "passed": bool(getattr(canary_result, "passed", False)),
+        "reason": getattr(canary_result, "reason", None),
+    }
+    if isinstance(details, Mapping):
+        payload.update(dict(details))
+    payload.setdefault("schema_version", "scion.canary_result.v1")
+    if not payload.get("raw_metrics_ref"):
+        payload["raw_metrics_ref"] = None
+        payload.setdefault(
+            "raw_metrics_unavailable_reason",
+            "canary_veto_before_formal_protocol",
+        )
+    return redact_public_refs(payload, base_dir=base_dir)
+
+
 _BRANCH_PROGRESS_FIELDS = (
     "lineage_status",
     "current_head_status",
@@ -719,6 +743,12 @@ class StatusWriterMixin:
                 self.last_status_result["failure_category"] = failure_category
             if failure_detail:
                 self.last_status_result["failure_detail"] = str(failure_detail)[:1000]
+            canary_payload = _canary_result_payload(
+                getattr(last_result, "canary_result", None),
+                base_dir=self.campaign_dir,
+            )
+            if canary_payload:
+                self.last_status_result["canary_result"] = canary_payload
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
         if stopped_reason is not None:
@@ -858,6 +888,14 @@ class StatusWriterMixin:
                 proposal_attempts=payload.get(
                     "proposal_attempts_consumed",
                     payload.get("proposal_attempts"),
+                ),
+                protocol_metric_results=payload.get(
+                    "protocol_metric_results",
+                    loop_mapping.get("protocol_metric_results"),
+                ),
+                effective_protocol_rounds=payload.get(
+                    "effective_protocol_rounds",
+                    loop_mapping.get("effective_protocol_rounds"),
                 ),
                 stopped_reason=payload.get("stopped_reason"),
                 failure_categories=failure_categories,
