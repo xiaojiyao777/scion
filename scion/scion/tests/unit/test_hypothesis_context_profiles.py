@@ -341,6 +341,9 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "branch_lesson_usage_requirement" not in decision_fields
     assert "family_saturation_summary" not in decision_fields
     assert "cross_branch_family_saturation_summary" not in decision_fields
+    assert "problem_measurement_diagnostics" not in decision_fields
+    assert "measurement_noise_floor" not in decision_fields
+    assert "objective_opportunity_profile" not in decision_fields
 
 
 def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
@@ -406,6 +409,95 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
     assert accounting["research_signal_ratio"] is not None
     assert accounting["families"]["research_signal"]["section_count"] >= 4
     assert accounting["families"]["governance"]["section_count"] >= 2
+
+
+def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden():
+    context = {
+        "problem_summary": "CVRP formal screening objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline_modules/local_search.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1 screening complete",
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
+            "effect_scale": {
+                "metric": "total_distance",
+                "unit": "raw_delta",
+                "practical_delta_screen": 2.0,
+                "practical_delta_validate": 1.0,
+                "mde_at_power_80": 9.9,
+            },
+            "calibration": {
+                "calibration_ref": "formal/calibration/aa_noise_floor.json",
+                "mde_at_power_80": 9.9,
+                "recommended_min_seeds": 8,
+                "false_pass_rate_at_current_gate": 0.0,
+                "selected_cases": ["secret-screening-case"],
+            },
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "low_snr",
+                    "surface": "solver_design",
+                    "summary": "Candidate effects below measured screening MDE.",
+                    "recommended_action": "continue with measurable bounded changes",
+                    "reason_codes": ["MEASUREMENT_POWER_LOW"],
+                    "validation_case_details": "secret-validation-case-detail",
+                    "frozen_case_details": "secret-frozen-case-detail",
+                    "raw_pair_rows": [{"case": "secret-raw-row"}],
+                }
+            ],
+            "raw_calibration_pair_rows": [{"case": "secret-aa-row"}],
+            "bks_gap_details": "secret-bks-gap",
+            "prompt_ratios": {"research_signal_ratio": 0.1},
+            "llm_text": "secret llm prose",
+        },
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+    diagnostic = filtered["problem_measurement_diagnostics"]
+
+    assert "problem_measurement_proposal_diagnostic.v1" in diagnostic
+    assert "problem_owned_proposal_diagnostic" in diagnostic
+    assert "excluded_from_decision_features" in diagnostic
+    assert "total_distance" in diagnostic
+    assert "mde_at_power_80" in diagnostic
+    assert "MEASUREMENT_POWER_LOW" in diagnostic
+    assert "secret-screening-case" not in diagnostic
+    assert "secret-validation-case-detail" not in diagnostic
+    assert "secret-frozen-case-detail" not in diagnostic
+    assert "secret-raw-row" not in diagnostic
+    assert "secret-aa-row" not in diagnostic
+    assert "secret-bks-gap" not in diagnostic
+    assert "research_signal_ratio" not in diagnostic
+    assert "secret llm prose" not in diagnostic
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    assert "## Problem Measurement Diagnostics" in rendered_prompt
+    assert "## Compact Research Signals" in rendered_prompt
+    assert "excluded from DecisionFeatures" in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-problem-measurement-diagnostics",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    accounting = manifest["block_family_accounting"]
+    assert accounting["decision_features_excluded"] is True
+    assert accounting["research_signal_chars"] > 0
+    assert manifest["section_statuses"]["problem_measurement_diagnostics"][
+        "block_family"
+    ] == "research_signal"
 
 
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():

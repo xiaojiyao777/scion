@@ -105,6 +105,12 @@ def _code_file_visibility_ledger(
         )
     if not target_record and not integration_records and not algorithm_read_records:
         return {}
+    source_guarantees = _code_phase_source_guarantees(
+        target_record=target_record,
+        integration_records=integration_records,
+        algorithm_read_records=algorithm_read_records,
+        target_file_create_mode=target_file_create_mode,
+    )
     return _drop_empty(
         {
             "schema_version": "code-file-visibility-ledger.v1",
@@ -114,6 +120,7 @@ def _code_file_visibility_ledger(
                 "source sections for typed edits; read receipts alone do not "
                 "prove the provider saw the file contents."
             ),
+            "source_visibility_guarantees": source_guarantees,
             "target_file": target_record,
             "integration_files": integration_records,
             "algorithm_file_reads": algorithm_read_records,
@@ -383,6 +390,95 @@ def _code_file_visibility_record(
         record["target_file_create_mode"] = True
         record["visibility_status"] = "create_new_target_no_current_source"
     return record
+
+
+def _code_phase_source_guarantees(
+    *,
+    target_record: Mapping[str, Any],
+    integration_records: list[Mapping[str, Any]],
+    algorithm_read_records: list[Mapping[str, Any]],
+    target_file_create_mode: bool,
+) -> dict[str, Any]:
+    required_integration_records = [
+        record
+        for record in integration_records
+        if str(record.get("role") or "")
+        == "required_full_integration_edit_source"
+    ]
+    protected_source_records = [
+        record
+        for record in (
+            [target_record]
+            + required_integration_records
+            + algorithm_read_records
+        )
+        if isinstance(record, Mapping) and record
+    ]
+    missing_required = [
+        str(record.get("file_path") or "")
+        for record in protected_source_records
+        if not _source_record_satisfies_code_phase_requirement(
+            record,
+            target_file_create_mode=(
+                record is target_record and target_file_create_mode
+            ),
+        )
+    ]
+    target_source_visible = _source_record_satisfies_code_phase_requirement(
+        target_record,
+        target_file_create_mode=target_file_create_mode,
+    )
+    required_integration_visible = all(
+        _source_record_satisfies_code_phase_requirement(record)
+        for record in required_integration_records
+    )
+    algorithm_reads_visible = all(
+        _source_record_satisfies_code_phase_requirement(record)
+        for record in algorithm_read_records
+    )
+    return _drop_empty(
+        {
+            "schema_version": "code-phase-source-visibility-guarantees.v1",
+            "phase": "code",
+            "policy": (
+                "Compression may remove governance boilerplate, duplicated raw "
+                "logs, and raw cross-branch payloads, but must keep source/code "
+                "needed to modify or judge the approved target and required "
+                "integration files."
+            ),
+            "target_file_create_mode": bool(target_file_create_mode),
+            "target_source_visible": target_source_visible,
+            "required_integration_source_visible": required_integration_visible,
+            "algorithm_file_read_source_visible": algorithm_reads_visible,
+            "protected_source_visible": not missing_required,
+            "protected_source_count": len(protected_source_records),
+            "required_integration_source_count": len(required_integration_records),
+            "algorithm_file_read_source_count": len(algorithm_read_records),
+            "missing_required_source_paths": missing_required,
+            "decision_features_excluded": True,
+            "manifest_observability_only": True,
+        }
+    )
+
+
+def _source_record_satisfies_code_phase_requirement(
+    record: Mapping[str, Any],
+    *,
+    target_file_create_mode: bool = False,
+) -> bool:
+    if not isinstance(record, Mapping) or not record:
+        return bool(target_file_create_mode)
+    if target_file_create_mode:
+        return (
+            record.get("target_file_create_mode") is True
+            and str(record.get("source_status") or "") == "new_file"
+            and bool(record.get("placeholder_visible_in_rendered_prompt"))
+        )
+    return (
+        str(record.get("section_status") or "") == "included"
+        and str(record.get("source_status") or "") == "current_branch_source"
+        and bool(record.get("full_content_visible_in_rendered_prompt"))
+    )
 
 
 def _parse_markdown_source_files(value: Any) -> dict[str, str]:

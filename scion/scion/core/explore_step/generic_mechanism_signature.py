@@ -255,7 +255,7 @@ def _known_generic_group(
         return "construction_seed_selector"
     if (
         ({"exchange", "swap"} & part_set or "exchange" in joined)
-        and ("local_search" in surface or "neighborhood" in surface or "vns" in surface)
+        and ("local_search" in surface or "neighborhood" in surface)
     ):
         return "local_search_exchange"
     if "pairwise" in part_set and (

@@ -85,6 +85,8 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
         "Measurement",
         (),
         {
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
             "effect_scale": type(
                 "EffectScale",
                 (),
@@ -102,6 +104,8 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
     assert config.min_practical_delta == 2.5
     assert config.screening_min_practical_delta == 2.5
     assert config.validation_min_practical_delta == 1.25
+    assert config.runtime.runtime_model == "budget_exhausting"
+    assert config.pairing_validity == "trajectory_divergent"
 
 
 def test_protocol_config_rejects_unknown_delta_reference():

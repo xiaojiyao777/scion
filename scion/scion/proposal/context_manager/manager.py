@@ -214,6 +214,64 @@ def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
     }
 
 
+def _problem_measurement_diagnostics(problem_spec: ProblemSpec) -> dict[str, Any]:
+    measurement = getattr(problem_spec, "measurement", None)
+    if measurement is None:
+        return {}
+    effect_scale = getattr(measurement, "effect_scale", None)
+    payload = {
+        "schema_version": "problem_measurement_proposal_diagnostic.v1",
+        "taint": "problem_owned_proposal_diagnostic",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "policy": (
+            "Measurement/noise readiness facts may guide hypothesis planning "
+            "only; raw calibration rows, BKS/gap details, validation/frozen "
+            "case details, LLM text, prompt ratios, and cross-branch lessons "
+            "remain excluded from DecisionFeatures."
+        ),
+        "runtime_model": str(getattr(measurement, "runtime_model", "") or ""),
+        "pairing_validity": str(getattr(measurement, "pairing_validity", "") or ""),
+        "effect_scale": {
+            key: value
+            for key, value in {
+                "metric": str(getattr(effect_scale, "metric", "") or ""),
+                "unit": str(getattr(effect_scale, "unit", "") or ""),
+                "practical_delta_screen": getattr(
+                    effect_scale,
+                    "practical_delta_screen",
+                    None,
+                ),
+                "practical_delta_validate": getattr(
+                    effect_scale,
+                    "practical_delta_validate",
+                    None,
+                ),
+            }.items()
+            if value not in ("", None, [], {}, ())
+        },
+        "calibration": {
+            key: value
+            for key, value in {
+                "calibration_ref": str(
+                    getattr(measurement, "calibration_ref", "") or ""
+                ),
+                "calibration_max_age_days": getattr(
+                    measurement,
+                    "calibration_max_age_days",
+                    None,
+                ),
+            }.items()
+            if value not in ("", None, [], {}, ())
+        },
+    }
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in ("", None, [], {}, ())
+    }
+
+
 def _proposal_branch_lesson_usage_requirement(
     cross_branch_research_payload: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -701,6 +759,9 @@ class ContextManager:
                 forced_request.target_file if forced_request else ""
             ),
             "objective_policy_guidance": objective_policy_guidance,
+            "problem_measurement_diagnostics": (
+                _problem_measurement_diagnostics(problem_spec)
+            ),
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
             "search_control_guidance": search_control_guidance,

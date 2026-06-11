@@ -143,6 +143,11 @@ def _split_hypothesis_context(
         branch_context_parts.append(D["locus_constraint"])
     if D.get("objective_guidance"):
         branch_context_parts.append(D["objective_guidance"])
+    if D.get("problem_measurement_diagnostics"):
+        branch_context_parts.append(
+            "## Problem Measurement Diagnostics\n"
+            f"{D['problem_measurement_diagnostics']}"
+        )
     if D.get("objective_opportunity_profile"):
         branch_context_parts.append(D["objective_opportunity_profile"])
     if D["weight_opt_feedback"]:
@@ -494,6 +499,10 @@ def _compact_research_signals(
             "blacklist": _compact_text_signal(D["blacklist_summary"]),
             "objective_opportunity_profile": _compact_text_signal(
                 D.get("objective_opportunity_profile")
+            ),
+            "problem_measurement_diagnostics": _compact_text_signal(
+                D.get("problem_measurement_diagnostics"),
+                max_chars=900,
             ),
             "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
             "cross_branch_learning": _compact_text_signal(

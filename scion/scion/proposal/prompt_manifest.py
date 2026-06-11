@@ -260,6 +260,11 @@ def build_api_visible_prompt_manifest(
             if item.get("payload_digest")
         ],
         "code_file_visibility_ledger": code_file_visibility_ledger,
+        "code_phase_source_guarantees": (
+            code_file_visibility_ledger.get("source_visibility_guarantees", {})
+            if isinstance(code_file_visibility_ledger, Mapping)
+            else {}
+        ),
         "hypothesis_target_source_visibility_ledger": (
             hypothesis_target_source_visibility_ledger
         ),

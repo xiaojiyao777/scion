@@ -36,7 +36,9 @@ class DecisionEngine:
         lifecycle_policy: BranchLifecyclePolicy | None = None,
     ) -> None:
         self.config = config
-        self.lifecycle_policy = lifecycle_policy or BranchLifecyclePolicy()
+        self.lifecycle_policy = lifecycle_policy or _lifecycle_policy_for_config(
+            config
+        )
 
     def decide(self, features: DecisionFeatures) -> DecisionOutcome:
         from scion.core.features import _validate_no_free_text
@@ -142,6 +144,18 @@ class DecisionEngine:
             )
         elif self._runtime_tie_improvement(features):
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT"])
+        elif self._trajectory_divergent_low_snr_expand(features):
+            if features.screening_expand_count >= 1:
+                return self._out(
+                    features,
+                    Decision.CONTINUE_EXPLORE,
+                    ["SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE"],
+                )
+            return self._out(
+                features,
+                Decision.EXPAND_SCREENING,
+                ["SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT"],
+            )
         elif wr >= 0.5 and wr < threshold:
             # v3 §11.5: screening expansion is one pre-registered statistical
             # expand per candidate, not a repeatable retry loop.
@@ -312,6 +326,53 @@ class DecisionEngine:
             return features.ci_low >= 0
         return features.median_delta == 0
 
+    def _trajectory_divergent_low_snr_expand(
+        self,
+        features: DecisionFeatures,
+    ) -> bool:
+        if getattr(self.config, "pairing_validity", "trajectory_stable") != (
+            "trajectory_divergent"
+        ):
+            return False
+        if features.stage != "screening":
+            return False
+        if features.win_rate is None:
+            return False
+        if features.win_rate >= self.config.screening_win_rate_threshold:
+            return False
+        if features.candidate_failed_pairs > 0 or features.failed_pairs > 0:
+            return False
+        if features.runtime_guard_timeout or features.runtime_guard_passed is False:
+            return False
+        if (
+            features.runtime_ratio_median is not None
+            and features.runtime_ratio_median > self.config.max_runtime_ratio
+        ):
+            return False
+        if (
+            features.runtime_regression_rate is not None
+            and features.runtime_regression_rate >= 0.90
+        ):
+            return False
+        if features.statistical_status == "negative":
+            return False
+        if features.median_delta is not None and features.median_delta < 0:
+            return False
+        if features.ci_high is not None and features.ci_high < 0:
+            return False
+
+        wins, losses, ties = _screening_signal_counts(features)
+        observed = wins + losses + ties
+        if observed <= 0:
+            return False
+        if _loss_heavy(wins=wins, losses=losses, observed=observed):
+            return False
+        non_tie = wins + losses
+        non_tie_nonnegative = non_tie > 0 and wins >= losses
+        high_tie = ties / observed >= 0.50
+        weak_nonnegative = wins > 0 and wins >= losses
+        return (high_tie and non_tie_nonnegative) or weak_nonnegative
+
     def _out(
         self,
         features: DecisionFeatures,
@@ -440,3 +501,44 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _lifecycle_policy_for_config(config: ProtocolConfig) -> BranchLifecyclePolicy:
+    if getattr(config, "pairing_validity", "trajectory_stable") != (
+        "trajectory_divergent"
+    ):
+        return BranchLifecyclePolicy()
+    return BranchLifecyclePolicy(
+        zero_win_streak_limit=5,
+        no_effect_followup_limit=3,
+        marginal_no_effect_streak_limit=3,
+        repeated_signal_signature_limit=3,
+        diagnostic_zero_win_streak_limit=3,
+    )
+
+
+def _screening_signal_counts(features: DecisionFeatures) -> tuple[int, int, int]:
+    pair_total = (
+        int(features.pair_wins or 0)
+        + int(features.pair_losses or 0)
+        + int(features.pair_ties or 0)
+    )
+    if pair_total > 0:
+        return (
+            max(0, int(features.pair_wins or 0)),
+            max(0, int(features.pair_losses or 0)),
+            max(0, int(features.pair_ties or 0)),
+        )
+    return (
+        max(0, int(features.wins or 0)),
+        max(0, int(features.losses or 0)),
+        max(0, int(features.ties or 0)),
+    )
+
+
+def _loss_heavy(*, wins: int, losses: int, observed: int) -> bool:
+    if observed <= 0:
+        return False
+    if wins == 0 and losses > 0:
+        return True
+    return losses > wins and losses / observed >= 0.50

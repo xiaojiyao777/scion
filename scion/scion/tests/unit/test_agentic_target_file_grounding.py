@@ -1991,6 +1991,10 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         "    solver = _ALNSVNSSolver(context=context)\n"
         "    return solver.solve(instance, rng)\n"
     )
+    required_integration_source = (
+        "def accept(candidate, incumbent, rng):\n"
+        "    return candidate.is_feasible and candidate.cost <= incumbent.cost\n"
+    )
     integration_files = (
         "### policies/baseline_algorithm.py\n"
         "Provenance: branch_workspace; readable=True\n"
@@ -2010,6 +2014,13 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         "target_file": "policies/baseline_modules/construction.py",
         "target_file_code": target_source,
         "solver_design_branch_current_integration_files": integration_files,
+        "agentic_required_full_integration_files": (
+            "### policies/baseline_modules/acceptance.py\n"
+            "Provenance: branch_workspace; readable=True\n"
+            "```python\n"
+            f"{required_integration_source}"
+            "```"
+        ),
         "hypothesis_text": "Add a bounded construction variant.",
         "hypothesis_implementation_brief": {
             "hypothesis_text": "Add a bounded construction variant.",
@@ -2068,6 +2079,7 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         item["file_path"]: item for item in ledger["integration_files"]
     }
     assert set(integration_records) == {
+        "policies/baseline_modules/acceptance.py",
         "policies/baseline_algorithm.py",
         "policies/baseline_modules/scheduler.py",
     }
@@ -2078,6 +2090,25 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
     integration_status = manifest["section_statuses"]["branch_current_integration_files"]
     assert integration_status["prompt_part"] == "system"
     assert integration_status["cacheable"] is True
+    required_integration_status = manifest["section_statuses"][
+        "required_full_integration_edit_sources"
+    ]
+    assert required_integration_status["status"] == "included"
+    assert required_integration_status["prompt_part"] == "user"
+    assert (
+        integration_records["policies/baseline_modules/acceptance.py"]["role"]
+        == "required_full_integration_edit_source"
+    )
+    guarantees = manifest["code_phase_source_guarantees"]
+    assert guarantees["schema_version"] == "code-phase-source-visibility-guarantees.v1"
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["required_integration_source_visible"] is True
+    assert guarantees["protected_source_visible"] is True
+    assert guarantees["required_integration_source_count"] == 1
+    assert guarantees.get("missing_required_source_paths", []) == []
+    assert (
+        ledger["source_visibility_guarantees"]["protected_source_visible"] is True
+    )
     hypothesis_status = manifest["section_statuses"]["hypothesis_to_implement"]
     assert hypothesis_status["status"] == "included"
     assert hypothesis_status["prompt_part"] == "user"

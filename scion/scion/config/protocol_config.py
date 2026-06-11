@@ -442,6 +442,11 @@ class ProtocolConfig(BaseModel):
     practical_delta_validate: float = Field(default=0.001, ge=0.0)
     """Resolved validation practical delta in the protocol's current delta units."""
 
+    pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
+        "trajectory_stable"
+    )
+    """Problem-declared solver trajectory pairing model for gate/lifecycle policy."""
+
     evaluation_pipeline: EvaluationPipelineConfig = Field(
         default_factory=EvaluationPipelineConfig
     )
@@ -510,6 +515,7 @@ class ProtocolConfig(BaseModel):
             if value is not None:
                 updates[field_name] = _nonnegative_float(field_name, value)
         runtime_model = getattr(measurement, "runtime_model", None)
+        data = self.model_dump()
         if runtime_model is not None:
             runtime_model_text = str(runtime_model).strip()
             if runtime_model_text not in {"comparative", "budget_exhausting"}:
@@ -519,10 +525,16 @@ class ProtocolConfig(BaseModel):
                 )
             runtime_payload = dict(self.runtime.model_dump())
             runtime_payload["runtime_model"] = runtime_model_text
-            data = self.model_dump()
             data["runtime"] = runtime_payload
-        else:
-            data = self.model_dump()
+        pairing_validity = getattr(measurement, "pairing_validity", None)
+        if pairing_validity is not None:
+            pairing_text = str(pairing_validity).strip()
+            if pairing_text not in {"trajectory_stable", "trajectory_divergent"}:
+                raise ValueError(
+                    "measurement.pairing_validity must be trajectory_stable "
+                    "or trajectory_divergent"
+                )
+            data["pairing_validity"] = pairing_text
         if not updates:
             return type(self).model_validate(data) if data != self.model_dump() else self
         data.update(updates)

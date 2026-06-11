@@ -135,10 +135,11 @@ finished with wrapper exit status 0. The frozen postrun baseline is
   mechanism-effect ranking. Source/code visibility was present and must remain
   protected during any context compression.
 
-The current step is Phase 2 from `TASK.md`: design and split the framework
-repairs using the completed A/A measurement-power conclusion. Additional gate,
-lifecycle, context, or budget tuning must be justified against the A/A MDE and
-must preserve the v3 Decision boundary.
+The current step is Phase 3 from `TASK.md`: finish minimal measurement
+readiness consumption. The Phase 2 framework repair is integrated, but current
+problem specs still point at `calibration_ref` paths that are not installed in
+the problem packages, and missing/stale calibration is not yet surfaced as
+readiness/status.
 
 ## 2026-06-11 Phase 1 A/A Calibration
 
@@ -182,6 +183,45 @@ Phase 1 is concluded and recorded in
   screening power, not proof that the mechanisms were intrinsically bad. Phase
   2 framework repair can start, but blind gate/lifecycle tuning is not an
   accepted fix.
+
+## 2026-06-11 Phase 2 Framework Repair
+
+Phase 2 first repair slice is integrated in
+`codex/v04-evidence-repair-plan`.
+
+- F-1/F-2 baseline verified: problem-owned practical deltas resolve into
+  protocol thresholds; `runtime_model: budget_exhausting` suppresses
+  meaningless runtime-tie fresh replay, downgrades budget saturation to info,
+  and keeps V9 semantics as budget compliance. Focused F-1/F-2 suite passed
+  with `135 passed`.
+- F-3 low-SNR repair: `ProtocolConfig` now resolves deterministic
+  `pairing_validity` from problem measurement declarations. Screening gates and
+  Decision can expand tie-heavy or weak non-negative low-SNR evidence below
+  `0.5` aggregate win rate only for `trajectory_divergent` problems. Negative
+  median delta, loss-heavy evidence, candidate failures, runtime guard
+  failures, and true runtime regressions still fail closed.
+- Lifecycle depth: trajectory-divergent low-SNR research receives relaxed
+  lifecycle thresholds so same-mechanism follow-up can continue beyond shallow
+  one-off attempts. Warehouse `trajectory_stable` behavior remains unchanged.
+- Context/source repair: hypothesis prompts receive tainted problem-owned
+  measurement/noise/opportunity diagnostics as research signal while filtering
+  raw calibration rows, validation/frozen detail, BKS/gap detail, LLM text,
+  prompt ratios, and raw cross-branch material. Code-phase prompt manifests now
+  expose `code_phase_source_guarantees` / `source_visibility_guarantees` so
+  target source and required integration source survival can be audited after
+  compression.
+- v3 boundary cleanup: generic mechanism-signature grouping no longer hardcodes
+  `vns`; the v3 generic-layer boundary test passes.
+- Integrated verification:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_config.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_problem_adapter.py scion/scion/tests/test_cli_run_options.py scion/scion/tests/test_protocol_stats_gates.py scion/scion/tests/test_decision_screening.py scion/scion/tests/unit/core/test_branch_lifecycle_policy.py scion/scion/tests/unit/core/test_scheduler_runtime_evidence_pressure.py scion/scion/tests/unit/core/test_runtime_budget_diagnostics.py scion/scion/tests/test_verification_gate_integration.py scion/scion/tests/unit/test_runtime_feedback_guidance.py scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/unit/test_prompt_manifest_accounting.py scion/scion/tests/unit/test_cross_branch_research.py scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_agentic_session_tool_selection.py`
+  passed with `311 passed`. The follow-up boundary subset
+  `test_v3_problem_boundary_no_cvrp_terms_in_generic_layers.py` plus key Phase
+  2 tests passed with `149 passed`.
+
+Remaining before focused validation: install or reference compatible A/A
+calibration artifacts through the measurement declaration layer and make
+missing/stale calibration visible as readiness/status without exposing raw
+calibration diagnostics to `DecisionFeatures`.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

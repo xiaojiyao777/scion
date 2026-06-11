@@ -158,16 +158,22 @@ class SafeFeatureExtractor:
             failed_pairs = stats.failed_pairs
             candidate_failed_pairs = stats.candidate_failed_pairs
             champion_failed_pairs = stats.champion_failed_pairs
+            pair_wins = int(getattr(stats, "pair_wins", 0) or 0)
+            pair_losses = int(getattr(stats, "pair_losses", 0) or 0)
+            pair_ties = int(getattr(stats, "pair_ties", 0) or 0)
             pair_feedback = list(getattr(protocol, "pair_feedback", ()) or ())
-            pair_wins = sum(
-                1 for item in pair_feedback if getattr(item, "comparison", None) == "win"
-            )
-            pair_losses = sum(
-                1
-                for item in pair_feedback
-                if getattr(item, "comparison", None) == "loss"
-            )
-            pair_ties = len(pair_feedback) - pair_wins - pair_losses
+            if pair_feedback:
+                pair_wins = sum(
+                    1
+                    for item in pair_feedback
+                    if getattr(item, "comparison", None) == "win"
+                )
+                pair_losses = sum(
+                    1
+                    for item in pair_feedback
+                    if getattr(item, "comparison", None) == "loss"
+                )
+                pair_ties = len(pair_feedback) - pair_wins - pair_losses
 
         recent_failure_codes: Tuple[str, ...] = tuple(
             c for c in branch.failure_codes if c in KNOWN_FAILURE_CODES

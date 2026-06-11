@@ -247,6 +247,9 @@ class EvalStats:
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
     champion_cached_runtime_pairs: int = 0
+    pair_wins: int = 0
+    pair_losses: int = 0
+    pair_ties: int = 0
     runtime_evidence_status: Literal[
         "sufficient",
         "insufficient",

@@ -35,6 +35,11 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
             outcome="pass",
             reason_codes=("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",),
         )
+    elif _trajectory_divergent_low_snr_expand(stats, config):
+        return GateResult(
+            outcome="expand",
+            reason_codes=("SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",),
+        )
     elif wr < 0.5:
         return GateResult(outcome="fail", reason_codes=("SCREENING_FAIL_WIN_RATE",))
     elif wr < threshold:
@@ -157,3 +162,67 @@ def _runtime_tie_fresh_champion_required(
     if stats.wins > 0:
         return False
     return stats.n_cases > 0 and stats.ties > 0
+
+
+def _trajectory_divergent_low_snr_expand(
+    stats: EvalStats,
+    config: ProtocolConfig,
+) -> bool:
+    if getattr(config, "pairing_validity", "trajectory_stable") != (
+        "trajectory_divergent"
+    ):
+        return False
+    if stats.win_rate >= config.screening_win_rate_threshold:
+        return False
+    if stats.candidate_failed_pairs > 0 or stats.failed_pairs > 0:
+        return False
+    if (
+        stats.runtime_ratio_median is not None
+        and stats.runtime_ratio_median > config.max_runtime_ratio
+    ):
+        return False
+    if stats.runtime_regression_rate is not None and stats.runtime_regression_rate >= 0.90:
+        return False
+    if stats.statistical_status == "negative":
+        return False
+    if stats.median_delta < 0:
+        return False
+    if stats.ci_high < 0:
+        return False
+
+    wins, losses, ties = _screening_signal_counts(stats)
+    observed = wins + losses + ties
+    if observed <= 0:
+        return False
+    if _loss_heavy(wins=wins, losses=losses, observed=observed):
+        return False
+    non_tie = wins + losses
+    non_tie_nonnegative = non_tie > 0 and wins >= losses
+    high_tie = ties / observed >= 0.50
+    weak_nonnegative = wins > 0 and wins >= losses
+    return (high_tie and non_tie_nonnegative) or weak_nonnegative
+
+
+def _screening_signal_counts(stats: EvalStats) -> tuple[int, int, int]:
+    pair_total = int(stats.pair_wins or 0) + int(stats.pair_losses or 0) + int(
+        stats.pair_ties or 0
+    )
+    if pair_total > 0:
+        return (
+            max(0, int(stats.pair_wins or 0)),
+            max(0, int(stats.pair_losses or 0)),
+            max(0, int(stats.pair_ties or 0)),
+        )
+    return (
+        max(0, int(stats.wins or 0)),
+        max(0, int(stats.losses or 0)),
+        max(0, int(stats.ties or 0)),
+    )
+
+
+def _loss_heavy(*, wins: int, losses: int, observed: int) -> bool:
+    if observed <= 0:
+        return False
+    if wins == 0 and losses > 0:
+        return True
+    return losses > wins and losses / observed >= 0.50

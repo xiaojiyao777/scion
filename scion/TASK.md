@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 1 A/A calibration concluded; Phase 2 repair ready*
+*Status: Phase 2 framework repair integrated; Phase 3 readiness layer pending*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -414,6 +414,21 @@ Exit criteria:
   V9 budget-compliance semantics, read-only branch research-shape diagnostics,
   prompt block-family accounting, compact research signals, and
   `scion/tools/calibrate_aa_noise.py`.
+- Implemented during Phase 2 framework repair: protocol config now resolves
+  deterministic `pairing_validity` from problem-owned measurement declarations;
+  screening gates and Decision can expand tie-heavy or weak non-negative
+  low-SNR evidence below `0.5` aggregate win rate only for
+  `trajectory_divergent` problems; trajectory-stable warehouse behavior remains
+  unchanged; hard negatives, candidate failures, runtime guard failures, and
+  true runtime regressions still fail closed. Lifecycle thresholds are relaxed
+  only for trajectory-divergent low-SNR research so same-mechanism follow-up can
+  continue beyond shallow one-off attempts.
+- Implemented during Phase 2 context/source repair: proposal context now exposes
+  tainted, problem-owned measurement/noise/opportunity diagnostics as research
+  signal, filters raw calibration rows, validation/frozen detail, BKS/gap
+  detail, LLM text, prompt ratios, and raw cross-branch material, and records
+  code-phase source visibility guarantees proving target and required
+  integration source survived compression.
 - Implemented during Phase 1 prerequisite repair: A/A artifacts now include
   replayable pair evidence, selected cases/seeds, replicate count, seed offset,
   bootstrap samples, selected surface, safe data roots, case resolution,
@@ -434,16 +449,22 @@ Exit criteria:
   Phase 0 CVRP candidates were below measured screening power, not disproven by
   failed screening outcomes. The Phase 1 report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
-- Partially implemented: context compaction is observable, but CVRP-specific
-  problem-domain diagnostics and phase-aware source protection still need repair.
+- Verified Phase 2 focused suite:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_config.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_problem_adapter.py scion/scion/tests/test_cli_run_options.py scion/scion/tests/test_protocol_stats_gates.py scion/scion/tests/test_decision_screening.py scion/scion/tests/unit/core/test_branch_lifecycle_policy.py scion/scion/tests/unit/core/test_scheduler_runtime_evidence_pressure.py scion/scion/tests/unit/core/test_runtime_budget_diagnostics.py scion/scion/tests/test_verification_gate_integration.py scion/scion/tests/unit/test_runtime_feedback_guidance.py scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/unit/test_prompt_manifest_accounting.py scion/scion/tests/unit/test_cross_branch_research.py scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_agentic_session_tool_selection.py`
+  passed with `311 passed`. Additional v3 boundary check
+  `test_v3_problem_boundary_no_cvrp_terms_in_generic_layers.py` passed after
+  removing a legacy generic-core `vns` hardcode from mechanism-signature
+  grouping.
 - Completed: Phase 0 postrun baseline for the paired 2026-06-11 CVRP and
   warehouse 4R verification runs is captured in
   `scion/docs/experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`.
   CVRP finished `4/4` screening-only rounds; warehouse finished `4/4` with a
   full promotion path to champion v2.
-- Pending: Phase 2 framework repair design and subagent task split, starting
-  with F-1 practical-delta resolution, F-2 runtime semantics, F-3 low-SNR
-  screening expansion, lifecycle depth, and phase-aware context/source policy.
+- Pending: Phase 3 readiness consumption. Current problem specs declare
+  `calibration_ref`, but the referenced A/A artifacts are not yet installed
+  under the problem packages, and missing/stale calibration is not yet surfaced
+  as readiness/status. Do that before focused Phase 4 validation and governance
+  on/off experiments.
 
 ## Status Cadence
 

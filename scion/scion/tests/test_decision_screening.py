@@ -198,6 +198,103 @@ def test_decision_screening_low_win_positive_effect_expands_screening():
     assert "SCREENING_EXPAND" in out.reason_codes
 
 
+def test_decision_trajectory_divergent_low_snr_expands_below_half_win_rate():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.EXPAND_SCREENING
+    assert out.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
+def test_decision_trajectory_stable_low_snr_shape_does_not_expand():
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+    )
+
+    out = _engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT" not in out.reason_codes
+
+
+def test_decision_trajectory_divergent_loss_heavy_does_not_expand():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=1,
+        losses=7,
+        ties=4,
+        win_rate=1 / 12,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT" not in out.reason_codes
+
+
+def test_decision_low_snr_expand_exhausted_continues_with_relaxed_lifecycle():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        pair_wins=12,
+        pair_losses=12,
+        pair_ties=40,
+    )
+    from dataclasses import replace
+
+    f = replace(f, screening_expand_count=1, lifecycle_zero_win_streak=2)
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert out.lifecycle_action == "retain_head"
+    assert "SCREENING_ZERO_WIN_STREAK_EXHAUSTED" not in out.reason_codes
+
+
 def test_decision_screening_expand_exhausted_borderline_positive_delta():
     """wr in [threshold-0.05, threshold) with md>=0 after 1 screening expand → queue_validate."""
     from scion.core.models import DecisionFeatures

@@ -799,6 +799,9 @@ def run_experiment(
 
     # T2: Aggregate pairs → case-level results
     all_pair_feedback = [fb for fbs in pairs_by_case.values() for fb in fbs]
+    pair_wins = sum(1 for fb in all_pair_feedback if fb.comparison == "win")
+    pair_losses = sum(1 for fb in all_pair_feedback if fb.comparison == "loss")
+    pair_ties = len(all_pair_feedback) - pair_wins - pair_losses
     case_level_results = _aggregate_pairs_to_case_level(all_pair_feedback)
 
     case_comparisons = [r.comparison for r in case_level_results]
@@ -851,6 +854,9 @@ def run_experiment(
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         champion_failed_pairs=champion_failed_pairs,
+        pair_wins=pair_wins,
+        pair_losses=pair_losses,
+        pair_ties=pair_ties,
     )
     if case_comparisons:
         if stage == ExperimentStage.SCREENING:

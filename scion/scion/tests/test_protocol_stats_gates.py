@@ -265,6 +265,124 @@ def test_screening_gate_expand():
     assert result.outcome == "expand"
 
 
+def test_trajectory_divergent_tie_heavy_screening_expands_below_half_win_rate():
+    stats = _make_stats(
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        valid_pairs=57,
+    )
+    config = ProtocolConfig.model_validate(
+        {"pairing_validity": "trajectory_divergent"}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
+def test_trajectory_stable_tie_heavy_screening_still_fails_below_half_win_rate():
+    stats = _make_stats(
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        valid_pairs=57,
+    )
+
+    result = screening_gate(stats, _cfg)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+
+
+def test_trajectory_divergent_negative_delta_still_fails_screening():
+    stats = _make_stats(
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=-0.01,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        valid_pairs=57,
+    )
+    config = ProtocolConfig.model_validate(
+        {"pairing_validity": "trajectory_divergent"}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+
+
+def test_trajectory_divergent_loss_heavy_screening_still_fails():
+    stats = _make_stats(
+        wins=1,
+        losses=7,
+        ties=4,
+        win_rate=1 / 12,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        valid_pairs=12,
+    )
+    config = ProtocolConfig.model_validate(
+        {"pairing_validity": "trajectory_divergent"}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+
+
+def test_trajectory_divergent_candidate_failure_still_fails_screening():
+    stats = _make_stats(
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        valid_pairs=57,
+        failed_pairs=1,
+        candidate_failed_pairs=1,
+    )
+    config = ProtocolConfig.model_validate(
+        {"pairing_validity": "trajectory_divergent"}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+
+
 def test_screening_gate_unclear_delta_small():
     stats = _make_stats(win_rate=0.7, median_delta=0.0001)
     result = screening_gate(stats, _cfg)

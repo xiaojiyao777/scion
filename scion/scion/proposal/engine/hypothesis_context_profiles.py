@@ -97,6 +97,14 @@ def filter_hypothesis_context_for_prompt(
     else:
         filtered.pop("cross_branch_research", None)
 
+    compact_measurement = _compact_problem_measurement_diagnostics(
+        context.get("problem_measurement_diagnostics")
+    )
+    if compact_measurement:
+        filtered["problem_measurement_diagnostics"] = compact_measurement
+    else:
+        filtered.pop("problem_measurement_diagnostics", None)
+
     if profile != "repair":
         for key in _REPAIR_FEEDBACK_KEYS:
             filtered.pop(key, None)
@@ -239,6 +247,92 @@ def _compact_cross_branch_research(payload: Any) -> str:
         "feedback for hypothesis planning only. It is excluded from "
         "DecisionFeatures and must not be used as a deterministic decision "
         "input.\n"
+        f"{rendered}"
+    )
+
+
+def _compact_problem_measurement_diagnostics(payload: Any) -> str:
+    if not isinstance(payload, Mapping):
+        return ""
+    compact = _drop_empty(
+        {
+            "schema_version": (
+                payload.get("schema_version")
+                or "problem_measurement_proposal_diagnostic.v1"
+            ),
+            "taint": (
+                payload.get("taint") or "problem_owned_proposal_diagnostic"
+            ),
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "decision_input_policy": "excluded_from_decision_features",
+            "runtime_model": _project_generic_value(payload.get("runtime_model")),
+            "pairing_validity": _project_generic_value(
+                payload.get("pairing_validity")
+            ),
+            "effect_scale": _project_mapping(
+                payload.get("effect_scale"),
+                fields=(
+                    "metric",
+                    "unit",
+                    "practical_delta_screen",
+                    "practical_delta_validate",
+                    "mde_at_power_80",
+                    "recommended_min_seeds",
+                    "false_pass_rate_at_current_gate",
+                ),
+            ),
+            "calibration": _project_mapping(
+                payload.get("calibration") or payload.get("calibration_summary"),
+                fields=(
+                    "calibration_ref",
+                    "calibration_max_age_days",
+                    "artifact_ref",
+                    "mde_at_power_80",
+                    "recommended_min_seeds",
+                    "false_pass_rate_at_current_gate",
+                    "selected_surface",
+                    "runtime_policy",
+                ),
+            ),
+            "noise_floor": _project_mapping(
+                payload.get("noise_floor") or payload.get("noise_summary"),
+                fields=(
+                    "mde_at_power_80",
+                    "recommended_min_seeds",
+                    "false_pass_rate_at_current_gate",
+                    "pairing_validity",
+                    "runtime_model",
+                ),
+            ),
+            "opportunity_diagnostics": _project_items(
+                payload.get("opportunity_diagnostics")
+                or payload.get("opportunity_hints"),
+                fields=(
+                    "diagnostic_type",
+                    "surface",
+                    "mechanism_family",
+                    "metric",
+                    "summary",
+                    "recommended_action",
+                    "confidence",
+                    "reason_codes",
+                ),
+                limit=6,
+            ),
+            "policy": _project_generic_value(payload.get("policy")),
+        }
+    )
+    if len(compact) <= 4:
+        return ""
+    rendered = json.dumps(compact, indent=2, sort_keys=True, default=str)
+    return (
+        "Problem-owned measurement/noise/opportunity diagnostics for proposal "
+        "planning only. These are tainted status diagnostics, excluded from "
+        "DecisionFeatures, and must not be treated as promotion evidence. "
+        "Validation/frozen per-case detail, raw calibration rows, BKS/gap "
+        "details, LLM text, prompt ratios, and raw cross-branch lessons are "
+        "intentionally omitted.\n"
         f"{rendered}"
     )
 

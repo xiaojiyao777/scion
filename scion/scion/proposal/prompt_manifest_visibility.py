@@ -176,6 +176,7 @@ def _section_block_family(name: str) -> str:
         "branch_dossier",
         "branch_direction",
         "objective_opportunity_profile",
+        "problem_measurement_diagnostics",
         "exploration_coverage",
         "strategy_guidance",
         "champion_baseline_hints",

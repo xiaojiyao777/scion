@@ -660,6 +660,57 @@ def test_repeated_marginal_signature_parks_lineage() -> None:
     assert decision.next_signal_signature_repeat_count == 2
 
 
+def test_relaxed_low_snr_policy_allows_multiple_marginal_followups() -> None:
+    features = _features(
+        n_cases=12,
+        wins=3,
+        losses=3,
+        ties=6,
+        win_rate=0.25,
+        median_delta=0.0,
+        ci_low=-0.5,
+        ci_high=0.5,
+        valid_pairs=12,
+        runtime_pairs=12,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.0,
+    )
+    signature = decision_features_signal_signature(features)
+    policy = BranchLifecyclePolicy(
+        zero_win_streak_limit=5,
+        no_effect_followup_limit=3,
+        marginal_no_effect_streak_limit=3,
+        repeated_signal_signature_limit=3,
+    )
+
+    keep = policy.decide(
+        features,
+        current_marginal_no_effect_streak=1,
+        last_signal_signature=signature,
+        current_signal_signature_repeat_count=1,
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+    exhausted = policy.decide(
+        features,
+        current_marginal_no_effect_streak=2,
+        last_signal_signature=signature,
+        current_signal_signature_repeat_count=2,
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+
+    assert keep.action == "retain_head"
+    assert keep.reason_codes == (SCREENING_MARGINAL_SIGNAL_CONTINUE,)
+    assert keep.next_marginal_no_effect_streak == 2
+    assert exhausted.action == "park_lineage"
+    assert exhausted.reason_codes == (
+        SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
+        SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
+    )
+    assert exhausted.next_marginal_no_effect_streak == 3
+
+
 def test_no_effect_exhausted_parks_instead_of_archiving() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(wins=0, losses=0, ties=8, win_rate=0.0),
