@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 0 evidence baseline captured - Phase 1 A/A calibration next*
+*Status: Phase 1 A/A calibration running*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -281,8 +281,10 @@ Exit criteria:
   V9 budget-compliance semantics, read-only branch research-shape diagnostics,
   prompt block-family accounting, compact research signals, and
   `scion/tools/calibrate_aa_noise.py`.
-- Partially implemented: A/A calibration tooling exists, but full CVRP and
-  warehouse formal calibration reports are still required.
+- In progress: Phase 1 A/A calibration has launched. Warehouse create/modify
+  screening calibrations finished with wrapper exit 0; CVRP formal screening
+  calibration is still running. The in-progress report is
+  `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.
 - Completed: Phase 0 postrun baseline for the paired 2026-06-11 CVRP and
@@ -290,8 +292,8 @@ Exit criteria:
   `scion/docs/experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`.
   CVRP finished `4/4` screening-only rounds; warehouse finished `4/4` with a
   full promotion path to champion v2.
-- Pending: Phase 1 formal A/A calibration for CVRP and warehouse, then Phase 2
-  repairs.
+- Pending: CVRP Phase 1 A/A completion and final calibration report, then
+  Phase 2 repairs.
 
 ## Git Hygiene
 

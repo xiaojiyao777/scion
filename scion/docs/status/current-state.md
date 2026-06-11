@@ -90,8 +90,10 @@ The active v0.4 task breakdown is
   ratio.
 - A/A calibration: `scion/tools/calibrate_aa_noise.py` can produce
   `scion.aa_noise_floor.v1` artifacts. Minimal CVRP controlled smoke passed at
-  5s/10s; formal CVRP/warehouse calibration reports still need to be generated
-  before interpreting MDE or changing experiment budgets.
+  5s/10s. Phase 1 formal A/A is now running; warehouse create/modify
+  calibrations finished cleanly, while CVRP formal screening calibration is
+  still running. The in-progress note is
+  [`../experiments/v0.4/v04-phase1-aa-calibration-20260611.md`](../experiments/v0.4/v04-phase1-aa-calibration-20260611.md).
 - Research shape/context: campaign summary/status expose read-only branch-depth
   and mechanism-family diagnostics; prompt manifests expose block-family token
   accounting and research-signal/governance ratios; hypothesis prompts now show
@@ -125,8 +127,27 @@ finished with wrapper exit status 0. The frozen postrun baseline is
   mechanism-effect ranking. Source/code visibility was present and must remain
   protected during any context compression.
 
-The next step is Phase 1 from `TASK.md`: formal A/A calibration for CVRP and
-warehouse before additional gate, lifecycle, or budget tuning.
+The current step is Phase 1 from `TASK.md`: finish CVRP formal A/A calibration,
+then finalize the measurement-power report before additional gate, lifecycle,
+or budget tuning.
+
+## 2026-06-11 Phase 1 A/A Calibration
+
+Phase 1 is in progress and recorded in
+[`../experiments/v0.4/v04-phase1-aa-calibration-20260611.md`](../experiments/v0.4/v04-phase1-aa-calibration-20260611.md).
+
+- Warehouse `create_new` A/A finished with `n_pairs=60`,
+  `mde_at_power_80=1725.0` raw `total_cost`, and
+  `false_pass_rate_at_current_gate=0.0`.
+- Warehouse `modify` A/A finished with `n_pairs=36`,
+  `mde_at_power_80=577.5` raw `total_cost`, and
+  `false_pass_rate_at_current_gate=0.0`.
+- CVRP `modify` A/A is still running. Its first launch exposed a calibration
+  tooling gap: the CLI does not yet consume CVRP's declared external problem
+  data root, so the active run uses a copied split with the local `vrp` data
+  root added as `safe_data_roots`.
+- No Phase 2 framework code repair should start until the CVRP result is
+  available and the Phase 1 measurement-power conclusion is finalized.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
