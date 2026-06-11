@@ -15,7 +15,8 @@ and must not enter `DecisionFeatures`.
 
 | Problem | Action | Run root | Status |
 |---|---|---|---|
-| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl30-saferoot-20260611T164539Z-claw` | running |
+| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl30-saferoot-20260611T164539Z-claw` | failed, exit 1 |
+| CVRP | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw` | running |
 | Warehouse | `create_new` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-create-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 | Warehouse | `modify` | `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-modify-r3-defaultbudget-20260611T164426Z-claw` | finished, exit 0 |
 
@@ -26,8 +27,14 @@ The warehouse runs completed with wrapper exit status 0:
 - `modify`: started `2026-06-11T16:44:26Z`, ended
   `2026-06-11T16:47:25Z`.
 
-The CVRP run started at `2026-06-11T16:45:39Z` and is still running at the
-time of this in-progress note.
+The first CVRP run started at `2026-06-11T16:45:39Z` and failed at
+`2026-06-11T17:50:33Z` before producing an `aa_noise_floor.json`. The failure
+was a timeout on `/home/clawd/research/or-autoresearch-agent/vrp/cvrplib/M/M-n200-k17.vrp`
+with candidate seed `2000035` under uniform `--time-limit-sec 30`.
+
+A corrected CVRP run started at `2026-06-11T17:54:50Z` with the same safe-root
+split and `--time-limit-sec 60`. This is still a uniform-budget calibration
+run, not a perfect reproduction of the formal per-case runtime time-limit rules.
 
 ## Expected Workload
 
@@ -41,11 +48,14 @@ with `seed + seed_offset * (replicate + 1)`.
 | Warehouse | create_new | 10 | 2 | 3 | 60 | 120 |
 | Warehouse | modify | 6 | 2 | 3 | 36 | 72 |
 
-CVRP was launched with a uniform `--time-limit-sec 30`. This is sufficient as
-a first formal noise-floor run, but it does not fully reproduce the formal CVRP
-runtime policy, whose screening rules use larger budgets for larger instances.
-The final report must label this as a calibration-tool limitation before using
-the CVRP number to redesign budgets or gates.
+The first CVRP launch used uniform `--time-limit-sec 30` and failed on
+`M/M-n200-k17.vrp`. This confirms that the current calibration CLI cannot yet
+be treated as a faithful formal screening runner for CVRP: the formal protocol
+uses screening defaults of 30s plus 45s rules for dimensions 150-250 and 60s
+rules above 250. The active corrected launch uses uniform 60s to produce a
+complete first CVRP noise-floor artifact. The final report must label the CVRP
+number as a uniform-60s calibration until Worker F adds per-case runtime-rule
+support.
 
 ## Warehouse Results
 
@@ -99,6 +109,14 @@ effectively dead practical-delta value.
 
 CVRP remains the gating item for Phase 1 completion.
 
+## CVRP Results
+
+The `tl30` CVRP run produced no calibration JSON and must not be interpreted as
+an MDE estimate. Its value is diagnostic: it shows that the A/A tool must either
+consume protocol runtime time-limit rules or expose a sufficiently conservative
+calibration budget. The `tl60` CVRP run is the active run for the first complete
+CVRP MDE estimate.
+
 ## Tooling Gaps Found During Phase 1
 
 - The first CVRP launch failed before solver execution because the formal CVRP
@@ -111,6 +129,10 @@ CVRP remains the gating item for Phase 1 completion.
   `/home/clawd/research/or-autoresearch-agent/vrp` added as a safe data root.
   That split copy has SHA-256
   `395a05d172d44c27e462f5030ff22b88730b4c1df21af368f8e0315aaee660d1`.
+- The first safe-root CVRP run still failed because uniform 30s was below the
+  formal screening runtime rule needed by `M/M-n200-k17.vrp`. The corrected
+  `tl60` run uses the same split hash and should be treated as a conservative
+  calibration workaround until the CLI supports protocol runtime rules.
 - The A/A payload records MDE, false pass rate, and per-case summaries, but it
   does not persist raw pair rows, candidate seeds, elapsed runtime, budget-hit
   or saturation details, selected cases/seeds, replicate count, seed offset, or

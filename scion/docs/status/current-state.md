@@ -145,7 +145,11 @@ Phase 1 is in progress and recorded in
 - CVRP `modify` A/A is still running. Its first launch exposed a calibration
   tooling gap: the CLI does not yet consume CVRP's declared external problem
   data root, so the active run uses a copied split with the local `vrp` data
-  root added as `safe_data_roots`.
+  root added as `safe_data_roots`. The first safe-root `tl30` run then failed
+  on `M/M-n200-k17.vrp` with a solver timeout, confirming that calibration also
+  needs protocol runtime-rule support. A corrected uniform-60s CVRP A/A run is
+  now active:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw`.
 - No Phase 2 framework code repair should start until the CVRP result is
   available and the Phase 1 measurement-power conclusion is finalized.
 

@@ -282,8 +282,9 @@ Exit criteria:
   prompt block-family accounting, compact research signals, and
   `scion/tools/calibrate_aa_noise.py`.
 - In progress: Phase 1 A/A calibration has launched. Warehouse create/modify
-  screening calibrations finished with wrapper exit 0; CVRP formal screening
-  calibration is still running. The in-progress report is
+  screening calibrations finished with wrapper exit 0. The first CVRP safe-root
+  `tl30` run failed on `M/M-n200-k17.vrp` timeout; a corrected uniform-60s CVRP
+  run is active. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.
