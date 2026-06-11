@@ -488,6 +488,15 @@ Exit criteria:
   with Python PID `1754001`, production protocol/split/seeds, and
   `--time-limit-sec 30`. Both runs use `--disable-early-stop` and
   `--agentic-proposal`.
+- Warehouse result: invalid for Phase 4 validation. The wrapper exited 0 and
+  consumed four candidate attempts, but all four were abandoned with
+  `CANARY_FAILED` before screening protocol rows were produced:
+  `screening_protocol_results=0`, `effective_protocol_rounds=0`, no formal
+  candidate index, and missing protocol `raw_metrics_ref`. Treat this as a
+  canary evidence/accounting repair finding, not as warehouse research
+  evidence. Worker H owns a generic repair so canary-vetoed candidates are not
+  misreported as formal screened/effective protocol evidence and canary details
+  are auditable before rerun.
 
 ## Status Cadence
 

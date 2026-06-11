@@ -276,6 +276,19 @@ formal screened candidates, branch depth, same-mechanism follow-up,
 cross-branch transfer, prompt context/source visibility, runtime semantics, and
 candidate evidence relative to A/A MDE.
 
+Warehouse status: the warehouse run finished with wrapper exit status 0, but it
+is invalid for Phase 4 validation. `run.log` reports `experiments  : 0`; status
+shows `effective_rounds_completed=4` and legacy `formal_screened_candidates=4`,
+but `effective_protocol_rounds=0`, `protocol_metric_results=0`, and
+`screening_protocol_results=0`. All four candidates passed Contract and
+Verification, then were abandoned with `CANARY_FAILED` before protocol
+screening rows were produced. There is no formal candidate index and protocol
+`raw_metrics_ref` is missing. Treat this as a canary evidence/accounting repair
+finding, not warehouse research evidence. Worker H is preparing a generic
+repair so canary-vetoed candidates are not misreported as formal
+screened/effective protocol evidence and canary failure details are auditable
+before rerun.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09
