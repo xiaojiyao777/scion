@@ -249,6 +249,33 @@ local `gpt5.5`, then audit branch depth, same-mechanism continuation,
 cross-branch transfer, prompt context, runtime semantics, and candidate
 evidence against A/A MDE.
 
+## 2026-06-11 Phase 4 Focused Validation Launched
+
+The first-rung 4R focused validation runs are launched from commit `32ab596`
+with local `gpt5.5`, `--disable-early-stop`, and `--agentic-proposal`.
+
+- CVRP formal:
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-cvrp-measreadiness-20260611-4r-gpt55-20260611T224916Z-claw`
+  (launcher PID `1753912`). It uses
+  `scion/problems/cvrp/formal/protocol.yaml`,
+  `scion/problems/cvrp/formal/split_manifest.yaml`,
+  `scion/problems/cvrp/formal/seed_ledger.yaml`,
+  `SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp`,
+  and `--time-limit-sec 30`.
+- Warehouse production:
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-measreadiness-20260611-4r-gpt55-20260611T225004Z-claw`
+  (Python PID `1754001`). It uses
+  `scion/problems/warehouse_delivery/protocol_prod.yaml`,
+  `scion/problems/warehouse_delivery/split_manifest_prod.yaml`,
+  `scion/problems/warehouse_delivery/seed_ledger.yaml`, and
+  `--time-limit-sec 30`.
+
+Do not advance to governance on/off until these runs finish and are audited
+against `v04-audit-agent-experiment-guide-20260609.md`: effective rounds,
+formal screened candidates, branch depth, same-mechanism follow-up,
+cross-branch transfer, prompt context/source visibility, runtime semantics, and
+candidate evidence relative to A/A MDE.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09

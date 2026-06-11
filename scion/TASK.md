@@ -478,6 +478,16 @@ Exit criteria:
   with local `gpt5.5`, then audit branch depth, same-mechanism follow-up,
   prompt context, runtime semantics, and evidence against A/A MDE before
   governance on/off experiments.
+- Launched: Phase 4 first-rung 4R focused validation runs from commit
+  `32ab596` using local `gpt5.5`.
+  CVRP formal run:
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-cvrp-measreadiness-20260611-4r-gpt55-20260611T224916Z-claw`
+  with PID `1753912`, formal CVRPLIB split, protocol time rules, and
+  `--time-limit-sec 30`. Warehouse run:
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-measreadiness-20260611-4r-gpt55-20260611T225004Z-claw`
+  with Python PID `1754001`, production protocol/split/seeds, and
+  `--time-limit-sec 30`. Both runs use `--disable-early-stop` and
+  `--agentic-proposal`.
 
 ## Status Cadence
 
