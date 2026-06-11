@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 1 A/A calibration running*
+*Status: Phase 1 A/A calibration concluded; Phase 2 repair ready*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -33,6 +33,17 @@ If Phase 1 cannot be completed because calibration tooling cannot represent the
 formal protocol, that tooling repair is a Phase 1 prerequisite, not a general
 framework repair.
 
+The v0.4 objective is therefore:
+
+- Prove the measurement instrument before interpreting failed promotions as
+  failed mechanisms.
+- Repair the framework paths that currently prevent deep, evidence-aware agent
+  research.
+- Add the smallest problem-owned measurement declaration layer needed for Scion
+  to know whether it can measure the claimed effect.
+- Run governance on/off only after the baseline framework is repaired, so the
+  comparison measures governance value rather than unresolved v0.4 debt.
+
 ## Phase Gates
 
 - Phase 1 gate: CVRP and warehouse both have usable A/A conclusions, including
@@ -53,6 +64,38 @@ framework repair.
 - No phase closes until `scion/TASK.md`, current state, v0.4 history, and the
   v0.4 repair plan have been updated with artifact paths, commands, caveats,
   and the next owner.
+
+## Effective Research Definition
+
+v0.4 is considered able to do effective research only when the framework can
+support evidence-backed continuation, rejection, and transfer of hypotheses.
+Promotion is a useful signal, but it is not the only acceptable research result.
+
+For CVRP, effective research requires:
+
+- Candidate evidence interpreted against A/A MDE and case-level variance, not
+  only aggregate win rate.
+- Low-SNR but non-negative solver-design ideas can receive same-mechanism
+  follow-up instead of being immediately parked.
+- Clearly negative effects, infeasible candidates, candidate failures, and
+  true runtime regressions still fail closed.
+- Branches show depth beyond shallow one-off attempts, including within-branch
+  iteration and mechanism-family continuity.
+- Later prompts receive useful branch lessons and problem-owned opportunity
+  diagnostics.
+- Code-phase contexts retain direct visibility of champion/current-branch/target
+  source; compression may reduce boilerplate and duplicated governance payloads
+  but must not hide the research object code.
+
+For warehouse, effective research requires:
+
+- Existing promotion behavior does not regress.
+- Repeated campaigns distinguish real plateau from missed continuous-promotion
+  opportunities.
+- Runtime configuration and observed fast completion are explained by the
+  problem/runtime model rather than treated as incidental noise.
+- Branch transfer and prompt context are inspected, not inferred from final
+  promotion status alone.
 
 ## Experiment Defaults
 
@@ -199,6 +242,33 @@ Exit criteria:
   and protocol design before more campaign runs.
 - Calibration results become proposal-visible diagnostics only; they are not
   promotion evidence.
+
+Phase 1 decision:
+
+- Concluded on 2026-06-11. CVRP and warehouse both have usable A/A artifacts.
+- CVRP formal protocol-time A/A:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw/aa_noise_floor.json`.
+  It produced `n_pairs=96`, `mde_at_power_80=9.9` raw `total_distance`,
+  `false_pass_rate_at_current_gate=0.0`, and `recommended_min_seeds=8`.
+  The run used protocol-resolved per-case time limits (`30s` and `45s`) and
+  complete pair evidence. Current CVRP `practical_delta_screen=2.0` is below
+  this measured detection floor, so Phase 0 screening failures are
+  measurement-power insufficient evidence, not mechanism disproof.
+  Read-only subagent validation confirmed wrapper exit status, artifact hash,
+  selected cases/seeds, seed-offset rule, safe data-root resolution,
+  runtime-policy metadata, pair evidence completeness, positive elapsed runtime
+  fields, and `DecisionFeatures` exclusion.
+- Warehouse modify A/A:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-modify-r3-defaultbudget-20260611T164426Z-claw/aa_noise_floor.json`.
+  It produced `n_pairs=36`, `mde_at_power_80=577.5` raw `total_cost`, and
+  `false_pass_rate_at_current_gate=0.0`.
+- Warehouse create A/A:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-warehouse-screening-create-r3-defaultbudget-20260611T164426Z-claw/aa_noise_floor.json`.
+  It produced `n_pairs=60`, `mde_at_power_80=1725.0` raw `total_cost`, and
+  `false_pass_rate_at_current_gate=0.0`.
+- Phase 2 may begin, but blind win-rate/lifecycle tuning is not accepted as a
+  fix. Repairs must make measurement power, runtime semantics, lifecycle depth,
+  and context signal density explicit.
 
 ## Phase 2 - Framework Repairs for Effective Research
 
@@ -350,18 +420,19 @@ Exit criteria:
   elapsed runtime, and explicit runtime-policy metadata. The calibration CLI can
   wire declared problem data roots and can run either uniform time limits or
   protocol-resolved per-case time limits.
-- In progress: Phase 1 A/A calibration has launched. Warehouse create/modify
-  screening calibrations finished with wrapper exit 0. The first CVRP safe-root
-  `tl30` run failed on `M/M-n200-k17.vrp` timeout. The corrected uniform-60s
-  CVRP legacy run finished at `2026-06-11T20:34:59Z` with `n_pairs=96`,
-  `mde_at_power_80=8.7` raw `total_distance`, and
+- Completed: Phase 1 A/A calibration. Warehouse create/modify screening
+  calibrations finished with wrapper exit 0. The first CVRP safe-root `tl30`
+  run failed on `M/M-n200-k17.vrp` timeout and is diagnostic only. The
+  corrected uniform-60s CVRP legacy run finished at `2026-06-11T20:34:59Z`
+  with `n_pairs=96`, `mde_at_power_80=8.7` raw `total_distance`, and
   `false_pass_rate_at_current_gate=0.0`, but it lacks Worker F pair/runtime
-  evidence and is not a formal per-case-runtime reproduction. A repaired formal
-  protocol-time CVRP run started at `2026-06-11T20:36:00Z` from commit
-  `a43dc2be371b5f2f209477df54883708b8750055`; it is now the remaining Phase 1
-  gating artifact. Read-only subagent cross-check accepted that Phase 0 CVRP
-  candidates were below the legacy measured screening power, not disproven by
-  the failed screening outcomes. The in-progress report is
+  evidence and is not a formal per-case-runtime reproduction. The repaired
+  formal protocol-time CVRP run finished at `2026-06-11T22:03:18Z` with
+  `n_pairs=96`, `mde_at_power_80=9.9` raw `total_distance`,
+  `false_pass_rate_at_current_gate=0.0`, complete pair evidence, and
+  protocol-resolved time limits. Read-only subagent cross-check accepted that
+  Phase 0 CVRP candidates were below measured screening power, not disproven by
+  failed screening outcomes. The Phase 1 report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.
@@ -370,8 +441,9 @@ Exit criteria:
   `scion/docs/experiments/v0.4/v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md`.
   CVRP finished `4/4` screening-only rounds; warehouse finished `4/4` with a
   full promotion path to champion v2.
-- Pending: CVRP Phase 1 A/A completion and final calibration report, then
-  Phase 2 repairs.
+- Pending: Phase 2 framework repair design and subagent task split, starting
+  with F-1 practical-delta resolution, F-2 runtime semantics, F-3 low-SNR
+  screening expansion, lifecycle depth, and phase-aware context/source policy.
 
 ## Status Cadence
 

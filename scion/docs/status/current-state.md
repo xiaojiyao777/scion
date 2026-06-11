@@ -90,17 +90,18 @@ The active v0.4 task breakdown is
   ratio.
 - A/A calibration: `scion/tools/calibrate_aa_noise.py` can produce
   `scion.aa_noise_floor.v1` artifacts. Minimal CVRP controlled smoke passed at
-  5s/10s. Phase 1 formal A/A is now running; warehouse create/modify
-  calibrations finished cleanly, while CVRP formal screening calibration is
-  still running. The in-progress note is
+  5s/10s. Phase 1 formal A/A is concluded: warehouse create/modify
+  calibrations finished cleanly, and the final CVRP protocol-time screening
+  calibration finished with `n_pairs=96`, MDE `9.9` raw `total_distance`, and
+  false-pass rate `0.0`. The final note is
   [`../experiments/v0.4/v04-phase1-aa-calibration-20260611.md`](../experiments/v0.4/v04-phase1-aa-calibration-20260611.md).
 - Phase 1 calibration evidence closure: the A/A tool now records replayable
   pair evidence, selected cases/seeds, replicate count, seed offset, bootstrap
   samples, selected surface, safe data roots, case resolution, elapsed runtime,
   and runtime-policy metadata. It can wire declared problem data roots and can
-  use protocol-resolved per-case time limits. The currently running CVRP
-  uniform-60s process was launched before this repair, so its artifact remains a
-  legacy uniform-budget estimate if it finishes successfully.
+  use protocol-resolved per-case time limits. The CVRP uniform-60s artifact
+  remains a legacy uniform-budget estimate; the protocol-time artifact is the
+  formal Phase 1 result.
 - Research shape/context: campaign summary/status expose read-only branch-depth
   and mechanism-family diagnostics; prompt manifests expose block-family token
   accounting and research-signal/governance ratios; hypothesis prompts now show
@@ -134,13 +135,14 @@ finished with wrapper exit status 0. The frozen postrun baseline is
   mechanism-effect ranking. Source/code visibility was present and must remain
   protected during any context compression.
 
-The current step is Phase 1 from `TASK.md`: finish CVRP formal A/A calibration,
-then finalize the measurement-power report before additional gate, lifecycle,
-or budget tuning.
+The current step is Phase 2 from `TASK.md`: design and split the framework
+repairs using the completed A/A measurement-power conclusion. Additional gate,
+lifecycle, context, or budget tuning must be justified against the A/A MDE and
+must preserve the v3 Decision boundary.
 
 ## 2026-06-11 Phase 1 A/A Calibration
 
-Phase 1 is in progress and recorded in
+Phase 1 is concluded and recorded in
 [`../experiments/v0.4/v04-phase1-aa-calibration-20260611.md`](../experiments/v0.4/v04-phase1-aa-calibration-20260611.md).
 
 - Warehouse `create_new` A/A finished with `n_pairs=60`,
@@ -149,36 +151,37 @@ Phase 1 is in progress and recorded in
 - Warehouse `modify` A/A finished with `n_pairs=36`,
   `mde_at_power_80=577.5` raw `total_cost`, and
   `false_pass_rate_at_current_gate=0.0`.
-- CVRP `modify` A/A has one successful legacy estimate and one active formal
-  run. The first safe-root `tl30` run failed on `M/M-n200-k17.vrp` with a
-  solver timeout, confirming that calibration needs protocol runtime-rule
-  support. The corrected uniform-60s legacy run finished at
-  `2026-06-11T20:34:59Z` with `n_pairs=96`, `mde_at_power_80=8.7` raw
-  `total_distance`, and `false_pass_rate_at_current_gate=0.0`; its artifact is
+- CVRP `modify` A/A has one failed diagnostic run, one successful legacy
+  estimate, and one successful formal protocol-time run. The first safe-root
+  `tl30` run failed on `M/M-n200-k17.vrp` with a solver timeout, confirming
+  that calibration needed protocol runtime-rule support. The corrected
+  uniform-60s legacy run finished at `2026-06-11T20:34:59Z` with `n_pairs=96`,
+  `mde_at_power_80=8.7` raw `total_distance`, and
+  `false_pass_rate_at_current_gate=0.0`; its artifact is
   `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-tl60-saferoot-20260611T175414Z-claw/aa_noise_floor.json`.
-  This is not enough to close Phase 1 because it lacks Worker F pair/runtime
-  evidence and is a uniform-60s approximation.
-- The repaired formal protocol-time CVRP A/A run started at
-  `2026-06-11T20:36:00Z` from commit
-  `a43dc2be371b5f2f209477df54883708b8750055`:
-  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw`.
-  It uses the formal split, seed ledger, declared data-root wiring, and
-  `--runtime-policy protocol_time_limits`; the first live solver command used
-  `A/A-n64-k9.vrp` with `--time-limit 30`, confirming protocol time-limit
-  resolution is active.
-- Phase 1 closure now has an explicit acceptance checklist in the calibration
-  note. The legacy CVRP run is only the first uniform-60s MDE estimate, not a
-  faithful formal per-case-runtime reproduction. The active protocol-time run
-  must explain selected cases/seeds, runtime behavior, raw pair evidence, and
-  case resolution before Phase 1 can close.
+  This remains a legacy uniform-budget estimate.
+- The repaired formal protocol-time CVRP A/A run finished at
+  `2026-06-11T22:03:18Z` from commit
+  `a43dc2be371b5f2f209477df54883708b8750055` with wrapper exit status 0:
+  `/home/clawd/research/scion-experiments/v04-phase1-aa-cvrp-screening-modify-r3-protocoltime-20260611T191356Z-claw/aa_noise_floor.json`.
+  It used the formal split, seed ledger, declared data-root wiring, and
+  `--runtime-policy protocol_time_limits`. It produced `n_pairs=96`,
+  `mde_at_power_80=9.9` raw `total_distance`,
+  `false_pass_rate_at_current_gate=0.0`, and `recommended_min_seeds=8`.
+  Pair evidence is complete and protocol-resolved pair time limits are present.
 - Read-only subagent cross-check `019eb86b-228f-7e92-913a-c7e873614a5e`
   accepted the legacy CVRP interpretation: Phase 0 CVRP median effects were all
   `0.0`, the best CI upper bound was `8.0`, and the legacy MDE was `8.7`, so
   the evidence supports "below measured screening power" rather than
   "mechanism disproven."
-- No Phase 2 framework code repair should start until the CVRP result is
-  available from the protocol-time run and the Phase 1 measurement-power
-  conclusion is finalized.
+- Read-only subagent cross-check `019eb8b9-005b-7203-a3b2-d7dcc1e4bec8`
+  validated the final protocol-time CVRP artifact and accepted it as satisfying
+  the CVRP-specific Phase 1 checklist.
+- Phase 1 conclusion: current CVRP `practical_delta_screen=2.0` is below the
+  formal A/A MDE of `9.9` by `4.95x`. Phase 0 CVRP failures were below measured
+  screening power, not proof that the mechanisms were intrinsically bad. Phase
+  2 framework repair can start, but blind gate/lifecycle tuning is not an
+  accepted fix.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
