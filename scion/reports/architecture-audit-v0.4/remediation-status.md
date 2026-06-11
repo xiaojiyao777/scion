@@ -1,9 +1,40 @@
 # v0.4 Architecture Audit Remediation Status
 
-*Last updated: 2026-06-07*
+*Last updated: 2026-06-11*
 
 This is a compact remediation tracker for the v0.4 architecture audit. It does
 not restate module evidence; use the numbered audit files for source findings.
+
+## Post-6/7 Disposition
+
+The 6/7 remediation validation remains the source-level repair baseline, but
+the later audit set changes the recommended next action:
+
+- [`../v04-audit-agent-experiment-guide-20260609.md`](../v04-audit-agent-experiment-guide-20260609.md)
+  is now required reading for post-run analysis. It defines how to resolve
+  effective copied configs, counters, prompt visibility, pair-level metrics,
+  and v3 layer boundaries before drawing conclusions.
+- [`../v04-core-framework-review-20260611.md`](../v04-core-framework-review-20260611.md)
+  and
+  [`../v04-core-framework-code-review-20260611.md`](../v04-core-framework-code-review-20260611.md)
+  reviewed the 2026-06-10 CVRP/Warehouse 8R runs and found the generic v3
+  framework path healthy enough for analysis: DecisionFeatures boundaries,
+  replay identity, evidence lineage, and warehouse promotion flow were not the
+  bottleneck.
+- The current blocker is evidence power, runtime-governance semantics,
+  branch-depth research, and research-object fit, especially CVRP under a
+  strong budget-exhausting ALNS/VNS champion. This should be fixed in v0.4, not
+  deferred wholesale to v0.5. CVRP/VRP still needs effective research evidence,
+  including the historical promotion mode where objective quality ties or stays
+  non-regressive while runtime improves materially.
+- The next work should follow
+  [`../../design/v0.5-evidence-uplift-roadmap.md`](../../design/v0.5-evidence-uplift-roadmap.md):
+  v0.4 lands the measurement/runtime/context/branch-depth repairs and focused
+  validation; v0.5 runs the broader governance ablation, reproduction matrix,
+  and problem-family comparisons. Do not resume longer CVRP runs as a default
+  gate until the v0.4 measurement and runtime semantics are fixed.
+- The concrete v0.4 execution split is
+  [`../../docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../../docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 
 ## Counter And Scheduler Semantics
 
@@ -118,7 +149,8 @@ Additional provenance/remediation validation on 2026-06-07:
 - `python -m pytest -q scion/scion/tests/unit/core`: 424 passed.
 - CVRP formal readiness + v3 problem-boundary focused suite: 8 passed.
 
-Current experiment readiness note:
+6/7 experiment readiness note, now superseded by the 6/11 evidence-power
+reviews:
 
 - Fresh 4R after the provenance/replay fixes completed valid with 4/4 formal
   screened candidates, 0 quality blocks, all LLM traces on `gpt-5.5`, complete
@@ -152,12 +184,14 @@ Current experiment readiness note:
   completed valid with 8/8 formal screened candidates, 0 quality blocks,
   0 `scheduler_active_slot_blocked_attempts`, all 59 LLM traces on `gpt-5.5`,
   complete tool-selection provenance, and complete replay identities for all
-  8 candidate patch artifacts. Independent framework and research analyses
-  recommend proceeding to 12R.
+  8 candidate patch artifacts. At the time, independent framework and research
+  analyses recommended proceeding to 12R.
 - Caveat: this successful 8R did not actually emit a scheduler-origin reclaim
   audit event; it proves the post-fix campaign can complete 8R without the
   previous partial-stop failure, while the exact scheduler-origin reclaim path
   remains covered by focused unit tests. The next longer run should explicitly
   report whether `scheduler_active_slot_reclaim` appears in campaign metadata.
-- Next gate: run 12R with the same local `gpt-5.5` proxy and analyze it before
-  considering 20R.
+- Superseding note: the later 6/10 8R CVRP/Warehouse comparison and 6/11
+  reviews shift the next gate away from "run 12R" and toward v0.4 measurement
+  calibration, runtime-governance repair, branch-depth/context repair, and then
+  focused VRP/warehouse validation.

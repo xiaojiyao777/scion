@@ -1,13 +1,110 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-07*
+*Last updated: 2026-06-11*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
 [`v0.4-history.md`](v0.4-history.md). Detailed experiment analyses live under
 [`../experiments/v0.4/`](../experiments/v0.4/).
 
-## Status
+## Current Snapshot
+
+Active implementation line: **v0.4 on `codex/v04-evidence-repair-plan`**.
+
+The current project state is no longer "keep repairing v0.4 until the next
+CVRP validation run." The latest 6/9-6/11 review set changes the operating
+interpretation:
+
+- The v3 control boundary remains the governing architecture:
+  [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
+  LLM output is tainted proposal material; Contract, Verification, Protocol,
+  safe feature extraction, and deterministic Decision remain the only path to
+  promotion or abandonment.
+- The required post-run audit method is now
+  [`../../reports/v04-audit-agent-experiment-guide-20260609.md`](../../reports/v04-audit-agent-experiment-guide-20260609.md).
+  Before interpreting a run, resolve the effective launched configuration from
+  `launch.env`, `run.sh`, copied champion files, metrics, status, and summary;
+  then separate proposal attempts, quality blocks, protocol rows, formal
+  candidate artifacts, branch lifecycle, and Decision evidence.
+- The 2026-06-10 CVRP/Warehouse 8R comparison, reviewed in
+  [`../../reports/v04-core-framework-review-20260611.md`](../../reports/v04-core-framework-review-20260611.md)
+  and
+  [`../../reports/v04-core-framework-code-review-20260611.md`](../../reports/v04-core-framework-code-review-20260611.md),
+  found no P0 break in the generic Scion loop. Warehouse still demonstrated the
+  full screening -> validation -> frozen -> promotion path, while CVRP failed
+  in screening because realistic candidate effects were below the current
+  protocol's measurement resolution.
+- The earlier
+  [`../../reviews/scion-v04-diagnostic-audit-20260609.md`](../../reviews/scion-v04-diagnostic-audit-20260609.md)
+  remains useful for the "research object must be measurable" lesson, but its
+  strongest all-tie/VNS-erasure framing should be read through the later 6/11
+  audits: non-tie CVRP pairs exist, yet win/loss signal is still too close to
+  noise for the current gate.
+- The current forward plan is split across v0.4 closeout and the 6/11
+  evidence-uplift proposal:
+  [`../../design/v0.5-evidence-uplift-roadmap.md`](../../design/v0.5-evidence-uplift-roadmap.md).
+  v0.4 should land the repair/readiness pieces needed to make VRP and
+  warehouse research meaningful; v0.5 should run the broader controlled
+  experiment matrix that evaluates Scion's value.
+
+## Current Interpretation
+
+v0.4 is still the code version, and it must finish the repair work needed for
+real VRP and warehouse research before v0.5 starts the broad experiment matrix.
+CVRP/VRP is not written off: prior Scion history includes a VRP runtime/algorithm
+efficiency promotion where candidate quality did not regress and runtime was
+better than baseline. The v0.4 task is to make that kind of evidence measurable
+and reproducible under the current framework, while preserving the v3 boundary.
+
+The next high-value v0.4 work is a repair-and-validation sequence:
+
+1. Fix v0.4 measurement/runtime semantics needed by current runs:
+   problem-owned practical deltas, budget-exhausting runtime interpretation,
+   no meaningless runtime-tie fresh replay, and A/A noise-floor calibration.
+2. Improve branch-depth research behavior so a branch can pursue a coherent
+   mechanism beyond shallow one-off attempts, with branch-depth and
+   mechanism-family evidence visible in summaries.
+3. Preserve and validate runtime-improvement promotion semantics for VRP:
+   candidates may advance when objective quality ties or remains non-regressive
+   and runtime evidence is complete and materially better.
+4. Re-run focused VRP/CVRP and warehouse campaigns only after the above
+   instrumentation and context repairs, then audit them with the 2026-06-09
+   guide at trace and pair level.
+5. Use v0.5 for the larger experiment program: governance ablations,
+   reproduction matrices, problem-family comparisons, prompt/context ablations,
+   and mechanism studies that quantify Scion's value.
+
+The active v0.4 task breakdown is
+[`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
+
+## 2026-06-11 Implementation Snapshot
+
+- Measurement layer: `ProblemSpecV1.measurement` now declares runtime model,
+  pairing validity, effect metric/unit, practical deltas, and calibration refs.
+  Protocol config resolves those values for screening/validation thresholds and
+  CLI entrypoints thread problem-v1 measurement into protocol config.
+- Runtime governance: CVRP declares `runtime_model: budget_exhausting`; runtime
+  budget saturation becomes non-actionable info in that model; meaningless
+  fresh-champion replay for cached runtime ties is disabled; V9 now treats
+  budget-exhausting runtime as budget compliance instead of champion slowdown
+  ratio.
+- A/A calibration: `scion/tools/calibrate_aa_noise.py` can produce
+  `scion.aa_noise_floor.v1` artifacts. Minimal CVRP controlled smoke passed at
+  5s/10s; formal CVRP/warehouse calibration reports still need to be generated
+  before interpreting MDE or changing experiment budgets.
+- Research shape/context: campaign summary/status expose read-only branch-depth
+  and mechanism-family diagnostics; prompt manifests expose block-family token
+  accounting and research-signal/governance ratios; hypothesis prompts now show
+  compact branch/history/research signals before broader governance rules.
+- Verification: focused regression currently covers measurement/runtime/V9,
+  prompt context density, campaign observability, and CVRP actionability paths.
+
+## Legacy Detailed Snapshot Through 2026-06-07
+
+The detailed handoff below is retained for provenance. It predates the 2026-06-09
+audit guide, the 2026-06-10 CVRP/Warehouse 8R comparison, and the 2026-06-11
+evidence-uplift roadmap. Use the current snapshot above for present operating
+guidance.
 
 The v0.4 architecture-audit remediation tracker is
 [`../../reports/architecture-audit-v0.4/remediation-status.md`](../../reports/architecture-audit-v0.4/remediation-status.md).
@@ -2999,7 +3096,12 @@ fact packet now states the regret score/tie-break semantics used by
   [`v0.4-history.md`](v0.4-history.md)
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
-- Latest experiment analysis:
-  [`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md)
+- Current audit guide:
+  [`../../reports/v04-audit-agent-experiment-guide-20260609.md`](../../reports/v04-audit-agent-experiment-guide-20260609.md)
+- Latest framework reviews:
+  [`../../reports/v04-core-framework-review-20260611.md`](../../reports/v04-core-framework-review-20260611.md),
+  [`../../reports/v04-core-framework-code-review-20260611.md`](../../reports/v04-core-framework-code-review-20260611.md)
+- Current forward roadmap:
+  [`../../design/v0.5-evidence-uplift-roadmap.md`](../../design/v0.5-evidence-uplift-roadmap.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

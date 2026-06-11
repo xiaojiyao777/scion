@@ -1,6 +1,6 @@
 # Scion v0.4 Planning Index
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-06-11*
 
 This directory contains v0.4 task manifests, worklogs, closeouts, and readiness
 plans. Design sources live in `../../../design/v0.4/`.
@@ -22,6 +22,7 @@ plans. Design sources live in `../../../design/v0.4/`.
 
 ## Current Planning Artifacts
 
+- [Evidence repair and validation plan](v0.4-evidence-repair-and-validation-plan-20260611.md)
 - [P0 postrun repair task](v0.4-p0-postrun-repair-task.md)
 - [P4-05 matrix readiness](v0.4-p4-05-matrix-readiness.md)
 
@@ -29,3 +30,5 @@ plans. Design sources live in `../../../design/v0.4/`.
 
 - [v0.4 design index](../../../design/v0.4/README.md)
 - [v0.4 current state](../../status/current-state.md)
+- [v0.4 audit agent experiment guide](../../../reports/v04-audit-agent-experiment-guide-20260609.md)
+- [v0.5 evidence uplift roadmap](../../../design/v0.5-evidence-uplift-roadmap.md)

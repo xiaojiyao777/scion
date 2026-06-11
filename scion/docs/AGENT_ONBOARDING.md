@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-06-07*
+*Last updated: 2026-06-11*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -12,6 +12,13 @@ Always read only these first:
 
 1. This document.
 2. [v0.4 current state](status/current-state.md).
+
+For architecture, audit, or experiment interpretation work, also read:
+
+3. [`design/scion-architecture-v3.md`](../design/scion-architecture-v3.md) as
+   the governing framework boundary.
+4. [`reports/v04-audit-agent-experiment-guide-20260609.md`](../reports/v04-audit-agent-experiment-guide-20260609.md)
+   before drawing conclusions from campaign artifacts.
 
 Then choose a task-specific reading profile from
 [Reading Profiles](READING_PROFILES.md). Do not automatically read all design
@@ -84,9 +91,11 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 
 ## Architecture Governance
 
-The current P0 priority is architecture debt cleanup before more validation
-experiments. Scion must remain an elegant v3 framework, not a pile of local
-experiment patches.
+The current P0 priority is evidence-power and research-object readiness before
+more validation experiments. Architecture debt remains a control risk, but the
+latest 6/9-6/11 evidence says the generic v3 loop is not the current blocker.
+Scion must remain an elegant v3 framework, not a pile of local experiment
+patches.
 
 - v3 is the design baseline: the framework controls boundaries, protocol,
   lineage, audit, and deterministic decisions; problem packages provide
@@ -155,9 +164,10 @@ experiment patches.
 - "Extracted helpers" is not sufficient modularization if the original file
   keeps the same broad responsibilities. Modules should be split by stable
   responsibility boundaries and public compatibility facades where needed.
-- Do not run 6-round validation experiments while core architecture debt is
-  the active blocker. First make the framework boundary enforceable, run
-  focused/full regressions, then resume 3-round validation before longer runs.
+- Do not run longer validation experiments while the active blocker is
+  measurement power, copied-config uncertainty, or research-object readiness.
+  First apply the audit guide, calibrate the protocol when needed, and only
+  then spend formal rounds.
 
 Current large-file audit:
 [`08-large-file-modularization-audit-20260519.md`](reviews/scion-code-audit-20260517/08-large-file-modularization-audit-20260519.md).
@@ -166,17 +176,22 @@ Current large-file audit:
 
 Active version: v0.4 on `v0.4-dev`.
 
-Current P0 operating mode: architecture cleanup and large-file modularization
-come before more solver-quality experiments. The 2026-05-19 audit identified
-oversized production and test files plus CVRP/framework boundary leakage. The
-first completed repair is `agentic_session`: the historical public module is
-now a small facade, with session orchestration, planner loop, code tools,
-preview/repair, budget/runtime, observations, outputs, and persistence split
-into focused `agentic_session_*` modules; the matching 4k+ session test file
-was split into focused tests. The former 4.8k-line CVRP solver runtime test
-aggregate is also split into focused `test_cvrp_*_runtime.py` files. Continue
-this pattern for the CVRP solver/adapter production modules, Contract,
-context, preview, protocol, and remaining oversized tests.
+Current operating mode: v0.4 remains the implementation line, but the latest
+6/9-6/11 audit evidence changes the research posture. The generic v3 boundary
+and v0.4 governance path are considered healthy enough for analysis; the
+current blocker is evidence quality, runtime semantics, branch-depth research,
+and problem-object fit, not another broad governance expansion. v0.4 must still
+produce meaningful VRP/CVRP and warehouse research evidence before v0.5. First
+resolve measurement/readiness questions using the 2026-06-09 audit guide and
+the 2026-06-11 evidence-uplift roadmap, then run focused validation.
+
+The previous architecture-cleanup and large-file modularization work remains
+valid engineering debt control. Do not add major behavior to oversized modules
+without a split plan, and do not move CVRP/ALNS/VNS semantics into generic
+framework layers. The new priority is narrower: make current v0.4 experiments
+scientifically interpretable, preserve runtime-improvement promotion semantics
+where quality is non-regressive, and strengthen branch-depth exploration before
+the v0.5 experiment matrix evaluates Scion's value at larger scale.
 
 Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is no longer incremental
@@ -582,6 +597,10 @@ Important current interpretation:
   experiment runs.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
+For post-run audits, follow
+[`v04-audit-agent-experiment-guide-20260609.md`](../reports/v04-audit-agent-experiment-guide-20260609.md)
+before interpreting counters, copied configs, prompt visibility, or CVRP
+screening failures.
 
 ## Hard Rules
 
@@ -595,10 +614,10 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   deterministic Contract/Verification/Protocol/Safe Feature Extractor/Decision
   layers control evidence and promotion.
 - Treat architecture debt as a control risk, not style cleanup. Before starting
-  another validation experiment, check the large-file audit. Files over 3000
-  lines require an active migration owner; files over 1000 lines should not
-  receive major new behavior without a split plan; test files follow the same
-  rule as production files.
+  another validation experiment, check current-state, the audit guide, and the
+  large-file audit. Files over 3000 lines require an active migration owner;
+  files over 1000 lines should not receive major new behavior without a split
+  plan; test files follow the same rule as production files.
 - Do not read raw experiment artifacts in the main session by default. Use
   bounded experiment docs or delegate raw-artifact analysis when needed.
 - After every real-cost experiment, do not stop at summary metrics. Inspect or
@@ -607,6 +626,12 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   and Decision evidence. Classify failures as framework boundary/control,
   prompt/API/object-model, repair-loop, provider/infra, or genuine
   algorithm-quality abandonment before starting the next repair.
+- For audit/reporting work, use the 2026-06-09 audit guide. Resolve the
+  effective launched configuration from `launch.env`, `run.sh`, copied champion
+  files, metrics, status, and summary before using current source as context.
+  Count proposal attempts, quality blocks, protocol metric rows, and formal
+  candidate artifacts separately. Do not infer "framework broken" from no
+  promotion, and do not put BKS/gap/case-hardness facts into `DecisionFeatures`.
 - For v0.4 APS experiments, trace review is mandatory before claiming a short
   experiment is healthy. For every round, audit both agent stages separately:
   hypothesis-stage context and every proposal-tool call/result, then code-stage

@@ -1,176 +1,68 @@
-# Sprint N1 — Objective / Benchmark Layer (W15 迁移 + W1 + W4)
+# Scion v0.4 Evidence Repair Task
 
-*Branch: `v0.3-dev`*  
-*Scope: W15 warehouse 真迁移, W1 scoring decouple, W4 MILP integration*  
-*前置: Sprint N0 完成*
+*Branch: `codex/v04-evidence-repair-plan`*
+*Status: implementation in progress*
 
----
+This task supersedes the stale v0.3 Sprint N1 checklist. The current objective
+is to close the v0.4 repair/readiness gap before v0.5 runs broad controlled
+experiments.
 
-## 0. 开发约束
+## Required Reading
 
-- **新建** `scion/scion/problem/` 模块（contracts, spec, objectives, loader）
-- **新建** `scion/problems/toy_tsp/` MWE
-- **新建** `scion/scion/tests/test_problem_adapter.py`
-- **不动** `core/campaign.py`（N0 不改 core 调用方式，N1 再切）
-- **不动** `protocol/evaluation.py`（现有 lexicographic_compare 保留）
-- **不动** `problems/warehouse_delivery/`（N1 再做 adapter 封装）
-- 所有现有 tests 必须继续 pass
-- 使用 `/home/clawd/miniconda3/envs/claw/bin/python -m pytest`
+1. `scion/design/scion-architecture-v3.md`
+2. `scion/docs/AGENT_ONBOARDING.md`
+3. `scion/docs/status/current-state.md`
+4. `scion/reports/v04-audit-agent-experiment-guide-20260609.md`
+5. `scion/reports/v04-core-framework-review-20260611.md`
+6. `scion/reports/v04-core-framework-code-review-20260611.md`
+7. `scion/design/v0.5-evidence-uplift-roadmap.md`
+8. `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 
----
+## Workstreams
 
-## 1. T1 — ProblemAdapter Protocol + 数据类型
+- R1 Measurement and practical delta:
+  add problem-owned measurement/readiness declarations, resolve practical delta
+  values into protocol gates, and build A/A noise-floor calibration.
+- R2 Runtime governance:
+  support budget-exhausting solver semantics, remove meaningless runtime replay
+  for saturated ties, and preserve quality-tie runtime speedup promotion.
+- R3 Branch depth:
+  expose branch-depth and mechanism-family evidence, and keep marginal
+  same-mechanism follow-up deep enough to learn without weakening fail-closed
+  regressions.
+- R4 Context signal density:
+  profile and compact model-visible context while preserving problem mechanics,
+  target source, branch history, runtime/screening feedback, and cross-branch
+  lessons.
+- R5 Focused validation:
+  run VRP/CVRP and warehouse campaigns only after R1-R4 instrumentation is
+  ready, then audit with the 2026-06-09 guide.
 
-### 新建 `scion/scion/problem/contracts.py`
+## Acceptance
 
-核心类型：
-- `CheckReport(frozen dataclass)`: passed: bool, reasons: tuple[str, ...]
-- `LowerBoundEstimate(frozen dataclass)`: metric_name, value, kind ("hard"|"instance"|"heuristic"), note
-- `SolverArtifact(frozen dataclass)`: raw_output, objective, feasible, normalized_solution
-- `ProblemAdapter(Protocol, runtime_checkable)`: 9 个方法
+- No CVRP/VRP/warehouse semantics leak into generic Decision input.
+- `DecisionFeatures` remains free of measurement diagnostics, BKS/gap, case
+  hardness, and LLM text.
+- Focused tests cover each code repair before real-cost experiments.
+- Experiment reports reconcile copied configs, counters, prompt visibility,
+  pair-level metrics, branch lifecycle, and Decision evidence.
+- Git changes are kept by slice; unrelated dirty files are not reverted.
 
-ProblemAdapter 方法清单：
-1. `render_problem_summary() -> str`
-2. `render_operator_interface() -> str`
-3. `load_instance(instance_path: str) -> Any`
-4. `deserialize_solver_output(raw_output, instance) -> SolverArtifact`
-5. `check_solution_consistency(artifact, instance) -> CheckReport`
-6. `check_feasibility(artifact, instance) -> CheckReport`
-7. `recompute_objective(artifact, instance) -> Mapping[str, int|float]`
-8. `estimate_lower_bound(metric_name, instance_paths) -> LowerBoundEstimate | None`
-9. `compare_objectives(candidate, champion) -> ObjectiveComparison`
+## Current Status
 
-接口参考：`reviews/v0.3-design-detail-plan.md` §3.4
+- Implemented: problem-owned `measurement` schema, protocol practical-delta
+  resolution, runtime model resolution, budget-exhausting runtime governance,
+  V9 budget-compliance semantics, read-only branch research-shape diagnostics,
+  prompt block-family accounting, and compact research signals in hypothesis
+  prompts.
+- Implemented: `scion/tools/calibrate_aa_noise.py` plus calibration math tests.
+  CVRP controlled smoke passed at 5s/10s with `n_pairs=1`; this validates the
+  chain but is not a formal MDE report.
+- Pending: full CVRP and warehouse A/A calibration reports, then focused
+  VRP/CVRP and warehouse validation campaigns audited with the 2026-06-09 guide.
 
-### 验收
-- [x] import 成功
-- [x] `isinstance(adapter, ProblemAdapter)` 可用
+## Current Coordination
 
----
-
-## 2. T2 — ProblemSpecV1 Strict Schema
-
-### 新建 `scion/scion/problem/spec.py`
-
-- Pydantic BaseModel with `model_config = ConfigDict(extra="forbid")`
-- 辅助 spec：ObjectiveMetricSpec, OperatorInterfaceSpec, OperatorCategorySpec, LLMHintsSpec, FamilyTaxonomySpec, ProblemAdapterRef
-- ProblemSpecV1 字段：id, display_name, root_dir, description, search_space, solver, parameter_search, operator_interface, objectives, llm_hints, family_taxonomy, adapter
-- `@model_validator`: objectives 唯一性, priority 连续性, adapter import_path 前缀校验
-
-接口参考：`reviews/v0.3-design-detail-plan.md` §3.3
-
-### 验收
-- [x] 合法 YAML 加载成功
-- [x] 非法字段被拒绝（extra="forbid"）
-- [x] priority 不连续时报错
-
----
-
-## 3. T3 — Generic Objective Comparator
-
-### 新建 `scion/scion/problem/objectives.py`
-
-- `MetricComparison(frozen)`: name, candidate_value, champion_value, signed_delta, relation, decisive
-- `ObjectiveComparison(frozen)`: outcome ("win"|"loss"|"tie"), decisive_metric, scalar_delta, metrics
-- `compare_lexicographic(metric_specs, candidate, champion) -> ObjectiveComparison`
-
-### 验收
-- [x] win/loss/tie 各种组合覆盖
-- [x] 与现有 `protocol/evaluation.py` 的 `lexicographic_compare` 行为一致（property-based 对比）
-
----
-
-## 4. T4 — Adapter Loader
-
-### 新建 `scion/scion/problem/loader.py`
-
-- `load_problem_adapter(spec: ProblemSpecV1) -> ProblemAdapter`
-- 路径校验：pinned to `scion.problems.*`
-- 动态 import (`importlib.import_module` + `getattr`)
-- Protocol isinstance 检查
-- `ProblemAdapterLoadError(RuntimeError)` 异常
-
-### 验收
-- [x] 能加载 toy_tsp adapter
-- [x] 路径不合法（不以 `scion.problems.` 开头）时抛 ProblemAdapterLoadError
-- [x] 加载的类不满足 Protocol 时抛错
-
----
-
-## 5. T5 — toy_tsp MWE
-
-### 新建 `scion/problems/toy_tsp/`
-
-```
-problems/toy_tsp/
-├── __init__.py
-├── adapter.py          # ToyTspAdapter(ProblemAdapter)
-├── models.py           # TspInstance, TspSolution
-├── oracle.py           # tour 有效性 + 距离计算
-├── solver.py           # nearest-neighbor + 2-opt
-├── operators/
-│   ├── __init__.py
-│   └── two_opt.py      # 2-opt 算子
-├── data/
-│   ├── tsp_10.json     # 10 点实例
-│   └── tsp_20.json     # 20 点实例
-├── problem.yaml        # ProblemSpecV1 格式
-└── tests/
-    └── test_tsp.py     # 基本冒烟
-```
-
-要求：
-- ToyTspAdapter 实现 ProblemAdapter 的全部 9 个方法
-- 极简实现，不追求质量
-- `estimate_lower_bound` 可返回 None（或用简单的 MST lower bound）
-
-### 验收
-- [x] `load_problem_adapter` 可加载
-- [x] 所有 Protocol 方法可调用且返回正确类型
-- [x] solver 能在 toy instance 上跑出合法 tour
-
----
-
-## 6. T6 — problem 模块入口 + 测试
-
-### 新建 `scion/scion/problem/__init__.py`
-
-导出公共 API：
-- ProblemAdapter, ProblemSpecV1, ProblemAdapterRef
-- ObjectiveMetricSpec, ObjectiveComparison, MetricComparison
-- CheckReport, LowerBoundEstimate, SolverArtifact
-- load_problem_adapter, compare_lexicographic
-
-### 新建 `scion/scion/tests/test_problem_adapter.py`
-
-测试清单：
-1. ProblemSpecV1 schema 验证（合法 / extra field / priority 不连续 / adapter 路径非法）
-2. adapter loader（正常加载 / 路径非法 / Protocol 不满足）
-3. generic comparator 单元测试（win / loss / tie / multi-metric / tie-tolerance）
-4. toy_tsp adapter 集成测试（load_instance + deserialize + check_feasibility + recompute_objective + compare）
-
-### 验收
-- [x] `pytest scion/scion/tests/test_problem_adapter.py` 全绿
-- [x] `pytest` 全量不回退
-
----
-
-## 7. 任务依赖
-
-```
-T1 (contracts) ──→ T2 (spec) ──→ T4 (loader)
-       │                              │
-       └──→ T3 (objectives) ──→ T5 (toy_tsp) ──→ T6 (entry + tests)
-```
-
-T1 和 T3 可并行。T2 依赖 T1（spec 引用 Protocol 类型）。T4 依赖 T2。T5 依赖 T1+T3+T4。T6 最后做。
-
----
-
-## 8. N0 完成标志
-
-- [ ] `scion/scion/problem/` 模块存在且可 import
-- [ ] `scion/problems/toy_tsp/` MWE 通过 adapter 全部方法
-- [ ] 所有现有 warehouse 测试不回退
-- [ ] `pytest` 全绿
-- [ ] 本文档 checklist 全部打勾
+Main thread owns integration, git hygiene, final task ordering, and experiment
+launch decisions. Subagents may own disjoint code or analysis slices, but each
+must report changed files and focused validation evidence.
