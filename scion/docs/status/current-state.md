@@ -171,6 +171,11 @@ Phase 1 is in progress and recorded in
   faithful formal per-case-runtime reproduction. The active protocol-time run
   must explain selected cases/seeds, runtime behavior, raw pair evidence, and
   case resolution before Phase 1 can close.
+- Read-only subagent cross-check `019eb86b-228f-7e92-913a-c7e873614a5e`
+  accepted the legacy CVRP interpretation: Phase 0 CVRP median effects were all
+  `0.0`, the best CI upper bound was `8.0`, and the legacy MDE was `8.7`, so
+  the evidence supports "below measured screening power" rather than
+  "mechanism disproven."
 - No Phase 2 framework code repair should start until the CVRP result is
   available from the protocol-time run and the Phase 1 measurement-power
   conclusion is finalized.

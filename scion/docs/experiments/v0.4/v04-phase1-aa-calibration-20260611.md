@@ -242,6 +242,30 @@ It is needed before closing Phase 1 because it uses the repaired calibration
 CLI, formal data-root resolution, protocol-resolved per-case time limits, and
 the replayable pair/runtime evidence required by the acceptance checklist.
 
+### Read-Only Cross-Check
+
+Subagent Bernoulli (`019eb86b-228f-7e92-913a-c7e873614a5e`) completed a
+read-only cross-check against the v3 boundary, the Phase 0 postrun, the legacy
+CVRP A/A artifact, Phase 0 metrics, and formal candidate index. No files were
+edited and no experiments were started.
+
+Accepted findings:
+
+- The legacy uniform-60 artifact supports the narrow claim that the Phase 0
+  CVRP candidates were below measured screening power. All four Phase 0 CVRP
+  screening medians were `0.0`, so the protocol-level median effect-to-MDE
+  ratio is `0 / 8.7 = 0`.
+- The best Phase 0 CVRP CI upper bound was `8.0`, which is still below the
+  legacy MDE of `8.7` (`8.0 / 8.7 = 0.92`). This supports "below measurement
+  power" more than "mechanism disproven."
+- The formal candidate index confirms replay identity for the four Phase 0
+  candidates, but that does not repair the legacy A/A payload gaps.
+- Per v3, raw A/A calibration diagnostics, pair evidence, per-case raw metrics,
+  calibration metadata, runtime elapsed rows, case-resolution rows, and
+  free-form analysis stay outside `DecisionFeatures`. Reduced MDE-vs-practical
+  delta, per-case noise/tie flags, runtime-policy status, and low-SNR
+  recommendations may become problem-owned proposal/status diagnostics.
+
 ## Tooling Gaps Found During Phase 1
 
 - The first CVRP launch failed before solver execution because the formal CVRP

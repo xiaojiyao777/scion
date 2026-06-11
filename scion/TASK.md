@@ -359,7 +359,9 @@ Exit criteria:
   evidence and is not a formal per-case-runtime reproduction. A repaired formal
   protocol-time CVRP run started at `2026-06-11T20:36:00Z` from commit
   `a43dc2be371b5f2f209477df54883708b8750055`; it is now the remaining Phase 1
-  gating artifact. The in-progress report is
+  gating artifact. Read-only subagent cross-check accepted that Phase 0 CVRP
+  candidates were below the legacy measured screening power, not disproven by
+  the failed screening outcomes. The in-progress report is
   `scion/docs/experiments/v0.4/v04-phase1-aa-calibration-20260611.md`.
 - Partially implemented: context compaction is observable, but CVRP-specific
   problem-domain diagnostics and phase-aware source protection still need repair.
