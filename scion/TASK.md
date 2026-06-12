@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Fixed-candidate replay executor accepted*
+*Status: Warehouse fixed-candidate replay audited*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -678,6 +678,20 @@ Exit criteria:
   candidate pairing, not candidate efficacy. Acceptance tests: focused
   replay/report suite `22 passed`, core/config/context regression `592 passed`,
   Python compile on touched implementation files, and `git diff --check`.
+- Completed and audited: full warehouse fixed-candidate replay over all five
+  ON-shakedown formal screening candidates. Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md`](docs/experiments/v0.4/v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md).
+  Artifact:
+  `/home/clawd/research/scion-experiments/v04-phase5-fixed-candidate-replay-warehouse-5c-20260612T0525Z-claw/fixed_candidate_replay_comparison.v1.json`.
+  The run produced `candidate_count=5`, `row_count=10`, `error_count=0`, and no
+  forbidden-field leakage. ON and `record_only` outcomes were identical for
+  every fixed candidate; four candidates remained all-tie screening failures
+  and `f40dd9b672cf6cc2` remained `SCREENING_EXPAND` in both arms. This validates
+  fixed-candidate causal pairing and shows that the warehouse shakedown
+  divergence was not caused by evaluating the same patch differently. It does
+  not prove LLM trajectory governance value. Next governance work should be a
+  trajectory-aware prompt/context or stored-proposal control, not another
+  fixed-candidate screening replay.
 
 ## Status Cadence
 

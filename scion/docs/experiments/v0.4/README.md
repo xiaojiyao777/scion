@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-23*
+*Last updated: 2026-06-12*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,6 +8,13 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [Phase 5 warehouse fixed-candidate replay, 2026-06-12](v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md)
+- [Phase 5 warehouse measurement-governance ON/OFF shakedown, 2026-06-12](v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md)
+- [Phase 4 CVRP 8-seed A/A power check, 2026-06-12](v04-phase4-cvrp-8seed-aa-postrun-20260612.md)
+- [Phase 4 CVRP measurement-readiness 4R postrun, 2026-06-12](v04-phase4-cvrp-measreadiness-4r-postrun-20260612.md)
+- [Phase 4 warehouse saferoot 4R postrun, 2026-06-12](v04-phase4-warehouse-saferoot-4r-postrun-20260612.md)
+- [Phase 1 A/A calibration, 2026-06-11](v04-phase1-aa-calibration-20260611.md)
+- [Evidence verification 4R GPT-5.5 Phase 0 postrun, 2026-06-11](v04-evidence-verify-4r-gpt55-20260611-phase0-postrun.md)
 - [Dual Sonnet post-run analysis, 2026-05-04](v0.4-dual-sonnet-postrun-analysis-20260504.md)
 - [Dual Sonnet 50R analysis, 2026-05-05](v0.4-dual-sonnet-50r-20260505/README.md)
 - [Post-APS CVRP Sonnet smoke, 2026-05-07](v0.4-post-aps-cvrp-sonnet-20260507.md)

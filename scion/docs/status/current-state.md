@@ -558,6 +558,17 @@ Warehouse governance ON/OFF shakedown postrun:
   not candidate efficacy. Acceptance: replay/report focused suite `22 passed`,
   core/config/context regression `592 passed`, Python compile on touched files,
   and `git diff --check`.
+- Full warehouse fixed-candidate replay is complete and audited:
+  [`../experiments/v0.4/v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md).
+  It replayed all five ON-shakedown formal screening candidates under `on` and
+  `record_only`, producing `row_count=10` and `error_count=0` at
+  `/home/clawd/research/scion-experiments/v04-phase5-fixed-candidate-replay-warehouse-5c-20260612T0525Z-claw/fixed_candidate_replay_comparison.v1.json`.
+  All paired outcomes were identical. Four candidates stayed all-tie screening
+  failures; `f40dd9b672cf6cc2` stayed `SCREENING_EXPAND` in both arms. The
+  result validates the fixed-candidate control but does not measure LLM
+  trajectory governance value. The next governance gate should examine
+  prompt/context/proposal trajectory controls on warehouse rather than rerunning
+  fixed-candidate screening.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
