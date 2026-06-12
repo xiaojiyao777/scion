@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Proposal trajectory report artifacts accepted*
+*Status: Warehouse proposal-context ablation shakedown accepted*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -714,23 +714,19 @@ Exit criteria:
   proposal/fixed-candidate/report suite `27 passed`, py_compile on touched
   files, real artifact smoke, exact forbidden-key/value scan, and
   `git diff --check`.
-- Accepted: proposal-visible context ablation switch for the next Phase 5
-  control. `scion run --proposal-context-ablation` now supports `full`,
+- Accepted: proposal-visible context ablation switch and first warehouse
+  three-arm shakedown. `scion run --proposal-context-ablation` supports `full`,
   `no-measurement-diagnostics`, and `minimal-research-context`. All arms keep
   `measurement_governance=on`; the switch only changes tainted hypothesis
   prompt visibility and does not enter Protocol, DecisionFeatures, promotion,
-  or evidence decisions. `no-measurement-diagnostics` hides compact
-  problem-measurement diagnostics and measurement-owned opportunity hints while
-  keeping broader research context. `minimal-research-context` hides broader
-  branch/cross-branch/runtime/opportunity research context while preserving
-  source/champion/branch code and compact measurement self-diagnosis. Prompt
-  manifests and proposal trajectory fingerprints record the selected ablation
-  mode for posthoc comparison. Acceptance: context/control/trajectory suite
-  `23 passed`, proposal pipeline/source-visibility suite `46 passed`,
-  CLI/config suite `31 passed`, py_compile on touched files, and
-  `git diff --check`. Next: launch a warehouse 3-arm shakedown with
-  `measurement_governance=on` in every arm; CVRP remains excluded from formal
-  governance-value conclusions until measurement power improves.
+  or evidence decisions. The shakedown report is
+  [`docs/experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md`](docs/experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md).
+  It confirmed intended prompt visibility and report-only guardrails, but no
+  arm promoted, fresh-runtime replay pressure persisted in the two non-full
+  arms, and proposal trajectory session-to-formal-candidate joins plus
+  top-level context-arm fingerprints need repair or pre-registration before
+  formal repeat analysis. CVRP remains excluded from formal governance-value
+  conclusions until measurement power improves.
 
 ## Status Cadence
 

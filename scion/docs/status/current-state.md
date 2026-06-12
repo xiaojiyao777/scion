@@ -80,6 +80,16 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
+The latest completed Phase 5 artifact is the warehouse three-arm
+proposal-context ablation shakedown from commit `2a88e86`:
+[`../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md).
+All arms kept `measurement_governance=on`; the ablation was proposal-visible
+only. The run validated the `full`, `no-measurement-diagnostics`, and
+`minimal-research-context` switch in real warehouse campaigns, but remains
+observational-only. No arm promoted, runtime-tie/fresh-replay pressure still
+appeared in the two non-full arms, and proposal trajectory session-to-candidate
+joins need repair or pre-registration before formal repeat analysis.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 
@@ -588,20 +598,18 @@ Warehouse governance ON/OFF shakedown postrun:
   trajectory distribution. Next experiment design should separately ablate
   measurement diagnostics and broader research context rather than treating
   `record_only` as all-governance-off.
-- Proposal-visible context ablation is now implemented for that next design.
+- Proposal-visible context ablation is implemented and has completed its first
+  warehouse three-arm shakedown:
+  [`../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md).
   `scion run --proposal-context-ablation` accepts `full`,
-  `no-measurement-diagnostics`, and `minimal-research-context`; all planned
-  Phase 5 context arms keep `measurement_governance=on` so protocol, runtime,
-  lifecycle, DecisionFeatures, and promotion semantics stay matched.
-  `no-measurement-diagnostics` hides compact measurement diagnostics while
-  keeping broader research context. `minimal-research-context` hides broader
-  branch/cross-branch/runtime/opportunity context while preserving source/code
-  visibility and compact measurement self-diagnosis. Prompt manifests and
-  proposal trajectory fingerprints record the ablation mode. Acceptance:
-  focused context/control/trajectory tests `23 passed`, proposal
-  pipeline/source-visibility tests `46 passed`, CLI/config tests `31 passed`,
-  py_compile, and `git diff --check`. Next gate: warehouse 3-arm shakedown,
-  with any free-running trajectory comparison labeled observational.
+  `no-measurement-diagnostics`, and `minimal-research-context`; all context arms
+  keep `measurement_governance=on` so protocol, runtime, lifecycle,
+  DecisionFeatures, and promotion semantics stay matched. The shakedown
+  confirmed intended prompt visibility and report-only guardrails, but no arm
+  promoted, fresh-runtime replay pressure persisted, and the proposal
+  trajectory session-to-formal-candidate join heuristic plus top-level
+  context-arm fingerprinting must be fixed or pre-registered before formal
+  repeats are treated as attribution evidence.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
