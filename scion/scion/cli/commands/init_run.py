@@ -9,7 +9,7 @@ import signal
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
 import typer
 
@@ -402,6 +402,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "solver.time_limit_sec"
             ),
         ),
+        measurement_governance: Literal["on", "record-only"] = typer.Option(
+            "on",
+            "--measurement-governance",
+            help=(
+                "Use problem measurement to govern protocol behavior, or "
+                "record reduced readiness status only"
+            ),
+        ),
         disable_early_stop: bool = typer.Option(
             False,
             "--disable-early-stop",
@@ -554,7 +562,10 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 if proto_path.exists()
                 else ProtocolConfig()
             )
-        proto_cfg = proto_cfg.with_problem_measurement(problem_v1 or spec)
+        proto_cfg = proto_cfg.with_problem_measurement(
+            problem_v1 or spec,
+            governance_mode=measurement_governance,
+        )
 
         if split:
             split_manifest = SplitManifest.from_yaml(split)

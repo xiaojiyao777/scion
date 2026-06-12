@@ -572,6 +572,34 @@ Exit criteria:
   subagents for concrete experiment design/analysis. Governance on/off should
   begin only after the comparison would measure governance value rather than
   unresolved measurement power.
+- Completed: two read-only next-rung design passes. Schrodinger designed the
+  CVRP power check: start with an 8-case x 8-seed x 3-replicate A/A calibration
+  using temporary run-root protocol/seed/split copies, protocol-resolved runtime
+  limits, and no LLM calls. Lovelace accepted warehouse production saferoot as
+  the first governance on/off candidate, while CVRP remains blocked from being
+  the first governance-value target until the 8-seed/power-adjusted check shows
+  usable measurement resolution.
+- Launched: CVRP 8-seed A/A power check at
+  `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-saferoot-20260612T011824Z-claw`.
+  It uses `8` selected screening cases, screening seeds
+  `11,29,43,59,73,79,97,103`, `3` replicates, protocol-time runtime limits,
+  champion v1 from the completed Phase 4 CVRP run, and no LLM calls. A prior
+  attempt at
+  `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-20260612T011722Z-claw`
+  failed before solver execution because the temporary protocol copy no longer
+  activated the formal data root; the saferoot rerun fixes this by declaring
+  `/home/clawd/research/or-autoresearch-agent/vrp` in the run-root split copy.
+- Completed: Ramanujan's minimal `measurement_governance` implementation is
+  accepted. `scion run` now exposes `--measurement-governance {on,record-only}`.
+  Default ON preserves current measurement-aware protocol/runtime/lifecycle/
+  context behavior. Record-only/OFF still records reduced measurement readiness
+  but does not copy problem measurement into practical deltas, runtime model, or
+  pairing validity, and suppresses prompt-visible measurement diagnostics.
+  Main-thread acceptance passed:
+  focused config/CLI/context suite `40 passed`, protocol/Decision/lifecycle/
+  runtime suite `124 passed`, full `unit/core` suite `489 passed`, problem/
+  boundary/context subset `113 passed`, Python compile on touched files, and
+  `git diff --check`.
 
 ## Status Cadence
 

@@ -12,9 +12,21 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from scion.measurement.readiness import measurement_readiness_status
+
+
+MeasurementGovernanceMode = Literal["on", "record_only"]
+
+
+def _normalize_measurement_governance_mode(value: Any | None) -> MeasurementGovernanceMode:
+    text = "on" if value is None else str(value).strip().lower().replace("-", "_")
+    if text == "on":
+        return "on"
+    if text == "record_only":
+        return "record_only"
+    raise ValueError("measurement_governance must be on or record_only")
 
 
 class ScreeningConfig(BaseModel):
@@ -476,6 +488,9 @@ class ProtocolConfig(BaseModel):
     )
     """Problem-declared solver trajectory pairing model for gate/lifecycle policy."""
 
+    measurement_governance: MeasurementGovernanceMode = "on"
+    """Whether problem measurement governs protocol behavior or is status-only."""
+
     measurement_readiness: MeasurementReadinessConfig = Field(
         default_factory=MeasurementReadinessConfig
     )
@@ -494,6 +509,11 @@ class ProtocolConfig(BaseModel):
         self._resolve_delta_reference(self.gates.screening.median_delta_min)
         self._resolve_delta_reference(self.gates.validation.median_delta_min)
         return self
+
+    @field_validator("measurement_governance", mode="before")
+    @classmethod
+    def _validate_measurement_governance(cls, value: Any) -> MeasurementGovernanceMode:
+        return _normalize_measurement_governance_mode(value)
 
     # ------------------------------------------------------------------
     # Backward-compatibility properties (used by gates.py and old tests)
@@ -533,32 +553,39 @@ class ProtocolConfig(BaseModel):
         self,
         problem_spec: Any | None,
         *,
+        governance_mode: Any | None = None,
         measurement_readiness_as_of: date | datetime | None = None,
     ) -> "ProtocolConfig":
         """Return a copy with problem-owned measurement thresholds resolved.
 
-        Measurement facts remain problem-owned diagnostics/configuration.  This
-        method only copies declared practical-delta numbers into protocol
-        thresholds and reduced readiness status into config; it does not expose
-        raw calibration diagnostics, BKS, gap, or free-form text to
-        DecisionFeatures.
+        When measurement governance is ``on``, problem-owned measurement facts
+        may configure protocol thresholds and runtime/pairing governance.  When
+        it is ``record_only``, only reduced readiness status is recorded for
+        audit/status; practical deltas, runtime model, and pairing validity stay
+        on the protocol defaults or YAML values.  Neither mode exposes raw
+        calibration diagnostics, BKS, gap, or free-form text to DecisionFeatures.
         """
 
+        mode = _normalize_measurement_governance_mode(
+            self.measurement_governance if governance_mode is None else governance_mode
+        )
         measurement = _problem_measurement(problem_spec)
         data = self.model_dump()
+        data["measurement_governance"] = mode
         data["measurement_readiness"] = measurement_readiness_status(
             problem_spec,
             as_of=measurement_readiness_as_of,
         ).to_status_payload()
-        effect_scale = getattr(measurement, "effect_scale", None)
-        if effect_scale is None:
+        if mode == "record_only" or measurement is None:
             return type(self).model_validate(data)
 
+        effect_scale = getattr(measurement, "effect_scale", None)
         updates: dict[str, float] = {}
-        for field_name in ("practical_delta_screen", "practical_delta_validate"):
-            value = getattr(effect_scale, field_name, None)
-            if value is not None:
-                updates[field_name] = _nonnegative_float(field_name, value)
+        if effect_scale is not None:
+            for field_name in ("practical_delta_screen", "practical_delta_validate"):
+                value = getattr(effect_scale, field_name, None)
+                if value is not None:
+                    updates[field_name] = _nonnegative_float(field_name, value)
         runtime_model = getattr(measurement, "runtime_model", None)
         if runtime_model is not None:
             runtime_model_text = str(runtime_model).strip()
@@ -580,7 +607,7 @@ class ProtocolConfig(BaseModel):
                 )
             data["pairing_validity"] = pairing_text
         if not updates:
-            return type(self).model_validate(data) if data != self.model_dump() else self
+            return type(self).model_validate(data)
         data.update(updates)
         return type(self).model_validate(data)
 

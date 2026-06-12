@@ -109,6 +109,13 @@ from .rendering import _format_hypothesis, _hypothesis_implementation_brief
 from .runtime import _build_runtime_feedback, _build_runtime_failure_guidance
 
 
+def _normalize_measurement_governance_mode(value: Any | None) -> str:
+    text = "on" if value is None else str(value).strip().lower().replace("-", "_")
+    if text in {"on", "record_only"}:
+        return text
+    raise ValueError("measurement_governance must be on or record_only")
+
+
 def _target_file_exists_in_root(root: str, target_file: Optional[str]) -> bool:
     if not root or not target_file:
         return False
@@ -355,9 +362,18 @@ class ContextManager:
     └─────────────────────────┴─────────────────────────────────────────┘
     """
 
-    def __init__(self, *, adapter=None, runtime_slow_threshold: float = 2.0):
+    def __init__(
+        self,
+        *,
+        adapter=None,
+        runtime_slow_threshold: float = 2.0,
+        measurement_governance: str = "on",
+    ):
         self._adapter = adapter
         self._runtime_slow_threshold = runtime_slow_threshold
+        self._measurement_governance = _normalize_measurement_governance_mode(
+            measurement_governance
+        )
 
     # ------------------------------------------------------------------
     # Round 1 — hypothesis context
@@ -383,6 +399,7 @@ class ContextManager:
         saturation_signals: Optional[List[Any]] = None,
         weight_opt_result: Optional[Any] = None,
         research_log: Optional[Any] = None,
+        measurement_governance: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -397,6 +414,11 @@ class ContextManager:
         any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        measurement_governance_mode = _normalize_measurement_governance_mode(
+            self._measurement_governance
+            if measurement_governance is None
+            else measurement_governance
+        )
         problem_object = _build_problem_object(adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
@@ -704,10 +726,17 @@ class ContextManager:
         if research_log is not None:
             research_log_block = research_log.render(view="hypothesis")
 
+        problem_measurement_diagnostics = (
+            _problem_measurement_diagnostics(problem_spec)
+            if measurement_governance_mode == "on"
+            else {}
+        )
+
         return {
             "problem_summary": problem_summary,
             "problem_object": problem_object,
             "solver_mechanics": solver_mechanics,
+            "measurement_governance": measurement_governance_mode,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "operator_categories": ", ".join(effective_operator_categories),
@@ -762,9 +791,7 @@ class ContextManager:
                 forced_request.target_file if forced_request else ""
             ),
             "objective_policy_guidance": objective_policy_guidance,
-            "problem_measurement_diagnostics": (
-                _problem_measurement_diagnostics(problem_spec)
-            ),
+            "problem_measurement_diagnostics": problem_measurement_diagnostics,
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
             "search_control_guidance": search_control_guidance,

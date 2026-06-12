@@ -8,6 +8,7 @@ agentic hypothesis generation.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal, Mapping
 
 HypothesisContextProfile = Literal["algorithm", "repair"]
@@ -49,6 +50,7 @@ _REPAIR_TRIGGER_KEYS = frozenset(
 
 _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
 _PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
+_OPPORTUNITY_STATUS_RE = re.compile(r"\s+opportunity_status=\S+")
 
 
 def derive_hypothesis_context_profile(
@@ -97,13 +99,25 @@ def filter_hypothesis_context_for_prompt(
     else:
         filtered.pop("cross_branch_research", None)
 
-    compact_measurement = _compact_problem_measurement_diagnostics(
-        context.get("problem_measurement_diagnostics")
+    measurement_governance = _normalize_measurement_governance_mode(
+        context.get("measurement_governance")
+    )
+    compact_measurement = (
+        ""
+        if measurement_governance == "record_only"
+        else _compact_problem_measurement_diagnostics(
+            context.get("problem_measurement_diagnostics")
+        )
     )
     if compact_measurement:
         filtered["problem_measurement_diagnostics"] = compact_measurement
     else:
         filtered.pop("problem_measurement_diagnostics", None)
+
+    if measurement_governance == "record_only":
+        filtered["experiment_history"] = _strip_opportunity_diagnostics_from_text(
+            filtered.get("experiment_history")
+        )
 
     if profile != "repair":
         for key in _REPAIR_FEEDBACK_KEYS:
@@ -120,6 +134,22 @@ def filter_hypothesis_context_for_prompt(
         filtered.pop("branch_lesson_usage_requirement", None)
 
     return filtered
+
+
+def _normalize_measurement_governance_mode(value: Any | None) -> str:
+    text = "on" if value is None else str(value).strip().lower().replace("-", "_")
+    if text in {"on", "record_only"}:
+        return text
+    return "on"
+
+
+def _strip_opportunity_diagnostics_from_text(value: Any) -> str:
+    lines: list[str] = []
+    for line in str(value or "").splitlines():
+        if "opportunity_diagnostics:" in line:
+            continue
+        lines.append(_OPPORTUNITY_STATUS_RE.sub("", line))
+    return "\n".join(lines).strip()
 
 
 def _compact_cross_branch_research(payload: Any) -> str:

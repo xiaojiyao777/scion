@@ -147,6 +147,7 @@ def compose_campaign_services(
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
         runtime_slow_threshold=protocol_config.runtime.max_runtime_ratio,
+        measurement_governance=getattr(protocol_config, "measurement_governance", "on"),
     )
     owner._protocol_config = protocol_config
     owner._split_manifest = split_manifest

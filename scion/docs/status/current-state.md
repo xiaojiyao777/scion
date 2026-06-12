@@ -246,10 +246,10 @@ Phase 3 minimal measurement readiness is integrated.
 - Focused Phase 3 verification passed with `34 passed` across measurement
   readiness, problem bridge, config, and hypothesis-context tests.
 
-Next: Phase 4 focused validation. Run short CVRP and warehouse campaigns with
-local `gpt5.5`, then audit branch depth, same-mechanism continuation,
-cross-branch transfer, prompt context, runtime semantics, and candidate
-evidence against A/A MDE.
+Phase 4 first-rung validation has since completed. The postrun audits now
+provide the branch-depth, same-mechanism continuation, cross-branch transfer,
+prompt context, runtime semantics, and A/A-MDE interpretation required before
+the next experiment rung.
 
 ## 2026-06-11 Phase 4 Focused Validation Launched
 
@@ -328,7 +328,9 @@ rejects `artifact:instance_prod_can_s01.json#64a747f955e8` as
 configuration issue, not as agent research evidence. Curie
 (`019eb91b-4d3c-74c0-b220-793cbe96639d`) is investigating a minimal
 problem-owned fix. The CVRP Phase 4 run remains in progress from commit
-`32ab596`; do not interpret it as exercising the later canary accounting fix.
+`32ab596` at this point in the chronology; do not interpret it as exercising
+the later canary accounting fix. That CVRP run has since completed and is
+audited below.
 
 Warehouse safe-root repair status: Curie's problem-owned fix is accepted. The
 production warehouse split now declares `safe_data_roots:
@@ -341,8 +343,8 @@ runner. Acceptance passed with
 `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/unit/protocol/test_case_path_safety.py scion/scion/tests/unit/test_cli_data_roots.py scion/scion/tests/test_e2e.py::TestWarehouseDeliveryConfig -q`
 (`12 passed`) and `git diff --check`.
 
-Next: commit the warehouse safe-root repair and rerun warehouse Phase 4 from the
-new commit.
+The warehouse safe-root repair was then committed and used for the canonical
+warehouse Phase 4 rerun below.
 
 Warehouse Phase 4 safe-root rerun: the canonical valid warehouse run is
 `/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-saferoot-20260611-4r-gpt55-20260612T000035Z-claw`,
@@ -359,11 +361,11 @@ extra metric row as non-effective/non-counted. Decisions were three
 `continue_explore`, one `abandon`, then one non-counted replay
 `continue_explore`; no promotion occurred.
 
-Next: run the Phase 4 warehouse postrun audit against the 2026-06-09 guide:
-branch depth, same-mechanism follow-up, fresh-runtime replay cause, prompt/source
-visibility, measurement-readiness context, and candidate evidence relative to
-warehouse A/A MDE. Do not advance to governance on/off until the warehouse audit
-and the still-running CVRP Phase 4 audit are both complete.
+The warehouse postrun audit below closes that rerun against the 2026-06-09
+guide: branch depth, same-mechanism follow-up, fresh-runtime replay cause,
+prompt/source visibility, measurement-readiness context, and candidate evidence
+relative to warehouse A/A MDE. Governance on/off remains gated on both
+warehouse and CVRP audit completion.
 
 Warehouse Phase 4 postrun audit is complete:
 [`../experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md`](../experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md).
@@ -409,6 +411,65 @@ auditability/runtime/context/branch mechanics, but not CVRP quality-improvement
 readiness under the current 4-seed protocol. The next CVRP action should be an
 8-seed or otherwise power-adjusted screening configuration check before any
 long promotion run.
+
+## 2026-06-12 Phase 4 Closeout Next-Rung Design
+
+Two read-only subagent design passes are complete:
+
+- Schrodinger designed the CVRP power check. The next CVRP measurement rung is
+  an 8-case x 8-seed x 3-replicate A/A calibration with protocol-resolved
+  runtime limits and no LLM calls. It uses temporary run-root copies of
+  protocol/seed/split config rather than editing the formal repo baseline. The
+  added screening seeds are `73,79,97,103`, preserving the existing
+  `11,29,43,59` seeds and avoiding validation/frozen/canary reuse.
+- Lovelace designed the governance on/off starting point. The first
+  measurement-governance on/off candidate should be warehouse production
+  saferoot, not current CVRP. CVRP remains blocked from being the first
+  governance-value target until the power-adjusted check shows the measurement
+  can detect the expected effect.
+
+CVRP 8-seed A/A launch status:
+
+- Failed diagnostic attempt:
+  `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-20260612T011722Z-claw`.
+  It exited before solver execution because the temporary protocol copy lived
+  outside the formal budgets path, so `cvrplib/...` cases did not receive a
+  safe data root.
+- Active saferoot rerun:
+  `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-saferoot-20260612T011824Z-claw`.
+  It uses run-root copies of `protocol.yaml`, `seed_ledger.yaml`, and
+  `split_manifest.yaml`; the split copy declares
+  `/home/clawd/research/or-autoresearch-agent/vrp` as `safe_data_roots`. The
+  run has `power_cases=8`, screening seeds
+  `11,29,43,59,73,79,97,103`, `replicates=3`,
+  `--runtime-policy protocol_time_limits`, champion v1 from the completed CVRP
+  Phase 4 run, and no LLM calls. Expected scale is `192` A/A pairs / `384`
+  solver invocations.
+
+Governance on/off implementation status:
+
+- The minimal `measurement_governance` switch is implemented and accepted.
+  `scion run` exposes `--measurement-governance {on,record-only}`. Default ON
+  preserves current measurement-aware protocol/runtime/lifecycle/context
+  behavior. Record-only/OFF computes and persists reduced measurement-readiness
+  status, but does not copy problem measurement into practical deltas, runtime
+  model, or pairing validity, and suppresses prompt-visible measurement
+  diagnostics. `objective_opportunity_profile` remains visible because it is
+  derived from recent protocol objective deltas and adapter objective policy,
+  not from `problem_spec.measurement`.
+- Acceptance passed:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_config.py scion/scion/tests/test_cli_run_options.py scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/unit/test_prompt_manifest_accounting.py -q`
+  (`40 passed`);
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_protocol_stats_gates.py scion/scion/tests/test_decision_screening.py scion/scion/tests/unit/core/test_branch_lifecycle_policy.py scion/scion/tests/unit/core/test_runtime_budget_diagnostics.py scion/scion/tests/test_verification_gate_integration.py -q`
+  (`124 passed`);
+  full `unit/core` (`489 passed`); problem/boundary/context subset
+  (`113 passed`); Python compile on touched files; and `git diff --check`.
+- Warehouse production saferoot can now be used for a small ON/OFF shakedown
+  once the current CVRP A/A run status is accounted for. Treat the first
+  warehouse ON/OFF pair as a switch/pilot unless it reaches validation/frozen
+  or produces MDE-relevant signal; warehouse measurement practical deltas are
+  still `0.001`, so the first contrast may be driven more by context/readiness
+  exposure and replay/accounting behavior than by practical-delta thresholds.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

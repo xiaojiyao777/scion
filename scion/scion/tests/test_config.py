@@ -80,6 +80,7 @@ def test_protocol_config_defaults():
     assert 0.0 < config.screening_win_rate_threshold <= 1.0
     assert 0.0 < config.validation_win_rate_threshold <= 1.0
     assert config.min_practical_delta > 0.0
+    assert config.measurement_governance == "on"
 
 
 def test_protocol_config_resolves_problem_measurement_practical_delta():
@@ -109,8 +110,55 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
     assert config.validation_min_practical_delta == 1.25
     assert config.runtime.runtime_model == "budget_exhausting"
     assert config.pairing_validity == "trajectory_divergent"
+    assert config.measurement_governance == "on"
     assert config.measurement_readiness.status == "not_ready"
     assert config.measurement_readiness.reason_code == "missing_calibration_ref"
+
+
+def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
+    """Record-only keeps readiness audit status without changing governance knobs."""
+    measurement = type(
+        "Measurement",
+        (),
+        {
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
+            "effect_scale": type(
+                "EffectScale",
+                (),
+                {
+                    "practical_delta_screen": 2.5,
+                    "practical_delta_validate": 1.25,
+                },
+            )(),
+        },
+    )()
+    problem_spec = type("ProblemSpec", (), {"measurement": measurement})()
+    base = ProtocolConfig(
+        practical_delta_screen=0.4,
+        practical_delta_validate=0.8,
+        runtime={"runtime_model": "comparative"},
+        pairing_validity="trajectory_stable",
+    )
+
+    config = base.with_problem_measurement(
+        problem_spec,
+        governance_mode="record_only",
+    )
+
+    assert config.measurement_governance == "record_only"
+    assert config.measurement_readiness.status == "not_ready"
+    assert config.measurement_readiness.reason_code == "missing_calibration_ref"
+    assert config.screening_min_practical_delta == 0.4
+    assert config.validation_min_practical_delta == 0.8
+    assert config.runtime.runtime_model == "comparative"
+    assert config.pairing_validity == "trajectory_stable"
+
+
+def test_protocol_config_normalizes_measurement_governance_alias():
+    config = ProtocolConfig.model_validate({"measurement_governance": "record-only"})
+
+    assert config.measurement_governance == "record_only"
 
 
 def test_protocol_config_surfaces_stale_measurement_calibration(tmp_path):

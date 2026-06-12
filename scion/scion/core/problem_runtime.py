@@ -34,11 +34,13 @@ class ProblemRuntime:
         split_manifest: Any | None = None,
         seed_ledger: Any | None = None,
         runtime_slow_threshold: float = 2.0,
+        measurement_governance: str = "on",
     ) -> None:
         self._spec = problem_spec
         self._adapter = adapter
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
+        self._measurement_governance = measurement_governance
         self._problem_spec_hash = stable_identity_hash(problem_spec)
         self._adapter_spec_hash = stable_identity_hash(_visible_adapter_spec(adapter))
         self._split_manifest_hash = stable_identity_hash(split_manifest)
@@ -49,12 +51,14 @@ class ProblemRuntime:
                 "adapter_spec_hash": self._adapter_spec_hash,
                 "split_manifest_hash": self._split_manifest_hash,
                 "seed_ledger_hash": self._seed_ledger_hash,
+                "measurement_governance": self._measurement_governance,
             }
         )
         from scion.proposal.context_manager import ContextManager
         self._ctx_manager = ContextManager(
             adapter=adapter,
             runtime_slow_threshold=runtime_slow_threshold,
+            measurement_governance=measurement_governance,
         )
 
     # ------------------------------------------------------------------
@@ -76,6 +80,10 @@ class ProblemRuntime:
     @property
     def seed_ledger(self) -> Any | None:
         return self._seed_ledger
+
+    @property
+    def measurement_governance(self) -> str:
+        return self._measurement_governance
 
     @property
     def ctx_manager(self) -> Any:

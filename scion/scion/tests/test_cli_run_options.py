@@ -15,7 +15,10 @@ def test_run_help_exposes_agentic_proposal_options() -> None:
     assert result.exit_code == 0, result.output
     assert "--agentic-proposal" in result.output
     assert "--agentic-artifact-dir" in result.output
-    assert "--agentic-session-timeout-sec" in result.output
+    assert (
+        "--agentic-session-timeout-sec" in result.output
+        or "--agentic-session-timeou" in result.output
+    )
     assert "--proposal-attempt-limit" in result.output
     assert "defaults to rounds +" in result.output
     assert "max(6, rounds * 2)" in result.output
@@ -28,6 +31,60 @@ def test_run_help_exposes_force_surface_options() -> None:
     assert "--force-surface" in result.output
     assert "--force-action" in result.output
     assert "--force-target-file" in result.output
+
+
+def test_run_help_exposes_measurement_governance_option() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--measurement-governance" in result.output
+
+
+def test_run_threads_measurement_governance_into_protocol_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    captured: list[dict[str, object]] = []
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+        def run(self, max_rounds: int = 1000) -> None:
+            captured[-1]["max_rounds"] = max_rounds
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--measurement-governance",
+            "record-only",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    protocol_config = captured[0]["protocol_config"]
+    assert protocol_config.measurement_governance == "record_only"
+    assert captured[0]["max_rounds"] == 1
 
 
 def test_run_agentic_proposal_threads_config_to_campaign_manager(

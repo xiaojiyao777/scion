@@ -516,6 +516,67 @@ def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden(
     ] == "research_signal"
 
 
+def test_record_only_measurement_governance_suppresses_prompt_measurement_diagnostics():
+    context = {
+        "problem_summary": "CVRP formal screening objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline_modules/local_search.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1 screening complete",
+        "experiment_history": (
+            "branch b1\n"
+            "    screening_feedback.tier=weak activation=observed "
+            "effect=none runtime_confidence=low "
+            "opportunity_status=opportunity_poor "
+            "repeat_unchanged_allowed=false\n"
+            "    opportunity_diagnostics: measurement-owned low SNR guidance"
+        ),
+        "objective_opportunity_profile": (
+            "## Objective Opportunity Profile (screening only)\n"
+            "- total_cost: positive_cases=1 negative_cases=0 tie_cases=1"
+        ),
+        "measurement_governance": "record_only",
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "signal_to_noise_tier": "low_power",
+            },
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "low_snr",
+                    "summary": "Candidate effects below measured screening MDE.",
+                    "reason_codes": ["MEASUREMENT_POWER_LOW"],
+                }
+            ],
+        },
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+
+    assert "problem_measurement_diagnostics" not in filtered
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    assert "## Problem Measurement Diagnostics" not in rendered_prompt
+    assert "MEASUREMENT_POWER_LOW" not in rendered_prompt
+    assert "measurement-owned low SNR guidance" not in rendered_prompt
+    assert "opportunity_status=opportunity_poor" not in rendered_prompt
+    assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
+
+    on_context = dict(context, measurement_governance="on")
+    on_filtered = filter_hypothesis_context_for_prompt(on_context)
+    assert "problem_measurement_diagnostics" in on_filtered
+    assert "MEASUREMENT_POWER_LOW" in on_filtered["problem_measurement_diagnostics"]
+    assert "measurement-owned low SNR guidance" in on_filtered["experiment_history"]
+    assert "opportunity_status=opportunity_poor" in on_filtered["experiment_history"]
+
+
 def test_material_difference_requirement_only_kept_when_required_and_nonempty():
     active = {
         "material_difference_requirement": {

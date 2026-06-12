@@ -531,6 +531,11 @@ class CampaignManager:
             "active_slots": active_slots,
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
+            "measurement_governance": getattr(
+                getattr(self, "_protocol_config", None),
+                "measurement_governance",
+                "on",
+            ),
             "promotion_dossier_ref": getattr(
                 self._champion,
                 "promotion_dossier_ref",
