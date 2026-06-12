@@ -377,6 +377,19 @@ fresh-runtime replay out-of-band in Phase 5 accounting/design and improve
 top-level counter rendering so replay closure rows are harder to misread as
 extra research candidates.
 
+CVRP Phase 4 first-rung run is complete:
+`/home/clawd/research/scion-experiments/v04-phase4-focused-cvrp-measreadiness-20260611-4r-gpt55-20260611T224916Z-claw`,
+launched from commit `32ab596` with the formal CVRP protocol/split/seeds and
+local `gpt5.5`. It finished with wrapper exit 0, `run_validity.reason=valid`,
+and champion v1: `effective_rounds_completed=4`,
+`effective_protocol_rounds=4`, `formal_screened_candidates=4`,
+`screening_protocol_results=4`, `protocol_metric_results=4`,
+`validation_protocol_results=0`, and `frozen_protocol_results=0`. The four
+screening decisions were `expand_screening`, `continue_explore`,
+`expand_screening`, and `abandon`; no promotion occurred. Postrun audit is
+pending and must interpret the expanded screening rows against the Phase 1 CVRP
+A/A MDE/readiness before governance on/off.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09

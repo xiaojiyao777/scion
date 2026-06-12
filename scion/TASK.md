@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 focused validation in progress; warehouse audit complete, CVRP running*
+*Status: Phase 4 focused validation in progress; warehouse audit complete, CVRP audit pending*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -542,6 +542,16 @@ Exit criteria:
   Phase 5 accounting/design.
 - Next: wait for CVRP Phase 4 completion, run CVRP postrun audit, then decide
   whether Phase 4 supports moving to governance on/off.
+- Completed: CVRP first-rung Phase 4 run from commit `32ab596` at
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-cvrp-measreadiness-20260611-4r-gpt55-20260611T224916Z-claw`.
+  It finished valid with wrapper exit 0, `effective_protocol_rounds=4`,
+  `formal_screened_candidates=4`, `screening_protocol_results=4`,
+  `protocol_metric_results=4`, `validation_protocol_results=0`,
+  `frozen_protocol_results=0`, and champion v1. Decisions:
+  `expand_screening`, `continue_explore`, `expand_screening`, `abandon`. No
+  promotion occurred.
+- Next: CVRP postrun audit against Phase 1 A/A MDE/readiness, then Phase 4
+  closeout decision for governance on/off.
 
 ## Status Cadence
 
