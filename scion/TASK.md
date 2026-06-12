@@ -730,6 +730,28 @@ Exit criteria:
   code-session order matches formal candidate row order, so direct stable
   linkage remains preferred. CVRP remains excluded from formal governance-value
   conclusions until measurement power improves.
+- Completed and accepted as observational Phase 5 evidence: the warehouse
+  proposal-context ablation formal repeat from commit `171648c4204d` at
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-context-ablation-formal-3x3-8r-20260612T114219Z-claw`.
+  Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](docs/experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
+  The run used warehouse production protocol/split/seeds, local `gpt-5.5`,
+  `measurement_governance=on`, three repeats of `full`,
+  `no-measurement-diagnostics`, and `minimal-research-context`, 8 rounds per
+  cell, and `--time-limit-sec 30`. All 9 cells exited `0` and were valid
+  complete runs; no arm promoted beyond champion v1. Full context produced the
+  strongest evidence quality, with the only frozen row and no fresh-runtime
+  replay rows. `no-measurement-diagnostics` removed measurement diagnostics
+  while preserving other research context and reached one validation row.
+  `minimal-research-context` reduced pooled research-signal share to `3.83%`,
+  reached no validation/frozen rows, and triggered fresh-runtime replay in all
+  three repeats. Generated manifests and compares were report-only,
+  non-mutating, free of forbidden raw prompt/response/patch/Decision payload
+  leakage, and `observational_only=true`; this is valid context-ablation
+  evidence, not a causal governance-value conclusion. Next: design the next
+  warehouse governance/context experiment with trajectory-aware control or
+  explicit control-pair keys, and do not use `minimal-research-context` as the
+  default compression strategy.
 
 ## Status Cadence
 

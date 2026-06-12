@@ -80,21 +80,30 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The latest completed Phase 5 artifact is the warehouse three-arm
-proposal-context ablation shakedown from commit `2a88e86`:
-[`../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md).
+The latest completed Phase 5 artifact is the warehouse proposal-context
+ablation formal repeat from commit `171648c4204d`:
+[`../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
 All arms kept `measurement_governance=on`; the ablation was proposal-visible
-only. The run validated the `full`, `no-measurement-diagnostics`, and
-`minimal-research-context` switch in real warehouse campaigns, but remains
-observational-only. No arm promoted, and runtime-tie/fresh-replay pressure
-still appeared in the two non-full arms. The follow-up report repair adds
-top-level trajectory `context_arm_fingerprint` and a conservative
-  `branch_code_sequence` join fallback that maps every replayable formal
-  candidate to the corresponding code-bearing session in the real shakedown
-  artifacts. This fallback preserves hypothesis-only sessions as missing and
-  depends on branch-local code-session order matching formal candidate row
-  order; future campaigns should persist direct session/request/hypothesis
-  linkage in formal candidate rows.
+only. The run executed three repeats of `full`,
+`no-measurement-diagnostics`, and `minimal-research-context`, with 8 rounds per
+cell. All 9 cells exited 0 and were valid complete runs; no arm promoted beyond
+champion v1. Full context produced the strongest evidence quality, including
+the only frozen row and zero fresh-runtime replay rows. The
+`no-measurement-diagnostics` arm removed prompt-visible measurement diagnostics
+while preserving other research context and reached one validation row. The
+`minimal-research-context` arm reduced pooled research-signal share to `3.83%`,
+reached no validation/frozen rows, and triggered fresh-runtime replay in all
+three repeats. The generated trajectory manifests and compares are report-only,
+non-mutating, and `observational_only=true`; this is valid context-ablation
+evidence, not a causal governance-value conclusion.
+
+Current Phase 5 implication: keep full context as the current warehouse
+research-efficiency baseline, preserve a no-measurement-diagnostics arm for
+isolating measurement diagnostics, and do not adopt `minimal-research-context`
+as the default compression strategy. The next governance/context experiment
+needs trajectory-aware control or explicit control-pair keys. CVRP remains
+excluded from formal governance-value conclusions until measurement power
+improves.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
@@ -619,6 +628,16 @@ Warehouse governance ON/OFF shakedown postrun:
   session/request ids in formal candidate rows over fallback attribution,
   because the fallback assumes branch-local code-session order matches formal
   candidate row order.
+- The formal 3x3x8 proposal-context ablation repeat is now complete and
+  audited:
+  [`../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
+  It keeps the same proposal-only ablation boundary and all arms still use
+  `measurement_governance=on`. It is stronger than the shakedown for research
+  efficiency analysis, but remains observational-only. Full context produced
+  the best evidence quality and the only frozen row; no-measurement preserved
+  broader research context while removing measurement diagnostics; minimal
+  removed too much branch/cross-branch research memory and should not become
+  the default compression strategy.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
