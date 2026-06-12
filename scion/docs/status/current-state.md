@@ -342,6 +342,27 @@ runner. Acceptance passed with
 Next: commit the warehouse safe-root repair and rerun warehouse Phase 4 from the
 new commit.
 
+Warehouse Phase 4 safe-root rerun: the canonical valid warehouse run is
+`/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-saferoot-20260611-4r-gpt55-20260612T000035Z-claw`,
+launched from commit `63f01d7` with the production warehouse protocol/split/seeds
+and local `gpt5.5`. It finished with wrapper exit 0 at
+`2026-06-12T00:17:02Z`, `run_validity.reason=valid`, and champion v1:
+`effective_rounds_completed=4`, `effective_protocol_rounds=4`,
+`formal_screened_candidates=4`, `protocol_evaluated_candidates=4`,
+`screening_protocol_results=5`, `protocol_metric_results=5`,
+`validation_protocol_results=0`, and `frozen_protocol_results=0`. The fifth
+screening row is a non-counted `fresh_runtime_replay` closure after max rounds;
+candidate reconciliation reports 4 formal candidate artifacts and explains the
+extra metric row as non-effective/non-counted. Decisions were three
+`continue_explore`, one `abandon`, then one non-counted replay
+`continue_explore`; no promotion occurred.
+
+Next: run the Phase 4 warehouse postrun audit against the 2026-06-09 guide:
+branch depth, same-mechanism follow-up, fresh-runtime replay cause, prompt/source
+visibility, measurement-readiness context, and candidate evidence relative to
+warehouse A/A MDE. Do not advance to governance on/off until the warehouse audit
+and the still-running CVRP Phase 4 audit are both complete.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09

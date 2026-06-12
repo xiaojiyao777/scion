@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 focused validation in progress; warehouse canary accounting verified, warehouse safe-root repair accepted*
+*Status: Phase 4 focused validation in progress; warehouse valid rerun complete, audits pending*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -521,8 +521,17 @@ Exit criteria:
   `safe_data_roots: ../../../../scion-data`, so production canary paths resolve
   through problem-owned safe roots under strict protocol. Acceptance: focused
   protocol/CLI/e2e subset `12 passed` and `git diff --check`.
-- Next: commit the safe-root repair and rerun warehouse Phase 4 from the new
-  commit.
+- Completed: warehouse safe-root Phase 4 rerun from commit `63f01d7` at
+  `/home/clawd/research/scion-experiments/v04-phase4-focused-warehouse-saferoot-20260611-4r-gpt55-20260612T000035Z-claw`.
+  It finished valid with wrapper exit 0, `effective_protocol_rounds=4`,
+  `formal_screened_candidates=4`, `protocol_evaluated_candidates=4`,
+  `screening_protocol_results=5`, `protocol_metric_results=5`,
+  `validation_protocol_results=0`, `frozen_protocol_results=0`, and champion
+  v1. The fifth screening row is non-counted fresh-runtime replay evidence;
+  candidate reconciliation reports four formal candidate artifacts. No
+  promotion occurred.
+- Next: warehouse postrun audit and CVRP completion/audit before governance
+  on/off.
 
 ## Status Cadence
 
