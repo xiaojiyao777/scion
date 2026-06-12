@@ -600,6 +600,16 @@ Exit criteria:
   runtime suite `124 passed`, full `unit/core` suite `489 passed`, problem/
   boundary/context subset `113 passed`, Python compile on touched files, and
   `git diff --check`.
+- Launched: first warehouse governance ON/OFF shakedown from commit `f604e81`,
+  local `gpt5.5`, production saferoot protocol/split/seeds, `--rounds 8`,
+  `--time-limit-sec 30`, `--disable-early-stop`, and `--agentic-proposal`.
+  ON arm:
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-on-pilot-8r-gpt55-20260612T013119Z-claw`
+  (PID `1787760`, `--measurement-governance on`). Record-only/OFF arm:
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-record_only-pilot-8r-gpt55-20260612T013119Z-claw`
+  (PID `1787770`, `--measurement-governance record-only`). Treat this as a
+  switch/pilot run until postrun audit shows whether either arm reaches
+  validation/frozen or produces MDE-relevant research signal.
 
 ## Status Cadence
 

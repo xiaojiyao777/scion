@@ -471,6 +471,23 @@ Governance on/off implementation status:
   still `0.001`, so the first contrast may be driven more by context/readiness
   exposure and replay/accounting behavior than by practical-delta thresholds.
 
+Warehouse governance ON/OFF shakedown launch:
+
+- Launched from commit `f604e81` at `2026-06-12T01:31:19Z` with local
+  `gpt5.5`, production warehouse saferoot protocol/split/seeds, `--rounds 8`,
+  `--time-limit-sec 30`, `--disable-early-stop`, and `--agentic-proposal`.
+- ON arm:
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-on-pilot-8r-gpt55-20260612T013119Z-claw`,
+  PID `1787760`, `--measurement-governance on`.
+- Record-only/OFF arm:
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-record_only-pilot-8r-gpt55-20260612T013119Z-claw`,
+  PID `1787770`, `--measurement-governance record-only`.
+- Both arms entered `Starting campaign: warehouse_delivery`; postrun audit must
+  reconcile requested/effective rounds, formal candidates, validation/frozen
+  reach, prompt-visible measurement diagnostics, branch depth, same-mechanism
+  follow-up, fresh-runtime replay rows, and candidate evidence against
+  warehouse A/A MDE before drawing any governance-value conclusion.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09
