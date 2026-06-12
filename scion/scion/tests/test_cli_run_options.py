@@ -87,6 +87,75 @@ def test_run_threads_measurement_governance_into_protocol_config(
     assert captured[0]["max_rounds"] == 1
 
 
+@pytest.mark.parametrize(
+    ("cli_value", "expected_value"),
+    [("record-only", "record_only"), ("on", "on")],
+)
+def test_run_measurement_governance_visible_in_summary_and_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cli_value: str,
+    expected_value: str,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    campaign_dir = tmp_path / "campaign"
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            self.campaign_dir = Path(str(kwargs["campaign_dir"]))
+            self.protocol_config = kwargs["protocol_config"]
+
+        def run(self, max_rounds: int = 1000) -> None:
+            self.campaign_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "campaign_id": "fake-campaign",
+                "measurement_governance": self.protocol_config.measurement_governance,
+            }
+            (self.campaign_dir / "campaign_summary.json").write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+            (self.campaign_dir / "status.json").write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(campaign_dir),
+            "--problem",
+            str(problem_yaml),
+            "--measurement-governance",
+            cli_value,
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    summary = json.loads(
+        (campaign_dir / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    status = json.loads((campaign_dir / "status.json").read_text(encoding="utf-8"))
+    assert summary["measurement_governance"] == expected_value
+    assert status["measurement_governance"] == expected_value
+
+
 def test_run_agentic_proposal_threads_config_to_campaign_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

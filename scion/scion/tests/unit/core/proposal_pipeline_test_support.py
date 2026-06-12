@@ -16,6 +16,7 @@ from scion.core.models import (
     DecisionFeatures,
     FailureEvent,
     HypothesisProposal,
+    HypothesisRecord,
     PatchProposal,
     StepRecord,
     VerificationResult,
@@ -137,8 +138,17 @@ class FakeBranchController:
 
 
 class FakeHypothesisStore:
+    def __init__(self, records: list[HypothesisRecord] | None = None) -> None:
+        self.records = list(records or [])
+
     def get_by_status(self, status):
-        return [f"{status}-record"]
+        return [record for record in self.records if record.status == status]
+
+    def get_by_branch(self, branch_id):
+        return [record for record in self.records if record.branch_id == branch_id]
+
+    def save(self, record: HypothesisRecord) -> None:
+        self.records.append(record)
 
 
 class FakeCircuitBreaker:

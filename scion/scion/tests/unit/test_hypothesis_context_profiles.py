@@ -511,9 +511,18 @@ def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden(
     accounting = manifest["block_family_accounting"]
     assert accounting["decision_features_excluded"] is True
     assert accounting["research_signal_chars"] > 0
+    assert "problem_measurement_diagnostics" in manifest["section_names"]
     assert manifest["section_statuses"]["problem_measurement_diagnostics"][
         "block_family"
     ] == "research_signal"
+    measurement_entries = [
+        entry
+        for entry in manifest["visibility_ledger"]["entries"]
+        if entry.get("entry_kind") == "section"
+        and entry.get("section_name") == "problem_measurement_diagnostics"
+    ]
+    assert len(measurement_entries) == 1
+    assert measurement_entries[0]["visibility_status"] == "full"
 
 
 def test_record_only_measurement_governance_suppresses_prompt_measurement_diagnostics():
@@ -568,6 +577,23 @@ def test_record_only_measurement_governance_suppresses_prompt_measurement_diagno
     assert "measurement-owned low SNR guidance" not in rendered_prompt
     assert "opportunity_status=opportunity_poor" not in rendered_prompt
     assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-record-only-measurement-suppressed",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    assert "problem_measurement_diagnostics" not in manifest["section_names"]
+    assert "problem_measurement_diagnostics" not in manifest["section_statuses"]
+    assert not any(
+        entry.get("section_name") == "problem_measurement_diagnostics"
+        for entry in manifest["visibility_ledger"]["entries"]
+    )
 
     on_context = dict(context, measurement_governance="on")
     on_filtered = filter_hypothesis_context_for_prompt(on_context)

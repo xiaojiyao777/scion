@@ -458,9 +458,9 @@ CVRP 8-seed A/A postrun:
   moved only from Phase 1 `9.9` to `9.6`, still `4.8x` above the declared
   `practical_delta_screen=2.0`. CVRP remains a low-power measurement/research
   mechanics pressure test until the protocol, seed/case budget, runtime
-  resolution, or effect scale changes. Caveat: `CMT4` has file dimension `151`
-  but received default `30s`, so exact protocol-time fidelity needs CMT
-  dimension handling repair or explicit pre-registration.
+  resolution, or effect scale changes. The `CMT4` runtime caveat is now handled
+  by an explicit formal-protocol `case_globs` pre-registration that assigns
+  `CMT4` to the 45s screening budget.
 
 Governance on/off implementation status:
 
@@ -510,11 +510,23 @@ Warehouse governance ON/OFF shakedown postrun:
   differed. Record-only suppressed `problem_measurement_diagnostics` while
   still exposing opportunity/runtime/cross-branch research signals. Code-phase
   champion and target source visibility held in both arms.
-- Next formal governance requirements: fixed-candidate or fixed-order replay
-  controls, a precise record-only/off ablation contract, manifest assertions for
-  measurement diagnostics and source visibility, `measurement_governance` in
-  `campaign_summary.json`, review of `SCREENING_EXPAND_EXHAUSTED_BORDERLINE`,
-  fresh-runtime replay drain closure, and durable parent-hypothesis lineage.
+- Accepted post-shakedown repair slice: `campaign_summary.json` now records
+  `measurement_governance`; CLI/status/summary tests assert governance
+  observability; prompt/context tests assert record-only measurement diagnostic
+  suppression and code-phase source visibility; CVRP formal protocol explicitly
+  assigns `CMT4` to the 45s screening budget; expanded-screening borderline
+  advance is protocol-configured instead of hidden in `Decision`; fresh-runtime
+  replay pressure now distinguishes "no scheduler-eligible replay candidate"
+  from materialization failures; and same-branch hypotheses persist
+  `parent_hypothesis_id` for branch-depth audits without entering
+  `DecisionFeatures`.
+- Acceptance for that slice: targeted repair suite `296 passed`, full
+  `unit/core` `494 passed`, protocol/adapter subset `99 passed`, Python compile
+  on touched core/config files, and `git diff --check`.
+- Remaining before a formal governance experiment: fixed-candidate or
+  fixed-order replay controls, plus a precise record-only/off ablation contract
+  that decides whether OFF removes only measurement diagnostics or all governance
+  opportunity signals.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

@@ -147,6 +147,27 @@ def test_formal_stage_seeds_are_consistent_across_assets() -> None:
     assert budgets["final_evidence"]["time_limit_sec"] == 60
 
 
+def test_formal_protocol_cmt4_screening_budget_caveat_is_problem_owned() -> None:
+    protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
+    time_limits = protocol.runtime.time_limits
+
+    assert time_limits.resolve(
+        stage="screening",
+        case_path="cvrplib/CMT/CMT4.vrp",
+        fallback_time_limit_sec=10,
+    ) == 45
+    assert time_limits.resolve(
+        stage="screening",
+        case_path="cvrplib/CMT/CMT2.vrp",
+        fallback_time_limit_sec=10,
+    ) == 30
+    assert time_limits.resolve(
+        stage="screening",
+        case_path="cvrplib/A/A-n32-k5.vrp",
+        fallback_time_limit_sec=10,
+    ) == 30
+
+
 def test_formal_cases_are_reference_clean_and_screening_has_gap_headroom() -> None:
     rows_by_path = _load_final_ledger_rows_by_path()
     reference_bad = _load_reference_bad_instances()

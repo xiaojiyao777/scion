@@ -1165,6 +1165,11 @@ class CampaignManager:
             stagnation_signals=self._stagnation_signals,
             diagnostics=self._diagnostics,
             frozen_budget=self._frozen_budget_ledger.snapshot(),
+            measurement_governance=getattr(
+                getattr(self, "_protocol_config", None),
+                "measurement_governance",
+                "on",
+            ),
         )
 
 

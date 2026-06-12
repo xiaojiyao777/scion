@@ -379,6 +379,22 @@ class RetryConfig(BaseModel):
     """LLM fix 最大重试次数。"""
 
 
+class ExpandedBorderlineAdvanceConfig(BaseModel):
+    """Policy for advancing borderline candidates after screening expand is exhausted."""
+
+    enabled: bool = False
+    """Whether below-threshold expanded screening results may queue validation."""
+
+    win_rate_window: float = Field(default=0.05, ge=0.0, le=1.0)
+    """Allowed shortfall below screening.win_rate_min."""
+
+    require_median_delta_nonnegative: bool = True
+    """Require median_delta >= 0; missing median_delta fails closed."""
+
+    require_ci_low_nonnegative: bool = False
+    """Require ci_low >= 0 when screening produces CI evidence."""
+
+
 class ScreeningGate(BaseModel):
     """Screening 门控阈值。"""
 
@@ -387,6 +403,11 @@ class ScreeningGate(BaseModel):
 
     median_delta_min: str | float = "practical_delta_screen"
     """最小中位 delta（可引用 problem.yaml 中的配置键名）。"""
+
+    expanded_borderline_advance: ExpandedBorderlineAdvanceConfig = Field(
+        default_factory=ExpandedBorderlineAdvanceConfig
+    )
+    """Explicit policy for expanded-screening borderline advancement."""
 
 
 class ValidationGate(BaseModel):

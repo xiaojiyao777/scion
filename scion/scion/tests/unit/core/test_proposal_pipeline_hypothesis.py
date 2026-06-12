@@ -32,6 +32,49 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
     assert pipeline.agentic_outputs == {}
 
 
+def test_generate_hypothesis_links_same_branch_parent_hypothesis_records() -> None:
+    pipeline, branch, _, _, _, _ = _pipeline()
+
+    _, first = pipeline.generate_hypothesis(branch)
+    assert first is not None
+    assert first.parent_hypothesis_id is None
+    pipeline.hypothesis_store.save(first)
+
+    _, second = pipeline.generate_hypothesis(branch)
+    assert second is not None
+    assert second.parent_hypothesis_id == first.hypothesis_id
+    pipeline.hypothesis_store.save(second)
+
+    _, third = pipeline.generate_hypothesis(branch)
+    assert third is not None
+    assert third.parent_hypothesis_id == second.hypothesis_id
+    assert third.parent_hypothesis_id != third.hypothesis_id
+    pipeline.hypothesis_store.save(third)
+
+    clean_branch = Branch(
+        branch_id="clean-branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="hash-1",
+    )
+
+    _, clean_record = pipeline.generate_hypothesis(clean_branch)
+
+    assert clean_record is not None
+    assert clean_record.parent_hypothesis_id is None
+
+
+def test_parent_hypothesis_lineage_does_not_extend_decision_features() -> None:
+    decision_field_names = {field.name for field in fields(DecisionFeatures)}
+
+    assert "parent_hypothesis_id" not in decision_field_names
+    assert "parent_hypothesis_text" not in decision_field_names
+    assert "hypothesis_text" not in decision_field_names
+    assert "branch_lesson_text" not in decision_field_names
+    assert "prompt_context" not in decision_field_names
+    assert "raw_llm_material" not in decision_field_names
+
+
 def test_generate_hypothesis_passes_filtered_prompt_context_to_creative() -> None:
     creative = FakeCreative()
     pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)

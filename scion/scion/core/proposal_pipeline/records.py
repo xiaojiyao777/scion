@@ -36,9 +36,15 @@ class ProposalRecordMixin:
         hypothesis: HypothesisProposal,
     ) -> HypothesisRecord:
         cls_result = self.classifier.classify(hypothesis.hypothesis_text or "")
+        hypothesis_id = str(uuid.uuid4())
+        parent_hypothesis_id = self._parent_hypothesis_id(
+            branch.branch_id,
+            hypothesis_id=hypothesis_id,
+        )
         return HypothesisRecord(
-            hypothesis_id=str(uuid.uuid4()),
+            hypothesis_id=hypothesis_id,
             branch_id=branch.branch_id,
+            parent_hypothesis_id=parent_hypothesis_id,
             change_locus=hypothesis.change_locus,
             action=hypothesis.action,
             status="active",
@@ -54,3 +60,16 @@ class ProposalRecordMixin:
             novelty_signature=dict(hypothesis.novelty_signature or {}),
             mechanism_changes=tuple(hypothesis.mechanism_changes or ()),
         )
+
+    def _parent_hypothesis_id(
+        self,
+        branch_id: str,
+        *,
+        hypothesis_id: str,
+    ) -> str | None:
+        """Return the prior durable hypothesis on this branch, if any."""
+
+        for record in reversed(self.hypothesis_store.get_by_branch(branch_id)):
+            if record.hypothesis_id != hypothesis_id:
+                return record.hypothesis_id
+        return None

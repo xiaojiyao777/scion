@@ -203,6 +203,7 @@ class CampaignSummaryMixin:
         diagnostics: Any | None = None,
         final_evidence_refs: Mapping[str, Any] | None = None,
         frozen_budget: Mapping[str, Any] | None = None,
+        measurement_governance: str = "on",
     ) -> Dict[str, Any]:
         """Write ``campaign_summary.json`` with the current backward-compatible schema."""
         steps = list(step_history)
@@ -442,6 +443,7 @@ class CampaignSummaryMixin:
             ],
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
+            "measurement_governance": measurement_governance,
             "promotion_dossier_ref": getattr(
                 champion,
                 "promotion_dossier_ref",

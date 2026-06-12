@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP 8-seed A/A audited; CVRP still low-power*
+*Status: Post-shakedown framework repairs integrated; next gate is formal replay/ablation design*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -630,11 +630,21 @@ Exit criteria:
   `problem_measurement_diagnostics` but still exposes opportunity/runtime/
   cross-branch/research-governance signals; code-phase source visibility held.
 - Next before a formal governance experiment: fixed-candidate or fixed-order
-  replay controls, a precise record-only/off ablation contract, manifest
-  assertions for measurement diagnostics and source visibility,
-  `measurement_governance` in `campaign_summary.json`, explicit review of
-  `SCREENING_EXPAND_EXHAUSTED_BORDERLINE`, fresh-runtime replay drain closure,
-  and durable `parent_hypothesis_id` lineage for same-branch follow-up.
+  replay controls and a precise record-only/off ablation contract.
+- Accepted after the warehouse shakedown and CVRP 8-seed A/A audit: the first
+  post-shakedown framework repair slice now covers the previously identified
+  observability and lineage debts. `campaign_summary.json` records
+  `measurement_governance`; CLI/status/summary tests assert governance visibility;
+  prompt/context tests assert measurement diagnostics suppression and code-phase
+  source visibility; CVRP formal protocol explicitly pre-registers `CMT4` for
+  the 45s screening budget; expanded-screening borderline advance is an explicit
+  protocol policy instead of hidden `0.05` behavior; fresh-runtime replay pressure
+  reports "no scheduler-eligible replay candidate" with materialization and
+  scheduling block reasons; and durable same-branch hypotheses now record
+  `parent_hypothesis_id` without adding that lineage to `DecisionFeatures`.
+  Acceptance: targeted repair suite `296 passed`, full `unit/core`
+  `494 passed`, protocol/adapter subset `99 passed`, Python compile on touched
+  core/config files, and `git diff --check`.
 
 ## Status Cadence
 

@@ -296,7 +296,7 @@ def test_decision_low_snr_expand_exhausted_continues_with_relaxed_lifecycle():
 
 
 def test_decision_screening_expand_exhausted_borderline_positive_delta():
-    """wr in [threshold-0.05, threshold) with md>=0 after 1 screening expand → queue_validate."""
+    """Default config does not advance below-threshold expanded screening results."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -309,14 +309,94 @@ def test_decision_screening_expand_exhausted_borderline_positive_delta():
         budget_remaining_ratio=1.0, screening_expand_count=1,
     )
     out = _engine.decide(f)
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_EXHAUSTED" in out.reason_codes
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS" not in out.reason_codes
+
+
+def test_decision_screening_expand_exhausted_borderline_policy_queues_validation():
+    """Explicit expanded-borderline policy can advance warehouse prod wr=0.50."""
+    from scion.core.models import DecisionFeatures
+    engine = DecisionEngine(
+        ProtocolConfig(
+            gates={
+                "screening": {
+                    "win_rate_min": 0.55,
+                    "expanded_borderline_advance": {
+                        "enabled": True,
+                        "win_rate_window": 0.05,
+                    },
+                },
+            },
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.50, median_delta=100.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0, screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
     assert out.decision == Decision.QUEUE_VALIDATE
-    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE" in out.reason_codes
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS" in out.reason_codes
+    assert "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY" in out.reason_codes
+
+
+def test_decision_screening_expand_exhausted_borderline_policy_off_blocks_warehouse_case():
+    """Warehouse prod wr=0.50 only advances when the protocol flag is explicit."""
+    from scion.core.models import DecisionFeatures
+    engine = DecisionEngine(
+        ProtocolConfig(
+            gates={
+                "screening": {
+                    "win_rate_min": 0.55,
+                    "expanded_borderline_advance": {
+                        "enabled": False,
+                        "win_rate_window": 0.05,
+                    },
+                },
+            },
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.50, median_delta=100.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0, screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_EXHAUSTED" in out.reason_codes
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS" not in out.reason_codes
 
 
 def test_decision_screening_expand_exhausted_borderline_negative_delta():
-    """wr in [threshold-0.05, threshold) with md<0 after 1 screening expand → continue_explore.
-    Cost-regressive candidates must not leak through BORDERLINE path."""
+    """Explicit borderline policy fails closed for negative median_delta."""
     from scion.core.models import DecisionFeatures
+    engine = DecisionEngine(
+        ProtocolConfig(
+            gates={
+                "screening": {
+                    "expanded_borderline_advance": {
+                        "enabled": True,
+                        "win_rate_window": 0.05,
+                    },
+                },
+            },
+        )
+    )
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
@@ -327,9 +407,44 @@ def test_decision_screening_expand_exhausted_borderline_negative_delta():
         stale=False, recent_retry_count=0, recent_failure_codes=(),
         budget_remaining_ratio=1.0, screening_expand_count=1,
     )
-    out = _engine.decide(f)
-    assert out.decision == Decision.CONTINUE_EXPLORE
+    out = engine.decide(f)
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
     assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA" in out.reason_codes
+    assert "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED" in out.reason_codes
+
+
+def test_decision_screening_expand_exhausted_borderline_loss_heavy_fails_closed():
+    """Loss-heavy results below the borderline window do not use the policy path."""
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=7,
+        ties=0,
+        win_rate=0.30,
+        median_delta=100.0,
+    )
+    from dataclasses import replace
+
+    f = replace(f, screening_expand_count=1)
+    engine = DecisionEngine(
+        ProtocolConfig(
+            gates={
+                "screening": {
+                    "win_rate_min": 0.55,
+                    "expanded_borderline_advance": {
+                        "enabled": True,
+                        "win_rate_window": 0.05,
+                    },
+                },
+            },
+        )
+    )
+
+    out = engine.decide(f)
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_FAIL_WIN_RATE" in out.reason_codes
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS" not in out.reason_codes
 
 
 def test_decision_screening_high_win_negative_effect_does_not_queue_validation():

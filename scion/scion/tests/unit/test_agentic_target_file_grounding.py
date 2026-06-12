@@ -1995,6 +1995,26 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         "def accept(candidate, incumbent, rng):\n"
         "    return candidate.is_feasible and candidate.cost <= incumbent.cost\n"
     )
+    champion_entrypoint_source = (
+        "def champion_solve(instance, rng, time_limit_sec, context):\n"
+        "    return context.champion_baseline(instance)\n"
+    )
+    champion_read_observation = {
+        "observation_id": "obs-champion-entrypoint",
+        "tool_name": "context.read_algorithm_file",
+        "is_error": False,
+        "structured_payload": {
+            "file_path": "policies/baseline_algorithm.py",
+            "active": True,
+            "role": "champion_entrypoint",
+            "readable": True,
+            "source": "champion_snapshot",
+            "truncated": False,
+            "size_chars": len(champion_entrypoint_source),
+            "max_chars": len(champion_entrypoint_source),
+            "content_preview": champion_entrypoint_source,
+        },
+    }
     integration_files = (
         "### policies/baseline_algorithm.py\n"
         "Provenance: branch_workspace; readable=True\n"
@@ -2021,6 +2041,7 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
             f"{required_integration_source}"
             "```"
         ),
+        "agentic_tool_observations": [champion_read_observation],
         "hypothesis_text": "Add a bounded construction variant.",
         "hypothesis_implementation_brief": {
             "hypothesis_text": "Add a bounded construction variant.",
@@ -2099,12 +2120,24 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         integration_records["policies/baseline_modules/acceptance.py"]["role"]
         == "required_full_integration_edit_source"
     )
+    algorithm_read_records = {
+        item["file_path"]: item for item in ledger["algorithm_file_reads"]
+    }
+    assert set(algorithm_read_records) == {"policies/baseline_algorithm.py"}
+    champion_source_record = algorithm_read_records["policies/baseline_algorithm.py"]
+    assert champion_source_record["full_content_visible_in_rendered_prompt"] is True
+    algorithm_read_status = manifest["section_statuses"][
+        "solver_design_full_algorithm_file_reads"
+    ]
+    assert algorithm_read_status["status"] == "included"
     guarantees = manifest["code_phase_source_guarantees"]
     assert guarantees["schema_version"] == "code-phase-source-visibility-guarantees.v1"
     assert guarantees["target_source_visible"] is True
     assert guarantees["required_integration_source_visible"] is True
+    assert guarantees["algorithm_file_read_source_visible"] is True
     assert guarantees["protected_source_visible"] is True
     assert guarantees["required_integration_source_count"] == 1
+    assert guarantees["algorithm_file_read_source_count"] == 1
     assert guarantees.get("missing_required_source_paths", []) == []
     assert (
         ledger["source_visibility_guarantees"]["protected_source_visible"] is True

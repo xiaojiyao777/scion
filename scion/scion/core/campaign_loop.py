@@ -831,13 +831,24 @@ def _fresh_runtime_replay_closure_status(result_metadata: Mapping[str, Any]) -> 
     return ""
 
 
+_FRESH_RUNTIME_NO_SCHEDULABLE_REPLAY_CANDIDATE = (
+    "pressure_no_schedulable_replay_candidate"
+)
+_LEGACY_FRESH_RUNTIME_NO_REPLAYABLE_CANDIDATE = "pressure_no_replayable_candidate"
+_FRESH_RUNTIME_PRESSURE_NO_REPLAY_CANDIDATE_STATUSES = {
+    _FRESH_RUNTIME_NO_SCHEDULABLE_REPLAY_CANDIDATE,
+    _LEGACY_FRESH_RUNTIME_NO_REPLAYABLE_CANDIDATE,
+}
+
+
 def _fresh_runtime_replay_blocked_count(result_metadata: Mapping[str, Any]) -> int:
     if not result_metadata:
         return 0
     closure_status = _fresh_runtime_replay_closure_status(result_metadata)
-    if closure_status.startswith("blocked_") or closure_status in {
-        "pressure_no_replayable_candidate",
-    }:
+    if (
+        closure_status.startswith("blocked_")
+        or closure_status in _FRESH_RUNTIME_PRESSURE_NO_REPLAY_CANDIDATE_STATUSES
+    ):
         return 1
     return 0
 
@@ -897,8 +908,8 @@ def _fresh_runtime_replay_drain_status(
             return "selected_failed"
         return "selected_executed"
     closure_status = _fresh_runtime_replay_closure_status(final_attempt_last_result)
-    if closure_status == "pressure_no_replayable_candidate":
-        return "pressure_no_replayable_candidate"
+    if closure_status in _FRESH_RUNTIME_PRESSURE_NO_REPLAY_CANDIDATE_STATUSES:
+        return _FRESH_RUNTIME_NO_SCHEDULABLE_REPLAY_CANDIDATE
     if skipped > 0 or str(stopped_reason or "") == "no_fresh_runtime_replay_pending":
         return "not_selected_no_pending"
     if attempts > 0:

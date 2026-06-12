@@ -31,6 +31,12 @@ runtime:
     rules:
     - stages:
       - screening
+      case_globs:
+      - cvrplib/CMT/CMT4.vrp
+      - CMT4.vrp
+      time_limit_sec: 45
+    - stages:
+      - screening
       min_dimension: 150
       max_dimension: 250
       time_limit_sec: 45

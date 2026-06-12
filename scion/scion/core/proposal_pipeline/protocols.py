@@ -51,6 +51,9 @@ class HypothesisStoreLike(Protocol):
     def get_by_status(self, status: str) -> list[HypothesisRecord]:
         ...
 
+    def get_by_branch(self, branch_id: str) -> list[HypothesisRecord]:
+        ...
+
 
 class ClassifierLike(Protocol):
     def classify(self, text: str) -> Any:

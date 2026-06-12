@@ -81,6 +81,9 @@ def test_protocol_config_defaults():
     assert 0.0 < config.validation_win_rate_threshold <= 1.0
     assert config.min_practical_delta > 0.0
     assert config.measurement_governance == "on"
+    borderline = config.gates.screening.expanded_borderline_advance
+    assert borderline.enabled is False
+    assert borderline.win_rate_window == pytest.approx(0.05)
 
 
 def test_protocol_config_resolves_problem_measurement_practical_delta():
@@ -241,7 +244,15 @@ def test_protocol_config_from_yaml(tmp_path):
         "validation": {"n_cases": 5, "n_seeds": 3, "expand_to": 9},
         "frozen": {"n_cases": 3, "n_seeds": 3, "max_uses_per_campaign": 2},
         "gates": {
-            "screening": {"win_rate_min": 0.6},
+            "screening": {
+                "win_rate_min": 0.6,
+                "expanded_borderline_advance": {
+                    "enabled": True,
+                    "win_rate_window": 0.04,
+                    "require_median_delta_nonnegative": True,
+                    "require_ci_low_nonnegative": True,
+                },
+            },
             "validation": {"win_rate_min": 0.7},
         }
     }))
@@ -253,6 +264,11 @@ def test_protocol_config_from_yaml(tmp_path):
     assert config.frozen.n_cases == 3
     assert config.frozen.max_uses_per_campaign == 2
     assert config.screening_win_rate_threshold == pytest.approx(0.6)
+    borderline = config.gates.screening.expanded_borderline_advance
+    assert borderline.enabled is True
+    assert borderline.win_rate_window == pytest.approx(0.04)
+    assert borderline.require_median_delta_nonnegative is True
+    assert borderline.require_ci_low_nonnegative is True
     assert config.validation_win_rate_threshold == pytest.approx(0.7)
 
 def test_protocol_config_runtime_governance_from_yaml(tmp_path):

@@ -472,7 +472,7 @@ def test_fresh_runtime_replay_drain_status_distinguishes_failed_from_blocked() -
     )
 
 
-def test_campaign_loop_reports_fresh_pressure_without_replayable_candidate() -> None:
+def test_campaign_loop_reports_fresh_pressure_without_schedulable_replay_candidate() -> None:
     main_calls = 0
     drain_calls = 0
     statuses: list[dict[str, Any]] = []
@@ -498,10 +498,10 @@ def test_campaign_loop_reports_fresh_pressure_without_replayable_candidate() -> 
                 "scheduler_action": "create_new",
                 "fresh_runtime_replay": {
                     "schema_version": "fresh_runtime_replay.v1",
-                    "closure_status": "pressure_no_replayable_candidate",
+                    "closure_status": "pressure_no_schedulable_replay_candidate",
                     "detail": (
                         "fresh champion runtime pressure exists but no "
-                        "structured replay pending candidate is materializable"
+                        "structured replay candidate is scheduler-eligible"
                     ),
                     "fresh_runtime_pressure_candidates": [
                         {
@@ -551,15 +551,15 @@ def test_campaign_loop_reports_fresh_pressure_without_replayable_candidate() -> 
     assert main_calls == 1
     assert drain_calls == 1
     assert final_status["fresh_runtime_replay_drain_status"] == (
-        "pressure_no_replayable_candidate"
+        "pressure_no_schedulable_replay_candidate"
     )
-    assert drain["status"] == "pressure_no_replayable_candidate"
+    assert drain["status"] == "pressure_no_schedulable_replay_candidate"
     assert drain["executed"] == 0
     assert drain["skipped"] == 1
-    assert drain["stopped_reason"] == "pressure_no_replayable_candidate"
+    assert drain["stopped_reason"] == "pressure_no_schedulable_replay_candidate"
     assert drain["blocked_count"] == 1
     assert drain["unresolved_closures"][0]["closure_status"] == (
-        "pressure_no_replayable_candidate"
+        "pressure_no_schedulable_replay_candidate"
     )
     assert drain["final_attempt_last_result"]["fresh_runtime_replay"][
         "fresh_runtime_pressure_candidates"

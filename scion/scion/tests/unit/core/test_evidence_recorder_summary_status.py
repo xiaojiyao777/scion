@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+import pytest
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 from scion.core.run_validity import (
     RUN_VALIDITY_INVALID_INFRA_ONLY,
@@ -113,6 +115,43 @@ def test_status_last_result_soft_abandon_is_screening_lifecycle_bookkeeping(
     assert last_result["lifecycle_bookkeeping"]["legacy_decision_layer_source"] == (
         "lifecycle_policy"
     )
+
+
+@pytest.mark.parametrize("measurement_governance", ["record_only", "on"])
+def test_summary_and_status_expose_measurement_governance_consistently(
+    tmp_path: Path,
+    measurement_governance: str,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-measurement-governance",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-measurement-governance",
+            "n_experiments": 0,
+            "screened_experiments": 0,
+            "total_rounds": 0,
+            "proposal_attempts": 0,
+            "proposal_attempts_consumed": 0,
+            "n_steps": 0,
+            "n_active_branches": 0,
+            "champion_version": 7,
+            "measurement_governance": measurement_governance,
+            "budget_remaining": 1.0,
+            "branches": [],
+            "branch_cards": [],
+        },
+    )
+
+    status = recorder.write_status()
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=0,
+        champion=_champion(),
+        measurement_governance=measurement_governance,
+    )
+
+    assert status["measurement_governance"] == measurement_governance
+    assert summary["measurement_governance"] == measurement_governance
 
 
 def test_campaign_summary_exposes_structured_step_reason_provenance(

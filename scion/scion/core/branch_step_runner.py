@@ -356,7 +356,7 @@ class BranchStepRunner:
                     non_replayable_marked
                 )
             if pressure_without_candidate:
-                drain_metadata["pressure_no_replayable_candidate"] = True
+                drain_metadata["pressure_no_schedulable_replay_candidate"] = True
                 drain_metadata["fresh_runtime_pressure_candidates"] = (
                     pressure_without_candidate
                 )
@@ -364,10 +364,10 @@ class BranchStepRunner:
             if pressure_without_candidate:
                 replay_metadata = {
                     "schema_version": "fresh_runtime_replay.v1",
-                    "closure_status": "pressure_no_replayable_candidate",
+                    "closure_status": "pressure_no_schedulable_replay_candidate",
                     "detail": (
                         "fresh champion runtime pressure exists but no "
-                        "structured replay pending candidate is materializable"
+                        "structured replay candidate is scheduler-eligible"
                     ),
                     "fresh_runtime_pressure_candidates": (
                         pressure_without_candidate
@@ -1226,6 +1226,11 @@ def _fresh_runtime_pressure_without_replayable_candidate(
             branch_current_hypothesis=branch_current_hypothesis,
             branch_patches=branch_patches,
         )
+        schedulability = _fresh_runtime_replay_schedulability_diagnostic(
+            state_value=state_value,
+            pending_marker=pending_marker,
+            materialization=materialization,
+        )
         candidates.append(
             {
                 "branch_id": getattr(branch, "branch_id", None),
@@ -1246,9 +1251,7 @@ def _fresh_runtime_pressure_without_replayable_candidate(
                 "runtime_evidence_pressure_count": _nonnegative_int(
                     summary.get("runtime_evidence_pressure_count")
                 ),
-                "replay_materializable": not bool(
-                    materialization["missing_materialization_keys"]
-                ),
+                **schedulability,
                 "missing_materialization_keys": list(
                     materialization["missing_materialization_keys"]
                 ),
@@ -1271,6 +1274,44 @@ def _fresh_runtime_pressure_without_replayable_candidate(
             }
         )
     return candidates
+
+
+def _fresh_runtime_replay_schedulability_diagnostic(
+    *,
+    state_value: str,
+    pending_marker: bool,
+    materialization: Mapping[str, Any],
+) -> dict[str, Any]:
+    materializable = not bool(materialization["missing_materialization_keys"])
+    schedulable = (
+        materializable
+        and pending_marker
+        and state_value == BranchState.EXPLORE.value
+    )
+    diagnostic: dict[str, Any] = {
+        "replay_materializable": materializable,
+        "replay_schedulable": schedulable,
+    }
+    if schedulable:
+        return diagnostic
+
+    block_reasons: list[str] = []
+    if state_value != BranchState.EXPLORE.value:
+        blocked_state = state_value or "unknown"
+        diagnostic["blocked_by_state"] = blocked_state
+        block_reasons.append(f"blocked_by_state:{blocked_state}")
+    if not pending_marker:
+        diagnostic["blocked_by_pending_marker"] = (
+            "fresh_champion_runtime_replay_pending_missing"
+        )
+        block_reasons.append("blocked_by_pending_marker")
+    if not materializable:
+        diagnostic["blocked_by_materialization"] = (
+            "missing_materialization_keys"
+        )
+        block_reasons.append("blocked_by_materialization")
+    diagnostic["replay_schedulable_block_reasons"] = block_reasons
+    return diagnostic
 
 
 def _mark_non_materializable_fresh_runtime_candidates(

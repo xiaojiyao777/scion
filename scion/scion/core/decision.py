@@ -160,14 +160,34 @@ class DecisionEngine:
             # v3 §11.5: screening expansion is one pre-registered statistical
             # expand per candidate, not a repeatable retry loop.
             if features.screening_expand_count >= 1:
-                # Borderline candidates (wr close to threshold) may still be worth validating,
-                # but only if median_delta is non-negative. Cost-regressive candidates
-                # (md < 0) that leak through this path burn val/frozen budget and typically
-                # fail frozen on ci_low<0 — reject them here instead.
-                if wr >= threshold - 0.05 and (md is None or md >= 0):
-                    return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_EXPAND_EXHAUSTED_BORDERLINE"])
-                if wr >= threshold - 0.05 and md is not None and md < 0:
-                    return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA"])
+                borderline = self._expanded_borderline_advance_status(features)
+                if borderline == "pass":
+                    return self._out(
+                        features,
+                        Decision.QUEUE_VALIDATE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS",
+                            "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY",
+                        ],
+                    )
+                if borderline == "negative_delta":
+                    return self._out(
+                        features,
+                        Decision.CONTINUE_EXPLORE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA",
+                            "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED",
+                        ],
+                    )
+                if borderline == "negative_ci_low":
+                    return self._out(
+                        features,
+                        Decision.CONTINUE_EXPLORE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_CI_LOW",
+                            "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED",
+                        ],
+                    )
                 return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_EXPAND_EXHAUSTED"])
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND"])
         elif wr < 0.5:
@@ -325,6 +345,29 @@ class DecisionEngine:
         if features.stage in ("validation", "frozen") and features.ci_low is not None:
             return features.ci_low >= 0
         return features.median_delta == 0
+
+    def _expanded_borderline_advance_status(
+        self,
+        features: DecisionFeatures,
+    ) -> str:
+        policy = self.config.gates.screening.expanded_borderline_advance
+        if not policy.enabled:
+            return "disabled"
+        if features.win_rate is None:
+            return "outside_window"
+
+        threshold = self.config.screening_win_rate_threshold
+        lower_bound = max(0.0, threshold - policy.win_rate_window)
+        if not (lower_bound <= features.win_rate < threshold):
+            return "outside_window"
+
+        if policy.require_median_delta_nonnegative:
+            if features.median_delta is None or features.median_delta < 0:
+                return "negative_delta"
+        if policy.require_ci_low_nonnegative:
+            if features.ci_low is None or features.ci_low < 0:
+                return "negative_ci_low"
+        return "pass"
 
     def _trajectory_divergent_low_snr_expand(
         self,
