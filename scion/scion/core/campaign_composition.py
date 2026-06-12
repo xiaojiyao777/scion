@@ -134,6 +134,7 @@ def compose_campaign_services(
     force_target_file: str | None = None,
     proposal_quality_loop_limit: int | None = None,
     proposal_attempt_limit: int | None = None,
+    proposal_context_ablation: str = "full",
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     production_campaign = is_adapter_backed_production_campaign(
@@ -148,6 +149,7 @@ def compose_campaign_services(
         seed_ledger=seed_ledger,
         runtime_slow_threshold=protocol_config.runtime.max_runtime_ratio,
         measurement_governance=getattr(protocol_config, "measurement_governance", "on"),
+        proposal_context_ablation=proposal_context_ablation,
     )
     owner._protocol_config = protocol_config
     owner._split_manifest = split_manifest

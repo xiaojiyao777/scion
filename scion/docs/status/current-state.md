@@ -588,6 +588,20 @@ Warehouse governance ON/OFF shakedown postrun:
   trajectory distribution. Next experiment design should separately ablate
   measurement diagnostics and broader research context rather than treating
   `record_only` as all-governance-off.
+- Proposal-visible context ablation is now implemented for that next design.
+  `scion run --proposal-context-ablation` accepts `full`,
+  `no-measurement-diagnostics`, and `minimal-research-context`; all planned
+  Phase 5 context arms keep `measurement_governance=on` so protocol, runtime,
+  lifecycle, DecisionFeatures, and promotion semantics stay matched.
+  `no-measurement-diagnostics` hides compact measurement diagnostics while
+  keeping broader research context. `minimal-research-context` hides broader
+  branch/cross-branch/runtime/opportunity context while preserving source/code
+  visibility and compact measurement self-diagnosis. Prompt manifests and
+  proposal trajectory fingerprints record the ablation mode. Acceptance:
+  focused context/control/trajectory tests `23 passed`, proposal
+  pipeline/source-visibility tests `46 passed`, CLI/config tests `31 passed`,
+  py_compile, and `git diff --check`. Next gate: warehouse 3-arm shakedown,
+  with any free-running trajectory comparison labeled observational.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

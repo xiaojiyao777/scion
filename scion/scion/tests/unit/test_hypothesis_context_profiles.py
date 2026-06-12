@@ -232,6 +232,7 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert filtered["context_profile_metadata"] == {
         "schema_version": "hypothesis_context_profile.v1",
         "profile": "algorithm",
+        "proposal_context_ablation": "full",
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
     }
@@ -334,6 +335,7 @@ def test_context_profile_metadata_does_not_enter_decision_features():
 
     assert "context_profile" not in decision_fields
     assert "context_profile_metadata" not in decision_fields
+    assert "proposal_context_ablation" not in decision_fields
     assert "compact_research_signals" not in decision_fields
     assert "research_signal_ratio" not in decision_fields
     assert "branch_lesson_records" not in decision_fields
@@ -344,6 +346,209 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "problem_measurement_diagnostics" not in decision_fields
     assert "measurement_noise_floor" not in decision_fields
     assert "objective_opportunity_profile" not in decision_fields
+
+
+def test_no_measurement_diagnostics_ablation_keeps_protocol_mode_and_research_context():
+    context = {
+        "problem_summary": "CVRP formal screening objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline_modules/local_search.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1 screening complete",
+        "measurement_governance": "on",
+        "proposal_context_ablation": "no-measurement-diagnostics",
+        "experiment_history": (
+            "branch b1\n"
+            "    screening_feedback.tier=weak activation=observed "
+            "effect=none runtime_confidence=low "
+            "opportunity_status=opportunity_poor\n"
+            "    opportunity_diagnostics: measurement-owned low SNR guidance"
+        ),
+        "objective_opportunity_profile": (
+            "## Objective Opportunity Profile (screening only)\n"
+            "- total_cost: positive_cases=1 negative_cases=0 tie_cases=1"
+        ),
+        "runtime_feedback": (
+            "## Runtime Feedback\n"
+            "candidate runtime ratio remains within the branch budget"
+        ),
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:non-measurement-still-visible",
+                    "scope": "cross_branch",
+                    "summary": "A sibling branch preserved feasibility.",
+                }
+            ],
+        },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:measurement-ablation",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:branch-memory-still-visible",
+                "scope": "same_branch",
+                "summary": "Current branch memory remains available.",
+            }
+        ],
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "signal_to_noise_tier": "low_power",
+            },
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "low_snr",
+                    "summary": "Candidate effects below measured screening MDE.",
+                    "reason_codes": ["MEASUREMENT_POWER_LOW"],
+                }
+            ],
+        },
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+
+    assert filtered["measurement_governance"] == "on"
+    assert filtered["proposal_context_ablation"] == "no-measurement-diagnostics"
+    assert (
+        filtered["context_profile_metadata"]["proposal_context_ablation"]
+        == "no-measurement-diagnostics"
+    )
+    assert "problem_measurement_diagnostics" not in filtered
+    assert "measurement-owned low SNR guidance" not in filtered["experiment_history"]
+    assert "opportunity_status=opportunity_poor" not in filtered["experiment_history"]
+    assert "objective_opportunity_profile" in filtered
+    assert "runtime_feedback" in filtered
+    assert "compact_cross_branch_learning.v1" in filtered["cross_branch_research"]
+    assert filtered["branch_lesson_records"][0]["lesson_id"] == (
+        "lesson:branch-memory-still-visible"
+    )
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    assert "## Problem Measurement Diagnostics" not in rendered_prompt
+    assert "MEASUREMENT_POWER_LOW" not in rendered_prompt
+    assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
+    assert "## Runtime Feedback" in rendered_prompt
+    assert "compact_cross_branch_learning.v1" in rendered_prompt
+
+
+def test_minimal_research_context_ablation_keeps_source_and_measurement_context():
+    context = {
+        "problem_summary": "Warehouse objective.",
+        "research_surfaces": "Research surfaces: operators",
+        "operator_categories": "operators",
+        "available_actions": "modify",
+        "targetable_files": "operators/relocate.py",
+        "champion_operators_code": "class Relocate:\n    pass\n",
+        "branch_code": "class Relocate:\n    def execute(self):\n        return None\n",
+        "champion_stats": "champion_v2",
+        "measurement_governance": "on",
+        "proposal_context_ablation": "minimal-research-context",
+        "active_hyp_summary": "hidden occupied hypothesis",
+        "blacklist_summary": "hidden rejected mechanism",
+        "sibling_summary": "hidden sibling branch",
+        "experiment_history": (
+            "branch b1\n"
+            "    opportunity_status=opportunity_poor\n"
+            "    opportunity_diagnostics: measurement-owned low SNR guidance"
+        ),
+        "exploration_coverage": "hidden coverage",
+        "strategy_guidance": "hidden strategy guidance",
+        "search_control_guidance": "hidden search control guidance",
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_stable",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "MEASUREMENT_POWER_LOW",
+                "signal_to_noise_tier": "measurable",
+            },
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "effect_scale",
+                    "summary": "Measurement diagnostics remain visible.",
+                    "reason_codes": ["MEASUREMENT_POWER_LOW"],
+                }
+            ],
+        },
+        "objective_opportunity_profile": "## Objective Opportunity Profile",
+        "runtime_feedback": "runtime feedback that should be hidden",
+        "cross_branch_research": "full cross branch text",
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "lesson_cards": [{"summary": "hidden lesson"}],
+        },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:hidden",
+        },
+        "branch_lesson_records": [{"lesson_id": "lesson:hidden"}],
+        "branch_direction": "hidden branch direction",
+        "branch_dossier": "hidden branch dossier",
+        "branch_followup_policy": "hidden follow-up policy",
+        "champion_baselines": "hidden champion baselines",
+        "objective_guidance": "hidden objective guidance",
+        "saturation_signal": "hidden saturation signal",
+        "search_memory": "hidden search memory",
+        "research_log": "hidden research log",
+        "weight_opt_feedback": "hidden weight feedback",
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+
+    assert filtered["measurement_governance"] == "on"
+    assert filtered["proposal_context_ablation"] == "minimal-research-context"
+    assert (
+        filtered["context_profile_metadata"]["proposal_context_ablation"]
+        == "minimal-research-context"
+    )
+    assert filtered["champion_operators_code"] == context["champion_operators_code"]
+    assert filtered["branch_code"] == context["branch_code"]
+    assert "problem_measurement_diagnostics" in filtered
+    assert "MEASUREMENT_POWER_LOW" in filtered["problem_measurement_diagnostics"]
+    assert "cross_branch_research" not in filtered
+    assert "branch_lesson_records" not in filtered
+    assert "branch_lesson_usage_requirement" not in filtered
+    assert "objective_opportunity_profile" not in filtered
+    assert "runtime_feedback" not in filtered
+    assert "experiment_history" not in filtered
+    assert "sibling_summary" not in filtered
+    assert "blacklist_summary" not in filtered
+    assert "active_hyp_summary" not in filtered
+    assert "strategy_guidance" not in filtered
+    assert "search_control_guidance" not in filtered
+    assert "search_memory" not in filtered
+    assert "research_log" not in filtered
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    assert "## Current Champion Research Code" in rendered_prompt
+    assert "class Relocate" in rendered_prompt
+    assert "## Current Branch Code" in rendered_prompt
+    assert "## Problem Measurement Diagnostics" in rendered_prompt
+    assert "MEASUREMENT_POWER_LOW" in rendered_prompt
+    assert "## Cross-Branch Research Map" not in rendered_prompt
+    assert "## Runtime Feedback" not in rendered_prompt
+    assert "## Objective Opportunity Profile" not in rendered_prompt
+    assert "## Experiment History" not in rendered_prompt
+    assert "hidden sibling branch" not in rendered_prompt
+    assert "hidden rejected mechanism" not in rendered_prompt
+    assert "hidden strategy guidance" not in rendered_prompt
 
 
 def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():

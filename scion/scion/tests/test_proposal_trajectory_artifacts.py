@@ -68,6 +68,7 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
     assert proposal["patch_digest"] == "patch-digest-a"
     assert proposal["formal_candidate_ref"].endswith("candidate.patch.json")
     assert proposal["formal_candidate_join_basis"] == "session_id"
+    assert session["trace_fingerprints"][0]["proposal_context_ablation"] == "full"
     assert session["replayability"]["summary"] == (
         "posthoc_audit_fingerprints_only_no_llm_replay"
     )
@@ -436,6 +437,13 @@ def _write_prompt_manifest(
         "artifact_kind": "api_visible_prompt_manifest",
         "call_kind": call_kind,
         "prompt_hash": prompt_hash,
+        "context_profile_metadata": {
+            "schema_version": "hypothesis_context_profile.v1",
+            "profile": "algorithm",
+            "proposal_context_ablation": "full",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        },
         "visibility_ledger_summary": {"ledger_digest": ledger_digest},
         "block_family_accounting": {
             "total_chars": total_tokens * 4,

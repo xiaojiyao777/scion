@@ -11,6 +11,8 @@ import json
 import re
 from typing import Any, Literal, Mapping
 
+from scion.proposal.context_ablation import normalize_proposal_context_ablation
+
 HypothesisContextProfile = Literal["algorithm", "repair"]
 
 _FULL_CONTEXT_KEYS = frozenset(
@@ -22,6 +24,37 @@ _FULL_CONTEXT_KEYS = frozenset(
         "cross_branch_research_audit_records",
         "cross_branch_research_session_metadata",
         "branch_followup_policy_payload",
+    }
+)
+
+_MINIMAL_RESEARCH_CONTEXT_KEYS = frozenset(
+    {
+        "active_hyp_summary",
+        "blacklist_summary",
+        "branch_dossier",
+        "branch_dossier_payload",
+        "branch_direction",
+        "branch_followup_policy",
+        "branch_followup_policy_payload",
+        "branch_lesson_records",
+        "branch_lesson_usage_requirement",
+        "champion_baselines",
+        "cross_branch_research",
+        "cross_branch_research_payload",
+        "cross_branch_research_audit_records",
+        "cross_branch_research_session_metadata",
+        "experiment_history",
+        "exploration_coverage",
+        "objective_opportunity_profile",
+        "objective_guidance",
+        "research_log",
+        "runtime_feedback",
+        "saturation_signal",
+        "search_control_guidance",
+        "search_memory",
+        "sibling_summary",
+        "strategy_guidance",
+        "weight_opt_feedback",
     }
 )
 
@@ -79,11 +112,16 @@ def filter_hypothesis_context_for_prompt(
 ) -> dict[str, Any]:
     """Project ContextManager output into the prompt-visible context."""
     profile = derive_hypothesis_context_profile(context)
+    ablation = normalize_proposal_context_ablation(
+        context.get("proposal_context_ablation")
+    )
     filtered = dict(context)
+    filtered["proposal_context_ablation"] = ablation
     filtered["context_profile"] = profile
     filtered["context_profile_metadata"] = {
         "schema_version": _PROFILE_METADATA_SCHEMA,
         "profile": profile,
+        "proposal_context_ablation": ablation,
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
     }
@@ -91,20 +129,28 @@ def filter_hypothesis_context_for_prompt(
     for key in _FULL_CONTEXT_KEYS:
         filtered.pop(key, None)
 
-    compact_cross_branch = _compact_cross_branch_research(
-        context.get("cross_branch_research_payload")
-    )
-    if compact_cross_branch:
-        filtered["cross_branch_research"] = compact_cross_branch
+    if ablation == "minimal-research-context":
+        for key in _MINIMAL_RESEARCH_CONTEXT_KEYS:
+            filtered.pop(key, None)
     else:
-        filtered.pop("cross_branch_research", None)
+        compact_cross_branch = _compact_cross_branch_research(
+            context.get("cross_branch_research_payload")
+        )
+        if compact_cross_branch:
+            filtered["cross_branch_research"] = compact_cross_branch
+        else:
+            filtered.pop("cross_branch_research", None)
 
     measurement_governance = _normalize_measurement_governance_mode(
         context.get("measurement_governance")
     )
+    hide_measurement_diagnostics = (
+        measurement_governance == "record_only"
+        or ablation == "no-measurement-diagnostics"
+    )
     compact_measurement = (
         ""
-        if measurement_governance == "record_only"
+        if hide_measurement_diagnostics
         else _compact_problem_measurement_diagnostics(
             context.get("problem_measurement_diagnostics")
         )
@@ -114,7 +160,7 @@ def filter_hypothesis_context_for_prompt(
     else:
         filtered.pop("problem_measurement_diagnostics", None)
 
-    if measurement_governance == "record_only":
+    if hide_measurement_diagnostics and "experiment_history" in filtered:
         filtered["experiment_history"] = _strip_opportunity_diagnostics_from_text(
             filtered.get("experiment_history")
         )
@@ -128,8 +174,11 @@ def filter_hypothesis_context_for_prompt(
     ):
         filtered.pop("material_difference_requirement", None)
 
-    if not _active_branch_lesson_usage_requirement(
-        context.get("branch_lesson_usage_requirement")
+    if (
+        ablation != "minimal-research-context"
+        and not _active_branch_lesson_usage_requirement(
+            context.get("branch_lesson_usage_requirement")
+        )
     ):
         filtered.pop("branch_lesson_usage_requirement", None)
 

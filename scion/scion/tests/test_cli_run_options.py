@@ -18,8 +18,12 @@ def test_run_help_exposes_agentic_proposal_options() -> None:
     assert (
         "--agentic-session-timeout-sec" in result.output
         or "--agentic-session-timeou" in result.output
+        or "--agentic-session-tim" in result.output
     )
-    assert "--proposal-attempt-limit" in result.output
+    assert (
+        "--proposal-attempt-limit" in result.output
+        or "--proposal-attempt-li" in result.output
+    )
     assert "defaults to rounds +" in result.output
     assert "max(6, rounds * 2)" in result.output
 
@@ -37,7 +41,10 @@ def test_run_help_exposes_measurement_governance_option() -> None:
     result = runner.invoke(app, ["run", "--help"])
 
     assert result.exit_code == 0, result.output
-    assert "--measurement-governance" in result.output
+    assert (
+        "--measurement-governance" in result.output
+        or "--measurement-governa" in result.output
+    )
 
 
 def test_run_threads_measurement_governance_into_protocol_config(

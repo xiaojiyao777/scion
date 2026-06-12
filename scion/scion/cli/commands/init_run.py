@@ -410,6 +410,18 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "record reduced readiness status only"
             ),
         ),
+        proposal_context_ablation: Literal[
+            "full",
+            "no-measurement-diagnostics",
+            "minimal-research-context",
+        ] = typer.Option(
+            "full",
+            "--proposal-context-ablation",
+            help=(
+                "Ablate only proposal-prompt visible context; does not change "
+                "protocol measurement governance or DecisionFeatures"
+            ),
+        ),
         disable_early_stop: bool = typer.Option(
             False,
             "--disable-early-stop",
@@ -747,6 +759,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 force_target_file=forced_request.target_file if forced_request else None,
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_attempt_limit=proposal_attempt_limit,
+                proposal_context_ablation=proposal_context_ablation,
             )
 
             forced_surface_note = (

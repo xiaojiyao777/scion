@@ -28,6 +28,7 @@ from scion.problem.providers import (
     active_subject_taxonomy_payload,
     resolve_solver_design_prompt_provider,
 )
+from scion.proposal.context_ablation import normalize_proposal_context_ablation
 from scion.proposal.context.feedback import (
     _build_agent_quality_feedback,
     _build_champion_baselines,
@@ -368,11 +369,15 @@ class ContextManager:
         adapter=None,
         runtime_slow_threshold: float = 2.0,
         measurement_governance: str = "on",
+        proposal_context_ablation: str = "full",
     ):
         self._adapter = adapter
         self._runtime_slow_threshold = runtime_slow_threshold
         self._measurement_governance = _normalize_measurement_governance_mode(
             measurement_governance
+        )
+        self._proposal_context_ablation = normalize_proposal_context_ablation(
+            proposal_context_ablation
         )
 
     # ------------------------------------------------------------------
@@ -400,6 +405,7 @@ class ContextManager:
         weight_opt_result: Optional[Any] = None,
         research_log: Optional[Any] = None,
         measurement_governance: Optional[str] = None,
+        proposal_context_ablation: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -418,6 +424,11 @@ class ContextManager:
             self._measurement_governance
             if measurement_governance is None
             else measurement_governance
+        )
+        proposal_context_ablation_mode = normalize_proposal_context_ablation(
+            self._proposal_context_ablation
+            if proposal_context_ablation is None
+            else proposal_context_ablation
         )
         problem_object = _build_problem_object(adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
@@ -737,6 +748,7 @@ class ContextManager:
             "problem_object": problem_object,
             "solver_mechanics": solver_mechanics,
             "measurement_governance": measurement_governance_mode,
+            "proposal_context_ablation": proposal_context_ablation_mode,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "operator_categories": ", ".join(effective_operator_categories),

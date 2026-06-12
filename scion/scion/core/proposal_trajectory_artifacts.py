@@ -406,6 +406,9 @@ def _trace_fingerprints(
                     "phase": _clean_str(trace.get("phase")),
                     "prompt_hash": prompt_hash,
                     "prompt_manifest_ref": prompt_ref,
+                    "proposal_context_ablation": _prompt_manifest_ablation(
+                        prompt_manifest
+                    ),
                     "visibility_ledger_digest": visibility_digest,
                     "block_family_summary": _prompt_block_family_summary(
                         prompt_manifest
@@ -420,6 +423,11 @@ def _trace_fingerprints(
             )
         )
     return fingerprints, prompt_ref_count, prompt_loaded_count
+
+
+def _prompt_manifest_ablation(prompt_manifest: Mapping[str, Any]) -> str:
+    metadata = _mapping(prompt_manifest.get("context_profile_metadata"))
+    return _clean_str(metadata.get("proposal_context_ablation"))
 
 
 def _prompt_block_family_summary(prompt_manifest: Mapping[str, Any]) -> dict[str, Any]:

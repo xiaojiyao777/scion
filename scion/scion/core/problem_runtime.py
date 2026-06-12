@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from scion.core.problem_identity import stable_identity_hash
+from scion.proposal.context_ablation import normalize_proposal_context_ablation
 
 
 class ProblemRuntime:
@@ -35,12 +36,16 @@ class ProblemRuntime:
         seed_ledger: Any | None = None,
         runtime_slow_threshold: float = 2.0,
         measurement_governance: str = "on",
+        proposal_context_ablation: str = "full",
     ) -> None:
         self._spec = problem_spec
         self._adapter = adapter
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
         self._measurement_governance = measurement_governance
+        self._proposal_context_ablation = normalize_proposal_context_ablation(
+            proposal_context_ablation
+        )
         self._problem_spec_hash = stable_identity_hash(problem_spec)
         self._adapter_spec_hash = stable_identity_hash(_visible_adapter_spec(adapter))
         self._split_manifest_hash = stable_identity_hash(split_manifest)
@@ -52,6 +57,7 @@ class ProblemRuntime:
                 "split_manifest_hash": self._split_manifest_hash,
                 "seed_ledger_hash": self._seed_ledger_hash,
                 "measurement_governance": self._measurement_governance,
+                "proposal_context_ablation": self._proposal_context_ablation,
             }
         )
         from scion.proposal.context_manager import ContextManager
@@ -59,6 +65,7 @@ class ProblemRuntime:
             adapter=adapter,
             runtime_slow_threshold=runtime_slow_threshold,
             measurement_governance=measurement_governance,
+            proposal_context_ablation=self._proposal_context_ablation,
         )
 
     # ------------------------------------------------------------------
@@ -84,6 +91,10 @@ class ProblemRuntime:
     @property
     def measurement_governance(self) -> str:
         return self._measurement_governance
+
+    @property
+    def proposal_context_ablation(self) -> str:
+        return self._proposal_context_ablation
 
     @property
     def ctx_manager(self) -> Any:

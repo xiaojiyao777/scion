@@ -714,6 +714,23 @@ Exit criteria:
   proposal/fixed-candidate/report suite `27 passed`, py_compile on touched
   files, real artifact smoke, exact forbidden-key/value scan, and
   `git diff --check`.
+- Accepted: proposal-visible context ablation switch for the next Phase 5
+  control. `scion run --proposal-context-ablation` now supports `full`,
+  `no-measurement-diagnostics`, and `minimal-research-context`. All arms keep
+  `measurement_governance=on`; the switch only changes tainted hypothesis
+  prompt visibility and does not enter Protocol, DecisionFeatures, promotion,
+  or evidence decisions. `no-measurement-diagnostics` hides compact
+  problem-measurement diagnostics and measurement-owned opportunity hints while
+  keeping broader research context. `minimal-research-context` hides broader
+  branch/cross-branch/runtime/opportunity research context while preserving
+  source/champion/branch code and compact measurement self-diagnosis. Prompt
+  manifests and proposal trajectory fingerprints record the selected ablation
+  mode for posthoc comparison. Acceptance: context/control/trajectory suite
+  `23 passed`, proposal pipeline/source-visibility suite `46 passed`,
+  CLI/config suite `31 passed`, py_compile on touched files, and
+  `git diff --check`. Next: launch a warehouse 3-arm shakedown with
+  `measurement_governance=on` in every arm; CVRP remains excluded from formal
+  governance-value conclusions until measurement power improves.
 
 ## Status Cadence
 
