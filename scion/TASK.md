@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Warehouse fixed-candidate replay audited*
+*Status: Proposal trajectory report artifacts accepted*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -692,6 +692,28 @@ Exit criteria:
   not prove LLM trajectory governance value. Next governance work should be a
   trajectory-aware prompt/context or stored-proposal control, not another
   fixed-candidate screening replay.
+- Accepted: report-only proposal trajectory artifacts. `scion report
+  proposal-trajectory-manifest` projects agentic session indexes, trace indexes,
+  prompt manifests, and replayable formal-candidate joins into compact
+  fingerprints without raw prompts, raw responses, patch bodies, raw metrics, or
+  Decision inputs. `scion report proposal-trajectory-compare` compares two such
+  manifests and labels the result `observational_only=true` unless a future
+  explicit control-pair key exists. Real warehouse ON/OFF artifacts generated
+  under
+  `/home/clawd/research/scion-experiments/v04-phase5-proposal-trajectory-warehouse-onoff-20260612T0550Z-claw/`:
+  report
+  [`docs/experiments/v0.4/v04-phase5-warehouse-proposal-trajectory-compare-20260612.md`](docs/experiments/v0.4/v04-phase5-warehouse-proposal-trajectory-compare-20260612.md).
+  both arms had `session_count=10`, `trace_count=32`,
+  `formal_candidate_count=5`, all `32` prompt manifests loaded, and no forbidden
+  field/value leakage. The comparison reproduced the trajectory divergence:
+  ON had `9` hypothesis, `18` tool-selection, `5` code traces and mechanisms
+  `subcategory_pack_upgrade`, `split_preserving_evacuate`,
+  `split_safe_cost_merge`; record-only had `10` hypothesis, `17`
+  tool-selection, `5` code traces and mechanisms `subcategory_block_repack`,
+  `safe_gap_fill`, `best_of_k_merge`, `compatible_repack_merge`. Acceptance:
+  proposal/fixed-candidate/report suite `27 passed`, py_compile on touched
+  files, real artifact smoke, exact forbidden-key/value scan, and
+  `git diff --check`.
 
 ## Status Cadence
 

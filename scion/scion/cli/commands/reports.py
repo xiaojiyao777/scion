@@ -13,6 +13,115 @@ from scion.core.public_refs import public_artifact_ref
 
 
 def register_report_commands(report_app: typer.Typer) -> None:
+    @report_app.command("proposal-trajectory-manifest")
+    def report_proposal_trajectory_manifest(
+        campaign_dir: str = typer.Option(
+            ...,
+            "--campaign-dir",
+            help="Campaign directory containing agentic session artifacts",
+        ),
+        observed_control_arm: str = typer.Option(
+            ...,
+            "--observed-control-arm",
+            help="Observed measurement-control arm: on or record_only",
+        ),
+        output: str = typer.Option(
+            ...,
+            "--output",
+            "-o",
+            help="Write proposal trajectory manifest JSON to this path",
+        ),
+    ) -> None:
+        """Build a report-only proposal trajectory manifest."""
+        from scion.core.proposal_trajectory_artifacts import (
+            write_proposal_trajectory_manifest,
+        )
+
+        try:
+            manifest_path = write_proposal_trajectory_manifest(
+                campaign_dir,
+                observed_control_arm=observed_control_arm,
+                output_path=output,
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            typer.echo(
+                f"ERROR: failed to build proposal trajectory manifest: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        counts = manifest["counts"]
+        typer.echo(
+            json.dumps(
+                {
+                    "manifest_path": str(manifest_path),
+                    "schema_version": manifest["schema_version"],
+                    "session_count": counts["session_count"],
+                    "trace_count": counts["trace_count"],
+                    "formal_candidate_count": counts["formal_candidate_count"],
+                    "observed_control_arm": manifest["observed_control_arm"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+
+    @report_app.command("proposal-trajectory-compare")
+    def report_proposal_trajectory_compare(
+        left: str = typer.Option(
+            ...,
+            "--left",
+            help="Left proposal trajectory manifest JSON path",
+        ),
+        right: str = typer.Option(
+            ...,
+            "--right",
+            help="Right proposal trajectory manifest JSON path",
+        ),
+        output: str = typer.Option(
+            ...,
+            "--output",
+            "-o",
+            help="Write proposal trajectory comparison JSON to this path",
+        ),
+    ) -> None:
+        """Compare two report-only proposal trajectory manifests."""
+        from scion.core.proposal_trajectory_artifacts import (
+            write_proposal_trajectory_comparison,
+        )
+
+        try:
+            comparison_path = write_proposal_trajectory_comparison(
+                left,
+                right,
+                output_path=output,
+            )
+            comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            typer.echo(
+                f"ERROR: failed to compare proposal trajectory manifests: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        summary = comparison["summary"]
+        typer.echo(
+            json.dumps(
+                {
+                    "comparison_path": str(comparison_path),
+                    "schema_version": comparison["schema_version"],
+                    "observational_only": comparison["observational_only"],
+                    "left_session_count": summary["left"]["session_count"],
+                    "right_session_count": summary["right"]["session_count"],
+                    "left_trace_count": summary["left"]["trace_count"],
+                    "right_trace_count": summary["right"]["trace_count"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+
     @report_app.command("fixed-candidate-replay-manifest")
     def report_fixed_candidate_replay_manifest(
         source: str = typer.Option(

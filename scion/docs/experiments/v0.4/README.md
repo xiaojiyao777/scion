@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [Phase 5 warehouse proposal trajectory compare, 2026-06-12](v04-phase5-warehouse-proposal-trajectory-compare-20260612.md)
 - [Phase 5 warehouse fixed-candidate replay, 2026-06-12](v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md)
 - [Phase 5 warehouse measurement-governance ON/OFF shakedown, 2026-06-12](v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md)
 - [Phase 4 CVRP 8-seed A/A power check, 2026-06-12](v04-phase4-cvrp-8seed-aa-postrun-20260612.md)

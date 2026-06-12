@@ -569,6 +569,25 @@ Warehouse governance ON/OFF shakedown postrun:
   trajectory governance value. The next governance gate should examine
   prompt/context/proposal trajectory controls on warehouse rather than rerunning
   fixed-candidate screening.
+- Report-only proposal trajectory artifacts are accepted. `scion report
+  proposal-trajectory-manifest` now summarizes agentic sessions, LLM trace
+  indexes, prompt-manifest block-family accounting, and replayable formal
+  candidate joins without embedding raw prompts, raw responses, patch bodies,
+  raw metrics, validation/frozen details, or Decision inputs. `scion report
+  proposal-trajectory-compare` compares these manifests and marks the result
+  `observational_only=true` unless a future explicit control-pair key is
+  present. Real warehouse ON/OFF trajectory artifacts are under
+  `/home/clawd/research/scion-experiments/v04-phase5-proposal-trajectory-warehouse-onoff-20260612T0550Z-claw/`.
+  Report:
+  [`../experiments/v0.4/v04-phase5-warehouse-proposal-trajectory-compare-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-proposal-trajectory-compare-20260612.md).
+  Both arms had `session_count=10`, `trace_count=32`,
+  `formal_candidate_count=5`, and `prompt_manifest_loaded_count=32`; exact
+  forbidden-key/value scanning found no raw prompt/response/patch/diagnostic
+  leakage. The comparison confirms that same-patch protocol evaluation was not
+  the source of ON/OFF divergence; the remaining signal is proposal/context
+  trajectory distribution. Next experiment design should separately ablate
+  measurement diagnostics and broader research context rather than treating
+  `record_only` as all-governance-off.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
