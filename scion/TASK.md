@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 focused validation in progress; warehouse audit complete, CVRP audit pending*
-*Updated: 2026-06-11*
+*Status: Phase 4 first-rung validation audited; CVRP power/readiness follow-up required before governance on/off*
+*Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -474,10 +474,10 @@ Exit criteria:
   is `ready` with MDE `577.5`, effect-to-MDE ratio about `1.7e-6`, and signal
   tier `low_power`. Raw A/A pair evidence remains outside
   `DecisionFeatures`.
-- Pending: Phase 4 focused validation. Run short CVRP and warehouse campaigns
-  with local `gpt5.5`, then audit branch depth, same-mechanism follow-up,
-  prompt context, runtime semantics, and evidence against A/A MDE before
-  governance on/off experiments.
+- Completed through first-rung Phase 4 focused validation. Short CVRP and
+  warehouse campaigns have been run and audited with local `gpt5.5`; evidence
+  is now interpreted against A/A MDE/readiness rather than only promotion or
+  aggregate win rate.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
@@ -530,8 +530,6 @@ Exit criteria:
   v1. The fifth screening row is non-counted fresh-runtime replay evidence;
   candidate reconciliation reports four formal candidate artifacts. No
   promotion occurred.
-- Next: warehouse postrun audit and CVRP completion/audit before governance
-  on/off.
 - Completed: warehouse Phase 4 postrun audit at
   `scion/docs/experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md`.
   It accepts the run as valid no-promotion evidence: count reconciliation is
@@ -540,8 +538,6 @@ Exit criteria:
   below MDE, candidates 2/3 were zero-effect same-mechanism follow-ups, and the
   clean fork was negative. Fresh-runtime replay should stay out-of-band for
   Phase 5 accounting/design.
-- Next: wait for CVRP Phase 4 completion, run CVRP postrun audit, then decide
-  whether Phase 4 supports moving to governance on/off.
 - Completed: CVRP first-rung Phase 4 run from commit `32ab596` at
   `/home/clawd/research/scion-experiments/v04-phase4-focused-cvrp-measreadiness-20260611-4r-gpt55-20260611T224916Z-claw`.
   It finished valid with wrapper exit 0, `effective_protocol_rounds=4`,
@@ -550,8 +546,32 @@ Exit criteria:
   `frozen_protocol_results=0`, and champion v1. Decisions:
   `expand_screening`, `continue_explore`, `expand_screening`, `abandon`. No
   promotion occurred.
-- Next: CVRP postrun audit against Phase 1 A/A MDE/readiness, then Phase 4
-  closeout decision for governance on/off.
+- Completed: CVRP Phase 4 postrun audit at
+  `scion/docs/experiments/v0.4/v04-phase4-cvrp-measreadiness-4r-postrun-20260612.md`.
+  It accepts the run as valid screening-only Phase 4 evidence: launch config,
+  copied formal config, A/A calibration, replayable patch artifacts, protocol
+  metrics, verification records, and deterministic decisions reconcile. Runtime
+  semantics are materially healthier for budget-exhausting CVRP: no fresh
+  runtime replay drain, no runtime-only promotion leakage, and saturation is
+  info rather than a gate veto. Branch mechanics improved enough that both
+  mechanisms received same-mechanism expansion under a 4R budget; the strongest
+  research signal was `double_bridge_relink_vns`, which moved from `17/9/6`
+  pair evidence initially to `22/19/7` after expansion, with stable positive
+  clusters on `A-n64-k9`, `A-n80-k10`, `M-n151-k12`, and `X-n110-k13`.
+- Phase 4 closeout decision: the repaired v0.4 evidence path is auditable, and
+  agents can now generate real CVRP/warehouse research attempts with healthier
+  runtime/context/branch mechanics. However, CVRP quality-improvement evidence
+  remains underpowered under the current 4-seed screening protocol: final
+  `double_bridge_relink_vns` median was `-1.25`, CI `[-5.75, 7.25]`, and high
+  CI remained below the Phase 1 CVRP MDE `9.9`. Do not start a long CVRP
+  promotion campaign or use CVRP as the first governance-value ablation without
+  an 8-seed or otherwise power-adjusted measurement configuration check.
+- Next: design the Phase 4 closeout follow-up. Main thread should define the
+  CVRP power-adjusted screening check, decide whether warehouse or another
+  effect-measurable problem is the first governance on/off candidate, and brief
+  subagents for concrete experiment design/analysis. Governance on/off should
+  begin only after the comparison would measure governance value rather than
+  unresolved measurement power.
 
 ## Status Cadence
 

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-11*
+*Last updated: 2026-06-12*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -56,20 +56,20 @@ efficiency promotion where candidate quality did not regress and runtime was
 better than baseline. The v0.4 task is to make that kind of evidence measurable
 and reproducible under the current framework, while preserving the v3 boundary.
 
-The next high-value v0.4 work is a repair-and-validation sequence:
+The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 
-1. Fix v0.4 measurement/runtime semantics needed by current runs:
+1. Preserve the completed v0.4 measurement/runtime semantics repairs:
    problem-owned practical deltas, budget-exhausting runtime interpretation,
    no meaningless runtime-tie fresh replay, and A/A noise-floor calibration.
-2. Improve branch-depth research behavior so a branch can pursue a coherent
-   mechanism beyond shallow one-off attempts, with branch-depth and
-   mechanism-family evidence visible in summaries.
+2. Use the Phase 4 audits to decide the next measurement rung. CVRP is now
+   auditable and produces real solver-design signals, but its 4-seed screening
+   protocol is still underpowered relative to the Phase 1 MDE.
 3. Preserve and validate runtime-improvement promotion semantics for VRP:
    candidates may advance when objective quality ties or remains non-regressive
    and runtime evidence is complete and materially better.
-4. Re-run focused VRP/CVRP and warehouse campaigns only after the above
-   instrumentation and context repairs, then audit them with the 2026-06-09
-   guide at trace and pair level.
+4. Do not start governance on/off until the chosen problem and protocol can
+   measure the expected effect; for CVRP this means an 8-seed or otherwise
+   power-adjusted screening check before any long promotion campaign.
 5. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
@@ -135,12 +135,14 @@ finished with wrapper exit status 0. The frozen postrun baseline is
   mechanism-effect ranking. Source/code visibility was present and must remain
   protected during any context compression.
 
-The current step is Phase 4 from `TASK.md`: run focused validation for repaired
-v0.4 before governance on/off comparisons. Phase 3 measurement readiness is
-integrated: compact Phase 1 A/A artifacts are installed, CVRP and warehouse
-`calibration_ref` paths resolve, and missing/stale/incompatible calibration is
-visible as readiness/status without exposing raw A/A diagnostics to
-`DecisionFeatures`.
+The current step is Phase 4 closeout from `TASK.md`. First-rung CVRP and
+warehouse validation runs are complete and audited. Phase 3 measurement
+readiness is integrated: compact Phase 1 A/A artifacts are installed, CVRP and
+warehouse `calibration_ref` paths resolve, and missing/stale/incompatible
+calibration is visible as readiness/status without exposing raw A/A diagnostics
+to `DecisionFeatures`. The next gate is not a blind long campaign; it is a
+power-adjusted CVRP measurement check and a governance on/off design that uses
+an effect-measurable problem/protocol.
 
 ## 2026-06-11 Phase 1 A/A Calibration
 
@@ -387,8 +389,26 @@ and champion v1: `effective_rounds_completed=4`,
 `validation_protocol_results=0`, and `frozen_protocol_results=0`. The four
 screening decisions were `expand_screening`, `continue_explore`,
 `expand_screening`, and `abandon`; no promotion occurred. Postrun audit is
-pending and must interpret the expanded screening rows against the Phase 1 CVRP
-A/A MDE/readiness before governance on/off.
+complete:
+[`../experiments/v0.4/v04-phase4-cvrp-measreadiness-4r-postrun-20260612.md`](../experiments/v0.4/v04-phase4-cvrp-measreadiness-4r-postrun-20260612.md).
+The audit accepts the run as valid screening-only evidence. Count
+reconciliation is clean (`4` effective protocol rows, `4` screening metric
+rows, and `2` replayable patch artifacts reused by expansion rows), evidence
+and lineage are complete, and v3 boundaries held. Runtime semantics are much
+healthier than the audited pre-repair pattern: no fresh-runtime replay drain,
+budget-exhausting V9 is budget-compliance based, and saturation remains
+info-only.
+
+CVRP research interpretation: the agent generated real mechanisms and branch
+follow-up. `route_limit_aware_repair` was essentially all tie and did not
+approach the Phase 1 MDE. `double_bridge_relink_vns` produced the strongest
+signal, moving from `17/9/6` pair evidence initially to `22/19/7` after
+expansion, but final median was `-1.25` with CI `[-5.75, 7.25]`; the high CI
+bound remains below the CVRP A/A MDE `9.9`. Therefore Phase 4 proves improved
+auditability/runtime/context/branch mechanics, but not CVRP quality-improvement
+readiness under the current 4-seed protocol. The next CVRP action should be an
+8-seed or otherwise power-adjusted screening configuration check before any
+long promotion run.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 
