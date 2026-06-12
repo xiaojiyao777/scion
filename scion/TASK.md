@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse governance shakedown audited; CVRP 8-seed A/A still running*
+*Status: CVRP 8-seed A/A audited; CVRP still low-power*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -581,16 +581,27 @@ Exit criteria:
   the first governance on/off candidate, while CVRP remains blocked from being
   the first governance-value target until the 8-seed/power-adjusted check shows
   usable measurement resolution.
-- Launched: CVRP 8-seed A/A power check at
+- Completed and audited: CVRP 8-seed A/A power check at
   `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-saferoot-20260612T011824Z-claw`.
-  It uses `8` selected screening cases, screening seeds
+  Report:
+  `scion/docs/experiments/v0.4/v04-phase4-cvrp-8seed-aa-postrun-20260612.md`.
+  It used `8` selected screening cases, screening seeds
   `11,29,43,59,73,79,97,103`, `3` replicates, protocol-time runtime limits,
-  champion v1 from the completed Phase 4 CVRP run, and no LLM calls. A prior
+  champion v1 from the completed Phase 4 CVRP run, and no LLM calls. It
+  completed with wrapper exit `0`, `n_pairs=192`, MDE `9.6` raw
+  `total_distance`, false-pass rate `0.0`, and `recommended_min_seeds=16`.
+  This is only a small improvement over the Phase 1 MDE `9.9` and remains
+  `4.8x` above `practical_delta_screen=2.0`, so CVRP is still not ready for a
+  formal governance ON/OFF main experiment or long promotion campaign. A prior
   attempt at
   `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-20260612T011722Z-claw`
   failed before solver execution because the temporary protocol copy no longer
   activated the formal data root; the saferoot rerun fixes this by declaring
   `/home/clawd/research/or-autoresearch-agent/vrp` in the run-root split copy.
+  Caveat: `CMT4` contains `DIMENSION : 151` but received the default `30s`
+  because current dimension resolution appears filename-based; exact
+  protocol-time fidelity needs CMT dimension handling repair or
+  pre-registration.
 - Completed: Ramanujan's minimal `measurement_governance` implementation is
   accepted. `scion run` now exposes `--measurement-governance {on,record-only}`.
   Default ON preserves current measurement-aware protocol/runtime/lifecycle/

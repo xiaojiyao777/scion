@@ -70,9 +70,11 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 4. Treat the completed warehouse ON/OFF run as a shakedown, not a formal
    governance-value conclusion. It validated the switch and warehouse promotion
    path, but the LLM trajectories and promoted patches diverged. Formal
-   governance experiments need fixed-candidate or fixed-order controls. CVRP
-   still needs an 8-seed or otherwise power-adjusted screening check before any
-   long promotion campaign or CVRP governance ablation.
+   governance experiments need fixed-candidate or fixed-order controls. The
+   completed CVRP 8-seed A/A check still measured MDE `9.6`, so CVRP remains
+   low-power for `practical_delta_screen=2.0` and should not be the next formal
+   governance target or long promotion campaign without another pre-registered
+   measurement change.
 5. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
@@ -431,23 +433,34 @@ Two read-only subagent design passes are complete:
   governance-value target until the power-adjusted check shows the measurement
   can detect the expected effect.
 
-CVRP 8-seed A/A launch status:
+CVRP 8-seed A/A postrun:
 
 - Failed diagnostic attempt:
   `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-20260612T011722Z-claw`.
   It exited before solver execution because the temporary protocol copy lived
   outside the formal budgets path, so `cvrplib/...` cases did not receive a
   safe data root.
-- Active saferoot rerun:
+- Accepted saferoot rerun:
   `/home/clawd/research/scion-experiments/v04-phase4-cvrp-8seed-aa-saferoot-20260612T011824Z-claw`.
-  It uses run-root copies of `protocol.yaml`, `seed_ledger.yaml`, and
+  It used run-root copies of `protocol.yaml`, `seed_ledger.yaml`, and
   `split_manifest.yaml`; the split copy declares
   `/home/clawd/research/or-autoresearch-agent/vrp` as `safe_data_roots`. The
-  run has `power_cases=8`, screening seeds
+  run had `power_cases=8`, screening seeds
   `11,29,43,59,73,79,97,103`, `replicates=3`,
   `--runtime-policy protocol_time_limits`, champion v1 from the completed CVRP
-  Phase 4 run, and no LLM calls. Expected scale is `192` A/A pairs / `384`
-  solver invocations.
+  Phase 4 run, and no LLM calls.
+- Report:
+  [`../experiments/v0.4/v04-phase4-cvrp-8seed-aa-postrun-20260612.md`](../experiments/v0.4/v04-phase4-cvrp-8seed-aa-postrun-20260612.md).
+  The run completed at `2026-06-12T04:13:56Z` with wrapper exit `0`,
+  `n_pairs=192`, complete raw pair evidence, MDE `9.6` raw `total_distance`,
+  false-pass rate `0.0`, and `recommended_min_seeds=16`.
+- Interpretation: the 8-seed check does not solve CVRP measurement power. MDE
+  moved only from Phase 1 `9.9` to `9.6`, still `4.8x` above the declared
+  `practical_delta_screen=2.0`. CVRP remains a low-power measurement/research
+  mechanics pressure test until the protocol, seed/case budget, runtime
+  resolution, or effect scale changes. Caveat: `CMT4` has file dimension `151`
+  but received default `30s`, so exact protocol-time fidelity needs CMT
+  dimension handling repair or explicit pre-registration.
 
 Governance on/off implementation status:
 
