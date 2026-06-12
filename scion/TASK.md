@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 focused validation in progress; warehouse valid rerun complete, audits pending*
+*Status: Phase 4 focused validation in progress; warehouse audit complete, CVRP running*
 *Updated: 2026-06-11*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -532,6 +532,16 @@ Exit criteria:
   promotion occurred.
 - Next: warehouse postrun audit and CVRP completion/audit before governance
   on/off.
+- Completed: warehouse Phase 4 postrun audit at
+  `scion/docs/experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md`.
+  It accepts the run as valid no-promotion evidence: count reconciliation is
+  healthy, v3 boundaries held, prompt/source visibility looked adequate, and no
+  candidate cleared warehouse A/A readiness. Candidate 1 was weak mixed signal
+  below MDE, candidates 2/3 were zero-effect same-mechanism follow-ups, and the
+  clean fork was negative. Fresh-runtime replay should stay out-of-band for
+  Phase 5 accounting/design.
+- Next: wait for CVRP Phase 4 completion, run CVRP postrun audit, then decide
+  whether Phase 4 supports moving to governance on/off.
 
 ## Status Cadence
 

@@ -363,6 +363,20 @@ visibility, measurement-readiness context, and candidate evidence relative to
 warehouse A/A MDE. Do not advance to governance on/off until the warehouse audit
 and the still-running CVRP Phase 4 audit are both complete.
 
+Warehouse Phase 4 postrun audit is complete:
+[`../experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md`](../experiments/v0.4/v04-phase4-warehouse-saferoot-4r-postrun-20260612.md).
+Conclusion: this is valid Phase 4 no-promotion evidence. The count reconciliation
+is healthy (`5` screening protocol rows = `4` counted candidates + `1`
+non-counted fresh-runtime replay closure), all four formal candidates have
+complete replay identity, and no candidate was ready for validation relative to
+warehouse A/A readiness. Candidate 1 was weak mixed signal with median delta `50`
+below the modify MDE `577.5`; candidates 2 and 3 were zero-effect
+same-mechanism follow-ups; the clean fork was negative. Prompt/context visibility
+looked adequate and v3 boundaries held. Remaining follow-up: keep
+fresh-runtime replay out-of-band in Phase 5 accounting/design and improve
+top-level counter rendering so replay closure rows are harder to misread as
+extra research candidates.
+
 ## Legacy Detailed Snapshot Through 2026-06-07
 
 The detailed handoff below is retained for provenance. It predates the 2026-06-09
