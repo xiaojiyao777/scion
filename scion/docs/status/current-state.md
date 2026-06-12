@@ -70,9 +70,9 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 4. Treat the completed warehouse ON/OFF run as a shakedown, not a formal
    governance-value conclusion. It validated the switch and warehouse promotion
    path, but the LLM trajectories and promoted patches diverged. Formal
-   governance experiments should use fixed-candidate replay manifests first;
-   fixed-order proposal replay is deferred. The completed CVRP 8-seed A/A check
-   still measured MDE `9.6`, so CVRP remains low-power for
+   governance experiments should use fixed-candidate replay first; fixed-order
+   proposal replay is deferred. The completed CVRP 8-seed A/A check still
+   measured MDE `9.6`, so CVRP remains low-power for
    `practical_delta_screen=2.0` and should not be the next formal governance
    target or long promotion campaign without another pre-registered measurement
    change.
@@ -544,6 +544,20 @@ Warehouse governance ON/OFF shakedown postrun:
   replay/OFF-contract/report tests, `513` core+report tests, `212`
   config/model/context/protocol/Decision tests, Python compile on touched
   implementation files, and `git diff --check`.
+- Accepted: fixed-candidate replay executor. The new `scion report
+  fixed-candidate-replay` command materializes recorded candidate patches and
+  evaluates identical candidates under `measurement_governance=on` and
+  `record_only`, producing a posthoc comparison artifact that is explicitly not
+  campaign, scheduler, Decision, lifecycle, or promotion input. Real warehouse
+  smoke artifact:
+  `/home/clawd/research/scion-experiments/v04-phase5-fixed-candidate-replay-smoke-warehouse-20260612T0508Z-claw/fixed_candidate_replay_comparison.v1.json`.
+  The smoke replayed one candidate with `row_count=2`, `error_count=0`, no
+  code/prompt/raw-diagnostic/BKS/A/A-row leakage, and `causal_candidate_pairing`
+  inherited from the manifest. Both rows completed and failed screening with
+  all ties, so the smoke validates replayability and governance-arm pairing,
+  not candidate efficacy. Acceptance: replay/report focused suite `22 passed`,
+  core/config/context regression `592 passed`, Python compile on touched files,
+  and `git diff --check`.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

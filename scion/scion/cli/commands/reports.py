@@ -76,6 +76,95 @@ def register_report_commands(report_app: typer.Typer) -> None:
             )
         )
 
+    @report_app.command("fixed-candidate-replay")
+    def report_fixed_candidate_replay(
+        manifest: str = typer.Option(
+            ...,
+            "--manifest",
+            help="fixed_candidate_replay_manifest.v1 JSON path",
+        ),
+        problem: str = typer.Option(
+            ...,
+            "--problem",
+            help="ProblemSpecV1 YAML path",
+        ),
+        output_dir: str = typer.Option(
+            ...,
+            "--output-dir",
+            help="Directory for materialized workspaces, metrics, and comparison JSON",
+        ),
+        protocol: Optional[str] = typer.Option(
+            None,
+            "--protocol",
+            help="protocol.yaml path; defaults to problem directory protocol.yaml",
+        ),
+        split: Optional[str] = typer.Option(
+            None,
+            "--split",
+            help="split_manifest.yaml path; defaults to problem directory split_manifest.yaml",
+        ),
+        seeds: Optional[str] = typer.Option(
+            None,
+            "--seeds",
+            help="seed_ledger.yaml path; defaults to problem directory seed_ledger.yaml",
+        ),
+        max_candidates: Optional[int] = typer.Option(
+            None,
+            "--max-candidates",
+            help="Maximum number of manifest candidates to replay",
+        ),
+        time_limit_sec: Optional[int] = typer.Option(
+            None,
+            "--time-limit-sec",
+            help="Solver subprocess time limit in seconds",
+        ),
+        output: Optional[str] = typer.Option(
+            None,
+            "--output",
+            "-o",
+            help="Comparison JSON path; defaults under output-dir",
+        ),
+    ) -> None:
+        """Run posthoc fixed-candidate screening replay for manifest arms."""
+        from scion.core.fixed_candidate_replay import execute_fixed_candidate_replay
+
+        try:
+            comparison_path = execute_fixed_candidate_replay(
+                manifest,
+                problem_yaml_path=problem,
+                output_dir=output_dir,
+                protocol_path=protocol,
+                split_path=split,
+                seeds_path=seeds,
+                max_candidates=max_candidates,
+                time_limit_sec=time_limit_sec,
+                comparison_output_path=output,
+            )
+            comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            typer.echo(
+                f"ERROR: failed to execute fixed-candidate replay: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        error_count = sum(
+            1 for row in comparison.get("rows", []) if row.get("status") == "error"
+        )
+        typer.echo(
+            json.dumps(
+                {
+                    "comparison_path": str(comparison_path),
+                    "candidate_count": comparison["candidate_count"],
+                    "row_count": comparison["row_count"],
+                    "error_count": error_count,
+                    "schema_version": comparison["schema_version"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+
     @report_app.command("summary")
     def report_summary(
         campaign_dir: str = typer.Option(

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Fixed-candidate replay manifest and measurement-only OFF contract accepted*
+*Status: Fixed-candidate replay executor accepted*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -663,6 +663,20 @@ Exit criteria:
   rationale, raw measurement diagnostics, BKS/gap, or raw A/A rows. Tests passed:
   focused replay/OFF-contract/report suite `117 passed`, core+report suite
   `513 passed`, config/model/context/protocol/Decision suite `212 passed`,
+  Python compile on touched implementation files, and `git diff --check`.
+- Accepted: fixed-candidate replay executor. `scion report
+  fixed-candidate-replay` materializes each manifest candidate from its recorded
+  `candidate.patch.json`, evaluates the same patch under the manifest arms, and
+  writes a posthoc `scion.fixed_candidate_replay_comparison.v1` artifact. The
+  executor does not enter the campaign loop, scheduler, Decision, lifecycle, or
+  promotion state. Real warehouse smoke:
+  `/home/clawd/research/scion-experiments/v04-phase5-fixed-candidate-replay-smoke-warehouse-20260612T0508Z-claw/fixed_candidate_replay_comparison.v1.json`
+  replayed one warehouse shakedown candidate under `on` and `record_only` with
+  `row_count=2`, `error_count=0`, and no code/prompt/raw-diagnostic/BKS/A/A-row
+  leakage. Both rows completed and failed screening with all ties, which is
+  acceptable for executor smoke because the gate is replayability and causal
+  candidate pairing, not candidate efficacy. Acceptance tests: focused
+  replay/report suite `22 passed`, core/config/context regression `592 passed`,
   Python compile on touched implementation files, and `git diff --check`.
 
 ## Status Cadence
