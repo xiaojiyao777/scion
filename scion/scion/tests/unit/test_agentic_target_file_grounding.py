@@ -2073,6 +2073,14 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
         "import_whitelist": "math, random",
         "editable_patterns": "policies/baseline_algorithm.py, policies/baseline_modules/*.py",
         "frozen_patterns": "adapter.py, solver.py",
+        "measurement_governance": "record_only",
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "measurement_readiness": {"status": "degraded"},
+            "opportunity_diagnostics": [
+                {"diagnostic_type": "low_snr", "reason_codes": ["LOW_POWER"]}
+            ],
+        },
     }
     system_blocks, user_prompt = _split_code_context(prompt_context)
     manifest = build_api_visible_prompt_manifest(
@@ -2136,6 +2144,12 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
     assert guarantees["required_integration_source_visible"] is True
     assert guarantees["algorithm_file_read_source_visible"] is True
     assert guarantees["protected_source_visible"] is True
+    assert prompt_context["measurement_governance"] == "record_only"
+    assert target_record["source_status"] == "current_branch_source"
+    assert integration_records["policies/baseline_algorithm.py"][
+        "source_provenance"
+    ] == "branch_workspace"
+    assert champion_source_record["source_status"] == "current_branch_source"
     assert guarantees["required_integration_source_count"] == 1
     assert guarantees["algorithm_file_read_source_count"] == 1
     assert guarantees.get("missing_required_source_paths", []) == []

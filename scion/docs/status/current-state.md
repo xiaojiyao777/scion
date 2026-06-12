@@ -70,11 +70,12 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 4. Treat the completed warehouse ON/OFF run as a shakedown, not a formal
    governance-value conclusion. It validated the switch and warehouse promotion
    path, but the LLM trajectories and promoted patches diverged. Formal
-   governance experiments need fixed-candidate or fixed-order controls. The
-   completed CVRP 8-seed A/A check still measured MDE `9.6`, so CVRP remains
-   low-power for `practical_delta_screen=2.0` and should not be the next formal
-   governance target or long promotion campaign without another pre-registered
-   measurement change.
+   governance experiments should use fixed-candidate replay manifests first;
+   fixed-order proposal replay is deferred. The completed CVRP 8-seed A/A check
+   still measured MDE `9.6`, so CVRP remains low-power for
+   `practical_delta_screen=2.0` and should not be the next formal governance
+   target or long promotion campaign without another pre-registered measurement
+   change.
 5. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
@@ -523,10 +524,26 @@ Warehouse governance ON/OFF shakedown postrun:
 - Acceptance for that slice: targeted repair suite `296 passed`, full
   `unit/core` `494 passed`, protocol/adapter subset `99 passed`, Python compile
   on touched core/config files, and `git diff --check`.
-- Remaining before a formal governance experiment: fixed-candidate or
-  fixed-order replay controls, plus a precise record-only/off ablation contract
-  that decides whether OFF removes only measurement diagnostics or all governance
-  opportunity signals.
+- Accepted: fixed-candidate replay manifest builder and measurement-only OFF
+  audit assertions are implemented. Fixed-order proposal replay remains deferred
+  because the current APS replay surface validates stored artifacts but does not
+  safely re-execute the same LLM/tool trajectory, and scheduler order is dynamic.
+  The lower-risk v0.4 control is a `fixed_candidate_replay_manifest.v1` built from
+  `formal_candidates/index.jsonl` and `candidate.patch.json`, then used to
+  evaluate identical patches under `measurement_governance=on` and
+  `record_only`.
+- Ablation contract decision: current `record_only` means measurement governance
+  OFF, not all governance OFF. It may still expose non-measurement objective
+  opportunity, runtime feedback, cross-branch research, branch memory, and source
+  visibility. Formal reports must name this scope precisely; causal claims need
+  `causal_candidate_pairing=true` or an equivalent pre-registered control.
+- Acceptance for this gate: real warehouse shakedown artifacts generated fixed
+  candidate manifests for both source arms (`5` candidates, `0` omitted rows
+  each) without leaking code body, prompt text, LLM rationale, raw measurement
+  diagnostics, BKS/gap, or raw A/A rows. Tests passed: `117` focused
+  replay/OFF-contract/report tests, `513` core+report tests, `212`
+  config/model/context/protocol/Decision tests, Python compile on touched
+  implementation files, and `git diff --check`.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

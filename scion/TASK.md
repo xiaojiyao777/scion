@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Post-shakedown framework repairs integrated; next gate is formal replay/ablation design*
+*Status: Fixed-candidate replay manifest and measurement-only OFF contract accepted*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -629,8 +629,14 @@ Exit criteria:
   `operators/merge_vehicles.py` patches diverged. Record-only suppresses
   `problem_measurement_diagnostics` but still exposes opportunity/runtime/
   cross-branch/research-governance signals; code-phase source visibility held.
-- Next before a formal governance experiment: fixed-candidate or fixed-order
-  replay controls and a precise record-only/off ablation contract.
+- Accepted before a formal governance experiment: fixed-candidate replay
+  manifest construction and explicit measurement-only OFF audit assertions.
+  Fixed-order proposal replay is deferred because current APS replay validates
+  stored artifacts but does not safely re-execute the same LLM/tool trajectory,
+  and scheduler order is dynamic. Fixed-candidate replay is the lower-risk v0.4
+  control because it reuses recorded `formal_candidates/index.jsonl` and
+  `candidate.patch.json` artifacts, then evaluates identical patches under
+  `measurement_governance=on` and `record_only`.
 - Accepted after the warehouse shakedown and CVRP 8-seed A/A audit: the first
   post-shakedown framework repair slice now covers the previously identified
   observability and lineage debts. `campaign_summary.json` records
@@ -645,6 +651,19 @@ Exit criteria:
   Acceptance: targeted repair suite `296 passed`, full `unit/core`
   `494 passed`, protocol/adapter subset `99 passed`, Python compile on touched
   core/config files, and `git diff --check`.
+- Active main-thread design decision: v0.4 `record_only` means measurement
+  governance OFF, not all governance OFF. It may still expose non-measurement
+  objective opportunity, runtime feedback, cross-branch research, branch memory,
+  and source visibility. Formal experiment reports must name this scope
+  precisely; causal claims require `causal_candidate_pairing=true` from a
+  fixed-candidate replay manifest or an equivalent pre-registered control.
+- Acceptance for the fixed-candidate/OFF-contract gate: real warehouse shakedown
+  artifacts generated fixed-candidate manifests for both source arms (`5`
+  candidates, `0` omitted rows each) without leaking code body, prompt text, LLM
+  rationale, raw measurement diagnostics, BKS/gap, or raw A/A rows. Tests passed:
+  focused replay/OFF-contract/report suite `117 passed`, core+report suite
+  `513 passed`, config/model/context/protocol/Decision suite `212 passed`,
+  Python compile on touched implementation files, and `git diff --check`.
 
 ## Status Cadence
 

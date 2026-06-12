@@ -13,6 +13,69 @@ from scion.core.public_refs import public_artifact_ref
 
 
 def register_report_commands(report_app: typer.Typer) -> None:
+    @report_app.command("fixed-candidate-replay-manifest")
+    def report_fixed_candidate_replay_manifest(
+        source: str = typer.Option(
+            ...,
+            "--source",
+            help="Source campaign directory or formal_candidates/index.jsonl",
+        ),
+        source_arm: str = typer.Option(
+            ...,
+            "--source-arm",
+            help="Measurement governance arm that produced the source candidates",
+        ),
+        comparison_id: str = typer.Option(
+            ...,
+            "--comparison-id",
+            help="Stable identifier for the ON vs record_only comparison",
+        ),
+        output: Optional[str] = typer.Option(
+            None,
+            "--output",
+            "-o",
+            help="Write manifest to this path",
+        ),
+        max_candidates: Optional[int] = typer.Option(
+            None,
+            "--max-candidates",
+            help="Maximum number of eligible candidates to include",
+        ),
+    ) -> None:
+        """Build a fixed-candidate replay manifest from formal artifacts."""
+        from scion.core.fixed_candidate_replay import (
+            write_fixed_candidate_replay_manifest,
+        )
+
+        try:
+            manifest_path = write_fixed_candidate_replay_manifest(
+                source,
+                source_arm=source_arm,
+                comparison_id=comparison_id,
+                output_path=output,
+                max_candidates=max_candidates,
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            typer.echo(
+                f"ERROR: failed to build fixed-candidate replay manifest: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(
+            json.dumps(
+                {
+                    "manifest_path": str(manifest_path),
+                    "candidate_count": manifest["candidate_count"],
+                    "omitted_row_count": len(manifest["omitted_rows"]),
+                    "schema_version": manifest["schema_version"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+
     @report_app.command("summary")
     def report_summary(
         campaign_dir: str = typer.Option(

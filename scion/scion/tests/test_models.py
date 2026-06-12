@@ -9,6 +9,7 @@ from scion.core.explore_step.material_difference import (
 from scion.core.explore_step.pipeline import (
     material_difference_pre_code_block_reason as pipeline_md_block_reason,
 )
+from scion.core.decision_features_serialization import decision_features_to_payload
 from scion.core.models import (
     Branch,
     Decision,
@@ -82,6 +83,59 @@ def test_decision_features_no_free_text_guard():
     for name, expected_type in allowed_fields.items():
         assert name in fields, f"Missing field: {name}"
         # 注意：这里只是静态定义检查，真正的运行时 guard 在 SafeFeatureExtractor 实现
+
+
+def test_decision_features_serialization_excludes_measurement_diagnostics():
+    features = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=10,
+        win_rate=0.7,
+        median_delta=0.05,
+        ci_low=0.01,
+        ci_high=0.09,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+    )
+
+    payload = decision_features_to_payload(features)
+    serialized_keys = set(_walk_mapping_keys(payload))
+    denied_keys = {
+        "measurement_readiness",
+        "calibration_ref",
+        "mde",
+        "mde_at_power_80",
+        "BKS",
+        "bks",
+        "gap",
+        "problem_measurement_diagnostics",
+        "prompt_ratio",
+        "prompt_ratios",
+        "llm_text",
+        "llm_rationale",
+        "free_form_notes",
+        "notes",
+        "effect_to_mde_ratio",
+        "signal_to_noise_tier",
+    }
+
+    assert denied_keys.isdisjoint(serialized_keys)
+
+
+def _walk_mapping_keys(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from _walk_mapping_keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_mapping_keys(item)
 
 def test_branch_state_enum():
     """验证 BranchState 涵盖了所有必要状态。"""

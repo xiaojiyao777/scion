@@ -119,7 +119,7 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
 
 
 def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
-    """Record-only keeps readiness audit status without changing governance knobs."""
+    """Record-only is measurement governance off, not all governance off."""
     measurement = type(
         "Measurement",
         (),
@@ -148,7 +148,16 @@ def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
         problem_spec,
         governance_mode="record_only",
     )
+    on_config = base.with_problem_measurement(
+        problem_spec,
+        governance_mode="on",
+    )
 
+    assert on_config.measurement_governance == "on"
+    assert on_config.screening_min_practical_delta == 2.5
+    assert on_config.validation_min_practical_delta == 1.25
+    assert on_config.runtime.runtime_model == "budget_exhausting"
+    assert on_config.pairing_validity == "trajectory_divergent"
     assert config.measurement_governance == "record_only"
     assert config.measurement_readiness.status == "not_ready"
     assert config.measurement_readiness.reason_code == "missing_calibration_ref"

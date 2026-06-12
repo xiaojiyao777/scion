@@ -546,6 +546,38 @@ def test_record_only_measurement_governance_suppresses_prompt_measurement_diagno
             "## Objective Opportunity Profile (screening only)\n"
             "- total_cost: positive_cases=1 negative_cases=0 tie_cases=1"
         ),
+        "runtime_feedback": (
+            "## Runtime Feedback\n"
+            "candidate runtime ratio remains within the branch budget"
+        ),
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:non-measurement-still-visible",
+                    "scope": "cross_branch",
+                    "summary": "A sibling branch preserved feasibility.",
+                    "usage_requirement": {
+                        "required_output_field": "branch_lesson_usage",
+                    },
+                }
+            ],
+        },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:record-only",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:branch-memory-still-visible",
+                "scope": "same_branch",
+                "summary": "Current branch memory remains available.",
+            }
+        ],
         "measurement_governance": "record_only",
         "problem_measurement_diagnostics": {
             "schema_version": "problem_measurement_proposal_diagnostic.v1",
@@ -577,6 +609,19 @@ def test_record_only_measurement_governance_suppresses_prompt_measurement_diagno
     assert "measurement-owned low SNR guidance" not in rendered_prompt
     assert "opportunity_status=opportunity_poor" not in rendered_prompt
     assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
+    still_on_non_measurement_signals = {
+        "objective_opportunity_profile": "Objective Opportunity Profile",
+        "runtime_feedback": "Runtime Feedback",
+        "cross_branch_research": "compact_cross_branch_learning.v1",
+        "branch_lesson_records": "lesson:branch-memory-still-visible",
+        "branch_lesson_usage_requirement": (
+            "branch_lesson_usage_requirement:record-only"
+        ),
+    }
+    for key, expected_text in still_on_non_measurement_signals.items():
+        assert key in filtered
+        assert expected_text in str(filtered[key])
+        assert expected_text in rendered_prompt
 
     manifest = build_api_visible_prompt_manifest(
         session_id="session-record-only-measurement-suppressed",
