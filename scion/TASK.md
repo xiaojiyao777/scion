@@ -723,9 +723,12 @@ Exit criteria:
   [`docs/experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md`](docs/experiments/v0.4/v04-phase5-warehouse-proposal-context-ablation-shakedown-20260612.md).
   It confirmed intended prompt visibility and report-only guardrails, but no
   arm promoted, fresh-runtime replay pressure persisted in the two non-full
-  arms, and proposal trajectory session-to-formal-candidate joins plus
-  top-level context-arm fingerprints need repair or pre-registration before
-  formal repeat analysis. CVRP remains excluded from formal governance-value
+  arms, and the initial trajectory report exposed weak attribution. The
+  follow-up report repair adds top-level trajectory `context_arm_fingerprint`
+  and conservative `branch_code_sequence` formal-candidate attribution,
+  validated on the real shakedown artifacts. The fallback assumes branch-local
+  code-session order matches formal candidate row order, so direct stable
+  linkage remains preferred. CVRP remains excluded from formal governance-value
   conclusions until measurement power improves.
 
 ## Status Cadence

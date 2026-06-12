@@ -52,6 +52,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         counts = manifest["counts"]
+        context_arm = manifest.get("context_arm_fingerprint", {})
         typer.echo(
             json.dumps(
                 {
@@ -61,6 +62,9 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "trace_count": counts["trace_count"],
                     "formal_candidate_count": counts["formal_candidate_count"],
                     "observed_control_arm": manifest["observed_control_arm"],
+                    "proposal_context_ablation": context_arm.get(
+                        "proposal_context_ablation", ""
+                    ),
                 },
                 indent=2,
                 sort_keys=True,

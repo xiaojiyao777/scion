@@ -86,9 +86,15 @@ proposal-context ablation shakedown from commit `2a88e86`:
 All arms kept `measurement_governance=on`; the ablation was proposal-visible
 only. The run validated the `full`, `no-measurement-diagnostics`, and
 `minimal-research-context` switch in real warehouse campaigns, but remains
-observational-only. No arm promoted, runtime-tie/fresh-replay pressure still
-appeared in the two non-full arms, and proposal trajectory session-to-candidate
-joins need repair or pre-registration before formal repeat analysis.
+observational-only. No arm promoted, and runtime-tie/fresh-replay pressure
+still appeared in the two non-full arms. The follow-up report repair adds
+top-level trajectory `context_arm_fingerprint` and a conservative
+  `branch_code_sequence` join fallback that maps every replayable formal
+  candidate to the corresponding code-bearing session in the real shakedown
+  artifacts. This fallback preserves hypothesis-only sessions as missing and
+  depends on branch-local code-session order matching formal candidate row
+  order; future campaigns should persist direct session/request/hypothesis
+  linkage in formal candidate rows.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
@@ -606,10 +612,13 @@ Warehouse governance ON/OFF shakedown postrun:
   keep `measurement_governance=on` so protocol, runtime, lifecycle,
   DecisionFeatures, and promotion semantics stay matched. The shakedown
   confirmed intended prompt visibility and report-only guardrails, but no arm
-  promoted, fresh-runtime replay pressure persisted, and the proposal
-  trajectory session-to-formal-candidate join heuristic plus top-level
-  context-arm fingerprinting must be fixed or pre-registered before formal
-  repeats are treated as attribution evidence.
+  promoted and fresh-runtime replay pressure persisted. The follow-up report
+  repair adds top-level trajectory `context_arm_fingerprint` and conservative
+  `branch_code_sequence` formal-candidate attribution, validated on the real
+  shakedown artifacts. Future campaigns should still prefer direct
+  session/request ids in formal candidate rows over fallback attribution,
+  because the fallback assumes branch-local code-session order matches formal
+  candidate row order.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

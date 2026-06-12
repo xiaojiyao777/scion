@@ -74,13 +74,20 @@ def build_proposal_trajectory_manifest(
     sessions: list[dict[str, Any]] = []
     missing_joins: list[dict[str, str]] = []
 
-    for item in sorted(session_items, key=_session_sort_key):
+    sorted_session_items = sorted(session_items, key=_session_sort_key)
+    session_join_hints = _session_join_hints(
+        sorted_session_items,
+        trace_by_session=trace_by_session,
+    )
+
+    for item in sorted_session_items:
         session = _session_fingerprint(
             item,
             trace_by_session.get(_clean_str(item.get("session_id"))),
             formal_join_index=formal_join_index,
             campaign_dir=campaign_path,
             agentic_dir=agentic_dir,
+            join_hints=session_join_hints.get(_clean_str(item.get("session_id")), {}),
         )
         prompt_manifest_ref_count += session.pop("_prompt_manifest_ref_count", 0)
         prompt_manifest_loaded_count += session.pop("_prompt_manifest_loaded_count", 0)
@@ -144,6 +151,7 @@ def build_proposal_trajectory_manifest(
                 sorted(formal_join_index.join_basis_counts.items())
             ),
         },
+        "context_arm_fingerprint": _context_arm_fingerprint(sessions),
         "call_kind_counts": _call_kind_counts(sessions),
         "proposal_distributions": _proposal_distributions(sessions),
         "prompt_block_family_aggregate": _block_family_aggregate(sessions),
@@ -206,6 +214,10 @@ def build_proposal_trajectory_comparison(
             "right": _manifest_count_summary(right_manifest),
             "delta": _count_delta(left_manifest, right_manifest),
         },
+        "context_arm_fingerprints": {
+            "left": _mapping(left_manifest.get("context_arm_fingerprint")),
+            "right": _mapping(right_manifest.get("context_arm_fingerprint")),
+        },
         "call_kind_counts": _paired_counter_summary(
             left_manifest.get("call_kind_counts"),
             right_manifest.get("call_kind_counts"),
@@ -260,6 +272,7 @@ def _session_fingerprint(
     formal_join_index: "_FormalCandidateJoinIndex",
     campaign_dir: Path,
     agentic_dir: Path,
+    join_hints: Mapping[str, Any],
 ) -> dict[str, Any]:
     session_id = _clean_str(item.get("session_id"))
     request_id = _clean_str(item.get("request_id")) or session_id
@@ -282,6 +295,13 @@ def _session_fingerprint(
             "branch_id": branch_id,
             "hypothesis_id": _clean_str(
                 item.get("hypothesis_id") or hypothesis_summary.get("hypothesis_id")
+            ),
+            "has_code_trace": _clean_str(join_hints.get("has_code_trace")),
+            "branch_code_ordinal": _clean_str(
+                join_hints.get("branch_code_ordinal")
+            ),
+            "branch_code_session_count": _clean_str(
+                join_hints.get("branch_code_session_count")
             ),
         }
     )
@@ -462,6 +482,50 @@ def _prompt_block_family_summary(prompt_manifest: Mapping[str, Any]) -> dict[str
     )
 
 
+def _session_join_hints(
+    items: list[Mapping[str, Any]],
+    *,
+    trace_by_session: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    has_code_by_session: dict[str, bool] = {}
+    branch_code_totals: Counter[str] = Counter()
+    for item in items:
+        session_id = _clean_str(item.get("session_id"))
+        branch_id = _clean_str(item.get("branch_id"))
+        trace_session = trace_by_session.get(session_id)
+        has_code = _trace_session_has_code(trace_session)
+        has_code_by_session[session_id] = has_code
+        if session_id and branch_id and has_code:
+            branch_code_totals[branch_id] += 1
+
+    branch_code_seen: Counter[str] = Counter()
+    hints: dict[str, dict[str, Any]] = {}
+    for item in items:
+        session_id = _clean_str(item.get("session_id"))
+        branch_id = _clean_str(item.get("branch_id"))
+        if not session_id:
+            continue
+        has_code = bool(has_code_by_session.get(session_id))
+        payload: dict[str, Any] = {"has_code_trace": has_code}
+        if branch_id and has_code:
+            branch_code_seen[branch_id] += 1
+            payload["branch_code_ordinal"] = branch_code_seen[branch_id]
+            payload["branch_code_session_count"] = branch_code_totals[branch_id]
+        hints[session_id] = payload
+    return hints
+
+
+def _trace_session_has_code(trace_session: Mapping[str, Any] | None) -> bool:
+    if not isinstance(trace_session, Mapping):
+        return False
+    for trace in trace_session.get("traces", []) or []:
+        if not isinstance(trace, Mapping):
+            continue
+        if _clean_str(trace.get("call_kind") or trace.get("request_kind")) == "code":
+            return True
+    return False
+
+
 class _FormalCandidateJoinIndex:
     def __init__(self, rows: list[Mapping[str, Any]]) -> None:
         self.rows = rows
@@ -475,7 +539,7 @@ class _FormalCandidateJoinIndex:
             self.replayable_rows,
             ("branch_id", "hypothesis_id"),
         )
-        self._by_branch = _index_unique(self.replayable_rows, "branch_id")
+        self._by_branch_order = _index_ordered(self.replayable_rows, "branch_id")
 
     def match_session(self, session: Mapping[str, str]) -> dict[str, str]:
         match: Mapping[str, Any] | None = None
@@ -490,7 +554,6 @@ class _FormalCandidateJoinIndex:
                 ),
                 self._by_branch_hypothesis,
             ),
-            ("unique_branch_id", session.get("branch_id"), self._by_branch),
         ):
             if not key:
                 continue
@@ -498,6 +561,20 @@ class _FormalCandidateJoinIndex:
             if match is not None:
                 basis = candidate_basis
                 break
+        if match is None:
+            branch_id = _clean_str(session.get("branch_id"))
+            branch_rows = self._by_branch_order.get(branch_id, [])
+            code_ordinal = _int_or_zero(session.get("branch_code_ordinal"))
+            code_session_count = _int_or_zero(session.get("branch_code_session_count"))
+            if (
+                _bool_str(session.get("has_code_trace"))
+                and branch_rows
+                and code_ordinal
+                and code_session_count == len(branch_rows)
+                and code_ordinal <= len(branch_rows)
+            ):
+                match = branch_rows[code_ordinal - 1]
+                basis = "branch_code_sequence"
         if not match:
             return {"join_status": "missing_formal_candidate_join"}
         self.join_basis_counts[basis] += 1
@@ -662,6 +739,37 @@ def _proposal_distributions(sessions: list[Mapping[str, Any]]) -> dict[str, dict
     }
 
 
+def _context_arm_fingerprint(sessions: list[Mapping[str, Any]]) -> dict[str, Any]:
+    counts: Counter[str] = Counter()
+    unknown_trace_count = 0
+    for session in sessions:
+        for trace in session.get("trace_fingerprints", []) or []:
+            if not isinstance(trace, Mapping):
+                continue
+            arm = _clean_str(trace.get("proposal_context_ablation"))
+            if arm:
+                counts[arm] += 1
+            else:
+                unknown_trace_count += 1
+    known_trace_count = sum(counts.values())
+    dominant = ""
+    mixed = len(counts) > 1
+    if len(counts) == 1:
+        dominant = next(iter(counts))
+    elif mixed:
+        dominant = "mixed"
+    elif unknown_trace_count:
+        dominant = "unknown"
+    return {
+        "source": "prompt_manifest.context_profile_metadata.proposal_context_ablation",
+        "proposal_context_ablation": dominant,
+        "proposal_context_ablation_counts": dict(sorted(counts.items())),
+        "known_trace_count": known_trace_count,
+        "unknown_trace_count": unknown_trace_count,
+        "mixed": mixed,
+    }
+
+
 def _block_family_aggregate(sessions: list[Mapping[str, Any]]) -> dict[str, Any]:
     family_chars: Counter[str] = Counter()
     family_tokens: Counter[str] = Counter()
@@ -796,6 +904,18 @@ def _index_unique(
     return {row_key: items[0] for row_key, items in values.items() if len(items) == 1}
 
 
+def _index_ordered(
+    rows: list[Mapping[str, Any]],
+    key: str,
+) -> dict[str, list[Mapping[str, Any]]]:
+    values: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        row_key = _clean_str(row.get(key))
+        if row_key:
+            values.setdefault(row_key, []).append(row)
+    return values
+
+
 def _index_unique_composite(
     rows: list[Mapping[str, Any]],
     keys: tuple[str, ...],
@@ -902,6 +1022,12 @@ def _float_or_none(value: Any) -> float | None:
 def _float_or_zero(value: Any) -> float:
     result = _float_or_none(value)
     return result if result is not None else 0.0
+
+
+def _bool_str(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return _clean_str(value).lower() in {"1", "true", "yes", "on"}
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

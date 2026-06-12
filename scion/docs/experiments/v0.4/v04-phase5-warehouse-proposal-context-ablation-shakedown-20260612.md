@@ -3,7 +3,7 @@
 *Date: 2026-06-12*
 *Branch: `codex/v04-evidence-repair-plan`*
 *Executor commit: `2a88e86`*
-*Status: valid 3-arm shakedown; observational only*
+*Status: valid 3-arm shakedown; trajectory attribution repaired; observational only*
 
 ## Summary
 
@@ -47,6 +47,11 @@ Generated report artifacts:
 - `minimal-research-context-proposal-trajectory-manifest.v1.json`
 - `full-vs-no-measurement-diagnostics-comparison.v1.json`
 - `full-vs-minimal-research-context-comparison.v1.json`
+
+Follow-up report-attribution repair validation regenerated the manifests and
+comparisons against the same source campaigns under:
+
+`/tmp/scion-proposal-context-ablation-report-fix`
 
 Launch shape:
 
@@ -160,20 +165,42 @@ Trajectory distributions diverged materially:
 | `no-measurement-diagnostics` | `subcategory_consolidation_repack` 6, `split_neutral_cost_compaction` 2 | 2 order-level, 6 vehicle-level | 2 target files |
 | `minimal-research-context` | `consolidate_subcategory` 4, `repack_split_subcategory` 4 | 8 vehicle-level | 2 target files |
 
-Formal-candidate session joins need follow-up before treating the trajectory
-reports as formal attribution evidence. `full` joined six sessions to three
-formal candidates, `no-measurement-diagnostics` joined two sessions to four
-formal candidates, and `minimal-research-context` joined zero sessions to four
-formal candidates. The formal candidate rows themselves are present and
-replayable; the report-only session-to-candidate join heuristic is the weak
-link.
+The original trajectory artifacts exposed a report-attribution gap: the formal
+candidate rows were present and replayable, but the session-to-candidate join
+heuristic did not understand the common agentic shape where a hypothesis-only
+session is followed by a separate code-bearing session. A follow-up repair adds
+a conservative `branch_code_sequence` fallback. Exact session/request/
+hypothesis matches still win; the fallback only fires when the number of
+code-bearing sessions on a branch equals the number of replayable formal
+candidate rows for that branch. Hypothesis-only sessions remain unjoined.
 
-The ablation arm is also not yet summarized in `campaign_summary.json` or
-`status.json`; those files record `measurement_governance=on`, while
-`proposal_context_ablation` / `context_ablation_arm` are `null`. The arm is
-recoverable from run path and prompt manifests, but formal repeats should add a
-top-level context-arm fingerprint or explicitly pre-register the path/manifest
-join as the arm identity.
+Regenerated trajectory manifest coverage on the same source campaigns:
+
+| Arm | Formal candidates | Joined sessions | Missing session joins | Join basis | Context arm known/unknown traces |
+| --- | ---: | ---: | ---: | --- | --- |
+| `full` | 3 | 3 | 5 | `branch_code_sequence`: 3 | `full`: 8 / 15 unknown |
+| `no-measurement-diagnostics` | 4 | 4 | 4 | `branch_code_sequence`: 4 | `no-measurement-diagnostics`: 8 / 15 unknown |
+| `minimal-research-context` | 4 | 4 | 4 | `branch_code_sequence`: 4 | `minimal-research-context`: 8 / 15 unknown |
+
+The remaining missing session joins are hypothesis-only sessions or sessions
+without a formal candidate. The unknown context-arm traces are tool-selection
+and code calls whose prompt manifests do not carry hypothesis-context
+metadata; all eight hypothesis-context traces per arm carry the expected
+ablation value.
+
+The `branch_code_sequence` join is a fallback, not a replacement for stable
+join keys. It depends on the within-branch order of code-bearing sessions
+matching the append order of replayable formal candidate rows. That order held
+for this shakedown. Future campaigns should persist direct `session_id`,
+`request_id`, or `hypothesis_id` linkage in formal candidate rows when
+available.
+
+`campaign_summary.json` and `status.json` still record
+`measurement_governance=on` while `proposal_context_ablation` /
+`context_ablation_arm` are `null`. The repaired trajectory manifest and
+comparison now expose a top-level `context_arm_fingerprint`; a future campaign
+summary field would still make arm identity easier to inspect without loading
+report artifacts.
 
 A coarse forbidden-token scan of the generated trajectory manifest/comparison
 artifacts found no raw prompt, raw response, code body, raw measurement
@@ -202,8 +229,11 @@ governance-value claims:
 2. Context compression helps token volume but does not automatically improve
    research quality. `minimal-research-context` produced narrower vehicle-level
    exploration and no promotion in this short run.
-3. The proposal trajectory report needs stronger session-to-formal-candidate
-   attribution before it can support formal repeat analysis.
+3. The original proposal trajectory report needed stronger
+   session-to-formal-candidate attribution. The follow-up report repair closes
+   the shakedown blocker with a conservative code-session sequence fallback,
+   but direct persistence of session/request ids in formal candidate rows would
+   still be a stronger long-term attribution source.
 
 ## Independent Check
 
@@ -221,12 +251,18 @@ check:
 - formal repeat analysis should first fix or pre-register the missing
   top-level context-arm fingerprint and weak session-to-formal-candidate join.
 
+The subsequent main-thread repair addressed those two report-layer blockers in
+trajectory artifacts. Plato performed a follow-up read-only review and accepted
+the v3 boundary, report-only guardrails, and conservative fallback shape. Its
+main caveat is the same order assumption above. The result remains posthoc and
+observational-only.
+
 ## Next Gate
 
-This run is accepted as a shakedown. Before launching formal repeats, fix or
-pre-register the formal-candidate join limitation and add a top-level
-context-arm fingerprint to trajectory/campaign reports. Then run a warehouse
-3-arm repeat matrix with the same arms, longer round budget, and
-fixed-candidate replay after generation. CVRP should remain a
-context/source/DecisionFeatures smoke target only until measurement power
-improves.
+This run is accepted as a shakedown. The immediate report-layer blockers are
+repaired for trajectory artifacts: regenerated manifests expose top-level
+context-arm fingerprints and join every replayable formal candidate to the
+corresponding code-bearing session. The next gate is a warehouse 3-arm repeat
+matrix with the same arms, longer round budget, and fixed-candidate replay
+after generation. CVRP should remain a context/source/DecisionFeatures smoke
+target only until measurement power improves.
