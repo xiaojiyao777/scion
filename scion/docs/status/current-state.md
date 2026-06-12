@@ -67,9 +67,12 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 3. Preserve and validate runtime-improvement promotion semantics for VRP:
    candidates may advance when objective quality ties or remains non-regressive
    and runtime evidence is complete and materially better.
-4. Do not start governance on/off until the chosen problem and protocol can
-   measure the expected effect; for CVRP this means an 8-seed or otherwise
-   power-adjusted screening check before any long promotion campaign.
+4. Treat the completed warehouse ON/OFF run as a shakedown, not a formal
+   governance-value conclusion. It validated the switch and warehouse promotion
+   path, but the LLM trajectories and promoted patches diverged. Formal
+   governance experiments need fixed-candidate or fixed-order controls. CVRP
+   still needs an 8-seed or otherwise power-adjusted screening check before any
+   long promotion campaign or CVRP governance ablation.
 5. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
@@ -464,29 +467,41 @@ Governance on/off implementation status:
   (`124 passed`);
   full `unit/core` (`489 passed`); problem/boundary/context subset
   (`113 passed`); Python compile on touched files; and `git diff --check`.
-- Warehouse production saferoot can now be used for a small ON/OFF shakedown
-  once the current CVRP A/A run status is accounted for. Treat the first
-  warehouse ON/OFF pair as a switch/pilot unless it reaches validation/frozen
-  or produces MDE-relevant signal; warehouse measurement practical deltas are
-  still `0.001`, so the first contrast may be driven more by context/readiness
-  exposure and replay/accounting behavior than by practical-delta thresholds.
+- Warehouse production saferoot has now been used for a small ON/OFF shakedown.
+  The run validates switch mechanics and the warehouse promotion path, but not
+  governance-value causality. Warehouse measurement practical deltas are still
+  `0.001`, and the first contrast is driven more by context/readiness exposure,
+  replay/accounting behavior, and LLM trajectory divergence than by
+  practical-delta thresholds.
 
-Warehouse governance ON/OFF shakedown launch:
+Warehouse governance ON/OFF shakedown postrun:
 
 - Launched from commit `f604e81` at `2026-06-12T01:31:19Z` with local
   `gpt5.5`, production warehouse saferoot protocol/split/seeds, `--rounds 8`,
   `--time-limit-sec 30`, `--disable-early-stop`, and `--agentic-proposal`.
 - ON arm:
   `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-on-pilot-8r-gpt55-20260612T013119Z-claw`,
-  PID `1787760`, `--measurement-governance on`.
+  `--measurement-governance on`, ended `2026-06-12T02:22:45Z`, wrapper exit
+  `0`.
 - Record-only/OFF arm:
   `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-record_only-pilot-8r-gpt55-20260612T013119Z-claw`,
-  PID `1787770`, `--measurement-governance record-only`.
-- Both arms entered `Starting campaign: warehouse_delivery`; postrun audit must
-  reconcile requested/effective rounds, formal candidates, validation/frozen
-  reach, prompt-visible measurement diagnostics, branch depth, same-mechanism
-  follow-up, fresh-runtime replay rows, and candidate evidence against
-  warehouse A/A MDE before drawing any governance-value conclusion.
+  `--measurement-governance record-only`, ended `2026-06-12T02:23:30Z`,
+  wrapper exit `0`.
+- Postrun report:
+  [`../experiments/v0.4/v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md).
+  Both arms were `valid` and `complete` with `8/8` effective protocol rows,
+  `6` screening rows, `1` validation row, `1` frozen row, and champion v2.
+- Interpretation: this is a successful shakedown, not a causal on/off result.
+  ON promoted `split_safe_cost_merge`; record-only promoted `best_of_k_merge`.
+  Both modified `operators/merge_vehicles.py`, but the patches and LLM paths
+  differed. Record-only suppressed `problem_measurement_diagnostics` while
+  still exposing opportunity/runtime/cross-branch research signals. Code-phase
+  champion and target source visibility held in both arms.
+- Next formal governance requirements: fixed-candidate or fixed-order replay
+  controls, a precise record-only/off ablation contract, manifest assertions for
+  measurement diagnostics and source visibility, `measurement_governance` in
+  `campaign_summary.json`, review of `SCREENING_EXPAND_EXHAUSTED_BORDERLINE`,
+  fresh-runtime replay drain closure, and durable parent-hypothesis lineage.
 
 ## Legacy Detailed Snapshot Through 2026-06-07
 

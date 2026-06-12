@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 first-rung validation audited; CVRP power/readiness follow-up required before governance on/off*
+*Status: warehouse governance shakedown audited; CVRP 8-seed A/A still running*
 *Updated: 2026-06-12*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -60,7 +60,9 @@ The v0.4 objective is therefore:
   governance value experiment starts, especially CVRP branch depth,
   same-mechanism follow-up, and evidence interpreted against A/A MDE.
 - Phase 5 gate: governance on/off arms must be matched on problem, champion
-  start, model, round budget, cases, seeds, and runtime budgets.
+  start, model, round budget, cases, seeds, runtime budgets, and candidate or
+  proposal replay controls strong enough to distinguish governance effects from
+  LLM/RNG trajectory divergence.
 - No phase closes until `scion/TASK.md`, current state, v0.4 history, and the
   v0.4 repair plan have been updated with artifact paths, commands, caveats,
   and the next owner.
@@ -600,16 +602,28 @@ Exit criteria:
   runtime suite `124 passed`, full `unit/core` suite `489 passed`, problem/
   boundary/context subset `113 passed`, Python compile on touched files, and
   `git diff --check`.
-- Launched: first warehouse governance ON/OFF shakedown from commit `f604e81`,
-  local `gpt5.5`, production saferoot protocol/split/seeds, `--rounds 8`,
-  `--time-limit-sec 30`, `--disable-early-stop`, and `--agentic-proposal`.
+- Completed and audited: first warehouse governance ON/OFF shakedown from
+  commit `f604e81`, local `gpt5.5`, production saferoot protocol/split/seeds,
+  `--rounds 8`, `--time-limit-sec 30`, `--disable-early-stop`, and
+  `--agentic-proposal`. Report:
+  `scion/docs/experiments/v0.4/v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md`.
   ON arm:
-  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-on-pilot-8r-gpt55-20260612T013119Z-claw`
-  (PID `1787760`, `--measurement-governance on`). Record-only/OFF arm:
-  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-record_only-pilot-8r-gpt55-20260612T013119Z-claw`
-  (PID `1787770`, `--measurement-governance record-only`). Treat this as a
-  switch/pilot run until postrun audit shows whether either arm reaches
-  validation/frozen or produces MDE-relevant research signal.
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-on-pilot-8r-gpt55-20260612T013119Z-claw`.
+  Record-only/OFF arm:
+  `/home/clawd/research/scion-experiments/v04-phase5-governance-warehouse-record_only-pilot-8r-gpt55-20260612T013119Z-claw`.
+  Both arms finished valid/complete with `8/8` effective protocol rows,
+  `6` screening rows, `1` validation row, `1` frozen row, and champion v2.
+  This validates the switch and warehouse evidence path, but it is not a
+  causal governance-value result: the LLM trajectories and promoted
+  `operators/merge_vehicles.py` patches diverged. Record-only suppresses
+  `problem_measurement_diagnostics` but still exposes opportunity/runtime/
+  cross-branch/research-governance signals; code-phase source visibility held.
+- Next before a formal governance experiment: fixed-candidate or fixed-order
+  replay controls, a precise record-only/off ablation contract, manifest
+  assertions for measurement diagnostics and source visibility,
+  `measurement_governance` in `campaign_summary.json`, explicit review of
+  `SCREENING_EXPAND_EXHAUSTED_BORDERLINE`, fresh-runtime replay drain closure,
+  and durable `parent_hypothesis_id` lineage for same-branch follow-up.
 
 ## Status Cadence
 
