@@ -275,15 +275,34 @@ final governance-value matrix.
 The compact-baseline governance control is now complete and audited. Treat it
 as a successful Phase 5 shakedown of the ON/OFF machinery plus a concrete
 source/accounting/replay repair finding, not as a final causal governance
-claim. The next main-thread step is to design and dispatch those repairs, then
-rerun or replay only after the accounting and source-identity reports are
-cleaner.
+claim. The immediate repair follow-up is now implemented: postrun
+research-efficiency accounting separates budget/protocol/formal/artifact/fresh
+replay/failure layers; failure taxonomy surfaces non-fatal code generation,
+stale source, tool timeout, and verification-heavy failures; code prompt
+manifests distinguish target source from required integration and activation
+source dependencies; and fixed-candidate replay fails early with a clear
+ProblemSpecV1 requirement for legacy `problem.yaml` inputs.
+
+Acceptance for that repair gate passed focused report/replay/source suites
+(`19 passed` and `55 passed`), py_compile on touched modules, `git diff
+--check`, and real-artifact smoke. Research-efficiency reports for all 8 cells
+were generated under
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw/postrun_acceptance/research_efficiency`.
+The smoke reproduced the important findings: `rep04/on_compact` reports
+code-generation `2`, `old_string_not_found` `1`, `stale_source` `1`, tool
+timeouts `2`, and verification-heavy failures `2`; `rep04/record_only_compact`
+reports `abandon_fast_verification_heavy` `1` and fresh replay drain executed
+`2`.
 
 Queued after the immediate warehouse governance-run repair planning: add a CVRP/VRP
 baseline-strength contrast for the long-standing "strong ALNS+VNS baseline may
 mask Scion improvements" hypothesis. The comparison should keep the current
 ALNS+VNS baseline intact and create a reproducible ALNS-only baseline variant
-with VNS disabled through the problem-owned solver configuration. It must first
+with VNS disabled through the problem-owned solver configuration. The current
+switch is `USE_VNS=True` in
+`scion/problems/cvrp/policies/baseline_modules/config.py`; the ALNS-only start
+should be a copied run-root/champion snapshot with `USE_VNS=False`, not an
+in-place mutation of the canonical baseline. It must first
 characterize both baselines without LLM calls, including quality, runtime,
 noise/MDE, and improvement headroom. Only then should matched Scion campaigns
 compare research productivity relative to each baseline: accepted evidence

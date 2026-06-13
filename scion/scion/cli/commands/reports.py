@@ -474,6 +474,48 @@ def register_report_commands(report_app: typer.Typer) -> None:
         else:
             typer.echo(report_json)
 
+    @report_app.command("research-efficiency")
+    def report_research_efficiency(
+        campaign_dir: str = typer.Option(
+            "campaign_out",
+            "--campaign-dir",
+            help="Campaign directory, or a run cell directory containing campaign/",
+        ),
+        output: Optional[str] = typer.Option(
+            None,
+            "--output",
+            "-o",
+            help="Write JSON report to file",
+        ),
+    ) -> None:
+        """Postrun research-efficiency accounting and failure taxonomy."""
+        from scion.core.research_efficiency_report import (
+            build_research_efficiency_report,
+            write_research_efficiency_report,
+        )
+
+        try:
+            if output:
+                report_path = write_research_efficiency_report(
+                    campaign_dir,
+                    output_path=output,
+                )
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            else:
+                report = build_research_efficiency_report(campaign_dir)
+        except (OSError, ValueError) as exc:
+            typer.echo(
+                f"ERROR: failed to build research-efficiency report: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        report_json = json.dumps(report, indent=2, sort_keys=True, default=str)
+        if output:
+            typer.echo(f"Research-efficiency report written to {output}")
+        else:
+            typer.echo(report_json)
+
     @report_app.command("failures")
     def report_failures(
         campaign_dir: str = typer.Option(

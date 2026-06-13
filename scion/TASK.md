@@ -965,6 +965,103 @@ Exit criteria:
   baseline-strength/research-surface study, not as a replacement for the
   completed warehouse governance ON/OFF evidence or its repair findings.
 
+## Queued CVRP Baseline-Strength Contrast
+
+Purpose: test whether the current strong ALNS+VNS champion leaves too little
+measurable headroom for Scion's proposal/research loop, compared with an
+ALNS-only baseline where VNS is disabled.
+
+Design constraints:
+
+- Keep the current ALNS+VNS champion intact as the control baseline. The
+  existing switch is `USE_VNS=True` in
+  `scion/problems/cvrp/policies/baseline_modules/config.py`.
+- Create the ALNS-only start as a separate problem-owned run-root variant or
+  copied champion snapshot with `USE_VNS=False`. Do not delete VNS code or
+  mutate the canonical formal baseline in place.
+- First run no-LLM characterization for both starts on the same formal split,
+  seeds, and protocol-resolved runtime limits: raw quality, runtime profile,
+  pair variance, A/A MDE, BKS/headroom where available, and runtime saturation.
+- Only after characterization, run matched Scion campaigns from each baseline
+  with the same commit, problem package, cases, seeds, model, solver budgets,
+  measurement-governance setting, prompt-context mode, round budget, and
+  postrun acceptance scripts.
+- Interpret results relative to each baseline's own measurement power and
+  headroom. The primary question is not "which baseline has lower distance";
+  it is whether Scion can produce accepted, evidence-backed research more
+  effectively under one starting research surface than the other.
+
+Primary metrics:
+
+- Validation/frozen/promotion evidence above that baseline's A/A MDE.
+- Branch depth by distinct formal hypotheses, not artifact retry rows.
+- Same-mechanism follow-up and mechanism-family transfer.
+- Proposal/code failure rate and source-identity health.
+- Runtime/headroom profile and cost per accepted research insight.
+
+Exit criteria:
+
+- A pre-registered experiment note records exact baseline snapshots, config
+  diff, protocol/split/seed hashes, and no-LLM characterization results before
+  any LLM campaign starts.
+- The ALNS-only arm is never used as a hidden replacement for the canonical
+  ALNS+VNS control; both are labeled in prompts, summaries, and reports.
+- If ALNS-only improves research productivity, the conclusion is framed as a
+  baseline-strength/research-surface finding. It does not by itself prove that
+  final solver quality is better than ALNS+VNS.
+
+## Current Repair Acceptance - 2026-06-13
+
+The immediate repair gate after the warehouse compact governance ON/OFF run is
+implemented and accepted.
+
+Accepted repair slices:
+
+- Postrun research-efficiency accounting: `scion report research-efficiency`
+  now emits a report-only JSON object separating effective budget, attempts,
+  protocol rows, formal candidates, formal candidate artifacts, stage rows,
+  fresh-runtime replay drain, proposal quality blocks, failure taxonomy, and
+  run status.
+- Failure taxonomy: the new report surfaces non-fatal agentic/code/runtime
+  control signals from campaign artifacts and `run.log`, including
+  `agentic_proposal:code_generation_failed`, `old_string_not_found`,
+  `stale_source`, `Tool call timeout`, `verification_heavy`, and
+  `abandon_fast` after repeated verification-heavy failures.
+- Code-phase source identity: code prompt manifests now distinguish
+  `target_source`, `required_integration_source`, and
+  `activation_source_dependency_source`; duplicate required integration paths
+  already satisfied by visible target source no longer create false
+  `missing_required_source_paths`.
+- Fixed-candidate replay problem input: default fixed replay now fails early
+  with a short actionable error when `--problem` is not `ProblemSpecV1`, instead
+  of emitting long Pydantic validation noise for legacy `problem.yaml`.
+
+Acceptance commands:
+
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_cli_report_research_efficiency.py scion/scion/tests/test_cli_reports_postmortem.py`
+  passed with `19 passed`.
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_prompt_manifest_accounting.py scion/scion/tests/unit/test_agentic_code_stage_invariants.py`
+  passed with `55 passed`.
+- `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile ...`
+  passed on the touched report, replay, and prompt-manifest modules.
+- `git diff --check` passed.
+
+Real-artifact smoke:
+
+- Research-efficiency reports were generated for all 8 cells under
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw/postrun_acceptance/research_efficiency`.
+- The reports reproduce the key repair signals: `rep04/on_compact` has
+  code-generation `2`, `old_string_not_found` `1`, `stale_source` `1`,
+  tool timeouts `2`, and verification-heavy failures `2`; `rep04/record_only`
+  has `abandon_fast_verification_heavy` `1` and fresh replay drain executed
+  `2`.
+
+Boundary status:
+
+- All three repair slices are report/manifest/replay tooling only.
+- No repair changes `DecisionFeatures`, Protocol gates, scheduler state,
+  campaign execution semantics, lifecycle policy, or promotion state.
+
 ## Status Cadence
 
 The main thread updates status after each material event:

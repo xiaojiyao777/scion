@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from scion.core.models import CanaryResult, EvalStats, ExperimentStage, ProtocolResult
@@ -436,6 +437,43 @@ def test_executor_writes_two_arm_rows_with_distinct_measurement_governance(
     assert "aa_rows" not in rendered
 
 
+def test_executor_rejects_legacy_problem_yaml_before_replay_rows(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "comparison_id": "cmp-legacy-problem",
+                "source_campaign_dir": str(tmp_path / "campaign"),
+                "replay_arms": ["on", "record_only"],
+                "candidates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    legacy_problem = (
+        Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "problem.yaml"
+    )
+    output_dir = tmp_path / "replay"
+
+    with pytest.raises(ValueError) as excinfo:
+        execute_fixed_candidate_replay(
+            manifest_path,
+            problem_yaml_path=legacy_problem,
+            output_dir=output_dir,
+        )
+
+    message = str(excinfo.value)
+    assert "fixed replay requires ProblemSpecV1" in message
+    assert "use problem-v1.yaml" in message
+    assert "problem-v1.yaml" in message
+    assert "ValidationError" not in message
+    assert "Field required" not in message
+    assert not output_dir.exists()
+
+
 def test_cli_executes_fixed_candidate_replay_with_row_error_summary(
     tmp_path: Path,
 ) -> None:
@@ -501,6 +539,62 @@ def test_cli_executes_fixed_candidate_replay_with_row_error_summary(
     comparison = json.loads(Path(summary["comparison_path"]).read_text(encoding="utf-8"))
     assert len(comparison["rows"]) == 2
     assert {row["status"] for row in comparison["rows"]} == {"error"}
+
+
+def test_cli_fixed_candidate_replay_rejects_legacy_problem_yaml(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    artifact_ref = _write_candidate_artifact(campaign_dir, "candidate-legacy-problem")
+    _append_index_row(
+        index_path,
+        {
+            "candidate_id": "candidate-legacy-problem",
+            "branch_id": "branch-a",
+            "hypothesis_id": "hyp-a",
+            "stage": "screening",
+            "patch_digest": "patch-digest-a",
+            "artifact_ref": artifact_ref,
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+    )
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="record_only",
+        comparison_id="cmp-cli-legacy-problem",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    output_dir = tmp_path / "replay-cli"
+    legacy_problem = (
+        Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "problem.yaml"
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "fixed-candidate-replay",
+            "--manifest",
+            str(manifest_path),
+            "--problem",
+            str(legacy_problem),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "fixed replay requires ProblemSpecV1" in result.output
+    assert "use problem-v1.yaml" in result.output
+    assert "problem-v1.yaml" in result.output
+    assert "ValidationError" not in result.output
+    assert "Field required" not in result.output
+    assert not output_dir.exists()
 
 
 def _write_candidate_artifact(

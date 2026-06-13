@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+import yaml
+
 from scion.core.evidence_recording.replay_identity import (
     formal_replay_identity_missing_keys,
 )
@@ -351,6 +353,9 @@ def execute_fixed_candidate_replay(
     source_campaign_dir = Path(_required_str(manifest, "source_campaign_dir")).resolve()
     arms = _manifest_replay_arms(manifest)
     candidates = list(_manifest_candidates(manifest))
+    problem_path = Path(problem_yaml_path).expanduser().resolve()
+    if protocol_factory is None:
+        _require_problem_spec_v1_for_fixed_replay(problem_path)
     if max_candidates is not None:
         if max_candidates < 0:
             raise ValueError("max_candidates must be non-negative")
@@ -374,7 +379,7 @@ def execute_fixed_candidate_replay(
                     candidate=candidate,
                     arm=arm,
                     source_campaign_dir=source_campaign_dir,
-                    problem_yaml_path=Path(problem_yaml_path).expanduser().resolve(),
+                    problem_yaml_path=problem_path,
                     protocol_path=Path(protocol_path).expanduser().resolve()
                     if protocol_path is not None
                     else None,
@@ -693,6 +698,7 @@ def _build_protocol(
     from scion.runtime.runner import ResourceLimits
     from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
+    _require_problem_spec_v1_for_fixed_replay(problem_yaml_path)
     problem_spec_v1 = load_problem_spec_v1_from_yaml(problem_yaml_path)
     bridge = bridge_problem_spec_v1(problem_spec_v1)
     config_dir = problem_yaml_path.parent
@@ -722,6 +728,43 @@ def _build_protocol(
         objective_policy=bridge.objective_policy,
         require_metric_specs=True,
         problem_spec=bridge.problem_spec,
+    )
+
+
+def _require_problem_spec_v1_for_fixed_replay(problem_yaml_path: Path) -> None:
+    try:
+        payload = yaml.safe_load(problem_yaml_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            "fixed replay requires ProblemSpecV1; use problem-v1.yaml for "
+            f"--problem (failed to parse {problem_yaml_path}: {exc})"
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError(
+            _fixed_replay_problem_spec_v1_error(problem_yaml_path, "<non-object>")
+        )
+    spec_version = _clean_str(payload.get("spec_version"))
+    if spec_version != "problem-v1":
+        raise ValueError(
+            _fixed_replay_problem_spec_v1_error(
+                problem_yaml_path,
+                spec_version or "<missing>",
+            )
+        )
+
+
+def _fixed_replay_problem_spec_v1_error(
+    problem_yaml_path: Path,
+    spec_version: str,
+) -> str:
+    sibling = problem_yaml_path.with_name("problem-v1.yaml")
+    if sibling != problem_yaml_path and sibling.is_file():
+        hint = f"suggested path: {sibling}"
+    else:
+        hint = "provide a ProblemSpecV1 YAML, usually problem-v1.yaml"
+    return (
+        "fixed replay requires ProblemSpecV1; use problem-v1.yaml for --problem "
+        f"(got spec_version={spec_version!r} at {problem_yaml_path}; {hint})"
     )
 
 

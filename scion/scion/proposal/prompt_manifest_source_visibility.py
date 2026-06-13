@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any, Mapping
 
+from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
 from scion.proposal.prompt_manifest_accounting import _text_digest
 
 
@@ -383,9 +384,19 @@ def _code_file_visibility_record(
     )
     section_status = section_statuses.get(section_name, {})
     section_included = section_status.get("status") == "included"
+    source_digest = (
+        source_digest_for_content(content)
+        if readable and isinstance(content, str)
+        else ""
+    )
+    source_digest_literal_visible = bool(
+        source_digest and _rendered_contains_literal(provider_prompt_text, source_digest)
+    )
+    source_digest_derivable_from_source = bool(source_digest and content_visible)
     record = {
         "file_path": file_path,
         "role": role,
+        "source_requirement_category": _source_requirement_category(role),
         "section": section_name,
         "section_status": section_status.get("status", "missing"),
         "section_char_count": section_status.get("char_count", 0),
@@ -398,6 +409,18 @@ def _code_file_visibility_record(
         "readable": readable,
         "content_chars": len(content or ""),
         "content_hash": _text_digest(content, length=16) if content else "",
+        "source_digest": source_digest,
+        "source_digest_visible_in_rendered_prompt": source_digest_literal_visible,
+        "source_digest_available_from_visible_source": (
+            source_digest_derivable_from_source
+        ),
+        "source_digest_visibility_status": (
+            "literal_visible"
+            if source_digest_literal_visible
+            else "derivable_from_visible_source"
+            if source_digest_derivable_from_source
+            else "not_visible"
+        ),
         "content_visible_in_rendered_prompt": content_visible,
         "placeholder_visible_in_rendered_prompt": placeholder_visible,
         "prompt_visibility_status": (
@@ -420,6 +443,19 @@ def _code_file_visibility_record(
     return record
 
 
+def _source_requirement_category(role: str) -> str:
+    role_text = str(role or "")
+    if role_text == "approved_target_file":
+        return "target_source"
+    if role_text == "required_full_integration_edit_source":
+        return "required_integration_source"
+    if role_text == "branch_current_integration_file":
+        return "source_dependency_source"
+    if role_text.startswith("solver_design_full_algorithm_file_read"):
+        return "activation_source_dependency_source"
+    return "source_dependency_source"
+
+
 def _code_phase_source_guarantees(
     *,
     target_record: Mapping[str, Any],
@@ -433,36 +469,58 @@ def _code_phase_source_guarantees(
         if str(record.get("role") or "")
         == "required_full_integration_edit_source"
     ]
-    protected_source_records = [
-        record
-        for record in (
-            [target_record]
-            + required_integration_records
-            + algorithm_read_records
-        )
-        if isinstance(record, Mapping) and record
-    ]
-    missing_required = [
-        str(record.get("file_path") or "")
-        for record in protected_source_records
-        if not _source_record_satisfies_code_phase_requirement(
-            record,
-            target_file_create_mode=(
-                record is target_record and target_file_create_mode
-            ),
-        )
-    ]
     target_source_visible = _source_record_satisfies_code_phase_requirement(
         target_record,
         target_file_create_mode=target_file_create_mode,
     )
-    required_integration_visible = all(
-        _source_record_satisfies_code_phase_requirement(record)
+    target_requirement = _source_requirement_diagnostic(
+        target_record,
+        requirement_category="target_source",
+        target_file_create_mode=target_file_create_mode,
+    )
+    required_integration_requirements = [
+        _source_requirement_diagnostic(
+            record,
+            requirement_category="required_integration_source",
+            target_record=target_record,
+            target_source_visible=target_source_visible,
+        )
         for record in required_integration_records
+        if isinstance(record, Mapping) and record
+    ]
+    activation_source_dependency_requirements = [
+        _source_requirement_diagnostic(
+            record,
+            requirement_category="activation_source_dependency_source",
+        )
+        for record in algorithm_read_records
+        if isinstance(record, Mapping) and record
+    ]
+    source_requirements = [
+        requirement
+        for requirement in (
+            [target_requirement]
+            + required_integration_requirements
+            + activation_source_dependency_requirements
+        )
+        if requirement
+    ]
+    missing_required_sources = [
+        requirement
+        for requirement in source_requirements
+        if requirement.get("required") is True
+        and requirement.get("required_source_satisfied") is not True
+    ]
+    missing_required = _unique_paths(
+        requirement.get("file_path") for requirement in missing_required_sources
+    )
+    required_integration_visible = all(
+        requirement.get("required_source_satisfied") is True
+        for requirement in required_integration_requirements
     )
     algorithm_reads_visible = all(
-        _source_record_satisfies_code_phase_requirement(record)
-        for record in algorithm_read_records
+        requirement.get("required_source_satisfied") is True
+        for requirement in activation_source_dependency_requirements
     )
     return _drop_empty(
         {
@@ -479,14 +537,127 @@ def _code_phase_source_guarantees(
             "required_integration_source_visible": required_integration_visible,
             "algorithm_file_read_source_visible": algorithm_reads_visible,
             "protected_source_visible": not missing_required,
-            "protected_source_count": len(protected_source_records),
+            "protected_source_count": len(source_requirements),
             "required_integration_source_count": len(required_integration_records),
             "algorithm_file_read_source_count": len(algorithm_read_records),
+            "target_source_identity": target_requirement,
+            "target_path": target_requirement.get("file_path"),
+            "source_requirements": source_requirements,
+            "required_integration_source_requirements": (
+                required_integration_requirements
+            ),
+            "activation_source_dependency_requirements": (
+                activation_source_dependency_requirements
+            ),
+            "missing_required_sources": missing_required_sources,
             "missing_required_source_paths": missing_required,
+            "duplicate_target_paths_satisfied_by_target_source": _unique_paths(
+                requirement.get("file_path")
+                for requirement in required_integration_requirements
+                if requirement.get("satisfied_by") == "target_source"
+            ),
             "decision_features_excluded": True,
             "manifest_observability_only": True,
         }
     )
+
+
+def _source_requirement_diagnostic(
+    record: Mapping[str, Any],
+    *,
+    requirement_category: str,
+    target_file_create_mode: bool = False,
+    target_record: Mapping[str, Any] | None = None,
+    target_source_visible: bool = False,
+) -> dict[str, Any]:
+    if not isinstance(record, Mapping) or not record:
+        return {}
+    path = _normalize_path(record.get("file_path"))
+    target_path = _normalize_path(
+        target_record.get("file_path") if isinstance(target_record, Mapping) else ""
+    )
+    duplicate_target_satisfied = bool(
+        requirement_category == "required_integration_source"
+        and path
+        and target_path
+        and path == target_path
+        and target_source_visible
+    )
+    satisfied = (
+        True
+        if duplicate_target_satisfied
+        else _source_record_satisfies_code_phase_requirement(
+            record,
+            target_file_create_mode=target_file_create_mode,
+        )
+    )
+    required = not (
+        requirement_category == "target_source" and target_file_create_mode
+    )
+    missing_reason = ""
+    if required and not satisfied:
+        missing_reason = _source_requirement_missing_reason(record)
+    return _drop_empty(
+        {
+            "file_path": path,
+            "requirement_category": requirement_category,
+            "role": record.get("role"),
+            "section": record.get("section"),
+            "section_status": record.get("section_status"),
+            "source_status": record.get("source_status"),
+            "source_provenance": record.get("source_provenance"),
+            "required": required,
+            "required_source_satisfied": bool(satisfied),
+            "target_file_create_mode": bool(target_file_create_mode),
+            "satisfied_by": (
+                "target_source" if duplicate_target_satisfied else ""
+            ),
+            "duplicate_target_requirement": duplicate_target_satisfied,
+            "full_content_visible_in_rendered_prompt": record.get(
+                "full_content_visible_in_rendered_prompt"
+            ),
+            "source_digest": record.get("source_digest"),
+            "source_digest_visible_in_rendered_prompt": record.get(
+                "source_digest_visible_in_rendered_prompt"
+            ),
+            "source_digest_available_from_visible_source": record.get(
+                "source_digest_available_from_visible_source"
+            ),
+            "source_digest_visibility_status": record.get(
+                "source_digest_visibility_status"
+            ),
+            "missing_reason": missing_reason,
+        }
+    )
+
+
+def _source_requirement_missing_reason(record: Mapping[str, Any]) -> str:
+    if not isinstance(record, Mapping) or not record:
+        return "source_record_missing"
+    if str(record.get("source_status") or "") == "missing_current_source":
+        return "missing_current_source"
+    if str(record.get("source_status") or "") == "new_file":
+        return "new_file_has_no_current_source"
+    section_status = str(record.get("section_status") or "")
+    if section_status != "included":
+        return "section_not_included"
+    if not bool(record.get("full_content_visible_in_rendered_prompt")):
+        return "full_current_source_not_visible"
+    if str(record.get("source_status") or "") != "current_branch_source":
+        return "not_current_branch_source"
+    return "source_requirement_unsatisfied"
+
+
+def _unique_paths(values: Any) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values or ():
+        path = _normalize_path(value)
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
 
 
 def _source_record_satisfies_code_phase_requirement(

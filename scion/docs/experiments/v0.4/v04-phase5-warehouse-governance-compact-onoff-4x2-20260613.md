@@ -283,3 +283,22 @@ The queued CVRP/VRP ALNS+VNS vs ALNS-only baseline-strength contrast remains
 useful, but it should start after these warehouse governance-run findings are
 recorded and the immediate replay/accounting/source-identity repairs are
 planned.
+
+## Repair Follow-Up
+
+The immediate repair items from this report were implemented later on
+2026-06-13:
+
+- `scion report research-efficiency` now generates report-only accounting and
+  failure-taxonomy JSON for each campaign/cell.
+- Code prompt source-visibility ledgers now separate target source, required
+  integration source, and activation source dependency requirements, reducing
+  false `missing_required_source_paths` for visible modify targets.
+- Fixed-candidate replay now fails early with a clear ProblemSpecV1 requirement
+  when passed legacy `problem.yaml`.
+
+Acceptance passed focused report/replay/source suites and real-artifact smoke
+reports were generated under
+`postrun_acceptance/research_efficiency` for all 8 cells in this run root.
+These repairs improve postrun observability and replay usability; they do not
+change the observational interpretation of the ON/OFF result above.

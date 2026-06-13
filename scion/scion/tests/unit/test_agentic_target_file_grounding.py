@@ -2408,6 +2408,64 @@ def test_create_new_target_prompt_uses_new_file_placeholder_status() -> None:
     )
 
 
+def test_code_visibility_does_not_mark_visible_modify_target_as_missing_required_source() -> None:
+    target_rel = "policies/operators/merge_vehicles.py"
+    target_source = "def merge_vehicles(solution):\n    return solution\n"
+    missing_duplicate_target = (
+        f"### {target_rel}\n"
+        "Provenance: branch_workspace; readable=False; "
+        "source_status=missing_current_source; visibility=not_visible\n"
+        "```python\n"
+        f"# could not read {target_rel}\n"
+        "```"
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": target_rel,
+        "target_file_code": f"File: {target_rel}\n```python\n{target_source}```",
+        "agentic_required_full_integration_files": missing_duplicate_target,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-visible-target-duplicate-required",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    guarantees = manifest["code_phase_source_guarantees"]
+    target_identity = guarantees["target_source_identity"]
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["required_integration_source_visible"] is True
+    assert guarantees["protected_source_visible"] is True
+    assert guarantees.get("missing_required_source_paths", []) == []
+    assert guarantees.get("missing_required_sources", []) == []
+    assert guarantees["duplicate_target_paths_satisfied_by_target_source"] == [
+        target_rel
+    ]
+    assert target_identity["file_path"] == target_rel
+    assert target_identity["required_source_satisfied"] is True
+    assert target_identity["source_digest"]
+    assert target_identity["source_digest_visibility_status"] in {
+        "literal_visible",
+        "derivable_from_visible_source",
+    }
+    duplicate_requirement = guarantees[
+        "required_integration_source_requirements"
+    ][0]
+    assert duplicate_requirement["file_path"] == target_rel
+    assert duplicate_requirement["required_source_satisfied"] is True
+    assert duplicate_requirement["satisfied_by"] == "target_source"
+    assert duplicate_requirement["duplicate_target_requirement"] is True
+
+
 def test_code_visibility_infers_create_new_from_target_file_absence() -> None:
     target_rel = "policies/helpers/new_module.py"
     target_placeholder = (
@@ -2446,6 +2504,56 @@ def test_code_visibility_infers_create_new_from_target_file_absence() -> None:
     assert guarantees["target_source_visible"] is True
     assert guarantees["protected_source_visible"] is True
     assert guarantees.get("missing_required_source_paths", []) == []
+    target_identity = guarantees["target_source_identity"]
+    assert target_identity["file_path"] == target_rel
+    assert target_identity["required"] is False
+    assert target_identity["required_source_satisfied"] is True
+    assert target_identity["source_digest_visibility_status"] == "not_visible"
+
+
+def test_code_visibility_reports_missing_required_integration_source_with_reason() -> None:
+    target_rel = "policies/operators/merge_vehicles.py"
+    integration_rel = "policies/operators/vehicle_registry.py"
+    target_source = "def merge_vehicles(solution):\n    return solution\n"
+    missing_integration = (
+        f"### {integration_rel}\n"
+        "Provenance: branch_workspace; readable=False; "
+        "source_status=missing_current_source; visibility=not_visible\n"
+        "```python\n"
+        f"# could not read {integration_rel}\n"
+        "```"
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": target_rel,
+        "target_file_code": f"File: {target_rel}\n```python\n{target_source}```",
+        "agentic_required_full_integration_files": missing_integration,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-missing-required-integration",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    guarantees = manifest["code_phase_source_guarantees"]
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["required_integration_source_visible"] is False
+    assert guarantees["protected_source_visible"] is False
+    assert guarantees["missing_required_source_paths"] == [integration_rel]
+    missing = guarantees["missing_required_sources"][0]
+    assert missing["file_path"] == integration_rel
+    assert missing["requirement_category"] == "required_integration_source"
+    assert missing["missing_reason"] == "missing_current_source"
+    assert missing["required_source_satisfied"] is False
 
 
 def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:

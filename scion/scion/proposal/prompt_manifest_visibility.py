@@ -317,9 +317,23 @@ def _code_file_visibility_ledger_entry(record: Mapping[str, Any]) -> dict[str, A
             "visibility_status": status,
             "char_count": char_count,
             "token_estimate": _token_estimate(char_count),
-            "digest": record.get("content_hash") or "",
+            "digest": record.get("source_digest")
+            or record.get("content_hash")
+            or "",
             "ref": record.get("file_path"),
             "file_path": record.get("file_path"),
+            "source_requirement_category": record.get(
+                "source_requirement_category"
+            ),
+            "source_digest_visibility_status": record.get(
+                "source_digest_visibility_status"
+            ),
+            "source_digest_visible_in_rendered_prompt": record.get(
+                "source_digest_visible_in_rendered_prompt"
+            ),
+            "source_digest_available_from_visible_source": record.get(
+                "source_digest_available_from_visible_source"
+            ),
             "projected_to_section": (
                 section_name
                 if status in {"full", "dedicated_projection", "summary", "truncated"}
