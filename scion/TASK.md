@@ -971,6 +971,10 @@ Purpose: test whether the current strong ALNS+VNS champion leaves too little
 measurable headroom for Scion's proposal/research loop, compared with an
 ALNS-only baseline where VNS is disabled.
 
+Pre-registration document:
+
+- `scion/docs/planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md`
+
 Design constraints:
 
 - Keep the current ALNS+VNS champion intact as the control baseline. The

@@ -310,6 +310,8 @@ above that baseline's MDE, branch depth, same-mechanism follow-up,
 mechanism-family transfer, and cost per accepted insight. This is a
 baseline-strength/research-surface study, not a substitute for the completed
 warehouse governance ON/OFF evidence or its repair findings.
+The pre-registered design is
+[`../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md).
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
