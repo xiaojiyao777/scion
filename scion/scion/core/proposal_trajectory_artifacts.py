@@ -538,14 +538,15 @@ class _FormalCandidateJoinIndex:
         self.replayable_rows = [
             row for row in rows if _is_replayable_formal_candidate_row(row)
         ]
+        self.logical_rows = _logical_formal_candidate_rows(self.replayable_rows)
         self.join_basis_counts: Counter[str] = Counter()
-        self._by_session = _index_unique(self.replayable_rows, "session_id")
-        self._by_request = _index_unique(self.replayable_rows, "request_id")
+        self._by_session = _index_unique(self.logical_rows, "session_id")
+        self._by_request = _index_unique(self.logical_rows, "request_id")
         self._by_branch_hypothesis = _index_unique_composite(
-            self.replayable_rows,
+            self.logical_rows,
             ("branch_id", "hypothesis_id"),
         )
-        self._by_branch_order = _index_ordered(self.replayable_rows, "branch_id")
+        self._by_branch_order = _index_ordered(self.logical_rows, "branch_id")
 
     def match_session(self, session: Mapping[str, str]) -> dict[str, str]:
         match: Mapping[str, Any] | None = None
@@ -601,6 +602,51 @@ def _is_replayable_formal_candidate_row(row: Mapping[str, Any]) -> bool:
     return (
         _clean_str(row.get("artifact_status")) == "recorded"
         and _clean_str(row.get("replay_identity_status")) == "complete"
+    )
+
+
+def _logical_formal_candidate_rows(
+    rows: list[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    grouped: dict[str, tuple[Mapping[str, Any], int]] = {}
+    order: list[str] = []
+    for row_index, row in enumerate(rows):
+        key = _formal_candidate_logical_key(row, row_index)
+        if not key:
+            continue
+        existing = grouped.get(key)
+        if existing is None:
+            order.append(key)
+            grouped[key] = (row, row_index)
+            continue
+        if _formal_candidate_preference_key(
+            row,
+            row_index,
+        ) > _formal_candidate_preference_key(*existing):
+            grouped[key] = (row, row_index)
+    return [grouped[key][0] for key in order]
+
+
+def _formal_candidate_logical_key(row: Mapping[str, Any], row_index: int) -> str:
+    branch_id = _clean_str(row.get("branch_id"))
+    if not branch_id:
+        return ""
+    for key in ("session_id", "request_id", "hypothesis_id", "candidate_id"):
+        value = _clean_str(row.get(key))
+        if value:
+            return _composite_key((branch_id, key, value))
+    return _composite_key((branch_id, "row", str(row_index)))
+
+
+def _formal_candidate_preference_key(
+    row: Mapping[str, Any],
+    row_index: int,
+) -> tuple[int, int, int, int]:
+    return (
+        1 if _string_list(row.get("activation_files")) else 0,
+        len(_string_list(row.get("target_files"))),
+        len(_string_list(row.get("proposal_target_files"))),
+        -row_index,
     )
 
 

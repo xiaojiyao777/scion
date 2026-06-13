@@ -36,13 +36,13 @@ def _code_file_visibility_ledger(
     if call_kind != "code":
         return {}
     target_file = _normalize_path(context.get("target_file"))
-    target_file_create_mode = str(context.get("action") or "").strip() in {
-        "create",
-        "create_new",
-    }
     target_source_record = _source_record_from_context_value(
         context.get("target_file_code"),
         expected_path=target_file,
+    )
+    target_file_create_mode = _target_file_create_mode(
+        context,
+        target_source_record=target_source_record,
     )
     target_record = _code_file_visibility_record(
         file_path=target_file,
@@ -126,6 +126,34 @@ def _code_file_visibility_ledger(
             "algorithm_file_reads": algorithm_read_records,
         }
     )
+
+
+def _target_file_create_mode(
+    context: Mapping[str, Any],
+    *,
+    target_source_record: Mapping[str, Any] | None,
+) -> bool:
+    action = str(context.get("action") or "").strip()
+    if action:
+        return action in {"create", "create_new"}
+    source_status = _source_status(
+        target_source_record,
+        (
+            str(target_source_record.get("content"))
+            if isinstance(target_source_record, Mapping)
+            and target_source_record.get("content") is not None
+            else None
+        ),
+    )
+    if source_status == "new_file":
+        return True
+    return _explicit_false(context.get("target_file_exists"))
+
+
+def _explicit_false(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value is False
+    return str(value).strip().lower() in {"false", "0", "no"}
 
 
 def _hypothesis_target_source_visibility_ledger(

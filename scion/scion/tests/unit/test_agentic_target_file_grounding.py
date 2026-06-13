@@ -2408,6 +2408,46 @@ def test_create_new_target_prompt_uses_new_file_placeholder_status() -> None:
     )
 
 
+def test_code_visibility_infers_create_new_from_target_file_absence() -> None:
+    target_rel = "policies/helpers/new_module.py"
+    target_placeholder = (
+        f"File: {target_rel}\n"
+        "Provenance: new_file_placeholder; readable=False; "
+        "source_status=new_file; visibility=new_file_placeholder\n"
+        "This target file does not currently exist and may be created.\n"
+        f"```python\n# new file placeholder for {target_rel}\n```"
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": target_rel,
+        "target_file_exists": False,
+        "target_file_code": target_placeholder,
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-new-file-inferred",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    target_record = manifest["code_file_visibility_ledger"]["target_file"]
+    assert target_record["target_file_create_mode"] is True
+    assert target_record["source_status"] == "new_file"
+    assert target_record["placeholder_visible_in_rendered_prompt"] is True
+    guarantees = manifest["code_phase_source_guarantees"]
+    assert guarantees["target_file_create_mode"] is True
+    assert guarantees["target_source_visible"] is True
+    assert guarantees["protected_source_visible"] is True
+    assert guarantees.get("missing_required_source_paths", []) == []
+
+
 def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:
     target_source = (
         "File: policies/baseline_modules/local_search.py\n"

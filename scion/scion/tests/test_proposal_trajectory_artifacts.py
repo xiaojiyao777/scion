@@ -406,6 +406,46 @@ def test_manifest_falls_back_to_branch_code_sequence_for_agentic_pairs(
     )
 
 
+def test_manifest_branch_code_sequence_prefers_activation_complete_duplicate(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = _write_activation_duplicate_branch_sequence_campaign(
+        tmp_path / "campaign"
+    )
+
+    manifest = build_proposal_trajectory_manifest(
+        campaign_dir,
+        observed_control_arm="on",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert manifest["counts"]["session_count"] == 2
+    assert manifest["counts"]["formal_candidate_count"] == 2
+    assert manifest["counts"]["formal_candidate_replayable_count"] == 2
+    assert manifest["counts"]["formal_candidate_joined_session_count"] == 1
+    assert manifest["coverage"]["missing_join_count"] == 1
+    assert manifest["coverage"]["missing_joins"] == [
+        {
+            "session_id": "hypothesis-only",
+            "branch_id": "branch-activation",
+            "reason": "missing_formal_candidate_join",
+        }
+    ]
+    assert manifest["coverage"]["formal_candidate_join_basis_counts"] == {
+        "branch_code_sequence": 1
+    }
+
+    sessions = manifest["sessions"]
+    assert sessions[0]["replayability"]["formal_candidate_joined"] is False
+    proposal = sessions[1]["proposal_fingerprint"]
+    assert proposal["formal_candidate_id"] == "candidate-activation-complete"
+    assert proposal["patch_digest"] == "patch-digest-activation-complete"
+    assert proposal["formal_candidate_ref"].endswith(
+        "activation-complete/candidate.patch.json"
+    )
+    assert proposal["formal_candidate_join_basis"] == "branch_code_sequence"
+
+
 def test_cli_writes_manifest_and_comparison(tmp_path: Path) -> None:
     left_campaign = _write_campaign(tmp_path / "left", session_id="session-a")
     right_campaign = _write_campaign(
@@ -733,6 +773,138 @@ def _write_branch_sequence_campaign(campaign_dir: Path) -> Path:
             "stage": "screening",
             "patch_digest": "patch-digest-b",
             "artifact_ref": "artifacts/formal_candidates/branch/b/candidate.patch.json",
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+    ]
+    formal_index.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    return campaign_dir
+
+
+def _write_activation_duplicate_branch_sequence_campaign(campaign_dir: Path) -> Path:
+    agentic_dir = campaign_dir / "agentic_sessions"
+    agentic_dir.mkdir(parents=True)
+    branch_id = "branch-activation"
+    session_specs = [
+        ("hypothesis-only", "partial_hypothesis_only", ("hypothesis",), "create_new"),
+        ("code-session", "completed", ("tool_selection", "code"), "create_new"),
+    ]
+    sessions: list[dict[str, object]] = []
+    trace_sessions: list[dict[str, object]] = []
+    for index, (session_id, status, call_kinds, action) in enumerate(
+        session_specs,
+        start=1,
+    ):
+        prompt_refs: list[str] = []
+        traces: list[dict[str, object]] = []
+        for call_index, call_kind in enumerate(call_kinds, start=1):
+            prompt_ref = (
+                f"agentic_sessions/prompt_manifests/"
+                f"{session_id}-{call_index}-{call_kind}.json"
+            )
+            prompt_refs.append(prompt_ref)
+            _write_prompt_manifest(
+                campaign_dir / prompt_ref,
+                call_kind=call_kind,
+                prompt_hash=f"prompt-{session_id}-{call_kind}",
+                ledger_digest=f"ledger-{session_id}-{call_kind}",
+                family_tokens=None,
+            )
+            traces.append(
+                {
+                    "trace_id": f"trace-{session_id}-{call_kind}",
+                    "call_kind": call_kind,
+                    "phase": call_kind,
+                    "prompt_hash": f"prompt-{session_id}-{call_kind}",
+                    "prompt_manifest_artifact_ref": prompt_ref,
+                }
+            )
+        sessions.append(
+            {
+                "schema_version": "agentic-session.v1",
+                "session_id": session_id,
+                "request_id": session_id,
+                "branch_id": branch_id,
+                "created_at": f"2026-06-12T00:00:0{index}+00:00",
+                "status": status,
+                "termination_reason": status,
+                "context_profile": "algorithm",
+                "selected_surface": "algorithm_surface",
+                "action": action,
+                "target_file": "components/operator.py",
+                "mechanism_ids": ["mechanism-activation"],
+                "hypothesis_summary": {
+                    "target_file": "components/operator.py",
+                },
+                "prompt_manifest_required": True,
+                "prompt_manifest_artifact_refs": prompt_refs,
+            }
+        )
+        trace_sessions.append(
+            {
+                "session_id": session_id,
+                "request_id": session_id,
+                "branch_id": branch_id,
+                "traces": traces,
+            }
+        )
+
+    (agentic_dir / "agentic_session_index.json").write_text(
+        json.dumps(sessions, indent=2),
+        encoding="utf-8",
+    )
+    (agentic_dir / "agentic_session_trace_index.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "agentic-session-trace-index.v1",
+                "artifact_kind": "agentic_session_trace_index",
+                "sessions": trace_sessions,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    rows = [
+        {
+            "schema": "scion.formal_candidate_patch_artifact.v1",
+            "candidate_id": "candidate-activation-less",
+            "branch_id": branch_id,
+            "hypothesis_id": "hypothesis-activation",
+            "stage": "screening",
+            "target_files": ["components/operator.py"],
+            "proposal_target_files": ["components/operator.py"],
+            "patch_digest": "patch-digest-activation-less",
+            "artifact_ref": (
+                "artifacts/formal_candidates/branch/activation-less/"
+                "candidate.patch.json"
+            ),
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+        {
+            "schema": "scion.formal_candidate_patch_artifact.v1",
+            "candidate_id": "candidate-activation-complete",
+            "branch_id": branch_id,
+            "hypothesis_id": "hypothesis-activation",
+            "stage": "screening",
+            "target_files": [
+                "components/operator.py",
+                "config/activation_registry.yaml",
+            ],
+            "proposal_target_files": ["components/operator.py"],
+            "activation_files": ["config/activation_registry.yaml"],
+            "patch_digest": "patch-digest-activation-complete",
+            "artifact_ref": (
+                "artifacts/formal_candidates/branch/activation-complete/"
+                "candidate.patch.json"
+            ),
             "artifact_status": "recorded",
             "replay_identity_status": "complete",
             "missing_replay_identity_keys": [],
