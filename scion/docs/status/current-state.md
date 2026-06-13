@@ -124,6 +124,20 @@ must still inspect proposal trajectories, LLM contexts, branch depth/transfer,
 validation/frozen reach, replay pressure, and forbidden-field leakage before any
 Phase 5 causal claim.
 
+Active run: the warehouse explicit-control-pair strong-control experiment was
+launched from commit `bd8bfd8e020be2a51d1268070870c7ee2ff6b2ce` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw`.
+It compares `full` vs `no-measurement-diagnostics` with
+`measurement_governance=on` in both arms, four order-balanced repeats, 8 rounds
+per cell, warehouse production protocol/split/seeds, local `gpt-5.5`,
+`--time-limit-sec 30`, `--disable-early-stop`, and
+`--agentic-session-timeout-sec 900`. Postrun manifests are pre-registered with
+`control_pair_key=warehouse.full-vs-nomeas:<repeat>`. This tests
+prompt-visible measurement diagnostics while preserving broader research memory;
+it remains non-deterministic LLM trajectory evidence. A prior
+`20260613T011255Z` launch root was aborted after two invalid-key cells because
+the ambient `SCION_API_KEY` was an upstream key, not the local proxy key.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 

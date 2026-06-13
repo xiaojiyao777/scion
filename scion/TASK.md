@@ -769,6 +769,23 @@ Exit criteria:
   a warehouse strong-control experiment that keeps branch/cross-branch research
   context visible while isolating measurement diagnostics; CVRP remains excluded
   from formal governance-value conclusions until measurement power improves.
+- Launched: warehouse Phase 5 explicit-control-pair strong-control experiment
+  from commit `bd8bfd8e020be2a51d1268070870c7ee2ff6b2ce` at
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw`.
+  Design: warehouse production problem/protocol/split/seeds, local `gpt-5.5`,
+  `measurement_governance=on`, arms `full` and
+  `no-measurement-diagnostics`, four order-balanced repeats, 8 rounds per cell,
+  `--time-limit-sec 30`, `--disable-early-stop`, and
+  `--agentic-session-timeout-sec 900`. Postrun manifests use matched
+  `control_pair_key=warehouse.full-vs-nomeas:<repeat>` for each repeat. This
+  isolates prompt-visible measurement diagnostics while keeping branch and
+  cross-branch research context visible; it still does not make LLM trajectories
+  deterministic. A prior launch root ending `20260613T011255Z-claw` was aborted
+  after two failed cells because the ambient `SCION_API_KEY` pointed at an
+  upstream key instead of the local proxy key. The active rerun script pins the
+  local proxy key and passed `bash -n`; current postrun acceptance remains open
+  until all cells finish and subagent analysis inspects summaries, trajectory
+  compares, LLM contexts, branch research, replay pressure, and leakage guards.
 
 ## Status Cadence
 
