@@ -213,6 +213,15 @@ report-only control keys, and compare `compact-measurement-diagnostics` against
 `no-measurement-diagnostics` and optionally `full`. Pull-based on-demand
 diagnostics remain deferred unless the longer compact run shows a clear need.
 
+That longer control is now launched from commit `0eca84f` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-control-3x3-4r-20260613T092510Z-claw`.
+It is a 3-repeat x 3-arm x 4-round warehouse production run with local
+`gpt-5.5`, uniform 30s solver cap, `measurement_governance=on` in every arm,
+order-balanced prompt arms, and matched report-only
+`control_pair_key=warehouse.compactdiag-control:<repeat>`. Treat it as a
+longer prompt-context control; do not treat it as the final governance-value
+matrix.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 

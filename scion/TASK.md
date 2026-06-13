@@ -903,6 +903,14 @@ Exit criteria:
   `control_pair_key` as pre-registered report pairing, not deterministic LLM
   replay. On-demand measurement tooling remains deferred unless the longer
   compact run shows the agent needs explicit pull-based diagnostics.
+- Launched: warehouse compact diagnostics longer control from commit `0eca84f`
+  at
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-control-3x3-4r-20260613T092510Z-claw`.
+  Design: 3 repeats x 3 prompt arms x 4 rounds, order-balanced arms,
+  warehouse production protocol/split/seeds, local `gpt-5.5`, uniform 30s
+  solver cap, `measurement_governance=on` in every arm, and matched report-only
+  `control_pair_key=warehouse.compactdiag-control:<repeat>`. Purpose is a
+  longer prompt-context control, not a final governance-value conclusion.
 
 ## Status Cadence
 
