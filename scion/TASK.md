@@ -923,6 +923,20 @@ Exit criteria:
   this run does not prove quality superiority or final governance value.
   On-demand diagnostics remain deferred: there is no evidence yet that compact
   failed because it lacked pull-based detailed measurement facts.
+- Launched: warehouse compact-baseline measurement-governance ON/OFF control
+  from commit `e1e4c48` at
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw`.
+  Design: 4 order-balanced repeats x 2 arms x 8 rounds. Both arms use
+  warehouse production protocol/split/seeds, local `gpt-5.5`, uniform 30s
+  solver cap, disabled early stop, and
+  `--proposal-context-ablation compact-measurement-diagnostics`. The ON arm
+  uses `--measurement-governance on`; the OFF arm uses
+  `--measurement-governance record-only`. Matched report-only
+  `control_pair_key=warehouse.gov-compact-onoff:<repeat>` is used for
+  trajectory manifests and compares. This is the next Phase 5 governance-value
+  control candidate, but still not deterministic LLM replay; any promotion,
+  validation, frozen, or strong expand candidate needs fixed-candidate replay
+  before causal governance claims.
 
 ## Status Cadence
 

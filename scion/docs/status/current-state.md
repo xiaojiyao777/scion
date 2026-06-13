@@ -240,6 +240,20 @@ same-mechanism follow-up behavior with five multi-hypothesis branches and max
 inferred branch depth 3. Treat this as prompt-context control evidence, not the
 final governance-value matrix.
 
+The next Phase 5 governance control is now launched from commit `e1e4c48` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw`.
+It uses warehouse production protocol/split/seeds, local `gpt-5.5`, uniform
+30s solver cap, disabled early stop, and
+`--proposal-context-ablation compact-measurement-diagnostics` in both arms. The
+ON arm uses `--measurement-governance on`; the OFF arm uses
+`--measurement-governance record-only`. Design: 4 order-balanced repeats x 2
+arms x 8 rounds, with matched report-only
+`control_pair_key=warehouse.gov-compact-onoff:<repeat>`. This is the first
+compact-baseline governance-value control candidate after prompt diagnostics
+cleanup. It remains non-deterministic LLM trajectory evidence; any accepted or
+strong borderline candidate must receive activation-complete fixed-candidate
+replay before causal governance claims.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 
