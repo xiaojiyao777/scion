@@ -254,6 +254,19 @@ cleanup. It remains non-deterministic LLM trajectory evidence; any accepted or
 strong borderline candidate must receive activation-complete fixed-candidate
 replay before causal governance claims.
 
+Queued after the current warehouse governance run: add a CVRP/VRP
+baseline-strength contrast for the long-standing "strong ALNS+VNS baseline may
+mask Scion improvements" hypothesis. The comparison should keep the current
+ALNS+VNS baseline intact and create a reproducible ALNS-only baseline variant
+with VNS disabled through the problem-owned solver configuration. It must first
+characterize both baselines without LLM calls, including quality, runtime,
+noise/MDE, and improvement headroom. Only then should matched Scion campaigns
+compare research productivity relative to each baseline: accepted evidence
+above that baseline's MDE, branch depth, same-mechanism follow-up,
+mechanism-family transfer, and cost per accepted insight. This is a
+baseline-strength/research-surface study, not a substitute for the current
+warehouse governance ON/OFF evidence.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 

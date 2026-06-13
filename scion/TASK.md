@@ -937,6 +937,22 @@ Exit criteria:
   control candidate, but still not deterministic LLM replay; any promotion,
   validation, frozen, or strong expand candidate needs fixed-candidate replay
   before causal governance claims.
+- Queued after the current warehouse governance run: add a CVRP/VRP
+  baseline-strength contrast to test whether the current ALNS+VNS baseline is
+  masking Scion's ability to make effective research progress. Do not remove
+  VNS from the existing baseline in place. Instead create a reproducible
+  problem-owned ALNS-only baseline variant with `USE_VNS=False` while keeping
+  the original ALNS+VNS champion as the control baseline. First run a no-LLM
+  baseline characterization/A-A check for both starts to measure quality,
+  runtime, MDE/noise, and effect headroom. Then run matched Scion campaigns
+  from the two baselines with the same problem, split, seeds, model, solver
+  budgets, governance settings, and round budget. Primary comparison is not raw
+  objective quality between baselines; it is Scion research productivity
+  relative to each baseline: validation/frozen/promotion above that baseline's
+  MDE, branch depth, same-mechanism follow-up, mechanism-family transfer, and
+  cost per accepted insight. This experiment should be interpreted as a
+  baseline-strength/research-surface study, not as a replacement for the
+  current warehouse governance ON/OFF evidence.
 
 ## Status Cadence
 
