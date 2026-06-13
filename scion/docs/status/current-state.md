@@ -81,29 +81,31 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    and mechanism studies that quantify Scion's value.
 
 The latest completed Phase 5 experiment artifact is the warehouse
-proposal-context ablation formal repeat from commit `171648c4204d`:
-[`../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
+explicit-control-pair full vs no-measurement-diagnostics repeat:
+[`../experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md).
 All arms kept `measurement_governance=on`; the ablation was proposal-visible
-only. The run executed three repeats of `full`,
-`no-measurement-diagnostics`, and `minimal-research-context`, with 8 rounds per
-cell. All 9 cells exited 0 and were valid complete runs; no arm promoted beyond
-champion v1. Full context produced the strongest evidence quality, including
-the only frozen row and zero fresh-runtime replay rows. The
-`no-measurement-diagnostics` arm removed prompt-visible measurement diagnostics
-while preserving other research context and reached one validation row. The
-`minimal-research-context` arm reduced pooled research-signal share to `3.83%`,
-reached no validation/frozen rows, and triggered fresh-runtime replay in all
-three repeats. The generated trajectory manifests and compares are report-only,
-non-mutating, and `observational_only=true`; this is valid context-ablation
-evidence, not a causal governance-value conclusion.
+only and isolated `problem_measurement_diagnostics` while preserving broader
+branch and cross-branch research memory. The run executed four order-balanced
+repeat pairs of `full` and `no-measurement-diagnostics`, with 8 rounds per cell.
+All 8 cells exited 0 and were valid complete runs. The no-measurement arm
+outperformed full on acceptance outcomes: 2 promotions, 3 validation rows, and
+2 frozen rows, versus no validation/frozen/promotion rows for full. Full context
+still produced deeper branch research (`max_depth=4`, mean `2.06`, versus
+`max_depth=3`, mean `1.53`), more sessions/traces, and more research-token
+volume, but that depth did not translate into stronger warehouse evidence.
 
-Current Phase 5 implication: keep full context as the current warehouse
-research-efficiency baseline, preserve a no-measurement-diagnostics arm for
-isolating measurement diagnostics, and do not adopt `minimal-research-context`
-as the default compression strategy. The next governance/context experiment
-needs trajectory-aware control or explicit control-pair keys. CVRP remains
-excluded from formal governance-value conclusions until measurement power
-improves.
+The previous warehouse proposal-context ablation formal repeat from commit
+`171648c4204d` remains background evidence:
+[`../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
+It showed that `minimal-research-context` removed too much branch/cross-branch
+research memory and should not become the default context compression strategy.
+
+Current Phase 5 implication: keep deterministic measurement governance ON, but
+do not render measurement diagnostics as a large always-visible warehouse
+hypothesis prompt block by default. Prefer `no-measurement-diagnostics` as the
+next warehouse prompt baseline or replace the block with compact/on-demand
+diagnostics. Do not adopt `minimal-research-context`. CVRP remains excluded
+from formal governance-value conclusions until measurement power improves.
 
 The latest accepted Phase 5 infrastructure slice is explicit report-only
 `control_pair_key` support for proposal trajectory manifests. `scion report
@@ -117,26 +119,19 @@ scheduler state, Protocol, and promotion state. Focused acceptance passed with
 `16 passed` in `test_proposal_trajectory_artifacts.py`, py_compile on touched
 report files, and `git diff --check`.
 
-Next operational gate: run a warehouse strong-control context/governance
-experiment using explicit control-pair keys, keeping branch and cross-branch
-research memory visible while isolating measurement diagnostics. The result
-must still inspect proposal trajectories, LLM contexts, branch depth/transfer,
-validation/frozen reach, replay pressure, and forbidden-field leakage before any
-Phase 5 causal claim.
-
-Active run: the warehouse explicit-control-pair strong-control experiment was
+Completed run: the warehouse explicit-control-pair strong-control experiment
 launched from commit `bd8bfd8e020be2a51d1268070870c7ee2ff6b2ce` at
 `/home/clawd/research/scion-experiments/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw`.
-It compares `full` vs `no-measurement-diagnostics` with
-`measurement_governance=on` in both arms, four order-balanced repeats, 8 rounds
-per cell, warehouse production protocol/split/seeds, local `gpt-5.5`,
-`--time-limit-sec 30`, `--disable-early-stop`, and
-`--agentic-session-timeout-sec 900`. Postrun manifests are pre-registered with
-`control_pair_key=warehouse.full-vs-nomeas:<repeat>`. This tests
-prompt-visible measurement diagnostics while preserving broader research memory;
-it remains non-deterministic LLM trajectory evidence. A prior
-`20260613T011255Z` launch root was aborted after two invalid-key cells because
-the ambient `SCION_API_KEY` was an upstream key, not the local proxy key.
+Postrun artifacts live under
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw/postrun_acceptance`.
+All four compares have matched `control_pair_key=warehouse.full-vs-nomeas:<repeat>`,
+`observational_only=false`, and `llm_deterministic_replay=false` with
+`control_pair_key_matched_not_deterministic_llm_replay`. Leakage and boundary
+checks passed for report-only, non-mutating artifacts; no no-measurement
+hypothesis prompt contained `problem_measurement_diagnostics`. The next gate is
+not another broad context ablation; it is a targeted follow-up on compact or
+on-demand measurement diagnostics and robustness checks for the two promoted
+warehouse patches.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).

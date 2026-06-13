@@ -783,9 +783,34 @@ Exit criteria:
   deterministic. A prior launch root ending `20260613T011255Z-claw` was aborted
   after two failed cells because the ambient `SCION_API_KEY` pointed at an
   upstream key instead of the local proxy key. The active rerun script pins the
-  local proxy key and passed `bash -n`; current postrun acceptance remains open
-  until all cells finish and subagent analysis inspects summaries, trajectory
-  compares, LLM contexts, branch research, replay pressure, and leakage guards.
+  local proxy key and passed `bash -n`; postrun acceptance is recorded in the
+  completed audit below.
+- Completed and audited: the warehouse Phase 5 explicit-control-pair
+  strong-control experiment. Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md`](docs/experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md).
+  All 8 cells exited `0`, every cell is valid and complete, and scripted
+  postrun summaries, failure reports, proposal-trajectory manifests, and four
+  matched-key compares were generated under
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-8r-20260613T011820Z-claw/postrun_acceptance`.
+  The compares all use `control_pair_key=warehouse.full-vs-nomeas:<repeat>`,
+  report `observational_only=false`, and preserve
+  `llm_deterministic_replay=false` with
+  `control_pair_key_matched_not_deterministic_llm_replay`; this remains
+  pre-registered report pairing, not deterministic replay. Prompt isolation
+  worked: `full` had `problem_measurement_diagnostics` in all 62 hypothesis
+  manifests, while `no-measurement-diagnostics` had it in 0/46 and still kept
+  compact research, cross-branch maps, branch lessons, branch history, sibling
+  branches, and champion research code visible. Outcome favored
+  `no-measurement-diagnostics`: 2 promotions, 3 validation rows, and 2 frozen
+  rows versus 0/0/0 for `full`. `full` showed deeper branch research
+  (`max_depth=4`, mean `2.06` vs `max_depth=3`, mean `1.53`) but did not turn
+  that extra depth into acceptance evidence. Leakage/boundary checks passed for
+  report-only/non-mutating artifacts and no raw prompt content was stored
+  (`raw_prompt` appeared only as `raw_prompt_saved=false`). Phase 5 conclusion:
+  always-visible measurement diagnostics are not supported as the warehouse
+  prompt default; keep deterministic measurement governance ON, prefer a compact
+  or on-demand diagnostics rendering, and keep CVRP excluded from formal
+  governance-value conclusions until measurement power improves.
 
 ## Status Cadence
 
