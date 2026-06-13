@@ -80,7 +80,24 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The latest completed Phase 5 experiment artifact is the warehouse
+The latest completed Phase 5 experiment artifact is the warehouse compact
+diagnostics longer control:
+[`../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md).
+It launched from commit `0eca84f` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-control-3x3-4r-20260613T092510Z-claw`.
+All 9 cells exited `0` with complete postrun summaries, failure reports,
+trajectory manifests, and compares. All arms kept `measurement_governance=on`;
+only proposal-visible measurement diagnostics changed. Prompt contracts passed:
+`full` exposed standalone measurement diagnostics in 24/24 hypothesis manifests,
+`compact-measurement-diagnostics` removed that standalone section and exposed
+bounded compact diagnostics in 22/22 manifests, and
+`no-measurement-diagnostics` had 0/22 measurement diagnostic hits while
+preserving branch and cross-branch research context. No arm reached validation,
+frozen, or promotion. Compact is accepted as a viable warehouse prompt baseline
+candidate, but the run does not prove quality superiority or final governance
+value.
+
+The previous accepted strong Phase 5 prompt ablation is the warehouse
 explicit-control-pair full vs no-measurement-diagnostics repeat:
 [`../experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-controlpair-full-vs-nomeas-4x2-20260613.md).
 All arms kept `measurement_governance=on`; the ablation was proposal-visible
@@ -102,10 +119,13 @@ research memory and should not become the default context compression strategy.
 
 Current Phase 5 implication: keep deterministic measurement governance ON, but
 do not render measurement diagnostics as a large always-visible warehouse
-hypothesis prompt block by default. Prefer `no-measurement-diagnostics` as the
-next warehouse prompt baseline or replace the block with compact/on-demand
-diagnostics. Do not adopt `minimal-research-context`. CVRP remains excluded
-from formal governance-value conclusions until measurement power improves.
+hypothesis prompt block by default. Prefer `compact-measurement-diagnostics` as
+the next warehouse prompt baseline candidate; keep
+`no-measurement-diagnostics` as a strong ablation arm and `full` as a reference.
+Do not adopt `minimal-research-context`. Pull-based on-demand diagnostics remain
+deferred until a targeted experiment shows compact needs detailed measurement
+facts. CVRP remains excluded from formal governance-value conclusions until
+measurement power improves.
 
 The latest promoted-patch robustness check is:
 [`../experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md).
@@ -207,20 +227,18 @@ joins from `0` to `2` joined code sessions. Acceptance passed the
 trajectory/report/source prompt suite (`84 passed`), py_compile, and
 `git diff --check`.
 
-Current next gate: run a longer compact diagnostics control rather than another
-2R shakedown. Keep `measurement_governance=on` in every arm, use matched
-report-only control keys, and compare `compact-measurement-diagnostics` against
-`no-measurement-diagnostics` and optionally `full`. Pull-based on-demand
-diagnostics remain deferred unless the longer compact run shows a clear need.
-
-That longer control is now launched from commit `0eca84f` at
-`/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-control-3x3-4r-20260613T092510Z-claw`.
-It is a 3-repeat x 3-arm x 4-round warehouse production run with local
-`gpt-5.5`, uniform 30s solver cap, `measurement_governance=on` in every arm,
+The longer compact diagnostics control is now complete and audited. It used a
+3-repeat x 3-arm x 4-round warehouse production design with local `gpt-5.5`,
+uniform 30s solver cap, `measurement_governance=on` in every arm,
 order-balanced prompt arms, and matched report-only
-`control_pair_key=warehouse.compactdiag-control:<repeat>`. Treat it as a
-longer prompt-context control; do not treat it as the final governance-value
-matrix.
+`control_pair_key=warehouse.compactdiag-control:<repeat>`. Aggregate evidence:
+`full` had 12 experiments and no validation/frozen/promotion rows;
+`compact-measurement-diagnostics` had 13 experiments, more continue decisions,
+and no validation/frozen/promotion rows; `no-measurement-diagnostics` had 12
+experiments and no validation/frozen/promotion rows. Compact preserved
+same-mechanism follow-up behavior with five multi-hypothesis branches and max
+inferred branch depth 3. Treat this as prompt-context control evidence, not the
+final governance-value matrix.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Compact diagnostics shakedown accepted; longer Phase 5 control next*
+*Status: Compact diagnostics longer control accepted; next Phase 5 design pending*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -895,14 +895,13 @@ Exit criteria:
   from `0` to `2` joined code sessions, leaving only the hypothesis-only
   sessions unjoined. Acceptance: trajectory/report/source prompt suite
   `84 passed`, py_compile on touched manifest modules, and `git diff --check`.
-- Next: run a longer compact diagnostics control, not another 2R shakedown.
-  Candidate design: warehouse production, at least three repeats, matched
-  report-only control keys, `measurement_governance=on` in every arm, and
-  primary comparison among `compact-measurement-diagnostics`,
-  `no-measurement-diagnostics`, and optionally `full`. Continue to treat
+- Completed design choice: run a longer compact diagnostics control rather than
+  another 2R shakedown. The accepted design used warehouse production, three
+  repeats, matched report-only control keys, `measurement_governance=on` in
+  every arm, and primary comparison among `compact-measurement-diagnostics`,
+  `no-measurement-diagnostics`, and `full`. Continue to treat
   `control_pair_key` as pre-registered report pairing, not deterministic LLM
-  replay. On-demand measurement tooling remains deferred unless the longer
-  compact run shows the agent needs explicit pull-based diagnostics.
+  replay.
 - Launched: warehouse compact diagnostics longer control from commit `0eca84f`
   at
   `/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-control-3x3-4r-20260613T092510Z-claw`.
@@ -911,6 +910,19 @@ Exit criteria:
   solver cap, `measurement_governance=on` in every arm, and matched report-only
   `control_pair_key=warehouse.compactdiag-control:<repeat>`. Purpose is a
   longer prompt-context control, not a final governance-value conclusion.
+- Completed and audited: warehouse compact diagnostics longer control. Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md`](docs/experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md).
+  All 9 cells exited `0`, produced complete postrun summaries/failures/
+  manifests/compares, and had no `run_errors.log`. Prompt contracts held:
+  `full` had standalone measurement diagnostics in 24/24 hypothesis manifests;
+  `compact-measurement-diagnostics` had 0/22 standalone sections and 22/22
+  compact diagnostics; `no-measurement-diagnostics` had 0/22 measurement
+  diagnostic hits. No arm reached validation, frozen, or promotion. Compact is
+  accepted as a viable prompt baseline candidate because it preserves research
+  context and branch follow-up while removing the large diagnostics block, but
+  this run does not prove quality superiority or final governance value.
+  On-demand diagnostics remain deferred: there is no evidence yet that compact
+  failed because it lacked pull-based detailed measurement facts.
 
 ## Status Cadence
 
