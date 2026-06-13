@@ -67,11 +67,11 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 3. Preserve and validate runtime-improvement promotion semantics for VRP:
    candidates may advance when objective quality ties or remains non-regressive
    and runtime evidence is complete and materially better.
-4. Treat the completed warehouse ON/OFF run as a shakedown, not a formal
-   governance-value conclusion. It validated the switch and warehouse promotion
-   path, but the LLM trajectories and promoted patches diverged. Formal
-   governance experiments should use fixed-candidate replay first; fixed-order
-   proposal replay is deferred. The completed CVRP 8-seed A/A check still
+4. Treat the completed warehouse ON/OFF runs as shakedown/control evidence,
+   not final governance-value conclusions. The latest compact-baseline
+   governance run validated the switch and replay path, but LLM trajectories
+   diverged; fixed-candidate replay for the strongest candidates showed no
+   ON/record-only difference. The completed CVRP 8-seed A/A check still
    measured MDE `9.6`, so CVRP remains low-power for
    `practical_delta_screen=2.0` and should not be the next formal governance
    target or long promotion campaign without another pre-registered measurement
@@ -81,6 +81,38 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    and mechanism studies that quantify Scion's value.
 
 The latest completed Phase 5 experiment artifact is the warehouse compact
+measurement-governance ON/OFF control:
+[`../experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md).
+It launched from commit `e1e4c48` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw`.
+All 8 cells exited `0` with postrun summaries, failure reports, proposal
+trajectory manifests, and compares. The run completed the planned
+4-repeat x 2-arm compact-baseline governance matrix, but it is accepted as
+observational evidence rather than a final governance-value proof:
+`control_pair_key` matched the repeat pairs, while LLM trajectories and
+candidate artifacts diverged.
+
+Raw trajectory favored `record_only` on acceptance outcomes because only
+`rep01/record_only_compact` reached validation, frozen, and promotion to
+champion v2. Fixed-candidate replay narrowed that claim: the promoted
+record-only candidate `070b6e4eb3046487` replayed identically under ON and
+record-only (`SCREENING_EXPAND`, W/L/T `3/0/3`, median delta `950.0`), and the
+strong ON candidate `d31c53b19d23ca4f` also replayed identically
+(`SCREENING_EXPAND`, W/L/T `5/1/4`, median delta `875.0`). Therefore the raw
+promotion difference cannot be attributed to measurement-governance OFF; it
+reflects divergent LLM/lifecycle trajectories after candidate generation.
+
+The run exposed v0.4 framework debt that should be repaired before another
+formal governance-value matrix: postrun accounting must distinguish effective
+budget, protocol rows, formal candidates, artifact rows, fresh-runtime drain,
+quality blocks, verification-heavy failures, and code-generation failures;
+failure reports currently miss non-fatal agentic/code/timeout failures; code
+phase source identity still shows `old_string_not_found`/`stale_source`
+failures and 11/78 code manifests with `missing_required_source_paths`; and
+fixed-candidate replay requires the V1 problem spec even though campaign launch
+uses the legacy warehouse `problem.yaml`.
+
+The previous completed Phase 5 prompt-context artifact is the warehouse compact
 diagnostics longer control:
 [`../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-control-3x3-20260613.md).
 It launched from commit `0eca84f` at
@@ -240,21 +272,14 @@ same-mechanism follow-up behavior with five multi-hypothesis branches and max
 inferred branch depth 3. Treat this as prompt-context control evidence, not the
 final governance-value matrix.
 
-The next Phase 5 governance control is now launched from commit `e1e4c48` at
-`/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw`.
-It uses warehouse production protocol/split/seeds, local `gpt-5.5`, uniform
-30s solver cap, disabled early stop, and
-`--proposal-context-ablation compact-measurement-diagnostics` in both arms. The
-ON arm uses `--measurement-governance on`; the OFF arm uses
-`--measurement-governance record-only`. Design: 4 order-balanced repeats x 2
-arms x 8 rounds, with matched report-only
-`control_pair_key=warehouse.gov-compact-onoff:<repeat>`. This is the first
-compact-baseline governance-value control candidate after prompt diagnostics
-cleanup. It remains non-deterministic LLM trajectory evidence; any accepted or
-strong borderline candidate must receive activation-complete fixed-candidate
-replay before causal governance claims.
+The compact-baseline governance control is now complete and audited. Treat it
+as a successful Phase 5 shakedown of the ON/OFF machinery plus a concrete
+source/accounting/replay repair finding, not as a final causal governance
+claim. The next main-thread step is to design and dispatch those repairs, then
+rerun or replay only after the accounting and source-identity reports are
+cleaner.
 
-Queued after the current warehouse governance run: add a CVRP/VRP
+Queued after the immediate warehouse governance-run repair planning: add a CVRP/VRP
 baseline-strength contrast for the long-standing "strong ALNS+VNS baseline may
 mask Scion improvements" hypothesis. The comparison should keep the current
 ALNS+VNS baseline intact and create a reproducible ALNS-only baseline variant
@@ -264,8 +289,8 @@ noise/MDE, and improvement headroom. Only then should matched Scion campaigns
 compare research productivity relative to each baseline: accepted evidence
 above that baseline's MDE, branch depth, same-mechanism follow-up,
 mechanism-family transfer, and cost per accepted insight. This is a
-baseline-strength/research-surface study, not a substitute for the current
-warehouse governance ON/OFF evidence.
+baseline-strength/research-surface study, not a substitute for the completed
+warehouse governance ON/OFF evidence or its repair findings.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).

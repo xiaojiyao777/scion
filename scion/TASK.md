@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Compact diagnostics longer control accepted; next Phase 5 design pending*
+*Status: Warehouse compact governance ON/OFF completed; repair planning next*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -923,21 +923,32 @@ Exit criteria:
   this run does not prove quality superiority or final governance value.
   On-demand diagnostics remain deferred: there is no evidence yet that compact
   failed because it lacked pull-based detailed measurement facts.
-- Launched: warehouse compact-baseline measurement-governance ON/OFF control
-  from commit `e1e4c48` at
+- Completed and audited: warehouse compact-baseline measurement-governance
+  ON/OFF control from commit `e1e4c48` at
   `/home/clawd/research/scion-experiments/v04-phase5-warehouse-governance-compact-onoff-4x2-8r-20260613T115956Z-claw`.
-  Design: 4 order-balanced repeats x 2 arms x 8 rounds. Both arms use
-  warehouse production protocol/split/seeds, local `gpt-5.5`, uniform 30s
-  solver cap, disabled early stop, and
-  `--proposal-context-ablation compact-measurement-diagnostics`. The ON arm
-  uses `--measurement-governance on`; the OFF arm uses
-  `--measurement-governance record-only`. Matched report-only
-  `control_pair_key=warehouse.gov-compact-onoff:<repeat>` is used for
-  trajectory manifests and compares. This is the next Phase 5 governance-value
-  control candidate, but still not deterministic LLM replay; any promotion,
-  validation, frozen, or strong expand candidate needs fixed-candidate replay
-  before causal governance claims.
-- Queued after the current warehouse governance run: add a CVRP/VRP
+  Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md`](docs/experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md).
+  All 8 cells exited `0`. Every cell completed
+  `effective_rounds_completed=8`, but effective protocol rows, formal
+  candidates, screening rows, formal artifact rows, and sessions diverged
+  because verification-heavy attempts, proposal/code failures, one-hypothesis
+  multi-candidate artifacts, and fresh-runtime replay drain are distinct
+  evidence layers. Raw trajectory had one record-only promotion and no ON
+  promotion, but fixed-candidate replay for the promoted record-only candidate
+  and the strongest ON candidate produced identical ON vs record-only screening
+  outcomes. Treat this run as valid observational governance shakedown evidence
+  and a concrete repair driver, not as final causal proof that either
+  governance arm is better.
+- Next repair gate before another formal governance-value matrix: implement a
+  stable postrun research-efficiency/accounting report that separates effective
+  budget, protocol rows, formal candidates, artifact rows, fresh-runtime drain,
+  validation/frozen rows, quality blocks, verification-heavy failures, and
+  code-generation failures; make non-fatal agentic/code/timeout failures appear
+  in failure taxonomy; repair code-phase source identity for modify operations
+  after `old_string_not_found`/`stale_source` failures and 11/78 code manifests
+  with `missing_required_source_paths`; and align fixed-candidate replay with
+  the campaign problem-spec bridge or fail clearly when a V1 spec is required.
+- Queued after the immediate warehouse governance-run repair planning: add a CVRP/VRP
   baseline-strength contrast to test whether the current ALNS+VNS baseline is
   masking Scion's ability to make effective research progress. Do not remove
   VNS from the existing baseline in place. Instead create a reproducible
@@ -952,7 +963,7 @@ Exit criteria:
   MDE, branch depth, same-mechanism follow-up, mechanism-family transfer, and
   cost per accepted insight. This experiment should be interpreted as a
   baseline-strength/research-surface study, not as a replacement for the
-  current warehouse governance ON/OFF evidence.
+  completed warehouse governance ON/OFF evidence or its repair findings.
 
 ## Status Cadence
 
