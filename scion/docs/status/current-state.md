@@ -167,6 +167,24 @@ not another broad context ablation; rep04 reconstruction has validated the
 repaired artifact path, so proceed to targeted compact/on-demand measurement
 diagnostics or another pre-registered fixed-candidate control.
 
+The compact diagnostics implementation is now accepted in commit `3c068c8`.
+`scion run --proposal-context-ablation compact-measurement-diagnostics` is a
+proposal-only context mode: it keeps protocol `measurement_governance=on` and
+does not change Protocol, DecisionFeatures, evaluation, lifecycle, or promotion
+semantics. It preserves branch history, cross-branch research, branch lessons,
+runtime feedback, objective opportunity profile, and code-phase source
+visibility, but removes the standalone `## Problem Measurement Diagnostics`
+hypothesis prompt section. The measurement signal is visible only inside
+bounded `Compact Research Signals` as
+`compact_problem_measurement_diagnostics`, and prompt manifests record
+`context_profile_metadata.measurement_diagnostics_visibility="compact"`.
+Focused acceptance passed with context/control tests (`20 passed`), the
+code-source visibility check (`1 passed`), report/CLI/model tests
+(`61 passed`), py_compile on touched proposal/CLI files, and
+`git diff --check`. Next gate: a warehouse shakedown comparing `full`,
+`compact-measurement-diagnostics`, and `no-measurement-diagnostics` with
+matched report-only control keys and prompt-manifest evidence.
+
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
 

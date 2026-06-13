@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Warehouse rep04 artifact reconstruction accepted; compact/on-demand diagnostics next*
+*Status: Compact measurement diagnostics implemented; shakedown next*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -854,6 +854,30 @@ Exit criteria:
   when represented by an activation-complete artifact. The historical old
   `d27b539b2b540a74` artifact remains incomplete and should stay marked as a
   negative artifact-completeness example.
+- Implemented the prompt-only `compact-measurement-diagnostics` context mode
+  in commit `3c068c8`. This keeps protocol `measurement_governance=on` and
+  leaves Protocol, DecisionFeatures, evaluation, lifecycle, and promotion
+  semantics unchanged. It preserves branch history, cross-branch research,
+  branch lessons, runtime feedback, objective opportunity profile, and
+  code-phase source visibility, but removes the standalone
+  `## Problem Measurement Diagnostics` hypothesis prompt section. Measurement
+  diagnostics remain visible only through bounded `Compact Research Signals`
+  under `compact_problem_measurement_diagnostics`, with
+  `context_profile_metadata.measurement_diagnostics_visibility="compact"`.
+  `no-measurement-diagnostics` and `measurement_governance=record_only` still
+  fully suppress prompt-visible measurement diagnostics and strip
+  measurement-owned opportunity diagnostics from experiment history. Acceptance:
+  focused context/control suite `20 passed`, prompt/source visibility check
+  `1 passed`, report/CLI/model suite `61 passed`, py_compile on touched
+  proposal/CLI files, and `git diff --check`.
+- Next: run a warehouse compact diagnostics shakedown that compares `full`,
+  `compact-measurement-diagnostics`, and `no-measurement-diagnostics` with
+  matched report-only control keys. The first acceptance criterion is prompt
+  evidence: compact mode must have no standalone
+  `problem_measurement_diagnostics` section while preserving compact research,
+  cross-branch learning, branch lessons, branch history, sibling branches, and
+  code/source visibility. On-demand measurement tooling remains deferred unless
+  the compact shakedown shows the agent needs explicit pull-based diagnostics.
 
 ## Status Cadence
 
