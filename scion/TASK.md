@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Warehouse explicit control-pair key accepted; next strong-control experiment open*
+*Status: Warehouse rep04 artifact reconstruction accepted; compact/on-demand diagnostics next*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -825,16 +825,11 @@ Exit criteria:
   and replayed ON vs `record_only` with no row errors. The rep01
   `merge_vehicles.py` promotion remained a screening-expand candidate under
   both arms (`3/0/3` case W/L/T, median delta `875.0`). The rep04
-  `split_safe_cost_repack.py` promotion did not reproduce its source screening
-  result: replay tied all 10 cases and failed screening under both arms. Audit
-  found that the source workspace registered `SplitSafeCostRepack` in
-  `registry.yaml`, but the formal candidate artifact recorded only the new
-  operator file, so replay materialized an inactive operator. Treat rep04 as a
-  formal-artifact completeness bug, not robust promotion evidence. Next P0/P1:
-  make `create_new` operator formal artifacts capture activation files such as
-  `registry.yaml` or mark such candidates non-replayable, then rerun rep04
-  replay.
-- Implemented the formal-artifact completeness repair for future
+  `split_safe_cost_repack.py` old artifact did not reproduce its source
+  screening result because replay materialized an inactive operator: the source
+  workspace registered `SplitSafeCostRepack` in `registry.yaml`, but the old
+  formal candidate artifact recorded only the new operator file.
+- Implemented and validated the formal-artifact completeness repair for future
   `create_new`/activation-surface candidates. `FormalCandidatePatchArtifactRecorder`
   now compares candidate workspace activation files against the base workspace,
   appends changed `registry.yaml` as canonical full-file patch content, records
@@ -844,10 +839,21 @@ Exit criteria:
   `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py`
   (`21 passed`),
   `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile scion/scion/core/formal_candidate_artifacts.py scion/scion/core/fixed_candidate_replay.py scion/scion/cli/commands/reports.py`,
-  and `git diff --check`. Caveat: the historical rep04 artifact remains
-  incomplete; to replay it as positive evidence, reconstruct a corrected
-  artifact from the archived source workspace or rerun the campaign after this
-  repair.
+  and `git diff --check`.
+- Reconstructed and replayed the historical rep04 artifact with activation
+  files included. Reconstruction root:
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-reconstructed-rep04-fixed-replay-20260613T081722Z-claw`.
+  Corrected candidate `2acf36e8e8709eb6` records
+  `target_files=["operators/split_safe_cost_repack.py", "registry.yaml"]` and
+  `activation_files=["registry.yaml"]`. The production-scope replay at
+  `replay_corrected_prod/fixed_candidate_replay_comparison.v1.json` completed
+  with `row_count=2`, no errors, identical ON/`record_only` outcomes, and
+  `SCREENING_EXPAND`: current case W/L/T `5/1/4`, pair W/L/T `12/2/6`,
+  median delta `775.0`, CI `[0.0, 3025.0]`, and canary passed. This validates
+  the artifact-completeness repair and makes rep04 positive replay evidence
+  when represented by an activation-complete artifact. The historical old
+  `d27b539b2b540a74` artifact remains incomplete and should stay marked as a
+  negative artifact-completeness example.
 
 ## Status Cadence
 

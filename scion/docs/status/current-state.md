@@ -118,26 +118,28 @@ included 1 candidate, filtered out 4, omitted 0, and replayed ON vs
 `record_only` with no row errors. The rep01 `merge_vehicles.py` promotion is
 stable at fixed-candidate screening replay (`expand`, case W/L/T `3/0/3`,
 median delta `875.0`) and shows no ON/record-only difference. The rep04
-`split_safe_cost_repack.py` promotion is not robust evidence: replay tied all
-10 cases and failed screening under both arms. Root cause is formal artifact
-incompleteness for `create_new` operators: the source workspace registered the
-new operator in `registry.yaml`, but `candidate.patch.json` recorded only the
-new operator file, so replay materialized an inactive operator. Next P0/P1
-repair is to capture activation files such as `registry.yaml` in formal
-candidate artifacts or mark those candidates non-replayable, then rerun the
-rep04 replay.
+`split_safe_cost_repack.py` old artifact failed replay because it recorded
+only the new operator file while the source workspace also changed
+`registry.yaml`; replay therefore materialized an inactive operator.
 
-That formal-artifact completeness repair is now implemented for future
-artifacts. `FormalCandidatePatchArtifactRecorder` compares candidate workspace
-activation files against the base workspace, appends changed `registry.yaml` as
-canonical full-file patch content, records `proposal_target_files` and
+That formal-artifact completeness repair is now implemented and validated.
+`FormalCandidatePatchArtifactRecorder` compares candidate workspace activation
+files against the base workspace, appends changed `registry.yaml` as canonical
+full-file patch content, records `proposal_target_files` and
 `activation_files`, and includes those files in the patch digest/replay
 identity. Acceptance passed with `test_fixed_candidate_replay.py` plus
 `test_decision_finalizer_lifecycle.py` (`21 passed`), py_compile on touched
-modules, and `git diff --check`. Caveat: the historical rep04
-`candidate.patch.json` remains incomplete; it needs a reconstructed corrected
-artifact from the archived source workspace or a fresh campaign rerun after
-this repair before it can become positive replay evidence.
+modules, and `git diff --check`. A corrected historical rep04 artifact was then
+reconstructed at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-reconstructed-rep04-fixed-replay-20260613T081722Z-claw`
+with `target_files=["operators/split_safe_cost_repack.py", "registry.yaml"]`
+and `activation_files=["registry.yaml"]`. The production-scope replay at
+`replay_corrected_prod/fixed_candidate_replay_comparison.v1.json` completed
+with `row_count=2`, no errors, identical ON/`record_only` outcomes, and
+`SCREENING_EXPAND`: current case W/L/T `5/1/4`, pair W/L/T `12/2/6`, median
+delta `775.0`, CI `[0.0, 3025.0]`, and canary passed. The historical old
+`d27b539b2b540a74` artifact remains incomplete, but the mechanism is positive
+replay evidence when represented by an activation-complete artifact.
 
 The latest accepted Phase 5 infrastructure slice is explicit report-only
 `control_pair_key` support for proposal trajectory manifests. `scion report
@@ -161,9 +163,9 @@ All four compares have matched `control_pair_key=warehouse.full-vs-nomeas:<repea
 `control_pair_key_matched_not_deterministic_llm_replay`. Leakage and boundary
 checks passed for report-only, non-mutating artifacts; no no-measurement
 hypothesis prompt contained `problem_measurement_diagnostics`. The next gate is
-not another broad context ablation; next either reconstruct/rerun rep04 to
-validate the repaired artifact path, or proceed to targeted compact/on-demand
-measurement diagnostics with the rep04 caveat carried forward.
+not another broad context ablation; rep04 reconstruction has validated the
+repaired artifact path, so proceed to targeted compact/on-demand measurement
+diagnostics or another pre-registered fixed-candidate control.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
