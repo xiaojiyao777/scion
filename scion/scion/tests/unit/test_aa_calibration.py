@@ -88,7 +88,8 @@ def test_aa_calibration_payload_is_problem_owned_diagnostic() -> None:
             "resolved_unique_sec": [45],
             "rules": [{"min_dimension": 150, "time_limit_sec": 45}],
         },
-        "runner_timeout_sec": 45,
+        "runner_timeout_grace_sec": 15,
+        "runner_timeout_sec": 60,
     }
 
     payload = build_aa_noise_floor_payload(
@@ -194,7 +195,8 @@ def test_aa_calibration_runtime_policy_can_resolve_protocol_case_rules() -> None
 
     assert summary["selected_policy"] == "protocol_time_limits"
     assert summary["formal_time_limits"]["resolved_unique_sec"] == [30, 45]
-    assert summary["runner_timeout_sec"] == 45
+    assert summary["runner_timeout_grace_sec"] == 15
+    assert summary["runner_timeout_sec"] == 60
     assert resolve_calibration_time_limit_sec(
         protocol=protocol,
         stage=ExperimentStage.SCREENING,

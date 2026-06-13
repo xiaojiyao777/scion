@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_INLINE_OUTPUT_BYTES = 50_000
 _OFFLOAD_PREFIX = "__offloaded__:"
-_SOLVER_WALL_CLOCK_GRACE_SEC = 2
+_SOLVER_WALL_CLOCK_GRACE_SEC = 15
 _POST_KILL_DRAIN_GRACE_SEC = 1
 
 

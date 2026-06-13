@@ -9,6 +9,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
+_CALIBRATION_RUNNER_TIMEOUT_GRACE_SEC = 15
+
 
 @dataclass(frozen=True)
 class AAPairRecord:
@@ -228,10 +230,12 @@ def runtime_policy_summary(
         runner_timeout = int(formal_summary.get("resolved_max_sec") or uniform_limit)
     else:
         runner_timeout = uniform_limit
+    runner_timeout = runner_timeout + _CALIBRATION_RUNNER_TIMEOUT_GRACE_SEC
     return {
         "selected_policy": selected_policy,
         "uniform_time_limit_sec": uniform_limit,
         "formal_time_limits": formal_summary,
+        "runner_timeout_grace_sec": _CALIBRATION_RUNNER_TIMEOUT_GRACE_SEC,
         "runner_timeout_sec": max(1, runner_timeout),
     }
 
