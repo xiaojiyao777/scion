@@ -161,6 +161,16 @@ def register_report_commands(report_app: typer.Typer) -> None:
             "--max-candidates",
             help="Maximum number of eligible candidates to include",
         ),
+        candidate_id: Optional[list[str]] = typer.Option(
+            None,
+            "--candidate-id",
+            help="Candidate id to include; may be supplied multiple times",
+        ),
+        hypothesis_id: Optional[list[str]] = typer.Option(
+            None,
+            "--hypothesis-id",
+            help="Hypothesis id to include; may be supplied multiple times",
+        ),
     ) -> None:
         """Build a fixed-candidate replay manifest from formal artifacts."""
         from scion.core.fixed_candidate_replay import (
@@ -174,6 +184,8 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 comparison_id=comparison_id,
                 output_path=output,
                 max_candidates=max_candidates,
+                candidate_ids=candidate_id,
+                hypothesis_ids=hypothesis_id,
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -188,6 +200,9 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 {
                     "manifest_path": str(manifest_path),
                     "candidate_count": manifest["candidate_count"],
+                    "filtered_out_row_count": manifest.get(
+                        "filtered_out_row_count", 0
+                    ),
                     "omitted_row_count": len(manifest["omitted_rows"]),
                     "schema_version": manifest["schema_version"],
                 },

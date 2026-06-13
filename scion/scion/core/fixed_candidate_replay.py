@@ -6,7 +6,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from scion.core.evidence_recording.replay_identity import (
     formal_replay_identity_missing_keys,
@@ -30,6 +30,8 @@ def build_fixed_candidate_replay_manifest(
     source_arm: str,
     comparison_id: str,
     max_candidates: int | None = None,
+    candidate_ids: Sequence[str] | None = None,
+    hypothesis_ids: Sequence[str] | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic manifest for fixed-candidate governance replay.
@@ -43,10 +45,18 @@ def build_fixed_candidate_replay_manifest(
         raise ValueError("max_candidates must be non-negative")
     index_path, source_campaign_dir = resolve_formal_candidate_index(source)
     rows = _read_index_rows(index_path)
+    candidate_filter = _candidate_filter(
+        candidate_ids=candidate_ids,
+        hypothesis_ids=hypothesis_ids,
+    )
+    filtered_out_row_count = 0
 
     candidates: list[dict[str, Any]] = []
     omitted_rows: list[dict[str, Any]] = []
     for row_index, row in enumerate(rows):
+        if not _row_matches_candidate_filter(row, candidate_filter):
+            filtered_out_row_count += 1
+            continue
         row_reasons = _row_omission_reasons(row)
         artifact_ref = _clean_str(row.get("artifact_ref"))
         metadata_path = _resolve_artifact_path(
@@ -98,6 +108,8 @@ def build_fixed_candidate_replay_manifest(
         "source_campaign_dir": str(source_campaign_dir),
         "source_arm": source_arm,
         "generated_at": generated_at or _utc_now_iso(),
+        "candidate_filter": candidate_filter,
+        "filtered_out_row_count": filtered_out_row_count,
         "candidate_count": len(candidates),
         "causal_candidate_pairing": bool(candidates),
         "replay_arms": list(REPLAY_ARMS),
@@ -113,6 +125,8 @@ def write_fixed_candidate_replay_manifest(
     comparison_id: str,
     output_path: str | Path | None = None,
     max_candidates: int | None = None,
+    candidate_ids: Sequence[str] | None = None,
+    hypothesis_ids: Sequence[str] | None = None,
 ) -> Path:
     """Build and write a fixed-candidate replay manifest JSON artifact."""
 
@@ -127,6 +141,8 @@ def write_fixed_candidate_replay_manifest(
         source_arm=source_arm,
         comparison_id=comparison_id,
         max_candidates=max_candidates,
+        candidate_ids=candidate_ids,
+        hypothesis_ids=hypothesis_ids,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(_manifest_json(manifest), encoding="utf-8")
@@ -178,6 +194,30 @@ def _read_index_rows(index_path: Path) -> list[Mapping[str, Any]]:
                 )
             rows.append(row)
     return rows
+
+
+def _candidate_filter(
+    *,
+    candidate_ids: Sequence[str] | None,
+    hypothesis_ids: Sequence[str] | None,
+) -> dict[str, list[str]]:
+    return {
+        "candidate_ids": _sorted_clean_strings(candidate_ids),
+        "hypothesis_ids": _sorted_clean_strings(hypothesis_ids),
+    }
+
+
+def _row_matches_candidate_filter(
+    row: Mapping[str, Any],
+    candidate_filter: Mapping[str, Sequence[str]],
+) -> bool:
+    candidate_ids = set(candidate_filter.get("candidate_ids") or ())
+    hypothesis_ids = set(candidate_filter.get("hypothesis_ids") or ())
+    if not candidate_ids and not hypothesis_ids:
+        return True
+    candidate_id = _clean_str(row.get("candidate_id"))
+    hypothesis_id = _clean_str(row.get("hypothesis_id"))
+    return candidate_id in candidate_ids or hypothesis_id in hypothesis_ids
 
 
 def _row_omission_reasons(row: Mapping[str, Any]) -> list[str]:
@@ -853,6 +893,10 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, (list, tuple, set)):
         return [_clean_str(item) for item in value if _clean_str(item)]
     return []
+
+
+def _sorted_clean_strings(value: Sequence[str] | None) -> list[str]:
+    return sorted(set(_string_list(value)))
 
 
 def _dedupe(values: list[str]) -> list[str]:

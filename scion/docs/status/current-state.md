@@ -107,6 +107,26 @@ next warehouse prompt baseline or replace the block with compact/on-demand
 diagnostics. Do not adopt `minimal-research-context`. CVRP remains excluded
 from formal governance-value conclusions until measurement power improves.
 
+The latest promoted-patch robustness check is:
+[`../experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md).
+The valid replay root is
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-promoted-only-fixed-replay-20260613T075754Z-claw`.
+The fixed-candidate manifest builder now supports promoted-only filters via
+`--candidate-id` and `--hypothesis-id`; focused acceptance passed with
+`test_fixed_candidate_replay.py` (`7 passed`). Both promoted-only manifests
+included 1 candidate, filtered out 4, omitted 0, and replayed ON vs
+`record_only` with no row errors. The rep01 `merge_vehicles.py` promotion is
+stable at fixed-candidate screening replay (`expand`, case W/L/T `3/0/3`,
+median delta `875.0`) and shows no ON/record-only difference. The rep04
+`split_safe_cost_repack.py` promotion is not robust evidence: replay tied all
+10 cases and failed screening under both arms. Root cause is formal artifact
+incompleteness for `create_new` operators: the source workspace registered the
+new operator in `registry.yaml`, but `candidate.patch.json` recorded only the
+new operator file, so replay materialized an inactive operator. Next P0/P1
+repair is to capture activation files such as `registry.yaml` in formal
+candidate artifacts or mark those candidates non-replayable, then rerun the
+rep04 replay.
+
 The latest accepted Phase 5 infrastructure slice is explicit report-only
 `control_pair_key` support for proposal trajectory manifests. `scion report
 proposal-trajectory-manifest --control-pair-key ...` writes a validated
@@ -129,9 +149,9 @@ All four compares have matched `control_pair_key=warehouse.full-vs-nomeas:<repea
 `control_pair_key_matched_not_deterministic_llm_replay`. Leakage and boundary
 checks passed for report-only, non-mutating artifacts; no no-measurement
 hypothesis prompt contained `problem_measurement_diagnostics`. The next gate is
-not another broad context ablation; it is a targeted follow-up on compact or
-on-demand measurement diagnostics and robustness checks for the two promoted
-warehouse patches.
+not another broad context ablation; first repair formal candidate artifact
+completeness for `create_new` warehouse operators, then continue targeted
+compact or on-demand measurement diagnostics.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).

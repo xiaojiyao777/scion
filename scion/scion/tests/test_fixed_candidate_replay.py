@@ -201,24 +201,73 @@ def test_omits_candidates_without_replayable_screening_artifacts(
     ]
 
 
+def test_manifest_filters_candidates_by_candidate_or_hypothesis_id(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign"
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    for candidate_id, hypothesis_id in [
+        ("candidate-a", "hyp-a"),
+        ("candidate-b", "hyp-b"),
+        ("candidate-c", "hyp-c"),
+    ]:
+        artifact_ref = _write_candidate_artifact(campaign_dir, candidate_id)
+        _append_index_row(
+            index_path,
+            {
+                "candidate_id": candidate_id,
+                "branch_id": f"branch-{candidate_id}",
+                "hypothesis_id": hypothesis_id,
+                "stage": "screening",
+                "patch_digest": f"patch-digest-{candidate_id}",
+                "artifact_ref": artifact_ref,
+                "artifact_status": "recorded",
+                "replay_identity_status": "complete",
+                "missing_replay_identity_keys": [],
+            },
+        )
+
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="on",
+        comparison_id="cmp-filter",
+        candidate_ids=["candidate-b"],
+        hypothesis_ids=["hyp-c"],
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert manifest["candidate_filter"] == {
+        "candidate_ids": ["candidate-b"],
+        "hypothesis_ids": ["hyp-c"],
+    }
+    assert manifest["filtered_out_row_count"] == 1
+    assert manifest["candidate_count"] == 2
+    assert [row["candidate_id"] for row in manifest["candidates"]] == [
+        "candidate-b",
+        "candidate-c",
+    ]
+    assert manifest["omitted_rows"] == []
+
+
 def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
     campaign_dir = tmp_path / "campaign"
     index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(campaign_dir, "candidate-cli")
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-cli",
-            "branch_id": "branch-cli",
-            "hypothesis_id": "hyp-cli",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
+    for candidate_id in ["candidate-cli", "candidate-other"]:
+        artifact_ref = _write_candidate_artifact(campaign_dir, candidate_id)
+        _append_index_row(
+            index_path,
+            {
+                "candidate_id": candidate_id,
+                "branch_id": "branch-cli",
+                "hypothesis_id": f"hyp-{candidate_id}",
+                "stage": "screening",
+                "patch_digest": "patch-digest-a",
+                "artifact_ref": artifact_ref,
+                "artifact_status": "recorded",
+                "replay_identity_status": "complete",
+                "missing_replay_identity_keys": [],
+            },
+        )
     output_path = tmp_path / "manifest.json"
 
     result = runner.invoke(
@@ -232,6 +281,8 @@ def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
             "record_only",
             "--comparison-id",
             "cmp-cli",
+            "--candidate-id",
+            "candidate-cli",
             "--output",
             str(output_path),
         ],
@@ -240,10 +291,12 @@ def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     summary = json.loads(result.output)
     assert summary["candidate_count"] == 1
+    assert summary["filtered_out_row_count"] == 1
     assert summary["omitted_row_count"] == 0
     assert summary["manifest_path"] == str(output_path)
     manifest = json.loads(output_path.read_text(encoding="utf-8"))
     assert manifest["comparison_id"] == "cmp-cli"
+    assert manifest["candidate_filter"]["candidate_ids"] == ["candidate-cli"]
     assert manifest["candidates"][0]["candidate_id"] == "candidate-cli"
 
 

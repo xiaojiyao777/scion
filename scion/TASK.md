@@ -811,6 +811,29 @@ Exit criteria:
   prompt default; keep deterministic measurement governance ON, prefer a compact
   or on-demand diagnostics rendering, and keep CVRP excluded from formal
   governance-value conclusions until measurement power improves.
+- Completed and audited: promoted-only fixed-candidate screening replay for
+  the two warehouse promotions from the `no-measurement-diagnostics` arm.
+  Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md`](docs/experiments/v0.4/v04-phase5-warehouse-promoted-fixed-replay-20260613.md).
+  The fixed-candidate manifest builder now supports `--candidate-id` and
+  `--hypothesis-id` filters and records `candidate_filter` plus
+  `filtered_out_row_count`; acceptance passed with
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py`
+  (`7 passed`). The valid promoted-only replay root is
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-promoted-only-fixed-replay-20260613T075754Z-claw`.
+  Each manifest included 1 candidate, filtered 4 candidates, omitted 0 rows,
+  and replayed ON vs `record_only` with no row errors. The rep01
+  `merge_vehicles.py` promotion remained a screening-expand candidate under
+  both arms (`3/0/3` case W/L/T, median delta `875.0`). The rep04
+  `split_safe_cost_repack.py` promotion did not reproduce its source screening
+  result: replay tied all 10 cases and failed screening under both arms. Audit
+  found that the source workspace registered `SplitSafeCostRepack` in
+  `registry.yaml`, but the formal candidate artifact recorded only the new
+  operator file, so replay materialized an inactive operator. Treat rep04 as a
+  formal-artifact completeness bug, not robust promotion evidence. Next P0/P1:
+  make `create_new` operator formal artifacts capture activation files such as
+  `registry.yaml` or mark such candidates non-replayable, then rerun rep04
+  replay.
 
 ## Status Cadence
 
