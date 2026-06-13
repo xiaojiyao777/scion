@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Compact measurement diagnostics implemented; shakedown next*
+*Status: Compact diagnostics shakedown accepted; longer Phase 5 control next*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -870,14 +870,39 @@ Exit criteria:
   focused context/control suite `20 passed`, prompt/source visibility check
   `1 passed`, report/CLI/model suite `61 passed`, py_compile on touched
   proposal/CLI files, and `git diff --check`.
-- Next: run a warehouse compact diagnostics shakedown that compares `full`,
-  `compact-measurement-diagnostics`, and `no-measurement-diagnostics` with
-  matched report-only control keys. The first acceptance criterion is prompt
-  evidence: compact mode must have no standalone
-  `problem_measurement_diagnostics` section while preserving compact research,
-  cross-branch learning, branch lessons, branch history, sibling branches, and
-  code/source visibility. On-demand measurement tooling remains deferred unless
-  the compact shakedown shows the agent needs explicit pull-based diagnostics.
+- Completed and audited: warehouse compact diagnostics shakedown. Report:
+  [`docs/experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-shakedown-20260613.md`](docs/experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-shakedown-20260613.md).
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-shakedown-3arms-2r-20260613T084629Z-claw`.
+  The run launched from commit `5159249` with one repeat, two rounds per arm,
+  warehouse production protocol/split/seeds, `measurement_governance=on`, and
+  report-only `control_pair_key=warehouse.compactdiag-shakedown:rep01`. All
+  three arms exited `0` and produced summaries, failures, proposal trajectory
+  manifests, and pairwise compares. Prompt evidence passed: `full` had
+  standalone `problem_measurement_diagnostics` in 3/3 hypothesis manifests;
+  `compact-measurement-diagnostics` had 0/4 standalone sections and 4/4 bounded
+  `compact_research_signals` with
+  `compact_problem_measurement_diagnostics`; `no-measurement-diagnostics` had
+  0/4 measurement diagnostics and no measurement string leakage while preserving
+  broader research context. This is accepted as prompt/manifest shakedown only,
+  not governance-value evidence.
+- Fixed after the shakedown: report-only proposal trajectory joins now handle
+  activation-complete duplicate formal-candidate rows, and code-phase source
+  visibility accounting now infers create-new mode when action is absent but
+  `target_file_exists=false` or `source_status=new_file` is present. Commit
+  `3835670` repaired both accounting issues. Rebuilt report-only manifests at
+  `postrun_acceptance_rebuilt_after_joinfix` restore compact trajectory joins
+  from `0` to `2` joined code sessions, leaving only the hypothesis-only
+  sessions unjoined. Acceptance: trajectory/report/source prompt suite
+  `84 passed`, py_compile on touched manifest modules, and `git diff --check`.
+- Next: run a longer compact diagnostics control, not another 2R shakedown.
+  Candidate design: warehouse production, at least three repeats, matched
+  report-only control keys, `measurement_governance=on` in every arm, and
+  primary comparison among `compact-measurement-diagnostics`,
+  `no-measurement-diagnostics`, and optionally `full`. Continue to treat
+  `control_pair_key` as pre-registered report pairing, not deterministic LLM
+  replay. On-demand measurement tooling remains deferred unless the longer
+  compact run shows the agent needs explicit pull-based diagnostics.
 
 ## Status Cadence
 

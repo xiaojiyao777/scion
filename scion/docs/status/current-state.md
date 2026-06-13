@@ -181,9 +181,37 @@ bounded `Compact Research Signals` as
 Focused acceptance passed with context/control tests (`20 passed`), the
 code-source visibility check (`1 passed`), report/CLI/model tests
 (`61 passed`), py_compile on touched proposal/CLI files, and
-`git diff --check`. Next gate: a warehouse shakedown comparing `full`,
-`compact-measurement-diagnostics`, and `no-measurement-diagnostics` with
-matched report-only control keys and prompt-manifest evidence.
+`git diff --check`.
+
+That warehouse shakedown is now complete and audited:
+[`../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-shakedown-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-compact-diagnostics-shakedown-20260613.md).
+It launched from commit `5159249` at
+`/home/clawd/research/scion-experiments/v04-phase5-warehouse-compact-diagnostics-shakedown-3arms-2r-20260613T084629Z-claw`
+with one repeat, two rounds per arm, warehouse production protocol/split/seeds,
+`measurement_governance=on`, and matched report-only
+`control_pair_key=warehouse.compactdiag-shakedown:rep01`. All three arms
+exited `0`. Prompt evidence passed: `full` exposed standalone measurement
+diagnostics, `compact-measurement-diagnostics` removed that standalone section
+and exposed only bounded compact diagnostics, and `no-measurement-diagnostics`
+suppressed measurement diagnostics entirely while preserving broader research
+context. This is prompt/manifest shakedown evidence only, not governance-value
+evidence.
+
+The shakedown found two report/manifest accounting issues, both fixed in commit
+`3835670`: proposal trajectory joins now handle activation-complete duplicate
+formal-candidate rows, and code-phase source visibility accounting now infers
+create-new mode from explicit target absence or `source_status=new_file` when
+`action` is absent. Rebuilt report-only manifests under
+`postrun_acceptance_rebuilt_after_joinfix` restore compact formal-candidate
+joins from `0` to `2` joined code sessions. Acceptance passed the
+trajectory/report/source prompt suite (`84 passed`), py_compile, and
+`git diff --check`.
+
+Current next gate: run a longer compact diagnostics control rather than another
+2R shakedown. Keep `measurement_governance=on` in every arm, use matched
+report-only control keys, and compare `compact-measurement-diagnostics` against
+`no-measurement-diagnostics` and optionally `full`. Pull-based on-demand
+diagnostics remain deferred unless the longer compact run shows a clear need.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
