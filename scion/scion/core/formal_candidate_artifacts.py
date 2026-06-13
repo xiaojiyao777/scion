@@ -87,7 +87,13 @@ class FormalCandidatePatchArtifactRecorder:
             or hypothesis.change_locus
             or ""
         )
-        changes = patch_file_changes(patch) if patch is not None else ()
+        proposal_changes = patch_file_changes(patch) if patch is not None else ()
+        changes = _changes_with_activation_files(
+            proposal_changes,
+            workspace=workspace,
+            base_workspace=base_workspace,
+        )
+        activation_files = _activation_file_paths(proposal_changes, changes)
         patch_digest = _patch_digest(changes) if patch is not None else ""
         replay_identity = (
             formal_replay_identity_payload(
@@ -192,6 +198,8 @@ class FormalCandidatePatchArtifactRecorder:
                 getattr(branch, "branch_code_status", "") or ""
             ),
             "target_files": [change.file_path for change in changes],
+            "proposal_target_files": [change.file_path for change in proposal_changes],
+            "activation_files": activation_files,
             "base": {
                 "base_champion_id": branch.base_champion_id,
                 "base_champion_hash": branch.base_champion_hash,
@@ -237,7 +245,9 @@ class FormalCandidatePatchArtifactRecorder:
                 "replay_identity_status": replay_identity["identity_status"],
                 "patch_model": (
                     "code_content is canonical full-file candidate content; "
-                    "base/current hashes and diff support audit replay"
+                    "base/current hashes and diff support audit replay; "
+                    "activation_files are runtime-owned support files required "
+                    "to materialize the executed candidate workspace"
                 ),
                 "formal_replay_identity_ref": (
                     f"{artifact_ref}#/replay_identity" if artifact_ref else ""
@@ -345,6 +355,79 @@ class FormalCandidatePatchArtifactRecorder:
 def _stage_value(protocol_result: ProtocolResult) -> str:
     stage = getattr(protocol_result, "stage", "")
     return str(getattr(stage, "value", stage) or "")
+
+
+def _changes_with_activation_files(
+    changes: Iterable[PatchFileChange],
+    *,
+    workspace: str | None,
+    base_workspace: str | None,
+) -> tuple[PatchFileChange, ...]:
+    result = list(changes)
+    existing = {
+        normalize_relative_patch_path(change.file_path)
+        for change in result
+        if change.file_path
+    }
+    for activation_file in ("registry.yaml",):
+        if activation_file in existing:
+            continue
+        extra = _activation_file_change(
+            activation_file,
+            workspace=workspace,
+            base_workspace=base_workspace,
+        )
+        if extra is not None:
+            result.append(extra)
+    return tuple(result)
+
+
+def _activation_file_change(
+    file_rel: str,
+    *,
+    workspace: str | None,
+    base_workspace: str | None,
+) -> PatchFileChange | None:
+    if not workspace:
+        return None
+    workspace_path = Path(workspace) / file_rel
+    if not workspace_path.is_file():
+        return None
+    base_path = Path(base_workspace) / file_rel if base_workspace else None
+    try:
+        code = workspace_path.read_text(encoding="utf-8")
+        base_code = (
+            base_path.read_text(encoding="utf-8")
+            if base_path is not None and base_path.is_file()
+            else None
+        )
+    except OSError:
+        return None
+    if base_code == code:
+        return None
+    return PatchFileChange(
+        file_path=file_rel,
+        action="modify" if base_code is not None else "create",
+        code_content=code,
+        test_hint="runtime activation support file",
+    )
+
+
+def _activation_file_paths(
+    proposal_changes: Iterable[PatchFileChange],
+    artifact_changes: Iterable[PatchFileChange],
+) -> list[str]:
+    proposal_paths = {
+        normalize_relative_patch_path(change.file_path)
+        for change in proposal_changes
+        if change.file_path
+    }
+    activation_paths = []
+    for change in artifact_changes:
+        path = normalize_relative_patch_path(change.file_path)
+        if path and path not in proposal_paths:
+            activation_paths.append(path)
+    return sorted(dict.fromkeys(activation_paths))
 
 
 def _artifact_omitted_reasons(

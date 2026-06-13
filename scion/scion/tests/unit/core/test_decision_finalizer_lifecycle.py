@@ -844,6 +844,133 @@ def test_quality_regression_discarded_candidate_records_patch_artifact(
     assert "h-quality-regression" in index_text
 
 
+def test_formal_candidate_artifact_captures_registry_activation_file(
+    tmp_path: Path,
+) -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion-hash",
+        )
+    )
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "clean-hash"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add a registered operator.",
+        change_locus="vehicle_level",
+        action="create_new",
+        target_file="operators/new_operator.py",
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-create-operator",
+        branch_id=branch.branch_id,
+        change_locus="vehicle_level",
+        action="create_new",
+        status="running",
+        target_file="operators/new_operator.py",
+    )
+    operator_code = "class NewOperator:\n    pass\n"
+    patch = PatchProposal(
+        file_path="operators/new_operator.py",
+        action="create",
+        code_content=operator_code,
+    )
+    base_workspace = tmp_path / "champion"
+    workspace = tmp_path / "workspace"
+    (base_workspace / "operators").mkdir(parents=True)
+    (workspace / "operators").mkdir(parents=True)
+    base_registry = "operators: []\n"
+    candidate_registry = (
+        "operators:\n"
+        "- name: new_operator\n"
+        "  file_path: operators/new_operator.py\n"
+        "  class_name: NewOperator\n"
+        "  weight: 0.1\n"
+    )
+    (base_workspace / "registry.yaml").write_text(base_registry, encoding="utf-8")
+    (workspace / "registry.yaml").write_text(
+        candidate_registry,
+        encoding="utf-8",
+    )
+    (workspace / "operators" / "new_operator.py").write_text(
+        operator_code,
+        encoding="utf-8",
+    )
+    recorder = FormalCandidatePatchArtifactRecorder(
+        tmp_path,
+        protocol_version="protocol-v3",
+        problem_spec_hash="problem-hash",
+        split_manifest_hash="split-hash",
+        seed_ledger_hash="seed-hash",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=2,
+            wins=1,
+            losses=0,
+            ties=1,
+            win_rate=0.5,
+            median_delta=1.0,
+            ci_low=0.0,
+            ci_high=2.0,
+        ),
+        gate_outcome="expand",
+        reason_codes=("SCREENING_EXPAND",),
+        exposed_summary="registered operator screening expand",
+        raw_metrics_ref=str(tmp_path / "metrics" / "screening.json"),
+    )
+
+    artifact_ref = recorder.record(
+        branch=branch,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        patch=patch,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        decision=Decision.EXPAND_SCREENING,
+        decision_reason_codes=("SCREENING_EXPAND",),
+        workspace=str(workspace),
+        base_workspace=str(base_workspace),
+    )
+
+    metadata_paths = list(
+        (tmp_path / "artifacts" / "formal_candidates").glob(
+            "**/candidate.patch.json"
+        )
+    )
+    assert artifact_ref
+    assert len(metadata_paths) == 1
+    metadata = json.loads(metadata_paths[0].read_text(encoding="utf-8"))
+    assert metadata["proposal_target_files"] == ["operators/new_operator.py"]
+    assert metadata["activation_files"] == ["registry.yaml"]
+    assert metadata["target_files"] == [
+        "operators/new_operator.py",
+        "registry.yaml",
+    ]
+    files = {item["file_path"]: item for item in metadata["patch"]["files"]}
+    assert files["operators/new_operator.py"]["action"] == "create"
+    assert files["operators/new_operator.py"]["code_content"] == operator_code
+    assert files["registry.yaml"]["action"] == "modify"
+    assert files["registry.yaml"]["code_content"] == candidate_registry
+    assert files["registry.yaml"]["base_sha256"]
+    assert files["registry.yaml"]["workspace_current_sha256"]
+    assert metadata["patch"]["patch_digest"] == metadata["replay_identity"][
+        "patch_digest"
+    ]
+    diff_text = (metadata_paths[0].parent / "candidate.diff").read_text(
+        encoding="utf-8"
+    )
+    assert "+++ b/operators/new_operator.py" in diff_text
+    assert "+++ b/registry.yaml" in diff_text
+
+
 def test_formal_candidate_artifact_omission_reports_missing_replay_identity(
     tmp_path: Path,
 ) -> None:

@@ -834,6 +834,20 @@ Exit criteria:
   make `create_new` operator formal artifacts capture activation files such as
   `registry.yaml` or mark such candidates non-replayable, then rerun rep04
   replay.
+- Implemented the formal-artifact completeness repair for future
+  `create_new`/activation-surface candidates. `FormalCandidatePatchArtifactRecorder`
+  now compares candidate workspace activation files against the base workspace,
+  appends changed `registry.yaml` as canonical full-file patch content, records
+  `proposal_target_files` and `activation_files`, and includes those files in
+  the patch digest/replay identity. This keeps the fix generic and replay-owned
+  rather than warehouse-specific. Acceptance:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py`
+  (`21 passed`),
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile scion/scion/core/formal_candidate_artifacts.py scion/scion/core/fixed_candidate_replay.py scion/scion/cli/commands/reports.py`,
+  and `git diff --check`. Caveat: the historical rep04 artifact remains
+  incomplete; to replay it as positive evidence, reconstruct a corrected
+  artifact from the archived source workspace or rerun the campaign after this
+  repair.
 
 ## Status Cadence
 

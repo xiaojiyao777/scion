@@ -127,6 +127,18 @@ repair is to capture activation files such as `registry.yaml` in formal
 candidate artifacts or mark those candidates non-replayable, then rerun the
 rep04 replay.
 
+That formal-artifact completeness repair is now implemented for future
+artifacts. `FormalCandidatePatchArtifactRecorder` compares candidate workspace
+activation files against the base workspace, appends changed `registry.yaml` as
+canonical full-file patch content, records `proposal_target_files` and
+`activation_files`, and includes those files in the patch digest/replay
+identity. Acceptance passed with `test_fixed_candidate_replay.py` plus
+`test_decision_finalizer_lifecycle.py` (`21 passed`), py_compile on touched
+modules, and `git diff --check`. Caveat: the historical rep04
+`candidate.patch.json` remains incomplete; it needs a reconstructed corrected
+artifact from the archived source workspace or a fresh campaign rerun after
+this repair before it can become positive replay evidence.
+
 The latest accepted Phase 5 infrastructure slice is explicit report-only
 `control_pair_key` support for proposal trajectory manifests. `scion report
 proposal-trajectory-manifest --control-pair-key ...` writes a validated
@@ -149,9 +161,9 @@ All four compares have matched `control_pair_key=warehouse.full-vs-nomeas:<repea
 `control_pair_key_matched_not_deterministic_llm_replay`. Leakage and boundary
 checks passed for report-only, non-mutating artifacts; no no-measurement
 hypothesis prompt contained `problem_measurement_diagnostics`. The next gate is
-not another broad context ablation; first repair formal candidate artifact
-completeness for `create_new` warehouse operators, then continue targeted
-compact or on-demand measurement diagnostics.
+not another broad context ablation; next either reconstruct/rerun rep04 to
+validate the repaired artifact path, or proceed to targeted compact/on-demand
+measurement diagnostics with the rep04 caveat carried forward.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
