@@ -412,6 +412,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
         ),
         proposal_context_ablation: Literal[
             "full",
+            "compact-measurement-diagnostics",
             "no-measurement-diagnostics",
             "minimal-research-context",
         ] = typer.Option(

@@ -11,12 +11,14 @@ from typing import Any, Literal
 
 ProposalContextAblation = Literal[
     "full",
+    "compact-measurement-diagnostics",
     "no-measurement-diagnostics",
     "minimal-research-context",
 ]
 
 _VALID_MODES = {
     "full",
+    "compact-measurement-diagnostics",
     "no-measurement-diagnostics",
     "minimal-research-context",
 }
@@ -25,6 +27,9 @@ _ALIASES = {
     "none": "full",
     "off": "full",
     "default": "full",
+    "compact_measurement_diagnostics": "compact-measurement-diagnostics",
+    "measurement_diagnostics_compact": "compact-measurement-diagnostics",
+    "measurement-diagnostics-compact": "compact-measurement-diagnostics",
     "no_measurement_diagnostics": "no-measurement-diagnostics",
     "measurement_diagnostics_off": "no-measurement-diagnostics",
     "measurement-diagnostics-off": "no-measurement-diagnostics",
@@ -42,7 +47,8 @@ def normalize_proposal_context_ablation(
     if text not in _VALID_MODES:
         raise ValueError(
             "proposal_context_ablation must be one of: "
-            "full, no-measurement-diagnostics, minimal-research-context"
+            "full, compact-measurement-diagnostics, "
+            "no-measurement-diagnostics, minimal-research-context"
         )
     return text  # type: ignore[return-value]
 

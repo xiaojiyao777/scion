@@ -83,6 +83,7 @@ _REPAIR_TRIGGER_KEYS = frozenset(
 
 _COMPACT_LEARNING_SCHEMA = "compact_cross_branch_learning.v1"
 _PROFILE_METADATA_SCHEMA = "hypothesis_context_profile.v1"
+_COMPACT_MEASUREMENT_DIAGNOSTICS_KEY = "compact_problem_measurement_diagnostics"
 _OPPORTUNITY_STATUS_RE = re.compile(r"\s+opportunity_status=\S+")
 
 
@@ -144,6 +145,9 @@ def filter_hypothesis_context_for_prompt(
     measurement_governance = _normalize_measurement_governance_mode(
         context.get("measurement_governance")
     )
+    compact_measurement_diagnostics_mode = (
+        ablation == "compact-measurement-diagnostics"
+    )
     hide_measurement_diagnostics = (
         measurement_governance == "record_only"
         or ablation == "no-measurement-diagnostics"
@@ -155,12 +159,41 @@ def filter_hypothesis_context_for_prompt(
             context.get("problem_measurement_diagnostics")
         )
     )
-    if compact_measurement:
+    measurement_visibility = "absent"
+    if hide_measurement_diagnostics:
+        filtered.pop("problem_measurement_diagnostics", None)
+        filtered.pop(_COMPACT_MEASUREMENT_DIAGNOSTICS_KEY, None)
+        measurement_visibility = "suppressed"
+    elif compact_measurement and compact_measurement_diagnostics_mode:
+        filtered[_COMPACT_MEASUREMENT_DIAGNOSTICS_KEY] = compact_measurement
+        filtered.pop("problem_measurement_diagnostics", None)
+        measurement_visibility = "compact"
+    elif compact_measurement:
         filtered["problem_measurement_diagnostics"] = compact_measurement
+        filtered.pop(_COMPACT_MEASUREMENT_DIAGNOSTICS_KEY, None)
+        measurement_visibility = "full"
     else:
         filtered.pop("problem_measurement_diagnostics", None)
+        filtered.pop(_COMPACT_MEASUREMENT_DIAGNOSTICS_KEY, None)
 
-    if hide_measurement_diagnostics and "experiment_history" in filtered:
+    metadata = filtered["context_profile_metadata"]
+    metadata["measurement_diagnostics_visibility"] = measurement_visibility
+    metadata["measurement_diagnostics_prompt_key"] = (
+        _COMPACT_MEASUREMENT_DIAGNOSTICS_KEY
+        if measurement_visibility == "compact"
+        else (
+            "problem_measurement_diagnostics"
+            if measurement_visibility == "full"
+            else ""
+        )
+    )
+    metadata["measurement_diagnostics_standalone_section"] = (
+        measurement_visibility == "full"
+    )
+
+    if (
+        hide_measurement_diagnostics or compact_measurement_diagnostics_mode
+    ) and "experiment_history" in filtered:
         filtered["experiment_history"] = _strip_opportunity_diagnostics_from_text(
             filtered.get("experiment_history")
         )

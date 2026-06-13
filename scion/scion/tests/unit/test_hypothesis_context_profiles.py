@@ -235,6 +235,9 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
         "proposal_context_ablation": "full",
         "proposal_visibility_only": True,
         "decision_features_excluded": True,
+        "measurement_diagnostics_visibility": "absent",
+        "measurement_diagnostics_prompt_key": "",
+        "measurement_diagnostics_standalone_section": False,
     }
     assert "branch_dossier" not in filtered
     assert "branch_dossier_payload" not in filtered
@@ -344,6 +347,10 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "family_saturation_summary" not in decision_fields
     assert "cross_branch_family_saturation_summary" not in decision_fields
     assert "problem_measurement_diagnostics" not in decision_fields
+    assert "compact_problem_measurement_diagnostics" not in decision_fields
+    assert "measurement_diagnostics_visibility" not in decision_fields
+    assert "measurement_diagnostics_prompt_key" not in decision_fields
+    assert "measurement_diagnostics_standalone_section" not in decision_fields
     assert "measurement_noise_floor" not in decision_fields
     assert "objective_opportunity_profile" not in decision_fields
 
@@ -443,6 +450,172 @@ def test_no_measurement_diagnostics_ablation_keeps_protocol_mode_and_research_co
     assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
     assert "## Runtime Feedback" in rendered_prompt
     assert "compact_cross_branch_learning.v1" in rendered_prompt
+
+
+def test_compact_measurement_diagnostics_ablation_keeps_research_context_without_standalone_section():
+    context = {
+        "problem_summary": "Warehouse objective.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify",
+        "targetable_files": "policies/baseline_modules/local_search.py",
+        "champion_operators_code": "def solve():\n    return best\n",
+        "champion_stats": "champion_v1 screening complete",
+        "measurement_governance": "on",
+        "proposal_context_ablation": "measurement_diagnostics_compact",
+        "experiment_history": (
+            "branch b1\n"
+            "    screening_feedback.tier=weak activation=observed "
+            "effect=none runtime_confidence=low "
+            "opportunity_status=opportunity_poor\n"
+            "    opportunity_diagnostics: measurement-owned low SNR guidance"
+        ),
+        "objective_opportunity_profile": (
+            "## Objective Opportunity Profile (screening only)\n"
+            "- total_cost: positive_cases=1 negative_cases=0 tie_cases=1"
+        ),
+        "runtime_feedback": (
+            "## Runtime Feedback\n"
+            "candidate runtime ratio remains within the branch budget"
+        ),
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "branch_lesson_records": [
+                {
+                    "schema_version": "branch_lesson.v1",
+                    "lesson_id": "lesson:compact-mode-still-visible",
+                    "scope": "cross_branch",
+                    "summary": "A sibling branch preserved feasibility.",
+                }
+            ],
+        },
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "record_id": "branch_lesson_usage_requirement:compact",
+            "required_output_field": "branch_lesson_usage",
+        },
+        "branch_lesson_records": [
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": "lesson:branch-compact-visible",
+                "scope": "same_branch",
+                "summary": "Current branch memory remains available.",
+            }
+        ],
+        "problem_measurement_diagnostics": {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "signal_to_noise_tier": "low_power",
+                "raw_pair_rows": [{"case": "secret-readiness-row"}],
+            },
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "low_snr",
+                    "summary": "Candidate effects below measured screening MDE.",
+                    "recommended_action": "try a larger bounded mechanism",
+                    "reason_codes": ["MEASUREMENT_POWER_LOW"],
+                    "validation_case_details": "secret-validation-case-detail",
+                    "frozen_case_details": "secret-frozen-case-detail",
+                    "raw_pair_rows": [{"case": "secret-raw-row"}],
+                }
+            ],
+            "raw_calibration_pair_rows": [{"case": "secret-aa-row"}],
+            "bks_gap_details": "secret-bks-gap",
+            "prompt_ratios": {"research_signal_ratio": 0.1},
+            "llm_text": "secret llm prose",
+        },
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+
+    assert filtered["measurement_governance"] == "on"
+    assert filtered["proposal_context_ablation"] == "compact-measurement-diagnostics"
+    assert (
+        filtered["context_profile_metadata"]["proposal_context_ablation"]
+        == "compact-measurement-diagnostics"
+    )
+    assert (
+        filtered["context_profile_metadata"]["measurement_diagnostics_visibility"]
+        == "compact"
+    )
+    assert (
+        filtered["context_profile_metadata"]["measurement_diagnostics_prompt_key"]
+        == "compact_problem_measurement_diagnostics"
+    )
+    assert (
+        filtered["context_profile_metadata"][
+            "measurement_diagnostics_standalone_section"
+        ]
+        is False
+    )
+    assert "problem_measurement_diagnostics" not in filtered
+    assert "compact_problem_measurement_diagnostics" in filtered
+    compact_diagnostic = filtered["compact_problem_measurement_diagnostics"]
+    assert "MEASUREMENT_POWER_LOW" in compact_diagnostic
+    assert "secret-readiness-row" not in compact_diagnostic
+    assert "secret-validation-case-detail" not in compact_diagnostic
+    assert "secret-frozen-case-detail" not in compact_diagnostic
+    assert "secret-raw-row" not in compact_diagnostic
+    assert "secret-aa-row" not in compact_diagnostic
+    assert "secret-bks-gap" not in compact_diagnostic
+    assert "research_signal_ratio" not in compact_diagnostic
+    assert "secret llm prose" not in compact_diagnostic
+    assert "branch b1" in filtered["experiment_history"]
+    assert "measurement-owned low SNR guidance" not in filtered["experiment_history"]
+    assert "opportunity_status=opportunity_poor" not in filtered["experiment_history"]
+    assert "objective_opportunity_profile" in filtered
+    assert "runtime_feedback" in filtered
+    assert "compact_cross_branch_learning.v1" in filtered["cross_branch_research"]
+    assert filtered["branch_lesson_records"][0]["lesson_id"] == (
+        "lesson:branch-compact-visible"
+    )
+
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    assert "## Problem Measurement Diagnostics" not in rendered_prompt
+    assert "## Compact Research Signals" in rendered_prompt
+    assert "MEASUREMENT_POWER_LOW" in rendered_prompt
+    assert "measurement-owned low SNR guidance" not in rendered_prompt
+    assert "## Objective Opportunity Profile (screening only)" in rendered_prompt
+    assert "## Runtime Feedback" in rendered_prompt
+    assert "compact_cross_branch_learning.v1" in rendered_prompt
+    assert "secret-validation-case-detail" not in rendered_prompt
+    assert "secret-frozen-case-detail" not in rendered_prompt
+    assert "secret-raw-row" not in rendered_prompt
+    assert "secret-aa-row" not in rendered_prompt
+    assert "secret-bks-gap" not in rendered_prompt
+    assert "research_signal_ratio" not in rendered_prompt
+    assert "secret llm prose" not in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-compact-measurement-diagnostics",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    assert (
+        manifest["context_profile_metadata"]["measurement_diagnostics_visibility"]
+        == "compact"
+    )
+    assert "problem_measurement_diagnostics" not in manifest["section_names"]
+    assert "problem_measurement_diagnostics" not in manifest["section_statuses"]
+    assert "compact_research_signals" in manifest["section_names"]
+    assert manifest["section_statuses"]["compact_research_signals"][
+        "block_family"
+    ] == "research_signal"
+    assert not any(
+        entry.get("section_name") == "problem_measurement_diagnostics"
+        for entry in manifest["visibility_ledger"]["entries"]
+    )
 
 
 def test_minimal_research_context_ablation_keeps_source_and_measurement_context():

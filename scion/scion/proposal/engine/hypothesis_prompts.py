@@ -501,7 +501,8 @@ def _compact_research_signals(
                 D.get("objective_opportunity_profile")
             ),
             "problem_measurement_diagnostics": _compact_text_signal(
-                D.get("problem_measurement_diagnostics"),
+                D.get("compact_problem_measurement_diagnostics")
+                or D.get("problem_measurement_diagnostics"),
                 max_chars=900,
             ),
             "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
