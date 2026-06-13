@@ -76,7 +76,12 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    `practical_delta_screen=2.0` and should not be the next formal governance
    target or long promotion campaign without another pre-registered measurement
    change.
-5. Use v0.5 for the larger experiment program: governance ablations,
+5. The next pre-registered CVRP measurement change is now active: compare the
+   current ALNS+VNS champion against a copied ALNS-only starting baseline in a
+   no-LLM baseline-strength Phase A before any matched LLM campaign. This tests
+   whether baseline strength/research-surface headroom, rather than only Scion
+   governance, is blocking measurable CVRP research progress.
+6. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
@@ -294,23 +299,36 @@ timeouts `2`, and verification-heavy failures `2`; `rep04/record_only_compact`
 reports `abandon_fast_verification_heavy` `1` and fresh replay drain executed
 `2`.
 
-Queued after the immediate warehouse governance-run repair planning: add a CVRP/VRP
-baseline-strength contrast for the long-standing "strong ALNS+VNS baseline may
-mask Scion improvements" hypothesis. The comparison should keep the current
-ALNS+VNS baseline intact and create a reproducible ALNS-only baseline variant
-with VNS disabled through the problem-owned solver configuration. The current
-switch is `USE_VNS=True` in
-`scion/problems/cvrp/policies/baseline_modules/config.py`; the ALNS-only start
-should be a copied run-root/champion snapshot with `USE_VNS=False`, not an
-in-place mutation of the canonical baseline. It must first
-characterize both baselines without LLM calls, including quality, runtime,
-noise/MDE, and improvement headroom. Only then should matched Scion campaigns
-compare research productivity relative to each baseline: accepted evidence
-above that baseline's MDE, branch depth, same-mechanism follow-up,
-mechanism-family transfer, and cost per accepted insight. This is a
-baseline-strength/research-surface study, not a substitute for the completed
-warehouse governance ON/OFF evidence or its repair findings.
-The pre-registered design is
+The CVRP/VRP baseline-strength contrast is now active in Phase A no-LLM
+characterization for the long-standing "strong ALNS+VNS baseline may mask Scion
+improvements" hypothesis. The comparison keeps the current ALNS+VNS champion
+intact and creates a copied ALNS-only baseline variant with VNS disabled through
+problem-owned solver configuration. Run root:
+`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`.
+The baseline manifest records the only intentional solver config diff as
+`USE_VNS=True -> False` in `policies/baseline_modules/config.py`, with the
+canonical repository baseline unmodified.
+
+Smoke and pilot evidence passed before starting the full run. Telemetry smoke
+on `A-n64-k9`, seed `11`, 5s budget showed ALNS-only with
+`vns_runtime_present=false` and ALNS attempts still present, while the control
+showed `vns_initial`, `vns_embedded`, and VNS move attempts. The 2-case x
+2-seed pilot reproduced this across all sampled pairs:
+`contrast_vns_observed_pairs=0`, `control_vns_observed_pairs=4`, and no pair
+failures. The pilot quality signal is diagnostic only: ALNS-only was
+`1` win / `3` losses versus control with median raw delta `-14.5`; pilot A/A
+MDE estimates were unstable (`3.33` for ALNS+VNS, `41.76` for ALNS-only), so
+the full 8 x 8 x 3 protocol-time characterization is required before any
+campaign conclusion.
+
+The full no-LLM characterization started at `2026-06-13T17:28:17Z` and is
+currently running. It runs 8 screening cases x 8 seeds x 3 A/A replicates for
+both baselines, then an 8 x 8 paired baseline characterization under
+protocol-resolved time limits. Matched Scion campaigns remain gated until this
+Phase A report interprets baseline-specific MDE/noise, quality/headroom,
+runtime behavior, and phase telemetry. This is a baseline-strength/research
+surface study, not a substitute for the completed warehouse governance ON/OFF
+evidence or its repair findings. The pre-registered design is
 [`../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md).
 
 The active v0.4 task breakdown is

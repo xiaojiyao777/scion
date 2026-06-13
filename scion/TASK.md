@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Warehouse compact governance ON/OFF completed; repair planning next*
+*Status: CVRP baseline-strength Phase A full no-LLM characterization running*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -948,24 +948,22 @@ Exit criteria:
   after `old_string_not_found`/`stale_source` failures and 11/78 code manifests
   with `missing_required_source_paths`; and align fixed-candidate replay with
   the campaign problem-spec bridge or fail clearly when a V1 spec is required.
-- Queued after the immediate warehouse governance-run repair planning: add a CVRP/VRP
-  baseline-strength contrast to test whether the current ALNS+VNS baseline is
-  masking Scion's ability to make effective research progress. Do not remove
-  VNS from the existing baseline in place. Instead create a reproducible
-  problem-owned ALNS-only baseline variant with `USE_VNS=False` while keeping
-  the original ALNS+VNS champion as the control baseline. First run a no-LLM
-  baseline characterization/A-A check for both starts to measure quality,
-  runtime, MDE/noise, and effect headroom. Then run matched Scion campaigns
-  from the two baselines with the same problem, split, seeds, model, solver
-  budgets, governance settings, and round budget. Primary comparison is not raw
-  objective quality between baselines; it is Scion research productivity
-  relative to each baseline: validation/frozen/promotion above that baseline's
-  MDE, branch depth, same-mechanism follow-up, mechanism-family transfer, and
-  cost per accepted insight. This experiment should be interpreted as a
-  baseline-strength/research-surface study, not as a replacement for the
-  completed warehouse governance ON/OFF evidence or its repair findings.
+- Active after the immediate warehouse governance-run repair planning: the
+  CVRP/VRP baseline-strength contrast has entered Phase A no-LLM
+  characterization. Run root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`.
+  The canonical ALNS+VNS champion remains intact. The ALNS-only arm is a copied
+  champion snapshot whose only intentional solver config diff is
+  `USE_VNS=True -> False` in
+  `policies/baseline_modules/config.py`. Smoke and 2-case x 2-seed pilot
+  checks passed: ALNS-only had `0` VNS-observed pairs while the control had
+  VNS evidence on every sampled pair; ALNS-only still produced ALNS move
+  attempts. The full 8-case x 8-seed x 3-replicate protocol-time no-LLM run is
+  now running from `2026-06-13T17:28:17Z`. Matched Scion/LLM campaigns remain
+  gated until the full characterization reports baseline-specific MDE/noise,
+  quality/headroom, runtime behavior, and phase-telemetry evidence.
 
-## Queued CVRP Baseline-Strength Contrast
+## Active CVRP Baseline-Strength Contrast
 
 Purpose: test whether the current strong ALNS+VNS champion leaves too little
 measurable headroom for Scion's proposal/research loop, compared with an
@@ -974,6 +972,46 @@ ALNS-only baseline where VNS is disabled.
 Pre-registration document:
 
 - `scion/docs/planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md`
+
+Current Phase A artifacts:
+
+- Run root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`
+- Baseline manifest:
+  `baseline_manifest.json`
+- Reproducibility inputs:
+  `artifacts/repo_head.txt`, `artifacts/repo_status_short.txt`, and
+  `artifacts/phaseA_inputs.sha256`
+- Smoke outputs:
+  `smoke/telemetry_smoke.json`, `smoke/pair_characterization_smoke.json`,
+  `smoke/aa_smoke_alns_vns.json`, and `smoke/aa_smoke_alns_only.json`
+- Pilot outputs:
+  `aa/pair_characterization_pilot_2case_2seed_uniform10.json`,
+  `aa/aa_pilot_alns_vns_2case_2seed_r1_uniform10.json`, and
+  `aa/aa_pilot_alns_only_2case_2seed_r1_uniform10.json`
+- Full run status:
+  `aa/full_status.json`
+
+Current Phase A evidence:
+
+- Variant construction was independently checked by subagents and by manifest:
+  the copied snapshots differ only in the ALNS-only config switch
+  `USE_VNS=False`; the repository/canonical baseline was not mutated.
+- Smoke telemetry on `A-n64-k9`, seed `11`, 5s budget showed ALNS-only
+  `vns_runtime_present=false`, `phase_move_attempts.alns=162`, and no VNS
+  phase runtime. The ALNS+VNS control showed `vns_initial`, `vns_embedded`,
+  `phase_move_attempts.vns=465`, and ALNS attempts.
+- The 2-case x 2-seed pilot confirmed the wiring across multiple pairs:
+  ALNS-only had `contrast_vns_observed_pairs=0`, control had
+  `control_vns_observed_pairs=4`, and all pairs succeeded.
+- Pilot quality signal is diagnostic only: ALNS-only had `1` win and `3`
+  losses versus control with median raw delta `-14.5`. Pilot A/A estimates were
+  unstable by design; ALNS+VNS pilot MDE was `3.33`, while ALNS-only pilot MDE
+  was `41.76`. Do not interpret those pilot MDEs as full protocol power.
+- The full no-LLM characterization started at `2026-06-13T17:28:17Z` and runs
+  `8` screening cases x `8` seeds x `3` A/A replicates for both baselines,
+  then an 8 x 8 paired baseline characterization under protocol-resolved time
+  limits. The current first stage is `alns_vns_phaseA` A/A.
 
 Design constraints:
 
