@@ -31,6 +31,11 @@ def register_report_commands(report_app: typer.Typer) -> None:
             "-o",
             help="Write proposal trajectory manifest JSON to this path",
         ),
+        control_pair_key: Optional[str] = typer.Option(
+            None,
+            "--control-pair-key",
+            help="Optional report-only key linking comparable control-pair manifests",
+        ),
     ) -> None:
         """Build a report-only proposal trajectory manifest."""
         from scion.core.proposal_trajectory_artifacts import (
@@ -41,6 +46,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
             manifest_path = write_proposal_trajectory_manifest(
                 campaign_dir,
                 observed_control_arm=observed_control_arm,
+                control_pair_key=control_pair_key,
                 output_path=output,
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -62,6 +68,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "trace_count": counts["trace_count"],
                     "formal_candidate_count": counts["formal_candidate_count"],
                     "observed_control_arm": manifest["observed_control_arm"],
+                    "control_pair_key": manifest.get("control_pair_key", ""),
                     "proposal_context_ablation": context_arm.get(
                         "proposal_context_ablation", ""
                     ),

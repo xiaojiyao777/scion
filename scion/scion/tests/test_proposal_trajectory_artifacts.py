@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from scion.cli.main import app
@@ -30,6 +31,7 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
 
     assert manifest["schema_version"] == SCHEMA_VERSION
     assert manifest["report_only"] is True
+    assert manifest["control_pair_key"] == ""
     assert manifest["decision_features_excluded"] is True
     assert manifest["comparison_is_decision_input"] is False
     assert manifest["campaign_state_mutated"] is False
@@ -91,6 +93,58 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
     }
     assert trace["omitted_sections"] == ["hidden_validation"]
     assert trace["truncated_sections"] == ["long_feedback"]
+
+
+def test_manifest_stores_sanitized_control_pair_key_only_at_top_level(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = _write_campaign(tmp_path / "campaign", session_id="session-a")
+
+    manifest = build_proposal_trajectory_manifest(
+        campaign_dir,
+        observed_control_arm="on",
+        control_pair_key="  pair.v1:run-01  ",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert manifest["control_pair_key"] == "pair.v1:run-01"
+    assert manifest["report_only"] is True
+    assert manifest["decision_features_excluded"] is True
+    assert manifest["comparison_is_decision_input"] is False
+    assert manifest["campaign_state_mutated"] is False
+    assert manifest["scheduler_state_mutated"] is False
+    assert manifest["promotion_state_mutated"] is False
+    assert manifest["raw_prompt_excluded"] is True
+    assert manifest["raw_response_excluded"] is True
+    assert manifest["patch_body_excluded"] is True
+    assert "control_pair_key" not in json.dumps(manifest["sessions"], sort_keys=True)
+    assert "pair.v1:run-01" not in json.dumps(manifest["sessions"], sort_keys=True)
+
+
+@pytest.mark.parametrize(
+    "control_pair_key",
+    [
+        "",
+        "   ",
+        "pair with space",
+        "pair\nwith-newline",
+        "pair/with/slash",
+        "x" * 129,
+    ],
+)
+def test_manifest_rejects_invalid_control_pair_keys(
+    tmp_path: Path,
+    control_pair_key: str,
+) -> None:
+    campaign_dir = _write_campaign(tmp_path / "campaign", session_id="session-a")
+
+    with pytest.raises(ValueError, match="control_pair_key"):
+        build_proposal_trajectory_manifest(
+            campaign_dir,
+            observed_control_arm="on",
+            control_pair_key=control_pair_key,
+            generated_at="2026-06-12T00:00:00+00:00",
+        )
 
 
 def test_manifest_does_not_leak_raw_prompt_response_patch_or_measurements(
@@ -202,6 +256,7 @@ def test_compares_distributions_and_labels_observational_only(tmp_path: Path) ->
     assert comparison["report_only"] is True
     assert comparison["observational_only"] is True
     assert comparison["llm_deterministic_replay"] is False
+    assert comparison["control_pair_key"] == ""
     assert comparison["causal_replay_label"] == (
         "observational_only_not_causal_llm_trajectory_replay"
     )
@@ -239,6 +294,81 @@ def test_compares_distributions_and_labels_observational_only(tmp_path: Path) ->
     shares = comparison["prompt_block_family_aggregate_shares"]["families"]
     assert shares["feedback"] == {"left": 0.0, "right": 0.75, "delta": 0.75}
     assert comparison["missing_joins"] == {"left": [], "right": []}
+
+
+def test_comparison_reports_matched_control_pair_key_without_deterministic_label(
+    tmp_path: Path,
+) -> None:
+    left_campaign = _write_campaign(tmp_path / "left", session_id="session-a")
+    right_campaign = _write_campaign(
+        tmp_path / "right",
+        session_id="session-b",
+        request_id="request-b",
+        branch_id="branch-b",
+    )
+    left = build_proposal_trajectory_manifest(
+        left_campaign,
+        observed_control_arm="on",
+        control_pair_key="pair.v1:matched-01",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+    right = build_proposal_trajectory_manifest(
+        right_campaign,
+        observed_control_arm="record_only",
+        control_pair_key="pair.v1:matched-01",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    comparison = build_proposal_trajectory_comparison(
+        left,
+        right,
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert comparison["observational_only"] is False
+    assert comparison["llm_deterministic_replay"] is False
+    assert comparison["comparison_is_decision_input"] is False
+    assert comparison["control_pair_key"] == "pair.v1:matched-01"
+    assert comparison["causal_replay_label"] == (
+        "control_pair_key_matched_not_deterministic_llm_replay"
+    )
+
+
+def test_comparison_keeps_mismatched_control_pair_keys_observational_only(
+    tmp_path: Path,
+) -> None:
+    left_campaign = _write_campaign(tmp_path / "left", session_id="session-a")
+    right_campaign = _write_campaign(
+        tmp_path / "right",
+        session_id="session-b",
+        request_id="request-b",
+        branch_id="branch-b",
+    )
+    left = build_proposal_trajectory_manifest(
+        left_campaign,
+        observed_control_arm="on",
+        control_pair_key="pair.v1:left",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+    right = build_proposal_trajectory_manifest(
+        right_campaign,
+        observed_control_arm="record_only",
+        control_pair_key="pair.v1:right",
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    comparison = build_proposal_trajectory_comparison(
+        left,
+        right,
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert comparison["observational_only"] is True
+    assert comparison["llm_deterministic_replay"] is False
+    assert comparison["control_pair_key"] == ""
+    assert comparison["causal_replay_label"] == (
+        "observational_only_not_causal_llm_trajectory_replay"
+    )
 
 
 def test_manifest_falls_back_to_branch_code_sequence_for_agentic_pairs(
@@ -298,6 +428,8 @@ def test_cli_writes_manifest_and_comparison(tmp_path: Path) -> None:
             str(left_campaign),
             "--observed-control-arm",
             "on",
+            "--control-pair-key",
+            "cli-pair.v1:run-01",
             "--output",
             str(left_manifest),
         ],
@@ -305,6 +437,9 @@ def test_cli_writes_manifest_and_comparison(tmp_path: Path) -> None:
     assert left_result.exit_code == 0, left_result.output
     left_summary = json.loads(left_result.output)
     assert left_summary["proposal_context_ablation"] == "full"
+    assert left_summary["control_pair_key"] == "cli-pair.v1:run-01"
+    left_payload = json.loads(left_manifest.read_text(encoding="utf-8"))
+    assert left_payload["control_pair_key"] == "cli-pair.v1:run-01"
     right_result = runner.invoke(
         app,
         [
@@ -341,6 +476,32 @@ def test_cli_writes_manifest_and_comparison(tmp_path: Path) -> None:
     comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
     assert comparison["summary"]["left"]["session_count"] == 1
     assert comparison["summary"]["right"]["session_count"] == 1
+
+
+def test_cli_rejects_invalid_control_pair_key(tmp_path: Path) -> None:
+    campaign_dir = _write_campaign(tmp_path / "campaign", session_id="session-a")
+    manifest_path = tmp_path / "manifest.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "proposal-trajectory-manifest",
+            "--campaign-dir",
+            str(campaign_dir),
+            "--observed-control-arm",
+            "on",
+            "--control-pair-key",
+            "not path safe",
+            "--output",
+            str(manifest_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "ERROR: failed to build proposal trajectory manifest" in result.output
+    assert "control_pair_key" in result.output
+    assert not manifest_path.exists()
 
 
 def _write_campaign(

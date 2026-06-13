@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Warehouse proposal-context ablation shakedown accepted*
-*Updated: 2026-06-12*
+*Status: Warehouse explicit control-pair key accepted; next strong-control experiment open*
+*Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -752,6 +752,23 @@ Exit criteria:
   warehouse governance/context experiment with trajectory-aware control or
   explicit control-pair keys, and do not use `minimal-research-context` as the
   default compression strategy.
+- Accepted: explicit report-only `control_pair_key` plumbing for proposal
+  trajectory manifests. `scion report proposal-trajectory-manifest` now accepts
+  `--control-pair-key`, validates it as a path-safe top-level manifest field, and
+  echoes it in the CLI summary. `proposal-trajectory-compare` treats equal
+  non-empty keys as a pre-registered control-pair match while still reporting
+  `llm_deterministic_replay=false` and
+  `control_pair_key_matched_not_deterministic_llm_replay`; mismatched or missing
+  keys remain `observational_only=true`. The key is report metadata only: it is
+  not stored in sessions, proposals, prompts, `DecisionFeatures`, campaign loop
+  state, scheduler state, Protocol, or promotion state. Acceptance:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest scion/scion/tests/test_proposal_trajectory_artifacts.py`
+  passed with `16 passed`,
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile scion/scion/core/proposal_trajectory_artifacts.py scion/scion/cli/commands/reports.py`
+  passed, and `git diff --check` passed. Next: use explicit control-pair keys in
+  a warehouse strong-control experiment that keeps branch/cross-branch research
+  context visible while isolating measurement diagnostics; CVRP remains excluded
+  from formal governance-value conclusions until measurement power improves.
 
 ## Status Cadence
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ COMPARISON_SCHEMA_VERSION = "scion.proposal_trajectory_comparison.v1"
 DEFAULT_MANIFEST_FILENAME = "proposal_trajectory_manifest.v1.json"
 DEFAULT_COMPARISON_FILENAME = "proposal_trajectory_comparison.v1.json"
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
+_CONTROL_PAIR_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 _GUARDRAILS: dict[str, bool] = {
     "report_only": True,
@@ -42,6 +44,7 @@ def build_proposal_trajectory_manifest(
     campaign_dir: str | Path,
     *,
     observed_control_arm: str,
+    control_pair_key: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a compact report-only proposal trajectory manifest."""
@@ -52,6 +55,7 @@ def build_proposal_trajectory_manifest(
             "observed_control_arm must be one of: "
             + ", ".join(sorted(OBSERVED_CONTROL_ARMS))
         )
+    sanitized_control_pair_key = _sanitize_control_pair_key(control_pair_key)
     campaign_path = Path(campaign_dir).expanduser().resolve()
     agentic_dir = campaign_path / "agentic_sessions"
     session_index_path = agentic_dir / "agentic_session_index.json"
@@ -113,7 +117,7 @@ def build_proposal_trajectory_manifest(
         "generated_at": generated_at or _utc_now_iso(),
         "campaign_dir": str(campaign_path),
         "observed_control_arm": arm,
-        "control_pair_key": "",
+        "control_pair_key": sanitized_control_pair_key,
         **_GUARDRAILS,
         "source_indexes": {
             "agentic_session_index_ref": (
@@ -164,6 +168,7 @@ def write_proposal_trajectory_manifest(
     campaign_dir: str | Path,
     *,
     observed_control_arm: str,
+    control_pair_key: str | None = None,
     output_path: str | Path,
 ) -> Path:
     """Build and write a proposal trajectory manifest JSON artifact."""
@@ -172,6 +177,7 @@ def write_proposal_trajectory_manifest(
     manifest = build_proposal_trajectory_manifest(
         campaign_dir,
         observed_control_arm=observed_control_arm,
+        control_pair_key=control_pair_key,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(_stable_json(manifest), encoding="utf-8")
@@ -191,8 +197,8 @@ def build_proposal_trajectory_comparison(
     _validate_manifest(left_manifest, side="left")
     _validate_manifest(right_manifest, side="right")
 
-    left_key = _clean_str(left_manifest.get("control_pair_key"))
-    right_key = _clean_str(right_manifest.get("control_pair_key"))
+    left_key = _manifest_control_pair_key(left_manifest, side="left")
+    right_key = _manifest_control_pair_key(right_manifest, side="right")
     paired_control_key = left_key if left_key and left_key == right_key else ""
     observational_only = not bool(paired_control_key)
 
@@ -707,6 +713,7 @@ def _validate_manifest(manifest: Mapping[str, Any], *, side: str) -> None:
     for key, expected in _GUARDRAILS.items():
         if manifest.get(key) is not expected:
             raise ValueError(f"{side} manifest guardrail mismatch: {key}")
+    _manifest_control_pair_key(manifest, side=side)
 
 
 def _call_kind_counts(sessions: list[Mapping[str, Any]]) -> dict[str, int]:
@@ -963,6 +970,30 @@ def _text_digest(value: Any) -> str:
     if not text:
         return ""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _manifest_control_pair_key(manifest: Mapping[str, Any], *, side: str) -> str:
+    if "control_pair_key" not in manifest or manifest.get("control_pair_key") == "":
+        return ""
+    try:
+        return _sanitize_control_pair_key(manifest.get("control_pair_key"))
+    except ValueError as exc:
+        raise ValueError(f"{side} manifest {exc}") from exc
+
+
+def _sanitize_control_pair_key(value: Any) -> str:
+    if value is None:
+        return ""
+    key = str(value).strip()
+    if not key:
+        raise ValueError("control_pair_key must be non-empty after trimming")
+    if len(key) > 128:
+        raise ValueError("control_pair_key must be at most 128 characters")
+    if not _CONTROL_PAIR_KEY_RE.fullmatch(key):
+        raise ValueError(
+            "control_pair_key must contain only [A-Za-z0-9._:-] characters"
+        )
+    return key
 
 
 def _clean_str(value: Any) -> str:

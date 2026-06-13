@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-12*
+*Last updated: 2026-06-13*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -80,8 +80,8 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The latest completed Phase 5 artifact is the warehouse proposal-context
-ablation formal repeat from commit `171648c4204d`:
+The latest completed Phase 5 experiment artifact is the warehouse
+proposal-context ablation formal repeat from commit `171648c4204d`:
 [`../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md`](../experiments/v0.4/v04-phase5-warehouse-context-ablation-formal-3x3-20260612.md).
 All arms kept `measurement_governance=on`; the ablation was proposal-visible
 only. The run executed three repeats of `full`,
@@ -104,6 +104,25 @@ as the default compression strategy. The next governance/context experiment
 needs trajectory-aware control or explicit control-pair keys. CVRP remains
 excluded from formal governance-value conclusions until measurement power
 improves.
+
+The latest accepted Phase 5 infrastructure slice is explicit report-only
+`control_pair_key` support for proposal trajectory manifests. `scion report
+proposal-trajectory-manifest --control-pair-key ...` writes a validated
+top-level key, and `proposal-trajectory-compare` can label matched non-empty
+keys as `control_pair_key_matched_not_deterministic_llm_replay` while keeping
+`llm_deterministic_replay=false`. This is pre-registered report metadata, not
+LLM replay and not campaign behavior: it is excluded from sessions, proposal
+fingerprints, prompt payloads, `DecisionFeatures`, campaign loop state,
+scheduler state, Protocol, and promotion state. Focused acceptance passed with
+`16 passed` in `test_proposal_trajectory_artifacts.py`, py_compile on touched
+report files, and `git diff --check`.
+
+Next operational gate: run a warehouse strong-control context/governance
+experiment using explicit control-pair keys, keeping branch and cross-branch
+research memory visible while isolating measurement diagnostics. The result
+must still inspect proposal trajectories, LLM contexts, branch depth/transfer,
+validation/frozen reach, replay pressure, and forbidden-field leakage before any
+Phase 5 causal claim.
 
 The active v0.4 task breakdown is
 [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md).
