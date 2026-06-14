@@ -33,10 +33,12 @@ class CampaignLoop:
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
     run_fresh_runtime_replay_drain_step: Callable[[], StepResult] | None = None
+    run_stage_transition_drain_step: Callable[[], StepResult] | None = None
     proposal_quality_loop_limit: int | None = None
     proposal_attempt_limit: int | None = None
     telemetry_repair_attempt_limit: int | None = None
     fresh_runtime_replay_drain_limit: int | None = None
+    stage_transition_drain_limit: int | None = None
     get_proposal_attempts: Callable[[], int] | None = None
 
     def run(self, max_rounds: int = 1000) -> None:
@@ -63,6 +65,13 @@ class CampaignLoop:
         fresh_runtime_replay_drain_last_metadata: dict[str, Any] = {}
         fresh_runtime_replay_drain_accepted_metadata: dict[str, Any] = {}
         fresh_runtime_replay_drain_final_metadata: dict[str, Any] = {}
+        stage_transition_drain_attempts = 0
+        stage_transition_drain_executed = 0
+        stage_transition_drain_skipped = 0
+        stage_transition_drain_stop_reason = ""
+        stage_transition_drain_last_metadata: dict[str, Any] = {}
+        stage_transition_drain_accepted_metadata: dict[str, Any] = {}
+        stage_transition_drain_final_metadata: dict[str, Any] = {}
         formal_screened_candidates = 0
         protocol_evaluated_candidates = 0
         quality_block_ledger: list[dict[str, Any]] = []
@@ -95,6 +104,10 @@ class CampaignLoop:
         fresh_runtime_replay_drain_limit = _fresh_runtime_replay_drain_limit(
             requested_rounds,
             configured=self.fresh_runtime_replay_drain_limit,
+        )
+        stage_transition_drain_limit = _stage_transition_drain_limit(
+            requested_rounds,
+            configured=self.stage_transition_drain_limit,
         )
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  Ordinary
@@ -195,6 +208,20 @@ class CampaignLoop:
                 fresh_runtime_replay_drain_final_metadata=(
                     fresh_runtime_replay_drain_final_metadata
                 ),
+                stage_transition_drain_attempts=stage_transition_drain_attempts,
+                stage_transition_drain_executed=stage_transition_drain_executed,
+                stage_transition_drain_skipped=stage_transition_drain_skipped,
+                stage_transition_drain_limit=stage_transition_drain_limit,
+                stage_transition_drain_stop_reason=stage_transition_drain_stop_reason,
+                stage_transition_drain_last_metadata=(
+                    stage_transition_drain_last_metadata
+                ),
+                stage_transition_drain_accepted_metadata=(
+                    stage_transition_drain_accepted_metadata
+                ),
+                stage_transition_drain_final_metadata=(
+                    stage_transition_drain_final_metadata
+                ),
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
@@ -205,6 +232,17 @@ class CampaignLoop:
                 failure_categories=failure_category_counts,
                 last_failure_category=last_failure_category,
             )
+
+        def record_protocol_result(result: StepResult) -> None:
+            nonlocal formal_screened_candidates, protocol_evaluated_candidates
+            protocol_stage = _protocol_stage_for_result(result)
+            if protocol_stage:
+                protocol_evaluated_candidates += 1
+                protocol_stage_counts[protocol_stage] = (
+                    protocol_stage_counts.get(protocol_stage, 0) + 1
+                )
+                if _is_formal_screened_candidate_result(result, protocol_stage):
+                    formal_screened_candidates += 1
 
         self.write_status(loop_status=loop_status())
         while counted_rounds < requested_rounds:
@@ -251,14 +289,7 @@ class CampaignLoop:
 
             self.write_status(loop_status=loop_status())
             result = self.run_one_step()
-            protocol_stage = _protocol_stage_for_result(result)
-            if protocol_stage:
-                protocol_evaluated_candidates += 1
-                protocol_stage_counts[protocol_stage] = (
-                    protocol_stage_counts.get(protocol_stage, 0) + 1
-                )
-                if _is_formal_screened_candidate_result(result, protocol_stage):
-                    formal_screened_candidates += 1
+            record_protocol_result(result)
             result_failure_category = _result_failure_category(result)
             if result_failure_category:
                 last_failure_category = result_failure_category
@@ -372,6 +403,69 @@ class CampaignLoop:
 
             self.run_stagnation_check()
             self.check_soft_stagnation()
+        if final_reason is None and counted_rounds >= requested_rounds:
+            drain_step = self.run_stage_transition_drain_step
+            if drain_step is not None:
+                while stage_transition_drain_executed < stage_transition_drain_limit:
+                    self.drain_weight_opt_events()
+                    if self.should_stop():
+                        stage_transition_drain_stop_reason = (
+                            self.get_last_stop_reason()
+                            or "termination condition met"
+                        )
+                        break
+                    circuit_breaker = self.get_circuit_breaker()
+                    if circuit_breaker.is_tripped:
+                        stage_transition_drain_stop_reason = "circuit_breaker"
+                        break
+                    stage_transition_drain_attempts += 1
+                    self.write_status(loop_status=loop_status())
+                    result = drain_step()
+                    if not _is_stage_transition_drain_result(result):
+                        stage_transition_drain_skipped += 1
+                        stage_transition_drain_final_metadata = (
+                            _stage_transition_drain_result_metadata(result)
+                        )
+                        stage_transition_drain_stop_reason = (
+                            str(result.reason or "")
+                            or "no_stage_transition_pending"
+                        )
+                        stage_transition_drain_last_metadata = dict(
+                            stage_transition_drain_final_metadata
+                        )
+                        break
+                    stage_transition_drain_executed += 1
+                    record_protocol_result(result)
+                    stage_transition_drain_accepted_metadata = (
+                        _stage_transition_drain_result_metadata(result)
+                    )
+                    stage_transition_drain_final_metadata = dict(
+                        stage_transition_drain_accepted_metadata
+                    )
+                    stage_transition_drain_last_metadata = dict(
+                        stage_transition_drain_accepted_metadata
+                    )
+                    self.write_status(
+                        last_result=result,
+                        loop_status=loop_status(),
+                    )
+                    if result.stopped:
+                        stage_transition_drain_stop_reason = (
+                            result.reason or "stage_transition_drain_stopped"
+                        )
+                        break
+                else:
+                    stage_transition_drain_stop_reason = (
+                        "stage_transition_drain_cap_exhausted"
+                    )
+                    stage_transition_drain_final_metadata = {
+                        **stage_transition_drain_final_metadata,
+                        "cap_exhausted": True,
+                        "stopped_reason": stage_transition_drain_stop_reason,
+                    }
+                    stage_transition_drain_last_metadata = dict(
+                        stage_transition_drain_final_metadata
+                    )
         if final_reason is None and counted_rounds >= requested_rounds:
             drain_step = self.run_fresh_runtime_replay_drain_step
             if drain_step is not None:
@@ -514,6 +608,12 @@ def _is_fresh_runtime_replay_drain_result(result: StepResult) -> bool:
     )
 
 
+def _is_stage_transition_drain_result(result: StepResult) -> bool:
+    if bool(getattr(result, "counts_toward_max_rounds", True)):
+        return False
+    return _protocol_stage_for_result(result) in {"validation", "frozen"}
+
+
 def _scheduler_action_for_result(result: StepResult) -> str:
     metadata = getattr(result, "scheduler_audit_metadata", None) or {}
     if not isinstance(metadata, dict):
@@ -556,6 +656,49 @@ def _fresh_runtime_replay_drain_result_metadata(
         "accepted_for_drain": _is_fresh_runtime_replay_drain_result(result),
         "fresh_runtime_replay": (
             dict(replay_metadata) if isinstance(replay_metadata, dict) else {}
+        ),
+    }
+
+
+def _stage_transition_drain_result_metadata(
+    result: StepResult,
+) -> dict[str, Any]:
+    metadata = getattr(result, "scheduler_audit_metadata", None) or {}
+    drain_metadata = (
+        metadata.get("stage_transition_drain")
+        if isinstance(metadata, dict)
+        else None
+    )
+    return {
+        "schema_version": "stage_transition_drain_result.v1",
+        "branch_id": getattr(result, "branch_id", None),
+        "action": str(getattr(result, "action", "") or ""),
+        "attempt_kind": _attempt_kind(result),
+        "counts_toward_max_rounds": bool(
+            getattr(result, "counts_toward_max_rounds", True)
+        ),
+        "scheduler_action": _scheduler_action_for_result(result),
+        "scheduler_slot": str(getattr(result, "scheduler_slot", "") or ""),
+        "scheduler_reason": str(getattr(result, "scheduler_reason", "") or ""),
+        "reason": str(getattr(result, "reason", "") or ""),
+        "protocol_stage": str(getattr(result, "protocol_stage", "") or ""),
+        "formal_protocol_evaluated": bool(
+            getattr(result, "formal_protocol_evaluated", False)
+        ),
+        "decision": (
+            getattr(getattr(result, "decision", None), "value", None)
+            or str(getattr(result, "decision", "") or "")
+        ),
+        "failure_stage": getattr(result, "failure_stage", None),
+        "failure_category": getattr(result, "failure_category", None),
+        "failure_detail": (
+            str(getattr(result, "failure_detail", ""))[:1000]
+            if getattr(result, "failure_detail", None)
+            else None
+        ),
+        "accepted_for_drain": _is_stage_transition_drain_result(result),
+        "stage_transition_drain": (
+            dict(drain_metadata) if isinstance(drain_metadata, dict) else {}
         ),
     }
 
@@ -805,6 +948,25 @@ def _fresh_runtime_replay_drain_limit(
     return max(1, min(4, max(1, int(requested_rounds))))
 
 
+def _stage_transition_drain_limit(
+    requested_rounds: int,
+    *,
+    configured: int | None,
+) -> int:
+    if configured is not None:
+        return max(0, int(configured))
+    raw = os.environ.get("SCION_STAGE_TRANSITION_DRAIN_LIMIT")
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_STAGE_TRANSITION_DRAIN_LIMIT=%r",
+                raw,
+            )
+    return max(1, min(4, max(1, int(requested_rounds))))
+
+
 def _initial_proposal_attempts(
     getter: Callable[[], int] | None,
     *,
@@ -917,6 +1079,32 @@ def _fresh_runtime_replay_drain_status(
     return "not_started"
 
 
+def _stage_transition_drain_status(
+    *,
+    attempts: int,
+    executed: int,
+    skipped: int,
+    stopped_reason: str,
+    accepted_last_result: Mapping[str, Any],
+    final_attempt_last_result: Mapping[str, Any],
+) -> str:
+    if executed > 0:
+        if str(stopped_reason or "") == "stage_transition_drain_cap_exhausted":
+            return "selected_cap_exhausted"
+        if accepted_last_result.get("failure_stage") or (
+            accepted_last_result.get("failure_detail")
+        ):
+            return "selected_failed"
+        return "selected_executed"
+    if skipped > 0:
+        return "not_selected_no_pending"
+    if str(stopped_reason or ""):
+        return str(stopped_reason)
+    if attempts > 0:
+        return "not_selected"
+    return "not_started"
+
+
 def _campaign_loop_status(
     *,
     requested_rounds: int,
@@ -944,6 +1132,14 @@ def _campaign_loop_status(
     fresh_runtime_replay_drain_last_metadata: dict[str, Any],
     fresh_runtime_replay_drain_accepted_metadata: dict[str, Any],
     fresh_runtime_replay_drain_final_metadata: dict[str, Any],
+    stage_transition_drain_attempts: int,
+    stage_transition_drain_executed: int,
+    stage_transition_drain_skipped: int,
+    stage_transition_drain_limit: int,
+    stage_transition_drain_stop_reason: str,
+    stage_transition_drain_last_metadata: dict[str, Any],
+    stage_transition_drain_accepted_metadata: dict[str, Any],
+    stage_transition_drain_final_metadata: dict[str, Any],
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
@@ -969,9 +1165,16 @@ def _campaign_loop_status(
     fresh_replay_drain_executed = max(0, int(fresh_runtime_replay_drain_executed))
     fresh_replay_drain_skipped = max(0, int(fresh_runtime_replay_drain_skipped))
     fresh_replay_drain_limit = max(1, int(fresh_runtime_replay_drain_limit))
+    stage_drain_attempts = max(0, int(stage_transition_drain_attempts))
+    stage_drain_executed = max(0, int(stage_transition_drain_executed))
+    stage_drain_skipped = max(0, int(stage_transition_drain_skipped))
+    stage_drain_limit = max(0, int(stage_transition_drain_limit))
     accepted_replay_last_result = dict(fresh_runtime_replay_drain_accepted_metadata)
     final_attempt_last_result = dict(fresh_runtime_replay_drain_final_metadata)
     legacy_last_result = dict(fresh_runtime_replay_drain_last_metadata)
+    accepted_stage_last_result = dict(stage_transition_drain_accepted_metadata)
+    final_stage_attempt_last_result = dict(stage_transition_drain_final_metadata)
+    legacy_stage_last_result = dict(stage_transition_drain_last_metadata)
     closure_source_result = (
         accepted_replay_last_result
         if accepted_replay_last_result
@@ -991,6 +1194,14 @@ def _campaign_loop_status(
         accepted_replay_last_result=accepted_replay_last_result,
         final_attempt_last_result=final_attempt_last_result,
         blocked_count=fresh_replay_blocked_count,
+    )
+    stage_drain_status = _stage_transition_drain_status(
+        attempts=stage_drain_attempts,
+        executed=stage_drain_executed,
+        skipped=stage_drain_skipped,
+        stopped_reason=stage_transition_drain_stop_reason,
+        accepted_last_result=accepted_stage_last_result,
+        final_attempt_last_result=final_stage_attempt_last_result,
     )
     proposal_attempts_total = max(max(0, int(loop_steps)), attempts_value)
     protocol_stage_counts_value = {
@@ -1017,6 +1228,34 @@ def _campaign_loop_status(
             int(protocol_evaluated_candidates),
         ),
         "protocol_stage_counts": protocol_stage_counts_value,
+        "stage_transition_drain": {
+            "schema_version": "stage_transition_drain.v1",
+            "status": stage_drain_status,
+            "attempts": stage_drain_attempts,
+            "executed": stage_drain_executed,
+            "skipped": stage_drain_skipped,
+            "limit": stage_drain_limit,
+            "stopped_reason": str(stage_transition_drain_stop_reason or ""),
+            "last_result": legacy_stage_last_result,
+            "accepted_stage_last_result": accepted_stage_last_result,
+            "final_attempt_last_result": final_stage_attempt_last_result,
+            "counts_toward_max_rounds": False,
+            "generates_new_hypothesis": False,
+        },
+        "stage_transition_drain_status": stage_drain_status,
+        "stage_transition_drain_attempts": stage_drain_attempts,
+        "stage_transition_drain_executed": stage_drain_executed,
+        "stage_transition_drain_skipped": stage_drain_skipped,
+        "stage_transition_drain_limit": stage_drain_limit,
+        "stage_transition_drain_stopped_reason": str(
+            stage_transition_drain_stop_reason or ""
+        ),
+        "stage_transition_drain_accepted_stage_last_result": (
+            accepted_stage_last_result
+        ),
+        "stage_transition_drain_final_attempt_last_result": (
+            final_stage_attempt_last_result
+        ),
         "max_rounds_budget_counter": "effective_rounds_completed",
         "max_rounds_semantics": (
             "requested_rounds limits effective_rounds_completed; "

@@ -361,6 +361,156 @@ def test_campaign_loop_does_not_drain_arbitrary_non_counted_result_after_max_rou
     )
 
 
+def test_campaign_loop_drains_final_round_queued_validation_without_new_proposal_round() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return _screening_result(
+            branch_id="b1",
+            reason="screening queued validation",
+            decision=Decision.QUEUE_VALIDATE,
+        )
+
+    def stage_drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        if drain_calls == 1:
+            return _protocol_stage_result(
+                action="validate",
+                branch_id="b1",
+                reason="validation drained",
+                stage="validation",
+                decision=Decision.QUEUE_FROZEN,
+                counts_toward_max_rounds=False,
+                attempt_kind="stage_transition_drain",
+            )
+        return StepResult(
+            action="skip",
+            branch_id="b1",
+            reason="stage transition drain skipped: no pending validation",
+            counts_toward_max_rounds=False,
+            attempt_kind="stage_transition_drain",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stage_transition_drain_step=stage_drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+        stage_transition_drain_limit=2,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 2
+    assert last_results[-1].reason == "validation drained"
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["proposal_attempts_consumed"] == 1
+    assert final_status["formal_screened_candidates"] == 1
+    assert final_status["protocol_stage_counts"] == {
+        "screening": 1,
+        "validation": 1,
+        "frozen": 0,
+    }
+    assert final_status["stage_transition_drain_executed"] == 1
+    assert final_status["stage_transition_drain_skipped"] == 1
+    assert final_status["stage_transition_drain_status"] == "selected_executed"
+    assert final_status["stage_transition_drain"]["counts_toward_max_rounds"] is False
+    assert final_status["stage_transition_drain"]["generates_new_hypothesis"] is False
+
+
+def test_campaign_loop_rejects_non_stage_transition_drain_result() -> None:
+    main_calls = 0
+    drain_calls = 0
+    statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal main_calls
+        main_calls += 1
+        return _screening_result()
+
+    def stage_drain_step() -> StepResult:
+        nonlocal drain_calls
+        drain_calls += 1
+        return StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="new proposal would be unsafe",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        )
+
+    def write_status(**kwargs: Any) -> None:
+        if "loop_status" in kwargs:
+            statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: None,
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stage_transition_drain_step=stage_drain_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=1,
+    )
+
+    loop.run(max_rounds=1)
+
+    final_status = statuses[-1]
+    assert main_calls == 1
+    assert drain_calls == 1
+    assert final_status["effective_rounds_completed"] == 1
+    assert final_status["proposal_attempts_consumed"] == 1
+    assert final_status["protocol_stage_counts"]["validation"] == 0
+    assert final_status["stage_transition_drain_executed"] == 0
+    assert final_status["stage_transition_drain_skipped"] == 1
+    assert final_status["stage_transition_drain_status"] == "not_selected_no_pending"
+
+
 def test_campaign_loop_preserves_blocked_replay_and_final_skip_in_drain_status() -> None:
     main_calls = 0
     drain_calls = 0

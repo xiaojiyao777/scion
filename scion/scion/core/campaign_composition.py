@@ -686,6 +686,9 @@ def compose_campaign_services(
         run_fresh_runtime_replay_drain_step=(
             lambda: owner.run_fresh_runtime_replay_drain_step()
         ),
+        run_stage_transition_drain_step=(
+            lambda: owner.run_stage_transition_drain_step()
+        ),
         run_stagnation_check=lambda: owner._run_stagnation_check(),
         check_soft_stagnation=lambda: owner._check_soft_stagnation(),
         write_campaign_summary=lambda: owner._write_campaign_summary(),

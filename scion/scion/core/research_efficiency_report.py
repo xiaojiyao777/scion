@@ -287,6 +287,70 @@ def build_research_efficiency_report(
                 False,
             ),
         },
+        "stage_transition_drain": {
+            "attempts": _first_int(
+                summary.get("stage_transition_drain_attempts"),
+                status.get("stage_transition_drain_attempts"),
+                _nested_int(summary, "stage_transition_drain", "attempts"),
+                _nested_int(status, "stage_transition_drain", "attempts"),
+            ),
+            "executed": _first_int(
+                summary.get("stage_transition_drain_executed"),
+                status.get("stage_transition_drain_executed"),
+                _nested_int(summary, "stage_transition_drain", "executed"),
+                _nested_int(status, "stage_transition_drain", "executed"),
+            ),
+            "skipped": _first_int(
+                summary.get("stage_transition_drain_skipped"),
+                status.get("stage_transition_drain_skipped"),
+                _nested_int(summary, "stage_transition_drain", "skipped"),
+                _nested_int(status, "stage_transition_drain", "skipped"),
+            ),
+            "limit": _first_int(
+                summary.get("stage_transition_drain_limit"),
+                status.get("stage_transition_drain_limit"),
+                _nested_int(summary, "stage_transition_drain", "limit"),
+                _nested_int(status, "stage_transition_drain", "limit"),
+            ),
+            "status": _first_str(
+                summary.get("stage_transition_drain_status"),
+                status.get("stage_transition_drain_status"),
+                _nested_value(summary, "stage_transition_drain", "status"),
+                _nested_value(status, "stage_transition_drain", "status"),
+            ),
+            "stopped_reason": _first_str(
+                summary.get("stage_transition_drain_stopped_reason"),
+                status.get("stage_transition_drain_stopped_reason"),
+                _nested_value(summary, "stage_transition_drain", "stopped_reason"),
+                _nested_value(status, "stage_transition_drain", "stopped_reason"),
+            ),
+            "counts_toward_max_rounds": _first_bool(
+                _nested_value(
+                    summary,
+                    "stage_transition_drain",
+                    "counts_toward_max_rounds",
+                ),
+                _nested_value(
+                    status,
+                    "stage_transition_drain",
+                    "counts_toward_max_rounds",
+                ),
+                False,
+            ),
+            "generates_new_hypothesis": _first_bool(
+                _nested_value(
+                    summary,
+                    "stage_transition_drain",
+                    "generates_new_hypothesis",
+                ),
+                _nested_value(
+                    status,
+                    "stage_transition_drain",
+                    "generates_new_hypothesis",
+                ),
+                False,
+            ),
+        },
         "proposal_quality": {
             "proposal_attempts_total": _first_int(
                 summary.get("proposal_attempts_total"),

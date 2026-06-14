@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP Phase B audited; staged CVRP gate repair under acceptance; validation drain and longer follow-up next*
+*Status: CVRP Phase B audited; staged gate and validation drain under acceptance; longer follow-up next*
 *Updated: 2026-06-14*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1151,13 +1151,24 @@ Phase B launch design - 2026-06-14:
   unit/core/test_runtime_budget_diagnostics.py
   test_verification_gate_integration.py` passed with `190 passed`;
   `py_compile` and `git diff --check` also passed.
-- Pauli read-only audit accepted the staged-gate direction and identified the
-  next separate repair: a final-round `QUEUE_VALIDATE` can be left unexecuted
-  because `CampaignLoop` stops at `max_rounds` and only drains fresh-runtime
-  replay. Do not treat this as solved by gate tuning. Add a small
-  validation-drain or reserved-validation-round mechanism before the next
-  formal 12/16-round CVRP follow-up, and keep it from generating new
-  hypotheses or inflating effective proposal rounds.
+- Implemented under acceptance: bounded post-budget stage-transition drain.
+  `CampaignLoop` now has a separate `stage_transition_drain` accounting block
+  and a bounded `SCION_STAGE_TRANSITION_DRAIN_LIMIT` override. After the
+  requested effective proposal/screening rounds are exhausted, it can execute
+  already-produced validation/frozen stage work without generating a new
+  hypothesis or incrementing `effective_rounds_completed` /
+  `proposal_attempts_consumed`. `BranchStepRunner` only accepts
+  `READY_VALIDATE`, `VALIDATING`, `VALIDATING_EXPAND`, `READY_FROZEN`, and
+  `FROZEN_TESTING` style work for this drain; arbitrary `EXPLORE`/`create_new`
+  work is skipped. Validation/frozen Protocol and Decision gates still run
+  normally and still form ordinary `DecisionFeatures`; this drain is not
+  `decision_features_excluded`. Targeted acceptance so far:
+  `test_retry_round_accounting_campaign_loop.py`,
+  `test_campaign_basics_continue.py`, and
+  `test_campaign_screening_verification_run.py` passed with `65 passed`;
+  accounting/status tests passed with `73 passed`; touched modules
+  `py_compile` passed. Combined gate/campaign/accounting regression passed with
+  `328 passed`; `git diff --check` passed.
 - WSL parallel execution channel is now operational for future long CVRP cells.
   The handoff/status path is
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/status/wsl_status.md`.

@@ -433,6 +433,10 @@ class CampaignManager:
         """Execute one scheduler-approved fresh-runtime replay drain step."""
         return _branch_step_runner_for(self).run_fresh_runtime_replay_drain_step()
 
+    def run_stage_transition_drain_step(self) -> StepResult:
+        """Execute one scheduler-approved post-budget validation/frozen step."""
+        return _branch_step_runner_for(self).run_stage_transition_drain_step()
+
     def should_stop(self) -> bool:
         if getattr(self, "_external_stop_requested", False):
             if not self._last_stop_reason:

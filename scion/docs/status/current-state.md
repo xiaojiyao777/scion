@@ -141,13 +141,21 @@ bridge/adapter, branch lifecycle, runtime-budget diagnostics, and verification
 integration passed with `190 passed`. `py_compile` and `git diff --check` also
 passed.
 
-The next CVRP framework repair is separate: final-round `QUEUE_VALIDATE` can be
-censored by `max_rounds` because `CampaignLoop` does not drain ordinary
-validation/frozen stage transitions after the proposal budget is exhausted. Add
-a bounded validation-drain or reserved-validation-round mechanism before the
-next formal 12/16-round follow-up; it should execute already-produced
-`READY_VALIDATE` work without generating new hypotheses or inflating effective
-proposal rounds.
+The separate final-round `QUEUE_VALIDATE` censoring repair is now implemented
+and under acceptance. `CampaignLoop` has a bounded post-budget
+`stage_transition_drain` that executes already-produced validation/frozen stage
+work after requested effective proposal/screening rounds are exhausted. The
+drain has its own accounting block, can be overridden with
+`SCION_STAGE_TRANSITION_DRAIN_LIMIT`, does not increment
+`effective_rounds_completed` or `proposal_attempts_consumed`, and records
+`generates_new_hypothesis=false`. `BranchStepRunner` restricts it to
+validation/frozen pending states, so it cannot create a new branch or run an
+ordinary `EXPLORE` proposal. Validation/frozen Protocol and Decision gates still
+run normally and still form ordinary `DecisionFeatures`. Targeted acceptance so
+far: loop/campaign max-round tests passed with `65 passed`, accounting/status
+tests passed with `73 passed`, and touched modules `py_compile` passed. Combined
+gate/campaign/accounting regression passed with `328 passed`; `git diff --check`
+passed.
 
 Future long CVRP cells can also use the WSL parallel execution channel described
 in

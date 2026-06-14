@@ -37,6 +37,7 @@ class StepResult:
         "validation_repair_required",
         "same_family_retry",
         "fresh_runtime_replay",
+        "stage_transition_drain",
         "reconcile_lifecycle",
         "scheduler_active_slot_blocked",
         "other",

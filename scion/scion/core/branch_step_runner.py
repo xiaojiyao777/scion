@@ -417,6 +417,106 @@ class BranchStepRunner:
             self.record_scheduler_result,
         )
 
+    def run_stage_transition_drain_step(self) -> StepResult:
+        """Execute one post-budget validation/frozen transition, if selected."""
+        self.drain_weight_opt_events()
+        if self.should_stop():
+            return StepResult(
+                action="stopped",
+                stopped=True,
+                reason=self.get_last_stop_reason() or "termination condition met",
+                counts_toward_max_rounds=False,
+                attempt_kind="stage_transition_drain",
+            )
+
+        active = self.branch_controller.get_active_branches()
+        sched = self.scheduler.select_next(active)
+        branch = getattr(sched, "branch", None)
+
+        def skip(reason: str) -> StepResult:
+            result = StepResult(
+                action="skip",
+                branch_id=getattr(branch, "branch_id", None),
+                reason=reason,
+                counts_toward_max_rounds=False,
+                attempt_kind="stage_transition_drain",
+                scheduler_audit_metadata={
+                    "stage_transition_drain": {
+                        "schema_version": "stage_transition_drain.v1",
+                        "executed": False,
+                        "skip_reason": reason,
+                        "counts_toward_max_rounds": False,
+                        "generates_new_hypothesis": False,
+                    }
+                },
+            )
+            return _finalize_scheduler_result(
+                result,
+                sched,
+                self.record_scheduler_result,
+            )
+
+        if str(getattr(sched, "action", "") or "") != "run_existing":
+            return skip(
+                "stage transition drain skipped: scheduler did not select run_existing"
+            )
+        if branch is None:
+            return skip(
+                "stage transition drain skipped: scheduler selected no branch"
+            )
+
+        selected = self.branch_controller.get_branch(branch.branch_id)
+        selected_state_before = selected.state
+        if selected.state in (BranchState.READY_VALIDATE, BranchState.READY_FROZEN):
+            try:
+                self.branch_controller.schedule_branch(selected.branch_id)
+                self.persist_branch_state(selected.branch_id)
+            except StateTransitionError as exc:
+                return _finalize_scheduler_result(
+                    StepResult(
+                        action="skip",
+                        branch_id=selected.branch_id,
+                        reason=str(exc),
+                        counts_toward_max_rounds=False,
+                        attempt_kind="stage_transition_drain",
+                    ),
+                    sched,
+                    self.record_scheduler_result,
+                )
+            selected = self.branch_controller.get_branch(selected.branch_id)
+
+        if selected.state not in (
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.FROZEN_TESTING,
+        ):
+            return skip(
+                "stage transition drain skipped: selected branch is not validation/frozen pending"
+            )
+
+        try:
+            result = self.run_eval_step_callback(selected)
+        except RuntimeError as exc:
+            result = self._handle_eval_runtime_error(selected, exc)
+        result.counts_toward_max_rounds = False
+        result.attempt_kind = "stage_transition_drain"
+        metadata = dict(result.scheduler_audit_metadata or {})
+        metadata["stage_transition_drain"] = {
+            "schema_version": "stage_transition_drain.v1",
+            "executed": True,
+            "source_state": selected_state_before.value,
+            "scheduled_state": selected.state.value,
+            "protocol_stage": getattr(result, "protocol_stage", None),
+            "counts_toward_max_rounds": False,
+            "generates_new_hypothesis": False,
+        }
+        result.scheduler_audit_metadata = metadata
+        return _finalize_scheduler_result(
+            result,
+            sched,
+            self.record_scheduler_result,
+        )
+
     def _persist_active_slot_reconciliation(self, reconciliation: Any) -> None:
         for branch_id in getattr(reconciliation, "parked_branch_ids", ()) or ():
             try:

@@ -78,6 +78,39 @@ class TestCampaignBasics:
             "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
         }
 
+    def test_final_round_queue_validate_drains_validation_without_new_proposal(self, tmp_path):
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol([
+                _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+                _make_protocol_result(
+                    ExperimentStage.VALIDATION,
+                    gate_outcome="pass",
+                    win_rate=0.7,
+                    ci_low=0.005,
+                    ci_high=0.02,
+                ),
+            ]),
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+
+        cm.run(max_rounds=1)
+
+        branch = next(iter(cm._branch_ctrl._branches.values()))
+        assert branch.state == BranchState.READY_FROZEN
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        assert status["stopped_reason"] == "max_rounds_exhausted"
+        assert status["effective_rounds_completed"] == 1
+        assert status["proposal_attempts_consumed"] == 1
+        assert status["protocol_stage_counts"] == {
+            "screening": 1,
+            "validation": 1,
+            "frozen": 0,
+        }
+        assert status["stage_transition_drain_executed"] == 1
+        assert status["stage_transition_drain"]["counts_toward_max_rounds"] is False
+        assert status["stage_transition_drain"]["generates_new_hypothesis"] is False
+
     def test_infra_only_attempt_exhaustion_is_marked_invalid(self, tmp_path):
         class NoAvailableAccountsLLM:
             def call(self, prompt, response_schema, model=None, system_blocks=None):

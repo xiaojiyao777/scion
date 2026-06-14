@@ -185,6 +185,21 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "fresh_runtime_replay_drain_unresolved_closures": (
             "fresh_runtime_replay_drain_unresolved_closures"
         ),
+        "stage_transition_drain": "stage_transition_drain",
+        "stage_transition_drain_status": "stage_transition_drain_status",
+        "stage_transition_drain_attempts": "stage_transition_drain_attempts",
+        "stage_transition_drain_executed": "stage_transition_drain_executed",
+        "stage_transition_drain_skipped": "stage_transition_drain_skipped",
+        "stage_transition_drain_limit": "stage_transition_drain_limit",
+        "stage_transition_drain_stopped_reason": (
+            "stage_transition_drain_stopped_reason"
+        ),
+        "stage_transition_drain_accepted_stage_last_result": (
+            "stage_transition_drain_accepted_stage_last_result"
+        ),
+        "stage_transition_drain_final_attempt_last_result": (
+            "stage_transition_drain_final_attempt_last_result"
+        ),
         "quality_blocks": "quality_blocks",
         "quality_block_ledger": "quality_block_ledger",
         "quality_block_ledger_count": "quality_block_ledger_count",
