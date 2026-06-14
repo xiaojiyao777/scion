@@ -40,6 +40,7 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--measurement-governance" in result.stdout
     assert "--proposal-context-ablation" in result.stdout
     assert "--control-pair-key" in result.stdout
+    assert "--stage-transition-drain-limit" in result.stdout
 
 
 def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
@@ -77,6 +78,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_MODEL=gpt-5.5" in launch_env
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in launch_env
     assert "SCION_API_KEY=pwd" in launch_env
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
     assert "ROUNDS=4" in launch_env
     assert "PROBLEM=scion/problems/cvrp/problem.yaml" in launch_env
     assert "PROTOCOL=scion/problems/cvrp/formal/protocol.yaml" in launch_env
@@ -91,10 +93,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert 'cd "$SCION_DIR"' in run_sh_text
     assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY" in run_sh_text
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT" in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
         run_sh_text
     )
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
@@ -142,6 +146,8 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
             "compact-measurement-diagnostics",
             "--control-pair-key",
             "pair-a-vs-b",
+            "--stage-transition-drain-limit",
+            "2",
             "--experiments-root",
             str(tmp_path / "runs"),
         ],
@@ -168,6 +174,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
         "PROPOSAL_CONTEXT_ABLATION=compact-measurement-diagnostics" in launch_env
     )
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in launch_env
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in launch_env
     assert f"--problem {problem}" in command_txt
     assert f"--protocol {protocol}" in command_txt
     assert f"--split {split}" in command_txt
@@ -177,6 +184,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
         "--proposal-context-ablation compact-measurement-diagnostics" in command_txt
     )
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in command_txt
+    assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in command_txt
     assert "--control-pair-key" not in command_txt
     assert "--control-pair-key" not in run_sh_text
 

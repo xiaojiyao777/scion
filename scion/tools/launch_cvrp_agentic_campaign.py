@@ -19,6 +19,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
+DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
 DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
 DEFAULT_USER_SUFFIX = "claw"
 
@@ -154,6 +155,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_API_KEY",
         "SCION_SDK_MAX_RETRIES",
         "SCION_LLM_MAX_RETRIES",
+        "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
         "SCION_PROBLEM_DATA_ROOT",
         "PROBLEM",
         "PROTOCOL",
@@ -179,7 +181,7 @@ def _write_run_sh(run_root: Path, command: str) -> None:
 set -uo pipefail
 source "$(dirname "$0")/launch.env"
 cd "$SCION_DIR" || exit 1
-export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_PROBLEM_DATA_ROOT
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_PROBLEM_DATA_ROOT
 {{
   echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "GIT_COMMIT:$GIT_COMMIT"
@@ -267,6 +269,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         ),
         "SCION_SDK_MAX_RETRIES": 0,
         "SCION_LLM_MAX_RETRIES": 2,
+        "SCION_STAGE_TRANSITION_DRAIN_LIMIT": args.stage_transition_drain_limit,
         "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
         "PROBLEM": args.problem,
         "PROTOCOL": args.protocol,
@@ -292,6 +295,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             "environment:\n"
             f"SCION_MODEL={env['SCION_MODEL']}\n"
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
+            f"SCION_STAGE_TRANSITION_DRAIN_LIMIT="
+            f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']}\n\n"
             "SCION_API_KEY="
             f"{'<set>' if str(env['SCION_API_KEY']) else '<unset>'}\n\n"
             "report_metadata:\n"
@@ -365,6 +370,16 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC,
     )
     parser.add_argument(
+        "--stage-transition-drain-limit",
+        type=int,
+        default=DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT,
+        help=(
+            "Bounded post-budget validation/frozen drain cap. Written as "
+            "SCION_STAGE_TRANSITION_DRAIN_LIMIT; use 0 only to disable the "
+            "post-budget drain."
+        ),
+    )
+    parser.add_argument(
         "--experiments-root",
         type=Path,
         default=DEFAULT_EXPERIMENTS_ROOT,
@@ -381,6 +396,8 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--time-limit-sec must be >= 1")
     if args.agentic_session_timeout_sec < 1:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
+    if args.stage_transition_drain_limit < 0:
+        raise SystemExit("--stage-transition-drain-limit must be >= 0")
     if not args.base_url.strip():
         raise SystemExit("--base-url must not be empty")
     for option_name in ("problem", "protocol", "split", "seeds"):

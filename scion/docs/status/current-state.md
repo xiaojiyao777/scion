@@ -88,9 +88,9 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The current next gate is now the CVRP staged gate repair/design and a
-pre-registered longer CVRP follow-up, based on the completed Phase B matched
-Scion campaign for the CVRP baseline-strength contrast:
+The current next gate is now the CVRP Phase C long-run follow-up, based on the
+completed staged gate repair, bounded stage-transition drain repair, and Phase
+B matched Scion campaign for the CVRP baseline-strength contrast:
 [`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md).
 Launch note:
 [`../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md).
@@ -100,6 +100,8 @@ The group root is
 `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-claw`.
 The WSL group is synced separately at
 `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-wsl`.
+Phase C is pre-registered here:
+[`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md).
 
 All six accepted cells are valid, complete, and `8/8`; all 48 formal rows
 remained in screening; there were no validation/frozen rows, promotions, failed
@@ -113,11 +115,10 @@ not run validation because the 8-round budget was exhausted.
 Phase B is accepted as valid research-surface evidence, not as promotion
 evidence and not as a final CVRP governance-value conclusion. `validation=0` is
 not a standalone failure diagnosis because several weak/marginal branches were
-censored by the round budget. The next v0.4 CVRP work is a staged gate
-repair/design and a pre-registered 12/16-round follow-up. The follow-up should
-preserve the canonical ALNS+VNS champion, keep ALNS-only labeled as a copied
-research-surface ablation, and interpret any ALNS-only result against its own
-weaker baseline and lower MDE.
+censored by the round budget. The next v0.4 CVRP work is Phase C: a
+pre-registered 16-round follow-up that preserves the canonical ALNS+VNS
+champion, keeps ALNS-only labeled as a copied research-surface ablation, and
+interprets any ALNS-only result against its own weaker baseline and lower MDE.
 
 Prompt/context analysis also found remaining v0.4 debt. The compact diagnostics
 arm suppressed the large standalone measurement diagnostics block and code-stage
@@ -156,6 +157,15 @@ far: loop/campaign max-round tests passed with `65 passed`, accounting/status
 tests passed with `73 passed`, and touched modules `py_compile` passed. Combined
 gate/campaign/accounting regression passed with `328 passed`; `git diff --check`
 passed.
+
+The Phase C launcher path now also records the drain cap explicitly:
+`launch_cvrp_agentic_campaign.py` exposes `--stage-transition-drain-limit`,
+writes `SCION_STAGE_TRANSITION_DRAIN_LIMIT` to `launch.env` and `command.txt`,
+and exports it from `run.sh`. Focused launcher acceptance passed with
+`7 passed`; `py_compile` and `git diff --check` passed. Phase C must use an
+experiment-owned protocol snapshot that preserves the accepted Phase A
+8-case/8-seed inputs while adding the repaired staged-gate block from the
+current CVRP formal protocol.
 
 Future long CVRP cells can also use the WSL parallel execution channel described
 in

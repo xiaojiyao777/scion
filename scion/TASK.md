@@ -1177,6 +1177,19 @@ Phase B launch design - 2026-06-14:
   `ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1`.
   Continue to coordinate through git plus rsync/handoff directories, and do not
   let server and WSL edit the same unsynced worktree concurrently.
+- Phase C long-run follow-up design is pre-registered in
+  [`docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md).
+  It uses 16 effective rounds, `3 repeats x 2 arms`, server `rep01`, WSL
+  `rep02/rep03`, `compact-measurement-diagnostics`, measurement governance
+  `on`, and an explicit `SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`. The protocol
+  input must be an experiment-owned Phase C snapshot: Phase A's accepted
+  8-case/8-seed split/seed ledger plus the repaired CVRP staged-gate block from
+  the current formal protocol. This avoids both stale Phase B gate semantics
+  and non-comparable 4-seed formal sampling.
+- Launcher acceptance for Phase C: `launch_cvrp_agentic_campaign.py` now exposes
+  `--stage-transition-drain-limit`, records it in `launch.env` and
+  `command.txt`, and exports it through `run.sh`. Focused launcher tests passed
+  with `7 passed`; `py_compile` and `git diff --check` passed.
 
 ## Current Repair Acceptance - 2026-06-13
 
