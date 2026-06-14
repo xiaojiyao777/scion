@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-13*
+*Last updated: 2026-06-14*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -76,14 +76,26 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    `practical_delta_screen=2.0` and should not be the next formal governance
    target or long promotion campaign without another pre-registered measurement
    change.
-5. The next pre-registered CVRP measurement change is now active: compare the
-   current ALNS+VNS champion against a copied ALNS-only starting baseline in a
-   no-LLM baseline-strength Phase A before any matched LLM campaign. This tests
-   whether baseline strength/research-surface headroom, rather than only Scion
-   governance, is blocking measurable CVRP research progress.
+5. The pre-registered CVRP baseline-strength Phase A no-LLM characterization is
+   complete and accepted:
+   [`../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md).
+   ALNS-only lowered A/A MDE from `9.6` to `4.65` raw `total_distance`, but
+   paired quality was much worse than ALNS+VNS: W/L/T `7/56/1`, median signed
+   delta `-20.0`, and mean BKS gap `6.50%` versus `4.20%` for ALNS+VNS. Treat
+   ALNS-only as a copied CVRP research-surface ablation, not as a canonical
+   baseline replacement or production solver improvement.
 6. Use v0.5 for the larger experiment program: governance ablations,
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
+
+The current next gate is a Phase B matched Scion campaign design for the CVRP
+baseline-strength contrast. It must keep both arms matched on model, rounds,
+protocol/split/seeds, runtime policy, measurement governance, prompt context
+mode, and postrun analysis. The primary question is whether the agent performs
+deeper and more useful CVRP research when the starting surface has larger
+measurable headroom. Any ALNS-only promotion must be interpreted against its
+own weaker baseline and lower MDE, not as a win over the current ALNS+VNS
+champion.
 
 The latest completed Phase 5 experiment artifact is the warehouse compact
 measurement-governance ON/OFF control:
@@ -299,11 +311,11 @@ timeouts `2`, and verification-heavy failures `2`; `rep04/record_only_compact`
 reports `abandon_fast_verification_heavy` `1` and fresh replay drain executed
 `2`.
 
-The CVRP/VRP baseline-strength contrast is now active in Phase A no-LLM
+The CVRP/VRP baseline-strength contrast completed Phase A no-LLM
 characterization for the long-standing "strong ALNS+VNS baseline may mask Scion
-improvements" hypothesis. The comparison keeps the current ALNS+VNS champion
-intact and creates a copied ALNS-only baseline variant with VNS disabled through
-problem-owned solver configuration. Run root:
+improvements" hypothesis. The comparison kept the current ALNS+VNS champion
+intact and created a copied ALNS-only baseline variant with VNS disabled
+through problem-owned solver configuration. Run root:
 `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`.
 The baseline manifest records the only intentional solver config diff as
 `USE_VNS=True -> False` in `policies/baseline_modules/config.py`, with the
@@ -318,17 +330,19 @@ showed `vns_initial`, `vns_embedded`, and VNS move attempts. The 2-case x
 failures. The pilot quality signal is diagnostic only: ALNS-only was
 `1` win / `3` losses versus control with median raw delta `-14.5`; pilot A/A
 MDE estimates were unstable (`3.33` for ALNS+VNS, `41.76` for ALNS-only), so
-the full 8 x 8 x 3 protocol-time characterization is required before any
+the full 8 x 8 x 3 protocol-time characterization was required before any
 campaign conclusion.
 
-The full no-LLM characterization started at `2026-06-13T17:28:17Z` and is
-currently running. It runs 8 screening cases x 8 seeds x 3 A/A replicates for
-both baselines, then an 8 x 8 paired baseline characterization under
-protocol-resolved time limits. Matched Scion campaigns remain gated until this
-Phase A report interprets baseline-specific MDE/noise, quality/headroom,
-runtime behavior, and phase telemetry. This is a baseline-strength/research
-surface study, not a substitute for the completed warehouse governance ON/OFF
-evidence or its repair findings. The pre-registered design is
+The accepted full no-LLM characterization ended at `2026-06-14T02:24:47Z` with
+all three stages exiting `0`; the report is
+[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md).
+ALNS+VNS A/A measured MDE `9.6` and `recommended_min_seeds=16`; ALNS-only A/A
+measured MDE `4.65` and `recommended_min_seeds=8`. Paired characterization
+showed ALNS-only W/L/T `7/56/1`, median signed delta `-20.0`, mean signed
+delta `-65.25`, and mean BKS gap `6.50%` versus `4.20%` for ALNS+VNS. This is
+a baseline-strength/research-surface study, not a substitute for the completed
+warehouse governance ON/OFF evidence or its repair findings. The pre-registered
+design is
 [`../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-contrast-20260613.md).
 
 The active v0.4 task breakdown is

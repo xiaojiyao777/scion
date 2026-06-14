@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP baseline-strength Phase A full no-LLM characterization running*
+*Status: CVRP baseline-strength Phase A accepted; Phase B design next*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -411,6 +411,23 @@ Exit criteria:
 
 ## Current Status
 
+- Completed: CVRP baseline-strength Phase A no-LLM characterization is accepted.
+  Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md`.
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`.
+  The full wrapper finished at `2026-06-14T02:24:47Z` with all three stages
+  exiting `0`. ALNS+VNS A/A produced `n_pairs=192`, MDE `9.6`, false-pass
+  `0.0`, and `recommended_min_seeds=16`; ALNS-only A/A produced
+  `n_pairs=192`, MDE `4.65`, false-pass `0.0`, and
+  `recommended_min_seeds=8`. Paired characterization showed ALNS-only as a
+  weaker but more measurable research surface: contrast W/L/T `7/56/1`,
+  median signed delta `-20.0`, mean signed delta `-65.25`, median runtime ratio
+  `0.9883`, and mean BKS gap `6.50%` versus `4.20%` for ALNS+VNS. VNS telemetry
+  matched the construction (`64/64` control pairs had VNS, `0/64` contrast
+  pairs had VNS). Phase B is allowed only as a pre-registered matched
+  research-surface campaign; ALNS-only is not a canonical baseline replacement
+  and no VNS/BKS/baseline-strength diagnostic enters `DecisionFeatures`.
 - Implemented: problem-owned `measurement` schema, protocol practical-delta
   resolution, runtime model resolution, budget-exhausting runtime governance,
   V9 budget-compliance semantics, read-only branch research-shape diagnostics,
@@ -948,9 +965,9 @@ Exit criteria:
   after `old_string_not_found`/`stale_source` failures and 11/78 code manifests
   with `missing_required_source_paths`; and align fixed-candidate replay with
   the campaign problem-spec bridge or fail clearly when a V1 spec is required.
-- Active after the immediate warehouse governance-run repair planning: the
-  CVRP/VRP baseline-strength contrast has entered Phase A no-LLM
-  characterization. Run root:
+- Completed after the immediate warehouse governance-run repair planning: the
+  CVRP/VRP baseline-strength contrast finished Phase A no-LLM characterization.
+  Run root:
   `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseA-20260613T171611Z-claw`.
   The canonical ALNS+VNS champion remains intact. The ALNS-only arm is a copied
   champion snapshot whose only intentional solver config diff is
@@ -958,12 +975,13 @@ Exit criteria:
   `policies/baseline_modules/config.py`. Smoke and 2-case x 2-seed pilot
   checks passed: ALNS-only had `0` VNS-observed pairs while the control had
   VNS evidence on every sampled pair; ALNS-only still produced ALNS move
-  attempts. The full 8-case x 8-seed x 3-replicate protocol-time no-LLM run is
-  now running from `2026-06-13T17:28:17Z`. Matched Scion/LLM campaigns remain
-  gated until the full characterization reports baseline-specific MDE/noise,
-  quality/headroom, runtime behavior, and phase-telemetry evidence.
+  attempts. The accepted full run ended at `2026-06-14T02:24:47Z` with all
+  stages exiting `0`; the report is
+  `scion/docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md`.
+  Matched Scion/LLM campaigns remain gated on explicit Phase B design, not on
+  missing Phase A characterization.
 
-## Active CVRP Baseline-Strength Contrast
+## Completed CVRP Baseline-Strength Phase A
 
 Purpose: test whether the current strong ALNS+VNS champion leaves too little
 measurable headroom for Scion's proposal/research loop, compared with an
@@ -991,6 +1009,10 @@ Current Phase A artifacts:
   `aa/aa_pilot_alns_only_2case_2seed_r1_uniform10.json`
 - Full run status:
   `aa/full_status.json`
+- Full A/A and paired characterization:
+  `aa/aa_alns_vns_protocoltime_8case_8seed_r3.json`,
+  `aa/aa_alns_only_protocoltime_8case_8seed_r3.json`, and
+  `aa/pair_characterization_protocoltime_8case_8seed.json`
 
 Current Phase A evidence:
 
@@ -1008,10 +1030,13 @@ Current Phase A evidence:
   losses versus control with median raw delta `-14.5`. Pilot A/A estimates were
   unstable by design; ALNS+VNS pilot MDE was `3.33`, while ALNS-only pilot MDE
   was `41.76`. Do not interpret those pilot MDEs as full protocol power.
-- The full no-LLM characterization started at `2026-06-13T17:28:17Z` and runs
-  `8` screening cases x `8` seeds x `3` A/A replicates for both baselines,
-  then an 8 x 8 paired baseline characterization under protocol-resolved time
-  limits. The current first stage is `alns_vns_phaseA` A/A.
+- The accepted full no-LLM characterization ended at `2026-06-14T02:24:47Z`.
+  ALNS+VNS A/A: `n_pairs=192`, MDE `9.6`, false-pass `0.0`,
+  `recommended_min_seeds=16`. ALNS-only A/A: `n_pairs=192`, MDE `4.65`,
+  false-pass `0.0`, `recommended_min_seeds=8`. Paired characterization:
+  ALNS-only W/L/T `7/56/1`, median signed delta `-20.0`, mean signed delta
+  `-65.25`, median runtime ratio `0.9883`, and VNS observed on `0/64`
+  contrast pairs versus `64/64` control pairs.
 
 Design constraints:
 
