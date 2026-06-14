@@ -1081,6 +1081,8 @@ Phase B launch design - 2026-06-14:
 
 - Pre-registered:
   [`docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md`](docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md).
+- Launched:
+  [`docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md`](docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md).
 - Purpose: matched agentic Scion campaigns to test whether CVRP research becomes
   deeper and more evidence-backed from a lower-noise, larger-headroom copied
   research surface.
@@ -1102,6 +1104,12 @@ Phase B launch design - 2026-06-14:
   each cell can record custom problem/protocol/split/seeds, measurement
   governance, proposal-context arm, and report-only `control_pair_key` metadata
   in `launch.env`/`command.txt`.
+- Launch state: the matrix group root is
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-claw`.
+  Sequential runner PID `2060750` started at `2026-06-14T02:46:13Z` and first
+  ran `rep01/alns_vns`. The sequential runner is intentional: CVRP solver
+  runtime is budget-exhausting, so parallel cells would contaminate wall-clock
+  runtime evidence.
 
 ## Current Repair Acceptance - 2026-06-13
 
