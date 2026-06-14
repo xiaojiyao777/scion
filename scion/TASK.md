@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP baseline-strength Phase B audited; staged CVRP gate repair and long-run design next*
+*Status: CVRP Phase B audited; staged CVRP gate repair under acceptance; validation drain and longer follow-up next*
 *Updated: 2026-06-14*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1134,6 +1134,38 @@ Phase B launch design - 2026-06-14:
   should keep branch lessons, same-mechanism follow-up, per-case opportunity,
   and mechanism rankings short, deterministic, and non-truncated while
   preserving full target/current source in code phase.
+- Implemented under acceptance: staged CVRP diagnostic-validation gate repair.
+  `ExpandedBorderlineAdvanceConfig` now supports explicit pair-level diagnostic
+  policy fields: `allow_pair_level_signal`, `pair_win_rate_min`,
+  `min_pair_total`, `min_pair_wins`, `min_pair_win_loss_margin`,
+  `pair_non_tie_win_rate_min`, and `max_pair_loss_rate`. The CVRP protocols
+  enable this only as a problem-owned, expand-exhausted diagnostic-validation
+  path; validation/frozen promotion gates remain strict. Boundary status:
+  Decision still reads only deterministic `DecisionFeatures` aggregates, not
+  raw MDE/BKS/gap/prompt/postrun diagnostics. Focused acceptance so far:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_config.py scion/scion/tests/test_decision_screening.py scion/scion/tests/test_protocol_stats_gates.py`
+  passed with `85 passed`. Wider gate-adjacent regression
+  `test_config.py test_problem_bridge.py test_problem_adapter.py
+  test_protocol_stats_gates.py test_decision_screening.py
+  unit/core/test_branch_lifecycle_policy.py
+  unit/core/test_runtime_budget_diagnostics.py
+  test_verification_gate_integration.py` passed with `190 passed`;
+  `py_compile` and `git diff --check` also passed.
+- Pauli read-only audit accepted the staged-gate direction and identified the
+  next separate repair: a final-round `QUEUE_VALIDATE` can be left unexecuted
+  because `CampaignLoop` stops at `max_rounds` and only drains fresh-runtime
+  replay. Do not treat this as solved by gate tuning. Add a small
+  validation-drain or reserved-validation-round mechanism before the next
+  formal 12/16-round CVRP follow-up, and keep it from generating new
+  hypotheses or inflating effective proposal rounds.
+- WSL parallel execution channel is now operational for future long CVRP cells.
+  The handoff/status path is
+  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/status/wsl_status.md`.
+  The reverse SSH tunnel is user-managed from WSL; when it is up, the server
+  can log in with
+  `ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1`.
+  Continue to coordinate through git plus rsync/handoff directories, and do not
+  let server and WSL edit the same unsynced worktree concurrently.
 
 ## Current Repair Acceptance - 2026-06-13
 

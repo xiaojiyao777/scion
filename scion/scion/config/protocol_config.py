@@ -394,6 +394,27 @@ class ExpandedBorderlineAdvanceConfig(BaseModel):
     require_ci_low_nonnegative: bool = False
     """Require ci_low >= 0 when screening produces CI evidence."""
 
+    allow_pair_level_signal: bool = False
+    """Allow measurable pair-level signal to enter validation after expand."""
+
+    pair_win_rate_min: float = Field(default=0.5, ge=0.0, le=1.0)
+    """Minimum pair win rate across all evaluated pairs for diagnostic advance."""
+
+    min_pair_total: int = Field(default=0, ge=0)
+    """Minimum number of evaluated pairs required for diagnostic advance."""
+
+    min_pair_wins: int = Field(default=0, ge=0)
+    """Minimum pair wins required for diagnostic advance."""
+
+    min_pair_win_loss_margin: int = Field(default=1, ge=0)
+    """Minimum pair_wins - pair_losses margin for diagnostic advance."""
+
+    pair_non_tie_win_rate_min: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    """Minimum pair win rate over non-tie pairs, when configured."""
+
+    max_pair_loss_rate: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    """Maximum pair loss rate across all evaluated pairs, when configured."""
+
 
 class ScreeningGate(BaseModel):
     """Screening 门控阈值。"""

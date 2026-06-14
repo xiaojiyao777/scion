@@ -32,6 +32,18 @@ gates:
   screening:
     win_rate_min: 0.60
     median_delta_min: "practical_delta_screen"
+    expanded_borderline_advance:
+      enabled: true
+      win_rate_window: 0.10
+      require_median_delta_nonnegative: true
+      require_ci_low_nonnegative: true
+      allow_pair_level_signal: true
+      pair_win_rate_min: 0.50
+      min_pair_total: 8
+      min_pair_wins: 4
+      min_pair_win_loss_margin: 1
+      pair_non_tie_win_rate_min: 0.60
+      max_pair_loss_rate: 0.40
   validation:
     win_rate_min: 0.66
     median_delta_min: "practical_delta_validate"

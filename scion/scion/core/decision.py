@@ -146,6 +146,34 @@ class DecisionEngine:
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT"])
         elif self._trajectory_divergent_low_snr_expand(features):
             if features.screening_expand_count >= 1:
+                borderline = self._expanded_borderline_advance_status(features)
+                if borderline == "pair_signal_pass":
+                    return self._out(
+                        features,
+                        Decision.QUEUE_VALIDATE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS",
+                            "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE",
+                        ],
+                    )
+                if borderline == "negative_delta":
+                    return self._out(
+                        features,
+                        Decision.CONTINUE_EXPLORE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA",
+                            "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED",
+                        ],
+                    )
+                if borderline == "negative_ci_low":
+                    return self._out(
+                        features,
+                        Decision.CONTINUE_EXPLORE,
+                        [
+                            "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_CI_LOW",
+                            "SCREENING_BORDERLINE_POLICY_FAIL_CLOSED",
+                        ],
+                    )
                 return self._out(
                     features,
                     Decision.CONTINUE_EXPLORE,
@@ -359,6 +387,9 @@ class DecisionEngine:
         threshold = self.config.screening_win_rate_threshold
         lower_bound = max(0.0, threshold - policy.win_rate_window)
         if not (lower_bound <= features.win_rate < threshold):
+            pair_signal = self._expanded_pair_level_signal_status(features)
+            if pair_signal != "disabled":
+                return pair_signal
             return "outside_window"
 
         if policy.require_median_delta_nonnegative:
@@ -368,6 +399,44 @@ class DecisionEngine:
             if features.ci_low is None or features.ci_low < 0:
                 return "negative_ci_low"
         return "pass"
+
+    def _expanded_pair_level_signal_status(
+        self,
+        features: DecisionFeatures,
+    ) -> str:
+        policy = self.config.gates.screening.expanded_borderline_advance
+        if not policy.allow_pair_level_signal:
+            return "disabled"
+        if policy.require_median_delta_nonnegative:
+            if features.median_delta is None or features.median_delta < 0:
+                return "negative_delta"
+        if policy.require_ci_low_nonnegative:
+            if features.ci_low is None or features.ci_low < 0:
+                return "negative_ci_low"
+        pair_wins = max(0, int(features.pair_wins or 0))
+        pair_losses = max(0, int(features.pair_losses or 0))
+        pair_ties = max(0, int(features.pair_ties or 0))
+        pair_total = pair_wins + pair_losses + pair_ties
+        if pair_total <= 0 or pair_total < policy.min_pair_total:
+            return "outside_window"
+        if pair_wins < policy.min_pair_wins:
+            return "outside_window"
+        pair_win_rate = pair_wins / pair_total
+        if pair_win_rate < policy.pair_win_rate_min:
+            return "outside_window"
+        if policy.max_pair_loss_rate is not None:
+            if pair_losses / pair_total > policy.max_pair_loss_rate:
+                return "outside_window"
+        if policy.pair_non_tie_win_rate_min is not None:
+            pair_non_tie_total = pair_wins + pair_losses
+            if pair_non_tie_total <= 0:
+                return "outside_window"
+            pair_non_tie_win_rate = pair_wins / pair_non_tie_total
+            if pair_non_tie_win_rate < policy.pair_non_tie_win_rate_min:
+                return "outside_window"
+        if (pair_wins - pair_losses) < policy.min_pair_win_loss_margin:
+            return "outside_window"
+        return "pair_signal_pass"
 
     def _trajectory_divergent_low_snr_expand(
         self,

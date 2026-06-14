@@ -126,6 +126,37 @@ often truncated. Future prompt repair should protect concise branch lessons,
 same-mechanism follow-up, per-case opportunity, and mechanism rankings while
 preserving full target/current source in code phase.
 
+The staged CVRP diagnostic-validation gate repair is now implemented and under
+acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
+pair-level policy fields for diagnostic validation after screening expansion is
+exhausted: total pair sample size, pair wins, pair win/loss margin, all-pair win
+rate, non-tie pair win rate, and max pair loss rate. The CVRP protocols enable
+that path while keeping the standard screening threshold at `0.60` and
+validation/frozen promotion gates strict. This remains v3-aligned: Decision
+uses only deterministic `DecisionFeatures` aggregates, not raw MDE, BKS/gap,
+prompt text, or postrun diagnostics. Focused acceptance so far:
+`test_config.py`, `test_decision_screening.py`, and `test_protocol_stats_gates.py`
+passed with `85 passed`; the wider gate-adjacent regression including problem
+bridge/adapter, branch lifecycle, runtime-budget diagnostics, and verification
+integration passed with `190 passed`. `py_compile` and `git diff --check` also
+passed.
+
+The next CVRP framework repair is separate: final-round `QUEUE_VALIDATE` can be
+censored by `max_rounds` because `CampaignLoop` does not drain ordinary
+validation/frozen stage transitions after the proposal budget is exhausted. Add
+a bounded validation-drain or reserved-validation-round mechanism before the
+next formal 12/16-round follow-up; it should execute already-produced
+`READY_VALIDATE` work without generating new hypotheses or inflating effective
+proposal rounds.
+
+Future long CVRP cells can also use the WSL parallel execution channel described
+in
+`/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/status/wsl_status.md`.
+When the user-managed reverse tunnel is up, the server can log into WSL with
+`ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1`.
+Continue to treat git plus rsync/handoff directories as the coordination
+surface; do not edit the same unsynced worktree from server and WSL at once.
+
 The latest completed Phase 5 experiment artifact is the warehouse compact
 measurement-governance ON/OFF control:
 [`../experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md`](../experiments/v0.4/v04-phase5-warehouse-governance-compact-onoff-4x2-20260613.md).

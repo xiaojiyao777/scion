@@ -260,6 +260,13 @@ def test_protocol_config_from_yaml(tmp_path):
                     "win_rate_window": 0.04,
                     "require_median_delta_nonnegative": True,
                     "require_ci_low_nonnegative": True,
+                    "allow_pair_level_signal": True,
+                    "pair_win_rate_min": 0.50,
+                    "min_pair_total": 8,
+                    "min_pair_wins": 4,
+                    "min_pair_win_loss_margin": 2,
+                    "pair_non_tie_win_rate_min": 0.60,
+                    "max_pair_loss_rate": 0.40,
                 },
             },
             "validation": {"win_rate_min": 0.7},
@@ -278,7 +285,42 @@ def test_protocol_config_from_yaml(tmp_path):
     assert borderline.win_rate_window == pytest.approx(0.04)
     assert borderline.require_median_delta_nonnegative is True
     assert borderline.require_ci_low_nonnegative is True
+    assert borderline.allow_pair_level_signal is True
+    assert borderline.pair_win_rate_min == pytest.approx(0.50)
+    assert borderline.min_pair_total == 8
+    assert borderline.min_pair_wins == 4
+    assert borderline.min_pair_win_loss_margin == 2
+    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.60)
+    assert borderline.max_pair_loss_rate == pytest.approx(0.40)
     assert config.validation_win_rate_threshold == pytest.approx(0.7)
+
+
+def test_cvrp_formal_protocol_enables_pair_signal_diagnostic_validation():
+    protocol_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "problems",
+        "cvrp",
+        "formal",
+        "protocol.yaml",
+    )
+
+    config = ProtocolConfig.from_yaml(protocol_path)
+
+    assert config.gates.screening.win_rate_min == pytest.approx(0.6)
+    assert config.gates.validation.win_rate_min == pytest.approx(0.66)
+    borderline = config.gates.screening.expanded_borderline_advance
+    assert borderline.enabled is True
+    assert borderline.win_rate_window == pytest.approx(0.10)
+    assert borderline.allow_pair_level_signal is True
+    assert borderline.pair_win_rate_min == pytest.approx(0.50)
+    assert borderline.min_pair_total == 16
+    assert borderline.min_pair_wins == 8
+    assert borderline.min_pair_win_loss_margin == 1
+    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.60)
+    assert borderline.max_pair_loss_rate == pytest.approx(0.40)
+    assert borderline.require_ci_low_nonnegative is True
+
 
 def test_protocol_config_runtime_governance_from_yaml(tmp_path):
     """Runtime governance is protocol-level, with a default and YAML override."""

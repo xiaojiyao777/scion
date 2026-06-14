@@ -348,6 +348,289 @@ def test_decision_screening_expand_exhausted_borderline_policy_queues_validation
     assert "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY" in out.reason_codes
 
 
+def test_decision_trajectory_divergent_pair_signal_after_expand_queues_diagnostic_validation():
+    """CVRP-style pair-level signal can enter validation after expand is exhausted."""
+    from scion.core.models import DecisionFeatures
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "gates": {
+                    "screening": {
+                        "win_rate_min": 0.60,
+                        "expanded_borderline_advance": {
+                            "enabled": True,
+                            "win_rate_window": 0.10,
+                            "require_median_delta_nonnegative": True,
+                            "require_ci_low_nonnegative": True,
+                            "allow_pair_level_signal": True,
+                            "pair_win_rate_min": 0.50,
+                            "min_pair_total": 16,
+                            "min_pair_wins": 8,
+                            "min_pair_win_loss_margin": 1,
+                            "pair_non_tie_win_rate_min": 0.60,
+                            "max_pair_loss_rate": 0.40,
+                        },
+                    },
+                },
+            }
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=12,
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=3.25,
+        ci_high=36.5,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=46,
+        pair_losses=12,
+        pair_ties=6,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" in out.reason_codes
+
+
+def test_decision_pair_signal_after_expand_requires_explicit_policy():
+    """Default trajectory-divergent policy continues after expand without pair policy."""
+    from scion.core.models import DecisionFeatures
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=12,
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=3.25,
+        ci_high=36.5,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=46,
+        pair_losses=12,
+        pair_ties=6,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
+def test_decision_pair_signal_after_expand_fails_closed_on_negative_ci_low():
+    """Pair-level diagnostic validation still respects CI fail-closed policy."""
+    from scion.core.models import DecisionFeatures
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "gates": {
+                    "screening": {
+                        "win_rate_min": 0.60,
+                        "expanded_borderline_advance": {
+                            "enabled": True,
+                            "win_rate_window": 0.10,
+                            "require_median_delta_nonnegative": True,
+                            "require_ci_low_nonnegative": True,
+                            "allow_pair_level_signal": True,
+                            "pair_win_rate_min": 0.50,
+                            "min_pair_total": 16,
+                            "min_pair_wins": 8,
+                            "min_pair_win_loss_margin": 1,
+                            "pair_non_tie_win_rate_min": 0.60,
+                            "max_pair_loss_rate": 0.40,
+                        },
+                    },
+                },
+            }
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=12,
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=-0.25,
+        ci_high=36.5,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=46,
+        pair_losses=12,
+        pair_ties=6,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_CI_LOW" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
+def test_decision_pair_signal_after_expand_requires_min_pair_total():
+    """Pair-level diagnostic validation is blocked by low pair sample size."""
+    from scion.core.models import DecisionFeatures
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "gates": {
+                    "screening": {
+                        "win_rate_min": 0.60,
+                        "expanded_borderline_advance": {
+                            "enabled": True,
+                            "win_rate_window": 0.10,
+                            "require_median_delta_nonnegative": True,
+                            "require_ci_low_nonnegative": True,
+                            "allow_pair_level_signal": True,
+                            "pair_win_rate_min": 0.50,
+                            "min_pair_total": 16,
+                            "min_pair_wins": 8,
+                            "min_pair_win_loss_margin": 1,
+                            "pair_non_tie_win_rate_min": 0.60,
+                            "max_pair_loss_rate": 0.40,
+                        },
+                    },
+                },
+            }
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=12,
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=3.25,
+        ci_high=36.5,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=3,
+        pair_losses=0,
+        pair_ties=0,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
+def test_decision_pair_signal_after_expand_requires_non_tie_win_rate():
+    """Pair-level diagnostic validation requires directional non-tie evidence."""
+    from scion.core.models import DecisionFeatures
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "gates": {
+                    "screening": {
+                        "win_rate_min": 0.60,
+                        "expanded_borderline_advance": {
+                            "enabled": True,
+                            "win_rate_window": 0.10,
+                            "require_median_delta_nonnegative": True,
+                            "require_ci_low_nonnegative": True,
+                            "allow_pair_level_signal": True,
+                            "pair_win_rate_min": 0.50,
+                            "min_pair_total": 16,
+                            "min_pair_wins": 8,
+                            "min_pair_win_loss_margin": 1,
+                            "pair_non_tie_win_rate_min": 0.60,
+                            "max_pair_loss_rate": 0.50,
+                        },
+                    },
+                },
+            }
+        )
+    )
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=12,
+        wins=5,
+        losses=4,
+        ties=3,
+        win_rate=5 / 12,
+        median_delta=16.75,
+        ci_low=3.25,
+        ci_high=36.5,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=20,
+        pair_losses=18,
+        pair_ties=2,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
 def test_decision_screening_expand_exhausted_borderline_policy_off_blocks_warehouse_case():
     """Warehouse prod wr=0.50 only advances when the protocol flag is explicit."""
     from scion.core.models import DecisionFeatures
