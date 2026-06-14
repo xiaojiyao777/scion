@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP baseline-strength Phase B running; server rep01 complete; WSL rep02/rep03 pending*
-*Updated: 2026-06-13*
+*Status: CVRP baseline-strength Phase B audited; staged CVRP gate repair and long-run design next*
+*Updated: 2026-06-14*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -1106,28 +1106,34 @@ Phase B launch design - 2026-06-14:
   in `launch.env`/`command.txt`.
 - Launch state: the matrix group root is
   `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-claw`.
-  The server sequential runner started at `2026-06-14T02:46:13Z` and completed
-  `rep01/alns_vns` at `2026-06-14T09:05:09Z` and `rep01/alns_only` at
-  `2026-06-14T15:06:31Z`, both with valid wrapper completion. The remaining
-  four cells were delegated to WSL after commit `2a7e1e4` fixed CVRP
-  solver-design smoke data-root fallback. As of the latest synced WSL status
-  (`2026-06-14T15:34:53Z`), `rep02/alns_vns`, `rep02/alns_only`,
-  `rep03/alns_vns`, and `rep03/alns_only` were running cleanly at roughly
-  `6/8`, `6/8`, `7/8`, and `6/8` rounds, with no 503, stale-source, unsafe
-  path, smoke-case, traceback, or failed-pair signals.
-- Analysis state: CVRP Phase B is not yet analyzed as a full matrix. Server
-  `rep01` is usable interim evidence only. Its preliminary branch-level pattern
-  is screening-only in both baselines, with active weak/marginal branches still
-  present at round exhaustion. Full conclusions must wait for WSL completion and
-  combine all six cells across branch depth, same-mechanism follow-up,
-  validation/frozen reach, pair-level signal, failure taxonomy, runtime
-  evidence, and prompt/context visibility.
-- Follow-up design note: do not interpret `validation=0` alone as mechanism
-  failure. The Phase B postrun analysis must evaluate whether the current
-  screening gate is too precision-oriented for CVRP discovery. A candidate v0.4
-  repair is a staged CVRP gate policy: higher-recall screening, diagnostic
-  validation for borderline but measurable pair-level signal, and stricter
-  validation/frozen gates for actual promotion.
+  Server `rep01` completed at `2026-06-14T15:06:31Z`. WSL `rep02`/`rep03`
+  completed cleanly at `2026-06-14T16:57:58Z` from commit `2a7e1e4`, after the
+  CVRP solver-design smoke data-root fallback fix. The WSL group was synced to
+  the server as
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-wsl`.
+- Completed and audited:
+  [`docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseB-postrun-20260614.md`](docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseB-postrun-20260614.md).
+  All six accepted cells are valid, complete, and `8/8`; all 48 formal rows
+  remained in screening; there were no validation/frozen rows, promotions,
+  failed pairs, fresh-runtime replays, or run-validity failures. ALNS-only
+  produced the only validation-ready signal: WSL `rep02/alns_only`
+  `route_count_aware_repair_selection` queued validation at the final protocol
+  row with case W/L/T `5/1/2`, pair W/L/T `46/12/6`, median delta `16.75`, and
+  CI `[3.25, 36.5]`, above the ALNS-only Phase A MDE `4.65`. It did not reach
+  validation because `max_rounds_exhausted` stopped the cell.
+- Phase B closeout decision: accepted as valid CVRP research-surface evidence,
+  not as promotion evidence and not as a final CVRP governance-value conclusion.
+  `validation=0` is not a standalone mechanism-failure diagnosis here; several
+  active weak/marginal branches were censored by the 8-round budget. Next
+  actions are a staged CVRP gate repair/design and a pre-registered 12/16-round
+  follow-up, preferably after or explicitly paired with the repaired gate.
+- Prompt/context closeout: `compact-measurement-diagnostics` did suppress the
+  large standalone measurement diagnostics block, and code-stage source
+  visibility held for all inspected code prompts. However, compact research
+  signals and branch lesson context were often truncated; future context repair
+  should keep branch lessons, same-mechanism follow-up, per-case opportunity,
+  and mechanism rankings short, deterministic, and non-truncated while
+  preserving full target/current source in code phase.
 
 ## Current Repair Acceptance - 2026-06-13
 
