@@ -1190,6 +1190,13 @@ Phase B launch design - 2026-06-14:
   `--stage-transition-drain-limit`, records it in `launch.env` and
   `command.txt`, and exports it through `run.sh`. Focused launcher tests passed
   with `7 passed`; `py_compile` and `git diff --check` passed.
+- Phase C launched from portable launcher commit `354a941` and is tracked in
+  [`docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md`](docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md).
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z`.
+  Current accepted runners: server `rep01` PID `2121897`, WSL `rep02/rep03`
+  PID `64429`. Initial wrapper-path attempts are archived and excluded from
+  accepted cells.
 
 ## Current Repair Acceptance - 2026-06-13
 

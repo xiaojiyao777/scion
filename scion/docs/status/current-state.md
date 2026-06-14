@@ -102,6 +102,8 @@ The WSL group is synced separately at
 `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-wsl`.
 Phase C is pre-registered here:
 [`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md).
+Launch note:
+[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md).
 
 All six accepted cells are valid, complete, and `8/8`; all 48 formal rows
 remained in screening; there were no validation/frozen rows, promotions, failed
@@ -166,6 +168,15 @@ and exports it from `run.sh`. Focused launcher acceptance passed with
 experiment-owned protocol snapshot that preserves the accepted Phase A
 8-case/8-seed inputs while adding the repaired staged-gate block from the
 current CVRP formal protocol.
+
+Phase C is now launched from portable launcher commit `354a941`. The run root
+is
+`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z`.
+The accepted active runners are server `rep01` PID `2121897` and WSL
+`rep02/rep03` PID `64429`. Accepted cells launch with `ROUNDS=16`,
+`SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`, and the host-specific Python path in
+`launch.env`. Earlier wrapper-path attempts are archived and excluded from
+accepted Phase C cells.
 
 Future long CVRP cells can also use the WSL parallel execution channel described
 in
