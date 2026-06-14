@@ -258,7 +258,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "CAMPAIGN_DIR": campaign_dir,
         "REPO_ROOT": repo_root,
         "SCION_DIR": scion_dir,
-        "PY": DEFAULT_PYTHON,
+        "PY": args.python,
         "PYTHONPATH": scion_dir,
         "SCION_MODEL": args.model,
         "SCION_BASE_URL": args.base_url,
@@ -356,6 +356,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--python",
+        type=Path,
+        default=DEFAULT_PYTHON,
+        help="Python executable to write into launch.env and run.sh.",
+    )
+    parser.add_argument(
         "--time-limit-sec",
         type=int,
         default=DEFAULT_TIME_LIMIT_SEC,
@@ -398,6 +404,8 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
     if args.stage_transition_drain_limit < 0:
         raise SystemExit("--stage-transition-drain-limit must be >= 0")
+    if not str(args.python).strip():
+        raise SystemExit("--python must not be empty")
     if not args.base_url.strip():
         raise SystemExit("--base-url must not be empty")
     for option_name in ("problem", "protocol", "split", "seeds"):

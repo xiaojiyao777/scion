@@ -33,6 +33,7 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--launch" in result.stdout
     assert "--base-url" in result.stdout
     assert "--api-key" in result.stdout
+    assert "--python" in result.stdout
     assert "--problem" in result.stdout
     assert "--protocol" in result.stdout
     assert "--split" in result.stdout
@@ -73,6 +74,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     assert f"SCION_DIR={SCION_DIR}" in launch_env
+    assert "PY=/home/clawd/miniconda3/envs/claw/bin/python" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
     assert f"SCION_PROBLEM_DATA_ROOT={PROJECT_ROOT / 'vrp'}" in launch_env
     assert "SCION_MODEL=gpt-5.5" in launch_env
@@ -148,6 +150,8 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
             "pair-a-vs-b",
             "--stage-transition-drain-limit",
             "2",
+            "--python",
+            str(tmp_path / "python-bin"),
             "--experiments-root",
             str(tmp_path / "runs"),
         ],
@@ -166,6 +170,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
 
     assert f"PROBLEM={problem}" in launch_env
+    assert f"PY={tmp_path / 'python-bin'}" in launch_env
     assert f"PROTOCOL={protocol}" in launch_env
     assert f"SPLIT={split}" in launch_env
     assert f"SEEDS={seeds}" in launch_env
