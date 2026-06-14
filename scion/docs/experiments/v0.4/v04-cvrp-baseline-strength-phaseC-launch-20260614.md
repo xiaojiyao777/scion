@@ -99,3 +99,27 @@ ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1 \
 
 Postrun analysis must wait until all accepted cells are complete and WSL results
 are synced back to the server root.
+
+## Postrun Tooling
+
+Prepared external scripts:
+
+- `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z/scripts/sync_wsl_back.sh`
+- `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z/scripts/run_phaseC_postrun_reports.sh`
+
+Completion sequence:
+
+1. Wait for all accepted cells to finish.
+2. Run `scripts/sync_wsl_back.sh` from the server root.
+3. Run `scripts/run_phaseC_postrun_reports.sh` from the server root.
+4. Inspect `postrun_acceptance/accepted_cells.tsv`,
+   `postrun_acceptance/sql/reach_drain.csv`,
+   `postrun_acceptance/sql/wlt_mde_rows.csv`,
+   `postrun_acceptance/sql/branch_depth.csv`, and
+   `postrun_acceptance/sql/prompt_context.csv`.
+
+The postrun script gates on exactly six accepted cells, records excluded
+wrapper/superseded archives, emits standard Scion reports, artifact inventory,
+per-repeat trajectory compares, and keeps MDE/BKS/gap, prompt/context,
+branch-depth, same-mechanism-chain, and cross-arm comparisons as postrun-only
+diagnostics.

@@ -178,6 +178,17 @@ The accepted active runners are server `rep01` PID `2121897` and WSL
 `launch.env`. Earlier wrapper-path attempts are archived and excluded from
 accepted Phase C cells.
 
+Phase C postrun acceptance tooling is prepared in the external run root. After
+all six accepted cells finish, the server-side sequence is
+`scripts/sync_wsl_back.sh` followed by
+`scripts/run_phaseC_postrun_reports.sh`. The strict postrun script requires the
+six-cell matrix, records excluded wrapper/superseded archives, generates
+standard Scion reports, artifact inventory, per-repeat trajectory compares, and
+CSV outputs for reach/drain, W/L/T plus Phase A MDE comparison, branch depth,
+and prompt/context evidence. MDE, BKS/gap, prompt/context, branch depth, and
+cross-arm analysis remain postrun research diagnostics only unless encoded into
+deterministic protocol/Decision features.
+
 Future long CVRP cells can also use the WSL parallel execution channel described
 in
 `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/status/wsl_status.md`.

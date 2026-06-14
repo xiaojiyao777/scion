@@ -1197,6 +1197,15 @@ Phase B launch design - 2026-06-14:
   Current accepted runners: server `rep01` PID `2121897`, WSL `rep02/rep03`
   PID `64429`. Initial wrapper-path attempts are archived and excluded from
   accepted cells.
+- Phase C postrun acceptance tooling is prepared in the external run root. After
+  all six accepted cells finish, run `scripts/sync_wsl_back.sh` and then
+  `scripts/run_phaseC_postrun_reports.sh`. The strict postrun script gates on
+  exactly six accepted cells (`rep01/rep02/rep03 x alns_vns/alns_only`),
+  records excluded archives, emits standard Scion reports, artifact inventory,
+  per-repeat trajectory compares, and CSVs for reach/drain, W/L/T plus MDE,
+  branch depth, and prompt/context evidence. These diagnostics remain
+  postrun-only unless already represented through deterministic
+  `DecisionFeatures`.
 
 ## Current Repair Acceptance - 2026-06-13
 
