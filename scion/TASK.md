@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP baseline-strength Phase A accepted; Phase B design next*
+*Status: CVRP baseline-strength Phase B running; server rep01 complete; WSL rep02/rep03 pending*
 *Updated: 2026-06-13*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1106,10 +1106,28 @@ Phase B launch design - 2026-06-14:
   in `launch.env`/`command.txt`.
 - Launch state: the matrix group root is
   `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-claw`.
-  Sequential runner PID `2060750` started at `2026-06-14T02:46:13Z` and first
-  ran `rep01/alns_vns`. The sequential runner is intentional: CVRP solver
-  runtime is budget-exhausting, so parallel cells would contaminate wall-clock
-  runtime evidence.
+  The server sequential runner started at `2026-06-14T02:46:13Z` and completed
+  `rep01/alns_vns` at `2026-06-14T09:05:09Z` and `rep01/alns_only` at
+  `2026-06-14T15:06:31Z`, both with valid wrapper completion. The remaining
+  four cells were delegated to WSL after commit `2a7e1e4` fixed CVRP
+  solver-design smoke data-root fallback. As of the latest synced WSL status
+  (`2026-06-14T15:34:53Z`), `rep02/alns_vns`, `rep02/alns_only`,
+  `rep03/alns_vns`, and `rep03/alns_only` were running cleanly at roughly
+  `6/8`, `6/8`, `7/8`, and `6/8` rounds, with no 503, stale-source, unsafe
+  path, smoke-case, traceback, or failed-pair signals.
+- Analysis state: CVRP Phase B is not yet analyzed as a full matrix. Server
+  `rep01` is usable interim evidence only. Its preliminary branch-level pattern
+  is screening-only in both baselines, with active weak/marginal branches still
+  present at round exhaustion. Full conclusions must wait for WSL completion and
+  combine all six cells across branch depth, same-mechanism follow-up,
+  validation/frozen reach, pair-level signal, failure taxonomy, runtime
+  evidence, and prompt/context visibility.
+- Follow-up design note: do not interpret `validation=0` alone as mechanism
+  failure. The Phase B postrun analysis must evaluate whether the current
+  screening gate is too precision-oriented for CVRP discovery. A candidate v0.4
+  repair is a staged CVRP gate policy: higher-recall screening, diagnostic
+  validation for borderline but measurable pair-level signal, and stricter
+  validation/frozen gates for actual promotion.
 
 ## Current Repair Acceptance - 2026-06-13
 
