@@ -1077,6 +1077,32 @@ Exit criteria:
   baseline-strength/research-surface finding. It does not by itself prove that
   final solver quality is better than ALNS+VNS.
 
+Phase B launch design - 2026-06-14:
+
+- Pre-registered:
+  [`docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md`](docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md).
+- Purpose: matched agentic Scion campaigns to test whether CVRP research becomes
+  deeper and more evidence-backed from a lower-noise, larger-headroom copied
+  research surface.
+- Matrix: `3` repeats x `2` baselines (`alns_vns`, `alns_only`) x `8` rounds,
+  with `measurement_governance=on`,
+  `proposal_context_ablation=compact-measurement-diagnostics`,
+  `--disable-early-stop`, `--agentic-proposal`, local `gpt-5.5`, and identical
+  provider/retry settings.
+- Protocol choice: use the accepted Phase A 8-case/8-seed config for Phase B so
+  MDE interpretation is directly anchored to Phase A. This is intentionally more
+  expensive than the ordinary 4-seed formal campaign.
+- Boundary: ALNS-only remains a copied CVRP problem-owned snapshot. It is not a
+  canonical champion replacement, and any ALNS-only promotion is interpreted as
+  research-surface/headroom evidence rather than a production win over ALNS+VNS.
+- Acceptance: formal outcomes come only from Contract/Verification/Protocol/
+  `DecisionFeatures`/Decision. MDE, BKS gap, VNS telemetry, prompt trajectories,
+  and A/A rows are postrun research-analysis facts only.
+- Launcher readiness gate: before launch, update the CVRP agentic launcher so
+  each cell can record custom problem/protocol/split/seeds, measurement
+  governance, proposal-context arm, and report-only `control_pair_key` metadata
+  in `launch.env`/`command.txt`.
+
 ## Current Repair Acceptance - 2026-06-13
 
 The immediate repair gate after the warehouse compact governance ON/OFF run is

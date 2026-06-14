@@ -88,14 +88,20 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The current next gate is a Phase B matched Scion campaign design for the CVRP
-baseline-strength contrast. It must keep both arms matched on model, rounds,
-protocol/split/seeds, runtime policy, measurement governance, prompt context
-mode, and postrun analysis. The primary question is whether the agent performs
-deeper and more useful CVRP research when the starting surface has larger
-measurable headroom. Any ALNS-only promotion must be interpreted against its
-own weaker baseline and lower MDE, not as a win over the current ALNS+VNS
-champion.
+The current next gate is now the pre-registered Phase B matched Scion campaign
+for the CVRP baseline-strength contrast:
+[`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md).
+It keeps both arms matched on model, rounds, protocol/split/seeds, runtime
+policy, measurement governance, prompt context mode, and postrun analysis. The
+matrix is `3` repeats x `2` baselines x `8` rounds with local `gpt-5.5`,
+`measurement_governance=on`, and
+`proposal_context_ablation=compact-measurement-diagnostics`. Phase B
+intentionally uses the Phase A 8-case/8-seed calibration config so postrun MDE
+interpretation remains anchored to Phase A, at the cost of heavier cells. The
+primary question is whether the agent performs deeper and more useful CVRP
+research when the starting surface has larger measurable headroom. Any
+ALNS-only promotion must be interpreted against its own weaker baseline and
+lower MDE, not as a win over the current ALNS+VNS champion.
 
 The latest completed Phase 5 experiment artifact is the warehouse compact
 measurement-governance ON/OFF control:

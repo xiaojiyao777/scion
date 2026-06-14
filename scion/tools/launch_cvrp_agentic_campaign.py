@@ -30,6 +30,13 @@ CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED = (
     PROBLEM,
     "scion/problems/cvrp/problem-v1.yaml",
 )
+MEASUREMENT_GOVERNANCE_CHOICES = ("on", "record-only")
+PROPOSAL_CONTEXT_ABLATION_CHOICES = (
+    "full",
+    "compact-measurement-diagnostics",
+    "no-measurement-diagnostics",
+    "minimal-research-context",
+)
 
 
 def _repo_root() -> Path:
@@ -79,9 +86,21 @@ def _default_api_key_for_base_url(base_url: str) -> str:
     return ""
 
 
-def _preflight_cvrp_parameter_search_disabled(scion_dir: Path) -> None:
-    for spec_path in CVRP_SPECS_REQUIRING_PARAMETER_SEARCH_DISABLED:
-        full_path = scion_dir / spec_path
+def _resolve_spec_path(scion_dir: Path, spec_path: str) -> Path:
+    path = Path(spec_path).expanduser()
+    if path.is_absolute():
+        return path
+    return scion_dir / path
+
+
+def _preflight_cvrp_parameter_search_disabled(scion_dir: Path, problem: str) -> None:
+    problem_path = _resolve_spec_path(scion_dir, problem)
+    spec_paths = [problem_path]
+    problem_v1_path = problem_path.with_name("problem-v1.yaml")
+    if problem_v1_path.exists():
+        spec_paths.append(problem_v1_path)
+
+    for full_path in spec_paths:
         with full_path.open(encoding="utf-8") as f:
             data = yaml.safe_load(f)
         parameter_search = (
@@ -93,9 +112,14 @@ def _preflight_cvrp_parameter_search_disabled(scion_dir: Path) -> None:
             else None
         )
         if enabled is not False:
+            display_path = (
+                str(full_path.relative_to(scion_dir))
+                if full_path.is_relative_to(scion_dir)
+                else str(full_path)
+            )
             raise SystemExit(
                 "CVRP agentic launcher requires "
-                f"parameter_search.enabled=false in {spec_path}"
+                f"parameter_search.enabled=false in {display_path}"
             )
 
 
@@ -110,6 +134,8 @@ def _build_command(env: dict[str, object]) -> str:
         f"--rounds {env['ROUNDS']} "
         f"--time-limit-sec {env['TIME_LIMIT_SEC']} "
         f"--agentic-session-timeout-sec {env['AGENTIC_SESSION_TIMEOUT_SEC']} "
+        f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
+        f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
         "--disable-early-stop "
         "--agentic-proposal"
     )
@@ -135,6 +161,9 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SEEDS",
         "ROUNDS",
         "TIME_LIMIT_SEC",
+        "MEASUREMENT_GOVERNANCE",
+        "PROPOSAL_CONTEXT_ABLATION",
+        "CONTROL_PAIR_KEY",
         "AGENTIC_PROPOSAL",
         "DISABLE_EARLY_STOP",
         "AGENTIC_SESSION_TIMEOUT_SEC",
@@ -166,6 +195,8 @@ export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES
   --rounds "$ROUNDS" \\
   --time-limit-sec "$TIME_LIMIT_SEC" \\
   --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
+  --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
+  --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
   --disable-early-stop \\
   --agentic-proposal \\
   >> "$RUN_ROOT/run.log" 2>&1
@@ -208,7 +239,7 @@ def _launch(run_root: Path) -> str:
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     repo_root = _repo_root()
     scion_dir = repo_root / "scion"
-    _preflight_cvrp_parameter_search_disabled(scion_dir)
+    _preflight_cvrp_parameter_search_disabled(scion_dir, args.problem)
     started_at = datetime.now(timezone.utc)
     timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
     label = _safe_label(args.label)
@@ -237,12 +268,15 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SCION_SDK_MAX_RETRIES": 0,
         "SCION_LLM_MAX_RETRIES": 2,
         "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
-        "PROBLEM": PROBLEM,
-        "PROTOCOL": PROTOCOL,
-        "SPLIT": SPLIT,
-        "SEEDS": SEEDS,
+        "PROBLEM": args.problem,
+        "PROTOCOL": args.protocol,
+        "SPLIT": args.split,
+        "SEEDS": args.seeds,
         "ROUNDS": args.rounds,
         "TIME_LIMIT_SEC": args.time_limit_sec,
+        "MEASUREMENT_GOVERNANCE": args.measurement_governance,
+        "PROPOSAL_CONTEXT_ABLATION": args.proposal_context_ablation,
+        "CONTROL_PAIR_KEY": args.control_pair_key or "",
         "AGENTIC_PROPOSAL": 1,
         "DISABLE_EARLY_STOP": 1,
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
@@ -260,6 +294,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
             "SCION_API_KEY="
             f"{'<set>' if str(env['SCION_API_KEY']) else '<unset>'}\n\n"
+            "report_metadata:\n"
+            f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n\n"
             "command:\n"
             f"{command}\n\n"
             "launch:\n"
@@ -281,6 +317,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--rounds", type=int, required=True)
     parser.add_argument("--label", required=True)
+    parser.add_argument("--problem", default=PROBLEM)
+    parser.add_argument("--protocol", default=PROTOCOL)
+    parser.add_argument("--split", default=SPLIT)
+    parser.add_argument("--seeds", default=SEEDS)
+    parser.add_argument(
+        "--measurement-governance",
+        choices=MEASUREMENT_GOVERNANCE_CHOICES,
+        default="on",
+    )
+    parser.add_argument(
+        "--proposal-context-ablation",
+        choices=PROPOSAL_CONTEXT_ABLATION_CHOICES,
+        default="full",
+    )
+    parser.add_argument(
+        "--control-pair-key",
+        default=None,
+        help=(
+            "Report-only metadata for matched-control launches. Written to "
+            "launch.env and command.txt; not passed to scion run."
+        ),
+    )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument(
@@ -325,6 +383,9 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
     if not args.base_url.strip():
         raise SystemExit("--base-url must not be empty")
+    for option_name in ("problem", "protocol", "split", "seeds"):
+        if not getattr(args, option_name).strip():
+            raise SystemExit(f"--{option_name} must not be empty")
     return args
 
 
