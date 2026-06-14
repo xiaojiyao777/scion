@@ -238,7 +238,7 @@ def test_algorithm_smoke_uses_active_formal_split_over_workspace_tiny_split(
     assert '"seed": 101' in rendered
 
 
-def test_runtime_smoke_does_not_resolve_ambient_env_data_root(
+def test_runtime_smoke_resolves_runtime_env_data_root_when_roots_omitted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -258,7 +258,7 @@ def test_runtime_smoke_does_not_resolve_ambient_env_data_root(
         case_rel="cvrplib/A/A-n32-k5.vrp",
     )
 
-    assert resolved is None
+    assert resolved == case
 
 
 def test_runtime_smoke_resolves_explicit_safe_data_root(

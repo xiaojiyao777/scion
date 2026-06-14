@@ -164,6 +164,54 @@ def test_runtime_smoke_cases_include_provider_representative_cases(
     assert provider_payload["case_digest"]
 
 
+def test_runtime_smoke_cases_include_env_root_for_provider_representative_cases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    base_workspace = tmp_path / "base"
+    data_root = tmp_path / "problem_data"
+    workspace.mkdir()
+    base_workspace.mkdir()
+    for rel in (
+        "cases/canary.dat",
+        "cases/small.dat",
+        "cases/medium.dat",
+        "cases/screening.dat",
+    ):
+        path = data_root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(data_root))
+
+    class Provider:
+        def solver_design_smoke_cases(self, **kwargs):
+            del kwargs
+            return [
+                {"label": "provider_small", "case": "cases/small.dat", "seed": 5},
+                {"label": "provider_medium", "case": "cases/medium.dat", "seed": 7},
+            ]
+
+    smoke_cases, missing = _runtime_smoke_cases(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        canary_rel="cases/canary.dat",
+        split_manifest={
+            "canary": ["cases/canary.dat"],
+            "screening": ["cases/screening.dat"],
+        },
+        seed_ledger={"canary": [1], "screening": [2]},
+        provider=Provider(),
+        context=SimpleNamespace(problem="generic"),
+    )
+
+    labels = [case.label for case in smoke_cases]
+    assert missing == []
+    assert labels[:3] == ["canary", "provider_small", "provider_medium"]
+    assert all(case.data_root_source == "safe_data_root" for case in smoke_cases)
+    assert all(case.path.is_relative_to(data_root) for case in smoke_cases)
+
+
 def test_algorithm_smoke_records_representative_case_execution_ledger(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -927,6 +975,16 @@ def _valid_runtime() -> dict[str, object]:
         "solver_algorithm_phase_delta_sum": {"seed": 1.0},
         "solver_algorithm_phase_best_delta": {"seed": 1.0},
         "solver_algorithm_phase_improvement_counts": {"seed": 1},
+        "solver_algorithm_actionability_summary": {
+            "schema": "scion.cvrp.solver_actionability.v1",
+            "attempted": True,
+            "move_attempts": 48,
+            "accepted_moves": 1,
+            "no_accepted_moves": False,
+            "candidate_emitted_no_measurable_objective_effect": False,
+            "runtime_budget_hit": False,
+            "phases": {},
+        },
         "solver_algorithm_stop_reason": "done",
         "solver_algorithm_events": [],
     }

@@ -98,7 +98,7 @@ def _runtime_smoke_cases(
             filename="seed_ledger.yaml",
         )
     if safe_data_roots is None:
-        safe_data_roots = _runtime_smoke_safe_data_roots_from_manifest(split_manifest)
+        safe_data_roots = _runtime_smoke_safe_data_roots_from_sources(split_manifest)
 
     canary_seed = _first_int(
         _runtime_smoke_stage_value(seed_ledger, "canary"),
@@ -369,10 +369,21 @@ def _runtime_smoke_safe_data_roots(context: ProposalToolContext) -> tuple[Path, 
         _attr(getattr(context, "adapter", None), "spec"),
     ):
         roots.extend(_runtime_smoke_safe_data_roots_from_manifest(source))
-    env_root = os.environ.get("SCION_PROBLEM_DATA_ROOT", "").strip()
-    if env_root:
-        roots.append(env_root)
+    roots.extend(_runtime_smoke_env_data_roots())
     return _normalize_runtime_smoke_safe_roots(roots)
+
+
+def _runtime_smoke_safe_data_roots_from_sources(*sources: Any) -> tuple[Path, ...]:
+    roots: list[Any] = []
+    for source in sources:
+        roots.extend(_runtime_smoke_safe_data_roots_from_manifest(source))
+    roots.extend(_runtime_smoke_env_data_roots())
+    return _normalize_runtime_smoke_safe_roots(roots)
+
+
+def _runtime_smoke_env_data_roots() -> list[str]:
+    env_root = os.environ.get("SCION_PROBLEM_DATA_ROOT", "").strip()
+    return [env_root] if env_root else []
 
 
 def _runtime_smoke_safe_data_roots_from_manifest(source: Any) -> list[Any]:
@@ -579,6 +590,11 @@ def _resolve_smoke_instance(
     case_source: str = "runtime_smoke_manifest",
 ) -> dict[str, Any]:
     rel = _runtime_smoke_relative_path(case_rel)
+    effective_safe_data_roots = (
+        _runtime_smoke_safe_data_roots_from_sources()
+        if safe_data_roots is None
+        else safe_data_roots
+    )
     if rel is None:
         path = Path(str(case_rel or ""))
         source = (
@@ -608,7 +624,7 @@ def _resolve_smoke_instance(
         )
     )
     for index, safe_root in enumerate(
-        _normalize_runtime_smoke_safe_roots(safe_data_roots)
+        _normalize_runtime_smoke_safe_roots(effective_safe_data_roots)
     ):
         candidates.append(
             (
@@ -623,7 +639,7 @@ def _resolve_smoke_instance(
             path,
             workspace=workspace,
             base_workspace=base_workspace,
-            safe_data_roots=safe_data_roots,
+            safe_data_roots=effective_safe_data_roots,
         ):
             continue
         if path.is_file():
