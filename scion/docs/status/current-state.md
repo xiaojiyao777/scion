@@ -394,6 +394,16 @@ repeated B-family objective regression; `B-n45-k6` had two losses and
 `B-n66-k9` had one. Treat the mechanism as promising but unstable and requiring
 narrower follow-up or B-family explanation before expensive replay.
 
+That narrower follow-up is now launched on WSL. Report:
+[`../experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-launch-20260615.md).
+Server root:
+`/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z`.
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z`.
+Tmux session: `scion_cvrp_twoopt_followup_1848`. It tests two direct replay
+variants against the same smoke baseline: `initial_only` polish and a diagnostic
+`size70` scale gate. This is still no-LLM, no-APS, problem-owned evidence only.
+
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
 Root:

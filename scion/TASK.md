@@ -1481,6 +1481,16 @@ Phase B launch design - 2026-06-14:
   B-family objective regression, while `B-n45-k6` had two losses and
   `B-n66-k9` had one. Treat this as promising but unstable problem-owned
   mechanism evidence, not promotion evidence.
+- Launched: no-LLM two-opt polish follow-up smoke to explain the B-family
+  regressions before any large-X replay. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-launch-20260615.md`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z`.
+  Tmux session: `scion_cvrp_twoopt_followup_1848`. The two variants are
+  `initial_only` and `size70`; both are problem-owned direct replay patches,
+  not Scion core changes.
 - Launched: fourth independent VRP-only research control `Anscombe`
   (`019ecc8e-d45e-7983-b346-3621f90d38f4`) as a fresh, non-forked external
   researcher. Report:
