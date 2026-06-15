@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP Phase C complete/postrun accepted; closeout analysis integrated*
+*Status: CVRP large-X curve accepted; warehouse longrun active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1281,16 +1281,34 @@ Phase B launch design - 2026-06-14:
   `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across seeds `61/67/89` and
   multipliers `1/2/4` produces `36` jobs. Full large-X curve execution remains
   the next experiment step, ideally on WSL using the pushed branch.
-- Large-X runtime curve launched: WSL execution started from commit `72491c0`
-  at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`
-  with server sync at
-  `/home/clawd/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`,
-  `--parallelism 4`, `--timeout-padding-sec 600`, and no LLM/APS calls. Initial
-  synced progress has 3 completed `X-n401-k29` jobs, all with distance `68673`,
-  BKS gap `3.81%`, `best_update_count=0`, and no stderr. The run is still
-  active; final acceptance requires syncing the completed summary JSON/CSV and
-  analyzing all 36 rows.
+- Completed and accepted: the full CVRP large-X runtime curve. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-largeX-runtime-curve-20260615.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`.
+  Server sync:
+  `/home/clawd/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`.
+  The no-LLM direct replay ran all `36` planned jobs across `X-n401`,
+  `X-n573`, `X-n641`, and `X-n1001`, seeds `61/67/89`, and multipliers
+  `1/2/4`. It produced `34` completed rows and `2` outer timeouts, both on
+  `X-n1001 seed=61` at `120s/240s`. Completed rows had stable objectives and
+  BKS gaps across multipliers, with `best_update_count=0` everywhere. The
+  result confirms that Phase C runner grace was too short for stable large-X
+  evidence, but does not support blind longer CVRP campaigns: more solver time
+  did not create large-X search leverage. Next CVRP work should replay the
+  validation-positive candidates on large-X and inspect mechanism/update
+  density before another LLM campaign.
+- Launched: warehouse Phase 4 longrun single-arm check. Report:
+  `scion/docs/experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`.
+  Clean WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
+  Server prep root:
+  `/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
+  Design: `3` repeats, `24` rounds each, warehouse production protocol/split/
+  seeds, `measurement_governance=on`, `compact-measurement-diagnostics`,
+  `time_limit_sec=30`, disabled early stop, WSL-local problem/split path copies,
+  and max two concurrent cells with a 600s stagger. The first attempted root
+  ending `T162506Z` was stopped after rep01 failed immediately on server
+  absolute paths; the clean rerun started at `2026-06-15T16:29:12Z`.
 
 ## Current Repair Acceptance - 2026-06-13
 

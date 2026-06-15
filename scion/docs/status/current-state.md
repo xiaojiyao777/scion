@@ -170,15 +170,32 @@ for `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across frozen seeds
 the next experiment artifact to execute, preferably on WSL after the branch is
 pushed.
 
-That full curve is now running on WSL from commit `72491c0` at
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`
-and has been partially synced to
+That full curve is now complete and synced. Report:
+[`../experiments/v0.4/v04-cvrp-largeX-runtime-curve-20260615.md`](../experiments/v0.4/v04-cvrp-largeX-runtime-curve-20260615.md).
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`.
+Server sync:
 `/home/clawd/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`.
-It uses `--parallelism 4`, `--timeout-padding-sec 600`, and direct solver
-replay only; no LLM or APS calls are involved. Initial synced output contains
-three completed `X-n401-k29` jobs, all at distance `68673`, BKS gap `3.81%`,
-and `best_update_count=0`. The curve is still active, so final CVRP runtime
-interpretation remains pending until all 36 rows are synced and analyzed.
+The direct replay ran all `36` planned rows, with `34` completed and `2`
+outer timeouts. Completed rows had stable objectives and BKS gaps across
+`1/2/4` budget multipliers, and every row had `best_update_count=0`. This
+confirms two things: Phase C runner grace was too short for stable large-X
+paired evidence, but more solver time did not create large-X search leverage
+for the ALNS-only champion. The next CVRP step should be candidate-specific
+large-X replay and mechanism/update-density diagnosis, not another blind longer
+LLM campaign.
+
+Warehouse Phase 4 longrun is now active on WSL. Report:
+[`../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`](../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md).
+Clean WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
+Server prep root:
+`/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
+It runs a single intended-default arm (`measurement_governance=on`,
+`compact-measurement-diagnostics`) for `3 x 24R` on the production warehouse
+protocol/split/seeds. The goal is to test whether warehouse can still produce
+continued improvements/promotions under longer v0.4 budget, and to audit
+branch depth/context behavior without mixing in a governance on/off comparison.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
