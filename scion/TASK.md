@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse prompt guidance repaired; CVRP fixed replay tooling ready; independent VRP phase F complete*
+*Status: warehouse prompt guidance repaired; CVRP fixed replay tooling ready; independent VRP phase G active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1601,6 +1601,21 @@ Phase B launch design - 2026-06-14:
   `E/E-n76-k10` and `X/X-n101-k25` (`6` rows, `2` improved, `4` regressed,
   `4` unsafe, net delta `+188`). Treat this as negative external-control
   evidence and not a Scion hypothesis seed.
+- Launched: eighth independent VRP-only research control `Tesla`
+  (`019ecd11-665c-7c32-b30a-0e023f0f29ef`) as a fresh, non-forked external
+  researcher. Launch report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-g-20260615`.
+  This control is intentionally not a Scion subagent: it is forbidden from
+  reading Scion design, task, status, audit, prompt, or experiment artifacts.
+  Its objective is to test whether a plain Codex research subject can improve
+  the standalone `vrp/` baseline and leave a high-resolution research-process
+  trace. First milestone is bounded: small/medium representative cases and
+  short budgets only, no broad WSL/server-heavy sweep or >2h single command
+  without returning a matrix proposal for main-thread approval. Any positive
+  candidate is external hypothesis material only and must pass later no-LLM
+  Scion replay before it can affect Scion experiments.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

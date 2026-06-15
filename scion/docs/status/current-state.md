@@ -442,6 +442,18 @@ but targeted stress on `E/E-n76-k10` and `X/X-n101-k25` rejected it with
 `2` improved / `4` regressed, `4` unsafe rows, and net delta `+188`. Treat this
 as negative external-control evidence, not a Scion hypothesis seed.
 
+An eighth independent VRP-only control is active as subagent `Tesla`
+(`019ecd11-665c-7c32-b30a-0e023f0f29ef`). Launch report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md).
+Artifact root:
+`/home/clawd/research/vrp-independent-codex-research/phase-g-20260615`.
+This is a fresh non-forked external researcher and must not read Scion
+artifacts. It is limited to standalone `vrp/` and its artifact root. The first
+milestone is bounded to small/medium signal-hunting runs; no broad WSL or
+server-heavy sweep is approved yet. Any positive result is only an external
+hypothesis seed and must pass later no-LLM Scion replay before it can affect
+Scion experiments.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
