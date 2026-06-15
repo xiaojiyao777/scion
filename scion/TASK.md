@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP large-X curve accepted; warehouse longrun active*
+*Status: CVRP 1R behavior debug active; pre-Protocol runtime-boundary repair accepted*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1354,6 +1354,24 @@ Phase B launch design - 2026-06-14:
   `run_status.json`, `status.json`, and `scion.db` created. After completion,
   sync the root to the server and run the artifact checklist before judging
   agent research quality.
+- Interim result: the active WSL 1R run is still pre-Protocol. It currently has
+  `protocol_metric_results=0`, `screening_protocol_results=0`, and repeated
+  `algorithm_smoke_failure` before formal candidate evaluation. Read-only audit
+  found code-stage source visibility was present, while prompt context remained
+  large and diluted by rules/diagnostics. The repeated hard runtime failure was
+  traced to a CVRP problem-owned boundary bug: ALNS/VNS scheduler best-update
+  instrumentation passed internal `_Solution` objects to `record_best_update()`,
+  which could not coerce internal `_Route` objects to public `CvrpSolution`.
+- Accepted repair: the current local worktree fixes that pre-Protocol blocker
+  without changing generic Decision input. Scheduler best-update recording now
+  passes `best.routes_as_tuples()`, and CVRP-owned solution coercion accepts
+  bare routes-like iterables. Focused acceptance:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_cvrp_solver_algorithm_runtime.py scion/scion/tests/test_cvrp_solver_vrp_smoke.py scion/scion/tests/test_cvrp_protocol_smoke.py`
+  passed with `21 passed`; scoped `py_compile` and `git diff --check` also
+  passed. The active WSL 1R run remains pre-repair evidence because it launched
+  from commit `17fdeb8`; after it finishes, sync/analyze it as behavior debug
+  evidence and rerun a small one-round debug from the repaired commit before
+  any longer CVRP campaign.
 - Launched: independent VRP baseline researcher control. This is an intentional
   exception to the usual v3-first subagent brief: the control agent is forbidden
   from reading Scion design/docs/reports/core, may only use standalone `vrp/`,

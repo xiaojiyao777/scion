@@ -162,7 +162,7 @@ class _ALNSVNSSolver:
                 best_improved = True
                 score = SIGMA_BEST
                 self.context.record_best_update(
-                    best,
+                    best.routes_as_tuples(),
                     phase="alns",
                     iteration=iteration,
                     delta_from_previous_best=delta,

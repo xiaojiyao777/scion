@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from scion.problems.cvrp.policies.baseline_modules import scheduler as baseline_scheduler
+from scion.problems.cvrp.policies.baseline_modules.state import _Route, _Solution
+from scion.problems.cvrp.solver_runtime.algorithm_runtime import (
+    SolverAlgorithmContext,
+    solver_algorithm_defaults,
+)
 from scion.tests.cvrp_solver_runtime_support import *
 from scion.runtime.audit import (
     format_runtime_audit_failure,
@@ -407,3 +413,118 @@ def test_solver_design_best_update_trace_is_bounded_and_summarized(
     assert summary["operator_pair_counts"] == {"shaw+regret2": 40}
     actionability = runtime["solver_algorithm_actionability_summary"]
     assert actionability["best_update_summary"]["best_update_count"] == 40
+
+
+def test_baseline_scheduler_best_update_records_public_routes_not_internal_solution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="scheduler_best_update_boundary",
+        capacity=99,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0, y=0, demand=0),
+            CvrpNode(id=1, x=0, y=1, demand=1),
+            CvrpNode(id=2, x=0, y=2, demand=1),
+            CvrpNode(id=3, x=100, y=0, demand=1),
+        ),
+        allowed_routes=1,
+        use_integer_cost=True,
+    )
+
+    def improve_to_ordered_route(candidate: _Solution, q: int, rng: object) -> list[int]:
+        candidate.routes = [_Route(candidate.instance, [1, 2, 3])]
+        candidate.rebuild_index()
+        return [3]
+
+    def repair_noop(candidate: _Solution, removed: list[int], rng: object) -> None:
+        return None
+
+    for name in (
+        "_random_removal",
+        "_worst_removal",
+        "_shaw_removal",
+        "_route_removal",
+    ):
+        monkeypatch.setattr(baseline_scheduler, name, improve_to_ordered_route)
+    for name in ("_greedy_insertion", "_regret2_insertion", "_regret3_insertion"):
+        monkeypatch.setattr(baseline_scheduler, name, repair_noop)
+
+    audit = solver_algorithm_defaults("policies/baseline_algorithm.py")
+    runtime_context = SolverAlgorithmContext(
+        instance=instance,
+        instance_path="unit/scheduler_best_update_boundary.json",
+        seed=1,
+        rng=random.Random(1),
+        time_limit_sec=1.0,
+        start_time=time.perf_counter(),
+        adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
+        audit=audit,
+    )
+
+    class _OneIterationRng:
+        def random(self) -> float:
+            return 0.0
+
+        def uniform(self, low: float, high: float) -> float:
+            return low
+
+    class _BoundaryContext:
+        def __init__(self, wrapped: SolverAlgorithmContext) -> None:
+            self._wrapped = wrapped
+            self.iterations = 0
+            self.best_update_payloads: list[object] = []
+
+        def elapsed_ms(self) -> int:
+            return self._wrapped.elapsed_ms()
+
+        def remaining_time(self) -> float:
+            return 1.0 if self.iterations == 0 else 0.0
+
+        def record_phase(self, name: str, elapsed_ms: int | float) -> None:
+            self._wrapped.record_phase(name, elapsed_ms)
+
+        def record_iteration(self, phase: str = "search", count: int = 1) -> None:
+            self.iterations += count
+            self._wrapped.record_iteration(phase, count)
+
+        def record_best_update(self, solution: object, **kwargs: object) -> None:
+            assert not isinstance(solution, _Solution)
+            self.best_update_payloads.append(solution)
+            self._wrapped.record_best_update(solution, **kwargs)
+
+        def record_move(self, phase: str, **kwargs: object) -> None:
+            self._wrapped.record_move(phase, **kwargs)
+
+        def record_solution_progress(self, **kwargs: object) -> None:
+            self._wrapped.record_solution_progress(**kwargs)
+
+    context = _BoundaryContext(runtime_context)
+    solver = baseline_scheduler._ALNSVNSSolver(
+        time_limit=1.0,
+        destroy_ratio=(0.1, 0.1),
+        segment_length=10,
+        reaction_factor=0.2,
+        vns_max_no_improve=1,
+        use_vns=False,
+        cw_threshold=99,
+        vns_threshold=99,
+        alns_threshold=99,
+        max_destroy_customers=1,
+        max_routes=1,
+        context=context,
+    )
+
+    initial_solution = _Solution(instance, [_Route(instance, [1, 3, 2])])
+    monkeypatch.setattr(
+        solver,
+        "_initial_solution",
+        lambda current_instance, reserve: initial_solution,
+    )
+
+    best = solver.solve(instance, _OneIterationRng())
+
+    assert context.best_update_payloads == [((1, 2, 3),)]
+    assert best.routes_as_tuples() == ((1, 2, 3),)
+    assert audit["solver_algorithm_best_update_summary"]["best_update_count"] == 1
+    assert audit["solver_algorithm_best_update_trace"][0]["route_count"] == 1

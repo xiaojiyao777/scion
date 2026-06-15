@@ -14,7 +14,8 @@ def _coerce_solution(candidate: Any) -> CvrpSolution | None:
     Generated operators commonly import ``CvrpSolution`` from workspace-local
     ``models.py`` while the solver imports the package model. Those are distinct
     class objects in Python, but the solution contract is structural: a routes
-    tuple of customer-id sequences. Coercing here preserves the adapter boundary
+    tuple of customer-id sequences. Objects may expose routes via ``.routes`` or
+    be the routes iterable directly. Coercing here preserves the adapter boundary
     while still rejecting genuinely invalid outputs fail-closed.
     """
 
@@ -34,7 +35,7 @@ def _coerce_solution(candidate: Any) -> CvrpSolution | None:
             return None
     routes = getattr(candidate, "routes", None)
     if routes is None:
-        return None
+        routes = candidate
     try:
         normalized = tuple(
             tuple(int(customer) for customer in route)

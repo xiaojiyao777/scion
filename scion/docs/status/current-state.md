@@ -197,6 +197,32 @@ route-limit-aware regret candidate completed with unchanged `X-n401/seed61`
 distance `68673` and `best_update_count=0`; the full replay is running in tmux
 session `scion_cvrp_candidate_replay_164410`.
 
+A CVRP one-round behavior debug is also active on WSL to inspect actual agent
+research behavior before another long campaign. WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-gpt55-20260615T172112Z-claw`.
+It runs one `gpt-5.5` cell with `measurement_governance=on`,
+`compact-measurement-diagnostics`, `SCION_STAGE_TRANSITION_DRAIN_LIMIT=0`, and
+`timeout 2h`. Current evidence is pre-Protocol: repeated agentic code/self-check
+attempts are blocked by `algorithm_smoke_failure`, with
+`protocol_metric_results=0` and `screening_protocol_results=0`. Read-only audit
+found target/current source was visible, but prompt context remained large and
+diluted by rules/diagnostics. The repeated hard runtime failure was not a
+Protocol negative result: CVRP ALNS/VNS scheduler passed internal `_Solution`
+objects into `record_best_update()`, while runtime audit coercion accepted only
+public `CvrpSolution`, mappings, or simple routes-like values.
+
+That pre-Protocol blocker is repaired in the current local worktree as a
+problem-owned CVRP runtime-boundary fix. The scheduler now records best updates
+with `best.routes_as_tuples()`, and CVRP-owned solution coercion accepts bare
+routes-like iterables. Focused acceptance passed:
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_cvrp_solver_algorithm_runtime.py scion/scion/tests/test_cvrp_solver_vrp_smoke.py scion/scion/tests/test_cvrp_protocol_smoke.py`
+reported `21 passed`; scoped `py_compile` and `git diff --check` also passed.
+This repair does not change generic Decision input and does not make the active
+WSL run valid post-repair evidence because that run started from commit
+`17fdeb8`. After the active run finishes, sync/analyze it as pre-repair behavior
+evidence, then rerun a small one-round debug from the repaired commit before
+any longer CVRP campaign.
+
 Warehouse Phase 4 longrun was attempted on WSL but is now aborted invalid.
 Report:
 [`../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`](../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md).
