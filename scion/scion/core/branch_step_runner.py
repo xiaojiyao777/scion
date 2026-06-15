@@ -1435,6 +1435,8 @@ def _mark_non_materializable_fresh_runtime_candidates(
         marker_payload = dict(marker) if isinstance(marker, Mapping) else {}
         if not _summary_fresh_runtime_required(summary, marker_payload):
             continue
+        if not _fresh_runtime_replay_signal_eligible(summary, marker_payload):
+            continue
         state = getattr(branch, "state", "")
         if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
             continue
@@ -1544,6 +1546,8 @@ def _materialize_fresh_runtime_pending_markers(
             continue
         if not _summary_fresh_runtime_required(summary, marker_payload):
             continue
+        if not _fresh_runtime_replay_signal_eligible(summary, marker_payload):
+            continue
         state = getattr(branch, "state", "")
         if str(getattr(state, "value", state) or "") != BranchState.EXPLORE.value:
             continue
@@ -1562,7 +1566,7 @@ def _materialize_fresh_runtime_pending_markers(
                 "queue_intent": "fresh_champion_runtime_replay",
                 "scheduler_marker": "fresh_champion_runtime_replay_pending",
                 "trigger": marker_payload.get("trigger")
-                or "fresh_runtime_required",
+                or _fresh_runtime_replay_signal_trigger(summary, marker_payload),
                 "fresh_runtime_pending": True,
                 "fresh_runtime_required": True,
                 "followup_recommended": True,
@@ -1656,6 +1660,74 @@ def _summary_fresh_runtime_required(
         or runtime_status in {"fresh_champion_required", "fresh_required"}
         or "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in reason_codes
         or "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in reason_codes
+    )
+
+
+def _fresh_runtime_replay_signal_eligible(
+    summary: Mapping[str, Any],
+    marker_payload: Mapping[str, Any],
+) -> bool:
+    return bool(_fresh_runtime_replay_signal_trigger(summary, marker_payload))
+
+
+def _fresh_runtime_replay_signal_trigger(
+    summary: Mapping[str, Any],
+    marker_payload: Mapping[str, Any],
+) -> str:
+    trigger = str(marker_payload.get("trigger") or "").strip()
+    if trigger in {"pair_level_win_no_loss", "actionable_loss_diagnostic"}:
+        return trigger
+    if (
+        bool(marker_payload.get("fresh_runtime_pending"))
+        and str(marker_payload.get("scheduler_marker") or "")
+        == "fresh_champion_runtime_replay_pending"
+    ):
+        return trigger or "fresh_runtime_replay_pending"
+    pair_summary = marker_payload.get("pair_summary")
+    pair_map = pair_summary if isinstance(pair_summary, Mapping) else {}
+    case_summary = marker_payload.get("case_summary")
+    case_map = case_summary if isinstance(case_summary, Mapping) else {}
+    pair_wins = _nonnegative_int(summary.get("pair_wins") or pair_map.get("wins"))
+    pair_losses = _nonnegative_int(
+        summary.get("pair_losses") or pair_map.get("losses")
+    )
+    losses = _nonnegative_int(summary.get("losses") or case_map.get("losses"))
+    if pair_wins > 0 and pair_losses == 0:
+        return "pair_level_win_no_loss"
+    if losses <= 0 and pair_losses <= 0:
+        return ""
+    if _fresh_runtime_actionable_loss_signal(summary):
+        return "actionable_loss_diagnostic"
+    return ""
+
+
+def _fresh_runtime_actionable_loss_signal(summary: Mapping[str, Any]) -> bool:
+    diagnostics = summary.get("opportunity_diagnostics")
+    if isinstance(diagnostics, str) and diagnostics.strip():
+        return True
+    if isinstance(diagnostics, (list, tuple, set)) and any(
+        str(item).strip() for item in diagnostics
+    ):
+        return True
+    phase = summary.get("phase_activation_summary")
+    if isinstance(phase, Mapping):
+        activation = str(phase.get("activation_status") or "").strip().lower()
+        effect = str(phase.get("effect_status") or "").strip().lower()
+        objective = str(phase.get("objective_effect_status") or "").strip().lower()
+        telemetry = str(phase.get("telemetry_outcome") or "").strip().lower()
+        if activation == "observed":
+            return True
+        if effect not in {"", "unknown", "no_objective_effect"}:
+            return True
+        if objective not in {"", "unknown", "zero", "no_effect"}:
+            return True
+        if telemetry not in {"", "unknown"}:
+            return True
+    reason_codes = _summary_reason_codes(summary)
+    return any(
+        token in code
+        for code in reason_codes
+        for token in ("DIAGNOSTIC", "TELEMETRY", "RUNTIME_TIE_FRESH_CHAMPION")
     )
 
 

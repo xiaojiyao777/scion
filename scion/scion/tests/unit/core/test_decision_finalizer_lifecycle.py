@@ -557,6 +557,66 @@ def test_actionable_loss_diagnostic_fresh_required_marks_followup_not_promotion(
     assert marker["decision_features_excluded"] is True
 
 
+def test_no_effect_fresh_required_runtime_tie_does_not_mark_followup() -> None:
+    branch = Branch(
+        branch_id="no-effect-runtime-tie",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion",
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_pairs=0,
+            runtime_evidence_status="fresh_champion_required",
+        ),
+        gate_outcome="unclear",
+        reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+        exposed_summary="no-effect runtime tie needs no replay followup",
+        raw_metrics_ref="/tmp/metrics.json",
+        pair_feedback=(
+            PairwiseCaseFeedback(case_id="case-a", seed=1, comparison="tie", delta=0.0),
+            PairwiseCaseFeedback(case_id="case-b", seed=1, comparison="tie", delta=0.0),
+            PairwiseCaseFeedback(case_id="case-c", seed=1, comparison="tie", delta=0.0),
+            PairwiseCaseFeedback(case_id="case-d", seed=1, comparison="tie", delta=0.0),
+        ),
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="fresh_champion_required",
+        champion_cached_runtime_pairs=4,
+    )
+    feedback = screening_feedback_summary(
+        protocol,
+        decision_reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+    )
+
+    from scion.core.decision_lifecycle_actions import (
+        update_branch_screening_evidence_summary,
+    )
+
+    update_branch_screening_evidence_summary(
+        branch,
+        protocol_result=protocol,
+        screening_feedback=feedback,
+        decision_reason_codes=("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",),
+    )
+
+    summary = branch.branch_evidence_summary
+
+    assert feedback.tier == "no_effect"
+    assert summary["tier"] == "no_effect"
+    assert summary.get("fresh_runtime_pending") is not True
+    assert summary.get("fresh_runtime_required") is not True
+    assert "fresh_runtime_followup" not in summary
+
+
 def test_continue_explore_discards_candidate_failed_screening_workspace() -> None:
     controller = BranchController()
     branch = controller.create_branch(

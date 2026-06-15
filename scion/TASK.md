@@ -1641,6 +1641,22 @@ Phase B launch design - 2026-06-14:
   Expected artifacts are `research_log.md`, `status.md`, `experiments.jsonl`,
   `candidate_summary.md`, and optional `candidate.patch`. Any positive result
   is external-control hypothesis material only.
+- Completed: ninth independent VRP-only research control `Kuhn`. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615h.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-h-20260615`.
+  It tested four standalone `vrp/` baseline candidates plus baseline over
+  `9` cases x `3` seeds x `2` short budgets (`270` rows). All rows finished
+  `ok`, and all produced CVRP-feasible solutions. The recommended external
+  hypothesis seed is `c02_cooler_sa`, a one-file patch to
+  `vrp/src/acceptance.py` changing simulated-annealing temperature ratios
+  from `0.05 -> 0.02` and `0.0001 -> 0.00005`. Paired result versus baseline:
+  W/T/L `11/42/1`, total-distance delta `-236`, mean BKS-gap delta
+  `-0.1403` percentage points, and mean wall delta `+0.021s`. Treat this as
+  weak-to-moderate external-reference evidence only. It requires broader
+  no-LLM validation with more seeds, more X cases, longer budgets, and explicit
+  initial-VNS wall-time instrumentation before any Scion replay or default
+  solver change.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1820,18 +1836,26 @@ Phase B launch design - 2026-06-14:
   `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
   completeness and large-X regression checks.
 - Health check: after server sync on 2026-06-15, the Tier 1 WSL tmux session
-  was still running normally with `6/36` result files written and four solver
-  subprocesses active. The early completed `X-n401-k29` rows were feasible but
-  all held at total distance `68521` / BKS gap `3.578%` with
-  `best_update_count=0`. This is not a postrun conclusion; wait for all keys
-  before deciding whether to launch formal validation.
-- Assigned: Scion worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`)
-  owns a targeted warehouse repair candidate. Required scope: read v3 first,
-  preserve Decision boundary, avoid long experiments, and focus on strict
-  branch-lesson semantic pre-code blocking, no-effect same-mechanism lifecycle
-  pressure, and warehouse-like no-effect fresh-runtime replay demotion. Main
-  thread must review its changed files/tests before integration. Prompt
-  overhead remains diagnostic-only unless the worker finds a narrow safe patch.
+  was still running normally with `14/36` result files written and four solver
+  subprocesses active. The completed `X-n401-k29` and early `X-n573-k30` rows
+  were feasible, but best-update count stayed `0`; two-opt phase-level effect
+  exists in raw runtime diagnostics while final large-X total distance has not
+  moved in the completed rows. This is not a postrun conclusion; wait for all
+  keys before deciding whether to launch formal validation.
+- Completed and accepted: targeted warehouse research-quality repair by Scion
+  worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
+  `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
+  The repair preserves the v3 boundary and changes only proposal/report
+  mechanics: strict `clean_fork_new_branch` / `sibling_nearby_attempt`
+  branch-lesson requirements now hard pre-code block missing,
+  metadata-only, linkage-unrecognized, or semantic-mismatch usage; no-effect
+  fresh-runtime drain no longer materializes bare
+  `RUNTIME_TIE_FRESH_CHAMPION_REQUIRED` without pair-win/no-loss or actionable
+  loss-diagnostic signal; `same_branch_refinement` remains non-hard-blocking.
+  Main-thread verification passed `149 + 79 + 76` focused tests plus
+  `py_compile` and `git diff --check`. Prompt overhead remains unresolved.
+  Next warehouse gate is another short compact `4-6R` debug, not full
+  `3 x 24R`.
 
 ## Current Repair Acceptance - 2026-06-13
 

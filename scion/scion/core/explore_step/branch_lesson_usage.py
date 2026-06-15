@@ -41,7 +41,7 @@ _STRICT_REQUIRED_FOR = frozenset(
         "sibling_nearby_attempt",
     }
 )
-_HARD_PRE_CODE_REQUIRED_FOR = frozenset()
+_HARD_PRE_CODE_REQUIRED_FOR = _STRICT_REQUIRED_FOR
 _LESSON_APPLICATION_FIELDS = frozenset(
     {
         "borrowed_lessons",
@@ -487,8 +487,9 @@ def branch_lesson_usage_pre_code_block_reason(
         "fork proposals must include at least one `contrasted_lessons` entry "
         "or `rejected_lessons` entry "
         "with target_file/action/mechanism linkage plus changed generic "
-        "dimensions. Sibling-nearby lesson usage is advisory by default and "
-        "should still be emitted for audit when practical. Weak-positive "
+        "dimensions. Sibling-nearby strict requirements use the same "
+        "semantic rule; non-actionable sibling records remain report-only. "
+        "Weak-positive "
         "transfer must borrow/preserve the lesson "
         "with activation/effect path and target linkage, or emit "
         "`rejected_weak_positive_lessons` with a machine-readable reject "
