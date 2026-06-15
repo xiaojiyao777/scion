@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP size70 large-X completed; warehouse lifecycle gate passed; short warehouse 3-5R debug next*
+*Status: CVRP size70 large-X completed; warehouse lifecycle gate passed; warehouse short 3R debug active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1617,6 +1617,19 @@ Phase B launch design - 2026-06-14:
   pair W/L/T was `5/8/7`, median delta `0.0`. This confirms the repaired
   warehouse path can reach Protocol again. Next owner: run a short `3-5R`
   compact warehouse debug before any full `3 x 24R` longrun.
+- Launched: warehouse short `3R` compact debug. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-short-debug-3r-launch-20260615.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-short-debug-3r-20260615T201259Z`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-short-debug-3r-20260615T201259Z`.
+  Tmux session: `scion_warehouse_short3r_201259`. It started at
+  `2026-06-15T20:14:17Z` from commit `dabfcee` with `rounds=3`,
+  `measurement_governance=on`, `compact-measurement-diagnostics`,
+  `time_limit_sec=30`, local `gpt-5.5`, disabled early stop, and the corrected
+  absolute WSL safe root. Launch health check confirmed `status.txt`,
+  `status.json`, `run_status.json`, `scion.db`, and `run.log`; campaign startup
+  was reached. This is the current active warehouse task.
 
 ## Current Repair Acceptance - 2026-06-13
 

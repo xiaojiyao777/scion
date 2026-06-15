@@ -484,6 +484,22 @@ and median delta `0.0`. This confirms the repaired warehouse path can reach
 Protocol again. The next warehouse step is a short `3-5R` compact debug before
 any full `3 x 24R` longrun.
 
+That short warehouse debug is now active. Launch report:
+[`../experiments/v0.4/v04-warehouse-short-debug-3r-launch-20260615.md`](../experiments/v0.4/v04-warehouse-short-debug-3r-launch-20260615.md).
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-short-debug-3r-20260615T201259Z`.
+Server root:
+`/home/clawd/research/scion-experiments/v04-warehouse-short-debug-3r-20260615T201259Z`.
+Tmux session: `scion_warehouse_short3r_201259`. It started at
+`2026-06-15T20:14:17Z` from commit `dabfcee` with `rounds=3`,
+`measurement_governance=on`, `compact-measurement-diagnostics`,
+`time_limit_sec=30`, local `gpt-5.5`, disabled early stop, and the corrected
+absolute WSL safe root. Initial health check confirmed `status.txt`,
+`run_status.json`, `status.json`, `scion.db`, and campaign startup in `run.log`.
+Postrun acceptance must inspect Protocol rows, branch depth, same-mechanism
+continuation, prompt composition, and whether marginal evidence influences
+later proposals.
+
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
 Root:
