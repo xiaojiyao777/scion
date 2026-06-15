@@ -404,6 +404,18 @@ Tmux session: `scion_cvrp_twoopt_followup_1848`. It tests two direct replay
 variants against the same smoke baseline: `initial_only` polish and a diagnostic
 `size70` scale gate. This is still no-LLM, no-APS, problem-owned evidence only.
 
+The follow-up smoke completed and is accepted for the `size70` large-X
+diagnostic replay only. Postrun:
+[`../experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-postrun-20260615.md).
+`initial_only` remained unstable with W/L/T `7/2/3` and two losses on
+`B-n45-k6`. `size70` passed: W/L/T `6/0/6`, mean delta `-3.8333`, median delta
+`-1.5`, route/fleet regressions `0`, B rows all tied with zero two-opt
+activation, and A/M rows all won. The size70 large-X diagnostic replay is now
+launched in WSL tmux session `scion_cvrp_twoopt_size70_large_1848`; launch
+report:
+[`../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md).
+This remains no-LLM diagnostic evidence, not Protocol or promotion evidence.
+
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
 Root:

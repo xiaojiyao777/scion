@@ -1491,6 +1491,16 @@ Phase B launch design - 2026-06-14:
   Tmux session: `scion_cvrp_twoopt_followup_1848`. The two variants are
   `initial_only` and `size70`; both are problem-owned direct replay patches,
   not Scion core changes.
+- Completed: two-opt follow-up smoke. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-polish-followup-smoke-postrun-20260615.md`.
+  `initial_only` still failed the large-X gate with W/L/T `7/2/3` and two
+  losses on `B-n45-k6`. `size70` passed the smoke gate with W/L/T `6/0/6`, mean
+  delta `-3.8333`, median delta `-1.5`, route/fleet regressions `0`, B rows all
+  tied with zero two-opt activation, and A/M rows all won.
+- Launched: size70 large-X diagnostic replay. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md`.
+  WSL tmux session: `scion_cvrp_twoopt_size70_large_1848`. This is no-LLM
+  diagnostic replay only, not Protocol or promotion evidence.
 - Launched: fourth independent VRP-only research control `Anscombe`
   (`019ecc8e-d45e-7983-b346-3621f90d38f4`) as a fresh, non-forked external
   researcher. Report:
