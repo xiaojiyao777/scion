@@ -229,6 +229,16 @@ WSL run valid post-repair evidence because that run started from commit
 `17fdeb8`. Next gate: rerun a small one-round debug from the repaired commit
 before any longer CVRP campaign.
 
+That repaired one-round debug is now active on WSL from commit `96ba571`. WSL
+root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-repaired-gpt55-20260615T175742Z-claw`.
+Tmux session: `scion_cvrp_1r_repaired_20260615T175742Z`. It uses the same
+one-cell `gpt-5.5`, `measurement_governance=on`,
+`compact-measurement-diagnostics`, `time_limit_sec=30`, and
+`SCION_STAGE_TRANSITION_DRAIN_LIMIT=0` shape as the pre-repair debug, with
+`timeout 2h`. First launch check confirmed `run_status.json`, `status.json`,
+`scion.db`, and `run.log` creation.
+
 Warehouse Phase 4 longrun was attempted on WSL but is now aborted invalid.
 Report:
 [`../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`](../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md).

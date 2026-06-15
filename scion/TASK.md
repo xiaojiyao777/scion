@@ -1375,6 +1375,15 @@ Phase B launch design - 2026-06-14:
   passed. The stopped WSL 1R run remains pre-repair evidence because it launched
   from commit `17fdeb8`; rerun a small one-round debug from the repaired commit
   before any longer CVRP campaign.
+- Launched: repaired CVRP single-round debug on WSL from commit `96ba571`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-repaired-gpt55-20260615T175742Z-claw`.
+  Tmux session: `scion_cvrp_1r_repaired_20260615T175742Z`. It uses the same
+  one-cell `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, `time_limit_sec=30`, and
+  `SCION_STAGE_TRANSITION_DRAIN_LIMIT=0` shape as the pre-repair debug, with
+  `timeout 2h`. First launch check confirmed `run_status.json`,
+  `status.json`, `scion.db`, and `run.log` creation.
 - Launched: independent VRP baseline researcher control. This is an intentional
   exception to the usual v3-first subagent brief: the control agent is forbidden
   from reading Scion design/docs/reports/core, may only use standalone `vrp/`,
