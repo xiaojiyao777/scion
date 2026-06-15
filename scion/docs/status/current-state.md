@@ -89,21 +89,21 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 
 Active work as of the latest handoff:
 
-- CVRP size70 Tier 1 Large-X completion diagnostic is running on WSL at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`
-  and syncing to
+- CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
+  Postrun:
+  [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
+  Root:
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
-  It is no-LLM/no-APS direct solver replay over `36` keys. The latest health
-  check found the tmux session alive with `28/36` planned keys accounted:
-  `27` completed and `1` `timeout_expired`. The timeout is
-  `X-n1001-k43 seed61 multiplier1`, which exceeded the `1020s` wrapper timeout
-  around a nominal `120s` solver limit. A partial read-only comparison over the
-  completed keys found no broad regression versus the champion Large-X curve,
-  but `X-n1001` is now an explicit Tier 1 runtime-completeness risk. Wait for
-  the remaining keys and Noether's postrun before deciding whether the size70
-  candidate may enter formal validation.
-  Postrun acceptance should follow
-  [`../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md`](../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md).
+  This no-LLM/no-APS direct replay accounted all `36/36` planned keys:
+  candidate `35 completed / 1 timeout`, champion curve `34 completed /
+  2 timeout`, no candidate-only timeout/failure. On the `34` completed-vs-
+  completed pairs, size70 won `34/0/0` with route count and fleet violation
+  unchanged. `two_opt_polish_initial` improved `35/35` completed rows and
+  `two_opt_polish_embedded` improved `26/35`. The gate passes to formal
+  fixed-candidate validation readiness, but evidence remains mechanism-validity
+  material only: `X-n1001` is still a heavy-tail runtime diagnostic and
+  `best_update_count=0` means the claim is limited to two-opt polish phase
+  movement, not deeper ALNS incumbent-update leverage.
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
   [`../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`](../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md).
   The repair makes strict clean-fork/sibling branch-lesson requirements
@@ -706,19 +706,25 @@ omitted rows. A materialization check recreated
 validation replay has been launched yet because the warehouse short debug is
 actively consuming WSL solver time.
 
-The CVRP size70 Tier 1 Large-X completion diagnostic is now running on WSL.
+The CVRP size70 Tier 1 Large-X completion diagnostic completed and is accepted.
 Launch report:
 [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md).
+Postrun:
+[`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
 WSL root:
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
 Server sync root:
 `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
-Tmux session: `scion_cvrp_size70_tier1_211545`. It uses WSL commit `2548560`,
-no LLM/APS, `scion/tools/cvrp_runtime_curve.py`, parallelism `4`, and a 16h
-wrapper timeout. Dry-run confirmed `36` planned keys across `X-n401`,
-`X-n573`, `X-n641`, `X-n1001`, seeds `61/67/89`, and multipliers `1/2/4`.
-Formal validation remains blocked until this Tier 1 postrun proves key
-completeness and no broad large-X regression.
+It used WSL commit `2548560`, no LLM/APS, `scion/tools/cvrp_runtime_curve.py`,
+parallelism `4`, and a 16h wrapper timeout. The postrun accounted `36/36`
+planned keys across `X-n401`, `X-n573`, `X-n641`, `X-n1001`, seeds
+`61/67/89`, and multipliers `1/2/4`. Candidate had `35` completions and `1`
+timeout; the timeout was not candidate-only because champion also timed out on
+`X-n1001-k43 seed61 m1`. Completed-vs-completed pairs were `34/34` wins with
+no route/fleet regression. This passes Tier 1 to formal fixed-candidate
+validation readiness, while retaining `X-n1001` heavy-tail runtime caveats and
+the interpretation limit that `best_update_count=0` confines the mechanism
+claim to two-opt polish phase movement.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).

@@ -1887,6 +1887,23 @@ Phase B launch design - 2026-06-14:
   `1020s`, so the remaining postrun must treat `X-n1001` as a
   runtime-completeness risk. This is not a postrun conclusion; all `36` keys
   must be accounted before deciding whether to launch formal validation.
+- Completed and accepted: CVRP size70 Tier 1 Large-X completion diagnostic.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`.
+  The WSL run completed, synced to
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`,
+  and accounted all `36/36` planned keys. Candidate status was `35 completed /
+  1 timeout`; champion curve status was `34 completed / 2 timeout`; there was
+  no candidate-only timeout/failure. On the `34` completed-vs-completed pairs,
+  candidate won `34/0/0`, total-distance sum delta was `-10014.0`, route count
+  was unchanged, and all completed candidate outputs were feasible with
+  `fleet_violation=0`. `two_opt_polish_initial` improved `35/35` completed
+  rows and `two_opt_polish_embedded` improved `26/35`; `best_update_count`
+  remained `0` on all rows. Decision: Tier 1 passes to formal fixed-candidate
+  validation readiness, but this is no-LLM mechanism-validity material only,
+  not promotion evidence or `DecisionFeatures` input. Keep `X-n1001` as a
+  heavy-tail runtime diagnostic and describe the mechanism as two-opt polish
+  phase movement, not deeper ALNS incumbent-update leverage.
 - Launched: CVRP agent behavior debug audit worker `Gibbs`
   (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
   experiment-analysis subagent, so its brief requires reading
@@ -1929,8 +1946,9 @@ Phase B launch design - 2026-06-14:
   This design is not launched. It requires WSL to be fast-forwarded to commit
   `1144239` or a descendant, local `gpt-5.5`, `measurement_governance=on`,
   `compact-measurement-diagnostics`, one warehouse production cell, and `4-6`
-  rounds with early stop disabled. Do not launch it while the CVRP size70
-  Tier 1 solver replay is still consuming WSL solver capacity.
+  rounds with early stop disabled. The CVRP size70 Tier 1 solver replay has now
+  cleared; coordinate any warehouse rerun with the formal CVRP validation replay
+  so WSL solver load does not distort either gate.
 
 ## Current Repair Acceptance - 2026-06-13
 
