@@ -1354,24 +1354,27 @@ Phase B launch design - 2026-06-14:
   `run_status.json`, `status.json`, and `scion.db` created. After completion,
   sync the root to the server and run the artifact checklist before judging
   agent research quality.
-- Interim result: the active WSL 1R run is still pre-Protocol. It currently has
-  `protocol_metric_results=0`, `screening_protocol_results=0`, and repeated
-  `algorithm_smoke_failure` before formal candidate evaluation. Read-only audit
-  found code-stage source visibility was present, while prompt context remained
-  large and diluted by rules/diagnostics. The repeated hard runtime failure was
-  traced to a CVRP problem-owned boundary bug: ALNS/VNS scheduler best-update
-  instrumentation passed internal `_Solution` objects to `record_best_update()`,
-  which could not coerce internal `_Route` objects to public `CvrpSolution`.
+- Interim result: the WSL 1R run was stopped and synced as invalid pre-repair
+  evidence. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-1r-debug-pre-repair-postrun-20260615.md`.
+  It has `run_validity.reason=invalid_no_effective_rounds`,
+  `protocol_metric_results=0`, `screening_protocol_results=0`,
+  `agentic_sessions=10`, and repeated `algorithm_smoke_failure` before formal
+  candidate evaluation. Read-only audit found code-stage source visibility was
+  present, while prompt context remained large and diluted by rules/diagnostics.
+  The repeated hard runtime failure was traced to a CVRP problem-owned boundary
+  bug: ALNS/VNS scheduler best-update instrumentation passed internal
+  `_Solution` objects to `record_best_update()`, which could not coerce internal
+  `_Route` objects to public `CvrpSolution`.
 - Accepted repair: the current local worktree fixes that pre-Protocol blocker
   without changing generic Decision input. Scheduler best-update recording now
   passes `best.routes_as_tuples()`, and CVRP-owned solution coercion accepts
   bare routes-like iterables. Focused acceptance:
   `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_cvrp_solver_algorithm_runtime.py scion/scion/tests/test_cvrp_solver_vrp_smoke.py scion/scion/tests/test_cvrp_protocol_smoke.py`
   passed with `21 passed`; scoped `py_compile` and `git diff --check` also
-  passed. The active WSL 1R run remains pre-repair evidence because it launched
-  from commit `17fdeb8`; after it finishes, sync/analyze it as behavior debug
-  evidence and rerun a small one-round debug from the repaired commit before
-  any longer CVRP campaign.
+  passed. The stopped WSL 1R run remains pre-repair evidence because it launched
+  from commit `17fdeb8`; rerun a small one-round debug from the repaired commit
+  before any longer CVRP campaign.
 - Launched: independent VRP baseline researcher control. This is an intentional
   exception to the usual v3-first subagent brief: the control agent is forbidden
   from reading Scion design/docs/reports/core, may only use standalone `vrp/`,
