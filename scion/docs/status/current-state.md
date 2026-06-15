@@ -276,9 +276,9 @@ and `fix_code` now accepts explicit `premise_check=wrong_owner` responses as a
 legal no-patch repair exit instead of forcing empty or whole-file
 `exact_replace` edits. Acceptance:
 `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_verification_runner_checks.py scion/scion/tests/unit/core/test_campaign_control_preflight_contract.py scion/scion/tests/unit/test_agentic_session_core_flow.py -q`
-passed with `39 passed`. The next warehouse longrun still needs a
-one-candidate lifecycle debug with `protocol_metric_results>0` before any
-3x24R rerun.
+passed with `39 passed`. The next warehouse longrun still needs a short `3-5R`
+compact debug before any `3 x 24R` rerun; the one-candidate Protocol-entry gate
+has since passed.
 
 The behavior analysis is complete:
 [`../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`](../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md).
@@ -288,8 +288,9 @@ The secondary cause was fix-stage patch protocol: the model recognized
 `wrong_owner` but had no legal `no_patch` / `abort_repair` exit, so it emitted
 empty or whole-file `exact_replace` edits. Source visibility was not the main
 issue in inspected cases. Verifier preflight and fix no-op handling are now
-repaired; do not rerun full warehouse until a small lifecycle debug reaches
-`protocol_metric_results>0`.
+repaired; the one-candidate lifecycle gate has since reached
+`protocol_metric_results>0`, so the next warehouse step is a short `3-5R`
+compact debug before any full rerun.
 
 A separate single-round debug/behavior audit is now running on WSL. Read-only
 subagent Ampere recommended starting with CVRP, not warehouse: warehouse
@@ -398,6 +399,15 @@ while `A-n32-k5` and `X-n101-k25` were neutral. This is a positive
 external-control hypothesis seed, not Scion Protocol evidence. It should get a
 broader no-LLM replay before any Scion adoption.
 
+A sixth independent VRP-only control is now active as subagent `Lovelace`
+(`019ecce4-4806-7581-b033-d33911f8b276`). Launch report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615e.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615e.md).
+It is a fresh non-forked long-running external researcher forbidden from
+reading Scion artifacts and limited to standalone `vrp/`. Artifact root:
+`/home/clawd/research/scion-experiments/v04-independent-vrp-baseline-research-longrun-20260615`.
+Its output is external-control process evidence only. A positive candidate can
+seed later no-LLM Scion replay, but it is not Scion Protocol evidence.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
@@ -433,23 +443,46 @@ diagnostic replay only. Postrun:
 `initial_only` remained unstable with W/L/T `7/2/3` and two losses on
 `B-n45-k6`. `size70` passed: W/L/T `6/0/6`, mean delta `-3.8333`, median delta
 `-1.5`, route/fleet regressions `0`, B rows all tied with zero two-opt
-activation, and A/M rows all won. The size70 large-X diagnostic replay is now
-launched in WSL tmux session `scion_cvrp_twoopt_size70_large_1848`; launch
-report:
+activation, and A/M rows all won. The size70 large-X diagnostic replay then
+completed. Launch report:
 [`../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md).
-This remains no-LLM diagnostic evidence, not Protocol or promotion evidence.
+Postrun:
+[`../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-postrun-20260615.md).
+Synced server root:
+`/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z`.
+The actual planned candidate shape was `4` large-X cases x `3` seeds x
+multipliers `{1,4}` = `24` rows. Candidate produced `24` rows, with `23`
+completed candidate/champion pairs and one planned `X-n1001-k43 seed61 m1`
+double timeout. Completed pairs were `23/0/0` W/L/T, mean
+candidate-minus-champion delta `-295.5652`, median `-192.0`, route/fleet
+regressions `0`, initial two-opt accepts `23`, embedded accepts `72`, and
+`candidate_best_update_count=0`. This satisfies the no-LLM diagnostic gate for
+large-X objective movement and makes size70 two-opt the leading CVRP mechanism
+seed. It remains no-LLM diagnostic evidence, not Protocol or promotion
+evidence.
 
-The next warehouse gate is now designed but not launched. Report:
+The warehouse 1-candidate lifecycle gate is now complete. Design report:
 [`../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-design-20260615.md`](../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-design-20260615.md).
-The gate is one WSL warehouse production cell with `rounds=1`, local
-`gpt-5.5`, `measurement_governance=on`,
-`compact-measurement-diagnostics`, `time_limit_sec=30`, disabled early stop,
-and foreground `timeout 2h`. It must use experiment-local WSL copies of
-`problem.yaml`, sibling `problem-v1.yaml`, and `split_manifest_prod.yaml`.
-WSL environment preflight has been repaired: `pytest` is installed in
-`/home/xjy-ubuntu/miniconda3/envs/scion`, the WSL repo is fast-forwarded to
-`9204315`, and the focused preflight/fix-stage suite passed on WSL with
-`39 passed`. Do not launch until the CVRP size70 large-X solver load finishes.
+Postrun:
+[`../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-postrun-20260615.md`](../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-postrun-20260615.md).
+The first root
+`/home/clawd/research/scion-experiments/v04-warehouse-1candidate-lifecycle-debug-20260615T1950Z`
+is invalid launch/config evidence: `run_validity.status=invalid`,
+`protocol_metric_results=0`, and canary failed because the experiment-local
+copied split manifest resolved `safe_data_roots` to the wrong WSL data root.
+The accepted rerun root is
+`/home/clawd/research/scion-experiments/v04-warehouse-1candidate-lifecycle-debug-20260615T2000Z`.
+It rewrote safe roots to `/home/xjy-ubuntu/research/scion-data`, exited `0`,
+and passed the intended gate with `run_validity.status=valid`,
+`effective_rounds_completed=1`, `protocol_metric_results=1`,
+`protocol_metric_stage_counts.screening=1`, `formal_screened_candidates=1`,
+Contract/Verification/canary all passed, and no postrun failures. The screened
+candidate was `operators/subcategory_consolidate_upgrade.py`; Decision returned
+`continue_explore` with `SCREENING_FAIL_WIN_RATE` and
+`SCREENING_MARGINAL_SIGNAL_CONTINUE`, case W/L/T `1/2/7`, pair W/L/T `5/8/7`,
+and median delta `0.0`. This confirms the repaired warehouse path can reach
+Protocol again. The next warehouse step is a short `3-5R` compact debug before
+any full `3 x 24R` longrun.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
