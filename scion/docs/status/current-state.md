@@ -96,7 +96,8 @@ Active work as of the latest handoff:
   It is no-LLM/no-APS direct solver replay over `36` keys. A health check found
   the tmux session alive with `6/36` result files and no immediate errors; wait
   for all planned keys before deciding whether the size70 candidate may enter
-  formal validation.
+  formal validation. Postrun acceptance should follow
+  [`../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md`](../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md).
 - Scion worker `Planck` is assigned, but not yet accepted, for the targeted
   warehouse repair after the repaired 4R compact debug. Its scope is strict
   branch-lesson semantic blocking, no-effect same-mechanism lifecycle pressure,

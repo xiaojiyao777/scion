@@ -1807,6 +1807,8 @@ Phase B launch design - 2026-06-14:
   replay while the warehouse short debug is actively evaluating solver rows.
 - Launched: CVRP size70 Tier 1 Large-X completion diagnostic. Launch report:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md`.
+  Postrun analysis plan:
+  `scion/docs/planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
   Server sync root:
