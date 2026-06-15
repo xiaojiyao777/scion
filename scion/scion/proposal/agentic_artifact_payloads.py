@@ -9,6 +9,9 @@ from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
+from scion.core.explore_step.branch_lesson_usage import (
+    branch_lesson_usage_report_projection,
+)
 from scion.core.models import ChampionState, PatchProposal
 from scion.core.public_refs import public_artifact_ref
 from scion.proposal.agentic_models import (
@@ -320,6 +323,9 @@ def _compact_hypothesis_summary(value: Any) -> dict[str, Any]:
             "hypothesis_text": str(getattr(value, "hypothesis_text", "") or "")[:240],
             "predicted_direction": getattr(value, "predicted_direction", None),
             "target_runtime_effect": getattr(value, "target_runtime_effect", None),
+            "branch_lesson_usage": branch_lesson_usage_report_projection(
+                getattr(value, "branch_lesson_usage", None)
+            ),
         }
     )
 

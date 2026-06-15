@@ -114,24 +114,47 @@ reached no frozen rows, and never exceeded its Phase A MDE `9.6`
 weak-surface CVRP signals into validation/frozen, but it has not yet shown
 effective CVRP improvement against the canonical baseline.
 
+The validation-to-frozen collapse now has a concrete runtime interpretation.
+The ALNS-only validation positives were measured on `30/45/60s` buckets and
+improved median BKS gap from about `5.21%` champion evidence to
+`4.48%-4.63%` candidate evidence. Frozen shifted to X-family holdouts with
+`60/90/120s` buckets; in the two ALNS-only frozen rows, `X-n573-k30`,
+`X-n641-k35`, and `X-n1001-k43` produced `0/18` valid paired comparisons
+because all attempts timed out, and `X-n401-k29` had `1/3` timeout seeds per
+row. A no-LLM ALNS-only replay smoke at
+`/home/clawd/research/scion-experiments/v04-cvrp-runtime-budget-smoke-20260615`
+showed that direct solver calls for `X-n401` and `X-n573` need longer than the
+Phase C runner grace to return no-improvement results, but 2x nominal budget did
+not improve either sampled distance. So the immediate issue is twofold:
+large-X frozen evidence completeness is invalid under the current runner
+timeout/grace, and large-X search has low best-update density.
+
 Phase C branch behavior improved but remains incomplete. Every cell produced at
 least depth-2 branch chains, and ALNS+VNS reached depth/same-mechanism chain
-`5` in two repeats. Mechanism family remained concentrated in `solver_design`,
-and the artifacts prove only that branch lessons were visible or truncated, not
-that they were effectively used. Prompt/context debt also remains:
-`compact-measurement-diagnostics` suppresses the large standalone measurement
-diagnostics block and code-stage source visibility held in sampled code prompts,
-but hypothesis/code prompts are still very large and
+`5` in two repeats. The immediate report-layer gap is narrowed: a report-only
+branch-lesson usage projection over the six accepted cells found structured
+usage in `125/128` sessions, with pooled counts `avoided=205`,
+`contrasted=175`, `preserved_same_branch=53`, `borrowed=15`, and
+`rejected_weak_positive=56`. This rules out the simple explanation that agent
+outputs lacked branch-lesson structure; it does not prove those lessons were
+used effectively for VRP mechanism innovation. Prompt/context debt also
+remains: `compact-measurement-diagnostics` suppresses the large standalone
+measurement diagnostics block and code-stage source visibility held in sampled
+code prompts, but hypothesis/code prompts are still very large and
 `prompt_context.csv` records 76 compact-research truncations plus 62
 branch-lesson truncations across accepted cells.
 
 The next v0.4 CVRP gate is targeted repair and analysis, not another longer
 campaign by default. Inspect the two ALNS-only validation-to-frozen collapses,
-add structured report-only lesson-use accounting, and tighten hypothesis
-context so concise branch lessons, same-mechanism continuation state, per-case
-opportunity, and mechanism rankings survive without crowding out the research
-intent. Preserve full target/current source in code phase and keep all
-diagnostics outside `DecisionFeatures`.
+especially large-X/holdout/runtime-incomplete behavior. Before another LLM
+campaign, run a small no-LLM current/2x/4x runtime curve on the large-X frozen
+cases and add best-update trace/effect attribution so the agent can distinguish
+"budget killed the evidence" from "mechanism has no large-X search leverage".
+Then improve the VRP mechanism research loop so concise branch lessons,
+same-mechanism continuation state, per-case opportunity, mechanism rankings,
+and required solver telemetry lead to stronger follow-up mechanisms. Preserve
+full target/current source in code phase and keep all diagnostics outside
+`DecisionFeatures`.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned

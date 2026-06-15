@@ -397,6 +397,20 @@ def test_agentic_session_index_preserves_failure_and_hypothesis_summary_fields(
             mechanism_changes=(
                 {"id": "generic_counter_probe", "change_type": "modify"},
             ),
+            branch_lesson_usage={
+                "borrowed_lessons": [
+                    {
+                        "lesson_id": "lesson:generic-counter",
+                        "source_branch_ids": ["branch-source"],
+                        "target_file": "policies/generic_policy.py",
+                        "action": "modify",
+                        "mechanism": "generic_counter_probe",
+                        "borrow_rationale": (
+                            "RAW BRANCH LESSON RATIONALE SHOULD NOT LEAK"
+                        ),
+                    }
+                ]
+            },
         )
     )
     output = AgenticProposalOutput(
@@ -432,6 +446,19 @@ def test_agentic_session_index_preserves_failure_and_hypothesis_summary_fields(
     assert index_entry["hypothesis_summary"]["mechanism_ids"] == [
         "generic_counter_probe"
     ]
+    usage_summary = index_entry["hypothesis_summary"]["branch_lesson_usage"]
+    assert usage_summary["report_only"] is True
+    assert usage_summary["decision_features_excluded"] is True
+    assert usage_summary["present"] is True
+    assert usage_summary["field_counts"] == {"borrowed_lessons": 1}
+    assert "RAW BRANCH LESSON RATIONALE SHOULD NOT LEAK" not in json.dumps(
+        index_entry,
+        sort_keys=True,
+    )
+    artifact_payload = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    assert artifact_payload["hypothesis_summary"]["branch_lesson_usage"][
+        "field_counts"
+    ] == {"borrowed_lessons": 1}
     assert loaded is not None
     assert loaded.entry.failure_reason == loaded.entry.failure_detail
     assert loaded.entry.target_file == "policies/generic_policy.py"

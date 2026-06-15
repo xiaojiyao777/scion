@@ -10,6 +10,9 @@ from scion.core.models import Branch, HypothesisProposal, mechanism_changes
 
 BRANCH_LESSON_USAGE_REQUIREMENT_SCHEMA = "branch_lesson_usage_requirement.v1"
 BRANCH_LESSON_RECORD_SCHEMA = "branch_lesson.v1"
+BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA = (
+    "branch_lesson_usage_report_projection.v1"
+)
 
 _BRANCH_LESSON_USAGE_REQUIRED_MISSING = (
     "agent_quality_blocked:branch_lesson_usage_required_missing"
@@ -711,6 +714,69 @@ def _repair_skeleton_hint(skeleton: Mapping[str, Any]) -> str:
         + "; ".join(parts)
         + "."
     )
+
+
+def branch_lesson_usage_report_projection(value: Any) -> dict[str, Any]:
+    """Return a compact report-only projection of branch_lesson_usage.
+
+    The projection intentionally excludes the normalized usage payload itself.
+    Reports get stable counts and a digest for trajectory analysis without
+    exposing raw proposal text or making branch lessons available to Decision.
+    """
+
+    if not isinstance(value, Mapping):
+        return {}
+    normalized = _normalized_usage_projection(value)
+    raw_present = _specific_signal_present(value)
+    if not normalized and not raw_present:
+        return {}
+    field_counts = _branch_lesson_usage_projection_field_counts(normalized)
+    digest_source = normalized or _generic_mapping(value)
+    return _drop_empty(
+        {
+            "schema_version": BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA,
+            "present": True,
+            "semantic_projection_present": bool(normalized),
+            "unrecognized_usage_present": raw_present and not bool(normalized),
+            "projection_digest": (
+                _stable_digest(digest_source)[:16] if digest_source else ""
+            ),
+            "field_counts": field_counts,
+            "item_count": sum(field_counts.values()),
+            "clean_fork_diversity_claim_present": bool(
+                normalized.get("clean_fork_diversity_claim")
+            ),
+            "report_only": True,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def _branch_lesson_usage_projection_field_counts(
+    normalized: Mapping[str, Any],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for field in (
+        "borrowed_lessons",
+        "avoided_lessons",
+        "contrasted_lessons",
+        "preserved_same_branch_lesson",
+        "rejected_lessons",
+        "rejected_weak_positive_lessons",
+    ):
+        count = _projection_item_count(normalized.get(field))
+        if count:
+            counts[field] = count
+    return counts
+
+
+def _projection_item_count(value: Any) -> int:
+    if isinstance(value, Mapping):
+        return 1 if _present(value) else 0
+    if not isinstance(value, (list, tuple)):
+        return 0
+    return sum(1 for item in value if isinstance(item, Mapping) and _present(item))
 
 
 def _normalized_usage_projection(value: Mapping[str, Any]) -> dict[str, Any]:

@@ -16,8 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scion.core.explore_step.branch_lesson_usage import (
+    BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA,
+    branch_lesson_usage_report_projection,
+)
+
 SCHEMA_VERSION = "scion.proposal_trajectory_manifest.v1"
 COMPARISON_SCHEMA_VERSION = "scion.proposal_trajectory_comparison.v1"
+BRANCH_LESSON_USAGE_ACCOUNTING_SCHEMA = "branch_lesson_usage_accounting.v1"
 DEFAULT_MANIFEST_FILENAME = "proposal_trajectory_manifest.v1.json"
 DEFAULT_COMPARISON_FILENAME = "proposal_trajectory_comparison.v1.json"
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
@@ -159,6 +165,7 @@ def build_proposal_trajectory_manifest(
         "call_kind_counts": _call_kind_counts(sessions),
         "proposal_distributions": _proposal_distributions(sessions),
         "prompt_block_family_aggregate": _block_family_aggregate(sessions),
+        "branch_lesson_usage_accounting": _branch_lesson_usage_accounting(sessions),
         "sessions": sessions,
     }
     return manifest
@@ -244,6 +251,10 @@ def build_proposal_trajectory_comparison(
             left_manifest.get("prompt_block_family_aggregate"),
             right_manifest.get("prompt_block_family_aggregate"),
         ),
+        "branch_lesson_usage_accounting": _paired_counter_summary(
+            _branch_lesson_usage_numeric_summary(left_manifest),
+            _branch_lesson_usage_numeric_summary(right_manifest),
+        ),
         "coverage": {
             "left": _coverage_summary(left_manifest),
             "right": _coverage_summary(right_manifest),
@@ -317,6 +328,11 @@ def _session_fingerprint(
         campaign_dir=campaign_dir,
         agentic_dir=agentic_dir,
     )
+    branch_lesson_usage = _branch_lesson_usage_fingerprint(
+        item,
+        campaign_dir=campaign_dir,
+        agentic_dir=agentic_dir,
+    )
     proposal = {
         "selected_surface": selected_surface,
         "action": action,
@@ -358,6 +374,7 @@ def _session_fingerprint(
             ),
         },
         "proposal_fingerprint": _drop_empty(proposal),
+        "branch_lesson_usage_fingerprint": branch_lesson_usage,
         "trace_fingerprints": trace_fingerprints,
         "replayability": {
             "summary": "posthoc_audit_fingerprints_only_no_llm_replay",
@@ -374,6 +391,108 @@ def _session_fingerprint(
         "_prompt_manifest_ref_count": prompt_ref_count,
         "_prompt_manifest_loaded_count": prompt_loaded_count,
     }
+
+
+def _branch_lesson_usage_fingerprint(
+    item: Mapping[str, Any],
+    *,
+    campaign_dir: Path,
+    agentic_dir: Path,
+) -> dict[str, Any]:
+    hypothesis_summary = _mapping(item.get("hypothesis_summary"))
+    from_summary = _coerce_branch_lesson_usage_projection(
+        hypothesis_summary.get("branch_lesson_usage")
+    )
+    if from_summary:
+        return from_summary
+    artifact = _load_session_output_artifact(
+        item,
+        campaign_dir=campaign_dir,
+        agentic_dir=agentic_dir,
+    )
+    hypothesis = _mapping(artifact.get("hypothesis"))
+    return _coerce_branch_lesson_usage_projection(
+        hypothesis.get("branch_lesson_usage")
+    )
+
+
+def _coerce_branch_lesson_usage_projection(value: Any) -> dict[str, Any]:
+    payload = _mapping(value)
+    if not payload:
+        return {}
+    if (
+        _clean_str(payload.get("schema_version"))
+        == BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA
+    ):
+        return _sanitize_branch_lesson_usage_projection(payload)
+    return _sanitize_branch_lesson_usage_projection(
+        branch_lesson_usage_report_projection(payload)
+    )
+
+
+def _sanitize_branch_lesson_usage_projection(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not value:
+        return {}
+    field_counts = {
+        str(key): _int_or_zero(count)
+        for key, count in _mapping(value.get("field_counts")).items()
+        if _int_or_zero(count)
+    }
+    projection_digest = _clean_str(value.get("projection_digest"))[:32]
+    return _drop_empty(
+        {
+            "schema_version": BRANCH_LESSON_USAGE_REPORT_PROJECTION_SCHEMA,
+            "present": bool(value.get("present")),
+            "semantic_projection_present": bool(
+                value.get("semantic_projection_present")
+            ),
+            "unrecognized_usage_present": bool(
+                value.get("unrecognized_usage_present")
+            ),
+            "projection_digest": projection_digest,
+            "field_counts": field_counts,
+            "item_count": _int_or_zero(value.get("item_count")),
+            "clean_fork_diversity_claim_present": bool(
+                value.get("clean_fork_diversity_claim_present")
+            ),
+            "report_only": True,
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+        }
+    )
+
+
+def _load_session_output_artifact(
+    item: Mapping[str, Any],
+    *,
+    campaign_dir: Path,
+    agentic_dir: Path,
+) -> Mapping[str, Any]:
+    refs = _string_list(
+        (
+            item.get("output_artifact_ref"),
+            item.get("artifact_ref"),
+            item.get("artifact_path"),
+        )
+    )
+    session_id = _clean_str(item.get("session_id"))
+    if session_id:
+        refs.append(f"{session_id}/output.json")
+    for ref in refs:
+        path = _resolve_artifact_ref(
+            ref,
+            campaign_dir=campaign_dir,
+            agentic_dir=agentic_dir,
+        )
+        if path is None or not path.exists():
+            continue
+        try:
+            raw = _read_json(path)
+        except (OSError, ValueError):
+            continue
+        if isinstance(raw, Mapping):
+            return raw
+    return {}
 
 
 def _trace_fingerprints(
@@ -857,6 +976,118 @@ def _block_family_aggregate(sessions: list[Mapping[str, Any]]) -> dict[str, Any]
         "total_token_estimate": total_tokens,
         "families": family_payload,
     }
+
+
+def _branch_lesson_usage_accounting(
+    sessions: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    field_counts: Counter[str] = Counter()
+    projection_digest_counts: Counter[str] = Counter()
+    prompt_visibility_counts: Counter[str] = Counter()
+    usage_present_count = 0
+    semantic_projection_present_count = 0
+    unrecognized_usage_present_count = 0
+    clean_fork_diversity_claim_present_count = 0
+    item_count = 0
+
+    for session in sessions:
+        usage = _mapping(session.get("branch_lesson_usage_fingerprint"))
+        if usage:
+            usage_present_count += 1
+            semantic_projection_present_count += int(
+                bool(usage.get("semantic_projection_present"))
+            )
+            unrecognized_usage_present_count += int(
+                bool(usage.get("unrecognized_usage_present"))
+            )
+            clean_fork_diversity_claim_present_count += int(
+                bool(usage.get("clean_fork_diversity_claim_present"))
+            )
+            item_count += _int_or_zero(usage.get("item_count"))
+            digest = _clean_str(usage.get("projection_digest"))
+            if digest:
+                projection_digest_counts[digest] += 1
+            for field, count in _mapping(usage.get("field_counts")).items():
+                field_counts[str(field)] += _int_or_zero(count)
+
+        for trace in session.get("trace_fingerprints", []) or []:
+            if not isinstance(trace, Mapping):
+                continue
+            truncated = _branch_lesson_prompt_sections(
+                trace.get("truncated_sections")
+            )
+            omitted = _branch_lesson_prompt_sections(trace.get("omitted_sections"))
+            if truncated:
+                prompt_visibility_counts[
+                    "branch_lesson_context_truncated_trace_count"
+                ] += 1
+                prompt_visibility_counts[
+                    "branch_lesson_context_truncated_section_count"
+                ] += len(truncated)
+            if omitted:
+                prompt_visibility_counts[
+                    "branch_lesson_context_omitted_trace_count"
+                ] += 1
+                prompt_visibility_counts[
+                    "branch_lesson_context_omitted_section_count"
+                ] += len(omitted)
+
+    return {
+        "schema_version": BRANCH_LESSON_USAGE_ACCOUNTING_SCHEMA,
+        "report_only": True,
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "session_count": len(sessions),
+        "usage_present_count": usage_present_count,
+        "usage_missing_count": len(sessions) - usage_present_count,
+        "semantic_projection_present_count": semantic_projection_present_count,
+        "unrecognized_usage_present_count": unrecognized_usage_present_count,
+        "clean_fork_diversity_claim_present_count": (
+            clean_fork_diversity_claim_present_count
+        ),
+        "item_count": item_count,
+        "field_counts": dict(sorted(field_counts.items())),
+        "projection_digest_counts": dict(sorted(projection_digest_counts.items())),
+        "prompt_visibility_counts": dict(sorted(prompt_visibility_counts.items())),
+    }
+
+
+def _branch_lesson_prompt_sections(value: Any) -> list[str]:
+    return [
+        section
+        for section in _string_list(value)
+        if _is_branch_lesson_prompt_section(section)
+    ]
+
+
+def _is_branch_lesson_prompt_section(value: Any) -> bool:
+    lowered = _clean_str(value).lower()
+    return "branch_lesson" in lowered or "branch lesson" in lowered
+
+
+def _branch_lesson_usage_numeric_summary(
+    manifest: Mapping[str, Any],
+) -> dict[str, int]:
+    accounting = _mapping(manifest.get("branch_lesson_usage_accounting"))
+    prompt_counts = _mapping(accounting.get("prompt_visibility_counts"))
+    field_counts = _mapping(accounting.get("field_counts"))
+    numeric: dict[str, int] = {
+        key: _int_or_zero(accounting.get(key))
+        for key in (
+            "session_count",
+            "usage_present_count",
+            "usage_missing_count",
+            "semantic_projection_present_count",
+            "unrecognized_usage_present_count",
+            "clean_fork_diversity_claim_present_count",
+            "item_count",
+        )
+    }
+    for key, value in prompt_counts.items():
+        numeric[str(key)] = _int_or_zero(value)
+    for key, value in field_counts.items():
+        numeric[f"{key}_count"] = _int_or_zero(value)
+    return numeric
 
 
 def _manifest_count_summary(manifest: Mapping[str, Any]) -> dict[str, int]:

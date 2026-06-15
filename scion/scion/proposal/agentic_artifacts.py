@@ -11,6 +11,9 @@ from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
+from scion.core.explore_step.branch_lesson_usage import (
+    branch_lesson_usage_report_projection,
+)
 from scion.core.models import ChampionState, PatchProposal
 from scion.core.public_refs import public_artifact_ref
 from scion.proposal.agentic_models import (
@@ -245,6 +248,11 @@ def _agentic_index_summary_fields(
                 getattr(hypothesis, "target_runtime_effect", "")
                 if hypothesis is not None
                 else ""
+            ),
+            "branch_lesson_usage": branch_lesson_usage_report_projection(
+                getattr(hypothesis, "branch_lesson_usage", None)
+                if hypothesis is not None
+                else None
             ),
         }
     )

@@ -60,6 +60,20 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
     }
     assert manifest["call_kind_counts"] == {"code": 1, "hypothesis": 1}
     assert manifest["proposal_distributions"]["selected_surface"] == {"repair": 1}
+    branch_usage_accounting = manifest["branch_lesson_usage_accounting"]
+    assert branch_usage_accounting["report_only"] is True
+    assert branch_usage_accounting["decision_features_excluded"] is True
+    assert branch_usage_accounting["session_count"] == 1
+    assert branch_usage_accounting["usage_present_count"] == 1
+    assert branch_usage_accounting["usage_missing_count"] == 0
+    assert branch_usage_accounting["semantic_projection_present_count"] == 1
+    assert branch_usage_accounting["field_counts"] == {"avoided_lessons": 1}
+    assert branch_usage_accounting["prompt_visibility_counts"] == {
+        "branch_lesson_context_omitted_section_count": 2,
+        "branch_lesson_context_omitted_trace_count": 2,
+        "branch_lesson_context_truncated_section_count": 2,
+        "branch_lesson_context_truncated_trace_count": 2,
+    }
 
     session = manifest["sessions"][0]
     assert session["session_id"] == "session-a"
@@ -78,6 +92,13 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
     assert proposal["patch_digest"] == "patch-digest-a"
     assert proposal["formal_candidate_ref"].endswith("candidate.patch.json")
     assert proposal["formal_candidate_join_basis"] == "session_id"
+    branch_usage = session["branch_lesson_usage_fingerprint"]
+    assert branch_usage["present"] is True
+    assert branch_usage["semantic_projection_present"] is True
+    assert branch_usage["field_counts"] == {"avoided_lessons": 1}
+    assert branch_usage["item_count"] == 1
+    assert branch_usage["report_only"] is True
+    assert branch_usage["decision_features_excluded"] is True
     assert session["trace_fingerprints"][0]["proposal_context_ablation"] == "full"
     assert session["replayability"]["summary"] == (
         "posthoc_audit_fingerprints_only_no_llm_replay"
@@ -91,8 +112,14 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
         "token_estimate": 10,
         "token_share": 0.5,
     }
-    assert trace["omitted_sections"] == ["hidden_validation"]
-    assert trace["truncated_sections"] == ["long_feedback"]
+    assert trace["omitted_sections"] == [
+        "hidden_validation",
+        "branch_lesson_usage_hidden_context",
+    ]
+    assert trace["truncated_sections"] == [
+        "long_feedback",
+        "branch_lesson_usage_context",
+    ]
 
 
 def test_manifest_stores_sanitized_control_pair_key_only_at_top_level(
@@ -176,6 +203,7 @@ def test_manifest_does_not_leak_raw_prompt_response_patch_or_measurements(
         "RAW RESPONSE SHOULD NOT LEAK",
         "FULL PATCH BODY SHOULD NOT LEAK",
         "RAW HYPOTHESIS SHOULD NOT LEAK",
+        "RAW BRANCH LESSON RATIONALE SHOULD NOT LEAK",
     ):
         assert forbidden_value not in rendered
 
@@ -619,6 +647,35 @@ def _write_campaign(
         json.dumps(session_index, indent=2),
         encoding="utf-8",
     )
+    output_dir = agentic_dir / session_id
+    output_dir.mkdir()
+    (output_dir / "output.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "agentic-proposal-session.v1",
+                "artifact_kind": "agentic_proposal_output",
+                "session_id": session_id,
+                "hypothesis": {
+                    "branch_lesson_usage": {
+                        "avoided_lessons": [
+                            {
+                                "lesson_id": "lesson:avoid-duplicate",
+                                "source_branch_ids": ["branch-source"],
+                                "target_file": target_file,
+                                "action": action,
+                                "mechanism": mechanism_ids[0],
+                                "risk_to_avoid": (
+                                    "RAW BRANCH LESSON RATIONALE SHOULD NOT LEAK"
+                                ),
+                            }
+                        ]
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     trace_index = {
         "schema_version": "agentic-session-trace-index.v1",
         "artifact_kind": "agentic_session_trace_index",
@@ -954,8 +1011,14 @@ def _write_prompt_manifest(
             "total_token_estimate": total_tokens,
             "families": families,
         },
-        "omitted_sections": ["hidden_validation"],
-        "truncated_sections": ["long_feedback"],
+        "omitted_sections": [
+            "hidden_validation",
+            "branch_lesson_usage_hidden_context",
+        ],
+        "truncated_sections": [
+            "long_feedback",
+            "branch_lesson_usage_context",
+        ],
         "prompt_text": "RAW PROMPT SHOULD NOT LEAK",
         "user_prompt": "RAW PROMPT SHOULD NOT LEAK",
         "system_blocks": [{"text": "RAW PROMPT SHOULD NOT LEAK"}],

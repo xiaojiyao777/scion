@@ -102,6 +102,43 @@ ALNS-only research surface. The failure is downstream: the strongest ALNS-only
 signals did not generalize through frozen, and canonical ALNS+VNS signals
 remained below measured power.
 
+## Validation-to-Frozen Runtime Check
+
+The two ALNS-only validation positives are not identical to a generic "agent
+cannot research VRP" failure. They show a size split:
+
+- validation cases were `30/45/60s` protocol buckets and produced complete
+  paired evidence. The strongest ALNS-only validation rows improved median
+  BKS-gap from about `5.21%` for champion evidence to `4.48%-4.63%` for
+  candidate evidence.
+- frozen cases are all X-family holdouts with `60/90/120s` protocol buckets.
+  In the two ALNS-only frozen rows, `X-n573-k30`, `X-n641-k35`, and
+  `X-n1001-k43` produced `0` valid paired comparisons across `18` attempted
+  pairs; all were timeout/shared-process failures. `X-n401-k29` also had a
+  `1/3` seed timeout in each frozen row.
+- the failed 501+ bucket was therefore not measured as "no improvement"; it was
+  not measured by the current runner/protocol combination.
+
+A no-LLM ALNS-only champion runtime smoke was run after closeout at
+`/home/clawd/research/scion-experiments/v04-cvrp-runtime-budget-smoke-20260615`.
+It replayed `X-n401-k29` and `X-n573-k30`, seed `61`, at current and 2x nominal
+budgets:
+
+| case | nominal budget | wall elapsed | distance | BKS gap | ALNS iterations | best delta | stop |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| X-n401-k29 | 90s | 115.9s | 68673 | 3.81% | 2 | 0 | time_limit |
+| X-n401-k29 | 180s | 171.4s | 68673 | 3.81% | 6 | 0 | completed |
+| X-n573-k30 | 120s | 188.5s | 52495 | 3.60% | 1 | 0 | time_limit |
+| X-n573-k30 | 240s | 211.4s | 52495 | 3.60% | 2 | 0 | completed |
+
+This smoke shows two distinct issues. First, the Phase C runner's fixed grace
+killed large-X solver calls before the baseline could emit even a no-improvement
+result, so frozen evidence completeness was invalid for X501+. Second, 2x
+nominal budget did not improve these sampled baseline results; the large-X
+search loop has very low best-update density, so simply running another long
+LLM campaign is not justified without a targeted runtime curve and mechanism
+redesign.
+
 ## Branch Behavior
 
 The run is not a pure one-off search. Every cell produced at least depth-2
@@ -114,10 +151,15 @@ branch chains. ALNS+VNS showed the deepest same-mechanism chains:
 
 This partially satisfies the Phase 4 effective-research requirement for
 within-branch continuation. It does not yet prove mature branch research.
-Mechanism family remains concentrated in `solver_design`, and the postrun
-artifacts can show branch lessons were visible or truncated, but they do not
-yet provide structured evidence that sibling/ancestor lessons were borrowed,
-avoided, contrasted, or causally affected later proposal choices.
+Mechanism family remains concentrated in `solver_design`. A later report-only
+trajectory projection narrowed the immediate evidence gap: across the six
+accepted cells, structured `branch_lesson_usage` was recoverable for `125/128`
+agentic sessions, with pooled counts `avoided=205`, `contrasted=175`,
+`preserved_same_branch=53`, `borrowed=15`, and
+`rejected_weak_positive=56`. This means the remaining problem is not simply
+"no structured branch lessons were emitted." The unresolved research question
+is whether those lessons changed later mechanism choices in a useful way; Phase
+C still does not prove that.
 
 ## Prompt and Context
 
@@ -154,19 +196,23 @@ Supported conclusions:
   ALNS+VNS: it reached validation in all three repeats and frozen in two.
 - The framework no longer simply dies at screening; validation/frozen paths are
   exercised under formal protocol.
-- Runtime saturation/fresh replay is not the main blocker in this run:
-  stage-transition drain did not execute because no eligible pending
-  validation/frozen work remained at stop.
+- Fresh-runtime replay is not the main blocker in this run: stage-transition
+  drain did not execute because no eligible pending validation/frozen work
+  remained at stop. Large-X timeout/evidence completeness is a separate blocker
+  for frozen interpretation.
 
 Unsupported conclusions:
 
 - Scion has not yet shown a formal CVRP promotion in Phase C.
 - Phase C does not prove effective improvement against the canonical ALNS+VNS
   baseline.
-- Phase C does not prove branch lessons are being effectively used; it only
-  shows partial branch continuation and prompt visibility.
+- Phase C does not prove branch lessons are being effectively used. New
+  report-only projection shows most sessions emitted structured lesson-use
+  objects, but the campaign still failed to turn them into robust VRP
+  mechanisms.
 - More rounds alone are not justified as the next step until the validation to
-  frozen collapse and prompt/lesson use are explained.
+  frozen collapse, large-X runtime evidence, and prompt/lesson use are
+  explained.
 
 ## Next Work
 
@@ -174,16 +220,22 @@ Before another long CVRP campaign, the next v0.4 work should be targeted:
 
 1. Inspect the two ALNS-only candidates that crossed MDE at validation and
    collapsed at frozen. Compare patch intent, case-level behavior, holdout
-   composition, and whether the positive signal was case-family overfit.
-2. Add structured report-only lesson-use accounting: borrowed, avoided,
-   contrasted, repeated, and contradicted lesson counters. Keep it out of
-   `DecisionFeatures`.
-3. Tighten hypothesis-context composition so branch lessons, same-mechanism
+   composition, runtime-incomplete rows, and whether the positive signal was
+   size/family overfit.
+2. Treat report-only lesson-use accounting as a completed diagnostic guardrail,
+   not a new framework-repair theme. The main bottleneck is now VRP mechanism
+   research quality: the agent must convert branch lessons into better
+   large-X-aware mechanism follow-up.
+3. Run a small no-LLM runtime curve before any new LLM campaign: current/2x/4x
+   budgets on `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across the frozen
+   seeds, with objective, timeout, BKS gap, ALNS iteration count, and
+   best-update trace. This is problem-owned measurement work, not a Decision
+   feature.
+4. Tighten hypothesis-context composition so branch lessons, same-mechanism
    continuation state, per-case opportunity summaries, and mechanism rankings
    survive without long generic rule payloads. Preserve full target/current
    source in code phase.
-4. Treat ALNS-only as a useful diagnostic research surface, not a canonical
+5. Treat ALNS-only as a useful diagnostic research surface, not a canonical
    baseline replacement.
-5. Keep CVRP out of formal governance-value claims until it either promotes or
+6. Keep CVRP out of formal governance-value claims until it either promotes or
    produces a clearly accepted research insight above its measurement floor.
-

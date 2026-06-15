@@ -1224,26 +1224,49 @@ Phase B launch design - 2026-06-14:
   `effect_to_mde=4.46`, but both collapsed at frozen (`0.86` and `0.0`). The
   canonical ALNS+VNS arm reached validation in two repeats, reached no frozen
   rows, and never exceeded its Phase A MDE `9.6` (`max_effect_to_mde=0.677`).
+- Phase C runtime-size diagnosis: the ALNS-only validation positives were
+  measured on `30/45/60s` buckets and improved median BKS gap from about
+  `5.21%` champion evidence to `4.48%-4.63%` candidate evidence. Frozen shifted
+  to X-family holdouts with `60/90/120s` buckets; in the two ALNS-only frozen
+  rows, `X-n573-k30`, `X-n641-k35`, and `X-n1001-k43` produced `0/18` valid
+  paired comparisons due to timeout/shared-process failure, and `X-n401-k29`
+  had `1/3` timeout seeds in each frozen row. A no-LLM ALNS-only champion
+  smoke at
+  `/home/clawd/research/scion-experiments/v04-cvrp-runtime-budget-smoke-20260615`
+  replayed `X-n401` and `X-n573`, seed `61`, at current and 2x nominal budgets.
+  Direct solver calls returned only after `115.9s` for `X-n401@90s` and
+  `188.5s` for `X-n573@120s`, past Phase C runner kill points, but 2x budget
+  still produced the same distances (`68673`, `52495`), same BKS gaps
+  (`3.81%`, `3.60%`), and `best_delta=0`. Interpretation: large-X frozen
+  evidence completeness is invalid under current runner timeout/grace, while
+  simple 2x budget is not enough to create large-X search leverage.
 - Phase C branch/context result: the run is no longer pure shallow one-off
   exploration. Every cell produced at least depth-2 branch chains, and
-  ALNS+VNS reached depth/same-mechanism chain `5` in two repeats. However,
-  mechanism family remained concentrated in `solver_design`, and current
-  postrun artifacts prove only that branch lessons were visible or truncated,
-  not that they were effectively used. Prompt sampling confirmed code-phase
-  target/current source visibility held, but hypothesis and code prompts remain
-  very large; `prompt_context.csv` records 76 compact-research truncations and
-  62 branch-lesson truncations across accepted cells.
+  ALNS+VNS reached depth/same-mechanism chain `5` in two repeats. The immediate
+  report-layer gap is now narrowed, not elevated into another generic framework
+  project: report-only branch-lesson usage projection found structured usage
+  in `125/128` accepted Phase C sessions, with pooled counts
+  `avoided=205`, `contrasted=175`, `preserved_same_branch=53`,
+  `borrowed=15`, and `rejected_weak_positive=56`. This rules out the simple
+  explanation that agent outputs lacked branch-lesson structure. It does not
+  prove those lessons changed mechanism design or produced effective VRP
+  research. Prompt sampling confirmed code-phase target/current source
+  visibility held, but hypothesis and code prompts remain very large;
+  `prompt_context.csv` records 76 compact-research truncations and 62
+  branch-lesson truncations across accepted cells.
 - Phase C closeout decision: valid and useful v0.4 evidence, but not enough to
   close the CVRP effective-research gate. The repaired framework can now carry
   ALNS-only weak-surface signals into validation/frozen, but it has not shown a
   formal CVRP promotion, has not produced accepted improvement against the
   canonical ALNS+VNS baseline, and has not proven effective branch-lesson use.
   Do not start another longer CVRP campaign as the immediate next step. First
-  inspect the two ALNS-only validation-to-frozen collapses, add structured
-  report-only lesson-use accounting, and tighten hypothesis context so concise
-  branch lessons, same-mechanism state, per-case opportunity, and mechanism
-  rankings survive without crowding out the research intent. Keep all of this
-  outside `DecisionFeatures`.
+  finish a no-LLM current/2x/4x runtime curve on the large-X frozen cases and
+  add best-update trace/effect attribution so the agent can distinguish
+  "budget killed the evidence" from "mechanism lacks large-X search leverage."
+  Then improve the VRP mechanism research loop: concise branch lessons,
+  same-mechanism state, per-case opportunity, mechanism rankings, and necessary
+  solver telemetry should drive stronger mechanism follow-up without crowding
+  out the research intent. Keep all of this outside `DecisionFeatures`.
 
 ## Current Repair Acceptance - 2026-06-13
 
