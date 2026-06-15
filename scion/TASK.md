@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP Phase B audited; staged gate and validation drain under acceptance; longer follow-up next*
-*Updated: 2026-06-14*
+*Status: CVRP Phase C corrected WSL-only long-run active; all six cells formal-started*
+*Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -1179,33 +1179,52 @@ Phase B launch design - 2026-06-14:
   let server and WSL edit the same unsynced worktree concurrently.
 - Phase C long-run follow-up design is pre-registered in
   [`docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](docs/planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md).
-  It uses 16 effective rounds, `3 repeats x 2 arms`, server `rep01`, WSL
-  `rep02/rep03`, `compact-measurement-diagnostics`, measurement governance
-  `on`, and an explicit `SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`. The protocol
-  input must be an experiment-owned Phase C snapshot: Phase A's accepted
-  8-case/8-seed split/seed ledger plus the repaired CVRP staged-gate block from
-  the current formal protocol. This avoids both stale Phase B gate semantics
-  and non-comparable 4-seed formal sampling.
+  It uses 16 effective rounds, `3 repeats x 2 arms`,
+  `compact-measurement-diagnostics`, measurement governance `on`, and an
+  explicit `SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`. The protocol input must be
+  an experiment-owned Phase C snapshot: Phase A's accepted 8-case/8-seed
+  split/seed ledger plus the repaired CVRP staged-gate block from the current
+  formal protocol. This avoids both stale Phase B gate semantics and
+  non-comparable 4-seed formal sampling.
 - Launcher acceptance for Phase C: `launch_cvrp_agentic_campaign.py` now exposes
   `--stage-transition-drain-limit`, records it in `launch.env` and
   `command.txt`, and exports it through `run.sh`. Focused launcher tests passed
   with `7 passed`; `py_compile` and `git diff --check` passed.
-- Phase C launched from portable launcher commit `354a941` and is tracked in
+- Phase C initially launched from portable launcher commit `354a941` and is
+  tracked in
   [`docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md`](docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md).
   Run root:
   `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z`.
-  Current accepted runners: server `rep01` PID `2121897`, WSL `rep02/rep03`
-  PID `64429`. Initial wrapper-path attempts are archived and excluded from
-  accepted cells.
+  The mixed server/WSL attempt is no longer the accepted Phase C evidence set.
+  WSL cells launched with the server safe data root completed/advanced as
+  canary-only `EVALUATION_FAILED` rows and were archived under
+  `invalid_wsl_archive/20260615T0105Z-safe-data-root-mismatch`. The partial
+  server `rep01/alns_vns` run was stopped and archived under
+  `superseded_server_partial_archive/20260615T0110Z-wsl-all-six-rerun` so the
+  accepted matrix is a single WSL execution environment.
+- Corrected Phase C rerun is active on WSL from commit `d0bd95f`. It uses
+  WSL-native `config_wsl/` with
+  `/home/xjy-ubuntu/research/or-autoresearch-agent/vrp` in
+  `safe_data_roots`, an adjacent `budgets.json`, WSL conda Python
+  `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and WSL-native
+  problem/protocol/split/seed paths. Runner PID: `92069`.
+- Corrected launch policy: two cells start per repeat; the next repeat starts
+  only after both cells in the current repeat show CVRPLIB formal solver
+  activity or recorded formal artifacts. By 2026-06-15T01:26:27Z all six
+  corrected WSL cells (`rep01/rep02/rep03 x alns_vns/alns_only`) had passed
+  formal-start and were no longer canary-only. All remained in the first
+  formal screening row at the last status update, so this is a launch/validity
+  milestone, not a postrun conclusion.
 - Phase C postrun acceptance tooling is prepared in the external run root. After
-  all six accepted cells finish, run `scripts/sync_wsl_back.sh` and then
+  all six accepted cells finish, sync WSL back to the server root and then run
   `scripts/run_phaseC_postrun_reports.sh`. The strict postrun script gates on
-  exactly six accepted cells (`rep01/rep02/rep03 x alns_vns/alns_only`),
-  records excluded archives, emits standard Scion reports, artifact inventory,
-  per-repeat trajectory compares, and CSVs for reach/drain, W/L/T plus MDE,
-  branch depth, and prompt/context evidence. These diagnostics remain
-  postrun-only unless already represented through deterministic
-  `DecisionFeatures`.
+  exactly six accepted cells (`rep01/rep02/rep03 x alns_vns/alns_only`) and now
+  also rejects wrapper-valid but evidence-invalid cells unless they have
+  recorded formal artifacts and CVRPLIB metrics. It records excluded archives,
+  emits standard Scion reports, artifact inventory, per-repeat trajectory
+  compares, and CSVs for reach/drain, W/L/T plus MDE, branch depth, and
+  prompt/context evidence. These diagnostics remain postrun-only unless
+  already represented through deterministic `DecisionFeatures`.
 
 ## Current Repair Acceptance - 2026-06-13
 
