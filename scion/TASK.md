@@ -1684,6 +1684,20 @@ Phase B launch design - 2026-06-14:
   total. Treat this as an external hypothesis seed for the large construction
   path only; it does not solve the X-subset ALNS gap, and it needs broader
   no-LLM validation before any Scion replay or default solver change.
+- Launched: eleventh independent VRP-only research control `Russell`
+  (`019ecd64-52d1-75b3-8b39-45ca1a78b7eb`). Launch report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615j.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-j-20260615`.
+  This is a fresh, non-forked external research subject and explicitly not a
+  Scion subagent. It is forbidden from reading `scion/`, `TASK.md`, Scion
+  design/status/audit/planning/experiment artifacts, or prior Scion conclusions.
+  It may only study standalone `vrp/`, write process logs, run bounded paired
+  baseline/candidate experiments in copied workspaces, and retain an optional
+  clean `candidate.patch`. The purpose is to compare plain Codex VRP baseline
+  research behavior against Scion-guided branch research. Any positive result is
+  external-control hypothesis material only and requires later no-LLM replay
+  before any Scion replay or default solver change.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

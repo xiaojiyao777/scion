@@ -125,6 +125,14 @@ Active work as of the latest handoff:
   `-61,847`, mean BKS-gap delta `-1.184` pp, runtime delta `+1.513s` total.
   It does not address the main X-subset ALNS gap and needs broader no-LLM
   validation before any Scion replay or default solver change.
+- Independent VRP-only control `Russell` is active outside Scion. Launch
+  report:
+  [`../experiments/v0.4/v04-independent-vrp-research-agent-20260615j.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615j.md).
+  Agent id: `019ecd64-52d1-75b3-8b39-45ca1a78b7eb`. Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-j-20260615`.
+  This is a fresh, non-forked external research subject forbidden from reading
+  Scion artifacts. Its output is process evidence and external hypothesis
+  material only; any positive candidate still needs later no-LLM replay.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
