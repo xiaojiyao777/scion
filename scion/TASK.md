@@ -1848,13 +1848,26 @@ Phase B launch design - 2026-06-14:
   `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
   completeness and large-X regression checks.
 - Health check: after server sync on 2026-06-15, the Tier 1 WSL tmux session
-  was still running normally with `24/36` result files written and four solver
-  subprocesses active. Completed `X-n401-k29`, `X-n573-k30`, and early
-  `X-n641-k35` rows were feasible, but best-update count stayed `0`;
-  two-opt phase-level effect exists in raw runtime diagnostics while final
-  large-X total distance has not moved in the completed rows. This is not a
-  postrun conclusion; wait for all keys before deciding whether to launch
-  formal validation.
+  was still running normally with `26/36` result files written and four solver
+  subprocesses active. Completed `X-n401-k29`, `X-n573-k30`, and partial
+  `X-n641-k35` rows are feasible. A partial read-only comparison over the
+  completed keys found `26/26` wins versus the champion Large-X curve
+  (`X-n401=-152`, `X-n573=-192`, `X-n641=-484` total distance on matched
+  keys), and two-opt phase-level effects are present in raw runtime
+  diagnostics. This is not a postrun conclusion; `X-n1001` is still incomplete,
+  and all `36` keys must be accounted before deciding whether to launch formal
+  validation.
+- Launched: CVRP agent behavior debug audit worker `Gibbs`
+  (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
+  experiment-analysis subagent, so its brief requires reading
+  `scion/design/scion-architecture-v3.md` first and preserving the v3 boundary.
+  It must inspect existing Phase C, repaired 1R debug, candidate replay, and
+  size70 prep/launch artifacts without launching new experiments or changing
+  code. Deliverable:
+  `scion/docs/experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`.
+  Purpose: separate framework path health from actual CVRP research quality by
+  auditing branch depth, branch-lesson use, prompt/context signal density, and
+  mechanism continuity.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

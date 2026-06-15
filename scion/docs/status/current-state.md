@@ -94,9 +94,12 @@ Active work as of the latest handoff:
   and syncing to
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
   It is no-LLM/no-APS direct solver replay over `36` keys. The latest health
-  check found the tmux session alive with `24/36` result files and no immediate
+  check found the tmux session alive with `26/36` result files and no immediate
   errors; wait for all planned keys before deciding whether the size70
-  candidate may enter formal validation. Postrun acceptance should follow
+  candidate may enter formal validation. A partial read-only comparison over
+  the completed keys found no broad regression versus the champion Large-X
+  curve, but `X-n1001` is still incomplete and remains the final Tier 1 risk.
+  Postrun acceptance should follow
   [`../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md`](../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md).
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
   [`../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`](../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md).
@@ -117,6 +120,12 @@ Active work as of the latest handoff:
   `/home/clawd/research/vrp-independent-codex-research/phase-i-20260615`.
   Its output is external-control process evidence and hypothesis material only,
   not Scion Protocol evidence.
+- CVRP agent behavior debug audit `Gibbs` is active as a Scion read-only
+  analysis worker. It must read the v3 blueprint first, inspect existing CVRP
+  Phase C / repaired 1R / replay artifacts, and produce
+  [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
+  It must not launch experiments or change code; its purpose is to separate
+  path health from actual CVRP research quality.
 
 The current CVRP closeout point is Phase C, based on the completed staged gate
 repair, bounded stage-transition drain repair, and Phase B matched Scion
