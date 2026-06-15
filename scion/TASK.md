@@ -1631,6 +1631,16 @@ Phase B launch design - 2026-06-14:
   seed only. It needs broader no-LLM validation over A/B/P/CMT plus stratified
   X/tai, seeds `0..4`, budgets `0.5/1.0/3.0s`, and comparison against both
   `(0.10, 0.40)` and `(0.05, 0.30)` before any Scion replay or default change.
+- Launched: ninth independent VRP-only research control `Kuhn`
+  (`019ecd29-fc9e-7f73-92bd-73b729cabfb3`). This is a fresh external Codex
+  research subject and is explicitly not a Scion subagent. It must not read
+  Scion design, task, audit, status, prompt, or experiment artifacts. It owns a
+  clean `HEAD` archive copy of `vrp/`, records the research process, and writes
+  outputs only under
+  `/home/clawd/research/vrp-independent-codex-research/phase-h-20260615`.
+  Expected artifacts are `research_log.md`, `status.md`, `experiments.jsonl`,
+  `candidate_summary.md`, and optional `candidate.patch`. Any positive result
+  is external-control hypothesis material only.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1807,6 +1817,19 @@ Phase B launch design - 2026-06-14:
   `X-n401`, `X-n573`, `X-n641`, `X-n1001` x seeds `61/67/89` x multipliers
   `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
   completeness and large-X regression checks.
+- Health check: after server sync on 2026-06-15, the Tier 1 WSL tmux session
+  was still running normally with `6/36` result files written and four solver
+  subprocesses active. The early completed `X-n401-k29` rows were feasible but
+  all held at total distance `68521` / BKS gap `3.578%` with
+  `best_update_count=0`. This is not a postrun conclusion; wait for all keys
+  before deciding whether to launch formal validation.
+- Assigned: Scion worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`)
+  owns a targeted warehouse repair candidate. Required scope: read v3 first,
+  preserve Decision boundary, avoid long experiments, and focus on strict
+  branch-lesson semantic pre-code blocking, no-effect same-mechanism lifecycle
+  pressure, and warehouse-like no-effect fresh-runtime replay demotion. Main
+  thread must review its changed files/tests before integration. Prompt
+  overhead remains diagnostic-only unless the worker finds a narrow safe patch.
 
 ## Current Repair Acceptance - 2026-06-13
 

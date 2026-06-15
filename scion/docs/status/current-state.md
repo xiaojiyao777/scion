@@ -87,6 +87,26 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
+Active work as of the latest handoff:
+
+- CVRP size70 Tier 1 Large-X completion diagnostic is running on WSL at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`
+  and syncing to
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
+  It is no-LLM/no-APS direct solver replay over `36` keys. A health check found
+  the tmux session alive with `6/36` result files and no immediate errors; wait
+  for all planned keys before deciding whether the size70 candidate may enter
+  formal validation.
+- Scion worker `Planck` is assigned, but not yet accepted, for the targeted
+  warehouse repair after the repaired 4R compact debug. Its scope is strict
+  branch-lesson semantic blocking, no-effect same-mechanism lifecycle pressure,
+  and no-effect budget-exhausting fresh-runtime replay demotion. Main thread
+  must review changed files/tests before integrating anything.
+- Independent VRP-only control `Kuhn` is running outside Scion under
+  `/home/clawd/research/vrp-independent-codex-research/phase-h-20260615`.
+  It must not read Scion artifacts. Its outputs are external hypothesis seeds,
+  not Scion Protocol evidence.
+
 The current CVRP closeout point is Phase C, based on the completed staged gate
 repair, bounded stage-transition drain repair, and Phase B matched Scion
 campaign for the CVRP baseline-strength contrast. Phase B is documented here:
