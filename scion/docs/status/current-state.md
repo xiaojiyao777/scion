@@ -382,16 +382,21 @@ good process-control evidence, but not an improvement hypothesis for Scion. It
 also makes the earlier real-CVRPLIB two-opt scheduling signal stand out as the
 stronger external-control VRP hypothesis so far.
 
-A fifth independent VRP-only control is active as subagent `Feynman`
-(`019eccb2-2fc0-7ff1-8032-94358c217c8a`). Artifact root:
+A fifth independent VRP-only control completed as subagent `Feynman`
+(`019eccb2-2fc0-7ff1-8032-94358c217c8a`). Report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615d.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615d.md).
+Artifact root:
 `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615d`.
-This is a fresh non-forked long-running plain Codex researcher. It is forbidden
-from reading `scion/`, `TASK.md`, Scion design docs, status docs, and experiment
-reports, and may only study standalone `vrp/` plus bounded real-case baseline
-and candidate experiments. Required process artifacts are `research_log.md`,
-baseline reproduction output, `hypotheses.md`, `experiments.csv`,
-`final_report.md`, and `candidate.patch` only if a positive candidate survives
-smoke. This is external-control process evidence, not Scion Protocol evidence.
+This was a fresh non-forked long-running plain Codex researcher, forbidden from
+reading `scion/`, `TASK.md`, Scion design docs, status docs, and experiment
+reports. It produced `5` baseline solver runs, `16` candidate solver runs, and
+a retained H3 `route_elimination` `candidate.patch`. The positive smoke signal:
+`B-n78-k10 seed0` tied objective and reduced routes `11 -> 10`,
+`B-n78-k10 seed1` improved `1251 -> 1250` and reduced routes `11 -> 10`,
+`X-n200-k36 seed0` improved `61796 -> 61420` and reduced routes `38 -> 37`,
+while `A-n32-k5` and `X-n101-k25` were neutral. This is a positive
+external-control hypothesis seed, not Scion Protocol evidence. It should get a
+broader no-LLM replay before any Scion adoption.
 
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
@@ -433,6 +438,18 @@ launched in WSL tmux session `scion_cvrp_twoopt_size70_large_1848`; launch
 report:
 [`../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-size70-largeX-launch-20260615.md).
 This remains no-LLM diagnostic evidence, not Protocol or promotion evidence.
+
+The next warehouse gate is now designed but not launched. Report:
+[`../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-design-20260615.md`](../experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-design-20260615.md).
+The gate is one WSL warehouse production cell with `rounds=1`, local
+`gpt-5.5`, `measurement_governance=on`,
+`compact-measurement-diagnostics`, `time_limit_sec=30`, disabled early stop,
+and foreground `timeout 2h`. It must use experiment-local WSL copies of
+`problem.yaml`, sibling `problem-v1.yaml`, and `split_manifest_prod.yaml`.
+WSL environment preflight has been repaired: `pytest` is installed in
+`/home/xjy-ubuntu/miniconda3/envs/scion`, the WSL repo is fast-forwarded to
+`9204315`, and the focused preflight/fix-stage suite passed on WSL with
+`39 passed`. Do not launch until the CVRP size70 large-X solver load finishes.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).

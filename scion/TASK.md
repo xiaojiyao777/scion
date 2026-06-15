@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP candidate large-X replay completed; size70 large-X and external VRP controls active*
+*Status: CVRP size70 large-X active; VRP external control D completed; warehouse lifecycle debug designed*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1524,20 +1524,23 @@ Phase B launch design - 2026-06-14:
   Scion hypothesis seed. It supports deprioritizing coarse VNS scheduling and
   destroy-ratio tweaks unless later instrumentation gives a more targeted
   mechanism.
-- Launched: fifth independent VRP-only research control `Feynman`
+- Completed: fifth independent VRP-only research control `Feynman`
   (`019eccb2-2fc0-7ff1-8032-94358c217c8a`) as a fresh, non-forked long-running
-  external researcher. This is another explicit exception to the v3-first Scion
-  subagent brief: it is forbidden from reading `scion/`, `TASK.md`, Scion
-  design docs, status docs, and experiment reports. It may only study standalone
-  `vrp/`, run bounded real-case baseline/candidate experiments, and write a
-  full process log under
+  external researcher. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615d.md`.
+  This is another explicit exception to the v3-first Scion subagent brief: it
+  was forbidden from reading `scion/`, `TASK.md`, Scion design docs, status
+  docs, and experiment reports. It studied standalone `vrp/`, ran bounded
+  real-case baseline/candidate experiments, and wrote a full process log under
   `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615d`.
-  Required artifacts are `research_log.md`, baseline reproduction output,
-  `hypotheses.md`, `experiments.csv`, `final_report.md`, and `candidate.patch`
-  only if a positive candidate survives smoke. Purpose: test whether a plain
-  Codex research subject can improve the VRP baseline without Scion context, and
-  provide external-control process evidence for comparing against Scion-guided
-  research.
+  It produced `5` baseline solver runs and `16` candidate solver runs. The
+  selected H3 `route_elimination` candidate has a retained `candidate.patch`:
+  `B-n78-k10 seed0` tied objective and reduced routes `11 -> 10`,
+  `B-n78-k10 seed1` improved `1251 -> 1250` and reduced routes `11 -> 10`,
+  `X-n200-k36 seed0` improved `61796 -> 61420` and reduced routes `38 -> 37`,
+  and `A-n32-k5` / `X-n101-k25` were neutral. Treat this as a positive
+  external-control hypothesis seed that needs broader no-LLM replay before any
+  Scion adoption; it is not Scion Protocol or promotion evidence.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1556,6 +1559,20 @@ Phase B launch design - 2026-06-14:
   passed with `39 passed`. Next warehouse order is now empirical:
   1-candidate lifecycle debug with `protocol_metric_results>0`, short 3-5R
   debug, then rerun 3x24R.
+- Completed: warehouse 1-candidate lifecycle debug design. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-1candidate-lifecycle-debug-design-20260615.md`.
+  Recommended gate: one WSL warehouse production cell, `rounds=1`,
+  `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, `time_limit_sec=30`, disabled early stop,
+  and foreground `timeout 2h`, using experiment-local WSL copies of
+  `problem.yaml`, sibling `problem-v1.yaml`, and `split_manifest_prod.yaml`.
+  Do not launch while the CVRP size70 large-X replay is still running, because
+  its parallel solver load can distort the 30s warehouse lifecycle judgment.
+  WSL environment preflight was repaired: `pytest` is now installed in
+  `/home/xjy-ubuntu/miniconda3/envs/scion`, the WSL repo was fast-forwarded to
+  `9204315`, and the focused preflight/fix-stage tests passed on WSL with
+  `39 passed`. Next owner: main thread launches this 1-candidate gate after
+  size70 large-X finishes and solver load clears.
 
 ## Current Repair Acceptance - 2026-06-13
 
