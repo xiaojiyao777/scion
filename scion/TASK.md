@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse short 3R postrun complete; CVRP size70 fixed-candidate validation design ready; independent VRP phase F active*
+*Status: warehouse prompt guidance repaired; CVRP fixed replay tooling ready; independent VRP phase F complete*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1590,6 +1590,17 @@ Phase B launch design - 2026-06-14:
   research against Scion-guided research. Any positive result is external
   hypothesis material only and must go through later no-LLM Scion replay before
   it can influence Scion experiments.
+- Completed: seventh independent VRP-only research control `Schrodinger`.
+  Result report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md`.
+  The run produced the required process artifacts under
+  `/home/clawd/research/vrp-external-research/independent-vrp-baseline-research-phase-f-20260615`.
+  No candidate survived and no `candidate.patch` was retained.
+  `no_route_destroy` had expansion signal (`18` rows, `11` improved, `7`
+  tied, `0` regressed, net delta `-93`) but failed targeted stress on
+  `E/E-n76-k10` and `X/X-n101-k25` (`6` rows, `2` improved, `4` regressed,
+  `4` unsafe, net delta `+188`). Treat this as negative external-control
+  evidence and not a Scion hypothesis seed.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1672,6 +1683,17 @@ Phase B launch design - 2026-06-14:
   by tool-selection/general content. Do not relaunch full warehouse `3 x 24R`
   yet; do targeted guidance/context repair and another short `3-6R` debug
   first.
+- Completed: targeted warehouse prompt/guidance repair before short rerun,
+  commit `38262b7`. The repair keeps warehouse semantics problem-owned while
+  moving compact branch-lesson usage context before the broad cross-branch map,
+  adding clean-fork semantic-contrast requirements to the hypothesis prompt,
+  discouraging low-value rereads in tool selection, and adding bounded
+  order-level/swap guidance to both packaged warehouse `problem-v1.yaml` copies
+  and adapter-rendered interface context. Focused main-thread verification
+  passed:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/unit/test_agentic_session_tool_selection.py scion/scion/tests/unit/test_warehouse_target_preview.py scion/scion/tests/unit/test_prompt_manifest_accounting.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_agentic_code_stage_invariants.py`
+  with `84 passed`. Next warehouse gate: launch a short repaired `3-6R` compact
+  debug before any full `3 x 24R` longrun.
 - Completed: CVRP size70 fixed-candidate validation design. Report:
   `scion/docs/planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`.
   Next CVRP order: fixed-candidate validation-grade replay first, seeded Scion
@@ -1681,6 +1703,17 @@ Phase B launch design - 2026-06-14:
   validation `12` cases x seeds `47/53/71/83` at protocol budgets, then frozen
   only if validation passes. Minimal tool gap: stage-aware fixed-candidate
   replay for `validation|frozen` and external full-file candidate artifacts.
+- Completed: CVRP fixed-candidate replay tooling gap, commit `2a1ccb8`.
+  `scion report fixed-candidate-replay-manifest` now supports repeated
+  `--stage screening|validation|frozen` and `--external-candidate-artifact` for
+  human-approved full-file candidates that were not produced by a previous LLM
+  formal candidate index. The replay executor now runs the manifest-declared
+  stage instead of hardcoding screening, and manifest/comparison artifacts
+  record `stage_filter`, `source_stage`, and `replay_stage` for audit. Focused
+  main-thread verification passed:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py scion/scion/tests/test_cli_reports_postmortem.py scion/scion/tests/test_cli.py`
+  with `29 passed`. This is tooling only; true CVRP size70 mechanism validity
+  still requires the pre-registered no-LLM replay tiers.
 
 ## Current Repair Acceptance - 2026-06-13
 

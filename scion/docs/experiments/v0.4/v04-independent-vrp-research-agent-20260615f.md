@@ -1,4 +1,4 @@
-# Independent VRP Research Agent F Launch - 2026-06-15
+# Independent VRP Research Agent F Result - 2026-06-15
 
 ## Purpose
 
@@ -34,6 +34,15 @@ The agent brief requires these artifacts under the artifact root:
 - candidate patches or self-contained variants under the artifact root only
 - `candidate.patch` only if a candidate survives enough checks
 
+All required process artifacts were produced:
+
+- `research_log.md`
+- `status.md`
+- `experiments.jsonl`
+- `combined_summary.csv`
+- `final_summary.md`
+- `matrix_runner.py`
+
 ## Scope And Constraints
 
 The agent must not modify tracked files in the main repository. It must first
@@ -54,3 +63,34 @@ This lane answers a different question from Scion's internal experiments:
 whether an uncontaminated Codex research subject can find useful standalone VRP
 baseline mechanisms when not constrained by Scion's proposal, branch, protocol,
 and governance framework.
+
+## Result
+
+The bounded phase completed and did not modify tracked repository files. The
+agent confirmed that `vrp/src/solver.py` was already dirty before this external
+lane started and treated that dirty checkout as the observed standalone
+baseline.
+
+Key results:
+
+| Phase | Variant | n | Improved | Tied | Regressed | Unsafe | Net delta |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| expansion | `no_route_destroy` | 18 | 11 | 7 | 0 | 0 | -93 |
+| expansion | `narrow_destroy` | 18 | 9 | 6 | 3 | 0 | -41 |
+| stress | `no_route_destroy` | 6 | 2 | 0 | 4 | 4 | +188 |
+| large | `sweep500_multistart` | 9 | 0 | 0 | 9 | 8 | +101263 |
+
+Negative delta is better. `no_route_destroy` looked promising in expansion but
+failed targeted stress on `E/E-n76-k10` and `X/X-n101-k25`, where it produced
+repeated regressions and benchmark-infeasible rows. `sweep500_multistart` was
+strongly rejected on large X cases.
+
+No candidate survived, and no `candidate.patch` was retained.
+
+## Interpretation
+
+This is negative external-control evidence. It does not refute the stronger
+size70 two-opt CVRP mechanism seed, but it makes whole-route destroy removal
+unsafe as an adoption candidate. A narrower future mechanism could test
+adaptive route-removal dampening after route-count or benchmark-feasibility
+regressions, but that would be a new external seed requiring its own replay.

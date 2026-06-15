@@ -430,6 +430,18 @@ lane alive. Any result is external-control hypothesis material only; a positive
 candidate must still pass later no-LLM Scion replay before it can influence
 Scion experiments.
 
+That seventh control is now complete and negative. The same report now records
+the result:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md).
+It produced `research_log.md`, `status.md`, `experiments.jsonl`,
+`combined_summary.csv`, `final_summary.md`, and `matrix_runner.py` under
+`/home/clawd/research/vrp-external-research/independent-vrp-baseline-research-phase-f-20260615`.
+No `candidate.patch` was retained. `no_route_destroy` had expansion signal
+(`11` improved / `7` tied / `0` regressed over `18` rows, net delta `-93`),
+but targeted stress on `E/E-n76-k10` and `X/X-n101-k25` rejected it with
+`2` improved / `4` regressed, `4` unsafe rows, and net delta `+188`. Treat this
+as negative external-control evidence, not a Scion hypothesis seed.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
@@ -563,6 +575,17 @@ seeded Scion CVRP run only if mechanism validity passes. The design explicitly
 adds `m=2` to the large-X completion key set and identifies the current tooling
 gap: stage-aware fixed-candidate replay for validation/frozen plus external
 full-file candidate artifact support.
+
+That fixed-candidate replay tooling gap is now closed by commit `2a1ccb8`.
+`scion report fixed-candidate-replay-manifest` supports repeated
+`--stage screening|validation|frozen` and `--external-candidate-artifact`.
+The replay executor runs the manifest-declared Protocol stage instead of
+hardcoding screening, and manifest/comparison artifacts record
+`stage_filter`, `source_stage`, and `replay_stage` for audit. Main-thread
+focused verification passed with `29` tests across fixed replay and CLI report
+coverage. This is tooling readiness only; the size70 mechanism still needs the
+pre-registered no-LLM replay tiers before any seeded Scion CVRP run or
+promotion claim.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
