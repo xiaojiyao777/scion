@@ -1669,6 +1669,21 @@ Phase B launch design - 2026-06-14:
   `candidate_summary.md`, and optional `candidate.patch`. Any positive result
   is external-control hypothesis material only and requires later no-LLM replay
   before any Scion replay or default solver change.
+- Completed: tenth independent VRP-only research control `Ohm`. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615i.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-i-20260615`.
+  The run produced `8` valid JSONL experiment-ledger rows and an applicable
+  `candidate.patch` (`git apply --check` passed). Baseline characterization
+  covered `9` cases x `3` seeds with `27/27` ok and `27/27` CVRP-feasible
+  rows. The recommended external seed is `rotated_sweep8`, a large
+  construction-fallback patch in `vrp/src/construction.py` that tries up to
+  `8` angular sweep starts and selects the lowest-cost feasible construction.
+  AGS large-only follow-up result: W/T/L `7/3/0`, total-distance delta
+  `-61,847`, mean BKS-gap delta `-1.184` pp, and runtime delta `+1.513s`
+  total. Treat this as an external hypothesis seed for the large construction
+  path only; it does not solve the X-subset ALNS gap, and it needs broader
+  no-LLM validation before any Scion replay or default solver change.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

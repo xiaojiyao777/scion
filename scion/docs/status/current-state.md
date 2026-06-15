@@ -113,13 +113,15 @@ Active work as of the latest handoff:
   [`../experiments/v0.4/v04-independent-vrp-research-agent-20260615h.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615h.md).
   Its `c02_cooler_sa` patch is a weak-to-moderate external hypothesis seed
   only and needs broader no-LLM validation before any Scion replay.
-- Independent VRP-only control `Ohm` is active outside Scion as an explicit
-  external researcher control. It must not read Scion design, task, audit,
-  status, prompt, or experiment artifacts. It writes process and experiment
-  artifacts under
+- Independent VRP-only control `Ohm` is complete outside Scion. Report:
+  [`../experiments/v0.4/v04-independent-vrp-research-agent-20260615i.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615i.md).
+  Artifact root:
   `/home/clawd/research/vrp-independent-codex-research/phase-i-20260615`.
-  Its output is external-control process evidence and hypothesis material only,
-  not Scion Protocol evidence.
+  Its `rotated_sweep8` patch is an external hypothesis seed for large
+  construction fallback only: AGS follow-up W/T/L `7/3/0`, total-distance delta
+  `-61,847`, mean BKS-gap delta `-1.184` pp, runtime delta `+1.513s` total.
+  It does not address the main X-subset ALNS gap and needs broader no-LLM
+  validation before any Scion replay or default solver change.
 - CVRP agent behavior debug audit `Gibbs` is active as a Scion read-only
   analysis worker. It must read the v3 blueprint first, inspect existing CVRP
   Phase C / repaired 1R / replay artifacts, and produce
