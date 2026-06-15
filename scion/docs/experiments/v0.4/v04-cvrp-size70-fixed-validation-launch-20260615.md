@@ -164,11 +164,69 @@ Initial repaired health check:
 - `stdout.log` and `stderr.log` are empty so far;
 - no immediate unsafe-case-path error.
 
+## Sampled Rerun Stopped
+
+The repaired relaunch above fixed case-path resolution, but it still did not
+match the pre-registered Tier 2 scope. Its raw validation metric reported
+`total_pairs=32`, because formal `protocol.yaml` has `validation.n_cases=8`.
+The Tier 2 design requires all `12` validation cases across `4` seeds, i.e.
+`48` pairs per replay arm.
+
+The sampled run was stopped by the main thread and must not be used as the
+formal validation gate. It is invalid-spec shakedown material only.
+
+## Full Validation Relaunch
+
+An experiment-local protocol override was generated with:
+
+```yaml
+validation:
+  n_cases: 12
+  expand_to: 12
+```
+
+The split manifest still includes the WSL data root in `safe_data_roots`.
+
+Full WSL root:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`
+
+Full server sync root:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`
+
+Full tmux session:
+
+`scion_cvrp_size70_validation_full_225148`
+
+Input summary:
+
+```json
+{
+  "expected_pairs_per_arm": 48,
+  "validation_case_count": 12,
+  "validation_expand_to": 12,
+  "validation_n_cases": 12,
+  "validation_seed_count": 4,
+  "safe_data_roots": [
+    "/home/xjy-ubuntu/research/or-autoresearch-agent/vrp"
+  ]
+}
+```
+
+Initial full health check:
+
+- tmux session exists;
+- solver subprocess is running;
+- first raw validation metric exists;
+- raw metric reports `total_pairs=48`.
+
 ## Postrun Requirements
 
 Postrun must check:
 
-- distinguish the invalid first attempt from the repaired replay;
+- distinguish the invalid first attempt and sampled `32`-pair rerun from the
+  full `48`-pair validation replay;
 - comparison schema and row status for both replay arms;
 - canary status for each arm;
 - raw validation metric rows, not only the top-level two-row comparison;

@@ -1942,9 +1942,20 @@ Phase B launch design - 2026-06-14:
   Repaired server sync root:
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
   Repaired tmux session: `scion_cvrp_size70_validation_rerun_224151`.
+  The repaired run was then stopped as invalid-spec shakedown after raw metrics
+  showed `total_pairs=32` from formal `validation.n_cases=8`; the
+  pre-registered Tier 2 requires all `12` validation cases x `4` seeds =
+  `48` pairs per arm. A full validation relaunch is now active with an
+  experiment-local protocol override `validation.n_cases=12` and
+  `validation.expand_to=12`, plus the WSL data-root split fix. Full WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
+  Full server sync root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
+  Full tmux session: `scion_cvrp_size70_validation_full_225148`. Initial raw
+  metrics report `total_pairs=48`.
 - Launched: CVRP fixed-validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`). It must read v3 first, poll the
-  repaired validation run sparingly, sync WSL results when complete, analyze
+  full `48`-pair validation run sparingly, sync WSL results when complete, analyze
   top-level comparison plus raw validation metrics, and write
   `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md`.
   It must not start new experiments or edit status docs.

@@ -112,19 +112,21 @@ Active work as of the latest handoff:
   failed before Protocol with `error_count=2` because strict case-path
   resolution could not resolve `cvrplib/A/A-n60-k9.vrp`; the formal split
   manifest had no WSL `safe_data_roots`. This is configuration evidence, not a
-  mechanism result. A repaired replay is active at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`
+  mechanism result. A first repaired replay fixed `safe_data_roots` but was
+  stopped as invalid-spec shakedown when raw metrics showed `total_pairs=32`
+  from `validation.n_cases=8`; the pre-registered Tier 2 requires `48` pairs
+  per arm. The active full replay is at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`
   and syncing to
-  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
-  Tmux session: `scion_cvrp_size70_validation_rerun_224151`. The repaired run
-  adds an experiment-local split manifest with WSL VRP data root in
-  `safe_data_roots`, replays one external full-file candidate over both fixed
-  replay arms at validation stage, and does not pass `--time-limit-sec`, so
-  formal protocol runtime rules apply. Postrun must inspect raw validation
-  metrics before deciding whether frozen fixed replay is allowed.
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
+  Tmux session: `scion_cvrp_size70_validation_full_225148`. It uses an
+  experiment-local protocol override with `validation.n_cases=12` and
+  `validation.expand_to=12`, plus the WSL VRP data root in `safe_data_roots`.
+  Initial raw metrics report `total_pairs=48`. Postrun must inspect raw
+  validation metrics before deciding whether frozen fixed replay is allowed.
 - CVRP validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`) is active. It must read v3 first,
-  poll the repaired validation run sparingly, sync results, and write the
+  poll the full 48-pair validation run sparingly, sync results, and write the
   validation postrun report without launching new experiments or editing status
   docs.
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
@@ -776,11 +778,14 @@ uses formal CVRP `problem-v1.yaml`, `formal/protocol.yaml`,
 `--time-limit-sec` override so protocol runtime rules apply. This remains
 no-LLM/no-APS mechanism-validity replay, not promotion evidence.
 The initial attempt failed before Protocol because strict case-path resolution
-did not have the WSL VRP data root in `safe_data_roots`. A repaired run is
-active at
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`
-with tmux session `scion_cvrp_size70_validation_rerun_224151` and an
-experiment-local split manifest adding the WSL data root.
+did not have the WSL VRP data root in `safe_data_roots`. A first repaired run
+fixed that configuration but was stopped as invalid-spec shakedown because it
+used the formal default `validation.n_cases=8` and produced `total_pairs=32`,
+not the pre-registered `48` pairs. The active full validation run is
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`
+with tmux session `scion_cvrp_size70_validation_full_225148`; it uses
+`validation.n_cases=12`, `validation.expand_to=12`, WSL `safe_data_roots`, and
+raw metrics now report `total_pairs=48`.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
