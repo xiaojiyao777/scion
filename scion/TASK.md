@@ -1856,6 +1856,13 @@ Phase B launch design - 2026-06-14:
   `py_compile` and `git diff --check`. Prompt overhead remains unresolved.
   Next warehouse gate is another short compact `4-6R` debug, not full
   `3 x 24R`.
+- Prepared: post-repair warehouse short debug design. Report:
+  `scion/docs/planning/v0.4/v04-warehouse-postrepair-short-debug-design-20260615.md`.
+  This design is not launched. It requires WSL to be fast-forwarded to commit
+  `1144239` or a descendant, local `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, one warehouse production cell, and `4-6`
+  rounds with early stop disabled. Do not launch it while the CVRP size70
+  Tier 1 solver replay is still consuming WSL solver capacity.
 
 ## Current Repair Acceptance - 2026-06-13
 

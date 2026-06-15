@@ -103,7 +103,9 @@ Active work as of the latest handoff:
   The repair makes strict clean-fork/sibling branch-lesson requirements
   hard-block semantically invalid proposals before code generation, and demotes
   no-effect fresh-runtime replay drain unless there is pair-win/no-loss or
-  actionable loss-diagnostic signal. Prompt overhead remains unresolved.
+  actionable loss-diagnostic signal. Prompt overhead remains unresolved. The
+  next warehouse short-debug design is prepared but not launched:
+  [`../planning/v0.4/v04-warehouse-postrepair-short-debug-design-20260615.md`](../planning/v0.4/v04-warehouse-postrepair-short-debug-design-20260615.md).
 - Independent VRP-only control `Kuhn` is complete outside Scion. Report:
   [`../experiments/v0.4/v04-independent-vrp-research-agent-20260615h.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615h.md).
   Its `c02_cooler_sa` patch is a weak-to-moderate external hypothesis seed
