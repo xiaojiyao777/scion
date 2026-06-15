@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP Phase C corrected WSL-only long-run active; all six cells formal-started*
+*Status: CVRP Phase C complete/postrun accepted; closeout analysis integrated*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1202,29 +1202,48 @@ Phase B launch design - 2026-06-14:
   server `rep01/alns_vns` run was stopped and archived under
   `superseded_server_partial_archive/20260615T0110Z-wsl-all-six-rerun` so the
   accepted matrix is a single WSL execution environment.
-- Corrected Phase C rerun is active on WSL from commit `d0bd95f`. It uses
-  WSL-native `config_wsl/` with
-  `/home/xjy-ubuntu/research/or-autoresearch-agent/vrp` in
-  `safe_data_roots`, an adjacent `budgets.json`, WSL conda Python
-  `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`, and WSL-native
-  problem/protocol/split/seed paths. Runner PID: `92069`.
-- Corrected launch policy: two cells start per repeat; the next repeat starts
-  only after both cells in the current repeat show CVRPLIB formal solver
-  activity or recorded formal artifacts. By 2026-06-15T01:26:27Z all six
-  corrected WSL cells (`rep01/rep02/rep03 x alns_vns/alns_only`) had passed
-  formal-start and were no longer canary-only. All remained in the first
-  formal screening row at the last status update, so this is a launch/validity
-  milestone, not a postrun conclusion.
-- Phase C postrun acceptance tooling is prepared in the external run root. After
-  all six accepted cells finish, sync WSL back to the server root and then run
-  `scripts/run_phaseC_postrun_reports.sh`. The strict postrun script gates on
-  exactly six accepted cells (`rep01/rep02/rep03 x alns_vns/alns_only`) and now
-  also rejects wrapper-valid but evidence-invalid cells unless they have
-  recorded formal artifacts and CVRPLIB metrics. It records excluded archives,
-  emits standard Scion reports, artifact inventory, per-repeat trajectory
-  compares, and CSVs for reach/drain, W/L/T plus MDE, branch depth, and
-  prompt/context evidence. These diagnostics remain postrun-only unless
-  already represented through deterministic `DecisionFeatures`.
+- Completed and audited: CVRP Phase C corrected WSL-only long run. Report:
+  [`docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-postrun-20260615.md`](docs/experiments/v0.4/v04-cvrp-baseline-strength-phaseC-postrun-20260615.md).
+  Postrun root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z/postrun_acceptance`.
+  The accepted evidence set is the corrected WSL six-cell matrix
+  (`rep01/rep02/rep03 x alns_vns/alns_only`) launched from `d0bd95f` with
+  WSL-native `config_wsl/`, WSL conda Python, WSL safe data root, 16 effective
+  rounds, `measurement_governance=on`,
+  `proposal_context_ablation=compact-measurement-diagnostics`, and
+  `SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`. The earlier mixed server/WSL attempt,
+  canary-only WSL cells, and partial server cell remain excluded archives.
+- Phase C formal outcome: all six cells were valid and completed `16/16`, and
+  the strict postrun gate accepted them only after recorded formal artifacts and
+  CVRPLIB metrics were present. No champion promotion occurred:
+  `promote_decisions_total=0`, every accepted cell retained champion version
+  `1`, and each cell's champion table contains only version `1`.
+- Phase C reach/MDE result: ALNS-only reached validation in all three repeats
+  and frozen in two repeats, with 6 rows at or above its Phase A MDE `4.65`.
+  The strongest validation signals were rep01 `effect_to_mde=10.97` and rep02
+  `effect_to_mde=4.46`, but both collapsed at frozen (`0.86` and `0.0`). The
+  canonical ALNS+VNS arm reached validation in two repeats, reached no frozen
+  rows, and never exceeded its Phase A MDE `9.6` (`max_effect_to_mde=0.677`).
+- Phase C branch/context result: the run is no longer pure shallow one-off
+  exploration. Every cell produced at least depth-2 branch chains, and
+  ALNS+VNS reached depth/same-mechanism chain `5` in two repeats. However,
+  mechanism family remained concentrated in `solver_design`, and current
+  postrun artifacts prove only that branch lessons were visible or truncated,
+  not that they were effectively used. Prompt sampling confirmed code-phase
+  target/current source visibility held, but hypothesis and code prompts remain
+  very large; `prompt_context.csv` records 76 compact-research truncations and
+  62 branch-lesson truncations across accepted cells.
+- Phase C closeout decision: valid and useful v0.4 evidence, but not enough to
+  close the CVRP effective-research gate. The repaired framework can now carry
+  ALNS-only weak-surface signals into validation/frozen, but it has not shown a
+  formal CVRP promotion, has not produced accepted improvement against the
+  canonical ALNS+VNS baseline, and has not proven effective branch-lesson use.
+  Do not start another longer CVRP campaign as the immediate next step. First
+  inspect the two ALNS-only validation-to-frozen collapses, add structured
+  report-only lesson-use accounting, and tighten hypothesis context so concise
+  branch lessons, same-mechanism state, per-case opportunity, and mechanism
+  rankings survive without crowding out the research intent. Keep all of this
+  outside `DecisionFeatures`.
 
 ## Current Repair Acceptance - 2026-06-13
 

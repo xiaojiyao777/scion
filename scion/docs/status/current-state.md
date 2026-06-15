@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-14*
+*Last updated: 2026-06-15*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -61,9 +61,10 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 1. Preserve the completed v0.4 measurement/runtime semantics repairs:
    problem-owned practical deltas, budget-exhausting runtime interpretation,
    no meaningless runtime-tie fresh replay, and A/A noise-floor calibration.
-2. Use the Phase 4 audits to decide the next measurement rung. CVRP is now
-   auditable and produces real solver-design signals, but its 4-seed screening
-   protocol is still underpowered relative to the Phase 1 MDE.
+2. Use the Phase 4/Phase C audits to decide the next measurement and research
+   rung. CVRP is now auditable and can reach validation/frozen under the copied
+   ALNS-only research surface, but Phase C still produced no champion promotion
+   and no accepted improvement against the canonical ALNS+VNS baseline.
 3. Preserve and validate runtime-improvement promotion semantics for VRP:
    candidates may advance when objective quality ties or remains non-regressive
    and runtime evidence is complete and materially better.
@@ -71,11 +72,9 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    not final governance-value conclusions. The latest compact-baseline
    governance run validated the switch and replay path, but LLM trajectories
    diverged; fixed-candidate replay for the strongest candidates showed no
-   ON/record-only difference. The completed CVRP 8-seed A/A check still
-   measured MDE `9.6`, so CVRP remains low-power for
-   `practical_delta_screen=2.0` and should not be the next formal governance
-   target or long promotion campaign without another pre-registered measurement
-   change.
+   ON/record-only difference. CVRP remains excluded from formal governance-value
+   claims until it either promotes or produces an accepted research insight
+   above its measurement floor.
 5. The pre-registered CVRP baseline-strength Phase A no-LLM characterization is
    complete and accepted:
    [`../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseA-20260613.md).
@@ -88,46 +87,51 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
-The current next gate is now the CVRP Phase C long-run follow-up, based on the
-completed staged gate repair, bounded stage-transition drain repair, and Phase
-B matched Scion campaign for the CVRP baseline-strength contrast:
-[`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseB-20260614.md).
-Launch note:
-[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-launch-20260614.md).
-Postrun:
+The current CVRP closeout point is Phase C, based on the completed staged gate
+repair, bounded stage-transition drain repair, and Phase B matched Scion
+campaign for the CVRP baseline-strength contrast. Phase B is documented here:
 [`../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-postrun-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseB-postrun-20260614.md).
-The group root is
-`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-claw`.
-The WSL group is synced separately at
-`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseB-matched-20260614T024206Z-wsl`.
-Phase C is pre-registered here:
-[`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md).
-Launch note:
-[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md).
+Phase C was pre-registered here:
+[`../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md`](../planning/v0.4/v0.4-cvrp-baseline-strength-phaseC-longrun-20260614.md),
+launched here:
+[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-launch-20260614.md),
+and audited here:
+[`../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-baseline-strength-phaseC-postrun-20260615.md).
 
-All six accepted cells are valid, complete, and `8/8`; all 48 formal rows
-remained in screening; there were no validation/frozen rows, promotions, failed
-pairs, fresh-runtime replays, or run-validity failures. ALNS-only produced the
-stronger research-surface signal and the only validation-ready row: WSL
-`rep02/alns_only` `route_count_aware_repair_selection` queued validation at the
-final protocol row with case W/L/T `5/1/2`, pair W/L/T `46/12/6`, median delta
-`16.75`, and CI `[3.25, 36.5]`, above the ALNS-only Phase A MDE `4.65`. It did
-not run validation because the 8-round budget was exhausted.
+Phase C accepted the corrected WSL-only six-cell matrix
+(`rep01/rep02/rep03 x alns_vns/alns_only`) at
+`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z/postrun_acceptance`.
+All six accepted cells are valid and complete at `16/16`. No champion promotion
+occurred: every accepted cell retained champion version `1` and
+`promote_decisions_total=0`.
 
-Phase B is accepted as valid research-surface evidence, not as promotion
-evidence and not as a final CVRP governance-value conclusion. `validation=0` is
-not a standalone failure diagnosis because several weak/marginal branches were
-censored by the round budget. The next v0.4 CVRP work is Phase C: a
-pre-registered 16-round follow-up that preserves the canonical ALNS+VNS
-champion, keeps ALNS-only labeled as a copied research-surface ablation, and
-interprets any ALNS-only result against its own weaker baseline and lower MDE.
+The useful positive signal is narrower. ALNS-only reached validation in all
+three repeats and frozen in two repeats, with 6 rows at or above its Phase A MDE
+`4.65`; the strongest validation rows had `effect_to_mde=10.97` and `4.46`.
+Both collapsed at frozen. Canonical ALNS+VNS reached validation in two repeats,
+reached no frozen rows, and never exceeded its Phase A MDE `9.6`
+(`max_effect_to_mde=0.677`). This means the repaired framework can carry
+weak-surface CVRP signals into validation/frozen, but it has not yet shown
+effective CVRP improvement against the canonical baseline.
 
-Prompt/context analysis also found remaining v0.4 debt. The compact diagnostics
-arm suppressed the large standalone measurement diagnostics block and code-stage
-source visibility held, but compact research signals and branch lessons were
-often truncated. Future prompt repair should protect concise branch lessons,
-same-mechanism follow-up, per-case opportunity, and mechanism rankings while
-preserving full target/current source in code phase.
+Phase C branch behavior improved but remains incomplete. Every cell produced at
+least depth-2 branch chains, and ALNS+VNS reached depth/same-mechanism chain
+`5` in two repeats. Mechanism family remained concentrated in `solver_design`,
+and the artifacts prove only that branch lessons were visible or truncated, not
+that they were effectively used. Prompt/context debt also remains:
+`compact-measurement-diagnostics` suppresses the large standalone measurement
+diagnostics block and code-stage source visibility held in sampled code prompts,
+but hypothesis/code prompts are still very large and
+`prompt_context.csv` records 76 compact-research truncations plus 62
+branch-lesson truncations across accepted cells.
+
+The next v0.4 CVRP gate is targeted repair and analysis, not another longer
+campaign by default. Inspect the two ALNS-only validation-to-frozen collapses,
+add structured report-only lesson-use accounting, and tighten hypothesis
+context so concise branch lessons, same-mechanism continuation state, per-case
+opportunity, and mechanism rankings survive without crowding out the research
+intent. Preserve full target/current source in code phase and keep all
+diagnostics outside `DecisionFeatures`.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
@@ -169,25 +173,15 @@ experiment-owned protocol snapshot that preserves the accepted Phase A
 8-case/8-seed inputs while adding the repaired staged-gate block from the
 current CVRP formal protocol.
 
-Phase C is now launched from portable launcher commit `354a941`. The run root
-is
-`/home/clawd/research/scion-experiments/v04-cvrp-baseline-strength-phaseC-longrun-20260614T174532Z`.
-The accepted active runners are server `rep01` PID `2121897` and WSL
-`rep02/rep03` PID `64429`. Accepted cells launch with `ROUNDS=16`,
-`SCION_STAGE_TRANSITION_DRAIN_LIMIT=4`, and the host-specific Python path in
-`launch.env`. Earlier wrapper-path attempts are archived and excluded from
-accepted Phase C cells.
-
-Phase C postrun acceptance tooling is prepared in the external run root. After
-all six accepted cells finish, the server-side sequence is
-`scripts/sync_wsl_back.sh` followed by
-`scripts/run_phaseC_postrun_reports.sh`. The strict postrun script requires the
-six-cell matrix, records excluded wrapper/superseded archives, generates
-standard Scion reports, artifact inventory, per-repeat trajectory compares, and
-CSV outputs for reach/drain, W/L/T plus Phase A MDE comparison, branch depth,
-and prompt/context evidence. MDE, BKS/gap, prompt/context, branch depth, and
-cross-arm analysis remain postrun research diagnostics only unless encoded into
-deterministic protocol/Decision features.
+Phase C is complete. The accepted all-WSL rerun launched from `d0bd95f`; the
+server-side postrun sequence synced WSL results back and ran
+`scripts/run_phaseC_postrun_reports.sh` successfully. The strict postrun script
+required the six-cell matrix, recorded excluded wrapper/superseded archives,
+generated standard Scion reports, artifact inventory, per-repeat trajectory
+compares, and CSV outputs for reach/drain, W/L/T plus Phase A MDE comparison,
+branch depth, and prompt/context evidence. MDE, BKS/gap, prompt/context, branch
+depth, and cross-arm analysis remain postrun research diagnostics only unless
+encoded into deterministic protocol/Decision features.
 
 Future long CVRP cells can also use the WSL parallel execution channel described
 in
