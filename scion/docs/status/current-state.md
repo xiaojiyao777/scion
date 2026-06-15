@@ -418,6 +418,18 @@ showed `1s` result `2` improved / `0` worse / `24` same, sum delta `-11`, and
 not clean enough for adoption and is lower priority than the size70 two-opt
 mechanism.
 
+A seventh independent VRP-only control is active as subagent `Schrodinger`
+(`019eccfc-0e6c-78e2-bf02-67b1689963f8`). Launch report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md).
+Artifact root:
+`/home/clawd/research/vrp-external-research/independent-vrp-baseline-research-phase-f-20260615`.
+This is again a fresh non-forked external researcher, forbidden from reading
+`scion/`, `TASK.md`, Scion design docs, status docs, audit docs, and experiment
+artifacts. Its job is to keep a documented plain-Codex VRP baseline research
+lane alive. Any result is external-control hypothesis material only; a positive
+candidate must still pass later no-LLM Scion replay before it can influence
+Scion experiments.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).

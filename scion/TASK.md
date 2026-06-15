@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse short 3R postrun complete; CVRP size70 fixed-candidate validation design ready*
+*Status: warehouse short 3R postrun complete; CVRP size70 fixed-candidate validation design ready; independent VRP phase F active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1578,6 +1578,18 @@ Phase B launch design - 2026-06-14:
   `24` same, sum delta `-11`, and `2s` expansion `2` improved / `2` worse /
   `21` same, sum delta `-20`. It is a backlog mechanism seed requiring gating
   and broader replay, weaker than current size70 two-opt priority.
+- Launched: seventh independent VRP-only research control `Schrodinger`
+  (`019eccfc-0e6c-78e2-bf02-67b1689963f8`) as a fresh, non-forked external
+  researcher. Launch report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615f.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-external-research/independent-vrp-baseline-research-phase-f-20260615`.
+  It is forbidden from reading Scion artifacts and may only study standalone
+  `vrp/`, standard Python tooling, and its artifact directory. This keeps a
+  long-running external-control lane active for comparing plain Codex VRP
+  research against Scion-guided research. Any positive result is external
+  hypothesis material only and must go through later no-LLM Scion replay before
+  it can influence Scion experiments.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
