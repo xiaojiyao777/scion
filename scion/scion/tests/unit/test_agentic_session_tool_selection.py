@@ -260,6 +260,7 @@ def test_tool_selection_prompt_caches_stable_planner_context() -> None:
 
     assert first_blocks[0]["text"] == later_blocks[0]["text"]
     assert "Stable Tool Selection Context" in first_blocks[0]["text"]
+    assert "do not reread broad context only to restate them" in first_blocks[0]["text"]
     assert "active_algorithm_facts_anchor" in first_blocks[0]["text"]
     assert "tool_arg_guidance" in first_blocks[0]["text"]
     assert "source_observation_id" not in first_blocks[0]["text"]

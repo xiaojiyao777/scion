@@ -537,6 +537,25 @@ about `932k` chars and are dominated by tool-selection/general content. Do not
 relaunch full warehouse `3 x 24R` yet; do targeted guidance/context repair, then
 another short `3-6R` debug.
 
+The targeted warehouse prompt/guidance repair has now landed in the proposal
+and warehouse problem-owned prompt path. Branch lesson usage context is
+rendered before the broader cross-branch map and compacted to ids, generic
+linkage fields, outcome/activation summaries, and required contrast dimensions
+instead of raw lesson/audit text. Clean-fork hypothesis prompts now explicitly
+require auditable semantic contrast linkage when leaving no-effect or
+weak-positive branches. Tool-selection planning now tells the agent not to
+reread broad context just to restate already visible compact research signals,
+branch lessons, material-difference requirements, or target/source anchors.
+Warehouse `order_level` declares problem-owned bounded swap/order guidance and
+anti-patterns in both packaged `problem-v1.yaml` copies, and the warehouse
+adapter renders the active surface prompt guidance into code-stage interface
+context. Focused acceptance passed:
+`test_hypothesis_context_profiles.py`, `test_agentic_session_tool_selection.py`,
+`test_warehouse_target_preview.py`, `test_prompt_manifest_accounting.py`,
+`test_agentic_target_file_grounding.py`, and
+`test_agentic_code_stage_invariants.py` (`84` tests total). Next warehouse
+gate remains a short `3-6R` compact debug before any full `3 x 24R` longrun.
+
 The CVRP size70 next-rung design is also complete:
 [`../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`](../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md).
 Next CVRP order is fixed-candidate validation-grade replay first, then a short

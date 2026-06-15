@@ -168,6 +168,15 @@ Frozen files (do not modify): {frozen}"""
 13. **Same category**: all orders in a vehicle must have the same `vehicle_category`
 14. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`"""
 
+    def render_research_surface_interface(self, surface_name: str) -> str:
+        """Render the operator interface plus surface-local prompt guidance."""
+
+        interface = self.render_operator_interface()
+        guidance = _render_surface_prompt_guidance(self._spec, surface_name)
+        if not guidance:
+            return interface
+        return f"{interface}\n\n{guidance}"
+
     # --- Instance / output ---
 
     def load_instance(self, instance_path: str) -> Any:
@@ -401,6 +410,32 @@ def _render_objective_implication(spec: ProblemSpecV1) -> str:
         "metrics are preserved within tolerance. Lower-priority moves should include "
         "a guard that returns the original solution if they would harm a protected metric."
     )
+
+
+def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> str:
+    surface = None
+    for candidate in spec.research_surfaces or []:
+        if getattr(candidate, "name", "") == surface_name:
+            surface = candidate
+            break
+    if surface is None:
+        return ""
+    prompt = getattr(surface, "prompt", None)
+    if prompt is None:
+        return ""
+    lines = [f"### Active Surface Prompt Guidance: {surface_name}"]
+    hypothesis = str(getattr(prompt, "hypothesis_guidance", "") or "").strip()
+    implementation = str(
+        getattr(prompt, "implementation_guidance", "") or ""
+    ).strip()
+    anti_patterns = str(getattr(prompt, "anti_patterns", "") or "").strip()
+    if hypothesis:
+        lines.append(f"- hypothesis_guidance: {hypothesis}")
+    if implementation:
+        lines.append(f"- implementation_guidance: {implementation}")
+    if anti_patterns:
+        lines.append(f"- anti_patterns: {anti_patterns}")
+    return "\n".join(lines) if len(lines) > 1 else ""
 
 
 # ---------------------------------------------------------------------------

@@ -106,13 +106,13 @@ def _split_hypothesis_context(
         branch_context_parts.append(f"## Branch Direction\n{D['branch_direction']}")
     if D["branch_dossier"]:
         branch_context_parts.append(f"## Branch Dossier\n{D['branch_dossier']}")
+    branch_lesson_context = _branch_lesson_usage_context_block(context)
+    if branch_lesson_context:
+        branch_context_parts.append(branch_lesson_context)
     if D["cross_branch_research"]:
         branch_context_parts.append(
             f"## Cross-Branch Research Map\n{D['cross_branch_research']}"
         )
-    branch_lesson_context = _branch_lesson_usage_context_block(context)
-    if branch_lesson_context:
-        branch_context_parts.append(branch_lesson_context)
     if D["branch_followup_policy"]:
         branch_context_parts.append(
             f"## Branch Follow-up Policy\n{D['branch_followup_policy']}"
@@ -782,7 +782,9 @@ def _branch_lesson_usage_context_block(context: Mapping[str, Any]) -> str:
     payload: dict[str, Any] = {}
     requirement = context.get("branch_lesson_usage_requirement")
     if isinstance(requirement, Mapping) and requirement:
-        payload["branch_lesson_usage_requirement"] = requirement
+        payload["branch_lesson_usage_requirement"] = (
+            _compact_branch_lesson_usage_requirement(requirement)
+        )
     for key in (
         "branch_lesson_records",
         "branch_lessons",
@@ -790,7 +792,7 @@ def _branch_lesson_usage_context_block(context: Mapping[str, Any]) -> str:
     ):
         records = context.get(key)
         if records:
-            payload[key] = records
+            payload[key] = _compact_branch_lesson_records(records)
     if not payload:
         return ""
     return (
@@ -798,7 +800,7 @@ def _branch_lesson_usage_context_block(context: Mapping[str, Any]) -> str:
         "This is tainted proposal-only research feedback and is excluded from "
         "DecisionFeatures. Use compact lesson ids and generic dimensions; do "
         "not copy raw lesson text into the formal hypothesis.\n\n"
-        f"{_bounded_json(payload, 6000)}"
+        f"{_bounded_json(payload, 9000)}"
     )
 
 
@@ -829,6 +831,15 @@ def _branch_lesson_usage_requirement_task_lines(
             "trace, prompt, transcript, observation, or problem-specific "
             "semantics."
         ),
+        (
+            "When leaving a no-effect or weak-positive branch via a clean fork, "
+            "make the semantic contrast auditable: include the source lesson id, "
+            "the old target/action/mechanism family being avoided or contrasted, "
+            "the new target/action/mechanism linkage, and at least one changed "
+            "generic contrast dimension such as target_file, mechanism_family, "
+            "runtime_budget_strategy, activation_path, effect_path, or "
+            "no_op_condition."
+        ),
     ]
 
 
@@ -847,6 +858,105 @@ def _branch_lesson_usage_context_present(context: Mapping[str, Any]) -> bool:
         if records not in (None, "", [], {}, ()):
             return True
     return False
+
+
+def _compact_branch_lesson_usage_requirement(
+    requirement: Mapping[str, Any],
+) -> dict[str, Any]:
+    keep_fields = (
+        "schema_version",
+        "record_id",
+        "record_digest",
+        "requirement_source",
+        "required",
+        "required_for",
+        "required_fors",
+        "required_output_field",
+        "candidate_lesson_ids",
+        "candidate_target_files",
+        "candidate_actions",
+        "candidate_change_loci",
+        "candidate_mechanism_families",
+        "required_contrast_dimensions",
+        "same_branch_refinement_allowed",
+        "sibling_duplication_allowed",
+        "pre_code_block_required",
+        "proposal_visibility_only",
+        "decision_features_excluded",
+    )
+    return {
+        key: _compact_branch_lesson_value(requirement.get(key))
+        for key in keep_fields
+        if requirement.get(key) not in (None, "", [], {}, ())
+    }
+
+
+def _compact_branch_lesson_records(records: Any) -> list[dict[str, Any]]:
+    if not isinstance(records, (list, tuple)):
+        return []
+    compact: list[dict[str, Any]] = []
+    for raw in records:
+        if not isinstance(raw, Mapping):
+            continue
+        item = {
+            key: _compact_branch_lesson_value(raw.get(key))
+            for key in (
+                "schema_version",
+                "lesson_id",
+                "source",
+                "decision_input_policy",
+                "scope",
+                "lesson_role",
+                "lesson_type",
+                "maturity",
+                "source_branch_ids",
+                "shared_signature",
+                "evidence_basis",
+                "required_response",
+                "reason_codes",
+            )
+            if raw.get(key) not in (None, "", [], {}, ())
+        }
+        if item:
+            compact.append(item)
+        if len(compact) >= 6:
+            break
+    return compact
+
+
+def _compact_branch_lesson_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        allowed = {
+            "action",
+            "activation_path",
+            "activation_statuses",
+            "change_locus",
+            "decision_input_policy",
+            "effect_path",
+            "effect_statuses",
+            "mechanism_family",
+            "outcome_patterns",
+            "required_contrast_dimensions",
+            "required_for",
+            "required_output_field",
+            "same_branch_refinement_allowed",
+            "sibling_duplication_allowed",
+            "target_file",
+        }
+        result = {
+            str(key): _compact_branch_lesson_value(item)
+            for key, item in value.items()
+            if str(key) in allowed and item not in (None, "", [], {}, ())
+        }
+        return result
+    if isinstance(value, (list, tuple)):
+        return [_compact_branch_lesson_value(item) for item in value[:8]]
+    if isinstance(value, str):
+        text = re.sub(r"\s+", " ", value).strip()
+        if len(text) > 180:
+            return text[:177].rstrip() + "..."
+        return text
+    return value
 
 
 def _novelty_signature_task_lines(

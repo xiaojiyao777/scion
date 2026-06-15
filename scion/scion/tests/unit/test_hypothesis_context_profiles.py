@@ -789,6 +789,90 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
     assert accounting["families"]["governance"]["section_count"] >= 2
 
 
+def test_branch_lesson_context_is_compact_and_prioritized_before_cross_branch_map():
+    records = []
+    for idx in range(6):
+        records.append(
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": f"lesson:warehouse-{idx}",
+                "source": "proposal_only",
+                "decision_input_policy": "excluded_from_decision_features",
+                "scope": "cross_branch",
+                "lesson_role": "contrast",
+                "lesson_type": "no_effect_plateau",
+                "maturity": "fresh",
+                "source_branch_ids": [f"branch-{idx}"],
+                "shared_signature": {
+                    "change_locus": "order_level",
+                    "target_file": "operators/swap_orders.py",
+                    "action": "modify",
+                    "mechanism_family": "order_swap",
+                    "raw_extra": "hidden" * 200,
+                },
+                "evidence_basis": {
+                    "outcome_patterns": {"no_effect": 2},
+                    "activation_statuses": {"observed": 1},
+                    "raw_rows": [{"case": "hidden"}],
+                },
+                "required_response": {
+                    "required_for": "clean_fork_new_branch",
+                    "required_output_field": "branch_lesson_usage",
+                    "required_contrast_dimensions": [
+                        "target_file",
+                        "mechanism_family",
+                        "runtime_budget_strategy",
+                    ],
+                    "same_branch_refinement_allowed": False,
+                    "sibling_duplication_allowed": False,
+                    "raw_instruction": "hidden" * 200,
+                },
+                "raw_text": "hidden raw branch lesson text " * 200,
+                "full_audit": {"hidden": True},
+            }
+        )
+    context = {
+        "problem_summary": "Warehouse objective.",
+        "research_surfaces": "Research surfaces: order_level",
+        "operator_categories": "order_level",
+        "available_actions": "modify, create_new",
+        "targetable_files": "operators/*.py",
+        "champion_operators_code": "class SwapOrders:\n    pass\n",
+        "champion_stats": "champion_v1",
+        "cross_branch_research": "compact_cross_branch_learning.v1 broad map",
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_for": "clean_fork_new_branch",
+            "required_output_field": "branch_lesson_usage",
+            "candidate_lesson_ids": [record["lesson_id"] for record in records],
+            "required_contrast_dimensions": [
+                "target_file",
+                "mechanism_family",
+                "runtime_budget_strategy",
+            ],
+            "decision_features_excluded": True,
+        },
+        "branch_lesson_records": records,
+    }
+
+    system_blocks, user_prompt = _split_hypothesis_context(context)
+    rendered_system = "\n".join(str(block["text"]) for block in system_blocks)
+
+    assert rendered_system.index("## Branch Lesson Usage Context") < (
+        rendered_system.index("## Cross-Branch Research Map")
+    )
+    assert "lesson:warehouse-0" in rendered_system
+    assert "runtime_budget_strategy" in rendered_system
+    assert "hidden raw branch lesson text" not in rendered_system
+    assert "raw_extra" not in rendered_system
+    assert "raw_rows" not in rendered_system
+    assert "full_audit" not in rendered_system
+    assert "<truncated agentic context>" not in rendered_system
+    assert "When leaving a no-effect or weak-positive branch" in user_prompt
+    assert "old target/action/mechanism family" in user_prompt
+
+
 def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden():
     context = {
         "problem_summary": "CVRP formal screening objective.",

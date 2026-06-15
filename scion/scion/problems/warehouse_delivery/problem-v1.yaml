@@ -79,6 +79,25 @@ research_surfaces:
       modify_allowed: true
       remove_allowed: true
       singleton: false
+    prompt:
+      hypothesis_guidance: >-
+        Order-level and swap-style hypotheses must be selective and bounded:
+        target a named consolidation or cost-preserving gap, pre-filter by
+        compatible vehicle category, region, subcategory, capacity slack, or
+        cost delta, and state the top-k, sampling, or early-exit cap that keeps
+        runtime comparable to the champion.
+      implementation_guidance: >-
+        An order-level operator may be invoked repeatedly inside the search
+        loop. Precompute vehicle/order summaries once per execute call, inspect
+        only a bounded candidate set, deep-copy only after a viable move is
+        selected, and return the original solution when no safe move exists.
+        Avoid repeated full-solution feasibility/objective recomputation inside
+        nested candidate loops.
+      anti_patterns: >-
+        Do not scan every vehicle pair and every order pair without a cap, do
+        not clone the whole solution for each trial pair, and do not perform a
+        broad swap_orders rewrite that relies on O(n^2) trial evaluation or
+        heavy recomputation on small canary cases.
   - name: vehicle_level
     kind: operator
     description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."

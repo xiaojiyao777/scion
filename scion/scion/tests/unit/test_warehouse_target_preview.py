@@ -4,6 +4,8 @@ from pathlib import Path
 
 from scion.config.problem import ProblemSpec
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
+from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
+from scion.proposal.context.problem_adapter import _build_operator_interface_spec
 from scion.proposal.tools import (
     ContextExposurePolicy,
     ProposalToolContext,
@@ -34,6 +36,32 @@ def test_warehouse_v1_bridge_preserves_surfaces_for_target_preview() -> None:
         "vehicle_level",
     ]
     _assert_vehicle_level_preview_passes(bridge.problem_spec)
+
+
+def test_warehouse_order_level_interface_renders_problem_owned_runtime_guidance() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    bridge = bridge_problem_spec_v1(spec_v1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+
+    order_interface = _build_operator_interface_spec(
+        bridge.problem_spec,
+        adapter=adapter,
+        surface_name="order_level",
+    )
+    vehicle_interface = _build_operator_interface_spec(
+        bridge.problem_spec,
+        adapter=adapter,
+        surface_name="vehicle_level",
+    )
+
+    assert "Active Surface Prompt Guidance: order_level" in order_interface
+    assert "top-k, sampling, or early-exit cap" in order_interface
+    assert "Avoid repeated full-solution feasibility/objective recomputation" in (
+        order_interface
+    )
+    assert "O(n^2) trial evaluation" in order_interface
+    assert "Active Surface Prompt Guidance: vehicle_level" not in vehicle_interface
+    assert "O(n^2) trial evaluation" not in vehicle_interface
 
 
 def _assert_vehicle_level_preview_passes(spec: ProblemSpec) -> None:
