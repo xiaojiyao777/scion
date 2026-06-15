@@ -1863,15 +1863,16 @@ Phase B launch design - 2026-06-14:
   `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
   completeness and large-X regression checks.
 - Health check: after server sync on 2026-06-15, the Tier 1 WSL tmux session
-  was still running normally with `26/36` result files written and four solver
-  subprocesses active. Completed `X-n401-k29`, `X-n573-k30`, and partial
-  `X-n641-k35` rows are feasible. A partial read-only comparison over the
-  completed keys found `26/26` wins versus the champion Large-X curve
-  (`X-n401=-152`, `X-n573=-192`, `X-n641=-484` total distance on matched
-  keys), and two-opt phase-level effects are present in raw runtime
-  diagnostics. This is not a postrun conclusion; `X-n1001` is still incomplete,
-  and all `36` keys must be accounted before deciding whether to launch formal
-  validation.
+  was still running. `28/36` planned keys were accounted in `run.log`: `27`
+  completed and `1` `timeout_expired`. Completed `X-n401-k29`,
+  `X-n573-k30`, and `X-n641-k35` rows are feasible and produced `27/27` wins
+  versus the champion Large-X curve (`X-n401=-152`, `X-n573=-192`,
+  `X-n641=-484` total distance on matched keys). Two-opt phase-level effects
+  are present in raw runtime diagnostics. The first `X-n1001-k43` row
+  (`seed61`, `multiplier1`, nominal `120s`) hit `timeout_expired` after
+  `1020s`, so the remaining postrun must treat `X-n1001` as a
+  runtime-completeness risk. This is not a postrun conclusion; all `36` keys
+  must be accounted before deciding whether to launch formal validation.
 - Launched: CVRP agent behavior debug audit worker `Gibbs`
   (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
   experiment-analysis subagent, so its brief requires reading
@@ -1883,6 +1884,18 @@ Phase B launch design - 2026-06-14:
   Purpose: separate framework path health from actual CVRP research quality by
   auditing branch depth, branch-lesson use, prompt/context signal density, and
   mechanism continuity.
+- Completed: CVRP agent behavior debug audit worker `Gibbs`. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`.
+  Judgment: Scion is CVRP research-capable but not yet research-effective. It
+  can reach Protocol, has durable branch parentage, branch-lesson fields,
+  source visibility, validation/frozen paths, and some same-mechanism chains.
+  The effective-research evidence is still insufficient: Phase C had no
+  promotion, canonical ALNS+VNS never exceeded its MDE, validation-positive
+  large-X candidates collapsed to ties/no best-update leverage, and branch
+  lesson usage is observable but not proven causal. The next useful CVRP
+  debug-mode Scion run, after the size70 Tier 1 postrun, should be a small
+  fixed-mechanism or strongly seeded behavior debug judged by semantic lesson
+  use and mechanism continuity, not promotion alone.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

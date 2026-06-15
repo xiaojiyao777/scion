@@ -94,11 +94,14 @@ Active work as of the latest handoff:
   and syncing to
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
   It is no-LLM/no-APS direct solver replay over `36` keys. The latest health
-  check found the tmux session alive with `26/36` result files and no immediate
-  errors; wait for all planned keys before deciding whether the size70
-  candidate may enter formal validation. A partial read-only comparison over
-  the completed keys found no broad regression versus the champion Large-X
-  curve, but `X-n1001` is still incomplete and remains the final Tier 1 risk.
+  check found the tmux session alive with `28/36` planned keys accounted:
+  `27` completed and `1` `timeout_expired`. The timeout is
+  `X-n1001-k43 seed61 multiplier1`, which exceeded the `1020s` wrapper timeout
+  around a nominal `120s` solver limit. A partial read-only comparison over the
+  completed keys found no broad regression versus the champion Large-X curve,
+  but `X-n1001` is now an explicit Tier 1 runtime-completeness risk. Wait for
+  the remaining keys and Noether's postrun before deciding whether the size70
+  candidate may enter formal validation.
   Postrun acceptance should follow
   [`../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md`](../planning/v0.4/v04-cvrp-size70-tier1-postrun-analysis-plan-20260615.md).
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
@@ -122,12 +125,13 @@ Active work as of the latest handoff:
   `-61,847`, mean BKS-gap delta `-1.184` pp, runtime delta `+1.513s` total.
   It does not address the main X-subset ALNS gap and needs broader no-LLM
   validation before any Scion replay or default solver change.
-- CVRP agent behavior debug audit `Gibbs` is active as a Scion read-only
-  analysis worker. It must read the v3 blueprint first, inspect existing CVRP
-  Phase C / repaired 1R / replay artifacts, and produce
+- CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
-  It must not launch experiments or change code; its purpose is to separate
-  path health from actual CVRP research quality.
+  It separates path health from research quality: Scion can carry CVRP
+  candidates through Protocol and has durable branch/lesson/source artifacts,
+  but it has not yet proven effective CVRP research because there is no
+  promotion, canonical ALNS+VNS remains below MDE, Phase C large-X positives
+  collapsed, and lesson usage is observable but not causally proven.
 
 The current CVRP closeout point is Phase C, based on the completed staged gate
 repair, bounded stage-transition drain repair, and Phase B matched Scion
