@@ -62,6 +62,8 @@ def test_builds_manifest_from_recorded_screening_candidate(tmp_path: Path) -> No
         "lineage_id": "lineage-a",
         "hypothesis_id": "hyp-a",
         "stage": "screening",
+        "source_stage": "screening",
+        "replay_stage": "screening",
         "artifact_ref": artifact_ref,
         "target_files": ["solver.py"],
         "selected_surface": "repair",
@@ -83,6 +85,7 @@ def test_builds_manifest_from_recorded_screening_candidate(tmp_path: Path) -> No
             "decision_features_excluded": True,
             "proposal_text_excluded": True,
             "replay_materialized_from_artifact": True,
+            "external_candidate_artifact": False,
         },
     }
     rendered = json.dumps(manifest, sort_keys=True)
@@ -250,6 +253,106 @@ def test_manifest_filters_candidates_by_candidate_or_hypothesis_id(
     assert manifest["omitted_rows"] == []
 
 
+def test_builds_manifest_for_requested_validation_stage(tmp_path: Path) -> None:
+    campaign_dir = tmp_path / "campaign"
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    screening_ref = _write_candidate_artifact(
+        campaign_dir,
+        "candidate-screening",
+        stage="screening",
+    )
+    _append_index_row(
+        index_path,
+        {
+            "candidate_id": "candidate-screening",
+            "branch_id": "branch-screening",
+            "hypothesis_id": "hyp-screening",
+            "stage": "screening",
+            "patch_digest": "patch-digest-screening",
+            "artifact_ref": screening_ref,
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+    )
+
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="on",
+        comparison_id="cmp-validation",
+        stages=["validation", "frozen"],
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert manifest["stage_filter"] == ["validation", "frozen"]
+    assert manifest["candidate_count"] == 2
+    assert [candidate["stage"] for candidate in manifest["candidates"]] == [
+        "validation",
+        "frozen",
+    ]
+    assert {candidate["source_stage"] for candidate in manifest["candidates"]} == {
+        "screening",
+    }
+    assert manifest["omitted_rows"] == []
+
+
+def test_builds_manifest_from_external_candidate_artifact_without_index(
+    tmp_path: Path,
+) -> None:
+    campaign_dir = tmp_path / "campaign-without-index"
+    campaign_dir.mkdir()
+    _write_base_workspace(campaign_dir)
+    artifact_path = _write_external_candidate_artifact(
+        campaign_dir,
+        "candidate-external",
+        patch_code_content="VALUE = 'external-candidate'\n",
+    )
+
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="record_only",
+        comparison_id="cmp-external",
+        stages=["frozen"],
+        external_candidate_artifacts=[artifact_path],
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+
+    assert manifest["source_campaign_dir"] == str(campaign_dir.resolve())
+    assert manifest["stage_filter"] == ["frozen"]
+    assert manifest["external_candidate_artifact_count"] == 1
+    assert manifest["candidate_count"] == 1
+    candidate = manifest["candidates"][0]
+    assert candidate["candidate_id"] == "candidate-external"
+    assert candidate["stage"] == "frozen"
+    assert candidate["source_stage"] == "external"
+    assert candidate["artifact_ref"] == str(artifact_path.resolve())
+    assert candidate["decision"] == "external_replay_candidate"
+    assert candidate["audit_flags"]["external_candidate_artifact"] is True
+    assert candidate["audit_flags"]["external_candidate_not_promotion_evidence"] is True
+    rendered = json.dumps(manifest, sort_keys=True)
+    assert "code_content" not in rendered
+    assert "TAINTED" not in rendered
+    assert "bks_gap" not in rendered
+
+    manifest_path = tmp_path / "external-manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    comparison_path = execute_fixed_candidate_replay(
+        manifest_path,
+        problem_yaml_path=tmp_path / "problem-v1.yaml",
+        output_dir=tmp_path / "replay-external",
+        protocol_factory=_fake_protocol_factory,
+    )
+
+    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+    assert comparison["stage_filter"] == ["frozen"]
+    assert {row["stage"] for row in comparison["rows"]} == {"frozen"}
+    assert {row["status"] for row in comparison["rows"]} == {"completed"}
+    assert {row["raw_metrics_ref"] for row in comparison["rows"]} == {
+        "metrics/on/frozen.json",
+        "metrics/record_only/frozen.json",
+    }
+
+
 def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
     campaign_dir = tmp_path / "campaign"
     index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
@@ -299,6 +402,47 @@ def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
     assert manifest["comparison_id"] == "cmp-cli"
     assert manifest["candidate_filter"]["candidate_ids"] == ["candidate-cli"]
     assert manifest["candidates"][0]["candidate_id"] == "candidate-cli"
+
+
+def test_cli_writes_external_stage_fixed_candidate_manifest(tmp_path: Path) -> None:
+    campaign_dir = tmp_path / "campaign-without-index"
+    campaign_dir.mkdir()
+    _write_base_workspace(campaign_dir)
+    artifact_path = _write_external_candidate_artifact(
+        campaign_dir,
+        "candidate-cli-external",
+        patch_code_content="VALUE = 'cli-external'\n",
+    )
+    output_path = tmp_path / "external-manifest.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "fixed-candidate-replay-manifest",
+            "--source",
+            str(campaign_dir),
+            "--source-arm",
+            "record_only",
+            "--comparison-id",
+            "cmp-cli-external",
+            "--stage",
+            "frozen",
+            "--external-candidate-artifact",
+            str(artifact_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["candidate_count"] == 1
+    assert summary["stage_filter"] == ["frozen"]
+    assert summary["external_candidate_artifact_count"] == 1
+    manifest = json.loads(output_path.read_text(encoding="utf-8"))
+    assert manifest["candidates"][0]["candidate_id"] == "candidate-cli-external"
+    assert manifest["candidates"][0]["stage"] == "frozen"
 
 
 def test_materializes_candidate_workspace_and_rejects_path_traversal(
@@ -435,6 +579,57 @@ def test_executor_writes_two_arm_rows_with_distinct_measurement_governance(
     assert "TAINTED" not in rendered
     assert "bks_gap" not in rendered
     assert "aa_rows" not in rendered
+
+
+def test_executor_runs_requested_validation_stage(tmp_path: Path) -> None:
+    campaign_dir = tmp_path / "campaign"
+    _write_base_workspace(campaign_dir)
+    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    artifact_ref = _write_candidate_artifact(
+        campaign_dir,
+        "candidate-validation-exec",
+        stage="screening",
+        base_workspace_ref="workspaces/champion",
+        patch_code_content="VALUE = 'candidate-validation'\n",
+    )
+    _append_index_row(
+        index_path,
+        {
+            "candidate_id": "candidate-validation-exec",
+            "branch_id": "branch-a",
+            "hypothesis_id": "hyp-a",
+            "stage": "screening",
+            "patch_digest": "patch-digest-a",
+            "artifact_ref": artifact_ref,
+            "artifact_status": "recorded",
+            "replay_identity_status": "complete",
+            "missing_replay_identity_keys": [],
+        },
+    )
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign_dir,
+        source_arm="record_only",
+        comparison_id="cmp-validation-exec",
+        stages=["validation"],
+        generated_at="2026-06-12T00:00:00+00:00",
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    comparison_path = execute_fixed_candidate_replay(
+        manifest_path,
+        problem_yaml_path=tmp_path / "problem-v1.yaml",
+        output_dir=tmp_path / "replay",
+        protocol_factory=_fake_protocol_factory,
+    )
+
+    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+    assert comparison["stage_filter"] == ["validation"]
+    assert {row["stage"] for row in comparison["rows"]} == {"validation"}
+    assert {row["raw_metrics_ref"] for row in comparison["rows"]} == {
+        "metrics/on/validation.json",
+        "metrics/record_only/validation.json",
+    }
 
 
 def test_executor_rejects_legacy_problem_yaml_before_replay_rows(
@@ -673,6 +868,40 @@ def _write_candidate_artifact(
     return artifact_ref
 
 
+def _write_external_candidate_artifact(
+    campaign_dir: Path,
+    candidate_id: str,
+    *,
+    patch_code_content: str,
+) -> Path:
+    artifact_path = campaign_dir / "external" / f"{candidate_id}.patch.json"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "schema": "scion.external_full_file_candidate_patch.v1",
+        "candidate_id": candidate_id,
+        "selected_surface": "solver_design",
+        "base": {
+            "base_champion_id": "champion-1",
+            "base_champion_hash": "champion-hash-a",
+            "base_workspace_ref": "workspaces/champion",
+        },
+        "patch": {
+            "files": [
+                {
+                    "file_path": "solver.py",
+                    "action": "modify",
+                    "code_sha256": _sha256(patch_code_content),
+                    "code_content": patch_code_content,
+                }
+            ],
+        },
+        "prompt_text": "TAINTED external notes should not be copied",
+        "raw_measurement_diagnostics": {"bks_gap": 0.1},
+    }
+    artifact_path.write_text(json.dumps(metadata), encoding="utf-8")
+    return artifact_path
+
+
 class _FakeProtocol:
     def __init__(self, arm: str) -> None:
         self._arm = arm
@@ -694,10 +923,14 @@ class _FakeProtocol:
         hypothesis_action: str,
         **kwargs: object,
     ) -> ProtocolResult:
-        assert stage is ExperimentStage.SCREENING
+        assert stage in {
+            ExperimentStage.SCREENING,
+            ExperimentStage.VALIDATION,
+            ExperimentStage.FROZEN,
+        }
         assert hypothesis_action == "modify"
         return ProtocolResult(
-            stage=ExperimentStage.SCREENING,
+            stage=stage,
             stats=EvalStats(
                 n_cases=1,
                 wins=1,
@@ -709,9 +942,9 @@ class _FakeProtocol:
                 ci_high=0.2,
             ),
             gate_outcome="pass",
-            reason_codes=("SCREENING_PASS",),
+            reason_codes=(f"{stage.value.upper()}_PASS",),
             exposed_summary="filtered summary",
-            raw_metrics_ref=f"metrics/{self._arm}/screening.json",
+            raw_metrics_ref=f"metrics/{self._arm}/{stage.value}.json",
             objective_semantics="declared_objectives_lexicographic",
         )
 

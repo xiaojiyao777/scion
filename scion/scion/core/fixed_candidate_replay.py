@@ -20,6 +20,8 @@ COMPARISON_SCHEMA_VERSION = "scion.fixed_candidate_replay_comparison.v1"
 DEFAULT_MANIFEST_FILENAME = "fixed_candidate_replay_manifest.v1.json"
 DEFAULT_COMPARISON_FILENAME = "fixed_candidate_replay_comparison.v1.json"
 REPLAY_ARMS = ["on", "record_only"]
+REPLAY_STAGES = ["screening", "validation", "frozen"]
+DEFAULT_REPLAY_STAGES = ["screening"]
 MEASUREMENT_GOVERNANCE_BY_ARM = {
     "on": "on",
     "record_only": "off_record_only",
@@ -34,19 +36,29 @@ def build_fixed_candidate_replay_manifest(
     max_candidates: int | None = None,
     candidate_ids: Sequence[str] | None = None,
     hypothesis_ids: Sequence[str] | None = None,
+    stages: Sequence[str] | None = None,
+    external_candidate_artifacts: Sequence[str | Path] | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic manifest for fixed-candidate governance replay.
 
-    The builder only reads ``formal_candidates/index.jsonl`` and referenced
-    ``candidate.patch.json`` files. It never materializes workspaces, runs
-    protocol replay, or mutates campaign state.
+    The builder reads ``formal_candidates/index.jsonl`` rows and referenced
+    ``candidate.patch.json`` files by default. Human-approved external
+    full-file candidate artifacts may also be included explicitly; they remain
+    report/replay material and never become Decision input. The builder never
+    materializes workspaces, runs protocol replay, or mutates campaign state.
     """
 
     if max_candidates is not None and max_candidates < 0:
         raise ValueError("max_candidates must be non-negative")
-    index_path, source_campaign_dir = resolve_formal_candidate_index(source)
-    rows = _read_index_rows(index_path)
+    explicit_stage_filter = stages is not None
+    stage_filter = _stage_filter(stages)
+    external_artifacts = [Path(path) for path in (external_candidate_artifacts or ())]
+    index_path, source_campaign_dir = _resolve_manifest_source(
+        source,
+        require_index=not external_artifacts,
+    )
+    rows = _read_index_rows(index_path) if index_path is not None else []
     candidate_filter = _candidate_filter(
         candidate_ids=candidate_ids,
         hypothesis_ids=hypothesis_ids,
@@ -59,12 +71,15 @@ def build_fixed_candidate_replay_manifest(
         if not _row_matches_candidate_filter(row, candidate_filter):
             filtered_out_row_count += 1
             continue
-        row_reasons = _row_omission_reasons(row)
+        row_reasons = _row_omission_reasons(
+            row,
+            explicit_stage_filter=explicit_stage_filter,
+        )
         artifact_ref = _clean_str(row.get("artifact_ref"))
         metadata_path = _resolve_artifact_path(
             artifact_ref,
             campaign_dir=source_campaign_dir,
-            index_dir=index_path.parent,
+            index_dir=index_path.parent if index_path is not None else source_campaign_dir,
         )
         metadata: Mapping[str, Any] | None = None
 
@@ -83,26 +98,98 @@ def build_fixed_candidate_replay_manifest(
                         row_reasons.append("candidate_patch_invalid")
                     else:
                         metadata = loaded
-                        row_reasons.extend(_metadata_omission_reasons(metadata))
+                        row_reasons.extend(
+                            _metadata_omission_reasons(
+                                metadata,
+                                explicit_stage_filter=explicit_stage_filter,
+                            )
+                        )
 
         if row_reasons:
             omitted_rows.append(_omitted_row(row_index, row, row_reasons))
             continue
 
         assert metadata is not None
-        if max_candidates is not None and len(candidates) >= max_candidates:
-            omitted_rows.append(
-                _omitted_row(row_index, row, ["max_candidates_exceeded"])
+        for stage_index, stage in enumerate(stage_filter):
+            if max_candidates is not None and len(candidates) >= max_candidates:
+                omitted_rows.append(
+                    _omitted_row(row_index, row, ["max_candidates_exceeded"])
+                )
+                continue
+            candidates.append(
+                _candidate_manifest_entry(
+                    row_index=row_index,
+                    stage_index=stage_index,
+                    stage=stage,
+                    row=row,
+                    metadata=metadata,
+                    artifact_ref=artifact_ref,
+                )
+            )
+
+    external_omitted_rows: list[dict[str, Any]] = []
+    for artifact_index, artifact_path in enumerate(external_artifacts):
+        artifact_ref = str(artifact_path.expanduser().resolve())
+        try:
+            metadata = _load_json_object(Path(artifact_ref))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            external_omitted_rows.append(
+                _omitted_row(
+                    len(rows) + artifact_index,
+                    {
+                        "candidate_id": f"external-candidate-{artifact_index + 1}",
+                        "stage": ",".join(stage_filter),
+                        "artifact_ref": artifact_ref,
+                        "artifact_status": "external",
+                        "replay_identity_status": "external",
+                    },
+                    ["external_candidate_artifact_unreadable", type(exc).__name__],
+                )
             )
             continue
-        candidates.append(
-            _candidate_manifest_entry(
-                row_index=row_index,
-                row=row,
-                metadata=metadata,
-                artifact_ref=artifact_ref,
+        if "patch" not in metadata or "base" not in metadata:
+            external_omitted_rows.append(
+                _omitted_row(
+                    len(rows) + artifact_index,
+                    {
+                        "candidate_id": _clean_str(metadata.get("candidate_id"))
+                        or f"external-candidate-{artifact_index + 1}",
+                        "stage": ",".join(stage_filter),
+                        "artifact_ref": artifact_ref,
+                        "artifact_status": "external",
+                        "replay_identity_status": "external",
+                    },
+                    ["external_candidate_missing_base_or_patch"],
+                )
             )
-        )
+            continue
+        for stage_index, stage in enumerate(stage_filter):
+            if max_candidates is not None and len(candidates) >= max_candidates:
+                external_omitted_rows.append(
+                    _omitted_row(
+                        len(rows) + artifact_index,
+                        {
+                            "candidate_id": _clean_str(metadata.get("candidate_id"))
+                            or f"external-candidate-{artifact_index + 1}",
+                            "stage": stage,
+                            "artifact_ref": artifact_ref,
+                            "artifact_status": "external",
+                            "replay_identity_status": "external",
+                        },
+                        ["max_candidates_exceeded"],
+                    )
+                )
+                continue
+            candidates.append(
+                _external_candidate_manifest_entry(
+                    row_index=len(rows) + artifact_index,
+                    stage_index=stage_index,
+                    stage=stage,
+                    metadata=metadata,
+                    artifact_ref=artifact_ref,
+                )
+            )
+    omitted_rows.extend(external_omitted_rows)
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -111,9 +198,11 @@ def build_fixed_candidate_replay_manifest(
         "source_arm": source_arm,
         "generated_at": generated_at or _utc_now_iso(),
         "candidate_filter": candidate_filter,
+        "stage_filter": stage_filter,
         "filtered_out_row_count": filtered_out_row_count,
         "candidate_count": len(candidates),
         "causal_candidate_pairing": bool(candidates),
+        "external_candidate_artifact_count": len(external_artifacts),
         "replay_arms": list(REPLAY_ARMS),
         "candidates": candidates,
         "omitted_rows": omitted_rows,
@@ -129,14 +218,25 @@ def write_fixed_candidate_replay_manifest(
     max_candidates: int | None = None,
     candidate_ids: Sequence[str] | None = None,
     hypothesis_ids: Sequence[str] | None = None,
+    stages: Sequence[str] | None = None,
+    external_candidate_artifacts: Sequence[str | Path] | None = None,
 ) -> Path:
     """Build and write a fixed-candidate replay manifest JSON artifact."""
 
-    index_path, _ = resolve_formal_candidate_index(source)
+    external_artifacts = list(external_candidate_artifacts or ())
+    index_path, source_campaign_dir = _resolve_manifest_source(
+        source,
+        require_index=not external_artifacts,
+    )
     destination = (
         Path(output_path)
         if output_path is not None
-        else index_path.parent / DEFAULT_MANIFEST_FILENAME
+        else (
+            index_path.parent
+            if index_path is not None
+            else source_campaign_dir
+        )
+        / DEFAULT_MANIFEST_FILENAME
     )
     manifest = build_fixed_candidate_replay_manifest(
         source,
@@ -145,6 +245,8 @@ def write_fixed_candidate_replay_manifest(
         max_candidates=max_candidates,
         candidate_ids=candidate_ids,
         hypothesis_ids=hypothesis_ids,
+        stages=stages,
+        external_candidate_artifacts=external_artifacts,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(_manifest_json(manifest), encoding="utf-8")
@@ -168,6 +270,29 @@ def resolve_formal_candidate_index(source: str | Path) -> tuple[Path, Path]:
     if not index_path.is_file():
         raise FileNotFoundError(f"formal candidate index not found: {index_path}")
     return index_path, campaign_dir
+
+
+def _resolve_manifest_source(
+    source: str | Path,
+    *,
+    require_index: bool,
+) -> tuple[Path | None, Path]:
+    source_path = Path(source).expanduser().resolve()
+    if source_path.is_dir():
+        campaign_dir = source_path
+        index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    else:
+        index_path = source_path
+        if index_path.name != "index.jsonl":
+            raise ValueError(
+                "source must be a campaign directory or formal_candidates/index.jsonl"
+            )
+        campaign_dir = _infer_campaign_dir_from_index(index_path)
+    if index_path.is_file():
+        return index_path, campaign_dir
+    if require_index:
+        raise FileNotFoundError(f"formal candidate index not found: {index_path}")
+    return None, campaign_dir
 
 
 def _infer_campaign_dir_from_index(index_path: Path) -> Path:
@@ -222,7 +347,21 @@ def _row_matches_candidate_filter(
     return candidate_id in candidate_ids or hypothesis_id in hypothesis_ids
 
 
-def _row_omission_reasons(row: Mapping[str, Any]) -> list[str]:
+def _stage_filter(stages: Sequence[str] | None) -> list[str]:
+    clean = _ordered_clean_strings(stages or DEFAULT_REPLAY_STAGES)
+    if not clean:
+        clean = list(DEFAULT_REPLAY_STAGES)
+    unsupported = [stage for stage in clean if stage not in REPLAY_STAGES]
+    if unsupported:
+        raise ValueError(f"unsupported replay stage(s): {unsupported}")
+    return clean
+
+
+def _row_omission_reasons(
+    row: Mapping[str, Any],
+    *,
+    explicit_stage_filter: bool,
+) -> list[str]:
     reasons: list[str] = []
     if _clean_str(row.get("artifact_status")) != "recorded":
         if _clean_str(row.get("artifact_status")) == "omitted":
@@ -232,7 +371,8 @@ def _row_omission_reasons(row: Mapping[str, Any]) -> list[str]:
             )
         else:
             reasons.append("artifact_not_recorded")
-    if _clean_str(row.get("stage")) != "screening":
+    row_stage = _clean_str(row.get("stage")) or "screening"
+    if not explicit_stage_filter and row_stage != "screening":
         reasons.append("non_screening_stage")
     if not _clean_str(row.get("artifact_ref")):
         reasons.append("missing_artifact_ref")
@@ -244,9 +384,14 @@ def _row_omission_reasons(row: Mapping[str, Any]) -> list[str]:
     return _dedupe(reasons)
 
 
-def _metadata_omission_reasons(metadata: Mapping[str, Any]) -> list[str]:
+def _metadata_omission_reasons(
+    metadata: Mapping[str, Any],
+    *,
+    explicit_stage_filter: bool,
+) -> list[str]:
     reasons: list[str] = []
-    if _clean_str(metadata.get("stage")) != "screening":
+    metadata_stage = _clean_str(metadata.get("stage")) or "screening"
+    if not explicit_stage_filter and metadata_stage != "screening":
         reasons.append("candidate_patch_non_screening_stage")
     replay_identity = metadata.get("replay_identity")
     if not isinstance(replay_identity, Mapping):
@@ -265,6 +410,8 @@ def _metadata_omission_reasons(metadata: Mapping[str, Any]) -> list[str]:
 def _candidate_manifest_entry(
     *,
     row_index: int,
+    stage_index: int,
+    stage: str,
     row: Mapping[str, Any],
     metadata: Mapping[str, Any],
     artifact_ref: str,
@@ -289,17 +436,21 @@ def _candidate_manifest_entry(
         or replay_metadata.get("raw_metrics_ref")
         or metadata.get("experiment_ref")
     )
+    candidate_id = _clean_str(metadata.get("candidate_id") or row.get("candidate_id"))
+    if stage_index:
+        candidate_id = f"{candidate_id}-{stage}"
+    source_stage = _clean_str(metadata.get("stage") or row.get("stage")) or "screening"
     return {
         "candidate_order_index": row_index,
-        "candidate_id": _clean_str(
-            metadata.get("candidate_id") or row.get("candidate_id")
-        ),
+        "candidate_id": candidate_id,
         "branch_id": _clean_str(metadata.get("branch_id") or row.get("branch_id")),
         "lineage_id": _clean_str(metadata.get("lineage_id")),
         "hypothesis_id": _clean_str(
             metadata.get("hypothesis_id") or row.get("hypothesis_id")
         ),
-        "stage": _clean_str(metadata.get("stage") or row.get("stage")),
+        "stage": stage,
+        "source_stage": source_stage,
+        "replay_stage": stage,
         "artifact_ref": artifact_ref,
         "target_files": _target_files(metadata),
         "selected_surface": _clean_str(
@@ -324,6 +475,74 @@ def _candidate_manifest_entry(
             "decision_features_excluded": True,
             "proposal_text_excluded": True,
             "replay_materialized_from_artifact": True,
+            "external_candidate_artifact": False,
+        },
+    }
+
+
+def _external_candidate_manifest_entry(
+    *,
+    row_index: int,
+    stage_index: int,
+    stage: str,
+    metadata: Mapping[str, Any],
+    artifact_ref: str,
+) -> dict[str, Any]:
+    candidate_id = (
+        _clean_str(metadata.get("candidate_id"))
+        or f"external-candidate-{row_index + 1}"
+    )
+    if stage_index:
+        candidate_id = f"{candidate_id}-{stage}"
+    patch = metadata.get("patch") if isinstance(metadata.get("patch"), Mapping) else {}
+    base = metadata.get("base") if isinstance(metadata.get("base"), Mapping) else {}
+    replay_identity = (
+        metadata.get("replay_identity")
+        if isinstance(metadata.get("replay_identity"), Mapping)
+        else {}
+    )
+    patch_digest = _clean_str(
+        replay_identity.get("patch_digest")
+        or replay_identity.get("patch_hash")
+        or patch.get("patch_digest")
+        or metadata.get("patch_digest")
+        or _full_file_patch_digest(patch)
+    )
+    return {
+        "candidate_order_index": row_index,
+        "candidate_id": candidate_id,
+        "branch_id": _clean_str(metadata.get("branch_id")) or "external",
+        "lineage_id": _clean_str(metadata.get("lineage_id")),
+        "hypothesis_id": _clean_str(metadata.get("hypothesis_id")),
+        "stage": stage,
+        "source_stage": _clean_str(metadata.get("stage")) or "external",
+        "replay_stage": stage,
+        "artifact_ref": artifact_ref,
+        "target_files": _target_files(metadata),
+        "selected_surface": _clean_str(
+            replay_identity.get("selected_surface")
+            or metadata.get("selected_surface")
+        ),
+        "hypothesis_action": _hypothesis_action(metadata),
+        "patch_digest": patch_digest,
+        "patch_hash": _clean_str(replay_identity.get("patch_hash") or patch_digest),
+        "code_hash": _clean_str(replay_identity.get("code_hash")),
+        "base_champion_id": _clean_str(base.get("base_champion_id")),
+        "base_champion_hash": _clean_str(base.get("base_champion_hash")),
+        "problem_spec_hash": _clean_str(replay_identity.get("problem_spec_hash")),
+        "split_manifest_hash": _clean_str(replay_identity.get("split_manifest_hash")),
+        "seed_ledger_hash": _clean_str(replay_identity.get("seed_ledger_hash")),
+        "protocol_version": _clean_str(replay_identity.get("protocol_version")),
+        "raw_metrics_ref": "",
+        "source_raw_metrics_ref": "",
+        "decision": "external_replay_candidate",
+        "decision_reason_codes": ["EXTERNAL_CANDIDATE_REPLAY_ONLY"],
+        "audit_flags": {
+            "decision_features_excluded": True,
+            "proposal_text_excluded": True,
+            "replay_materialized_from_artifact": True,
+            "external_candidate_artifact": True,
+            "external_candidate_not_promotion_evidence": True,
         },
     }
 
@@ -344,8 +563,9 @@ def execute_fixed_candidate_replay(
     """Replay fixed candidates under each manifest arm and write comparison JSON.
 
     This executor is intentionally posthoc: it materializes workspaces under
-    ``output_dir`` and invokes screening protocol only.  It does not touch
-    campaign state, branch lifecycle, Decision, scheduler, or promotion state.
+    ``output_dir`` and invokes the manifest-declared protocol stage.  It does
+    not touch campaign state, branch lifecycle, Decision, scheduler, or
+    promotion state.
     """
 
     manifest_file = Path(manifest_path).expanduser().resolve()
@@ -403,6 +623,8 @@ def execute_fixed_candidate_replay(
         "comparison_id": _clean_str(manifest.get("comparison_id")),
         "generated_at": _utc_now_iso(),
         "replay_arms": arms,
+        "stage_filter": _string_list(manifest.get("stage_filter"))
+        or list(DEFAULT_REPLAY_STAGES),
         "candidate_count": len(candidates),
         "row_count": len(rows),
         "decision_features_excluded": True,
@@ -510,6 +732,35 @@ def _hypothesis_action(metadata: Mapping[str, Any]) -> str:
     return "modify"
 
 
+def _full_file_patch_digest(patch: Mapping[str, Any]) -> str:
+    files = patch.get("files")
+    if not isinstance(files, list) or not files:
+        return ""
+    payload: list[dict[str, str]] = []
+    for item in files:
+        if not isinstance(item, Mapping):
+            return ""
+        file_path = _clean_str(item.get("file_path") or item.get("path"))
+        if not file_path:
+            return ""
+        payload.append(
+            {
+                "file_path": file_path,
+                "action": _clean_str(item.get("action")) or "modify",
+                "code_sha256": _clean_str(item.get("code_sha256")),
+                "code_content_sha256": hashlib.sha256(
+                    str(item.get("code_content") or "").encode("utf-8")
+                ).hexdigest()
+                if "code_content" in item
+                else "",
+            }
+        )
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _omitted_row(
     row_index: int,
     row: Mapping[str, Any],
@@ -609,8 +860,9 @@ def _execute_replay_row(
             str(champion_ws),
             selected_surface=selected_surface,
         )
+        stage = _stage_from_candidate(candidate)
         result = protocol.run_experiment(
-            _screening_stage(),
+            stage,
             str(workspace),
             str(champion_ws),
             hypothesis_action,
@@ -650,6 +902,11 @@ def _base_comparison_row(candidate: Mapping[str, Any], arm: str) -> dict[str, An
         "candidate_id": _clean_str(candidate.get("candidate_id")),
         "branch_id": _clean_str(candidate.get("branch_id")),
         "hypothesis_id": _clean_str(candidate.get("hypothesis_id")),
+        "stage": _clean_str(candidate.get("stage")) or "screening",
+        "source_stage": _clean_str(candidate.get("source_stage")),
+        "replay_stage": _clean_str(candidate.get("replay_stage"))
+        or _clean_str(candidate.get("stage"))
+        or "screening",
         "arm": arm,
         "measurement_governance": measurement_governance,
         "measurement_governance_off": measurement_governance == "off_record_only",
@@ -714,6 +971,7 @@ def _build_protocol(
         output_dir
         / "metrics"
         / _safe_path_token(_clean_str(candidate.get("candidate_id")) or "candidate")
+        / _safe_path_token(_clean_str(candidate.get("stage")) or "screening")
         / _safe_path_token(arm)
     )
     limit = int(time_limit_sec) if time_limit_sec is not None else 300
@@ -882,10 +1140,17 @@ def _measurement_governance_for_arm(arm: str) -> str:
     return MEASUREMENT_GOVERNANCE_BY_ARM[arm]
 
 
-def _screening_stage() -> Any:
+def _stage_from_candidate(candidate: Mapping[str, Any]) -> Any:
     from scion.core.models import ExperimentStage
 
-    return ExperimentStage.SCREENING
+    stage = _clean_str(candidate.get("stage")) or "screening"
+    if stage == "screening":
+        return ExperimentStage.SCREENING
+    if stage == "validation":
+        return ExperimentStage.VALIDATION
+    if stage == "frozen":
+        return ExperimentStage.FROZEN
+    raise ValueError(f"unsupported replay stage: {stage}")
 
 
 def _stats_payload(stats: Any) -> dict[str, Any]:
@@ -940,6 +1205,10 @@ def _string_list(value: Any) -> list[str]:
 
 def _sorted_clean_strings(value: Sequence[str] | None) -> list[str]:
     return sorted(set(_string_list(value)))
+
+
+def _ordered_clean_strings(value: Sequence[str] | None) -> list[str]:
+    return list(dict.fromkeys(_string_list(value)))
 
 
 def _dedupe(values: list[str]) -> list[str]:

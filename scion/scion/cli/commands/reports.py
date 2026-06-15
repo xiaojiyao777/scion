@@ -171,6 +171,22 @@ def register_report_commands(report_app: typer.Typer) -> None:
             "--hypothesis-id",
             help="Hypothesis id to include; may be supplied multiple times",
         ),
+        stage: Optional[list[str]] = typer.Option(
+            None,
+            "--stage",
+            help=(
+                "Replay stage to include: screening, validation, or frozen; "
+                "may be supplied multiple times. Defaults to screening."
+            ),
+        ),
+        external_candidate_artifact: Optional[list[str]] = typer.Option(
+            None,
+            "--external-candidate-artifact",
+            help=(
+                "External full-file candidate.patch.json artifact to include; "
+                "may be supplied multiple times"
+            ),
+        ),
     ) -> None:
         """Build a fixed-candidate replay manifest from formal artifacts."""
         from scion.core.fixed_candidate_replay import (
@@ -186,6 +202,8 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 max_candidates=max_candidates,
                 candidate_ids=candidate_id,
                 hypothesis_ids=hypothesis_id,
+                stages=stage,
+                external_candidate_artifacts=external_candidate_artifact,
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -204,6 +222,10 @@ def register_report_commands(report_app: typer.Typer) -> None:
                         "filtered_out_row_count", 0
                     ),
                     "omitted_row_count": len(manifest["omitted_rows"]),
+                    "stage_filter": manifest.get("stage_filter", []),
+                    "external_candidate_artifact_count": manifest.get(
+                        "external_candidate_artifact_count", 0
+                    ),
                     "schema_version": manifest["schema_version"],
                 },
                 indent=2,
@@ -260,7 +282,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
             help="Comparison JSON path; defaults under output-dir",
         ),
     ) -> None:
-        """Run posthoc fixed-candidate screening replay for manifest arms."""
+        """Run posthoc fixed-candidate replay for manifest stages and arms."""
         from scion.core.fixed_candidate_replay import execute_fixed_candidate_replay
 
         try:
