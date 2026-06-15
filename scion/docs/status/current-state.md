@@ -185,17 +185,59 @@ for the ALNS-only champion. The next CVRP step should be candidate-specific
 large-X replay and mechanism/update-density diagnosis, not another blind longer
 LLM campaign.
 
-Warehouse Phase 4 longrun is now active on WSL. Report:
+That candidate-specific replay is now active on the server. Report:
+[`../experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md).
+Server root:
+`/home/clawd/research/scion-experiments/v04-cvrp-candidate-largeX-replay-20260615T164410Z`.
+It replays the two Phase C ALNS-only validation-positive candidates against the
+completed champion large-X curve using direct solver calls only: `4` large-X
+cases, seeds `61/89`, budget multipliers `1/4`, parallelism `2`, selected
+surface `solver_design`, and no LLM calls. A foreground smoke for the rep01
+route-limit-aware regret candidate completed with unchanged `X-n401/seed61`
+distance `68673` and `best_update_count=0`; the full replay is running in tmux
+session `scion_cvrp_candidate_replay_164410`.
+
+Warehouse Phase 4 longrun was attempted on WSL but is now aborted invalid.
+Report:
 [`../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`](../experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md).
 Clean WSL root:
-`/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
-Server prep root:
-`/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
-It runs a single intended-default arm (`measurement_governance=on`,
+`/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163700Z`.
+Server sync root:
+`/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163700Z`.
+It was designed as a single intended-default arm (`measurement_governance=on`,
 `compact-measurement-diagnostics`) for `3 x 24R` on the production warehouse
 protocol/split/seeds. The goal is to test whether warehouse can still produce
 continued improvements/promotions under longer v0.4 budget, and to audit
 branch depth/context behavior without mixing in a governance on/off comparison.
+The clean run used experiment-local WSL copies of `problem.yaml`,
+`problem-v1.yaml`, and `split_manifest_prod.yaml`; two earlier roots ending
+`T162506Z` and `T163050Z` were stopped before useful evidence because of WSL path
+and missing-ProblemSpecV1-sibling launch issues.
+
+The clean `T163700Z` root entered the adapter-backed production path correctly
+but failed as research evidence: rep01 and rep02 produced `0` protocol metric
+rows and entered early patch-edit/`verification_light` loops
+(`rep01 verification_failure_consumed_candidates=7`, rep02 `=2`). The root was
+stopped at `2026-06-15T16:52:52Z` and should be treated as agent behavior debug
+evidence, not as evidence that warehouse cannot recover continued promotion.
+The next warehouse longrun needs a patch-edit/source-action debug or a
+single-round behavior audit first.
+
+A separate single-round debug/behavior audit is being designed but has not
+started a new LLM campaign. Its purpose is to inspect one complete agent loop:
+prompt context composition, branch and cross-branch lesson visibility, source
+visibility in code stage, proposal mechanism quality, patch artifact fidelity,
+and protocol outcome. This is the right diagnostic for the user's concern that
+rules may still crowd out history and branch evidence, and the aborted
+warehouse root gives a concrete early-failure sample to analyze.
+
+An independent VRP baseline researcher control is also active. This is a
+deliberate exception to the usual v3-first subagent rule because the experiment
+requires an uncontaminated external researcher: the subagent may only read the
+standalone `vrp/` baseline and write scratch artifacts under
+`/home/clawd/research/scion-experiments/independent-vrp-baseline-research-20260615T165347Z`.
+It must record `research_log.md`, baseline-vs-candidate commands, and results
+so its research process can be compared against Scion-guided research.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned

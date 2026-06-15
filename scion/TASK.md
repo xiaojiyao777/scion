@@ -1297,18 +1297,50 @@ Phase B launch design - 2026-06-14:
   did not create large-X search leverage. Next CVRP work should replay the
   validation-positive candidates on large-X and inspect mechanism/update
   density before another LLM campaign.
-- Launched: warehouse Phase 4 longrun single-arm check. Report:
+- Aborted invalid: warehouse Phase 4 longrun single-arm check. Report:
   `scion/docs/experiments/v0.4/v04-phase4-warehouse-longrun-compact-on-launch-20260615.md`.
   Clean WSL root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
-  Server prep root:
-  `/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163050Z`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163700Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-phase4-warehouse-longrun-compact-on-3x24r-20260615T163700Z`.
   Design: `3` repeats, `24` rounds each, warehouse production protocol/split/
   seeds, `measurement_governance=on`, `compact-measurement-diagnostics`,
-  `time_limit_sec=30`, disabled early stop, WSL-local problem/split path copies,
-  and max two concurrent cells with a 600s stagger. The first attempted root
-  ending `T162506Z` was stopped after rep01 failed immediately on server
-  absolute paths; the clean rerun started at `2026-06-15T16:29:12Z`.
+  `time_limit_sec=30`, disabled early stop, WSL-local `problem.yaml`,
+  `problem-v1.yaml`, and split path copies, and max two concurrent cells with a
+  600s stagger. The first attempted root ending `T162506Z` was stopped after
+  rep01 failed immediately on server absolute paths; the second root ending
+  `T163050Z` was stopped after launch verification showed legacy objective
+  fallback because the experiment config lacked a sibling `problem-v1.yaml`.
+  The clean rerun started at `2026-06-15T16:37:52Z` and was stopped at
+  `2026-06-15T16:52:52Z` after rep01/rep02 produced `0` protocol metric rows
+  and entered early patch-edit/`verification_light` failure loops. This root is
+  invalid for warehouse longrun promotion evidence; keep it as agent behavior
+  debug evidence and do not interpret it as warehouse inability to improve.
+- Launched: CVRP candidate-specific large-X replay. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-candidate-largeX-replay-20260615T164410Z`.
+  Design: no-LLM direct solver replay for the two ALNS-only Phase C
+  validation-positive candidates, `4` large-X cases, seeds `61/89`,
+  multipliers `1/4`, parallelism `2`, and `solver_design` selected surface.
+  The initial `nohup` launch did not persist under the Codex exec wrapper; a
+  foreground smoke for rep01 `X-n401/seed61/90s` completed with unchanged
+  distance `68673` and `best_update_count=0`. The full replay was restarted in
+  tmux session `scion_cvrp_candidate_replay_164410` at
+  `2026-06-15T16:49:33Z`.
+- Queued: single-round debug/behavior audit design. A read-only subagent is
+  preparing the minimal 1R run and artifact checklist to inspect whether
+  prompt context, branch lessons, cross-branch history, source visibility, and
+  patch artifacts actually translate into research action. Do not launch the
+  debug LLM campaign until this design is reviewed.
+- Launched: independent VRP baseline researcher control. This is an intentional
+  exception to the usual v3-first subagent brief: the control agent is forbidden
+  from reading Scion design/docs/reports/core, may only use standalone `vrp/`,
+  and must write all scratch changes, commands, `research_log.md`, and
+  benchmark results under
+  `/home/clawd/research/scion-experiments/independent-vrp-baseline-research-20260615T165347Z`.
+  Purpose: compare Scion-guided research with a plain Codex VRP baseline
+  research process.
 
 ## Current Repair Acceptance - 2026-06-13
 
