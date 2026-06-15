@@ -2000,6 +2000,19 @@ Phase B launch design - 2026-06-14:
   researcher against Scion-guided branch research. Any positive result is
   external-control hypothesis material only and requires later no-LLM replay
   before any Scion replay or default solver change.
+- Completed: twelfth independent VRP-only research control `Helmholtz`.
+  Result report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615k-result.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-k-20260615`.
+  Required artifacts are present, `experiments.jsonl` has `3` valid rows, and
+  `candidate.patch` dry-runs against a clean `HEAD` archive without applying to
+  the main checkout. The retained `regret4_repair` seed adds a `regret4`
+  repair operator and measured W/T/L `8/5/2`, mean delta `-32.333`, median
+  delta `-11.0`, failures `0` on a `5` case x `3` seed x `1s` standalone VRP
+  smoke grid. Treat it as a positive external-control hypothesis seed only:
+  it has two X-family regressions and needs broader no-LLM validation before
+  any Scion replay or default solver change.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

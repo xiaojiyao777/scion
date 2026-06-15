@@ -173,15 +173,16 @@ Active work as of the latest handoff:
   `max_destroy_160_param` W/T/L `0/15/0`. This is negative external-control
   evidence and should not seed Scion replay.
 - Independent VRP-only control `Helmholtz`
-  (`019ecd83-3324-7820-912e-2c7d94517e7e`) is active outside Scion. Artifact
-  root:
+  (`019ecd83-3324-7820-912e-2c7d94517e7e`) is complete outside Scion. Report:
+  [`../experiments/v0.4/v04-independent-vrp-research-agent-20260615k-result.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615k-result.md).
+  Artifact root:
   `/home/clawd/research/vrp-independent-codex-research/phase-k-20260615`.
-  This is a fresh, non-forked external research subject forbidden from reading
-  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
-  or prior Scion conclusions. Required process artifacts are
-  `research_log.md`, `experiments.jsonl`, and `summary.md`; any retained
-  `candidate.patch` is external hypothesis material only and must pass later
-  no-LLM replay before Scion adoption.
+  It retained a `regret4_repair` external hypothesis seed that adds a
+  `regret4` ALNS repair operator. The standalone smoke result was W/T/L
+  `8/5/2`, mean delta `-32.333`, median delta `-11.0`, failures `0`, and the
+  patch dry-runs against clean `HEAD`. This is positive external-control
+  evidence only; it has two X-family regressions and needs broader no-LLM
+  validation before any Scion replay or default solver change.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
