@@ -1281,6 +1281,16 @@ Phase B launch design - 2026-06-14:
   `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across seeds `61/67/89` and
   multipliers `1/2/4` produces `36` jobs. Full large-X curve execution remains
   the next experiment step, ideally on WSL using the pushed branch.
+- Large-X runtime curve launched: WSL execution started from commit `72491c0`
+  at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`
+  with server sync at
+  `/home/clawd/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`,
+  `--parallelism 4`, `--timeout-padding-sec 600`, and no LLM/APS calls. Initial
+  synced progress has 3 completed `X-n401-k29` jobs, all with distance `68673`,
+  BKS gap `3.81%`, `best_update_count=0`, and no stderr. The run is still
+  active; final acceptance requires syncing the completed summary JSON/CSV and
+  analyzing all 36 rows.
 
 ## Current Repair Acceptance - 2026-06-13
 

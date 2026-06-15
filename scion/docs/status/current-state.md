@@ -170,6 +170,16 @@ for `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across frozen seeds
 the next experiment artifact to execute, preferably on WSL after the branch is
 pushed.
 
+That full curve is now running on WSL from commit `72491c0` at
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`
+and has been partially synced to
+`/home/clawd/research/scion-experiments/v04-cvrp-largeX-runtime-curve-20260615T150454Z`.
+It uses `--parallelism 4`, `--timeout-padding-sec 600`, and direct solver
+replay only; no LLM or APS calls are involved. Initial synced output contains
+three completed `X-n401-k29` jobs, all at distance `68673`, BKS gap `3.81%`,
+and `best_update_count=0`. The curve is still active, so final CVRP runtime
+interpretation remains pending until all 36 rows are synced and analyzed.
+
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
 pair-level policy fields for diagnostic validation after screening expansion is
