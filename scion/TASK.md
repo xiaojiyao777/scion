@@ -1904,6 +1904,32 @@ Phase B launch design - 2026-06-14:
   not promotion evidence or `DecisionFeatures` input. Keep `X-n1001` as a
   heavy-tail runtime diagnostic and describe the mechanism as two-opt polish
   phase movement, not deeper ALNS incumbent-update leverage.
+- Launched: CVRP size70 fixed-candidate validation replay on WSL. Launch
+  report:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-validation-launch-20260615.md`.
+  Initial WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-20260615T223636Z`.
+  Initial server sync root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-20260615T223636Z`.
+  Initial tmux session: `scion_cvrp_size70_validation_223636`. WSL repo was
+  fast-forwarded to `2e0db05`, the external candidate artifact was synced, the
+  validation manifest was rebuilt with WSL-local paths, and materialization
+  recreated `scheduler.py` with sha256
+  `1cdc55672fd14f357605fbb253186fef621864c4972dd1ddf73bec31a9c826ac`.
+  The replay uses the formal CVRP `problem-v1.yaml`, `formal/protocol.yaml`,
+  `formal/split_manifest.yaml`, and `formal/seed_ledger.yaml`, with no
+  explicit `--time-limit-sec` override so protocol runtime rules apply. This is
+  no-LLM/no-APS mechanism-validity replay only, not promotion evidence.
+  The initial run failed before Protocol with `error_count=2` because strict
+  `ExperimentProtocol` case-path resolution could not resolve
+  `cvrplib/A/A-n60-k9.vrp`; the formal split manifest had no WSL
+  `safe_data_roots`. A repaired run is now active with an experiment-local
+  split manifest adding `/home/xjy-ubuntu/research/or-autoresearch-agent/vrp`.
+  Repaired WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
+  Repaired server sync root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
+  Repaired tmux session: `scion_cvrp_size70_validation_rerun_224151`.
 - Launched: CVRP agent behavior debug audit worker `Gibbs`
   (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
   experiment-analysis subagent, so its brief requires reading

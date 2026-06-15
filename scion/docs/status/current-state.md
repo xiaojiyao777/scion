@@ -104,6 +104,24 @@ Active work as of the latest handoff:
   material only: `X-n1001` is still a heavy-tail runtime diagnostic and
   `best_update_count=0` means the claim is limited to two-opt polish phase
   movement, not deeper ALNS incumbent-update leverage.
+- CVRP size70 fixed-candidate validation replay is running on WSL. Launch
+  report:
+  [`../experiments/v0.4/v04-cvrp-size70-fixed-validation-launch-20260615.md`](../experiments/v0.4/v04-cvrp-size70-fixed-validation-launch-20260615.md).
+  The initial WSL root
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-20260615T223636Z`
+  failed before Protocol with `error_count=2` because strict case-path
+  resolution could not resolve `cvrplib/A/A-n60-k9.vrp`; the formal split
+  manifest had no WSL `safe_data_roots`. This is configuration evidence, not a
+  mechanism result. A repaired replay is active at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`
+  and syncing to
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
+  Tmux session: `scion_cvrp_size70_validation_rerun_224151`. The repaired run
+  adds an experiment-local split manifest with WSL VRP data root in
+  `safe_data_roots`, replays one external full-file candidate over both fixed
+  replay arms at validation stage, and does not pass `--time-limit-sec`, so
+  formal protocol runtime rules apply. Postrun must inspect raw validation
+  metrics before deciding whether frozen fixed replay is allowed.
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
   [`../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`](../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md).
   The repair makes strict clean-fork/sibling branch-lesson requirements
@@ -725,6 +743,29 @@ no route/fleet regression. This passes Tier 1 to formal fixed-candidate
 validation readiness, while retaining `X-n1001` heavy-tail runtime caveats and
 the interpretation limit that `best_update_count=0` confines the mechanism
 claim to two-opt polish phase movement.
+
+The formal fixed-candidate validation replay was then launched on WSL. Launch
+report:
+[`../experiments/v0.4/v04-cvrp-size70-fixed-validation-launch-20260615.md`](../experiments/v0.4/v04-cvrp-size70-fixed-validation-launch-20260615.md).
+Initial WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-20260615T223636Z`.
+Initial server sync root:
+`/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-20260615T223636Z`.
+Initial tmux session: `scion_cvrp_size70_validation_223636`. WSL was fast-forwarded to
+commit `2e0db05`; the external candidate artifact was synced to WSL; the
+validation manifest was rebuilt with WSL-local paths; and materialization
+recreated `scheduler.py` with sha256
+`1cdc55672fd14f357605fbb253186fef621864c4972dd1ddf73bec31a9c826ac`. The replay
+uses formal CVRP `problem-v1.yaml`, `formal/protocol.yaml`,
+`formal/split_manifest.yaml`, and `formal/seed_ledger.yaml`, with no explicit
+`--time-limit-sec` override so protocol runtime rules apply. This remains
+no-LLM/no-APS mechanism-validity replay, not promotion evidence.
+The initial attempt failed before Protocol because strict case-path resolution
+did not have the WSL VRP data root in `safe_data_roots`. A repaired run is
+active at
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`
+with tmux session `scion_cvrp_size70_validation_rerun_224151` and an
+experiment-local split manifest adding the WSL data root.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
