@@ -105,7 +105,7 @@ class _ALNSVNSSolver:
             d_idx = destroy_weights.choose(rng)
             r_idx = repair_weights.choose(rng)
             destroy_name, destroy_op = destroy_ops[d_idx]
-            _repair_name, repair_op = repair_ops[r_idx]
+            repair_name, repair_op = repair_ops[r_idx]
             score = 0.0
             accepted = False
             best_improved = False
@@ -161,6 +161,14 @@ class _ALNSVNSSolver:
                 accepted = True
                 best_improved = True
                 score = SIGMA_BEST
+                self.context.record_best_update(
+                    best,
+                    phase="alns",
+                    iteration=iteration,
+                    delta_from_previous_best=delta,
+                    destroy_operator=destroy_name,
+                    repair_operator=repair_name,
+                )
             elif candidate.total_cost + _EPS < current.total_cost:
                 current = candidate
                 accepted = True

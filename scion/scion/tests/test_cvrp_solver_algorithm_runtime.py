@@ -40,11 +40,16 @@ def test_solver_design_surface_declares_active_algorithm_runtime_fields(
         if surface.name == "solver_design"
     )
     required_fields = tuple(surface.evidence.required_runtime_fields)
+    optional_fields = tuple(surface.evidence.optional_runtime_fields)
 
     assert "solver_algorithm_loaded" in required_fields
     assert "solver_algorithm_active" in required_fields
     assert "solver_algorithm_phase_runtime_ms" in required_fields
     assert "solver_algorithm_actionability_summary" in required_fields
+    assert "solver_algorithm_best_update_trace" not in required_fields
+    assert "solver_algorithm_best_update_summary" not in required_fields
+    assert "solver_algorithm_best_update_trace" in optional_fields
+    assert "solver_algorithm_best_update_summary" in optional_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
     assert runtime["solver_algorithm_loaded"] is True
@@ -323,4 +328,82 @@ def test_solver_design_context_exposes_objective_and_budget_helpers(
     assert summary["route_count_delta_final_minus_initial"] == -1
     assert summary["total_distance_improvement_from_initial"] == 2.0
     assert summary["phases"]["objective_probe"]["status"] == "attempted_no_acceptance"
+    assert runtime["solver_algorithm_best_update_trace"] == []
+    best_update_summary = runtime["solver_algorithm_best_update_summary"]
+    assert best_update_summary["schema"] == "scion.cvrp.best_update_summary.v1"
+    assert best_update_summary["best_update_count"] == 0
+    assert best_update_summary["trace_truncated"] is False
+    assert summary["best_update_summary"]["best_update_count"] == 0
     assert runtime["solver_algorithm_solution_valid"] is True
+
+
+def test_solver_design_best_update_trace_is_bounded_and_summarized(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "baseline_algorithm.py").write_text(
+        "\n".join(
+            [
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    solution = context.nearest_neighbor()",
+                "    for iteration in range(1, 41):",
+                "        context.record_iteration('alns', 1)",
+                "        context.record_best_update(",
+                "            solution,",
+                "            phase='alns',",
+                "            iteration=iteration,",
+                "            delta_from_previous_best=1.5,",
+                "            destroy_operator='shaw',",
+                "            repair_operator='regret2',",
+                "        )",
+                "        context.record_move(",
+                "            'alns',",
+                "            attempted=1,",
+                "            accepted=1,",
+                "            delta=1.5,",
+                "            best_improved=True,",
+                "        )",
+                "    return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+
+    trace = runtime["solver_algorithm_best_update_trace"]
+    summary = runtime["solver_algorithm_best_update_summary"]
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_best_improving_moves"] == 40
+    assert runtime["solver_algorithm_phase_improvement_counts"]["alns"] == 40
+    assert len(trace) == summary["trace_limit"] == 32
+    assert trace[0]["phase"] == "alns"
+    assert trace[0]["iteration"] == 1
+    assert trace[-1]["iteration"] == 32
+    assert trace[0]["delta_from_previous_best"] == 1.5
+    assert trace[0]["destroy_operator"] == "shaw"
+    assert trace[0]["repair_operator"] == "regret2"
+    assert trace[0]["operator_pair"] == "shaw+regret2"
+    assert trace[0]["route_count"] >= 1
+    assert trace[0]["total_distance"] > 0
+    assert trace[0]["objective"]["total_distance"] == trace[0]["total_distance"]
+    assert summary["schema"] == "scion.cvrp.best_update_summary.v1"
+    assert summary["best_update_count"] == 40
+    assert summary["trace_truncated"] is True
+    assert summary["first_iteration"] == 1
+    assert summary["last_iteration"] == 40
+    assert summary["first_elapsed_ms"] is not None
+    assert summary["last_elapsed_ms"] is not None
+    assert summary["update_density_per_1000_iterations"] == 1000.0
+    assert summary["phase_counts"] == {"alns": 40}
+    assert summary["operator_pair_counts"] == {"shaw+regret2": 40}
+    actionability = runtime["solver_algorithm_actionability_summary"]
+    assert actionability["best_update_summary"]["best_update_count"] == 40

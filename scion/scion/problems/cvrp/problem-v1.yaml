@@ -175,6 +175,8 @@ research_surfaces:
       optional_runtime_fields:
         - solver_algorithm_path
         - solver_algorithm_events
+        - solver_algorithm_best_update_trace
+        - solver_algorithm_best_update_summary
         - solver_algorithm_phase_move_attempts
         - solver_algorithm_phase_accepted_moves
         - solver_algorithm_runtime_budget_hit
@@ -205,6 +207,7 @@ research_surfaces:
           - solver_algorithm_improving_moves
           - solver_algorithm_best_improving_moves
           - solver_algorithm_best_delta
+          - solver_algorithm_best_update_summary
           - solver_algorithm_phase_delta_sum
           - solver_algorithm_phase_best_delta
           - solver_algorithm_phase_improvement_counts
@@ -225,6 +228,8 @@ research_surfaces:
           - solver_algorithm_active
           - solver_algorithm_errors
           - solver_algorithm_events
+          - solver_algorithm_best_update_trace
+          - solver_algorithm_best_update_summary
           - solver_algorithm_stop_reason
           - solver_algorithm_runtime_budget_hit
           - solver_algorithm_solution_progress

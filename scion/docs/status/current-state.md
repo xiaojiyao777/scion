@@ -156,6 +156,20 @@ and required solver telemetry lead to stronger follow-up mechanisms. Preserve
 full target/current source in code phase and keep all diagnostics outside
 `DecisionFeatures`.
 
+The first runtime-tooling slice for that gate is implemented. CVRP
+solver-design runtime now emits optional problem-owned
+`solver_algorithm_best_update_trace` and `solver_algorithm_best_update_summary`
+fields, bounded to 32 trace rows and summarized by elapsed time, iteration,
+update density, phase counts, and operator-pair counts. These fields are
+runtime audit/proposal feedback material only and remain outside
+`DecisionFeatures`. `scion/tools/cvrp_runtime_curve.py` now prepares and runs
+no-LLM direct-solver current/2x/4x curves with JSON/CSV output, BKS-gap
+calculation, resume support, and configurable `--parallelism`. A dry-run plan
+for `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across frozen seeds
+`61/67/89` and multipliers `1/2/4` yields `36` jobs. The full large-X curve is
+the next experiment artifact to execute, preferably on WSL after the branch is
+pushed.
+
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
 pair-level policy fields for diagnostic validation after screening expansion is

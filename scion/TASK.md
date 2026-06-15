@@ -1267,6 +1267,20 @@ Phase B launch design - 2026-06-14:
   same-mechanism state, per-case opportunity, mechanism rankings, and necessary
   solver telemetry should drive stronger mechanism follow-up without crowding
   out the research intent. Keep all of this outside `DecisionFeatures`.
+- Large-X runtime tooling status: the CVRP solver-design runtime now emits
+  problem-owned `solver_algorithm_best_update_trace` and
+  `solver_algorithm_best_update_summary` telemetry for incumbent best updates,
+  capped at 32 trace rows and summarized by first/last elapsed time,
+  first/last iteration, update density, phase counts, and operator-pair counts.
+  These fields are declared as optional `solver_design` telemetry in
+  `problem-v1.yaml`; they are not required replay fields and do not enter
+  `DecisionFeatures`. `scion/tools/cvrp_runtime_curve.py` now provides a
+  no-LLM direct-solver replay tool that accepts `CASE=base_budget`, seeds,
+  `1/2/4` budget multipliers, `--parallelism`, and writes JSON/CSV summaries
+  including BKS gap and best-update summaries. Dry-run planning for
+  `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across seeds `61/67/89` and
+  multipliers `1/2/4` produces `36` jobs. Full large-X curve execution remains
+  the next experiment step, ideally on WSL using the pushed branch.
 
 ## Current Repair Acceptance - 2026-06-13
 

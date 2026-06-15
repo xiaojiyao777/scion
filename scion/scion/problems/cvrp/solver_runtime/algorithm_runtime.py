@@ -17,6 +17,7 @@ from scion.problems.cvrp.solver_runtime.solution_ops import (
 from scion.problems.cvrp.solver_runtime.timing import _remaining_time_sec
 
 _BASELINE_ALGORITHM_RELATIVE_PATH = "policies/baseline_algorithm.py"
+_BEST_UPDATE_TRACE_LIMIT = 32
 
 
 def load_baseline_algorithm(
@@ -194,6 +195,8 @@ def solver_algorithm_defaults(
         "solver_algorithm_neutral_accepted_moves": 0,
         "solver_algorithm_best_improving_moves": 0,
         "solver_algorithm_best_delta": 0.0,
+        "solver_algorithm_best_update_trace": [],
+        "solver_algorithm_best_update_summary": _best_update_summary_template(),
         "solver_algorithm_phase_delta_sum": {"none": 0.0},
         "solver_algorithm_phase_best_delta": {"none": 0.0},
         "solver_algorithm_phase_improvement_counts": {"none": 0},
@@ -457,6 +460,58 @@ class SolverAlgorithmContext:
             delta_value,
         )
 
+    def record_best_update(
+        self,
+        solution: Any,
+        *,
+        phase: str = "search",
+        iteration: int | None = None,
+        delta_from_previous_best: int | float = 0.0,
+        destroy_operator: str | None = None,
+        repair_operator: str | None = None,
+        operator: str | None = None,
+    ) -> None:
+        """Record a bounded incumbent-update trace for CVRP solver diagnostics."""
+
+        coerced = _coerce_solution(solution)
+        if coerced is None:
+            raise ValueError("solution cannot be coerced to CvrpSolution")
+        objective = self.objective(coerced)
+        phase_name = str(phase or "").strip() or "search"
+        try:
+            update_delta = max(0.0, float(delta_from_previous_best))
+        except (TypeError, ValueError):
+            update_delta = 0.0
+        trace = self._audit.setdefault("solver_algorithm_best_update_trace", [])
+        if not isinstance(trace, list):
+            trace = []
+            self._audit["solver_algorithm_best_update_trace"] = trace
+        event: dict[str, Any] = {
+            "elapsed_ms": self.elapsed_ms(),
+            "phase": phase_name,
+            "iteration": _as_nonnegative_int(iteration),
+            "objective": dict(objective),
+            "total_distance": float(objective.get("total_distance", 0.0)),
+            "route_count": len(coerced.routes),
+            "delta_from_previous_best": update_delta,
+        }
+        operator_name = str(operator or "").strip()
+        destroy_name = str(destroy_operator or "").strip()
+        repair_name = str(repair_operator or "").strip()
+        if operator_name:
+            event["operator"] = operator_name
+        if destroy_name:
+            event["destroy_operator"] = destroy_name
+        if repair_name:
+            event["repair_operator"] = repair_name
+        if destroy_name or repair_name:
+            event["operator_pair"] = (
+                f"{destroy_name or 'unknown'}+{repair_name or 'unknown'}"
+            )
+        if len(trace) < _BEST_UPDATE_TRACE_LIMIT:
+            trace.append(event)
+        _refresh_solver_algorithm_best_update_summary(self._audit, event)
+
     def set_stop_reason(self, reason: str) -> None:
         value = str(reason or "").strip()
         if value:
@@ -639,6 +694,10 @@ def _refresh_solver_algorithm_actionability_summary(audit: dict[str, Any]) -> No
 
     no_measurable_effect = attempts > 0 and improving <= 0 and best_delta <= 0.0
     audit["solver_algorithm_runtime_budget_hit"] = bool(budget_hit)
+    best_update_summary = audit.get("solver_algorithm_best_update_summary")
+    if not isinstance(best_update_summary, dict):
+        best_update_summary = _best_update_summary_template()
+        audit["solver_algorithm_best_update_summary"] = best_update_summary
     audit["solver_algorithm_actionability_summary"] = {
         "schema": "scion.cvrp.solver_actionability.v1",
         "attempted": bool(attempts > 0 or iterations > 0),
@@ -668,6 +727,7 @@ def _refresh_solver_algorithm_actionability_summary(audit: dict[str, Any]) -> No
         ),
         "phase_no_acceptance_count": no_accept_phase_count,
         "phase_no_measurable_effect_count": no_effect_phase_count,
+        "best_update_summary": best_update_summary,
         "phases": phases,
     }
 
@@ -704,8 +764,87 @@ def _actionability_summary_template() -> dict[str, Any]:
         "total_distance_improvement_from_initial": None,
         "phase_no_acceptance_count": 0,
         "phase_no_measurable_effect_count": 0,
+        "best_update_summary": _best_update_summary_template(),
         "phases": {},
     }
+
+
+def _best_update_summary_template() -> dict[str, Any]:
+    return {
+        "schema": "scion.cvrp.best_update_summary.v1",
+        "best_update_count": 0,
+        "trace_limit": _BEST_UPDATE_TRACE_LIMIT,
+        "trace_truncated": False,
+        "first_elapsed_ms": None,
+        "last_elapsed_ms": None,
+        "first_iteration": None,
+        "last_iteration": None,
+        "update_density_per_1000_iterations": 0.0,
+        "phase_counts": {},
+        "operator_counts": {},
+        "operator_pair_counts": {},
+    }
+
+
+def _refresh_solver_algorithm_best_update_summary(
+    audit: dict[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    summary = audit.setdefault(
+        "solver_algorithm_best_update_summary",
+        _best_update_summary_template(),
+    )
+    if not isinstance(summary, dict):
+        summary = _best_update_summary_template()
+        audit["solver_algorithm_best_update_summary"] = summary
+    count = _as_nonnegative_int(summary.get("best_update_count")) + 1
+    summary["best_update_count"] = count
+    summary["trace_limit"] = _BEST_UPDATE_TRACE_LIMIT
+    summary["trace_truncated"] = bool(count > _BEST_UPDATE_TRACE_LIMIT)
+
+    elapsed_ms = _as_nonnegative_int(event.get("elapsed_ms"))
+    iteration = _as_nonnegative_int(event.get("iteration"))
+    if summary.get("first_elapsed_ms") is None:
+        summary["first_elapsed_ms"] = elapsed_ms
+    if summary.get("first_iteration") is None:
+        summary["first_iteration"] = iteration
+    summary["last_elapsed_ms"] = elapsed_ms
+    summary["last_iteration"] = iteration
+
+    total_iterations = _as_nonnegative_int(
+        audit.get("solver_algorithm_search_iterations")
+    )
+    if total_iterations > 0:
+        summary["update_density_per_1000_iterations"] = (
+            count * 1000.0 / total_iterations
+        )
+    else:
+        summary["update_density_per_1000_iterations"] = 0.0
+
+    phase_counts = summary.setdefault("phase_counts", {})
+    if not isinstance(phase_counts, dict):
+        phase_counts = {}
+        summary["phase_counts"] = phase_counts
+    phase = str(event.get("phase") or "search")
+    phase_counts[phase] = _as_nonnegative_int(phase_counts.get(phase)) + 1
+
+    operator_counts = summary.setdefault("operator_counts", {})
+    if not isinstance(operator_counts, dict):
+        operator_counts = {}
+        summary["operator_counts"] = operator_counts
+    operator = str(event.get("operator") or "").strip()
+    if operator:
+        operator_counts[operator] = (
+            _as_nonnegative_int(operator_counts.get(operator)) + 1
+        )
+
+    pair_counts = summary.setdefault("operator_pair_counts", {})
+    if not isinstance(pair_counts, dict):
+        pair_counts = {}
+        summary["operator_pair_counts"] = pair_counts
+    pair = str(event.get("operator_pair") or "").strip()
+    if pair:
+        pair_counts[pair] = _as_nonnegative_int(pair_counts.get(pair)) + 1
 
 
 def _dict_ints(value: Any) -> dict[str, int]:

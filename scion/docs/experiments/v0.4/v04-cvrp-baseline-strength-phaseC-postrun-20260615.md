@@ -230,7 +230,9 @@ Before another long CVRP campaign, the next v0.4 work should be targeted:
    budgets on `X-n401`, `X-n573`, `X-n641`, and `X-n1001` across the frozen
    seeds, with objective, timeout, BKS gap, ALNS iteration count, and
    best-update trace. This is problem-owned measurement work, not a Decision
-   feature.
+   feature. Tooling for this is now available through
+   `scion/tools/cvrp_runtime_curve.py`, and CVRP solver-design runtime emits
+   optional bounded best-update trace/summary telemetry for new replays.
 4. Tighten hypothesis-context composition so branch lessons, same-mechanism
    continuation state, per-case opportunity summaries, and mechanism rankings
    survive without long generic rule payloads. Preserve full target/current
