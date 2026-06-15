@@ -1698,6 +1698,18 @@ Phase B launch design - 2026-06-14:
   research behavior against Scion-guided branch research. Any positive result is
   external-control hypothesis material only and requires later no-LLM replay
   before any Scion replay or default solver change.
+- Completed: eleventh independent VRP-only research control `Russell`. Result
+  report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615j-result.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-j-20260615`.
+  The run produced the required process artifacts, `experiments.jsonl` has
+  `4` valid JSONL rows, and no `candidate.patch` was retained. The external
+  researcher identified X as the clearest standalone weakness but rejected or
+  failed to retain all screened candidates: `no_vns_param` W/T/L `0/0/15` with
+  mean cost delta `+240.73`, `rotated_sweep_initial` W/T/L `0/15/0`, and
+  `max_destroy_160_param` W/T/L `0/15/0`. Treat this as negative
+  external-control evidence; it should not seed Scion replay.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
