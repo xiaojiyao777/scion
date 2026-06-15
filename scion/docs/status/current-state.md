@@ -122,6 +122,11 @@ Active work as of the latest handoff:
   replay arms at validation stage, and does not pass `--time-limit-sec`, so
   formal protocol runtime rules apply. Postrun must inspect raw validation
   metrics before deciding whether frozen fixed replay is allowed.
+- CVRP validation monitor/postrun worker `Erdos`
+  (`019ecd76-f213-7050-a344-36419ce5314b`) is active. It must read v3 first,
+  poll the repaired validation run sparingly, sync results, and write the
+  validation postrun report without launching new experiments or editing status
+  docs.
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
   [`../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`](../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md).
   The repair makes strict clean-fork/sibling branch-lesson requirements

@@ -1942,6 +1942,12 @@ Phase B launch design - 2026-06-14:
   Repaired server sync root:
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-rerun-20260615T224151Z`.
   Repaired tmux session: `scion_cvrp_size70_validation_rerun_224151`.
+- Launched: CVRP fixed-validation monitor/postrun worker `Erdos`
+  (`019ecd76-f213-7050-a344-36419ce5314b`). It must read v3 first, poll the
+  repaired validation run sparingly, sync WSL results when complete, analyze
+  top-level comparison plus raw validation metrics, and write
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md`.
+  It must not start new experiments or edit status docs.
 - Launched: CVRP agent behavior debug audit worker `Gibbs`
   (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
   experiment-analysis subagent, so its brief requires reading
