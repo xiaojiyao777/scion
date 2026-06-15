@@ -1488,6 +1488,15 @@ Phase B launch design - 2026-06-14:
   It is forbidden from reading Scion artifacts and may only inspect/edit
   standalone `vrp/` in an isolated worktree. Artifact root:
   `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615c`.
+- Completed: fourth independent VRP-only control `Anscombe`. It ran real
+  standalone CVRPLIB `A` subset evidence (`27` cases, seed `0`) and rejected all
+  six small candidates. No `candidate.patch` was retained. The best-looking
+  attempt was C3 VNS operator reordering with W/L/T `4/2/21`, mean objective
+  delta `+0.741` where positive is worse, median delta `0.0`, and no feasibility
+  or route-count regressions. This is negative external-control evidence, not a
+  Scion hypothesis seed. It supports deprioritizing coarse VNS scheduling and
+  destroy-ratio tweaks unless later instrumentation gives a more targeted
+  mechanism.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

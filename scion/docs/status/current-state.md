@@ -363,6 +363,18 @@ only inspect/edit standalone `vrp/` in an isolated worktree. Artifact root:
 Its output will be external-control hypothesis material only, not Scion Protocol
 evidence.
 
+That fourth independent control is now complete and negative. It used real
+standalone CVRPLIB `A` subset data (`27` EUC_2D cases, seed `0`) and tested six
+small candidates: VNS gating, periodic VNS, VNS operator reordering, accepted
+candidate polish, smaller destroy ratio, and larger destroy ratio. All six had
+worse mean objective than baseline; no feasibility or route-count regressions
+were observed. The best-looking attempt, C3 VNS operator reordering, measured
+W/L/T `4/2/21`, mean objective delta `+0.741` where positive is worse, and
+median delta `0.0`. No `candidate.patch` was retained. Interpretation: this is
+good process-control evidence, but not an improvement hypothesis for Scion. It
+also makes the earlier real-CVRPLIB two-opt scheduling signal stand out as the
+stronger external-control VRP hypothesis so far.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
