@@ -1657,6 +1657,18 @@ Phase B launch design - 2026-06-14:
   no-LLM validation with more seeds, more X cases, longer budgets, and explicit
   initial-VNS wall-time instrumentation before any Scion replay or default
   solver change.
+- Launched: tenth independent VRP-only research control `Ohm`
+  (`019ecd40-b8cd-7060-85e0-dc28394e2cb7`). This is a fresh external Codex
+  research subject and is explicitly not a Scion subagent. It must not read
+  Scion design, task, audit, status, prompt, or experiment artifacts. Its job
+  is to keep a documented plain-Codex VRP baseline research lane alive, with
+  process logs detailed enough to compare independent Codex research behavior
+  against Scion-guided branch research. It writes outputs only under
+  `/home/clawd/research/vrp-independent-codex-research/phase-i-20260615`.
+  Expected artifacts are `status.md`, `research_log.md`, `experiments.jsonl`,
+  `candidate_summary.md`, and optional `candidate.patch`. Any positive result
+  is external-control hypothesis material only and requires later no-LLM replay
+  before any Scion replay or default solver change.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1836,12 +1848,13 @@ Phase B launch design - 2026-06-14:
   `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
   completeness and large-X regression checks.
 - Health check: after server sync on 2026-06-15, the Tier 1 WSL tmux session
-  was still running normally with `14/36` result files written and four solver
-  subprocesses active. The completed `X-n401-k29` and early `X-n573-k30` rows
-  were feasible, but best-update count stayed `0`; two-opt phase-level effect
-  exists in raw runtime diagnostics while final large-X total distance has not
-  moved in the completed rows. This is not a postrun conclusion; wait for all
-  keys before deciding whether to launch formal validation.
+  was still running normally with `24/36` result files written and four solver
+  subprocesses active. Completed `X-n401-k29`, `X-n573-k30`, and early
+  `X-n641-k35` rows were feasible, but best-update count stayed `0`;
+  two-opt phase-level effect exists in raw runtime diagnostics while final
+  large-X total distance has not moved in the completed rows. This is not a
+  postrun conclusion; wait for all keys before deciding whether to launch
+  formal validation.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
