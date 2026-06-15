@@ -114,7 +114,7 @@ For warehouse, effective research requires:
 
 ## Required Reading
 
-Every main-thread phase and every new subagent brief must start with the v3
+Every main-thread phase and every Scion subagent brief must start with the v3
 architecture baseline:
 
 1. `scion/design/scion-architecture-v3.md`
@@ -128,6 +128,13 @@ Task-specific references:
 6. `scion/docs/AGENT_ONBOARDING.md`
 7. `scion/docs/status/current-state.md`
 8. `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
+
+Exception: explicitly designated independent VRP-only control agents are not
+Scion subagents. They must not read Scion design, task, audit, status, or
+experiment artifacts, because their purpose is to test what an uncontaminated
+plain Codex VRP researcher can discover against the standalone `vrp/` baseline.
+Their outputs are external-control hypothesis seeds, not Scion Protocol
+evidence.
 
 ## Roles
 
@@ -1416,6 +1423,15 @@ Phase B launch design - 2026-06-14:
   benchmark feasibility and one paired B row regressed. Treat this as a stronger
   external-control hypothesis seed that needs 3-seed/repeated replay and Scion
   direct-solver/protocol validation before adoption.
+- Launched: third independent VRP-only research control `Peirce`
+  (`019ecc78-2582-75f2-8d0d-1448fa0761bf`) in clean worktree
+  `/home/clawd/research/or-autoresearch-agent-vrp-control-20260615b` on branch
+  `codex/vrp-independent-control-20260615b`. It is explicitly forbidden from
+  reading Scion artifacts and writes its research log, summaries, candidate
+  patch, and paired-comparison outputs under
+  `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615b`.
+  Purpose: continue the external-control line as a clean, documented VRP
+  research subject whose process can be compared against Scion-guided research.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

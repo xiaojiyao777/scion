@@ -340,6 +340,17 @@ benchmark-feasible, ALL W/L/T was `39/1/74`, mean gap improved
 loss, and the run is single-seed/wall-clock limited. Treat this as a stronger
 external-control hypothesis seed, not as a merge-ready patch.
 
+A third independent VRP-only control is now active as subagent `Peirce`
+(`019ecc78-2582-75f2-8d0d-1448fa0761bf`). It runs from clean worktree
+`/home/clawd/research/or-autoresearch-agent-vrp-control-20260615b` on branch
+`codex/vrp-independent-control-20260615b` and writes artifacts under
+`/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615b`.
+This is an intentional exception to the usual Scion v3-first subagent rule: the
+agent is forbidden from reading Scion design, task, audit, status, or experiment
+artifacts. Its purpose is to continue the external-control line and record how
+a plain Codex VRP researcher behaves when studying only the standalone `vrp/`
+baseline.
+
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
 pair-level policy fields for diagnostic validation after screening expansion is
