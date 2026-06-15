@@ -1744,6 +1744,20 @@ Phase B launch design - 2026-06-14:
   `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_fixed_candidate_replay.py scion/scion/tests/test_cli_reports_postmortem.py scion/scion/tests/test_cli.py`
   with `29 passed`. This is tooling only; true CVRP size70 mechanism validity
   still requires the pre-registered no-LLM replay tiers.
+- Prepared: CVRP size70 external full-file candidate artifact and validation
+  fixed-replay manifest. Prep report:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-replay-prep-20260615.md`.
+  Artifact:
+  `/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z/external_candidates/size70_twoopt_candidate.patch.json`.
+  Manifest:
+  `/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z/fixed_replay/validation_manifest.v1.json`.
+  The manifest has `candidate_count=1`, `stage_filter=["validation"]`, and no
+  omitted rows. A materialization check confirmed that baseline workspace
+  `workspaces/baseline_alns_only` plus the external full-file patch recreates
+  `workspaces/candidate_twoopt_size70/policies/baseline_modules/scheduler.py`
+  with sha256 `1cdc55672fd14f357605fbb253186fef621864c4972dd1ddf73bec31a9c826ac`.
+  No validation replay has been launched yet; do not start solver-heavy CVRP
+  replay while the warehouse short debug is actively evaluating solver rows.
 
 ## Current Repair Acceptance - 2026-06-13
 

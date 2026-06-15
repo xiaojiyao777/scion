@@ -615,6 +615,19 @@ coverage. This is tooling readiness only; the size70 mechanism still needs the
 pre-registered no-LLM replay tiers before any seeded Scion CVRP run or
 promotion claim.
 
+The size70 fixed replay input is now prepared. Report:
+[`../experiments/v0.4/v04-cvrp-size70-fixed-replay-prep-20260615.md`](../experiments/v0.4/v04-cvrp-size70-fixed-replay-prep-20260615.md).
+The external candidate artifact is
+`/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z/external_candidates/size70_twoopt_candidate.patch.json`.
+The validation manifest is
+`/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-followup-smoke-20260615T1848Z/fixed_replay/validation_manifest.v1.json`.
+The manifest has `candidate_count=1`, `stage_filter=["validation"]`, and no
+omitted rows. A materialization check recreated
+`policies/baseline_modules/scheduler.py` with sha256
+`1cdc55672fd14f357605fbb253186fef621864c4972dd1ddf73bec31a9c826ac`. No CVRP
+validation replay has been launched yet because the warehouse short debug is
+actively consuming WSL solver time.
+
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
 Root:
