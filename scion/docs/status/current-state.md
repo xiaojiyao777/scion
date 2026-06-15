@@ -454,6 +454,18 @@ server-heavy sweep is approved yet. Any positive result is only an external
 hypothesis seed and must pass later no-LLM Scion replay before it can affect
 Scion experiments.
 
+That eighth control is now complete. The same report records the result:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md).
+It retained a parameter-only `candidate.patch` for default ALNS
+`destroy_ratio=(0.05, 0.25)` instead of `(0.10, 0.40)`, relative to the current
+dirty local `vrp/src/solver.py` baseline. The bounded pilot ran `7` cases x `2`
+seeds at nominal `0.4s`; the candidate improved mean gap by about `0.2904`
+percentage points, W/T/L `5/7/2`, and reduced mean wall time from `1.087s` to
+`0.785s`. It also had losses on `X-n143-k7` and `tai150a`, and no activation on
+`X-n513-k21` under the short budget. Treat it as an external hypothesis seed
+requiring broader no-LLM validation, not a solver default change or Scion
+Protocol result.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
@@ -580,9 +592,11 @@ context. Focused acceptance passed:
 `test_agentic_code_stage_invariants.py` (`84` tests total). Next warehouse
 gate remains a short `3-6R` compact debug before any full `3 x 24R` longrun.
 
-That repaired short warehouse debug is now running as a `4R` compact ON-arm
-cell. Launch report:
+That repaired short warehouse debug completed as a `4R` compact ON-arm cell.
+Launch report:
 [`../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-launch-20260615.md`](../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-launch-20260615.md).
+Postrun:
+[`../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-postrun-20260615.md`](../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-postrun-20260615.md).
 WSL root:
 `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-short-debug-4r-guidance-20260615T205022Z`.
 Server sync root:
@@ -591,10 +605,20 @@ Tmux session: `scion_warehouse_short4r_guidance_205022`. It started at
 `2026-06-15T20:51:18Z` from commit `bf420c2` with local `gpt-5.5`,
 `measurement_governance=on`, `compact-measurement-diagnostics`, `rounds=4`,
 `time_limit_sec=30`, disabled early stop, and an absolute WSL safe root.
-Initial health check confirmed `status=running`, experiment-local WSL configs,
-and campaign startup in `run.log`. Postrun acceptance must inspect Protocol row
-accounting, branch-lesson semantic use, prompt truncation, order-level runtime
-behavior, and code-stage source visibility.
+It finished with wrapper exit `0`, `run_validity_status=valid`,
+`requested_rounds=4`, `effective_rounds_completed=4`, and
+`effective_protocol_rounds=4`. All four requested attempts reached screening
+and produced formal candidate artifacts. `protocol_metric_results=5` because
+one non-counted fresh-runtime replay row ran after the four counted screening
+rows. There were no Verification failures, no `V9_perf_guard`, no validation or
+frozen rows, and no promotion. The order-level `move_order.py` candidate
+reached screening and avoided the previous V9 failure mode, but the run is not
+ready for the full warehouse `3 x 24R`: branch-lesson semantic satisfaction is
+still weak, same-file `subcategory_pack_upgrade.py` consumed three counted
+candidates, hypothesis manifests still truncate `compact_research_signals`,
+general/tool-selection payloads still dominate prompts, and a fresh-runtime
+replay was still spent on a no-effect warehouse path. Next warehouse action:
+targeted repair, then another short compact `4-6R`, not a full longrun yet.
 
 The CVRP size70 next-rung design is also complete:
 [`../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`](../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md).

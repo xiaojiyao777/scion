@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse prompt guidance repaired; CVRP fixed replay tooling ready; independent VRP phase G active*
+*Status: warehouse 4R postrun complete; CVRP fixed replay input ready; independent VRP phase G complete*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1616,6 +1616,21 @@ Phase B launch design - 2026-06-14:
   without returning a matrix proposal for main-thread approval. Any positive
   candidate is external hypothesis material only and must pass later no-LLM
   Scion replay before it can affect Scion experiments.
+- Completed: eighth independent VRP-only research control `Tesla`. Result
+  report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615g.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-g-20260615`.
+  It retained a parameter-only candidate patch changing default ALNS
+  `destroy_ratio` from `(0.10, 0.40)` to `(0.05, 0.25)` relative to the current
+  dirty local `vrp/src/solver.py` baseline. Pilot matrix result over `7` cases
+  x `2` seeds at nominal `0.4s`: baseline mean gap `7.6449519187010235%`,
+  candidate mean gap `7.354517114570147%`, delta
+  `-0.29043480413087686` percentage points, W/T/L `5/7/2`, and lower mean wall
+  time (`0.785s` versus `1.087s`). Treat this as an external-control hypothesis
+  seed only. It needs broader no-LLM validation over A/B/P/CMT plus stratified
+  X/tai, seeds `0..4`, budgets `0.5/1.0/3.0s`, and comparison against both
+  `(0.10, 0.40)` and `(0.05, 0.30)` before any Scion replay or default change.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1724,6 +1739,28 @@ Phase B launch design - 2026-06-14:
   and campaign startup. Postrun acceptance must inspect Protocol rows,
   branch-lesson semantic use, prompt truncation, order-level runtime behavior,
   and code-stage source visibility.
+- Completed: repaired warehouse short `4R` compact debug. Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-short-debug-4r-guidance-postrun-20260615.md`.
+  The run is valid and complete: wrapper exit `0`,
+  `run_validity_status=valid`, `requested_rounds=4`,
+  `effective_rounds_completed=4`, `effective_protocol_rounds=4`, all four
+  requested attempts reached screening, and `formal_candidate_artifact_count=4`.
+  `protocol_metric_results=5` because one non-counted fresh-runtime replay row
+  was executed after the four counted screening rows. There were no
+  verification failures, no `V9_perf_guard`, no validation/frozen rows, and no
+  promotion. The order-level `move_order.py` candidate reached screening and
+  avoided the previous V9 failure mode, with median runtime ratio `0.814`, but
+  only marginal objective evidence (`case 1/2/3`, pair `3/5/4`, median delta
+  `0`). Verdict: execution/safety gate passed, research-quality gate not ready
+  for full warehouse `3 x 24R`. Remaining issues: only `1/4` branch-lesson
+  usages satisfied the campaign semantic projection, three counted candidates
+  stayed in same-file `subcategory_pack_upgrade.py`, hypothesis manifests still
+  truncated `compact_research_signals`, general/tool-selection prompt payloads
+  dominated context, and one fresh-runtime replay was still spent on a
+  no-effect budget-exhausting warehouse path. Next warehouse action: targeted
+  repair for semantic branch-lesson enforcement, same-mechanism no-effect
+  lifecycle pressure, prompt overhead, and no-effect fresh-runtime demotion;
+  then rerun another short compact `4-6R`, not full `3 x 24R` yet.
 - Completed: CVRP size70 fixed-candidate validation design. Report:
   `scion/docs/planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`.
   Next CVRP order: fixed-candidate validation-grade replay first, seeded Scion
