@@ -223,6 +223,17 @@ evidence, not as evidence that warehouse cannot recover continued promotion.
 The next warehouse longrun needs a patch-edit/source-action debug or a
 single-round behavior audit first.
 
+The behavior analysis is complete:
+[`../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`](../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md).
+The primary cause was verification environment/preflight: candidates failed
+`V3_unit_tests` because the WSL campaign environment could not import `pytest`.
+The secondary cause was fix-stage patch protocol: the model recognized
+`wrong_owner` but had no legal `no_patch` / `abort_repair` exit, so it emitted
+empty or whole-file `exact_replace` edits. Source visibility was not the main
+issue in inspected cases. Do not rerun full warehouse until verifier preflight
+and fix no-op handling are repaired and a small lifecycle debug reaches
+`protocol_metric_results>0`.
+
 A separate single-round debug/behavior audit is being designed but has not
 started a new LLM campaign. Its purpose is to inspect one complete agent loop:
 prompt context composition, branch and cross-branch lesson visibility, source
@@ -238,6 +249,20 @@ standalone `vrp/` baseline and write scratch artifacts under
 `/home/clawd/research/scion-experiments/independent-vrp-baseline-research-20260615T165347Z`.
 It must record `research_log.md`, baseline-vs-candidate commands, and results
 so its research process can be compared against Scion-guided research.
+
+That independent control is now complete. Report:
+[`../experiments/v0.4/v04-independent-vrp-baseline-control-20260615.md`](../experiments/v0.4/v04-independent-vrp-baseline-control-20260615.md).
+The non-Scion researcher found a standalone `vrp/` mechanism: keep a lightweight
+intra-route 2-opt polish for medium instances where full VNS is skipped by the
+`vns_threshold`. The small paired benchmark produced `60/60` successful
+subprocesses, mean gap improvement from `8.7653%` to `8.1732%`, paired outcomes
+`17` improved / `13` tied / `0` regressed, and X-subset outcomes `15` improved /
+`3` tied / `0` regressed. A read-only portability probe found that Scion CVRP
+has the analogous structure: `_two_opt_intra` already exists and embedded/initial
+VNS is gated by `instance.customer_count <= self.vns_threshold`. The Scion
+candidate is therefore a scheduling/gating mechanism, not adding a duplicate
+2-opt operator. It still needs Scion direct-solver replay and formal protocol
+validation before adoption.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned

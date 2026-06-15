@@ -1341,6 +1341,27 @@ Phase B launch design - 2026-06-14:
   `/home/clawd/research/scion-experiments/independent-vrp-baseline-research-20260615T165347Z`.
   Purpose: compare Scion-guided research with a plain Codex VRP baseline
   research process.
+- Completed: independent VRP baseline researcher control. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-baseline-control-20260615.md`.
+  The non-Scion researcher found a standalone `vrp/` mechanism: preserve a
+  cheap intra-route 2-opt polish for medium instances where full VNS is skipped
+  by the `vns_threshold`. The scratch benchmark produced `60/60` successful
+  subprocesses, mean gap improvement from `8.7653%` to `8.1732%`, paired
+  outcomes `17` improved / `13` tied / `0` regressed, and X-subset outcomes
+  `15` improved / `3` tied / `0` regressed. Quick portability probe shows Scion
+  CVRP already has `_two_opt_intra` and the same full-VNS threshold gate, so the
+  Scion hypothesis is a scheduling/gating candidate, not a duplicate operator
+  addition. Treat this as a strong external-control research signal requiring
+  Scion replay/protocol validation before adoption.
+- Completed: warehouse abort behavior analysis. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
+  Root cause was not warehouse mechanism quality: candidates failed before
+  Protocol because the WSL verification environment lacked `pytest`
+  (`V3_unit_tests` / `No module named pytest`), then fix-stage `wrong_owner`
+  handling had no legal no-op / abort-repair path and degenerated into empty or
+  whole-file `exact_replace` patch protocol errors. Next warehouse order is:
+  verifier preflight, fix-stage no-patch/abort handling, 1-candidate lifecycle
+  debug with `protocol_metric_results>0`, short 3-5R debug, then rerun 3x24R.
 
 ## Current Repair Acceptance - 2026-06-13
 
