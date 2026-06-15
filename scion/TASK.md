@@ -1392,6 +1392,18 @@ Phase B launch design - 2026-06-14:
   Scion hypothesis is a scheduling/gating candidate, not a duplicate operator
   addition. Treat this as a strong external-control research signal requiring
   Scion replay/protocol validation before adoption.
+- Completed: second independent VRP-only research control. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615.md`.
+  This control again read only `vrp/` and did not read Scion docs or history.
+  On the complete standalone `A/B/P/E/X` EUC_2D set with seed `0` and
+  `1.0s` BKS time limit, the final candidate kept small-instance full VNS
+  unchanged and added only cheap `two_opt_intra` polish for instances above the
+  full-VNS threshold. Paired benchmark-feasible rows: ALL W/L/T `39/1/74`,
+  mean gap `3.3243% -> 3.1658`; X W/L/T `34/0/13`, mean gap
+  `5.9733% -> 5.6062`, median X cost delta `-101`. Risk: one B instance lost
+  benchmark feasibility and one paired B row regressed. Treat this as a stronger
+  external-control hypothesis seed that needs 3-seed/repeated replay and Scion
+  direct-solver/protocol validation before adoption.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

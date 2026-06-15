@@ -309,6 +309,21 @@ candidate is therefore a scheduling/gating mechanism, not adding a duplicate
 2-opt operator. It still needs Scion direct-solver replay and formal protocol
 validation before adoption.
 
+A second independent VRP-only control repeated the idea on the complete
+standalone `A/B/P/E/X` EUC_2D set. Report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615.md).
+Artifact root:
+`/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615`.
+It did not read Scion docs/history. The final candidate left small-instance
+full VNS unchanged and added only `two_opt_intra` polish for instances above the
+full-VNS threshold. On rows where both baseline and candidate were
+benchmark-feasible, ALL W/L/T was `39/1/74`, mean gap improved
+`3.3243% -> 3.1658%`; X W/L/T was `34/0/13`, mean gap improved
+`5.9733% -> 5.6062`, and median X cost delta was `-101`. Risks remain:
+`B-n45-k6` lost benchmark feasibility, `B-n66-k9` was the only paired objective
+loss, and the run is single-seed/wall-clock limited. Treat this as a stronger
+external-control hypothesis seed, not as a merge-ready patch.
+
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
 pair-level policy fields for diagnostic validation after screening expansion is
