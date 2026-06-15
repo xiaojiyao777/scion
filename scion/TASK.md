@@ -1957,7 +1957,12 @@ Phase B launch design - 2026-06-14:
   metrics at `9/48` attempted/valid pairs, `0` failed pairs, W/T/L `0/8/1`,
   mean delta `-0.222`, and median delta `0.0`. This is progress telemetry
   only; no validation conclusion is accepted until all `48` pairs and
-  comparison outputs are present.
+  comparison outputs are present. Later sync clarified that `48` pairs are per
+  replay arm, not the whole fixed-replay gate: the `on` arm completed `48/48`
+  with `0` failed pairs, and the run then started the `record_only` arm. The
+  fixed-candidate validation gate remains open until `record_only` completes,
+  `exit_code.txt` is written, and `fixed_candidate_replay_comparison.v1.json`
+  is present.
 - Launched: CVRP fixed-validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`). It must read v3 first, poll the
   full `48`-pair validation run sparingly, sync WSL results when complete, analyze

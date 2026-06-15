@@ -127,7 +127,11 @@ Active work as of the latest handoff:
   validation metrics at `9/48` attempted/valid pairs, `0` failed pairs, W/T/L
   `0/8/1`, mean delta `-0.222`, and median delta `0.0`. Postrun must inspect
   the full raw validation metrics before deciding whether frozen fixed replay
-  is allowed.
+  is allowed. A later sync clarified the scope: `48` pairs are required per
+  replay arm. The `on` arm completed `48/48` with `0` failed pairs, after which
+  the run began the `record_only` arm. The gate is still running and must not be
+  accepted until `record_only` completes, `exit_code.txt` exists, and the
+  top-level `fixed_candidate_replay_comparison.v1.json` is present.
 - CVRP validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`) is active. It must read v3 first,
   poll the full 48-pair validation run sparingly, sync results, and write the
