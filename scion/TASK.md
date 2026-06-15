@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP 1R behavior debug active; pre-Protocol runtime-boundary repair accepted*
+*Status: CVRP 1R behavior debug completed valid; two-opt direct replay smoke complete; external VRP control active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1432,6 +1432,62 @@ Phase B launch design - 2026-06-14:
   `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615b`.
   Purpose: continue the external-control line as a clean, documented VRP
   research subject whose process can be compared against Scion-guided research.
+- Completed: third independent VRP-only research control `Peirce`. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615b.md`.
+  Because real `cvrplib/` data was absent from the isolated allowed roots, this
+  control generated synthetic CVRPLIB-format fixtures and found only a weaker
+  hypothesis seed: add standalone intra-route relocate to VNS. Synthetic paired
+  comparison W/L/T was `18/5/15`, mean cost delta `-4.8421`, median delta `0.0`,
+  and no feasibility or route-count regressions. Treat this as weaker than the
+  earlier real-CVRPLIB two-opt scheduling controls.
+- Launched: no-LLM Scion CVRP direct replay for the stronger independent-control
+  two-opt scheduling hypothesis. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-direct-replay-20260615T1820Z`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-polish-direct-replay-20260615T1820Z`.
+  Tmux session: `scion_cvrp_twoopt_smoke_20260615T1820Z`. This direct replay
+  creates experiment-owned copied workspaces for `USE_VNS=False` baseline and
+  `USE_VNS=False + _two_opt_intra` polish candidate, then runs a smoke on
+  `B-n45-k6`, `B-n66-k9`, `A-n80-k10`, and `M-n200-k17` with seeds `11/29/43`.
+  Large-X replay is gated on the smoke result and has not been launched.
+- Completed: repaired CVRP 1R behavior debug. WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-repaired-gpt55-20260615T175742Z-claw`.
+  Synced server root:
+  `/home/clawd/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-repaired-gpt55-20260615T175742Z-claw`.
+  Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`.
+  It finished with wrapper exit `0`, `run_validity.status=valid`,
+  `effective_protocol_rounds=1`, `formal_screened_candidates=1`,
+  `protocol_metric_results=1`, `screening_protocol_results=1`,
+  `validation_protocol_results=0`, `frozen_protocol_results=0`,
+  `agentic_sessions=2`, and `quality_block_ledger=0`. This clears the
+  immediate behavior-debug health gate: the pre-repair runtime-boundary failure
+  no longer blocks Protocol. Subagent `Carson`
+  (`019ecc90-853a-7111-a164-166df16f2de6`) completed artifact analysis and
+  accepted this only for framework path health, not for agent research quality.
+  The candidate was a `split_route_ejection_merge` VNS/local-search mechanism
+  with screening case W/L/T `2/1/5`, pair W/L/T `6/5/21`, `win_rate=0.25`,
+  `median_delta=0.0`, CI `[0.0, 5.25]`, and decision
+  `expand_screening` / `SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT`.
+  Source visibility passed, but the hypothesis prompt was still about `120,089`
+  characters and `compact_research_signals` was truncated.
+- Completed: two-opt direct replay smoke. Aggregate W/L/T was `9/3/0`, mean
+  candidate-minus-baseline delta `-3.4167`, median delta `-3.5`, route/fleet
+  regressions `0`, and candidate two-opt activation was nonzero
+  (`9` initial accepts, `3739` embedded accepts). Large-X is not launched from
+  this smoke as-is because the pre-registered gate required no repeated
+  B-family objective regression, while `B-n45-k6` had two losses and
+  `B-n66-k9` had one. Treat this as promising but unstable problem-owned
+  mechanism evidence, not promotion evidence.
+- Launched: fourth independent VRP-only research control `Anscombe`
+  (`019ecc8e-d45e-7983-b346-3621f90d38f4`) as a fresh, non-forked external
+  researcher. Report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615c.md`.
+  It is forbidden from reading Scion artifacts and may only inspect/edit
+  standalone `vrp/` in an isolated worktree. Artifact root:
+  `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615c`.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

@@ -340,16 +340,67 @@ benchmark-feasible, ALL W/L/T was `39/1/74`, mean gap improved
 loss, and the run is single-seed/wall-clock limited. Treat this as a stronger
 external-control hypothesis seed, not as a merge-ready patch.
 
-A third independent VRP-only control is now active as subagent `Peirce`
-(`019ecc78-2582-75f2-8d0d-1448fa0761bf`). It runs from clean worktree
-`/home/clawd/research/or-autoresearch-agent-vrp-control-20260615b` on branch
-`codex/vrp-independent-control-20260615b` and writes artifacts under
+A third independent VRP-only control completed as subagent `Peirce`
+(`019ecc78-2582-75f2-8d0d-1448fa0761bf`). Report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615b.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615b.md).
+Artifact root:
 `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615b`.
-This is an intentional exception to the usual Scion v3-first subagent rule: the
-agent is forbidden from reading Scion design, task, audit, status, or experiment
-artifacts. Its purpose is to continue the external-control line and record how
-a plain Codex VRP researcher behaves when studying only the standalone `vrp/`
-baseline.
+This was an intentional exception to the usual Scion v3-first subagent rule: the
+agent was forbidden from reading Scion artifacts. Because real `cvrplib/` data
+was absent from its allowed roots, it generated synthetic CVRPLIB-format
+fixtures and found only a weak hypothesis seed: add standalone `relocate_intra`
+to VNS. Synthetic paired comparison W/L/T was `18/5/15`, mean cost delta
+`-4.8421`, median delta `0.0`, with no feasibility or route-count regressions.
+Treat this as weaker than the earlier real-CVRPLIB two-opt scheduling control.
+
+A fourth independent VRP-only control is active as subagent `Anscombe`
+(`019ecc8e-d45e-7983-b346-3621f90d38f4`). Report:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615c.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615c.md).
+This was launched as a fresh, non-forked external researcher so it does not
+inherit Scion task context. It is forbidden from reading Scion artifacts and may
+only inspect/edit standalone `vrp/` in an isolated worktree. Artifact root:
+`/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615c`.
+Its output will be external-control hypothesis material only, not Scion Protocol
+evidence.
+
+The direct replay for the stronger independent-control mechanism completed its
+smoke on WSL. Launch/status report:
+[`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
+Server root:
+`/home/clawd/research/scion-experiments/v04-cvrp-twoopt-polish-direct-replay-20260615T1820Z`.
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-twoopt-polish-direct-replay-20260615T1820Z`.
+It creates experiment-owned `USE_VNS=False` baseline and
+`USE_VNS=False + _two_opt_intra` polish workspaces from the current WSL CVRP
+problem package, then ran a no-LLM smoke on `B-n45-k6`, `B-n66-k9`,
+`A-n80-k10`, and `M-n200-k17` over seeds `11/29/43`. The smoke finished with
+wrapper exit `0`, aggregate W/L/T `9/3/0`, mean candidate-minus-baseline delta
+`-3.4167`, median delta `-3.5`, route/fleet regressions `0`, and nonzero
+two-opt activation (`9` initial accepts and `3739` embedded accepts). Large-X is
+not launched from this smoke as-is because the pre-registered gate required no
+repeated B-family objective regression; `B-n45-k6` had two losses and
+`B-n66-k9` had one. Treat the mechanism as promising but unstable and requiring
+narrower follow-up or B-family explanation before expensive replay.
+
+The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
+[`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
+Root:
+`/home/clawd/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-repaired-gpt55-20260615T175742Z-claw`.
+It finished with wrapper exit `0`, `run_validity.status=valid`,
+`effective_protocol_rounds=1`, `formal_screened_candidates=1`,
+`protocol_metric_results=1`, `screening_protocol_results=1`,
+`validation_protocol_results=0`, `frozen_protocol_results=0`,
+`agentic_sessions=2`, and no quality-block ledger entries. This clears the
+immediate framework path-health gate after the runtime-boundary repair: the run
+now reaches Protocol instead of dying in pre-Protocol smoke. Subagent `Carson`
+(`019ecc90-853a-7111-a164-166df16f2de6`) completed read-only artifact analysis
+and accepted it only for framework path health, not agent research quality. The
+single candidate was `split_route_ejection_merge`, not the external-control
+two-opt hypothesis; screening case W/L/T was `2/1/5`, pair W/L/T `6/5/21`,
+`win_rate=0.25`, `median_delta=0.0`, CI `[0.0, 5.25]`, and decision
+`expand_screening` with `SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT`. Source
+visibility passed, but hypothesis context remains too large at about `120,089`
+characters with `compact_research_signals` truncated.
 
 The staged CVRP diagnostic-validation gate repair is now implemented and under
 acceptance. `ExpandedBorderlineAdvanceConfig` has explicit problem-owned
