@@ -408,6 +408,16 @@ reading Scion artifacts and limited to standalone `vrp/`. Artifact root:
 Its output is external-control process evidence only. A positive candidate can
 seed later no-LLM Scion replay, but it is not Scion Protocol evidence.
 
+That sixth control is now complete. The same report now records the result:
+[`../experiments/v0.4/v04-independent-vrp-research-agent-20260615e.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260615e.md).
+It produced a cleanly applying `candidate.patch` for `construction_portfolio`,
+but the result is only an external backlog seed. The observed baseline included
+the pre-existing dirty `vrp/src/solver.py` two-opt fallback. `construction_portfolio`
+showed `1s` result `2` improved / `0` worse / `24` same, sum delta `-11`, and
+`2s` expansion `2` improved / `2` worse / `21` same, sum delta `-20`. It is
+not clean enough for adoption and is lower priority than the size70 two-opt
+mechanism.
+
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
 [`../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-twoopt-polish-direct-replay-launch-20260615.md).
@@ -499,6 +509,29 @@ absolute WSL safe root. Initial health check confirmed `status.txt`,
 Postrun acceptance must inspect Protocol rows, branch depth, same-mechanism
 continuation, prompt composition, and whether marginal evidence influences
 later proposals.
+
+The short warehouse debug is now postrun-audited. Postrun:
+[`../experiments/v0.4/v04-warehouse-short-debug-3r-postrun-20260615.md`](../experiments/v0.4/v04-warehouse-short-debug-3r-postrun-20260615.md).
+It exited `0` and is valid with `requested_rounds=3`,
+`effective_rounds_completed=3`, `protocol_metric_results=2`,
+`formal_screened_candidates=2`, and one verification-heavy failure that consumed
+the third round before Protocol. The useful result is branch behavior, not
+quality success: the first `subcategory_pack_upgrade.py` create was marginal,
+the second same-branch modify was no-effect, and the third clean-fork
+`swap_orders.py` candidate failed V9 runtime verification. Branch lesson usage
+was present in all `6` sessions, but a read-only semantic audit judged only the
+same-branch modify as clearly satisfying the lesson intent. Prompts still total
+about `932k` chars and are dominated by tool-selection/general content. Do not
+relaunch full warehouse `3 x 24R` yet; do targeted guidance/context repair, then
+another short `3-6R` debug.
+
+The CVRP size70 next-rung design is also complete:
+[`../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`](../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md).
+Next CVRP order is fixed-candidate validation-grade replay first, then a short
+seeded Scion CVRP run only if mechanism validity passes. The design explicitly
+adds `m=2` to the large-X completion key set and identifies the current tooling
+gap: stage-aware fixed-candidate replay for validation/frozen plus external
+full-file candidate artifact support.
 
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).

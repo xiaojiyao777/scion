@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP size70 large-X completed; warehouse lifecycle gate passed; warehouse short 3R debug active*
+*Status: warehouse short 3R postrun complete; CVRP size70 fixed-candidate validation design ready*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1566,6 +1566,18 @@ Phase B launch design - 2026-06-14:
   only study standalone `vrp/`, write process logs, run bounded baseline/candidate
   experiments, and retain candidate patches under the artifact root. Its output
   can seed later no-LLM Scion replay but is not Scion Protocol evidence.
+- Completed: sixth independent VRP-only research control `Lovelace`. Result
+  report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260615e.md`.
+  The run produced `research_log.md`, `status.md`, `experiments.csv`,
+  `experiments.jsonl`, `final_summary.md`, and a cleanly applying
+  `candidate.patch`. Caveat: its observed baseline included the pre-existing
+  dirty `vrp/src/solver.py` two-opt fallback, so treat it as external research
+  relative to the current dirty standalone baseline. The retained
+  `construction_portfolio` seed had `1s` result `2` improved / `0` worse /
+  `24` same, sum delta `-11`, and `2s` expansion `2` improved / `2` worse /
+  `21` same, sum delta `-20`. It is a backlog mechanism seed requiring gating
+  and broader replay, weaker than current size70 two-opt priority.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before
@@ -1630,6 +1642,33 @@ Phase B launch design - 2026-06-14:
   absolute WSL safe root. Launch health check confirmed `status.txt`,
   `status.json`, `run_status.json`, `scion.db`, and `run.log`; campaign startup
   was reached. This is the current active warehouse task.
+- Completed: warehouse short `3R` compact debug. Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-short-debug-3r-postrun-20260615.md`.
+  The run exited `0` and is valid: `requested_rounds=3`,
+  `effective_rounds_completed=3`, `protocol_metric_results=2`,
+  `formal_screened_candidates=2`, and `verification_consumed_candidates=3`.
+  The third attempt failed before Protocol on `V9_perf_guard` heavy runtime
+  (`1421ms` candidate versus `445ms` champion on `instance_small_1.json`), so
+  the `3R` versus `2` Protocol row difference is reconciled. Branch behavior
+  was useful but not successful research: first `subcategory_pack_upgrade`
+  create was marginal (`1/2/7` case W/L/T, `5/8/7` pair W/L/T), the second
+  same-branch modify became no-effect (`0/0/6`, `0/0/12`), and the third
+  clean-fork `swap_orders.py` candidate failed Verification. Prompt manifests
+  show branch lesson usage present in all `6` sessions, but a read-only
+  semantic audit judged only the same-branch modify as clearly satisfying the
+  lesson intent. Aggregate prompts remain large (`932,623` chars) and dominated
+  by tool-selection/general content. Do not relaunch full warehouse `3 x 24R`
+  yet; do targeted guidance/context repair and another short `3-6R` debug
+  first.
+- Completed: CVRP size70 fixed-candidate validation design. Report:
+  `scion/docs/planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`.
+  Next CVRP order: fixed-candidate validation-grade replay first, seeded Scion
+  CVRP run only after mechanism validity passes. Pre-register large-X
+  completion with `X-n401`, `X-n573`, `X-n641`, `X-n1001`, seeds `61/67/89`,
+  multipliers `1/2/4` (`36` keys, explicitly adding `m=2`), then formal
+  validation `12` cases x seeds `47/53/71/83` at protocol budgets, then frozen
+  only if validation passes. Minimal tool gap: stage-aware fixed-candidate
+  replay for `validation|frozen` and external full-file candidate artifacts.
 
 ## Current Repair Acceptance - 2026-06-13
 
