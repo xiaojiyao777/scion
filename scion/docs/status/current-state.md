@@ -122,8 +122,12 @@ Active work as of the latest handoff:
   Tmux session: `scion_cvrp_size70_validation_full_225148`. It uses an
   experiment-local protocol override with `validation.n_cases=12` and
   `validation.expand_to=12`, plus the WSL VRP data root in `safe_data_roots`.
-  Initial raw metrics report `total_pairs=48`. Postrun must inspect raw
-  validation metrics before deciding whether frozen fixed replay is allowed.
+  Initial raw metrics report `total_pairs=48`. Latest synced progress showed
+  the run still active with no exit code, no comparison summary, and raw
+  validation metrics at `9/48` attempted/valid pairs, `0` failed pairs, W/T/L
+  `0/8/1`, mean delta `-0.222`, and median delta `0.0`. Postrun must inspect
+  the full raw validation metrics before deciding whether frozen fixed replay
+  is allowed.
 - CVRP validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`) is active. It must read v3 first,
   poll the full 48-pair validation run sparingly, sync results, and write the
@@ -168,6 +172,16 @@ Active work as of the latest handoff:
   mean cost delta `+240.73`; `rotated_sweep_initial` W/T/L `0/15/0`;
   `max_destroy_160_param` W/T/L `0/15/0`. This is negative external-control
   evidence and should not seed Scion replay.
+- Independent VRP-only control `Helmholtz`
+  (`019ecd83-3324-7820-912e-2c7d94517e7e`) is active outside Scion. Artifact
+  root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-k-20260615`.
+  This is a fresh, non-forked external research subject forbidden from reading
+  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
+  or prior Scion conclusions. Required process artifacts are
+  `research_log.md`, `experiments.jsonl`, and `summary.md`; any retained
+  `candidate.patch` is external hypothesis material only and must pass later
+  no-LLM replay before Scion adoption.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

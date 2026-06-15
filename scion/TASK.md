@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse 4R postrun complete; CVRP fixed replay input ready; independent VRP phase G complete*
+*Status: CVRP size70 full validation running; Erdos postrun monitor active; independent VRP phase K control active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1952,7 +1952,12 @@ Phase B launch design - 2026-06-14:
   Full server sync root:
   `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
   Full tmux session: `scion_cvrp_size70_validation_full_225148`. Initial raw
-  metrics report `total_pairs=48`.
+  metrics report `total_pairs=48`. A later sync showed the run still active,
+  with no `exit_code.txt`, no top-level comparison yet, and raw validation
+  metrics at `9/48` attempted/valid pairs, `0` failed pairs, W/T/L `0/8/1`,
+  mean delta `-0.222`, and median delta `0.0`. This is progress telemetry
+  only; no validation conclusion is accepted until all `48` pairs and
+  comparison outputs are present.
 - Launched: CVRP fixed-validation monitor/postrun worker `Erdos`
   (`019ecd76-f213-7050-a344-36419ce5314b`). It must read v3 first, poll the
   full `48`-pair validation run sparingly, sync WSL results when complete, analyze
@@ -1982,6 +1987,19 @@ Phase B launch design - 2026-06-14:
   debug-mode Scion run, after the size70 Tier 1 postrun, should be a small
   fixed-mechanism or strongly seeded behavior debug judged by semantic lesson
   use and mechanism continuity, not promotion alone.
+- Launched: twelfth independent VRP-only research control `Helmholtz`
+  (`019ecd83-3324-7820-912e-2c7d94517e7e`). This is a fresh, non-forked
+  external research subject, not a Scion subagent. It is forbidden from reading
+  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
+  or prior Scion conclusions. It may only study standalone `vrp/`, write
+  process logs, run bounded baseline/candidate experiments, and retain an
+  optional `candidate.patch` under
+  `/home/clawd/research/vrp-independent-codex-research/phase-k-20260615`.
+  Required process artifacts are `research_log.md`, `experiments.jsonl`, and
+  `summary.md`. Its purpose is to compare an uncontaminated plain Codex VRP
+  researcher against Scion-guided branch research. Any positive result is
+  external-control hypothesis material only and requires later no-LLM replay
+  before any Scion replay or default solver change.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
