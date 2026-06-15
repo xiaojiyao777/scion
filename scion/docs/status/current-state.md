@@ -568,6 +568,22 @@ context. Focused acceptance passed:
 `test_agentic_code_stage_invariants.py` (`84` tests total). Next warehouse
 gate remains a short `3-6R` compact debug before any full `3 x 24R` longrun.
 
+That repaired short warehouse debug is now running as a `4R` compact ON-arm
+cell. Launch report:
+[`../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-launch-20260615.md`](../experiments/v0.4/v04-warehouse-short-debug-4r-guidance-launch-20260615.md).
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-short-debug-4r-guidance-20260615T205022Z`.
+Server sync root:
+`/home/clawd/research/scion-experiments/v04-warehouse-short-debug-4r-guidance-20260615T205022Z`.
+Tmux session: `scion_warehouse_short4r_guidance_205022`. It started at
+`2026-06-15T20:51:18Z` from commit `bf420c2` with local `gpt-5.5`,
+`measurement_governance=on`, `compact-measurement-diagnostics`, `rounds=4`,
+`time_limit_sec=30`, disabled early stop, and an absolute WSL safe root.
+Initial health check confirmed `status=running`, experiment-local WSL configs,
+and campaign startup in `run.log`. Postrun acceptance must inspect Protocol row
+accounting, branch-lesson semantic use, prompt truncation, order-level runtime
+behavior, and code-stage source visibility.
+
 The CVRP size70 next-rung design is also complete:
 [`../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`](../planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md).
 Next CVRP order is fixed-candidate validation-grade replay first, then a short

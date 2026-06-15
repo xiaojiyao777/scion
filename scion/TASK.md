@@ -1694,6 +1694,21 @@ Phase B launch design - 2026-06-14:
   `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/unit/test_agentic_session_tool_selection.py scion/scion/tests/unit/test_warehouse_target_preview.py scion/scion/tests/unit/test_prompt_manifest_accounting.py scion/scion/tests/unit/test_agentic_target_file_grounding.py scion/scion/tests/unit/test_agentic_code_stage_invariants.py`
   with `84 passed`. Next warehouse gate: launch a short repaired `3-6R` compact
   debug before any full `3 x 24R` longrun.
+- Launched: repaired warehouse short `4R` compact debug from commit `bf420c2`.
+  Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-short-debug-4r-guidance-launch-20260615.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-short-debug-4r-guidance-20260615T205022Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-short-debug-4r-guidance-20260615T205022Z`.
+  Tmux session: `scion_warehouse_short4r_guidance_205022`. It uses local
+  `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, `rounds=4`, `time_limit_sec=30`, disabled
+  early stop, and an absolute WSL warehouse safe root. Launch health check
+  confirmed `status=running`, `commit=bf420c2`, experiment-local WSL configs,
+  and campaign startup. Postrun acceptance must inspect Protocol rows,
+  branch-lesson semantic use, prompt truncation, order-level runtime behavior,
+  and code-stage source visibility.
 - Completed: CVRP size70 fixed-candidate validation design. Report:
   `scion/docs/planning/v0.4/v04-cvrp-size70-fixed-candidate-validation-design-20260615.md`.
   Next CVRP order: fixed-candidate validation-grade replay first, seeded Scion
