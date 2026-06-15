@@ -242,21 +242,24 @@ issue in inspected cases. Verifier preflight and fix no-op handling are now
 repaired; do not rerun full warehouse until a small lifecycle debug reaches
 `protocol_metric_results>0`.
 
-A separate single-round debug/behavior audit has been designed but has not
-started a new LLM campaign. Read-only subagent Ampere recommended starting with
-CVRP, not warehouse: warehouse currently mostly tests the pre-Protocol
-environment/fix-path repairs, while CVRP already has Phase C protocol rows,
-large-X runtime evidence, branch/context artifacts, and the independent VRP
-control signal. The minimal debug should run one CVRP candidate/round on WSL
-with `gpt-5.5`, `measurement_governance=on`,
-`compact-measurement-diagnostics`, `--stage-transition-drain-limit 0`, no
-parallel cells, and a 2h foreground timeout. The audit checklist is prompt
-manifests, source visibility, branch/cross-branch lessons, proposal/hypothesis
-quality, code patch fidelity, Contract/Verification/Protocol rows, context
-composition, and whether visible lessons actually change mechanism choices.
-If `protocol_metric_results=0`, classify the failure as framework/environment
-until proven otherwise; only judge agent research quality after source/context
-and Protocol evidence are present.
+A separate single-round debug/behavior audit is now running on WSL. Read-only
+subagent Ampere recommended starting with CVRP, not warehouse: warehouse
+currently mostly tests the pre-Protocol environment/fix-path repairs, while
+CVRP already has Phase C protocol rows, large-X runtime evidence,
+branch/context artifacts, and the independent VRP control signal. The run root
+is
+`/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-gpt55-20260615T172112Z-claw`;
+it was prepared from commit `17fdeb8` and started in WSL tmux session
+`scion_cvrp_1r_debug_172112` at `2026-06-15T17:21:58Z` using `gpt-5.5`,
+`measurement_governance=on`, `compact-measurement-diagnostics`,
+`--stage-transition-drain-limit 0`, one cell only, and `timeout 2h bash
+run.sh`. The audit checklist is prompt manifests, source visibility,
+branch/cross-branch lessons, proposal/hypothesis quality, code patch fidelity,
+Contract/Verification/Protocol rows, context composition, and whether visible
+lessons actually change mechanism choices. If `protocol_metric_results=0`,
+classify the failure as framework/environment until proven otherwise; only
+judge agent research quality after source/context and Protocol evidence are
+present.
 
 An independent VRP baseline researcher control is also active. This is a
 deliberate exception to the usual v3-first subagent rule because the experiment

@@ -1342,6 +1342,18 @@ Phase B launch design - 2026-06-14:
   `protocol_metric_results=0`, classify as framework/environment until proven
   otherwise; judge agent research quality only after source/context and
   Protocol evidence are present.
+- Launched: CVRP single-round debug/behavior audit on WSL from commit
+  `17fdeb8`. WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-single-round-debug-cvrp-compact-1r-gpt55-20260615T172112Z-claw`.
+  It was prepared without launcher `--launch`, checked, then started in tmux
+  session `scion_cvrp_1r_debug_172112` at `2026-06-15T17:21:58Z` with
+  `timeout 2h bash run.sh`. Config: one cell, `rounds=1`, `gpt-5.5`,
+  `measurement_governance=on`, `compact-measurement-diagnostics`,
+  `time_limit_sec=30`, `SCION_STAGE_TRANSITION_DRAIN_LIMIT=0`, WSL conda
+  `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`. First launch check saw
+  `run_status.json`, `status.json`, and `scion.db` created. After completion,
+  sync the root to the server and run the artifact checklist before judging
+  agent research quality.
 - Launched: independent VRP baseline researcher control. This is an intentional
   exception to the usual v3-first subagent brief: the control agent is forbidden
   from reading Scion design/docs/reports/core, may only use standalone `vrp/`,
