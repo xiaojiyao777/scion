@@ -1795,6 +1795,18 @@ Phase B launch design - 2026-06-14:
   with sha256 `1cdc55672fd14f357605fbb253186fef621864c4972dd1ddf73bec31a9c826ac`.
   No validation replay has been launched yet; do not start solver-heavy CVRP
   replay while the warehouse short debug is actively evaluating solver rows.
+- Launched: CVRP size70 Tier 1 Large-X completion diagnostic. Launch report:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
+  Tmux session: `scion_cvrp_size70_tier1_211545`. The run uses commit
+  `2548560`, no LLM/APS, `scion/tools/cvrp_runtime_curve.py`, parallelism `4`,
+  and a 16h wrapper timeout. Dry-run confirmed `36` planned keys:
+  `X-n401`, `X-n573`, `X-n641`, `X-n1001` x seeds `61/67/89` x multipliers
+  `1/2/4`. This is Tier 1 only; formal validation remains gated on postrun
+  completeness and large-X regression checks.
 
 ## Current Repair Acceptance - 2026-06-13
 

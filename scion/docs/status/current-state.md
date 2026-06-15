@@ -652,6 +652,20 @@ omitted rows. A materialization check recreated
 validation replay has been launched yet because the warehouse short debug is
 actively consuming WSL solver time.
 
+The CVRP size70 Tier 1 Large-X completion diagnostic is now running on WSL.
+Launch report:
+[`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-launch-20260615.md).
+WSL root:
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
+Server sync root:
+`/home/clawd/research/scion-experiments/v04-cvrp-size70-tier1-largeX-20260615T211545Z`.
+Tmux session: `scion_cvrp_size70_tier1_211545`. It uses WSL commit `2548560`,
+no LLM/APS, `scion/tools/cvrp_runtime_curve.py`, parallelism `4`, and a 16h
+wrapper timeout. Dry-run confirmed `36` planned keys across `X-n401`,
+`X-n573`, `X-n641`, `X-n1001`, seeds `61/67/89`, and multipliers `1/2/4`.
+Formal validation remains blocked until this Tier 1 postrun proves key
+completeness and no broad large-X regression.
+
 The repaired CVRP 1R behavior debug also completed and synced from WSL. Report:
 [`../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-1r-debug-repaired-postrun-20260615.md).
 Root:
