@@ -76,6 +76,10 @@ def _split_fix_context(
         f"the mechanism truly produces positive improvement. If the mechanism "
         f"is activity/activation-only, report the telemetry declaration mismatch "
         f"instead of fabricating effect evidence.\n"
+        f"- If the requested repair is outside the editable owner/boundary, "
+        f"or the failure is environmental rather than patch-owned, return "
+        f"`premise_check: wrong_owner` with a concrete reason. Do not invent "
+        f"an empty or whole-file exact_replace patch for a no-op repair.\n"
     )
 
     return system_blocks, user_prompt

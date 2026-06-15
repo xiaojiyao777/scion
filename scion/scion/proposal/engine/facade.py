@@ -86,7 +86,7 @@ class CreativeLayer:
         )
         return _parse_patch(raw, context=context)
 
-    def fix_code(self, context: Dict[str, Any]) -> PatchProposal:
+    def fix_code(self, context: Dict[str, Any]) -> PatchProposal | None:
         """Generate a corrected PatchProposal after a light verification failure.
 
         Uses tool_use (same as generate_hypothesis/generate_code) to avoid
@@ -100,6 +100,8 @@ class CreativeLayer:
             system_blocks=system_blocks,
             context=context,
         )
+        if _raw_fix_declares_no_patch(raw):
+            return None
         return _parse_patch(raw, context=context)
 
     def plan_tool_call(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,6 +179,16 @@ class CreativeLayer:
             llm_retry_events=_client_retry_events(self._client),
         )
         return raw
+
+
+def _raw_fix_declares_no_patch(raw: Dict[str, Any]) -> bool:
+    """Return True when a fix response explicitly refuses ownership."""
+
+    premise_check = str(raw.get("premise_check") or "").strip()
+    if premise_check != "wrong_owner":
+        return False
+    reason = str(raw.get("premise_check_reason") or "").strip()
+    return bool(reason)
 
 
 def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:

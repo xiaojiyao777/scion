@@ -423,6 +423,9 @@ class CampaignManager:
         from scion.problem.preflight import run_runtime_preflight
 
         run_runtime_preflight(self._spec, adapter=self._adapter)
+        verification_preflight = getattr(self._vgate, "run_preflight", None)
+        if callable(verification_preflight):
+            verification_preflight()
         self._runtime_preflight_checked = True
 
     def run_one_step(self) -> StepResult:

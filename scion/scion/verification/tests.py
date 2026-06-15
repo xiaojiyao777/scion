@@ -10,6 +10,7 @@ that operator imports resolve to the candidate code rather than the champion.
 from __future__ import annotations
 
 import os
+import importlib.util
 import subprocess
 import sys
 import time
@@ -64,6 +65,21 @@ def check_regression_tests(
     return _run_pytest(test_path, candidate_workspace, "V4_regression_tests", t0)
 
 
+def verification_pytest_preflight_reasons(problem_spec: ProblemSpec) -> tuple[str, ...]:
+    """Return fail-fast reasons for configured pytest-backed verification tests."""
+
+    configured_paths = _configured_pytest_paths(problem_spec)
+    if not configured_paths:
+        return ()
+    if importlib.util.find_spec("pytest") is not None:
+        return ()
+    rendered = ", ".join(configured_paths)
+    return (
+        "missing required Python module 'pytest' for verification runner "
+        f"'{sys.executable}' with configured verification tests: {rendered}",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -86,6 +102,27 @@ def _resolve_test_path(
     if os.path.isfile(fallback):
         return fallback
     return None
+
+
+def _configured_pytest_paths(problem_spec: ProblemSpec) -> tuple[str, ...]:
+    paths: list[str] = []
+    unit_path = _resolve_test_path(
+        problem_spec.unit_test_path if hasattr(problem_spec, "unit_test_path") else "",
+        problem_spec.root_dir,
+        "tests/test_operators.py",
+    )
+    if unit_path is not None:
+        paths.append(unit_path)
+    regression_path = _resolve_test_path(
+        problem_spec.regression_test_path
+        if hasattr(problem_spec, "regression_test_path")
+        else "",
+        problem_spec.root_dir,
+        "tests/test_solver.py",
+    )
+    if regression_path is not None:
+        paths.append(regression_path)
+    return tuple(paths)
 
 
 def _run_pytest(test_path: str, workspace: str, check_name: str, t0: int) -> CheckResult:

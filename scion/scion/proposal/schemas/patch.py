@@ -633,10 +633,14 @@ as a string. Use new_string "" for deletion; never omit it or set it to null.
 Fix the code so it passes verification.
 Preserve the research-surface interface specification exactly.
 Make only the minimal changes needed to fix the reported failure.
+If the failure is outside this patch's editable owner/boundary, or it is an
+environmental verifier problem rather than patch-owned code, return
+`premise_check="wrong_owner"` with a concrete `premise_check_reason` and do not
+invent an empty or whole-file exact_replace patch.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
-  "premise_check": "supported",
+  "premise_check": "supported" | "wrong_owner",
   "premise_check_reason": "",
   "file_path": "<same relative path as original>",
   "action": "modify" | "create" | "delete",

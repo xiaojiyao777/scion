@@ -1,6 +1,8 @@
 """Focused tests split from test_campaign_control_boundaries.py."""
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
+import scion.verification.tests as verification_tests
+from scion.verification.gate import VerificationGate
 
 
 def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
@@ -101,6 +103,30 @@ def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
         cm.run(max_rounds=1)
 
     assert missing in str(excinfo.value)
+    assert cm._round_num == 0
+    assert cm._step_history == []
+
+
+def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cm = _campaign(tmp_path)
+    tests_dir = Path(cm._spec.root_dir) / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_operators.py").write_text("def test_ok(): pass\n")
+    cm._vgate = VerificationGate(problem_spec=cm._spec, runner=object())
+    monkeypatch.setattr(
+        verification_tests.importlib.util,
+        "find_spec",
+        lambda module_name: None if module_name == "pytest" else object(),
+    )
+
+    with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
+        cm.run(max_rounds=1)
+
+    assert "pytest" in str(excinfo.value)
+    assert "verification runner" in str(excinfo.value)
     assert cm._round_num == 0
     assert cm._step_history == []
 

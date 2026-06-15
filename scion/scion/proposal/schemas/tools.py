@@ -191,7 +191,11 @@ FIX_TOOL: Dict[str, Any] = {
         "the approved hypothesis to silence the guard. For delta-valued effect "
         "fields, use record_move with a positive improvement delta and "
         "best_improved=True only for true improvements; otherwise report the "
-        "expected_telemetry/mechanism declaration mismatch."
+        "expected_telemetry/mechanism declaration mismatch.\n"
+        "- If the requested fix is outside the editable owner/boundary or the "
+        "failure is environmental rather than patch-owned, return "
+        "premise_check=wrong_owner with a concrete reason instead of emitting "
+        "an empty or whole-file exact_replace no-op patch."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }

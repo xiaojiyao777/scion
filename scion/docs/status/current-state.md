@@ -220,8 +220,16 @@ rows and entered early patch-edit/`verification_light` loops
 (`rep01 verification_failure_consumed_candidates=7`, rep02 `=2`). The root was
 stopped at `2026-06-15T16:52:52Z` and should be treated as agent behavior debug
 evidence, not as evidence that warehouse cannot recover continued promotion.
-The next warehouse longrun needs a patch-edit/source-action debug or a
-single-round behavior audit first.
+The two pre-Protocol framework fixes exposed by this abort are now implemented:
+Campaign startup calls `VerificationGate.run_preflight()` so configured
+pytest-backed V3/V4 checks fail before proposal work when `pytest` is missing,
+and `fix_code` now accepts explicit `premise_check=wrong_owner` responses as a
+legal no-patch repair exit instead of forcing empty or whole-file
+`exact_replace` edits. Acceptance:
+`PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_verification_runner_checks.py scion/scion/tests/unit/core/test_campaign_control_preflight_contract.py scion/scion/tests/unit/test_agentic_session_core_flow.py -q`
+passed with `39 passed`. The next warehouse longrun still needs a
+one-candidate lifecycle debug with `protocol_metric_results>0` before any
+3x24R rerun.
 
 The behavior analysis is complete:
 [`../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`](../experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md).
@@ -230,17 +238,25 @@ The primary cause was verification environment/preflight: candidates failed
 The secondary cause was fix-stage patch protocol: the model recognized
 `wrong_owner` but had no legal `no_patch` / `abort_repair` exit, so it emitted
 empty or whole-file `exact_replace` edits. Source visibility was not the main
-issue in inspected cases. Do not rerun full warehouse until verifier preflight
-and fix no-op handling are repaired and a small lifecycle debug reaches
+issue in inspected cases. Verifier preflight and fix no-op handling are now
+repaired; do not rerun full warehouse until a small lifecycle debug reaches
 `protocol_metric_results>0`.
 
-A separate single-round debug/behavior audit is being designed but has not
-started a new LLM campaign. Its purpose is to inspect one complete agent loop:
-prompt context composition, branch and cross-branch lesson visibility, source
-visibility in code stage, proposal mechanism quality, patch artifact fidelity,
-and protocol outcome. This is the right diagnostic for the user's concern that
-rules may still crowd out history and branch evidence, and the aborted
-warehouse root gives a concrete early-failure sample to analyze.
+A separate single-round debug/behavior audit has been designed but has not
+started a new LLM campaign. Read-only subagent Ampere recommended starting with
+CVRP, not warehouse: warehouse currently mostly tests the pre-Protocol
+environment/fix-path repairs, while CVRP already has Phase C protocol rows,
+large-X runtime evidence, branch/context artifacts, and the independent VRP
+control signal. The minimal debug should run one CVRP candidate/round on WSL
+with `gpt-5.5`, `measurement_governance=on`,
+`compact-measurement-diagnostics`, `--stage-transition-drain-limit 0`, no
+parallel cells, and a 2h foreground timeout. The audit checklist is prompt
+manifests, source visibility, branch/cross-branch lessons, proposal/hypothesis
+quality, code patch fidelity, Contract/Verification/Protocol rows, context
+composition, and whether visible lessons actually change mechanism choices.
+If `protocol_metric_results=0`, classify the failure as framework/environment
+until proven otherwise; only judge agent research quality after source/context
+and Protocol evidence are present.
 
 An independent VRP baseline researcher control is also active. This is a
 deliberate exception to the usual v3-first subagent rule because the experiment

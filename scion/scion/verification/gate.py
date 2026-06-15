@@ -37,7 +37,11 @@ from scion.core.models import CheckResult, PatchProposal, VerificationResult
 from scion.runtime.runner import Runner
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
-from scion.verification.tests import check_unit_tests, check_regression_tests
+from scion.verification.tests import (
+    check_regression_tests,
+    check_unit_tests,
+    verification_pytest_preflight_reasons,
+)
 from scion.verification.feasibility import resolve_problem_path
 from scion.verification.state_mutation import check_state_mutation
 from scion.verification.feasibility import check_feasibility
@@ -122,6 +126,18 @@ class VerificationGate:
                 runtime_time_limit_sec,
                 self._runtime_time_limit_sec,
             )
+
+    def run_preflight(self) -> None:
+        """Fail fast on verification-runner dependencies before proposal work."""
+
+        if self._runner is None or self._spec is None:
+            return
+        reasons = verification_pytest_preflight_reasons(self._spec)
+        if not reasons:
+            return
+        from scion.problem.preflight import RuntimeDependencyPreflightError
+
+        raise RuntimeDependencyPreflightError(reasons)
 
     def run(
         self,

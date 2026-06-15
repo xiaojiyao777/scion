@@ -47,6 +47,32 @@ class ExactReplaceShapeRetryCreative(FakeCreative):
         return self.patch
 
 
+class WrongOwnerFixClient:
+    def __init__(self) -> None:
+        self.tool_names: list[str] = []
+
+    def call_with_tool(self, prompt, tool, model=None, system_blocks=None, **kwargs):
+        del prompt, model, system_blocks, kwargs
+        self.tool_names.append(tool["name"])
+        assert tool["name"] == "fix_patch"
+        return {
+            "premise_check": "wrong_owner",
+            "premise_check_reason": (
+                "verification environment is missing pytest; no patch-owned "
+                "code edit can repair this"
+            ),
+            "file_path": "",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": "",
+            "old_string": "",
+            "new_string": "",
+            "replace_all": False,
+            "additional_changes": [],
+            "test_hint": None,
+        }
+
+
 class NearWholeExactReplaceRetryCreative(FakeCreative):
     def __init__(self, patch: PatchProposal, *, fail_times: int = 1) -> None:
         super().__init__(patch=patch)
@@ -346,6 +372,26 @@ def test_agentic_session_retries_exact_replace_schema_preflight_feedback(
         event.metadata.get("failure_code") == "code_edit_protocol_retry"
         for event in output.transcript
     )
+
+
+def test_creative_layer_fix_code_accepts_wrong_owner_no_patch() -> None:
+    client = WrongOwnerFixClient()
+    creative = CreativeLayer(client)
+
+    fixed = creative.fix_code(
+        {
+            "problem_summary": "Synthetic problem.",
+            "original_code": "def candidate():\n    return 1\n",
+            "failure_detail": "V3_unit_tests: No module named pytest",
+            "operator_interface_spec": "def candidate(): ...",
+            "import_whitelist": "math",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "solver.py",
+        }
+    )
+
+    assert fixed is None
+    assert client.tool_names == ["fix_patch"]
 
 
 def test_agentic_session_retries_near_whole_exact_replace_feedback(

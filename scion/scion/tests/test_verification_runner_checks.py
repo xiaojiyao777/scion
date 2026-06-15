@@ -1,6 +1,8 @@
 """Focused tests split from test_verification.py."""
 
 from .verification_test_support import *  # noqa: F401,F403
+from scion.problem.preflight import RuntimeDependencyPreflightError
+import scion.verification.tests as verification_tests
 
 class TestUnitTestsCheck:
     def test_skipped_when_no_test_file(self, tmp_path):
@@ -118,3 +120,26 @@ class TestVerificationGateTestChecks:
         assert result.passed is False
         assert result.failure_severity == "light"
         assert result.first_failure == "V3_unit_tests"
+
+    def test_preflight_fails_when_pytest_missing_for_configured_tests(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Configured V3/V4 pytest checks require pytest before proposal work."""
+        test_file = tmp_path / "test_configured.py"
+        test_file.write_text("def test_ok(): pass\n")
+        spec = _make_spec().model_copy(update={"unit_test_path": str(test_file)})
+        runner = _mock_runner()
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+        monkeypatch.setattr(
+            verification_tests.importlib.util,
+            "find_spec",
+            lambda module_name: None if module_name == "pytest" else object(),
+        )
+
+        with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
+            gate.run_preflight()
+
+        assert "pytest" in str(excinfo.value)
+        assert "verification runner" in str(excinfo.value)

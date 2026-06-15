@@ -1328,11 +1328,20 @@ Phase B launch design - 2026-06-14:
   distance `68673` and `best_update_count=0`. The full replay was restarted in
   tmux session `scion_cvrp_candidate_replay_164410` at
   `2026-06-15T16:49:33Z`.
-- Queued: single-round debug/behavior audit design. A read-only subagent is
-  preparing the minimal 1R run and artifact checklist to inspect whether
-  prompt context, branch lessons, cross-branch history, source visibility, and
-  patch artifacts actually translate into research action. Do not launch the
-  debug LLM campaign until this design is reviewed.
+- Completed: single-round debug/behavior audit design. Read-only subagent
+  Ampere recommends starting with CVRP, not warehouse, because warehouse first
+  needs proof that the repaired pre-Protocol path reaches Protocol while CVRP
+  already has Phase C protocol rows, large-X runtime diagnostics, branch/context
+  artifacts, and the independent VRP control signal. Minimal run design: one
+  CVRP candidate/round on WSL with `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, `--stage-transition-drain-limit 0`, no
+  parallel cells, and foreground `timeout 2h`. Audit prompt manifests, source
+  visibility, branch/cross-branch lesson use, hypothesis quality, code patch
+  fidelity, Contract/Verification/Protocol rows, context composition, and
+  whether visible lessons changed the mechanism action. If
+  `protocol_metric_results=0`, classify as framework/environment until proven
+  otherwise; judge agent research quality only after source/context and
+  Protocol evidence are present.
 - Launched: independent VRP baseline researcher control. This is an intentional
   exception to the usual v3-first subagent brief: the control agent is forbidden
   from reading Scion design/docs/reports/core, may only use standalone `vrp/`,
@@ -1359,9 +1368,18 @@ Phase B launch design - 2026-06-14:
   Protocol because the WSL verification environment lacked `pytest`
   (`V3_unit_tests` / `No module named pytest`), then fix-stage `wrong_owner`
   handling had no legal no-op / abort-repair path and degenerated into empty or
-  whole-file `exact_replace` patch protocol errors. Next warehouse order is:
-  verifier preflight, fix-stage no-patch/abort handling, 1-candidate lifecycle
-  debug with `protocol_metric_results>0`, short 3-5R debug, then rerun 3x24R.
+  whole-file `exact_replace` patch protocol errors.
+- Completed: warehouse abort pre-Protocol repair. Campaign startup now calls
+  `VerificationGate.run_preflight()` after problem runtime preflight; configured
+  pytest-backed V3/V4 checks fail before proposal work when `pytest` is missing.
+  `CreativeLayer.fix_code` now treats explicit `premise_check=wrong_owner` with
+  a concrete reason as a legal no-patch repair exit, avoiding invalid
+  empty/whole-file `exact_replace` attempts for environmental or boundary-owned
+  failures. Focused acceptance:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_verification_runner_checks.py scion/scion/tests/unit/core/test_campaign_control_preflight_contract.py scion/scion/tests/unit/test_agentic_session_core_flow.py -q`
+  passed with `39 passed`. Next warehouse order is now empirical:
+  1-candidate lifecycle debug with `protocol_metric_results>0`, short 3-5R
+  debug, then rerun 3x24R.
 
 ## Current Repair Acceptance - 2026-06-13
 
