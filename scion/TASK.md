@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP 1R behavior debug completed valid; two-opt direct replay smoke complete; external VRP control active*
+*Status: CVRP candidate large-X replay completed; size70 large-X and external VRP controls active*
 *Updated: 2026-06-15*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -1323,18 +1323,25 @@ Phase B launch design - 2026-06-14:
   and entered early patch-edit/`verification_light` failure loops. This root is
   invalid for warehouse longrun promotion evidence; keep it as agent behavior
   debug evidence and do not interpret it as warehouse inability to improve.
-- Launched: CVRP candidate-specific large-X replay. Report:
+- Completed: CVRP candidate-specific large-X replay. Launch report:
   `scion/docs/experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-candidate-largeX-replay-postrun-20260615.md`.
   Server root:
   `/home/clawd/research/scion-experiments/v04-cvrp-candidate-largeX-replay-20260615T164410Z`.
   Design: no-LLM direct solver replay for the two ALNS-only Phase C
   validation-positive candidates, `4` large-X cases, seeds `61/89`,
-  multipliers `1/4`, parallelism `2`, and `solver_design` selected surface.
-  The initial `nohup` launch did not persist under the Codex exec wrapper; a
-  foreground smoke for rep01 `X-n401/seed61/90s` completed with unchanged
-  distance `68673` and `best_update_count=0`. The full replay was restarted in
-  tmux session `scion_cvrp_candidate_replay_164410` at
-  `2026-06-15T16:49:33Z`.
+  multipliers `1/4`, parallelism `2`, and `solver_design` selected surface. It
+  planned `32` candidate/champion pairs and produced `29` completed pairs.
+  Overall completed-pair W/L/T was `2/0/27`, mean candidate-minus-champion
+  delta `-8.6897`, median delta `0.0`, and route-count comparison was all
+  ties. The incomplete rows were concentrated on `X-n1001-k43 seed61`, so
+  runner grace remains a real large-X evidence-completeness issue. However, the
+  completed rows show that the two Phase C validation-positive candidates
+  mostly collapsed to ties, had `0` candidate best updates, and did not gain
+  broad large-X search leverage from extra replay grace. Next CVRP mechanism
+  work should require no-LLM evidence of nonzero best-update density and
+  objective movement on large-X before another long LLM campaign.
 - Completed: single-round debug/behavior audit design. Read-only subagent
   Ampere recommends starting with CVRP, not warehouse, because warehouse first
   needs proof that the repaired pre-Protocol path reaches Protocol while CVRP
@@ -1517,6 +1524,20 @@ Phase B launch design - 2026-06-14:
   Scion hypothesis seed. It supports deprioritizing coarse VNS scheduling and
   destroy-ratio tweaks unless later instrumentation gives a more targeted
   mechanism.
+- Launched: fifth independent VRP-only research control `Feynman`
+  (`019eccb2-2fc0-7ff1-8032-94358c217c8a`) as a fresh, non-forked long-running
+  external researcher. This is another explicit exception to the v3-first Scion
+  subagent brief: it is forbidden from reading `scion/`, `TASK.md`, Scion
+  design docs, status docs, and experiment reports. It may only study standalone
+  `vrp/`, run bounded real-case baseline/candidate experiments, and write a
+  full process log under
+  `/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615d`.
+  Required artifacts are `research_log.md`, baseline reproduction output,
+  `hypotheses.md`, `experiments.csv`, `final_report.md`, and `candidate.patch`
+  only if a positive candidate survives smoke. Purpose: test whether a plain
+  Codex research subject can improve the VRP baseline without Scion context, and
+  provide external-control process evidence for comparing against Scion-guided
+  research.
 - Completed: warehouse abort behavior analysis. Report:
   `scion/docs/experiments/v0.4/v04-warehouse-abort-behavior-analysis-20260615.md`.
   Root cause was not warehouse mechanism quality: candidates failed before

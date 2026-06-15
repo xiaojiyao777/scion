@@ -185,17 +185,24 @@ for the ALNS-only champion. The next CVRP step should be candidate-specific
 large-X replay and mechanism/update-density diagnosis, not another blind longer
 LLM campaign.
 
-That candidate-specific replay is now active on the server. Report:
+That candidate-specific replay is complete. Launch report:
 [`../experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md`](../experiments/v0.4/v04-cvrp-candidate-largeX-replay-launch-20260615.md).
+Postrun:
+[`../experiments/v0.4/v04-cvrp-candidate-largeX-replay-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-candidate-largeX-replay-postrun-20260615.md).
 Server root:
 `/home/clawd/research/scion-experiments/v04-cvrp-candidate-largeX-replay-20260615T164410Z`.
-It replays the two Phase C ALNS-only validation-positive candidates against the
-completed champion large-X curve using direct solver calls only: `4` large-X
-cases, seeds `61/89`, budget multipliers `1/4`, parallelism `2`, selected
-surface `solver_design`, and no LLM calls. A foreground smoke for the rep01
-route-limit-aware regret candidate completed with unchanged `X-n401/seed61`
-distance `68673` and `best_update_count=0`; the full replay is running in tmux
-session `scion_cvrp_candidate_replay_164410`.
+It replayed the two Phase C ALNS-only validation-positive candidates against
+the completed champion large-X curve using direct solver calls only: `4`
+large-X cases, seeds `61/89`, budget multipliers `1/4`, parallelism `2`,
+selected surface `solver_design`, and no LLM calls. The plan covered `32`
+candidate/champion pairs and produced `29` completed pairs. Overall
+completed-pair W/L/T was `2/0/27`, mean candidate-minus-champion delta
+`-8.6897`, median delta `0.0`, and route-count comparison was all ties. Missing
+rows were concentrated on `X-n1001-k43 seed61`, confirming that runner grace was
+an evidence-completeness issue, but completed rows still show `0` candidate
+best updates and no broad large-X search leverage. This closes the Phase C
+candidate-specific replay question: these validation-positive candidates were
+weak large-X mechanisms, not just victims of runner grace.
 
 A CVRP one-round behavior debug was stopped and synced as invalid pre-repair
 evidence. Report:
@@ -374,6 +381,17 @@ median delta `0.0`. No `candidate.patch` was retained. Interpretation: this is
 good process-control evidence, but not an improvement hypothesis for Scion. It
 also makes the earlier real-CVRPLIB two-opt scheduling signal stand out as the
 stronger external-control VRP hypothesis so far.
+
+A fifth independent VRP-only control is active as subagent `Feynman`
+(`019eccb2-2fc0-7ff1-8032-94358c217c8a`). Artifact root:
+`/home/clawd/research/scion-experiments/v04-independent-vrp-research-agent-20260615d`.
+This is a fresh non-forked long-running plain Codex researcher. It is forbidden
+from reading `scion/`, `TASK.md`, Scion design docs, status docs, and experiment
+reports, and may only study standalone `vrp/` plus bounded real-case baseline
+and candidate experiments. Required process artifacts are `research_log.md`,
+baseline reproduction output, `hypotheses.md`, `experiments.csv`,
+`final_report.md`, and `candidate.patch` only if a positive candidate survives
+smoke. This is external-control process evidence, not Scion Protocol evidence.
 
 The direct replay for the stronger independent-control mechanism completed its
 smoke on WSL. Launch/status report:
