@@ -490,6 +490,37 @@ Active work as of the latest handoff:
   prompt/quality tests (`12 passed`), context/agentic tests (`90 passed`),
   proposal pipeline tests (`64 passed`), Python compile, and `git diff --check`.
   The next gate is a short warehouse production rerun from this repair commit.
+- That short rerun was early-stopped after it exposed a narrower remaining
+  quality gap, so it is rejected as research-quality acceptance rather than
+  interpreted as a complete warehouse efficacy run. Early-stop report:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-quality-rerun6r-early-stop-20260616.md`](../experiments/v0.4/v04-warehouse-validation-transfer-quality-rerun6r-early-stop-20260616.md).
+  Launch report:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-quality-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-validation-transfer-quality-rerun6r-launch-20260616.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-quality-rerun6r-20260616T195153Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-quality-rerun6r-20260616T195153Z`.
+  The hypothesis gate worked (`proposal_quality_blocks=2`, both
+  `agent_quality_blocked`), but a non-blocked candidate reached screening with
+  `activation_status=not_declared`, `effect_status=not_declared`, and a
+  regression result even though its hypothesis promised activation/effect
+  diagnostics. The next repair is a code-stage problem-owned patch-quality hook:
+  core should provide only generic routing/lifecycle handling, while
+  `WarehouseDeliveryAdapter` blocks high-risk warehouse operator patches that
+  do not make promised diagnostics executable or observable before Protocol.
+  Worker `Raman` (`019ed204-5f15-7132-b16c-f5b65c744b22`) completed the
+  concrete implementation, and main-session acceptance is recorded in:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-patch-quality-repair-20260616.md`](../experiments/v0.4/v04-warehouse-validation-transfer-patch-quality-repair-20260616.md).
+  The repair is accepted as code/framework behavior: the early-stop field
+  `merge_vehicles.py` and `move_order.py` trace patches are now both blocked
+  before Protocol with
+  `agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing`.
+  Verification passed warehouse tests (`15 passed`), proposal quality tests
+  (`18 passed`), proposal pipeline tests (`74 passed`), context/session tests
+  (`90 passed`), retry/evidence/cross-branch tests (`114 passed` across two
+  groups), Python compile, and `git diff --check`. This is not warehouse
+  efficacy evidence. The next gate is a fresh short warehouse production rerun
+  from the repair commit.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

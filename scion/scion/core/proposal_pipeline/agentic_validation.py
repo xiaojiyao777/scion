@@ -14,7 +14,10 @@ from scion.proposal.agentic_session import (
 )
 
 from .classification import _agentic_self_check_failure_detail
-from .problem_quality import validate_problem_hypothesis_quality
+from .problem_quality import (
+    validate_problem_hypothesis_quality,
+    validate_problem_patch_quality,
+)
 
 
 class AgenticValidationMixin:
@@ -55,6 +58,7 @@ class AgenticValidationMixin:
         forced_action: str | None = None,
         forced_target_file: str | None = None,
         active_problem_boundary_surfaces: tuple[str, ...] = (),
+        approved_hypothesis: HypothesisProposal | None = None,
     ) -> AgenticProposalOutput:
         failures: list[str] = []
         if output.branch_id != branch.branch_id:
@@ -131,6 +135,7 @@ class AgenticValidationMixin:
                 quality_structured_rejection = quality_check.structured_rejection
         else:
             quality_structured_rejection = None
+        patch_quality_structured_rejection = None
 
         if output.status != AgenticProposalStatus.FAILED:
             self_check_failure = _agentic_self_check_failure_detail(output)
@@ -144,13 +149,36 @@ class AgenticValidationMixin:
             if not failure_detail:
                 failure_detail = "non-completed output included unchecked patch"
 
+        quality_hypothesis = output.hypothesis or approved_hypothesis
+        if (
+            quality_structured_rejection is None
+            and output.status == AgenticProposalStatus.COMPLETED
+            and patch is not None
+            and quality_hypothesis is not None
+        ):
+            patch_quality_check = validate_problem_patch_quality(
+                self.problem_runtime,
+                branch,
+                quality_hypothesis,
+                patch,
+                step_history=self.step_history,
+            )
+            if not patch_quality_check.allowed:
+                failures.append(patch_quality_check.detail)
+                patch_quality_structured_rejection = (
+                    patch_quality_check.structured_rejection
+                )
+
         if failures:
             structured_rejection = _agentic_anchor_structured_rejection(
                 anchor_failures
             )
             termination_reason = AgenticTerminationReason.ANCHOR_VALIDATION_FAILED
             failure_category = AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
-            if not anchor_failures and quality_structured_rejection:
+            if not anchor_failures and patch_quality_structured_rejection:
+                termination_reason = AgenticTerminationReason.CODE_GENERATION_FAILED
+                failure_category = "agent_grounding_failure"
+            elif not anchor_failures and quality_structured_rejection:
                 termination_reason = AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED
                 failure_category = AgenticFailureCategory.PREMISE_CONTRADICTED
             return replace(
@@ -163,6 +191,7 @@ class AgenticValidationMixin:
                 failure_category=failure_category,
                 structured_rejection=(
                     structured_rejection
+                    or patch_quality_structured_rejection
                     or quality_structured_rejection
                     or output.structured_rejection
                 ),

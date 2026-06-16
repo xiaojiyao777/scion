@@ -180,6 +180,7 @@ class AgenticLifecycleMixin:
                         self.problem_runtime,
                     )
                 ),
+                approved_hypothesis=hypothesis,
             )
             if output.status == AgenticProposalStatus.FAILED:
                 detail = self._agentic_failure_detail(output)
@@ -262,6 +263,7 @@ class AgenticLifecycleMixin:
                 if request.tool_context
                 else ()
             ),
+            approved_hypothesis=hypothesis,
         )
         self._record_agentic_lineage_event(output)
         self._record_agentic_session_ref(output)

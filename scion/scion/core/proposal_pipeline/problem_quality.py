@@ -1,4 +1,4 @@
-"""Adapter-owned proposal quality checks for hypothesis generation."""
+"""Adapter-owned proposal quality checks for tainted proposal artifacts."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,6 +7,13 @@ from typing import Any, Mapping, Sequence
 
 @dataclass(frozen=True)
 class ProblemHypothesisQualityCheck:
+    allowed: bool
+    detail: str = ""
+    structured_rejection: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProblemPatchQualityCheck:
     allowed: bool
     detail: str = ""
     structured_rejection: Mapping[str, Any] = field(default_factory=dict)
@@ -49,14 +56,56 @@ def validate_problem_hypothesis_quality(
                 "agent_block_reason": "agent_quality_blocked",
             },
         )
-    return _normalize_problem_quality_result(raw)
+    return _normalize_hypothesis_quality_result(raw)
+
+
+def validate_problem_patch_quality(
+    problem_runtime: Any,
+    branch: Any,
+    hypothesis: Any,
+    patch: Any,
+    *,
+    step_history: Sequence[Any] | None = None,
+) -> ProblemPatchQualityCheck:
+    """Run an optional adapter-owned patch/code quality hook.
+
+    This is still proposal-side validation.  It may reject tainted code before
+    Contract/Verification/Protocol, but it must not produce DecisionFeatures or
+    alter protocol thresholds.
+    """
+
+    adapter = _runtime_attr(problem_runtime, "adapter")
+    if adapter is None:
+        adapter = _runtime_attr(problem_runtime, "_adapter")
+    hook = getattr(adapter, "validate_patch_quality", None)
+    if not callable(hook):
+        return ProblemPatchQualityCheck(allowed=True)
+    try:
+        raw = hook(
+            branch=branch,
+            hypothesis=hypothesis,
+            patch=patch,
+            step_history=tuple(step_history or ()),
+        )
+    except Exception as exc:
+        return ProblemPatchQualityCheck(
+            allowed=False,
+            detail=f"agent_quality_blocked:problem_patch_quality_hook_failed: {exc}",
+            structured_rejection={
+                "source": "problem_adapter",
+                "gate_name": "problem_patch_quality",
+                "failure_code": "problem_patch_quality_hook_failed",
+                "agent_block_reason": "agent_quality_blocked",
+            },
+        )
+    return _normalize_patch_quality_result(raw)
 
 
 def _runtime_attr(runtime: Any, name: str) -> Any:
     return getattr(runtime, name, None) if runtime is not None else None
 
 
-def _normalize_problem_quality_result(raw: Any) -> ProblemHypothesisQualityCheck:
+def _normalize_hypothesis_quality_result(raw: Any) -> ProblemHypothesisQualityCheck:
     if isinstance(raw, ProblemHypothesisQualityCheck):
         return raw
     if raw is None or raw is True:
@@ -82,7 +131,35 @@ def _normalize_problem_quality_result(raw: Any) -> ProblemHypothesisQualityCheck
     return ProblemHypothesisQualityCheck(allowed=True)
 
 
+def _normalize_patch_quality_result(raw: Any) -> ProblemPatchQualityCheck:
+    if isinstance(raw, ProblemPatchQualityCheck):
+        return raw
+    if raw is None or raw is True:
+        return ProblemPatchQualityCheck(allowed=True)
+    if raw is False:
+        return ProblemPatchQualityCheck(
+            allowed=False,
+            detail="problem_patch_quality_rejected",
+        )
+    if isinstance(raw, Mapping):
+        allowed = bool(raw.get("allowed", raw.get("passed", True)))
+        detail = str(raw.get("detail") or raw.get("reason") or "").strip()
+        if not allowed and not detail:
+            detail = "problem_patch_quality_rejected"
+        structured = raw.get("structured_rejection")
+        if not isinstance(structured, Mapping):
+            structured = {}
+        return ProblemPatchQualityCheck(
+            allowed=allowed,
+            detail=detail,
+            structured_rejection=dict(structured),
+        )
+    return ProblemPatchQualityCheck(allowed=True)
+
+
 __all__ = [
     "ProblemHypothesisQualityCheck",
+    "ProblemPatchQualityCheck",
     "validate_problem_hypothesis_quality",
+    "validate_problem_patch_quality",
 ]

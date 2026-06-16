@@ -14,6 +14,7 @@ from scion.core.models import (
 from scion.core.proposal_pipeline.agentic_validation import AgenticValidationMixin
 from scion.core.proposal_pipeline.problem_quality import (
     validate_problem_hypothesis_quality,
+    validate_problem_patch_quality,
 )
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
 from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
@@ -363,6 +364,145 @@ def test_warehouse_quality_check_allows_transfer_and_diagnostics_claims() -> Non
     assert check.allowed is True
 
 
+def test_warehouse_patch_quality_blocks_transfer_hypothesis_without_code_diagnostics() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    branch = _warehouse_weak_positive_branch()
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def execute(self, solution, rng):
+        candidate = solution.deep_copy()
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        branch,
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "warehouse_validation_transfer_patch_quality_missing" in check.detail
+    assert "agent_quality_blocked" in check.detail
+    assert "activation_effect_diagnostic_code" in check.detail
+    assert (
+        check.structured_rejection["gate_name"]
+        == "warehouse_validation_transfer_patch_quality"
+    )
+    assert check.structured_rejection["agent_block_reason"] == "agent_quality_blocked"
+
+
+def test_warehouse_patch_quality_allows_diagnostics_and_guard_code() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    branch = _warehouse_weak_positive_branch()
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        eligible_vehicle_or_order_groups_seen = 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += (
+            eligible_vehicle_or_order_groups_seen
+        )
+        split_delta = 1
+        cost_delta = 10
+        diagnostics["split_delta_sum"] += split_delta
+        diagnostics["cost_delta_sum"] += cost_delta
+        if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+            return solution
+        validation_transfer_guard = split_delta > 0 or cost_delta > 0
+        if not validation_transfer_guard:
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        branch,
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_agentic_validation_blocks_warehouse_patch_without_transfer_diagnostics() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    branch = _warehouse_weak_positive_branch(branch_id="warehouse-agentic-code")
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="solver",
+        code_snapshot_path="/tmp/champion",
+        code_snapshot_hash="hash",
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-warehouse-agentic-code",
+        campaign_id="camp-warehouse",
+        branch_id=branch.branch_id,
+        champion_version=champion.version,
+        hypothesis=_warehouse_transfer_quality_hypothesis(),
+        patch=PatchProposal(
+            file_path="operators/merge_vehicles.py",
+            action="modify",
+            code_content="""
+class MergeVehicles:
+    def execute(self, solution, rng):
+        return solution.deep_copy()
+""",
+        ),
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    sanitized = _AgenticValidationHarness(adapter)._validate_and_sanitize_agentic_output(
+        branch=branch,
+        champion=champion,
+        output=output,
+    )
+
+    assert sanitized.status == AgenticProposalStatus.FAILED
+    assert sanitized.patch is None
+    assert sanitized.termination_reason == AgenticTerminationReason.CODE_GENERATION_FAILED
+    assert sanitized.failure_category == "agent_grounding_failure"
+    assert "warehouse_validation_transfer_patch_quality_missing" in (
+        sanitized.failure_detail or ""
+    )
+    assert sanitized.structured_rejection is not None
+    assert (
+        sanitized.structured_rejection["failure_code"]
+        == "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+    )
+    assert (
+        sanitized.structured_rejection["gate_name"]
+        == "warehouse_validation_transfer_patch_quality"
+    )
+
+
 def test_warehouse_quality_check_does_not_accept_undeclared_telemetry_only() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     adapter = WarehouseDeliveryAdapter(spec_v1)
@@ -452,6 +592,50 @@ def _assert_vehicle_level_preview_passes(spec: ProblemSpec) -> None:
 
 def _surface(spec, name: str):
     return next(surface for surface in spec.research_surfaces if surface.name == name)
+
+
+def _warehouse_weak_positive_branch(
+    *,
+    branch_id: str = "warehouse-weak-positive",
+) -> Branch:
+    return Branch(
+        branch_id=branch_id,
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+    )
+
+
+def _warehouse_transfer_quality_hypothesis() -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text=(
+            "Refine the merge trigger for screening-to-validation transfer: "
+            "the mechanism should generalize because it only acts on "
+            "case-general same-subcategory groups with spare capacity."
+        ),
+        change_locus="vehicle_level",
+        action="modify",
+        target_file="operators/merge_vehicles.py",
+        target_weakness=(
+            "The prior screening positive can fail formal validation when "
+            "activation occurs without a hierarchical gain."
+        ),
+        expected_effect=(
+            "Activation/effect diagnostics should show operator_invocations, "
+            "eligible_vehicle_or_order_groups_seen, accepted_moves, "
+            "split_delta_sum, cost_delta_sum, and improving_move_count "
+            "positive, not merely screening wins."
+        ),
+        no_op_condition=(
+            "Guard and return the original solution when the move would be "
+            "screening-only or lexicographically dominated on formal cases."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is a median delta 0 no hierarchical gain."
+        ),
+    )
 
 
 class _AgenticValidationHarness(AgenticValidationMixin):

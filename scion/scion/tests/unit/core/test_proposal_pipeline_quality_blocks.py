@@ -512,6 +512,76 @@ def test_agentic_activation_diagnostic_enters_next_hypothesis_context_with_facts
     assert "infra_suspected" not in rendered.lower()
 
 
+def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="patch-quality-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    class PatchQualityAdapter:
+        def validate_patch_quality(self, **_kwargs):
+            return {
+                "allowed": False,
+                "detail": (
+                    "agent_quality_blocked:"
+                    "warehouse_validation_transfer_patch_quality_missing"
+                ),
+                "structured_rejection": {
+                    "source": "warehouse_problem_adapter",
+                    "gate_name": "warehouse_validation_transfer_patch_quality",
+                    "failure_code": (
+                        "agent_quality_blocked:"
+                        "warehouse_validation_transfer_patch_quality_missing"
+                    ),
+                    "agent_block_reason": "agent_quality_blocked",
+                    "retry_constraint": (
+                        "add activation/effect diagnostic counters before protocol"
+                    ),
+                    "counts_as_screened_round": False,
+                    "counts_as_proposal_quality_attempt": True,
+                },
+            }
+
+    pipeline, branch, runtime, circuit, failures, _ = _pipeline(
+        creative=creative,
+        use_agentic_proposal=True,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    runtime.adapter = PatchQualityAdapter()
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert detail is not None
+    assert "warehouse_validation_transfer_patch_quality_missing" in detail
+    assert failures == []
+    assert circuit.failures == []
+    stored = pipeline.agentic_quality_feedback[branch.branch_id]
+    assert stored[0]["failure_code"] == (
+        "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+    )
+    assert stored[0]["gate_name"] == "warehouse_validation_transfer_patch_quality"
+    assert "activation/effect diagnostic counters" in stored[0]["retry_constraint"]
+    assert session_ref is not None
+    assert session_ref["agent_block_reason"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["stage"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["code"] == (
+        "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+    )
+
+
 def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(

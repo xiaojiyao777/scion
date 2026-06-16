@@ -344,6 +344,63 @@ Frozen files (do not modify): {frozen}"""
             },
         }
 
+    def validate_patch_quality(
+        self,
+        *,
+        branch: Any | None,
+        hypothesis: Any,
+        patch: Any,
+        step_history: Sequence[Any] | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned code quality check for warehouse operator patches."""
+
+        del step_history
+        if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
+            return {"allowed": True}
+        code, changed_files = _warehouse_operator_patch_code(patch, hypothesis)
+        missing = list(_missing_transfer_patch_quality(code))
+        if not changed_files:
+            missing.insert(0, "warehouse_operator_patch_code")
+        if not missing:
+            return {
+                "allowed": True,
+                "gate_name": "warehouse_validation_transfer_patch_quality",
+            }
+        detail = (
+            f"{WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE}: warehouse "
+            "operator patch must implement proposal/code-visible validation "
+            "transfer diagnostics before protocol: activation/effect counters "
+            "or an explicit instrumentation path, plus a screening-only or "
+            "lexicographic guard; missing="
+            + ",".join(dict.fromkeys(missing))
+        )
+        return {
+            "allowed": False,
+            "detail": detail,
+            "gate_name": "warehouse_validation_transfer_patch_quality",
+            "structured_rejection": {
+                "source": "warehouse_problem_adapter",
+                "gate_name": "warehouse_validation_transfer_patch_quality",
+                "failure_code": WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE,
+                "agent_block_reason": "agent_quality_blocked",
+                "retry_constraint": (
+                    "Revise the warehouse operator patch before protocol: "
+                    "add code-visible activation/effect diagnostic counters or "
+                    "a named instrumentation path, and include a guard that "
+                    "prevents screening-only or lexicographically dominated "
+                    "moves."
+                ),
+                "missing_code_elements": list(dict.fromkeys(missing)),
+                "target_file": _normalize_patch_path(
+                    getattr(hypothesis, "target_file", "")
+                ),
+                "changed_files": list(changed_files),
+                "counts_as_screened_round": False,
+                "counts_as_proposal_quality_attempt": True,
+                "decision_features_excluded": True,
+            },
+        }
+
     # --- Instance / output ---
 
     def load_instance(self, instance_path: str) -> Any:
@@ -626,6 +683,9 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
 WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE = (
     "agent_quality_blocked:warehouse_validation_transfer_quality_missing"
 )
+WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE = (
+    "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+)
 
 _EXISTING_OPERATOR_MODULES = frozenset(
     {
@@ -685,6 +745,145 @@ def _missing_transfer_quality_claims(hypothesis: Any) -> tuple[str, ...]:
     if not _mentions_screening_only_guard(text):
         missing.append("screening_only_guard")
     return tuple(missing)
+
+
+def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
+    if not str(code or "").strip():
+        return ("activation_effect_diagnostic_code", "screening_or_lexicographic_guard")
+    signal_text = _code_signal_text(code)
+    missing: list[str] = []
+    if not _patch_has_activation_effect_diagnostics(signal_text):
+        missing.append("activation_effect_diagnostic_code")
+    if not _patch_has_screening_or_lexicographic_guard(code, signal_text):
+        missing.append("screening_or_lexicographic_guard")
+    return tuple(missing)
+
+
+def _warehouse_operator_patch_code(
+    patch: Any,
+    hypothesis: Any,
+) -> tuple[str, tuple[str, ...]]:
+    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
+    chunks: list[str] = []
+    changed_files: list[str] = []
+    for change in _patch_changes(patch):
+        file_path = _normalize_patch_path(getattr(change, "file_path", ""))
+        if not _is_warehouse_operator_patch_file(file_path, target_file):
+            continue
+        changed_files.append(file_path)
+        action = str(getattr(change, "action", "") or "").strip()
+        if action in {"delete", "remove"}:
+            continue
+        chunks.append(str(getattr(change, "code_content", "") or ""))
+    return "\n\n".join(chunks), tuple(dict.fromkeys(changed_files))
+
+
+def _is_warehouse_operator_patch_file(file_path: str, target_file: str) -> bool:
+    normalized = _normalize_patch_path(file_path)
+    if not normalized.startswith("operators/") or not normalized.endswith(".py"):
+        return False
+    if not target_file:
+        return True
+    return normalized == target_file or _is_existing_operator_module(normalized)
+
+
+def _code_signal_text(code: str) -> str:
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError:
+        return str(code or "").lower()
+    parts: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            parts.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            parts.append(node.name)
+        elif isinstance(node, ast.arg):
+            parts.append(node.arg)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            parts.append(node.value)
+    return " ".join(parts).lower()
+
+
+def _patch_has_activation_effect_diagnostics(signal_text: str) -> bool:
+    has_named_activation = any(
+        term in signal_text
+        for term in (
+            "operator_invocations",
+            "operator_invocation_count",
+            "eligible_vehicle_or_order_groups_seen",
+            "eligible_vehicle_groups_seen",
+            "eligible_order_groups_seen",
+            "accepted_moves",
+            "accepted_move_count",
+        )
+    )
+    has_named_effect = any(
+        term in signal_text
+        for term in (
+            "split_delta_sum",
+            "cost_delta_sum",
+            "improving_move_count",
+            "effect_delta_sum",
+        )
+    )
+    if has_named_activation and has_named_effect:
+        return True
+    has_activation_signal = any(
+        term in signal_text
+        for term in (
+            "activation",
+            "invocation",
+            "eligible",
+            "accepted_move",
+            "accepted",
+        )
+    )
+    has_effect_signal = any(
+        term in signal_text
+        for term in ("effect", "split_delta", "cost_delta", "improving", "delta")
+    )
+    has_instrumentation_path = any(
+        term in signal_text
+        for term in ("diagnostic", "telemetry", "counter", "metric", "instrument")
+    )
+    return has_activation_signal and has_effect_signal and has_instrumentation_path
+
+
+def _patch_has_screening_or_lexicographic_guard(
+    code: str,
+    signal_text: str,
+) -> bool:
+    if any(
+        term in signal_text
+        for term in (
+            "screening_only",
+            "screening",
+            "validation",
+            "overfit",
+            "generalize",
+            "generalization",
+            "guard",
+            "no_op",
+            "noop",
+        )
+    ):
+        return True
+    has_split_signal = any(
+        term in signal_text
+        for term in ("subcategory_splits", "split_delta", "split_delta_sum")
+    )
+    has_cost_signal = any(
+        term in signal_text for term in ("total_cost", "cost_delta", "cost_delta_sum")
+    )
+    code_lower = str(code or "").lower()
+    has_control_flow = any(
+        term in code_lower
+        for term in ("if ", "return ", "continue", "break", "lexicographic")
+    )
+    return has_split_signal and has_cost_signal and has_control_flow
 
 
 def _hypothesis_quality_text(hypothesis: Any) -> str:

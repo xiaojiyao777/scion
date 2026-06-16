@@ -65,7 +65,10 @@ from .protocols import (
     HypothesisStoreLike,
     ProblemRuntimeLike,
 )
-from .problem_quality import validate_problem_hypothesis_quality
+from .problem_quality import (
+    validate_problem_hypothesis_quality,
+    validate_problem_patch_quality,
+)
 from .records import ProposalRecordMixin
 
 logger = logging.getLogger(__name__)
@@ -446,6 +449,21 @@ class ProposalPipeline(
         context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
         try:
             result = self.creative.generate_code(context)
+            quality_check = validate_problem_patch_quality(
+                self.problem_runtime,
+                branch,
+                hypothesis,
+                result,
+                step_history=self.step_history,
+            )
+            if not quality_check.allowed:
+                self.hypothesis_failure_details[bid] = quality_check.detail
+                self.handle_failure(
+                    branch,
+                    FailureEvent(category="proposal", detail=quality_check.detail),
+                )
+                self.circuit_breaker.record_failure(quality_check.detail)
+                return None
             self.circuit_breaker.record_success()
             return result
         except LLMBalanceError as exc:

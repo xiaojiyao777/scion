@@ -154,6 +154,18 @@ def _agentic_quality_block_classification(
             "block_reason": AGENT_QUALITY_BLOCKED,
         }
     if (
+        str(structured.get("agent_block_reason") or "") == AGENT_QUALITY_BLOCKED
+        or f"{AGENT_QUALITY_BLOCKED}:" in detail
+    ):
+        code = failure_code or _agent_quality_detail_code(detail)
+        if not code:
+            code = failure_category or AGENT_QUALITY_BLOCKED
+        return {
+            "failure_class": failure_category or AGENT_GROUNDING_FAILURE,
+            "failure_code": code,
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
+    if (
         failure_code == PROPOSAL_PREMISE_CONTRADICTED
         or failure_category in {
             AGENT_GROUNDING_FAILURE,
@@ -175,6 +187,17 @@ def _agentic_quality_block_classification(
 
 def _agentic_output_is_quality_blocked(output: AgenticProposalOutput) -> bool:
     return _agentic_quality_block_classification(output) is not None
+
+
+def _agent_quality_detail_code(detail: str) -> str:
+    marker = f"{AGENT_QUALITY_BLOCKED}:"
+    if marker not in detail:
+        return ""
+    suffix = detail.split(marker, 1)[1].strip()
+    if not suffix:
+        return AGENT_QUALITY_BLOCKED
+    code = suffix.split(":", 1)[0].strip()
+    return f"{marker}{code}" if code else AGENT_QUALITY_BLOCKED
 
 
 def _structured_mechanism_novelty_diagnostic(
