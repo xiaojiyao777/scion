@@ -615,6 +615,16 @@ Exit criteria:
   (`100`, `93`, and `92` passed in the recorded groups), Python compile, and
   `git diff --check`. Next gate: short warehouse production rerun from the new
   commit.
+- Active: that field gate is running on WSL from commit `41d02d1`. Launch
+  report:
+  `scion/docs/experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`;
+  expected server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`;
+  tmux session `scion_wh_posdiag_rerun6r_20260616T190605Z`. Initial health
+  reached `status=running`. Acceptance requires validation behavior, not merely
+  more screening-only rows.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
