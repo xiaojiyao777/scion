@@ -735,10 +735,13 @@ Exit criteria:
   `/home/clawd/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
   tmux session `scion_wh_hypqblock_rerun6r_4b2ee29_222243`. Initial health
   check shows `status=running`, commit `4b2ee29`, and the expected first
-  warehouse validation-transfer quality block. Acceptance requires later
-  hypothesis traces to show `Prior Agent Quality Blocks For This Hypothesis`
-  after a quality block, and then either fewer repeated validation-transfer
-  blocks, a genuine adapter-owned explanation for remaining blocks, or restored
+  warehouse validation-transfer quality block. Early trace inspection accepts
+  prompt visibility: later hypothesis LLM traces include
+  `Prior Agent Quality Blocks For This Hypothesis` with warehouse-owned
+  hypothesis and patch failure codes, retry constraints, and
+  `missing_claims` / `missing_code_elements`. Research-quality acceptance still
+  requires either fewer repeated validation-transfer blocks, a genuine
+  adapter-owned explanation for remaining blocks, or restored
   validation/frozen/promotion behavior without regressing prompt visibility.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.

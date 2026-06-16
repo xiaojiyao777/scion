@@ -70,11 +70,31 @@ This is not a launch failure. It is the intended first signal for this repair:
 the next hypothesis call on that branch should receive the prior block as a
 hard proposal-only research constraint.
 
+## Early Trace Check
+
+Early WSL trace inspection confirms the prompt repair is active in real LLM
+calls, not only in context assembly tests:
+
+- `3` hypothesis prompt manifests were present.
+- `2/3` hypothesis manifests included
+  `Prior Agent Quality Blocks For This Hypothesis`.
+- The second hypothesis LLM trace included
+  `agent_quality_blocked:warehouse_validation_transfer_quality_missing`,
+  `warehouse_validation_transfer_quality`, the warehouse-owned retry
+  constraint, and `missing_claims` for `validation_transfer_risk` and
+  `screening_only_guard`.
+- A later hypothesis LLM trace included
+  `agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing`,
+  `warehouse_validation_transfer_patch_quality`, the patch retry constraint,
+  and `missing_code_elements` for `activation_effect_diagnostic_code`.
+
+This accepts prompt visibility for the new hypothesis-stage quality-block
+section. It does not yet accept research-quality improvement; that still
+requires the full run outcome.
+
 ## Acceptance Criteria
 
-Accept the prompt repair only if later hypothesis traces/manifests show the
-`Prior Agent Quality Blocks For This Hypothesis` section after a quality block
-has occurred.
+Prompt visibility for the repair has already been observed in early traces.
 
 Accept research-quality improvement only if one of these is true:
 

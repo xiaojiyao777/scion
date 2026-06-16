@@ -137,7 +137,11 @@ Active work as of the latest handoff:
   `/home/clawd/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
   tmux session `scion_wh_hypqblock_rerun6r_4b2ee29_222243`. Initial health
   check shows `status=running`, commit `4b2ee29`, and the expected first
-  warehouse validation-transfer quality block.
+  warehouse validation-transfer quality block. Early trace inspection accepts
+  prompt visibility for the new hypothesis section: later hypothesis LLM traces
+  include `Prior Agent Quality Blocks For This Hypothesis` with warehouse-owned
+  failure codes, retry constraints, and missing claim/code-element fields.
+  Research-quality acceptance still waits for the full run.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
