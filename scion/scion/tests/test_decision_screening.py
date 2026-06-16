@@ -1,5 +1,7 @@
 """Focused tests split from test_decision.py."""
 
+from pathlib import Path
+
 from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
 )
@@ -407,6 +409,147 @@ def test_decision_trajectory_divergent_pair_signal_after_expand_queues_diagnosti
     assert out.decision == Decision.QUEUE_VALIDATE
     assert "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS" in out.reason_codes
     assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" in out.reason_codes
+
+
+def test_decision_warehouse_prod_pair_signal_after_expand_queues_diagnostic_validation():
+    """Warehouse prod can diagnose low-SNR case ties with strong pair evidence."""
+    from scion.core.models import DecisionFeatures
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml
+
+    repo_scion_dir = Path(__file__).resolve().parents[2]
+    problem = load_problem_spec_v1_from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    )
+    config = ProtocolConfig.from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "protocol_prod.yaml"
+    ).with_problem_measurement(problem)
+    engine = DecisionEngine(config)
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=6,
+        wins=2,
+        losses=0,
+        ties=4,
+        win_rate=2 / 6,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=1.0,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=6,
+        pair_losses=2,
+        pair_ties=4,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert config.pairing_validity == "trajectory_divergent"
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" in out.reason_codes
+
+
+def test_decision_warehouse_prod_pair_signal_fails_closed_on_negative_median():
+    """Pair-level diagnostic validation still requires non-negative effect."""
+    from dataclasses import replace
+    from scion.core.models import DecisionFeatures
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml
+
+    repo_scion_dir = Path(__file__).resolve().parents[2]
+    problem = load_problem_spec_v1_from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    )
+    config = ProtocolConfig.from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "protocol_prod.yaml"
+    ).with_problem_measurement(problem)
+    engine = DecisionEngine(config)
+    base = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=6,
+        wins=2,
+        losses=0,
+        ties=4,
+        win_rate=2 / 6,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=1.0,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=6,
+        pair_losses=2,
+        pair_ties=4,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(replace(base, median_delta=-0.1))
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert out.decision != Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
+def test_decision_warehouse_prod_pair_signal_fails_closed_when_loss_heavy():
+    """Loss-heavy pair evidence cannot reach diagnostic validation."""
+    from dataclasses import replace
+    from scion.core.models import DecisionFeatures
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml
+
+    repo_scion_dir = Path(__file__).resolve().parents[2]
+    problem = load_problem_spec_v1_from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    )
+    config = ProtocolConfig.from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "protocol_prod.yaml"
+    ).with_problem_measurement(problem)
+    engine = DecisionEngine(config)
+    base = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=6,
+        wins=2,
+        losses=0,
+        ties=4,
+        win_rate=2 / 6,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=1.0,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=6,
+        pair_losses=2,
+        pair_ties=4,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(
+        replace(base, pair_wins=4, pair_losses=6, pair_ties=2)
+    )
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+    assert all("PASS" not in reason for reason in out.reason_codes)
 
 
 def test_decision_pair_signal_after_expand_requires_explicit_policy():

@@ -469,7 +469,7 @@ class DecisionEngine:
         if features.statistical_status == "negative":
             return False
         if features.median_delta is not None and features.median_delta < 0:
-            return False
+            return features.screening_expand_count >= 1
         if features.ci_high is not None and features.ci_high < 0:
             return False
 

@@ -519,18 +519,43 @@ Exit criteria:
   `DecisionFeatures`, Protocol, promotion, or gate semantics. Next gate: rerun
   a short warehouse live check from the new repair commit before any warehouse
   efficacy or v0.3-continuity claim.
-- Active: that short warehouse live rerun has started from commit `d666311`.
+- Completed with split acceptance: the warehouse live rerun from commit
+  `d666311` finished valid/complete but failed research-quality acceptance.
   Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-research-loop-repair-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-research-loop-repair-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`;
   server sync root:
-  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`;
-  tmux session `scion_wh_repair_rerun6r_173136`. It is a single `6R`
-  `on_compact` cell with warehouse production protocol/split/seeds,
-  `gpt-5.5`, `measurement_governance=on`, compact context, disabled early
-  stop, and `30s` solver cap. Accept only on behavior improvement against the
-  failed `0bb99ec` 6R gate.
+  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`.
+  It completed `6/6` effective rounds with `6` screening rows, `0` proposal
+  quality blocks, `0` verification-consumed failures, exact formal-candidate
+  reconciliation, and `0` fresh-runtime replay rows. This field-accepts the
+  branch-lesson canonicalization and warehouse operator-preview repair slice.
+  It does not field-accept warehouse efficacy: there were no validation,
+  frozen, or promotion rows. The remaining blocker is research quality and
+  measurement/protocol semantics, not prompt visibility or generic
+  observability. Next active repair: warehouse problem-owned measurement and
+  production protocol should allow conservative pair-level low-SNR diagnostic
+  validation for borderline positive signals, while preserving strict
+  validation/frozen/promotion gates and keeping raw prompt/LLM evidence out of
+  `DecisionFeatures`.
+- Completed and accepted as deterministic repair, not efficacy evidence:
+  warehouse pair-level diagnostic protocol repair. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-pair-signal-diagnostic-protocol-repair-20260616.md`.
+  The warehouse problem measurement now declares `trajectory_divergent`
+  pairing, and `protocol_prod.yaml` enables conservative pair-level diagnostic
+  validation after screening expand is exhausted. The repair is deliberately
+  narrow: a pair-positive, non-regressive low-SNR shape like the rerun's
+  `2/0/4` case W/L/T and `6/2/4` pair W/L/T now queues validation, while
+  negative median and loss-heavy pair evidence fail closed. Validation,
+  frozen, promotion, runtime, and `DecisionFeatures` semantics are unchanged.
+  Main-session acceptance passed config/problem-bridge/decision/protocol-gate
+  tests (`97 passed`) plus a direct deterministic decision replay of the rerun
+  shape. Next gate: short warehouse production rerun from the new commit,
+  accepting only if pair-positive branches actually reach validation and the
+  validation/frozen stages reject or confirm them with auditable evidence.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

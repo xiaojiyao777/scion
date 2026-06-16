@@ -18,6 +18,12 @@
 #     低于 0.55 但仍有非负/正向 cost 中位改善；该策略只允许这类 expanded
 #     用尽后的边界样本进入 validation，不改变 frozen 晋升标准。
 #
+#   - pair-level diagnostic validation 显式开启
+#     原因：production warehouse screening 经常被 case-level ties 淹没；当
+#     expanded screening 已用尽、median 非负、pair wins 明显多于 losses 时，
+#     允许进入 validation 作为诊断放大，而不是直接继续探索或晋升。
+#     validation/frozen/promotion gate 不变。
+#
 # 不变项：
 #   - frozen gate 保持 bootstrap CI，不降低，晋升标准不松动
 #   - n_seeds 保持 2/3（已够用）
@@ -63,6 +69,13 @@ gates:
       win_rate_window: 0.05
       require_median_delta_nonnegative: true
       require_ci_low_nonnegative: false
+      allow_pair_level_signal: true
+      pair_win_rate_min: 0.50
+      min_pair_total: 12
+      min_pair_wins: 6
+      min_pair_win_loss_margin: 4
+      pair_non_tie_win_rate_min: 0.70
+      max_pair_loss_rate: 0.25
   validation:
     win_rate_min: 0.55          # 原 0.66，与 screening 保持对称
     median_delta_min: "practical_delta_validate"

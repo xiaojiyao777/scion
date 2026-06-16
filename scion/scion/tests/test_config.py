@@ -322,6 +322,34 @@ def test_cvrp_formal_protocol_enables_pair_signal_diagnostic_validation():
     assert borderline.require_ci_low_nonnegative is True
 
 
+def test_warehouse_prod_protocol_enables_conservative_pair_signal_diagnostic_validation():
+    protocol_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "problems",
+        "warehouse_delivery",
+        "protocol_prod.yaml",
+    )
+
+    config = ProtocolConfig.from_yaml(protocol_path)
+
+    assert config.gates.screening.win_rate_min == pytest.approx(0.55)
+    assert config.gates.validation.win_rate_min == pytest.approx(0.55)
+    borderline = config.gates.screening.expanded_borderline_advance
+    assert borderline.enabled is True
+    assert borderline.win_rate_window == pytest.approx(0.05)
+    assert borderline.require_median_delta_nonnegative is True
+    assert borderline.require_ci_low_nonnegative is False
+    assert borderline.allow_pair_level_signal is True
+    assert borderline.pair_win_rate_min == pytest.approx(0.50)
+    assert borderline.min_pair_total == 12
+    assert borderline.min_pair_wins == 6
+    assert borderline.min_pair_win_loss_margin == 4
+    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.70)
+    assert borderline.max_pair_loss_rate == pytest.approx(0.25)
+
+
 def test_protocol_config_runtime_governance_from_yaml(tmp_path):
     """Runtime governance is protocol-level, with a default and YAML override."""
     default_config = ProtocolConfig()

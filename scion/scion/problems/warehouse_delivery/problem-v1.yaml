@@ -145,7 +145,7 @@ objectives:
 
 measurement:
   runtime_model: comparative
-  pairing_validity: trajectory_stable
+  pairing_validity: trajectory_divergent
   effect_scale:
     metric: total_cost
     unit: raw_delta

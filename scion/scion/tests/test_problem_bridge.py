@@ -171,6 +171,7 @@ def test_warehouse_legacy_and_package_specs_share_measurement_declaration() -> N
     package = load_problem_spec_v1_from_yaml(package_path)
 
     assert legacy.measurement == package.measurement
+    assert legacy.measurement.pairing_validity == "trajectory_divergent"
     assert legacy.measurement.effect_scale.metric == "total_cost"
     assert legacy.measurement.calibration_ref == "calibration/aa_noise_floor.json"
     for spec in (legacy, package):
