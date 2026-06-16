@@ -126,10 +126,14 @@ class AgenticRefsMixin:
         )
         quality = _agentic_quality_block_classification(output)
         if quality is not None:
+            failure_code = str(quality["failure_code"] or "")
+            if failure_code.startswith(f"{AGENT_QUALITY_BLOCKED}:"):
+                quality_prefix = failure_code
+            else:
+                quality_prefix = f"{AGENT_QUALITY_BLOCKED}:{failure_code}"
             prefix = (
                 f"agentic_proposal:{reason_value}: "
-                f"{AGENT_QUALITY_BLOCKED}:"
-                f"{quality['failure_code']}:"
+                f"{quality_prefix}:"
                 f"{quality['failure_class']}"
             )
             if output.failure_detail:

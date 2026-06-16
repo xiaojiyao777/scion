@@ -44,6 +44,10 @@ Changed files:
 - `scion/scion/core/proposal_pipeline/classification.py`
   - classifies structured `agent_block_reason=agent_quality_blocked` payloads
     as quality blocks for feedback/lifecycle handling.
+- `scion/scion/core/proposal_pipeline/agentic_refs.py`
+  - renders quality-block failure details without duplicating the
+    `agent_quality_blocked` prefix when structured problem-owned failure codes
+    already include it.
 - `scion/scion/problems/warehouse_delivery/adapter.py`
   - adds `validate_patch_quality(...)`.
   - high-risk warehouse operator patches must expose recognizable
@@ -90,6 +94,9 @@ Main-session verification:
   - `48 passed`
 - `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py scion/scion/tests/unit/core/test_cross_branch_observability.py -q`
   - `66 passed`
+- Follow-up feedback-format check:
+  `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py scion/scion/tests/unit/test_warehouse_target_preview.py -q`
+  - `33 passed`
 - `python -m py_compile` on touched core/warehouse modules
   - passed
 - `git diff --check`

@@ -566,6 +566,7 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     assert patch is None
     assert detail is not None
     assert "warehouse_validation_transfer_patch_quality_missing" in detail
+    assert "agent_quality_blocked:agent_quality_blocked" not in detail
     assert failures == []
     assert circuit.failures == []
     stored = pipeline.agentic_quality_feedback[branch.branch_id]
