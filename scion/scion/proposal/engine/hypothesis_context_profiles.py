@@ -241,103 +241,33 @@ def _compact_cross_branch_research(payload: Any) -> str:
         {
             "schema_version": _COMPACT_LEARNING_SCHEMA,
             "taint": "proposal_research_feedback",
+            "proposal_visibility_only": True,
             "decision_input_policy": "excluded_from_decision_features",
-            "near_duplicate_hints": _project_items(
+            "near_duplicate_hints": _mechanism_signal_items(
                 payload.get("similarity_hints"),
-                fields=(
-                    "hint_type",
-                    "branch_ids",
-                    "shared_signature",
-                    "outcome_patterns",
-                    "recommended_action",
-                    "reason_codes",
-                    "summary",
-                ),
                 accepted_types={"near_duplicate", "saturated_family"},
             ),
-            "avoid_hints": _project_items(
+            "avoid_hints": _mechanism_signal_items(
                 payload.get("avoid_bridge_guidance"),
-                fields=(
-                    "guidance_type",
-                    "hint_type",
-                    "source",
-                    "branch_ids",
-                    "signature",
-                    "shared_signature",
-                    "outcome_patterns",
-                    "lesson_type",
-                    "failure_mode",
-                    "recommended_action",
-                    "priority",
-                    "proposal_guidance",
-                    "confidence",
-                    "reason_codes",
-                    "summary",
-                ),
             ),
-            "opportunity_hints": _project_items(
+            "opportunity_hints": _mechanism_signal_items(
                 payload.get("opportunity_gaps"),
-                fields=(
-                    "hint_type",
-                    "opportunity_type",
-                    "gap_type",
-                    "source",
-                    "recommended_action",
-                    "priority",
-                    "basis",
-                    "proposal_guidance",
-                    "confidence",
-                    "reason_codes",
-                    "summary",
-                ),
             ),
-            "lesson_hints": _project_items(
+            "lesson_hints": _mechanism_signal_items(
                 payload.get("lesson_cards") or payload.get("lessons"),
-                fields=(
-                    "scope",
-                    "branch_id",
-                    "branch_ids",
-                    "lesson_type",
-                    "failure_mode",
-                    "evidence_strength",
-                    "transferability",
-                    "recommended_action",
-                    "affected_stage",
-                    "confidence",
-                    "reason_codes",
-                    "summary",
-                ),
             ),
-            "branch_lessons": _project_items(
+            "branch_lessons": _mechanism_signal_items(
                 payload.get("branch_lesson_records"),
-                fields=(
-                    "lesson_id",
-                    "source",
-                    "decision_input_policy",
-                    "scope",
-                    "lesson_role",
-                    "lesson_type",
-                    "maturity",
-                    "source_branch_ids",
-                    "shared_signature",
-                    "evidence_basis",
-                    "required_response",
-                    "reason_codes",
-                ),
-                limit=8,
+                limit=12,
             ),
-            "portfolio_guidance": _project_generic_value(
-                payload.get("portfolio_guidance")
+            "cluster_hints": _mechanism_signal_items(
+                _portfolio_clusters(payload.get("portfolio_steering")),
+                limit=6,
             ),
-            "portfolio_steering": _compact_portfolio_steering(
-                payload.get("portfolio_steering")
-            ),
-            "family_saturation_summary": _compact_family_saturation_summary(
+            "family_saturation_hints": _mechanism_signal_items(
                 payload.get("family_saturation_summary")
-                or _project_mapping(
-                    payload.get("portfolio_steering"),
-                    fields=("family_saturation_summary",),
-                ).get("family_saturation_summary")
+                or _portfolio_family_saturation(payload.get("portfolio_steering")),
+                limit=6,
             ),
             "novelty_pressure": _project_mapping(
                 payload.get("novelty_pressure"),
@@ -345,7 +275,6 @@ def _compact_cross_branch_research(payload: Any) -> str:
                     "policy",
                     "pressure",
                     "recommended_action",
-                    "reason_codes",
                     "summary",
                 ),
             ),
@@ -361,6 +290,215 @@ def _compact_cross_branch_research(payload: Any) -> str:
         "input.\n"
         f"{rendered}"
     )
+
+
+def _mechanism_signal_items(
+    value: Any,
+    *,
+    accepted_types: set[str] | None = None,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    if isinstance(value, Mapping):
+        if isinstance(value.get("summaries"), (list, tuple)):
+            value = value.get("summaries")
+        else:
+            value = (value,)
+    if not isinstance(value, (list, tuple)):
+        return []
+    items: list[dict[str, Any]] = []
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            continue
+        hint_type = str(raw.get("hint_type") or raw.get("lesson_type") or "")
+        if accepted_types is not None and hint_type not in accepted_types:
+            continue
+        projected = _mechanism_signal_item(raw)
+        if projected:
+            items.append(projected)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _mechanism_signal_item(raw: Mapping[str, Any]) -> dict[str, Any]:
+    signature = _compact_signal_signature(
+        raw.get("shared_signature")
+        or raw.get("signature")
+        or raw.get("source_signature")
+        or raw
+    )
+    evidence = _compact_signal_evidence(raw.get("evidence_basis") or raw)
+    return _drop_empty(
+        {
+            "id": _first_present(
+                raw,
+                ("lesson_id", "cluster_id", "hint_id", "record_id"),
+            ),
+            "type": _first_present(
+                raw,
+                (
+                    "hint_type",
+                    "lesson_type",
+                    "lesson_role",
+                    "cluster_type",
+                    "opportunity_type",
+                    "gap_type",
+                    "guidance_type",
+                    "failure_mode",
+                ),
+            ),
+            "signature": signature,
+            "summary": _short_signal_text(
+                _first_present(
+                    raw,
+                    (
+                        "summary",
+                        "proposal_guidance",
+                        "proposal_advisory",
+                        "recommended_action",
+                        "cluster_signal",
+                        "advisory_label",
+                    ),
+                )
+            ),
+            "guidance": _short_signal_text(
+                _first_present(
+                    raw,
+                    ("recommended_action", "proposal_guidance", "proposal_advisory"),
+                )
+            ),
+            "signal": _short_signal_text(
+                _first_present(raw, ("cluster_signal", "advisory_label")),
+                max_chars=120,
+            ),
+            "role": _short_signal_text(raw.get("lesson_role"), max_chars=80),
+            "evidence": evidence,
+            "maturity": _short_signal_text(
+                _first_present(
+                    raw,
+                    (
+                        "maturity",
+                        "evidence_strength",
+                        "transferability",
+                        "confidence",
+                        "priority",
+                    ),
+                ),
+                max_chars=80,
+            ),
+            "branches": _short_sequence(
+                raw.get("branch_ids") or raw.get("source_branch_ids")
+            ),
+        }
+    )
+
+
+def _compact_signal_signature(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    fields = (
+        "change_locus",
+        "surface",
+        "target_file",
+        "action",
+        "mechanism_family",
+        "mechanism_id",
+        "intervention_type",
+    )
+    return _drop_empty(
+        {
+            field: _short_signal_text(value.get(field), max_chars=120)
+            for field in fields
+            if value.get(field) not in (None, "", [], {}, ())
+        }
+    )
+
+
+def _compact_signal_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    evidence = _drop_empty(
+        {
+            "count": _first_present(
+                value,
+                (
+                    "evidence_count",
+                    "attempt_count",
+                    "branch_count",
+                    "lesson_count",
+                    "signature_count",
+                    "cluster_count",
+                ),
+            ),
+            "outcome_patterns": _project_generic_value(
+                value.get("outcome_patterns")
+            ),
+            "activation_statuses": _project_generic_value(
+                value.get("activation_statuses")
+            ),
+            "effect_statuses": _project_generic_value(value.get("effect_statuses")),
+            "runtime_evidence_statuses": _project_generic_value(
+                value.get("runtime_evidence_statuses")
+            ),
+            "case_level_counts": _project_generic_value(
+                value.get("case_level_counts")
+            ),
+            "outcome_tier_counts": _project_generic_value(
+                value.get("outcome_tier_counts")
+            ),
+            "lifecycle_counts": _project_generic_value(value.get("lifecycle_counts")),
+            "basis": _short_signal_text(value.get("basis"), max_chars=160),
+        }
+    )
+    if not evidence:
+        source_branches = value.get("source_branch_ids") or value.get("branch_ids")
+        if isinstance(source_branches, (list, tuple)):
+            evidence["count"] = len(source_branches)
+    return evidence
+
+
+def _portfolio_clusters(value: Any) -> list[Any]:
+    if not isinstance(value, Mapping):
+        return []
+    clusters = value.get("clusters")
+    if isinstance(clusters, (list, tuple)):
+        return list(clusters)
+    return []
+
+
+def _portfolio_family_saturation(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return {}
+    return value.get("family_saturation_summary")
+
+
+def _first_present(value: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        item = value.get(key)
+        if _present(item):
+            return item
+    return ""
+
+
+def _short_sequence(value: Any, *, limit: int = 6) -> list[Any]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [
+        _short_signal_text(item, max_chars=80)
+        for item in value[:limit]
+        if _present(item)
+    ]
+
+
+def _short_signal_text(value: Any, *, max_chars: int = 220) -> str:
+    if isinstance(value, (dict, list, tuple)):
+        rendered = json.dumps(_project_generic_value(value), sort_keys=True, default=str)
+    else:
+        rendered = str(value or "")
+    text = re.sub(r"\s+", " ", rendered).strip()
+    if len(text) > max_chars:
+        return text[: max_chars - 3].rstrip() + "..."
+    return text
 
 
 def _compact_problem_measurement_diagnostics(payload: Any) -> str:
@@ -463,128 +601,6 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
         "intentionally omitted.\n"
         f"{rendered}"
     )
-
-
-def _compact_portfolio_steering(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    return _drop_empty(
-        {
-            "schema_version": "compact_portfolio_steering.v1",
-            "source_schema_version": value.get("schema_version"),
-            "taint": "proposal_research_feedback",
-            "proposal_visibility_only": value.get("proposal_visibility_only"),
-            "decision_features_excluded": value.get("decision_features_excluded"),
-            "summary": _project_mapping(
-                value.get("summary"),
-                fields=(
-                    "signature_count",
-                    "branch_count",
-                    "cluster_count",
-                    "no_effect_lesson_count",
-                    "outcome_patterns",
-                ),
-            ),
-            "top_no_effect_lessons": _project_items(
-                value.get("no_effect_lessons"),
-                fields=(
-                    "lesson_type",
-                    "source_cluster_id",
-                    "branch_ids",
-                    "evidence_basis",
-                    "required_contrast_dimensions",
-                    "recommended_action",
-                    "same_branch_refinement_allowed",
-                    "sibling_duplication_allowed",
-                    "reason_codes",
-                ),
-                accepted_types={"no_effect_plateau"},
-                limit=4,
-            ),
-            "avoid_clusters": _project_items(
-                _avoid_portfolio_clusters(value.get("clusters")),
-                fields=(
-                    "cluster_id",
-                    "cluster_type",
-                    "branch_ids",
-                    "branch_count",
-                    "shared_signature",
-                    "outcome_patterns",
-                    "activation_statuses",
-                    "effect_statuses",
-                    "runtime_evidence_statuses",
-                    "cluster_signal",
-                    "recommended_action",
-                ),
-                limit=4,
-            ),
-            "opportunity_gaps": _project_items(
-                value.get("opportunity_gaps"),
-                fields=(
-                    "gap_type",
-                    "recommended_action",
-                    "priority",
-                    "basis",
-                    "reason_codes",
-                    "confidence",
-                ),
-                limit=4,
-            ),
-            "family_saturation_summary": _compact_family_saturation_summary(
-                value.get("family_saturation_summary")
-            ),
-        }
-    )
-
-
-def _compact_family_saturation_summary(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    return _drop_empty(
-        {
-            "schema_version": value.get("schema_version"),
-            "visibility_marker": value.get("visibility_marker"),
-            "proposal_visibility_only": value.get("proposal_visibility_only"),
-            "advisory_only": value.get("advisory_only"),
-            "decision_features_excluded": value.get("decision_features_excluded"),
-            "decision_input_policy": value.get("decision_input_policy"),
-            "grouping_keys": _project_generic_value(value.get("grouping_keys")),
-            "saturated_family_count": value.get("saturated_family_count"),
-            "summaries": _project_items(
-                value.get("summaries"),
-                fields=(
-                    "mechanism_family",
-                    "intervention_type",
-                    "surface",
-                    "attempt_count",
-                    "branch_count",
-                    "outcome_tier_counts",
-                    "case_level_counts",
-                    "lifecycle_counts",
-                    "advisory_label",
-                    "proposal_advisory",
-                    "reason_codes",
-                ),
-                limit=6,
-            ),
-        }
-    )
-
-
-def _avoid_portfolio_clusters(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, (list, tuple)):
-        return []
-    clusters: list[dict[str, Any]] = []
-    for raw in value:
-        if not isinstance(raw, Mapping):
-            continue
-        if raw.get("cluster_signal") in {
-            "no_effect_plateau",
-            "non_positive_cluster",
-            "activation_gap",
-        } or raw.get("recommended_action") in {"avoid", "diversify", "bridge"}:
-            clusters.append(dict(raw))
-    return clusters
 
 
 def _project_items(

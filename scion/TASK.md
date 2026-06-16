@@ -2167,6 +2167,28 @@ Phase B launch design - 2026-06-14:
   post-initial-local-search cost, ALNS iterations, destroy/repair choices,
   accepted moves, best-update count, route-count status, runtime phase split,
   budget tier, and final gap before proposing another broad candidate.
+- Completed and accepted: W4/P2 prompt signal-density repair. The warehouse
+  branch audits showed `compact_research_signals` and
+  `branch_lesson_usage_context` still hit provider-visible truncation markers
+  in many hypothesis traces. Re-reading `scion-architecture-v3.md`,
+  `v04-core-framework-code-review-20260611.md`,
+  `v04-core-framework-review-20260611.md`, and
+  `v0.5-evidence-uplift-roadmap.md` confirmed this was a v0.4 closeout blocker,
+  not a v0.5-only experiment item. Worker `Lovelace`
+  (`019ed10e-aa46-7e02-bcdc-71d5d05383b4`) implemented the repair in proposal
+  prompt/context rendering: critical research sections no longer route through
+  tiny `_bounded_json` budgets, branch-lesson prompt records preserve compact
+  ids/target/action/mechanism/evidence fields, and repeated
+  `required_response`/raw audit/session payloads are kept out of provider-visible
+  research context. Acceptance stress test proves `compact_research_signals`,
+  `branch_lesson_usage_context`, and `cross_branch_research_map` are not marked
+  truncated while champion/source code remains visible and v3 Decision
+  boundaries are unchanged. Main-session verification:
+  `test_hypothesis_context_profiles.py`, `test_proposal_validation.py`,
+  `test_branch_lesson_usage.py` (`79 passed`), plus proposal pipeline/artifact
+  regression subset (`45 passed`), `py_compile`, and `git diff --check`. Next
+  real campaign must still confirm prompt manifests stay untruncated on live
+  warehouse/CVRP traces.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

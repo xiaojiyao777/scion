@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Dict, Mapping
 
@@ -9,7 +10,6 @@ from .prompt_common import (
     _CACHE_5M,
     _DefaultDict,
     _agentic_research_context_block,
-    _bounded_json,
 )
 from .solver_design_prompts import _solver_design_hypothesis_guidance
 
@@ -506,10 +506,7 @@ def _compact_research_signals(
                 max_chars=900,
             ),
             "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
-            "cross_branch_learning": _compact_text_signal(
-                D["cross_branch_research"],
-                max_chars=900,
-            ),
+            "cross_branch_index": _compact_cross_branch_signal_index(context, D),
             "branch_lesson_ids": _lesson_ids_from_context(context),
             "research_shape": _compact_text_signal(D.get("research_shape_diagnostics")),
         }
@@ -521,7 +518,7 @@ def _compact_research_signals(
         "Default-visible proposal context only; excluded from DecisionFeatures. "
         "Use this before broader rules or raw feedback when choosing the next "
         "mechanism.\n\n"
-        f"{_bounded_json(payload, 2200)}"
+        f"{_compact_json(payload)}"
     )
 
 
@@ -540,6 +537,40 @@ def _compact_text_signal(value: Any, *, max_chars: int = 420) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 18].rstrip() + " ... [truncated]"
+
+
+def _compact_cross_branch_signal_index(
+    context: Mapping[str, Any],
+    D: Mapping[str, Any],
+) -> dict[str, Any]:
+    ids = _lesson_ids_from_context(context)
+    text = str(D.get("cross_branch_research") or "")
+    if not ids and not text.strip():
+        return {}
+    return _drop_empty_mapping(
+        {
+            "lesson_ids": ids,
+            "section_available": bool(text.strip()),
+            "compact_learning_schema": (
+                "compact_cross_branch_learning.v1"
+                if "compact_cross_branch_learning.v1" in text
+                else ""
+            ),
+            "signal_hint": _compact_text_signal(_first_nonempty_line(text), max_chars=180),
+        }
+    )
+
+
+def _first_nonempty_line(value: str) -> str:
+    for line in str(value or "").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("{"):
+            return stripped
+    return ""
+
+
+def _compact_json(value: Any) -> str:
+    return json.dumps(value, indent=2, sort_keys=True, default=str)
 
 
 def _lesson_ids_from_context(context: Mapping[str, Any]) -> list[str]:
@@ -800,7 +831,7 @@ def _branch_lesson_usage_context_block(context: Mapping[str, Any]) -> str:
         "This is tainted proposal-only research feedback and is excluded from "
         "DecisionFeatures. Use compact lesson ids and generic dimensions; do "
         "not copy raw lesson text into the formal hypothesis.\n\n"
-        f"{_bounded_json(payload, 9000)}"
+        f"{_compact_json(payload)}"
     )
 
 
@@ -912,14 +943,14 @@ def _compact_branch_lesson_records(records: Any) -> list[dict[str, Any]]:
                 "source_branch_ids",
                 "shared_signature",
                 "evidence_basis",
-                "required_response",
-                "reason_codes",
+                "summary",
+                "outcome_summary",
             )
             if raw.get(key) not in (None, "", [], {}, ())
         }
         if item:
             compact.append(item)
-        if len(compact) >= 6:
+        if len(compact) >= 16:
             break
     return compact
 
@@ -935,12 +966,16 @@ def _compact_branch_lesson_value(value: Any) -> Any:
             "effect_path",
             "effect_statuses",
             "mechanism_family",
+            "mechanism_id",
             "outcome_patterns",
+            "outcome_summary",
             "required_contrast_dimensions",
             "required_for",
             "required_output_field",
             "same_branch_refinement_allowed",
             "sibling_duplication_allowed",
+            "source_branch_ids",
+            "summary",
             "target_file",
         }
         result = {

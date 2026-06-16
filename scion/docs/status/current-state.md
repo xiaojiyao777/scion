@@ -270,6 +270,19 @@ Active work as of the latest handoff:
   scheduling, acceptance temperature, VNS runtime allocation, or large-X budget
   saturation. The next VRP rung should be problem-owned mechanism diagnostics,
   not another broad candidate-first smoke search.
+- Accepted repair before further longruns: W4/P2 prompt signal density. The
+  latest branch audits showed `compact_research_signals` and
+  `branch_lesson_usage_context` were still provider-visible truncated sections
+  in many warehouse hypothesis traces. Worker `Lovelace`
+  (`019ed10e-aa46-7e02-bcdc-71d5d05383b4`) implemented the concrete
+  prompt/context repair: critical research sections now render compact
+  mechanism-level lesson ids, target/action/mechanism linkage, maturity, and
+  evidence summaries; repeated `required_response`, raw audit rows, and session
+  metadata are kept out of provider-visible research context. Main-session
+  acceptance passed `79` focused prompt/validation/branch-lesson tests, `45`
+  proposal pipeline/artifact regression tests, `py_compile`, and
+  `git diff --check`. Next warehouse/CVRP campaigns must still verify prompt
+  manifests on live traces before considering the repair field-proven.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

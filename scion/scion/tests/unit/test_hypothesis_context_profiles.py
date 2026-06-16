@@ -255,19 +255,20 @@ def test_algorithm_profile_filters_full_governance_noise_and_keeps_compact_learn
     assert "lesson:abc123" in compact
     assert "preserve" in compact
     assert "fresh" in compact
-    assert "branch_lesson_usage" in compact
-    assert "runtime_budget_strategy" in compact
-    assert "same_branch_refinement_allowed" in compact
-    assert "sibling_duplication_allowed" in compact
-    assert "compact_portfolio_steering.v1" in compact
-    assert "cross_branch_family_saturation_summary.v1" in compact
-    assert "advisory proposal-only excluded_from_DecisionFeatures" in compact
+    assert "branch_lesson_usage" not in compact
+    assert "runtime_budget_strategy" not in compact
+    assert "same_branch_refinement_allowed" not in compact
+    assert "sibling_duplication_allowed" not in compact
+    assert "compact_portfolio_steering.v1" not in compact
+    assert "cross_branch_family_saturation_summary.v1" not in compact
+    assert "advisory proposal-only excluded_from_DecisionFeatures" not in compact
     assert "consider diversifying" in compact
-    assert "spent_family" in compact
-    assert "portfolio_steering.v1" in compact
+    assert "Spent family" in compact
+    assert "portfolio_steering.v1" not in compact
     assert "no_effect_plateau" in compact
-    assert "no_effect_contrast_gap" in compact
     assert "activation_policy" in compact
+    assert "reason_codes" not in compact
+    assert "required_response" not in compact
     assert "signature_digest" not in compact
     assert "hidden-full-signature" not in compact
     assert "same_family_surface" not in compact
@@ -871,6 +872,253 @@ def test_branch_lesson_context_is_compact_and_prioritized_before_cross_branch_ma
     assert "<truncated agentic context>" not in rendered_system
     assert "When leaving a no-effect or weak-positive branch" in user_prompt
     assert "old target/action/mechanism family" in user_prompt
+
+
+def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signals():
+    records = []
+    for idx in range(12):
+        records.append(
+            {
+                "schema_version": "branch_lesson.v1",
+                "lesson_id": f"lesson:stress-{idx:02d}",
+                "source": "proposal_only",
+                "decision_input_policy": "excluded_from_decision_features",
+                "scope": "cross_branch",
+                "lesson_role": "contrast" if idx % 2 else "avoid",
+                "lesson_type": "no_effect_plateau",
+                "maturity": "mature" if idx < 4 else "fresh",
+                "source_branch_ids": [f"branch-stress-{idx}"],
+                "shared_signature": {
+                    "change_locus": "solver_design",
+                    "target_file": f"policies/module_{idx}.py",
+                    "action": "modify",
+                    "mechanism_family": f"stress_family_{idx % 3}",
+                    "mechanism_id": f"stress_mechanism_{idx}",
+                },
+                "evidence_basis": {
+                    "outcome_patterns": {"no_effect": idx + 1, "weak_positive": 1},
+                    "activation_statuses": {"observed": idx + 2},
+                    "effect_statuses": {"zero": idx + 1},
+                    "outcome_summary": f"outcome summary {idx}",
+                    "raw_rows": [
+                        {
+                            "case": f"secret-raw-row-{idx}",
+                            "delta": idx,
+                        }
+                    ],
+                },
+                "summary": (
+                    f"mechanism stress_family_{idx % 3} repeatedly activates "
+                    f"without moving the target objective on evidence set {idx}."
+                ),
+                "required_response": {
+                    "required_for": "clean_fork_new_branch",
+                    "required_output_field": "branch_lesson_usage",
+                    "minimum_requirement": "secret-required-template " * 300,
+                    "reason_codes": [f"SECRET_REASON_CODE_{idx}"],
+                    "required_contrast_dimensions": [
+                        "target_file",
+                        "mechanism_family",
+                        "runtime_budget_strategy",
+                    ],
+                },
+                "reason_codes": [f"SECRET_RECORD_REASON_{idx}"],
+                "raw_text": f"secret raw_text payload {idx} " * 200,
+                "raw_rows": [{"case": f"secret-top-raw-row-{idx}"}],
+                "full_audit": {"secret_full_audit": idx},
+                "session_metadata": {"session_id": f"secret-session-{idx}"},
+                "portfolio_payload": {"secret_portfolio_blob": "x" * 5000},
+            }
+        )
+    context = {
+        "problem_summary": "Warehouse 3x24R branch audit stress context.",
+        "research_surfaces": "Research surfaces: solver_design",
+        "operator_categories": "solver_design",
+        "available_actions": "modify, create_new",
+        "targetable_files": "policies/*.py",
+        "champion_operators_code": (
+            "class ChampionOperator:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        ),
+        "champion_stats": "champion_v3 screening complete",
+        "experiment_history": (
+            "branch stress-a: weak-positive activation but no objective movement."
+        ),
+        "sibling_summary": "sibling stress-b explored scheduler compaction.",
+        "blacklist_summary": "avoid exact stress_family_0 replay.",
+        "objective_opportunity_profile": (
+            "## Objective Opportunity Profile (screening only)\n"
+            "- objective=total_cost positive_cases=2 tie_cases=10"
+        ),
+        "runtime_feedback": (
+            "runtime summary: saturated but bounded; no crash or timeout."
+        ),
+        "branch_lesson_usage_requirement": {
+            "schema_version": "branch_lesson_usage_requirement.v1",
+            "required": True,
+            "required_for": "clean_fork_new_branch",
+            "required_fors": ["clean_fork_new_branch"],
+            "required_output_field": "branch_lesson_usage",
+            "candidate_lesson_ids": [record["lesson_id"] for record in records],
+            "candidate_target_files": [
+                record["shared_signature"]["target_file"] for record in records
+            ],
+            "candidate_actions": ["modify"],
+            "candidate_mechanism_families": [
+                "stress_family_0",
+                "stress_family_1",
+                "stress_family_2",
+            ],
+            "required_contrast_dimensions": [
+                "target_file",
+                "mechanism_family",
+                "runtime_budget_strategy",
+            ],
+            "decision_features_excluded": True,
+        },
+        "branch_lesson_records": records,
+        "cross_branch_research_payload": {
+            "schema_version": "cross_branch_research.v1",
+            "branch_lesson_records": records,
+            "avoid_bridge_guidance": [
+                {
+                    "hint_type": "avoid",
+                    "shared_signature": {
+                        "change_locus": "solver_design",
+                        "target_file": "policies/module_0.py",
+                        "action": "modify",
+                        "mechanism_family": "stress_family_0",
+                    },
+                    "summary": "Avoid replaying saturated stress families.",
+                    "recommended_action": "contrast target_file and mechanism_family",
+                    "required_response": {"secret": "do not render"},
+                    "raw_text": "secret cross raw text",
+                    "reason_codes": ["SECRET_CROSS_REASON"],
+                }
+            ],
+            "opportunity_gaps": [
+                {
+                    "gap_type": "coverage_gap",
+                    "summary": "Opportunity remains in untested bounded routing.",
+                    "recommended_action": "try a bounded contrast mechanism",
+                    "raw_rows": [{"secret": "cross raw row"}],
+                }
+            ],
+            "portfolio_steering": {
+                "schema_version": "portfolio_steering.v1",
+                "session_metadata": {"session_id": "secret-portfolio-session"},
+                "raw_rows": [{"secret": "portfolio raw rows"}],
+                "clusters": [
+                    {
+                        "cluster_id": "cluster-stress-family",
+                        "cluster_type": "family_surface_target_action",
+                        "branch_ids": ["branch-stress-0", "branch-stress-1"],
+                        "branch_count": 2,
+                        "shared_signature": {
+                            "surface": "solver_design",
+                            "target_file": "policies/module_0.py",
+                            "action": "modify",
+                            "mechanism_family": "stress_family_0",
+                        },
+                        "outcome_patterns": {"no_effect": 2},
+                        "cluster_signal": "no_effect_plateau",
+                        "recommended_action": "diversify",
+                        "full_audit": {"secret": "portfolio audit"},
+                    }
+                ],
+                "family_saturation_summary": {
+                    "summaries": [
+                        {
+                            "mechanism_family": "stress_family_0",
+                            "intervention_type": "modify",
+                            "surface": "solver_design",
+                            "attempt_count": 4,
+                            "branch_count": 2,
+                            "outcome_tier_counts": {"no_effect": 4},
+                            "proposal_advisory": "spent family; diversify.",
+                            "reason_codes": ["SECRET_PORTFOLIO_REASON"],
+                        }
+                    ]
+                },
+            },
+            "cross_branch_research_session_metadata": {
+                "session_id": "secret-cross-session"
+            },
+            "full_audit": {"secret": "cross full audit"},
+        },
+    }
+
+    filtered = filter_hypothesis_context_for_prompt(context)
+    system_blocks, user_prompt = _split_hypothesis_context(filtered)
+    rendered_prompt = "\n".join(str(block["text"]) for block in system_blocks)
+    rendered_prompt += "\n" + user_prompt
+
+    assert "<truncated agentic context>" not in rendered_prompt
+    for forbidden in (
+        "raw_text",
+        "raw_rows",
+        "full_audit",
+        "session_metadata",
+        "required_response",
+        "secret-required-template",
+        "SECRET_REASON_CODE",
+        "secret raw_text payload",
+        "secret-top-raw-row",
+        "secret_full_audit",
+        "secret-session",
+        "secret_portfolio_blob",
+        "secret-cross-session",
+        "secret-portfolio-session",
+        "SECRET_CROSS_REASON",
+        "SECRET_PORTFOLIO_REASON",
+    ):
+        assert forbidden not in rendered_prompt
+    for expected in (
+        "lesson:stress-00",
+        "lesson:stress-11",
+        "mature",
+        "fresh",
+        "policies/module_0.py",
+        "modify",
+        "stress_mechanism_0",
+        "stress_family_2",
+        "outcome summary 0",
+        "no_effect",
+        "weak_positive",
+        "clean_fork_new_branch",
+        "branch_lesson_usage",
+        "target_file",
+        "mechanism_family",
+        "runtime_budget_strategy",
+        "Avoid replaying saturated stress families.",
+        "cluster-stress-family",
+        "class ChampionOperator",
+    ):
+        assert expected in rendered_prompt
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-stress-branch-lessons",
+        phase="hypothesis",
+        call_kind="hypothesis",
+        prompt_context=filtered,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    for section_name in (
+        "compact_research_signals",
+        "branch_lesson_usage_context",
+        "cross_branch_research_map",
+    ):
+        if section_name in manifest["section_statuses"]:
+            assert (
+                manifest["section_statuses"][section_name]["status"] != "truncated"
+            )
+    assert manifest["section_statuses"]["current_champion_research_code"][
+        "status"
+    ] == "included"
 
 
 def test_problem_measurement_diagnostics_are_tainted_and_holdout_details_hidden():
