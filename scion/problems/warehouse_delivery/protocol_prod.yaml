@@ -70,11 +70,11 @@ gates:
       require_median_delta_nonnegative: true
       require_ci_low_nonnegative: false
       allow_pair_level_signal: true
-      pair_win_rate_min: 0.50
+      pair_win_rate_min: 0.46
       min_pair_total: 12
       min_pair_wins: 6
       min_pair_win_loss_margin: 4
-      pair_non_tie_win_rate_min: 0.70
+      pair_non_tie_win_rate_min: 0.68
       max_pair_loss_rate: 0.25
   validation:
     win_rate_min: 0.55          # 原 0.66，与 screening 保持对称

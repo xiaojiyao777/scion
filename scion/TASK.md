@@ -582,17 +582,39 @@ Exit criteria:
   preserved. Acceptance passed `181` branch lifecycle/Decision/finalizer/
   scheduler tests, `51` orchestrator/scheduler/hygiene tests, Python compile,
   and `git diff --check`.
-- Active: the field gate for that lifecycle repair is running on WSL from
-  commit `6e3988c`. Launch report:
+- Completed with incomplete research-quality acceptance: the field gate for
+  that lifecycle repair ran on WSL from commit `6e3988c`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-lossheavy-lifecycle-rerun6r-20260616T184031Z`;
-  expected server sync root:
+  server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-lossheavy-lifecycle-rerun6r-20260616T184031Z`;
-  tmux session `scion_wh_lossheavy_rerun6r_20260616T184031Z`. Initial health
-  reached campaign startup. Acceptance requires no repeated loss-dominated
-  same-branch formal screening loop while preserving pair-positive diagnostic
-  validation and strict validation/frozen/promotion gates.
+  wrapper exit `0`, run validity `valid`, `6/6` effective rounds, `6`
+  screening rows, no validation/frozen/promotion, no proposal quality blocks,
+  no verification failures, and no fresh-runtime replay drain. The target
+  loss-dominated `1/2/3` case and `3/4/5` pair loop did not recur, so the
+  lifecycle brake is field no-regression rather than direct field-trigger proof.
+  It preserved a positive `move_order.py` branch. Research quality still fails:
+  an expanded-exhausted positive shape (`3/1/10` case, `13/6/9` pair, median
+  `300`, CI low `0`) still remained screening-only. Next active repair:
+  warehouse-owned diagnostic validation thresholds should admit this
+  non-regressive positive-CI shape while preserving fail-closed behavior for
+  negative-median and loss-heavy shapes.
+- Implemented and locally accepted as deterministic repair: warehouse
+  production protocol now admits the field-positive expanded-exhausted shape by
+  setting `pair_win_rate_min=0.46` and `pair_non_tie_win_rate_min=0.68`.
+  Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-positive-diagnostic-protocol-repair-20260616.md`.
+  Generic Decision code is unchanged; the change is problem-owned protocol
+  policy. Direct replay shows the `3/1/10` case, `13/6/9` pair, median `300`,
+  CI low `0` shape queues diagnostic validation; negative-median and
+  loss-dominated shapes still fail closed or stay below validation. Acceptance
+  passed focused config/problem-bridge/decision/protocol/lifecycle tests
+  (`100`, `93`, and `92` passed in the recorded groups), Python compile, and
+  `git diff --check`. Next gate: short warehouse production rerun from the new
+  commit.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

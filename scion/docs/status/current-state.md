@@ -422,17 +422,38 @@ Active work as of the latest handoff:
   Acceptance passed `181` branch lifecycle/Decision/finalizer/scheduler tests,
   `51` orchestrator/scheduler/hygiene tests, Python compile, and
   `git diff --check`.
-- The field gate for that lifecycle repair is now active on WSL from commit
-  `6e3988c`. Launch report:
+- The field gate for that lifecycle repair is complete with incomplete
+  research-quality acceptance. It ran on WSL from commit `6e3988c`. Launch
+  report:
   [`../experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-launch-20260616.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-lossheavy-lifecycle-rerun6r-postrun-20260616.md).
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-lossheavy-lifecycle-rerun6r-20260616T184031Z`;
-  expected server sync root:
+  server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-lossheavy-lifecycle-rerun6r-20260616T184031Z`.
-  Tmux session: `scion_wh_lossheavy_rerun6r_20260616T184031Z`. Initial health
-  reached campaign startup. Acceptance requires no repeated loss-dominated
-  same-branch formal screening loop while preserving pair-positive diagnostic
-  validation and strict validation/frozen/promotion gates.
+  Wrapper exit was `0`; the run was valid and completed `6/6` effective rounds,
+  all in screening, with no proposal quality blocks, verification failures, or
+  fresh-runtime replay drain. The prior loss-dominated marginal loop did not
+  recur, so the lifecycle brake is field no-regression rather than direct
+  field-trigger proof. Research quality still fails: no validation/frozen/
+  promotion occurred, and an expanded-exhausted positive `move_order.py` shape
+  (`3/1/10` case W/L/T, `13/6/9` pair W/L/T, median `300`, CI low `0`) stayed
+  screening-only. The next repair is warehouse-owned diagnostic validation
+  threshold/rule tuning for this non-regressive positive-CI shape, while
+  preserving fail-closed behavior for negative-median and loss-heavy evidence.
+- That warehouse-owned protocol repair is implemented and locally accepted as
+  deterministic behavior. Report:
+  [`../experiments/v0.4/v04-warehouse-positive-diagnostic-protocol-repair-20260616.md`](../experiments/v0.4/v04-warehouse-positive-diagnostic-protocol-repair-20260616.md).
+  Production warehouse protocol now uses `pair_win_rate_min=0.46` and
+  `pair_non_tie_win_rate_min=0.68` for expanded-borderline pair-level
+  diagnostic validation. Generic Decision code is unchanged. Direct replay
+  queues the field-positive `3/1/10` case, `13/6/9` pair, median `300`, CI low
+  `0` shape for diagnostic validation; negative-median and loss-dominated
+  shapes remain fail-closed or below validation. Local acceptance passed focused
+  config/problem-bridge/decision/protocol/lifecycle tests (`100`, `93`, and
+  `92` passed in the recorded groups), Python compile, and `git diff --check`.
+  The next gate is a short warehouse production rerun from the new commit.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

@@ -411,6 +411,132 @@ def test_decision_trajectory_divergent_pair_signal_after_expand_queues_diagnosti
     assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" in out.reason_codes
 
 
+def _warehouse_prod_engine_and_config():
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml
+
+    repo_scion_dir = Path(__file__).resolve().parents[2]
+    problem = load_problem_spec_v1_from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "problem-v1.yaml"
+    )
+    config = ProtocolConfig.from_yaml(
+        repo_scion_dir / "problems" / "warehouse_delivery" / "protocol_prod.yaml"
+    ).with_problem_measurement(problem)
+    return DecisionEngine(config), config
+
+
+def _warehouse_expanded_screening_features(
+    *,
+    case_wins: int,
+    case_losses: int,
+    case_ties: int,
+    pair_wins: int,
+    pair_losses: int,
+    pair_ties: int,
+    median_delta: float,
+    ci_low: float,
+    ci_high: float,
+):
+    from scion.core.models import DecisionFeatures
+
+    n_cases = case_wins + case_losses + case_ties
+    return DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=n_cases,
+        wins=case_wins,
+        losses=case_losses,
+        ties=case_ties,
+        win_rate=case_wins / n_cases,
+        median_delta=median_delta,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        pair_wins=pair_wins,
+        pair_losses=pair_losses,
+        pair_ties=pair_ties,
+        screening_expand_count=1,
+    )
+
+
+def test_decision_warehouse_prod_field_gate_shape_a_queues_diagnostic_validation():
+    """Expanded positive pair/case signal queues diagnostic validation."""
+
+    engine, config = _warehouse_prod_engine_and_config()
+    f = _warehouse_expanded_screening_features(
+        case_wins=3,
+        case_losses=1,
+        case_ties=10,
+        pair_wins=13,
+        pair_losses=6,
+        pair_ties=9,
+        median_delta=300.0,
+        ci_low=0.0,
+        ci_high=875.0,
+    )
+
+    out = engine.decide(f)
+
+    assert config.pairing_validity == "trajectory_divergent"
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" in out.reason_codes
+
+
+def test_decision_warehouse_prod_field_gate_shape_b_fails_closed():
+    """Expanded loss-regressive signal cannot queue validation."""
+
+    engine, _config = _warehouse_prod_engine_and_config()
+    f = _warehouse_expanded_screening_features(
+        case_wins=4,
+        case_losses=2,
+        case_ties=10,
+        pair_wins=14,
+        pair_losses=12,
+        pair_ties=6,
+        median_delta=-50.0,
+        ci_low=-200.0,
+        ci_high=500.0,
+    )
+
+    out = engine.decide(f)
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert out.decision != Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
+def test_decision_warehouse_prod_field_gate_shape_c_does_not_validate():
+    """Loss-dominated marginal shape remains below diagnostic validation."""
+
+    engine, _config = _warehouse_prod_engine_and_config()
+    f = _warehouse_expanded_screening_features(
+        case_wins=1,
+        case_losses=2,
+        case_ties=3,
+        pair_wins=3,
+        pair_losses=4,
+        pair_ties=5,
+        median_delta=0.0,
+        ci_low=-50.0,
+        ci_high=50.0,
+    )
+
+    out = engine.decide(f)
+
+    assert out.stage_decision == Decision.CONTINUE_EXPLORE
+    assert out.decision != Decision.QUEUE_VALIDATE
+    assert "SCREENING_FAIL_WIN_RATE" in out.reason_codes
+    assert "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE" not in out.reason_codes
+
+
 def test_decision_warehouse_prod_pair_signal_after_expand_queues_diagnostic_validation():
     """Warehouse prod can diagnose low-SNR case ties with strong pair evidence."""
     from scion.core.models import DecisionFeatures

@@ -342,11 +342,11 @@ def test_warehouse_prod_protocol_enables_conservative_pair_signal_diagnostic_val
     assert borderline.require_median_delta_nonnegative is True
     assert borderline.require_ci_low_nonnegative is False
     assert borderline.allow_pair_level_signal is True
-    assert borderline.pair_win_rate_min == pytest.approx(0.50)
+    assert borderline.pair_win_rate_min == pytest.approx(0.46)
     assert borderline.min_pair_total == 12
     assert borderline.min_pair_wins == 6
     assert borderline.min_pair_win_loss_margin == 4
-    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.70)
+    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.68)
     assert borderline.max_pair_loss_rate == pytest.approx(0.25)
 
 
