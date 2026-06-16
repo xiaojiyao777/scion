@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse validation-transfer patch-quality repair accepted locally; fresh short rerun is running on WSL from `b7627fc`; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse validation-transfer patch-quality gate works locally and in shakedown; cache-coherency fix for code-stage quality-block session refs is pending commit/relaunch; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled

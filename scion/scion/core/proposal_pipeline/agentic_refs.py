@@ -224,6 +224,9 @@ class AgenticRefsMixin:
                 if value not in (None, "", [], {}, ()):
                     ref[key] = value
         self.agentic_session_refs[output.branch_id] = ref
+        cache = getattr(self, "_proposal_session_ref_cache", None)
+        if isinstance(cache, dict):
+            cache.pop(output.branch_id, None)
 
     def pop_agentic_session_ref(self, branch_id: str) -> Mapping[str, Any] | None:
         return self.agentic_session_refs.pop(branch_id, None)

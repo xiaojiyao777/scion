@@ -48,6 +48,9 @@ Changed files:
   - renders quality-block failure details without duplicating the
     `agent_quality_blocked` prefix when structured problem-owned failure codes
     already include it.
+  - invalidates stale per-branch proposal-session-ref cache entries after a
+    newer agentic session ref is recorded, so code-stage patch-quality blocks
+    do not inherit an earlier partial-hypothesis ref in step records.
 - `scion/scion/problems/warehouse_delivery/adapter.py`
   - adds `validate_patch_quality(...)`.
   - high-risk warehouse operator patches must expose recognizable
@@ -97,6 +100,12 @@ Main-session verification:
 - Follow-up feedback-format check:
   `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py scion/scion/tests/unit/test_warehouse_target_preview.py -q`
   - `33 passed`
+- Follow-up cache-coherency check:
+  `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py scion/scion/tests/unit/test_warehouse_target_preview.py -q`
+  - `34 passed`
+- Follow-up proposal-pipeline suite:
+  `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_*.py -q`
+  - `75 passed`
 - `python -m py_compile` on touched core/warehouse modules
   - passed
 - `git diff --check`

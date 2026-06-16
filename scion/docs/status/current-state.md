@@ -521,7 +521,8 @@ Active work as of the latest handoff:
   groups), Python compile, and `git diff --check`. This is not warehouse
   efficacy evidence. The next gate is a fresh short warehouse production rerun
   from the repair commit.
-- That fresh field gate is running on WSL from commit `b7627fc`. Launch report:
+- A fresh field-gate shakedown was launched on WSL from commit `b7627fc`.
+  Launch report:
   [`../experiments/v0.4/v04-warehouse-validation-transfer-patch-quality-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-validation-transfer-patch-quality-rerun6r-launch-20260616.md).
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T201601Z`;
@@ -530,11 +531,15 @@ Active work as of the latest handoff:
   Tmux session: `scion_wh_patchqual_rerun6r_201601`. Shape: one
   `rep01/on_compact` cell, `6R`, production warehouse protocol/split/seeds,
   `measurement_governance=on`, `compact-measurement-diagnostics`, `30s`,
-  early stop disabled, local `gpt-5.5`. Initial health passed, and the first
-  hypothesis quality block no longer carries the duplicate
-  `agent_quality_blocked:agent_quality_blocked` prefix. An earlier shakedown
-  root ending `20260616T201139Z` was stopped before acceptance after exposing
-  that feedback-format issue.
+  early stop disabled, local `gpt-5.5`. This shakedown was stopped before
+  acceptance: it proved the patch-quality gate can fire
+  (`warehouse_validation_transfer_patch_quality_missing`) but exposed stale
+  `proposal_session_ref` cache inheritance from the earlier partial-hypothesis
+  session on the code-stage block path. A follow-up cache-coherency fix is
+  implemented locally and must be committed/pushed before the formal field gate
+  is relaunched. An earlier shakedown root ending `20260616T201139Z` was also
+  stopped before acceptance after exposing the duplicate
+  `agent_quality_blocked:agent_quality_blocked` feedback prefix.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

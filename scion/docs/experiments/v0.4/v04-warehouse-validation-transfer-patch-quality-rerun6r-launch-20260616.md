@@ -69,6 +69,15 @@ An earlier shakedown root ending `20260616T201139Z` was stopped before
 acceptance because it exposed the duplicate quality-block prefix fixed by
 `b7627fc`. Treat that root as launch/debug evidence only.
 
+This `b7627fc` launch root ending `20260616T201601Z` was also stopped before
+acceptance after it proved the patch-quality gate could fire, but exposed a
+stale `proposal_session_ref` cache on the code-stage block path: the quality
+block ledger carried
+`warehouse_validation_transfer_patch_quality_missing`, while
+`last_result.proposal_session_ref` still pointed at the earlier partial
+hypothesis session. Treat this root as shakedown/debug evidence only. The
+formal field gate must be relaunched from the follow-up cache-coherency fix.
+
 ## Acceptance
 
 Postrun must inspect:

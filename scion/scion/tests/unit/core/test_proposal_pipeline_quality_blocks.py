@@ -583,6 +583,59 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     )
 
 
+def test_agentic_session_ref_update_invalidates_cached_partial_ref() -> None:
+    creative = FakeCreative()
+    pipeline, branch, _, _, _, _ = _pipeline(creative=creative)
+    old_ref = {
+        "session_id": "partial-hypothesis-session",
+        "status": "partial_hypothesis_only",
+        "primary_failure": {
+            "stage": "hypothesis_awaiting_approval",
+            "reason": "hypothesis awaits ContractGate approval",
+        },
+    }
+    pipeline.agentic_session_refs[branch.branch_id] = old_ref
+    pipeline._proposal_session_ref_cache = {branch.branch_id: old_ref}
+
+    failed_output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="code-quality-session",
+        campaign_id="camp-1",
+        branch_id=branch.branch_id,
+        champion_version=1,
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_detail=(
+            "agent_quality_blocked:"
+            "warehouse_validation_transfer_patch_quality_missing"
+        ),
+        failure_category="agent_grounding_failure",
+        structured_rejection={
+            "source": "warehouse_problem_adapter",
+            "gate_name": "warehouse_validation_transfer_patch_quality",
+            "failure_code": (
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_patch_quality_missing"
+            ),
+            "agent_block_reason": "agent_quality_blocked",
+        },
+        tainted_artifact_refs=("code-quality-session/output.json",),
+    )
+
+    pipeline._record_agentic_session_ref(failed_output)
+
+    assert branch.branch_id not in pipeline._proposal_session_ref_cache
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+    assert session_ref is not None
+    assert session_ref["session_id"] == "code-quality-session"
+    assert session_ref["agent_block_reason"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["stage"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["reason"] == (
+        "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+    )
+
+
 def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(
