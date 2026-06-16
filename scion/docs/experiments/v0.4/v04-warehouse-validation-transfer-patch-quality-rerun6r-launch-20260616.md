@@ -100,6 +100,25 @@ with the wrong session lineage.
 The formal field gate must be relaunched only after the explore-step
 session-ref cache and quality-detail normalization repair is committed.
 
+The clean field gate was relaunched from commit `6e13b11`
+(`fix: refresh code quality session refs`):
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+- Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+- WSL tmux session: `scion_wh_patchqual_rerun6r_6e13b11_203530`
+- Started at UTC: `2026-06-16T20:36:20Z`
+- Shape: unchanged one-cell `rep01/on_compact`, warehouse production
+  protocol/split/seeds, `6R`, measurement governance `on`,
+  `compact-measurement-diagnostics`, local `gpt-5.5`, disabled early stop,
+  `30s` solver cap.
+- Launch health: WSL checkout fast-forwarded to `6e13b11`; Python dependencies
+  and model endpoint passed preflight; `status.txt` reports `status=running`;
+  `run.log` reached `Starting campaign: warehouse_delivery`.
+
+This is now the only active field-acceptance run for this repair.
+
 ## Acceptance
 
 Postrun must inspect:

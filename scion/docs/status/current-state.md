@@ -98,8 +98,13 @@ Active work as of the latest handoff:
   earlier `partial_hypothesis_only` proposal-session ref. The current local
   repair clears the explore-step stale session-ref cache on code-generation
   failure and removes repeated quality-block prefixes from feedback details.
-  It has passed focused proposal/warehouse/status tests and is pending commit,
-  push, and one clean WSL `6R` field rerun.
+  It has passed focused proposal/warehouse/status tests and was committed as
+  `6e13b11` (`fix: refresh code quality session refs`). A clean WSL `6R`
+  field rerun is active at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+  and syncing to
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`;
+  tmux session `scion_wh_patchqual_rerun6r_6e13b11_203530`.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

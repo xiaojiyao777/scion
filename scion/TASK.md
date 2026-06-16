@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse validation-transfer patch-quality gate works locally, but cdb8f43 field acceptance failed on code-stage session-ref/status fidelity; repair is implemented locally and pending commit/relaunch; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse validation-transfer patch-quality session-ref repair committed and WSL rerun launched from `6e13b11`; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -2504,9 +2504,19 @@ Current local verification:
 - `python -m py_compile` for touched core modules and `git diff --check`
   passed.
 
-Next gate: commit and push this local repair, then relaunch one clean WSL
-warehouse `6R` patch-quality field check from the new commit. Acceptance
-requires any patch-quality block to have matching failure detail,
+Committed and relaunched:
+
+- Repair commit: `6e13b11` (`fix: refresh code quality session refs`)
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+- Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+- WSL tmux session: `scion_wh_patchqual_rerun6r_6e13b11_203530`
+- Shape: one warehouse production `rep01/on_compact` cell, `6R`,
+  `measurement_governance=on`, `compact-measurement-diagnostics`, local
+  `gpt-5.5`, disabled early stop, `30s` solver cap.
+
+Acceptance requires any patch-quality block to have matching failure detail,
 `agent_block_reason=agent_quality_blocked`, `primary_failure.stage` equal to
 `agent_quality_blocked`, and a code-quality session ref rather than an earlier
 partial-hypothesis session.
