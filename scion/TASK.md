@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse 6R research-loop field gate failed quality acceptance and triggered a second targeted repair; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
+*Status: warehouse repair rerun 6R active on WSL after second targeted repair; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -519,6 +519,18 @@ Exit criteria:
   `DecisionFeatures`, Protocol, promotion, or gate semantics. Next gate: rerun
   a short warehouse live check from the new repair commit before any warehouse
   efficacy or v0.3-continuity claim.
+- Active: that short warehouse live rerun has started from commit `d666311`.
+  Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-research-loop-repair-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`;
+  tmux session `scion_wh_repair_rerun6r_173136`. It is a single `6R`
+  `on_compact` cell with warehouse production protocol/split/seeds,
+  `gpt-5.5`, `measurement_governance=on`, compact context, disabled early
+  stop, and `30s` solver cap. Accept only on behavior improvement against the
+  failed `0bb99ec` 6R gate.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

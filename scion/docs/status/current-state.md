@@ -364,6 +364,15 @@ Active work as of the latest handoff:
   contract suites (`218` tests total), plus Python compile. The repair is code
   accepted only; it still needs a short live warehouse rerun before any
   efficacy claim.
+- That live rerun is now active on WSL from commit `d666311`. Launch report:
+  [`../experiments/v0.4/v04-warehouse-research-loop-repair-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-research-loop-repair-rerun6r-launch-20260616.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-rerun6r-20260616T173136Z`.
+  Tmux session: `scion_wh_repair_rerun6r_173136`. Initial health passed:
+  WSL checkout is `d666311`, local `gpt-5.5` proxy is reachable, status is
+  `running`, and `run.log` reached warehouse campaign startup.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
