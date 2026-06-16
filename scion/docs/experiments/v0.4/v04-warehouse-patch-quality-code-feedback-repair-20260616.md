@@ -44,6 +44,22 @@ The repair keeps the v3 boundary intact:
   `agent_block_reason`, `failure_code`, `quality_gate_name`, and
   `retry_constraint`.
 
+## Follow-up Repair During Field Rerun
+
+The first `5f2d418` field rerun proved the section is visible in code prompt
+manifests, but it also exposed a second feedback-quality bug: session refs and
+quality ledgers could still show a generic novelty retry constraint instead of
+the problem-owned warehouse patch-quality retry text. The root cause was in the
+generic agentic rejection projection: it overwrote
+`structured_rejection.retry_constraint` with a fallback novelty/premise message.
+
+The follow-up repair preserves the problem-owned retry constraint when present
+and carries `missing_claims` / `missing_code_elements` into quality feedback.
+This keeps the adapter-owned actionable instruction, such as adding
+activation/effect diagnostic counters or screening/lexicographic guards,
+visible to later code prompts without adding warehouse semantics to
+`DecisionFeatures`.
+
 No `DecisionFeatures`, Protocol thresholds, validation/frozen gates, or
 warehouse problem-owned quality semantics changed.
 
@@ -66,6 +82,25 @@ Results:
 - Proposal pipeline tests: `77 passed`.
 - Agentic feedback plus warehouse target preview tests: `23 passed`.
 - Evidence status tests: `53 passed`.
+- `py_compile`: passed.
+- `git diff --check`: passed.
+
+Additional follow-up verification:
+
+```bash
+PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py -q
+PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_*.py -q
+PYTHONPATH=scion python -m pytest scion/scion/tests/unit/test_agentic_feedback_exposure.py scion/scion/tests/unit/test_warehouse_target_preview.py scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py -q
+python -m py_compile scion/scion/core/proposal_pipeline/classification.py scion/scion/core/proposal_pipeline/agentic_lifecycle.py
+git diff --check
+```
+
+Results:
+
+- Proposal quality-block tests: `21 passed`.
+- Proposal pipeline tests: `77 passed`.
+- Agentic feedback, warehouse target preview, and evidence status tests:
+  `76 passed`.
 - `py_compile`: passed.
 - `git diff --check`: passed.
 

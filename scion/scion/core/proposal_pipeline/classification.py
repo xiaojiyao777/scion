@@ -468,12 +468,15 @@ def _agentic_rejection_constraint(
             "threshold": structured.get("threshold"),
             "count": structured.get("count"),
             "prior_count": structured.get("prior_count"),
+            "missing_claims": structured.get("missing_claims"),
+            "missing_code_elements": structured.get("missing_code_elements"),
             "counts_as_screened_round": structured.get("counts_as_screened_round"),
             "counts_as_proposal_quality_attempt": structured.get(
                 "counts_as_proposal_quality_attempt"
             ),
             "retry_constraint": (
-                "Acknowledge the existing mechanism and state the material "
+                structured.get("retry_constraint")
+                or "Acknowledge the existing mechanism and state the material "
                 "trigger, scoring, schedule, or behavior difference. Do not "
                 "change research direction merely to satisfy novelty wording."
             ),

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse patch-quality code-feedback field rerun launched from `5f2d418`; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse patch-quality code-feedback rerun from `5f2d418` proved code-prompt visibility but exposed retry-constraint overwrite; follow-up local repair preserves problem-owned actionable constraints*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -695,6 +695,14 @@ Exit criteria:
   tmux session `scion_wh_codefeedback_rerun6r_5f2d418_210541`.
   Initial health check showed `status=running`, commit `5f2d418`, and the
   expected first hypothesis-stage validation-transfer quality block.
+  Mid-run inspection accepted the visibility repair: code manifests include
+  `agentic_prior_quality_blocks` and `Prior Agent Quality Blocks For This Code
+  Patch`. It also exposed the next quality issue: session refs/ledgers could
+  still show a generic novelty retry constraint instead of the warehouse
+  problem-owned patch-quality retry text. A local follow-up repair now
+  preserves `structured_rejection.retry_constraint` and carries
+  `missing_claims` / `missing_code_elements` into quality feedback; it is
+  locally verified and awaits commit/field rerun.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

@@ -448,6 +448,9 @@ class AgenticLifecycleMixin:
             "contradicted_span",
             "matched_span",
             "allowed_variant_guidance",
+            "missing_claims",
+            "missing_code_elements",
+            "changed_files",
         ):
             value = rejection.get(key)
             if value not in (None, "", [], {}):
