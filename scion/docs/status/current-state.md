@@ -201,17 +201,20 @@ Active work as of the latest handoff:
   evidence only; it has two X-family regressions and needs broader no-LLM
   validation before any Scion replay or default solver change.
 - Independent VRP-only control `Newton`
-  (`019ecded-8a24-7a03-b64b-8b1929c9af49`) is active outside Scion. Launch
+  (`019ecded-8a24-7a03-b64b-8b1929c9af49`) is complete outside Scion. Launch
   report:
   [`../experiments/v0.4/v04-independent-vrp-research-agent-20260616l.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260616l.md).
+  Result report:
+  [`../experiments/v0.4/v04-independent-vrp-research-agent-20260616l-result.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260616l-result.md).
   Artifact root:
   `/home/clawd/research/vrp-independent-codex-research/phase-l-20260616`.
-  This is a fresh, non-forked external research subject forbidden from reading
-  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
-  or prior Scion conclusions. Its first cycle is bounded to real VRP cases,
-  at least `3` seeds, and a `1s` initial budget. Outputs are process evidence
-  and external hypothesis material only; any positive candidate still needs
-  broader no-LLM replay before Scion replay or solver adoption.
+  Required artifacts are present and no `candidate.patch` was retained. The
+  implemented intra-route Or-opt VNS candidate was rejected after `30` paired
+  real CVRPLIB runs at `1s` and `3` seeds: combined W/T/L `7/12/11`, mean
+  delta `+1.6`, median delta `0.0`, failures `0`, CVRP feasibility failures
+  `0`, and route-count regressions `0`. The outside-case sanity slice was
+  negative (`2/1/6`, mean delta `+5.666667`), so this does not enter broader
+  replay or Scion fixed replay.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

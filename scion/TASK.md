@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP size70 full validation running; Erdos postrun monitor active; independent VRP phase K control active*
-*Updated: 2026-06-15*
+*Status: CVRP size70 validation stopped at failed validation; warehouse targeted repair accepted; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
+*Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -2056,6 +2056,21 @@ Phase B launch design - 2026-06-14:
   branch research. Any positive result is hypothesis material only and must
   pass broader no-LLM replay before Scion replay, Protocol evidence, or default
   solver changes.
+- Completed: thirteenth independent VRP-only research control `Newton`.
+  Result report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260616l-result.md`.
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-l-20260616`.
+  Required artifacts are present: `research_journal.md`,
+  `rejected_candidates.md`, `experiment_results.jsonl`, `summary.md`, and
+  `README.md`. No `candidate.patch` was retained. The implemented intra-route
+  Or-opt VNS extension was rejected after `30` paired real CVRPLIB runs at
+  `1s` and `3` seeds: combined W/T/L `7/12/11`, mean delta `+1.6`, median
+  delta `0.0`, failures `0`, CVRP feasibility failures `0`, and candidate
+  route-count regressions `0`. The follow-up outside-case sanity slice was
+  negative at W/T/L `2/1/6`, mean delta `+5.666667`, median delta `+6.0`.
+  Treat this as negative external-control evidence and do not send it to
+  broader replay or Scion fixed replay.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
