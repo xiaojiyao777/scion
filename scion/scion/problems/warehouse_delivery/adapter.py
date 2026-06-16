@@ -67,6 +67,9 @@ Metric definitions:
 
 {objective_implication}
 
+### Validation Transfer Risk and Operator Diagnostics
+{_render_validation_transfer_guidance()}
+
 ### How the Initial Solution is Built (greedy_init)
 Orders are grouped by (vehicle_category, vehicle_subcategory, pickup_city).
 Within each group, orders are packed sequentially into vehicles using first-fit.
@@ -150,6 +153,9 @@ Frozen files (do not modify): {frozen}"""
 - `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
 - Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
+
+### Validation Transfer Risk and Operator Diagnostics
+{_render_validation_transfer_guidance()}
 
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
@@ -243,6 +249,99 @@ Frozen files (do not modify): {frozen}"""
             "issues": issues,
             "workspace_materialized": False,
             "verification_run": False,
+        }
+
+    def render_problem_measurement_diagnostics(self) -> Mapping[str, Any]:
+        """Return warehouse proposal-only transfer diagnostics.
+
+        This is problem-owned planning context.  It intentionally exposes the
+        aggregate failure shape but not validation/frozen case details.
+        """
+
+        return {
+            "schema_version": "warehouse_validation_transfer_diagnostic.v1",
+            "taint": "problem_owned_proposal_diagnostic",
+            "decision_features_excluded": True,
+            "transfer_risk": {
+                "risk_model": (
+                    "screening-positive operator changes may activate on the "
+                    "small screening distribution while producing no "
+                    "hierarchical gain on formal validation aggregates"
+                ),
+                "historical_pattern": (
+                    "same_subcategory_consolidate-style operator: screening "
+                    "positive, formal aggregate 2/3/0, paired 6/9/0, median "
+                    "delta 0, failure VALIDATION_FAIL_NO_HIERARCHICAL_GAIN"
+                ),
+                "required_hypothesis_claims": [
+                    "why the mechanism should transfer beyond screening cases",
+                    "what operator activation counter should become positive",
+                    "what effect counter should prove subcategory split or cost gain",
+                    "how the operator avoids screening-only activation",
+                ],
+            },
+            "required_diagnostics": {
+                "activation": [
+                    "operator_invocations",
+                    "eligible_vehicle_or_order_groups_seen",
+                    "accepted_moves",
+                ],
+                "effect": [
+                    "split_delta_sum",
+                    "cost_delta_sum",
+                    "improving_move_count",
+                ],
+            },
+            "policy": (
+                "Use these diagnostics to shape warehouse proposals before "
+                "code generation. They are not promotion evidence and are not "
+                "DecisionFeatures."
+            ),
+        }
+
+    def validate_hypothesis_quality(
+        self,
+        *,
+        branch: Any | None,
+        hypothesis: Any,
+        step_history: Sequence[Any] | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned proposal-only quality check for warehouse operators."""
+
+        del step_history
+        if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
+            return {"allowed": True}
+        missing = _missing_transfer_quality_claims(hypothesis)
+        if not missing:
+            return {
+                "allowed": True,
+                "gate_name": "warehouse_validation_transfer_quality",
+            }
+        detail = (
+            f"{WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE}: warehouse "
+            "operator proposal must explain validation-case transfer risk, "
+            "expected activation/effect diagnostics, and how it avoids "
+            "screening-only gains before code generation; missing="
+            + ",".join(missing)
+        )
+        return {
+            "allowed": False,
+            "detail": detail,
+            "gate_name": "warehouse_validation_transfer_quality",
+            "structured_rejection": {
+                "source": "warehouse_problem_adapter",
+                "gate_name": "warehouse_validation_transfer_quality",
+                "failure_code": WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE,
+                "agent_block_reason": "agent_quality_blocked",
+                "retry_constraint": (
+                    "Rewrite the warehouse operator hypothesis before code: "
+                    "state the screening-to-validation transfer risk, declare "
+                    "expected activation/effect diagnostics, and explain the "
+                    "guard against screening-only improvements."
+                ),
+                "missing_claims": list(missing),
+                "decision_features_excluded": True,
+            },
         }
 
     # --- Instance / output ---
@@ -480,6 +579,24 @@ def _render_objective_implication(spec: ProblemSpecV1) -> str:
     )
 
 
+def _render_validation_transfer_guidance() -> str:
+    return (
+        "Warehouse operator proposals must handle screening-to-validation "
+        "transfer explicitly. A recent high-risk pattern was a "
+        "same_subcategory_consolidate-style operator that looked positive in "
+        "screening but failed formal validation with aggregate 2/3/0, paired "
+        "6/9/0, median delta 0, and "
+        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. Before code generation, state "
+        "why the mechanism should generalize beyond screening cases, which "
+        "operator activation counters should become positive, which effect "
+        "counters should show subcategory split or cost improvement, and what "
+        "guard prevents a screening-only no-effect move from being accepted. "
+        "Treat those counters as a proposal-level diagnostic plan unless the "
+        "active research surface explicitly declares matching runtime telemetry "
+        "fields; do not invent undeclared expected_telemetry keys."
+    )
+
+
 def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> str:
     surface = None
     for candidate in spec.research_surfaces or []:
@@ -506,6 +623,10 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE = (
+    "agent_quality_blocked:warehouse_validation_transfer_quality_missing"
+)
+
 _EXISTING_OPERATOR_MODULES = frozenset(
     {
         "operators/change_vehicle_type.py",
@@ -516,6 +637,149 @@ _EXISTING_OPERATOR_MODULES = frozenset(
         "operators/swap_orders.py",
     }
 )
+
+
+def _is_high_risk_warehouse_hypothesis(branch: Any | None, hypothesis: Any) -> bool:
+    if hypothesis is None:
+        return False
+    if not _is_warehouse_operator_hypothesis(hypothesis):
+        return False
+    if _is_screening_positive_followup(branch):
+        return True
+    action = str(getattr(hypothesis, "action", "") or "").strip()
+    return action in {"modify", "create_new", "remove"}
+
+
+def _is_warehouse_operator_hypothesis(hypothesis: Any) -> bool:
+    locus = str(getattr(hypothesis, "change_locus", "") or "").strip()
+    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
+    return locus in {"order_level", "vehicle_level"} or (
+        target_file.startswith("operators/") and target_file.endswith(".py")
+    )
+
+
+def _is_screening_positive_followup(branch: Any | None) -> bool:
+    if branch is None:
+        return False
+    status = str(getattr(branch, "branch_code_status", "") or "")
+    tier = str(getattr(branch, "last_screening_feedback_tier", "") or "")
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    return (
+        status in {"active_weak_positive", "screening_positive"}
+        or tier in {"weak_positive", "screening_positive", "strong_positive"}
+        or str(summary.get("screening_tier") or "") in {
+            "weak_positive",
+            "screening_positive",
+            "strong_positive",
+        }
+    )
+
+
+def _missing_transfer_quality_claims(hypothesis: Any) -> tuple[str, ...]:
+    text = _hypothesis_quality_text(hypothesis)
+    missing: list[str] = []
+    if not _mentions_validation_transfer_risk(text):
+        missing.append("validation_transfer_risk")
+    if not _has_activation_effect_diagnostics(hypothesis, text):
+        missing.append("activation_effect_diagnostics")
+    if not _mentions_screening_only_guard(text):
+        missing.append("screening_only_guard")
+    return tuple(missing)
+
+
+def _hypothesis_quality_text(hypothesis: Any) -> str:
+    fields = [
+        getattr(hypothesis, "hypothesis_text", ""),
+        getattr(hypothesis, "target_weakness", ""),
+        getattr(hypothesis, "expected_effect", ""),
+        getattr(hypothesis, "objective_tradeoff_policy", ""),
+        getattr(hypothesis, "no_op_condition", ""),
+        getattr(hypothesis, "risk_to_higher_priority", ""),
+        getattr(hypothesis, "runtime_budget_strategy", ""),
+        getattr(hypothesis, "target_file", ""),
+        _jsonish(getattr(hypothesis, "branch_lesson_usage", {}) or {}),
+        _jsonish(getattr(hypothesis, "mechanism_changes", ()) or ()),
+    ]
+    return " ".join(str(field or "") for field in fields).lower()
+
+
+def _jsonish(value: Any) -> str:
+    try:
+        return json.dumps(value, default=str, sort_keys=True)
+    except TypeError:
+        return str(value)
+
+
+def _mentions_validation_transfer_risk(text: str) -> bool:
+    has_formal_stage = any(
+        term in text for term in ("validation", "formal", "holdout")
+    )
+    has_transfer = any(
+        term in text
+        for term in (
+            "transfer",
+            "generaliz",
+            "screening-to-validation",
+            "screening to validation",
+            "screening-positive",
+            "screening positive",
+            "screening-only",
+            "screening only",
+            "no hierarchical gain",
+            "median delta 0",
+            "2/3/0",
+            "6/9/0",
+        )
+    )
+    return has_formal_stage and has_transfer
+
+
+def _has_activation_effect_diagnostics(hypothesis: Any, text: str) -> bool:
+    has_activation_terms = any(
+        term in text
+        for term in (
+            "activation",
+            "operator_invocation",
+            "operator invocation",
+            "accepted_moves",
+            "eligible_vehicle",
+            "eligible_order",
+        )
+    )
+    has_effect_terms = any(
+        term in text
+        for term in (
+            "effect",
+            "split_delta",
+            "cost_delta",
+            "improving_move",
+            "record_move",
+            "counter",
+            "diagnostic",
+        )
+    )
+    return has_activation_terms and has_effect_terms
+
+
+def _mentions_screening_only_guard(text: str) -> bool:
+    return any(
+        term in text
+        for term in (
+            "screening-only",
+            "screening only",
+            "not only screening",
+            "avoid overfit",
+            "overfitting",
+            "case-general",
+            "general condition",
+            "validation cases",
+            "formal cases",
+            "return the original solution",
+            "no-op",
+            "no op",
+            "guard",
+        )
+    )
 
 
 def _patch_changes(patch: Any) -> tuple[Any, ...]:

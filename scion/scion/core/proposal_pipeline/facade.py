@@ -65,6 +65,7 @@ from .protocols import (
     HypothesisStoreLike,
     ProblemRuntimeLike,
 )
+from .problem_quality import validate_problem_hypothesis_quality
 from .records import ProposalRecordMixin
 
 logger = logging.getLogger(__name__)
@@ -392,6 +393,21 @@ class ProposalPipeline(
                 FailureEvent(category="proposal", detail=followup_check.detail),
             )
             self.circuit_breaker.record_failure(followup_check.detail)
+            return None, None
+
+        quality_check = validate_problem_hypothesis_quality(
+            self.problem_runtime,
+            branch,
+            hypothesis,
+            step_history=self.step_history,
+        )
+        if not quality_check.allowed:
+            self.hypothesis_failure_details[bid] = quality_check.detail
+            self.handle_failure(
+                branch,
+                FailureEvent(category="proposal", detail=quality_check.detail),
+            )
+            self.circuit_breaker.record_failure(quality_check.detail)
             return None, None
 
         self.circuit_breaker.record_success()

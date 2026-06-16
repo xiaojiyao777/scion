@@ -475,6 +475,21 @@ Active work as of the latest handoff:
   promotion. The positive-diagnostic threshold repair remains deterministic
   accepted, but this live run reached validation through ordinary
   `SCREENING_PASS`, not the exact diagnostic-threshold shape.
+- Warehouse validation-transfer proposal-quality repair is implemented and
+  locally accepted as code, not efficacy evidence. Report:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-quality-repair-20260616.md`](../experiments/v0.4/v04-warehouse-validation-transfer-quality-repair-20260616.md).
+  A generic optional adapter hook now runs before code generation in both
+  non-agentic and agentic proposal paths, while the actual rule remains
+  warehouse-owned in `WarehouseDeliveryAdapter`. Warehouse operator hypotheses
+  must explain screening-to-validation transfer risk, a proposal-level
+  activation/effect diagnostic plan, and a guard against screening-only
+  no-effect gains. The guidance explicitly warns not to invent undeclared
+  `expected_telemetry` keys for those counters. No `DecisionFeatures`,
+  Protocol thresholds, validation/frozen/promotion gates, or validation/frozen
+  per-case exposure rules changed. Local acceptance passed warehouse
+  prompt/quality tests (`12 passed`), context/agentic tests (`90 passed`),
+  proposal pipeline tests (`64 passed`), Python compile, and `git diff --check`.
+  The next gate is a short warehouse production rerun from this repair commit.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

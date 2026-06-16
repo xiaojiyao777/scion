@@ -14,6 +14,7 @@ from scion.proposal.agentic_session import (
 )
 
 from .classification import _agentic_self_check_failure_detail
+from .problem_quality import validate_problem_hypothesis_quality
 
 
 class AgenticValidationMixin:
@@ -118,6 +119,18 @@ class AgenticValidationMixin:
             )
             if not repair_check.allowed:
                 failures.append(repair_check.detail)
+            quality_check = validate_problem_hypothesis_quality(
+                self.problem_runtime,
+                branch,
+                output.hypothesis,
+                step_history=self.step_history,
+            )
+            quality_structured_rejection = None
+            if not quality_check.allowed:
+                failures.append(quality_check.detail)
+                quality_structured_rejection = quality_check.structured_rejection
+        else:
+            quality_structured_rejection = None
 
         if output.status != AgenticProposalStatus.FAILED:
             self_check_failure = _agentic_self_check_failure_detail(output)
@@ -135,16 +148,23 @@ class AgenticValidationMixin:
             structured_rejection = _agentic_anchor_structured_rejection(
                 anchor_failures
             )
+            termination_reason = AgenticTerminationReason.ANCHOR_VALIDATION_FAILED
+            failure_category = AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
+            if not anchor_failures and quality_structured_rejection:
+                termination_reason = AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED
+                failure_category = AgenticFailureCategory.PREMISE_CONTRADICTED
             return replace(
                 ensure_agentic_output_audit_metadata(output),
                 status=AgenticProposalStatus.FAILED,
                 hypothesis=None,
                 patch=None,
-                termination_reason=AgenticTerminationReason.ANCHOR_VALIDATION_FAILED,
+                termination_reason=termination_reason,
                 failure_detail="; ".join(failures),
-                failure_category=AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE,
+                failure_category=failure_category,
                 structured_rejection=(
-                    structured_rejection or output.structured_rejection
+                    structured_rejection
+                    or quality_structured_rejection
+                    or output.structured_rejection
                 ),
             )
         if patch is not output.patch or failure_detail != output.failure_detail:

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse pair-signal diagnostic rerun complete and valid but failed research-quality acceptance; generic loss-dominated marginal lifecycle repair accepted locally; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
+*Status: warehouse validation-transfer proposal-quality repair accepted locally and awaits short field rerun; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -636,6 +636,25 @@ Exit criteria:
   promotion. The positive-diagnostic threshold repair remains deterministically
   accepted, but this live run's validation came from an ordinary
   `SCREENING_PASS`, not the exact diagnostic-threshold shape.
+- Implemented and locally accepted as the next research-quality repair:
+  warehouse validation-transfer proposal-quality gating. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-quality-repair-20260616.md`.
+  A generic optional adapter hook now runs before code generation in both
+  non-agentic and agentic proposal paths. The generic core only calls the
+  hook; the actual semantics stay problem-owned in the warehouse adapter and
+  problem spec. Warehouse operator hypotheses must now explain
+  screening-to-validation transfer risk, proposal-level activation/effect
+  diagnostics, and the guard against screening-only no-effect gains before
+  code generation. The prompt guidance explicitly says not to invent undeclared
+  `expected_telemetry` keys for these diagnostic counters. No
+  `DecisionFeatures`, Protocol thresholds, validation/frozen/promotion gates,
+  or holdout exposure rules changed. Acceptance passed warehouse prompt/quality
+  tests (`12 passed`), context/agentic tests (`90 passed`), proposal pipeline
+  tests (`64 passed`), Python compile, and `git diff --check`. Next gate:
+  short warehouse production rerun from this repair commit; accept only if
+  low-quality transfer-blind hypotheses are blocked before code, or screened
+  candidates carry explicit transfer-risk, activation/effect diagnostic plan,
+  and screening-only guard claims before validation is interpreted.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

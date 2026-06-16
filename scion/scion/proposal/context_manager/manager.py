@@ -223,10 +223,23 @@ def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
     }
 
 
-def _problem_measurement_diagnostics(problem_spec: ProblemSpec) -> dict[str, Any]:
+def _problem_measurement_diagnostics(
+    problem_spec: ProblemSpec,
+    *,
+    adapter: Any | None = None,
+) -> dict[str, Any]:
     measurement = getattr(problem_spec, "measurement", None)
     if measurement is None:
-        return {}
+        adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
+        if not adapter_payload:
+            return {}
+        return {
+            "schema_version": "problem_measurement_proposal_diagnostic.v1",
+            "taint": "problem_owned_proposal_diagnostic",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "adapter_diagnostics": adapter_payload,
+        }
     effect_scale = getattr(measurement, "effect_scale", None)
     readiness = measurement_readiness_status(problem_spec)
     payload = {
@@ -276,11 +289,25 @@ def _problem_measurement_diagnostics(problem_spec: ProblemSpec) -> dict[str, Any
             if value not in ("", None, [], {}, ())
         },
     }
+    adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
+    if adapter_payload:
+        payload["adapter_diagnostics"] = adapter_payload
     return {
         key: value
         for key, value in payload.items()
         if value not in ("", None, [], {}, ())
     }
+
+
+def _adapter_problem_measurement_diagnostics(adapter: Any | None) -> dict[str, Any]:
+    hook = getattr(adapter, "render_problem_measurement_diagnostics", None)
+    if not callable(hook):
+        return {}
+    try:
+        payload = hook()
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, Mapping) else {}
 
 
 def _proposal_branch_lesson_usage_requirement(
@@ -738,7 +765,7 @@ class ContextManager:
             research_log_block = research_log.render(view="hypothesis")
 
         problem_measurement_diagnostics = (
-            _problem_measurement_diagnostics(problem_spec)
+            _problem_measurement_diagnostics(problem_spec, adapter=self._adapter)
             if measurement_governance_mode == "on"
             else {}
         )

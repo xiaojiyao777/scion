@@ -85,19 +85,31 @@ research_surfaces:
         target a named consolidation or cost-preserving gap, pre-filter by
         compatible vehicle category, region, subcategory, capacity slack, or
         cost delta, and state the top-k, sampling, or early-exit cap that keeps
-        runtime comparable to the champion.
+        runtime comparable to the champion. They must also state the
+        screening-to-validation transfer risk, why the mechanism should
+        generalize beyond screening cases, the expected operator activation
+        and effect counters, and the guard that prevents a screening-only
+        no-effect move from being accepted.
       implementation_guidance: >-
         An order-level operator may be invoked repeatedly inside the search
         loop. Precompute vehicle/order summaries once per execute call, inspect
         only a bounded candidate set, deep-copy only after a viable move is
         selected, and return the original solution when no safe move exists.
         Avoid repeated full-solution feasibility/objective recomputation inside
-        nested candidate loops.
+        nested candidate loops. Prefer lightweight activation/effect counters
+        such as eligible groups seen, accepted moves, split_delta_sum, and
+        cost_delta_sum as a proposal-level diagnostic plan so a
+        screening-positive proposal can diagnose whether the operator actually
+        transfers to formal validation aggregates. Do not invent undeclared
+        expected_telemetry fields for these counters.
       anti_patterns: >-
         Do not scan every vehicle pair and every order pair without a cap, do
         not clone the whole solution for each trial pair, and do not perform a
         broad swap_orders rewrite that relies on O(n^2) trial evaluation or
-        heavy recomputation on small canary cases.
+        heavy recomputation on small canary cases. Do not propose an operator
+        that only explains why it may pass screening while omitting how it
+        avoids the known formal-validation no-gain pattern
+        VALIDATION_FAIL_NO_HIERARCHICAL_GAIN.
   - name: vehicle_level
     kind: operator
     description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."
@@ -115,19 +127,32 @@ research_surfaces:
         such as split_vehicle.py or merge_vehicles.py is allowed only when the
         hypothesis states an explicit replacement path that keeps every order
         assigned exactly once and keeps Solution.assignment synchronized with
-        Vehicle.order_ids after every move.
+        Vehicle.order_ids after every move. They must also state the
+        screening-to-validation transfer risk, why the consolidation or resize
+        mechanism should generalize beyond screening cases, the expected
+        activation/effect counters, and the guard that prevents a
+        screening-only no-effect merge from being accepted.
       implementation_guidance: >-
         Structural vehicle operators must update both vehicle.order_ids and
         solution.assignment together, preserve locked orders, call
         remove_empty_vehicles after moves, and return the original solution
         when the replacement path cannot prove capacity, region, category,
-        pickup, hazard, and assignment completeness constraints.
+        pickup, hazard, and assignment completeness constraints. Prefer
+        lightweight activation/effect counters such as eligible vehicle groups
+        seen, accepted merges, split_delta_sum, and cost_delta_sum so a
+        screening-positive proposal can diagnose whether the operator actually
+        transfers to formal validation aggregates. Treat these as a
+        proposal-level diagnostic plan unless matching runtime telemetry is
+        explicitly declared; do not invent undeclared expected_telemetry fields.
       anti_patterns: >-
         Do not delete, disable, or neuter split/merge behavior merely because a
         prior branch failed. Do not remove operators/split_vehicle.py or an
         equivalent structural vehicle split/merge path without an explicit
         assignment-completeness check, a synchronized reassignment plan, and a
-        replacement mechanism that preserves all orders.
+        replacement mechanism that preserves all orders. Do not propose a
+        consolidation operator that only explains why it may pass screening
+        while omitting how it avoids the known formal-validation no-gain
+        pattern VALIDATION_FAIL_NO_HIERARCHICAL_GAIN.
 
 objective_policy:
   mode: lexicographic

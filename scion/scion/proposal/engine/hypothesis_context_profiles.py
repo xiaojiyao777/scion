@@ -587,6 +587,9 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "reason_codes",
                 ),
             ),
+            "adapter_diagnostics": _project_generic_value(
+                payload.get("adapter_diagnostics")
+            ),
             "policy": _project_generic_value(payload.get("policy")),
         }
     )
