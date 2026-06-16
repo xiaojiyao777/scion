@@ -556,6 +556,19 @@ Exit criteria:
   shape. Next gate: short warehouse production rerun from the new commit,
   accepting only if pair-positive branches actually reach validation and the
   validation/frozen stages reject or confirm them with auditable evidence.
+- Active: that short warehouse production rerun is now running on WSL from
+  commit `3ca26a0`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
+  tmux session `scion_wh_pairsignal_rerun6r_180447`. Initial health passed:
+  WSL checkout is `3ca26a0`, local `gpt-5.5` proxy is reachable, status is
+  `running`, and `run.log` reached warehouse campaign startup. Acceptance is
+  validation-behavior focused: pair-positive low-SNR branches should not remain
+  trapped as screening-only when the protocol policy applies, but
+  validation/frozen/promotion gates must remain strict.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

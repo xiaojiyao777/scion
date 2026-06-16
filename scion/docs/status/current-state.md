@@ -395,6 +395,15 @@ Active work as of the latest handoff:
   (`97 passed`) and a direct deterministic decision replay. The next evidence
   gate is a short warehouse production rerun from this repair commit; success
   requires validation/frozen evidence, not merely more screening rows.
+- That evidence gate is now active on WSL from commit `3ca26a0`. Launch report:
+  [`../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`.
+  Tmux session: `scion_wh_pairsignal_rerun6r_180447`. Initial health passed:
+  WSL checkout is `3ca26a0`, local `gpt-5.5` proxy is reachable, status is
+  `running`, and `run.log` reached warehouse campaign startup.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
