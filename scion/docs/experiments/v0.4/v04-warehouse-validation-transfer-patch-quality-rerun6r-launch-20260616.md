@@ -75,8 +75,30 @@ stale `proposal_session_ref` cache on the code-stage block path: the quality
 block ledger carried
 `warehouse_validation_transfer_patch_quality_missing`, while
 `last_result.proposal_session_ref` still pointed at the earlier partial
-hypothesis session. Treat this root as shakedown/debug evidence only. The
-formal field gate must be relaunched from the follow-up cache-coherency fix.
+hypothesis session. Treat this root as shakedown/debug evidence only.
+
+A follow-up launch from commit `cdb8f43` attempted to fix that stale ref:
+
+- WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T202258Z`
+- Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T202258Z`
+- WSL tmux session: `scion_wh_patchqual_rerun6r_202258`
+- Started at UTC: `2026-06-16T20:23:13Z`
+
+That launch was also stopped as shakedown/debug evidence. It showed the
+patch-quality block still fired before Protocol, but `status.json:last_result`
+paired a code-stage `warehouse_validation_transfer_patch_quality_missing`
+failure detail with a `proposal_session_ref` whose top-level `session_id` was
+the earlier partial-hypothesis session
+`b484d71f-a059-4300-8df6-f2947e0c0b5a`, with
+`primary_failure.stage=hypothesis_awaiting_approval` and empty
+`agent_block_reason`. This failed research-quality acceptance because later
+agent feedback and human postrun analysis would see a true code-quality block
+with the wrong session lineage.
+
+The formal field gate must be relaunched only after the explore-step
+session-ref cache and quality-detail normalization repair is committed.
 
 ## Acceptance
 

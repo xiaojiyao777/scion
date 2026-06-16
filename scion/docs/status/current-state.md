@@ -89,6 +89,17 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
 
 Active work as of the latest handoff:
 
+- Warehouse validation-transfer patch-quality acceptance is still open. The
+  local problem-owned patch-quality hook correctly blocks diagnostic-blind
+  warehouse operator patches, but the cdb8f43 WSL rerun at
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T202258Z`
+  was stopped as shakedown/debug evidence: it paired a code-stage
+  `warehouse_validation_transfer_patch_quality_missing` failure detail with an
+  earlier `partial_hypothesis_only` proposal-session ref. The current local
+  repair clears the explore-step stale session-ref cache on code-generation
+  failure and removes repeated quality-block prefixes from feedback details.
+  It has passed focused proposal/warehouse/status tests and is pending commit,
+  push, and one clean WSL `6R` field rerun.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

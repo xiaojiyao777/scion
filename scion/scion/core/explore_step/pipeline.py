@@ -688,6 +688,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
+            cache = getattr(self, "_proposal_session_ref_cache", None)
+            if isinstance(cache, dict):
+                cache.pop(bid, None)
             session_timeout = _is_agentic_control_timeout_detail(detailed_failure)
             quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
             status = "code_failed"

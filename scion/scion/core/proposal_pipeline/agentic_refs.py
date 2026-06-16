@@ -137,7 +137,11 @@ class AgenticRefsMixin:
                 f"{quality['failure_class']}"
             )
             if output.failure_detail:
-                return f"{prefix}: {output.failure_detail}"
+                detail = _strip_repeated_quality_prefix(
+                    output.failure_detail,
+                    quality_prefix=quality_prefix,
+                )
+                return f"{prefix}: {detail}" if detail else prefix
             return prefix
         if output.failure_detail:
             return f"agentic_proposal:{reason_value}: {output.failure_detail}"
@@ -349,3 +353,19 @@ def _agentic_planner_loop_diagnostic(
         "diagnostic_only": False,
         "formal_round_succeeded": False,
     }
+
+
+def _strip_repeated_quality_prefix(
+    detail: Any,
+    *,
+    quality_prefix: str,
+) -> str:
+    text = str(detail or "").strip()
+    if not text:
+        return ""
+    if text == quality_prefix:
+        return ""
+    marker = f"{quality_prefix}:"
+    if text.startswith(marker):
+        return text[len(marker) :].strip()
+    return text

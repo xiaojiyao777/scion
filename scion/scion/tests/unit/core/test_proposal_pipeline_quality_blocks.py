@@ -567,6 +567,10 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     assert detail is not None
     assert "warehouse_validation_transfer_patch_quality_missing" in detail
     assert "agent_quality_blocked:agent_quality_blocked" not in detail
+    assert (
+        "agent_grounding_failure: agent_quality_blocked:"
+        "warehouse_validation_transfer_patch_quality_missing"
+    ) not in detail
     assert failures == []
     assert circuit.failures == []
     stored = pipeline.agentic_quality_feedback[branch.branch_id]
@@ -634,6 +638,138 @@ def test_agentic_session_ref_update_invalidates_cached_partial_ref() -> None:
     assert session_ref["primary_failure"]["reason"] == (
         "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
     )
+
+
+def test_explore_code_failure_refreshes_stale_session_ref_cache() -> None:
+    creative = FakeCreative()
+    branch = _branch()
+    record = HypothesisRecord(
+        hypothesis_id="hyp-code-quality",
+        branch_id=branch.branch_id,
+        change_locus=creative.hypothesis.change_locus,
+        action=creative.hypothesis.action,
+        status="active",
+        target_file=creative.hypothesis.target_file,
+        hypothesis_text=creative.hypothesis.hypothesis_text,
+    )
+    old_ref = {
+        "session_id": "partial-hypothesis-session",
+        "status": "partial_hypothesis_only",
+        "agent_block_reason": "",
+        "primary_failure": {
+            "stage": "hypothesis_awaiting_approval",
+            "reason": "hypothesis awaits ContractGate approval",
+        },
+    }
+    new_ref = {
+        "session_id": "code-quality-session",
+        "status": "failed",
+        "termination_reason": "code_generation_failed",
+        "failure_category": "agent_grounding_failure",
+        "failure_code": (
+            "agent_quality_blocked:"
+            "warehouse_validation_transfer_patch_quality_missing"
+        ),
+        "agent_block_reason": "agent_quality_blocked",
+        "primary_failure": {
+            "stage": "agent_quality_blocked",
+            "reason": (
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_patch_quality_missing"
+            ),
+            "category": "agent_grounding_failure",
+            "code": (
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_patch_quality_missing"
+            ),
+        },
+        "rejection_constraint": {
+            "gate_name": "warehouse_validation_transfer_patch_quality",
+            "failure_code": (
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_patch_quality_missing"
+            ),
+            "agent_block_reason": "agent_quality_blocked",
+        },
+    }
+    detail = (
+        "agentic_proposal:code_generation_failed: "
+        "agent_quality_blocked:"
+        "warehouse_validation_transfer_patch_quality_missing:"
+        "agent_grounding_failure: warehouse operator patch must implement "
+        "proposal/code-visible validation transfer diagnostics"
+    )
+    steps: list[StepRecord] = []
+    marked_status: list[tuple[str, str]] = []
+    ref_holder = {"ref": old_ref}
+    pipeline_holder: dict[str, ExploreStepPipeline] = {}
+
+    class Store:
+        def get_by_status(self, _status: str):
+            return []
+
+        def save(self, _record):
+            return None
+
+        def mark_status(self, hypothesis_id: str, status: str) -> None:
+            marked_status.append((hypothesis_id, status))
+
+    class ContractGate:
+        def validate_hypothesis(self, *_args, **_kwargs):
+            return ContractResult(passed=True, checks=())
+
+    def generate_code(*_args, **_kwargs):
+        pipeline_holder["pipeline"]._proposal_session_ref_cache = {
+            branch.branch_id: old_ref
+        }
+        ref_holder["ref"] = new_ref
+        return None
+
+    pipeline = ExploreStepPipeline(
+        branch_controller=None,
+        contract_gate=ContractGate(),
+        verification_gate=None,
+        hypothesis_store=Store(),
+        registry=None,
+        campaign_id="camp-1",
+        get_champion=_champion,
+        pending_hypotheses={},
+        branch_hypotheses={},
+        branch_patches={},
+        branch_current_hypothesis={},
+        branch_workspaces={},
+        failure_streak={},
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda _branch: (creative.hypothesis, record),
+        generate_code=generate_code,
+        attempt_fix=lambda *_args, **_kwargs: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_step=steps.append,
+        setup_workspace=lambda _branch: None,
+        apply_patch=lambda *_args, **_kwargs: None,
+        record_verification_pass=lambda *_args, **_kwargs: None,
+        archive_failed_workspace=lambda *_args, **_kwargs: None,
+        evaluate=lambda *_args, **_kwargs: (None, None, None),
+        apply_decision_and_finalize=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args, **_kwargs: None,
+        proposal_failure_detail_for=lambda _branch_id: detail,
+        proposal_session_ref_for=lambda _branch_id: dict(ref_holder["ref"]),
+        persist_branch_state=lambda _branch_id: None,
+    )
+    pipeline_holder["pipeline"] = pipeline
+
+    result = pipeline.run(branch)
+
+    assert result.failure_stage == "agent_quality_blocked"
+    assert result.proposal_session_ref is not None
+    assert result.proposal_session_ref["session_id"] == "code-quality-session"
+    assert steps[0].proposal_session_ref is not None
+    assert steps[0].proposal_session_ref["session_id"] == "code-quality-session"
+    assert steps[0].proposal_session_ref["agent_block_reason"] == (
+        "agent_quality_blocked"
+    )
+    assert marked_status == [("hyp-code-quality", "rejected")]
 
 
 def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -> None:

@@ -49,8 +49,11 @@ Changed files:
     `agent_quality_blocked` prefix when structured problem-owned failure codes
     already include it.
   - invalidates stale per-branch proposal-session-ref cache entries after a
-    newer agentic session ref is recorded, so code-stage patch-quality blocks
-    do not inherit an earlier partial-hypothesis ref in step records.
+    newer agentic session ref is recorded.
+- `scion/scion/core/explore_step/pipeline.py`
+  - refreshes the explore-step proposal-session-ref cache after code
+    generation fails, so code-stage patch-quality blocks do not inherit an
+    earlier partial-hypothesis ref in step records or status results.
 - `scion/scion/problems/warehouse_delivery/adapter.py`
   - adds `validate_patch_quality(...)`.
   - high-risk warehouse operator patches must expose recognizable
@@ -106,6 +109,16 @@ Main-session verification:
 - Follow-up proposal-pipeline suite:
   `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_*.py -q`
   - `75 passed`
+- Follow-up field-acceptance repair checks after the cdb8f43 shakedown exposed
+  stale explore-step session refs:
+  - `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py -q`
+    - `20 passed`
+  - `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_*.py -q`
+    - `76 passed`
+  - `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/test_warehouse_target_preview.py scion/scion/tests/unit/test_agentic_feedback_exposure.py -q`
+    - `23 passed`
+  - `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py -q`
+    - `52 passed`
 - `python -m py_compile` on touched core/warehouse modules
   - passed
 - `git diff --check`
@@ -113,8 +126,16 @@ Main-session verification:
 
 ## Decision
 
-Accept the repair as code and framework behavior. This is not warehouse
-efficacy evidence.
+Accept the local repair as code behavior. This is not warehouse efficacy
+evidence, and the field gate is not yet accepted.
+
+The cdb8f43 WSL rerun at
+`/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T202258Z`
+was stopped as shakedown/debug evidence because `status.json:last_result`
+paired a code-stage `warehouse_validation_transfer_patch_quality_missing`
+failure detail with a stale `partial_hypothesis_only` proposal-session ref.
+That failed research-quality acceptance and triggered the explore-step cache
+repair above.
 
 Next gate: launch a fresh short production warehouse rerun from the repair
 commit. Acceptance should require one of:

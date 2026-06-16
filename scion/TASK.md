@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse validation-transfer patch-quality gate works locally and in shakedown; cache-coherency fix for code-stage quality-block session refs is pending commit/relaunch; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse validation-transfer patch-quality gate works locally, but cdb8f43 field acceptance failed on code-stage session-ref/status fidelity; repair is implemented locally and pending commit/relaunch; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -2459,6 +2459,57 @@ Phase B launch design - 2026-06-14:
   so WSL solver load does not distort either gate.
 
 ## Current Repair Acceptance - 2026-06-13
+
+## Current Warehouse Patch-Quality Acceptance - 2026-06-16
+
+Warehouse validation-transfer patch-quality repair remains in field
+acceptance, not completed research evidence.
+
+Accepted so far:
+
+- Local hook behavior is correct: diagnostic-blind validation-transfer patches
+  are blocked before Protocol as
+  `agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing`.
+- The old duplicate
+  `agent_quality_blocked:agent_quality_blocked` feedback prefix is removed.
+- The latest local repair also clears the explore-step stale
+  `proposal_session_ref` cache after code generation fails, so a code-stage
+  quality block cannot inherit a previous `hypothesis_awaiting_approval`
+  partial-session ref.
+
+Rejected field acceptance:
+
+- The formal rerun from commit `cdb8f43` at
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-20260616T202258Z`
+  was stopped as shakedown/debug evidence. It proved the patch-quality gate
+  can fire, but `status.json:last_result.failure_detail` reported a code-stage
+  `warehouse_validation_transfer_patch_quality_missing` block while
+  `last_result.proposal_session_ref` still pointed to a
+  `partial_hypothesis_only` session with
+  `primary_failure.stage=hypothesis_awaiting_approval`.
+- That mismatch fails research-quality acceptance because later agent/context
+  analysis would see the true code-quality block paired with the wrong session
+  and wrong primary failure.
+
+Current local verification:
+
+- `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py -q`
+  passed with `20 passed`.
+- `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline_*.py -q`
+  passed with `76 passed`.
+- `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/test_warehouse_target_preview.py scion/scion/tests/unit/test_agentic_feedback_exposure.py -q`
+  passed with `23 passed`.
+- `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py -q`
+  passed with `52 passed`.
+- `python -m py_compile` for touched core modules and `git diff --check`
+  passed.
+
+Next gate: commit and push this local repair, then relaunch one clean WSL
+warehouse `6R` patch-quality field check from the new commit. Acceptance
+requires any patch-quality block to have matching failure detail,
+`agent_block_reason=agent_quality_blocked`, `primary_failure.stage` equal to
+`agent_quality_blocked`, and a code-quality session ref rather than an earlier
+partial-hypothesis session.
 
 The immediate repair gate after the warehouse compact governance ON/OFF run is
 implemented and accepted.
