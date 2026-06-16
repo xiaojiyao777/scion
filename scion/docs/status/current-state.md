@@ -105,8 +105,12 @@ Active work as of the latest handoff:
   The current local repair therefore stages prior quality blocks through the
   next code context, renders them in code prompts as proposal-only hard repair
   constraints, and enriches quality-block ledgers with session/ref fields. It
-  is locally verified but not yet field-accepted; next gate is a fresh short
-  warehouse rerun from the new commit.
+  is locally verified but not yet field-accepted. A fresh short warehouse rerun
+  from commit `5f2d418` is active on WSL at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`
+  and syncing to
+  `/home/clawd/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`;
+  tmux session `scion_wh_codefeedback_rerun6r_5f2d418_210541`.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

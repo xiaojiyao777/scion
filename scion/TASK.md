@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse patch-quality code-feedback repair implemented locally after `6e13b11` rerun exposed repeated code-stage quality blocks without code-prompt feedback; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse patch-quality code-feedback field rerun launched from `5f2d418`; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -685,6 +685,16 @@ Exit criteria:
   rerun the short warehouse patch-quality field check from this new commit and
   accept only if repeated patch-quality omissions stop or the code prompt
   manifest proves the prior block was visible.
+- Launched: that short warehouse field check from commit `5f2d418`. Launch
+  report:
+  `scion/docs/experiments/v0.4/v04-warehouse-patch-quality-codefeedback-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`;
+  tmux session `scion_wh_codefeedback_rerun6r_5f2d418_210541`.
+  Initial health check showed `status=running`, commit `5f2d418`, and the
+  expected first hypothesis-stage validation-transfer quality block.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
