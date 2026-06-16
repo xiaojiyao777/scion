@@ -2204,6 +2204,21 @@ Phase B launch design - 2026-06-14:
   together (`124 passed`), plus `py_compile` and `git diff --check`. Next
   action returns to the live warehouse/CVRP field check: verify prompt manifests
   from a real campaign under `fd185cf` or descendant.
+- Launched: warehouse no-hard-truncation short `4R` field check. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-launch-20260616.md`.
+  Official WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-postrepair-nohardtrunc-short-debug-4r-20260616T155951Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-postrepair-nohardtrunc-short-debug-4r-20260616T155951Z`.
+  Tmux session: `scion_wh_nohardtrunc_short4r_155951`. Commit `061eba0`,
+  code repair commit `fd185cf`, local `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, production warehouse protocol/split/seeds,
+  `time_limit_sec=30`, disabled early stop, `4` rounds. Purpose: field-check
+  real hypothesis prompt manifests for no hard research-signal truncation while
+  preserving raw/noise filtering. An earlier root
+  `...20260616T155433Z` is invalid launch-env evidence only because it omitted
+  `SCION_API_KEY` and APS failed with missing credentials; do not interpret it
+  as research evidence.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

@@ -296,6 +296,20 @@ Active work as of the latest handoff:
   (`124 passed`), plus `py_compile` and `git diff --check`. The next real
   warehouse/CVRP campaign should validate this no-hard-truncation renderer on
   live prompt manifests.
+- Active field check: warehouse no-hard-truncation short `4R` run is live on
+  WSL. Launch report:
+  [`../experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-launch-20260616.md).
+  Official WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-postrepair-nohardtrunc-short-debug-4r-20260616T155951Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-postrepair-nohardtrunc-short-debug-4r-20260616T155951Z`.
+  Tmux session: `scion_wh_nohardtrunc_short4r_155951`. Shape: commit
+  `061eba0`, local `gpt-5.5`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, warehouse production protocol/split/seeds,
+  `time_limit_sec=30`, disabled early stop, `4` rounds. Purpose: inspect real
+  prompt manifests for no hard research-signal truncation and preserved
+  noise filtering. The earlier root ending `155433Z` is invalid launch-env
+  evidence only because it omitted `SCION_API_KEY` and hit missing credentials.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
