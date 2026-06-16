@@ -2219,6 +2219,22 @@ Phase B launch design - 2026-06-14:
   `...20260616T155433Z` is invalid launch-env evidence only because it omitted
   `SCION_API_KEY` and APS failed with missing credentials; do not interpret it
   as research evidence.
+- Completed and accepted with split verdict: warehouse no-hard-truncation short
+  `4R` field check. Postrun report:
+  `scion/docs/experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-postrun-20260616.md`.
+  Wrapper exited `0`, `run_validity.status=valid`, requested `4/4` effective
+  rounds completed, all `21` LLM traces used `gpt-5.5`, and no auth/API failure
+  occurred. Prompt-rendering field validity passes: required hypothesis
+  research sections were included and non-truncated; no `<truncated agentic
+  context>`, `... [truncated]`, synthetic research-signal ellipsis,
+  `required_response`, raw audit, or session metadata noise was found; code-stage
+  source visibility held. Research quality fails: only `3` screening rows, all
+  failed by win rate; no validation/frozen rows and no promotion. Failure
+  signals for the next repair are one branch-lesson semantic mismatch quality
+  block, one `V5_solution_consistency` verification failure, two abandoned
+  negative screening branches, and one marginal active
+  `residual_vehicle_absorption` branch that needs structured follow-up rather
+  than broad new exploration.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

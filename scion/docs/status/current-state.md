@@ -310,6 +310,17 @@ Active work as of the latest handoff:
   prompt manifests for no hard research-signal truncation and preserved
   noise filtering. The earlier root ending `155433Z` is invalid launch-env
   evidence only because it omitted `SCION_API_KEY` and hit missing credentials.
+- That field check is now complete and accepted only for prompt/context
+  validity. Postrun:
+  [`../experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-nohardtrunc-short-debug-4r-postrun-20260616.md).
+  Wrapper exit was `0`, `run_validity.status=valid`, all `21` LLM traces used
+  `gpt-5.5`, and required hypothesis research sections were included,
+  non-truncated, and free of raw audit/session/`required_response` noise.
+  Research quality failed: only `3` screening rows, all win-rate failures, no
+  validation/frozen rows, and no promotion. Next repair should target
+  warehouse research-loop quality: branch-lesson semantic repair feedback,
+  V5 solution-consistency prevention for unsafe operator removals, and stronger
+  same-branch follow-up for the marginal residual-vehicle absorption signal.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
