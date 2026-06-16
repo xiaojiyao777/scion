@@ -454,15 +454,27 @@ Active work as of the latest handoff:
   config/problem-bridge/decision/protocol/lifecycle tests (`100`, `93`, and
   `92` passed in the recorded groups), Python compile, and `git diff --check`.
   The next gate is a short warehouse production rerun from the new commit.
-- That field gate is active on WSL from commit `41d02d1`. Launch report:
+- That field gate is complete with split acceptance. It ran on WSL from commit
+  `41d02d1`. Launch report:
   [`../experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-launch-20260616.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-postrun-20260616.md).
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`;
-  expected server sync root:
+  server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`.
-  Tmux session: `scion_wh_posdiag_rerun6r_20260616T190605Z`. Initial health
-  reached `status=running`. Acceptance requires validation behavior, not merely
-  more screening-only rows.
+  Wrapper exit was `0`; the run was valid and completed `6/6` effective rounds:
+  `5` screening rows, `1` validation row, and `0` frozen rows. There were no
+  proposal quality blocks, verification failures, or fresh-runtime replay rows.
+  This field-accepts validation reachability and the loss-heavy lifecycle
+  brake: the repeated `move_order.py` `1/2/3` case, `3/4/5` pair shape was
+  parked with `BRANCH_LIFECYCLE_PARK_LINEAGE` and
+  `SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP`. Research quality is still not
+  accepted: the validation candidate failed
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, and there was no frozen row or
+  promotion. The positive-diagnostic threshold repair remains deterministic
+  accepted, but this live run reached validation through ordinary
+  `SCREENING_PASS`, not the exact diagnostic-threshold shape.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

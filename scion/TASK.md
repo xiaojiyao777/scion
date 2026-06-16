@@ -615,16 +615,27 @@ Exit criteria:
   (`100`, `93`, and `92` passed in the recorded groups), Python compile, and
   `git diff --check`. Next gate: short warehouse production rerun from the new
   commit.
-- Active: that field gate is running on WSL from commit `41d02d1`. Launch
-  report:
+- Completed with split acceptance: that field gate ran on WSL from commit
+  `41d02d1`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-positive-diagnostic-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`;
-  expected server sync root:
+  server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-positive-diagnostic-rerun6r-20260616T190605Z`;
-  tmux session `scion_wh_posdiag_rerun6r_20260616T190605Z`. Initial health
-  reached `status=running`. Acceptance requires validation behavior, not merely
-  more screening-only rows.
+  wrapper exit `0`, run validity `valid`, `6/6` effective rounds, `5`
+  screening rows, `1` validation row, `0` frozen rows, no proposal quality
+  blocks, no verification failures, and no fresh-runtime replay drain. This
+  field-accepts validation reachability and the loss-heavy lifecycle brake:
+  the `1/2/3` case, `3/4/5` pair `move_order.py` shape was parked with
+  `BRANCH_LIFECYCLE_PARK_LINEAGE` and
+  `SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP`. Research quality is still not
+  accepted: the validation candidate failed
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, and there was no frozen row or
+  promotion. The positive-diagnostic threshold repair remains deterministically
+  accepted, but this live run's validation came from an ordinary
+  `SCREENING_PASS`, not the exact diagnostic-threshold shape.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
