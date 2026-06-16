@@ -1969,6 +1969,28 @@ Phase B launch design - 2026-06-14:
   top-level comparison plus raw validation metrics, and write
   `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md`.
   It must not start new experiments or edit status docs.
+- Completed and accepted by main-thread verification: CVRP size70
+  fixed-candidate validation replay. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md`.
+  The Erdos monitor returned a completion summary when closed; its conclusions
+  agreed with the main-thread synced artifact verification. Final acceptance is
+  main-thread owned.
+  Full server root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
+  Wrapper exit was `0`; `fixed_candidate_replay_comparison.v1.json` exists
+  with schema `scion.fixed_candidate_replay_comparison.v1`, `row_count=2`,
+  `candidate_count=1`, arms `on` and `record_only`, both rows `completed`, no
+  row errors, and no campaign/promotion/scheduler state mutation. Raw metrics
+  completed both arms at `48/48` valid pairs with `0` failed pairs. ON W/T/L
+  was `26/13/9`, mean delta `34.4167`, median delta `4.0`; `record_only`
+  W/T/L was `27/13/8`, mean delta `34.5208`, median delta `6.0`. Both arms
+  reported `runtime_gate_visibility.gate_outcome=fail` with
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, despite complete/high runtime
+  evidence, route-count delta `0`, fleet violation `0`, and visible two-opt
+  activation. Decision: accept the run as valid fixed-candidate validation
+  evidence, but stop the size70 candidate here. Do not launch frozen fixed
+  replay and do not launch a seeded Scion CVRP campaign for this candidate as a
+  validated mechanism.
 - Launched: CVRP agent behavior debug audit worker `Gibbs`
   (`019ecd49-1c1b-7240-afa1-57084260772c`). This is a Scion read-only
   experiment-analysis subagent, so its brief requires reading

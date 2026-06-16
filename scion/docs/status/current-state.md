@@ -133,10 +133,23 @@ Active work as of the latest handoff:
   accepted until `record_only` completes, `exit_code.txt` exists, and the
   top-level `fixed_candidate_replay_comparison.v1.json` is present.
 - CVRP validation monitor/postrun worker `Erdos`
-  (`019ecd76-f213-7050-a344-36419ce5314b`) is active. It must read v3 first,
-  poll the full 48-pair validation run sparingly, sync results, and write the
-  validation postrun report without launching new experiments or editing status
-  docs.
+  (`019ecd76-f213-7050-a344-36419ce5314b`) returned a completion summary when
+  closed. Its conclusions agreed with the main-thread synced artifact
+  verification. The accepted postrun below is main-thread owned.
+- CVRP size70 fixed-candidate validation replay is complete and accepted as
+  valid evidence, but the candidate failed validation. Postrun:
+  [`../experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-fixed-validation-postrun-20260615.md).
+  Full server root:
+  `/home/clawd/research/scion-experiments/v04-cvrp-size70-fixed-validation-full-20260615T225148Z`.
+  Wrapper exit was `0`; comparison schema was
+  `scion.fixed_candidate_replay_comparison.v1`; `row_count=2`; both `on` and
+  `record_only` rows were `completed`; no campaign, promotion, scheduler, or
+  DecisionFeatures state was mutated. Raw metrics completed both arms at
+  `48/48` valid pairs with `0` failed pairs. ON W/T/L was `26/13/9`, median
+  delta `4.0`; `record_only` W/T/L was `27/13/8`, median delta `6.0`. Both
+  arms failed the validation gate with
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`. Decision: do not launch frozen fixed
+  replay or a seeded Scion CVRP campaign for this size70 candidate.
 - Targeted warehouse repair from worker `Planck` is accepted. Report:
   [`../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`](../experiments/v0.4/v04-warehouse-targeted-repair-20260615.md).
   The repair makes strict clean-fork/sibling branch-lesson requirements
