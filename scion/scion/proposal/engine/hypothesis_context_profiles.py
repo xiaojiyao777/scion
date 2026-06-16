@@ -258,16 +258,13 @@ def _compact_cross_branch_research(payload: Any) -> str:
             ),
             "branch_lessons": _mechanism_signal_items(
                 payload.get("branch_lesson_records"),
-                limit=12,
             ),
             "cluster_hints": _mechanism_signal_items(
                 _portfolio_clusters(payload.get("portfolio_steering")),
-                limit=6,
             ),
             "family_saturation_hints": _mechanism_signal_items(
                 payload.get("family_saturation_summary")
                 or _portfolio_family_saturation(payload.get("portfolio_steering")),
-                limit=6,
             ),
             "novelty_pressure": _project_mapping(
                 payload.get("novelty_pressure"),
@@ -296,7 +293,8 @@ def _mechanism_signal_items(
     value: Any,
     *,
     accepted_types: set[str] | None = None,
-    limit: int = 8,
+    limit: int | None = None,
+    enforce_limit: bool = False,
 ) -> list[dict[str, Any]]:
     if isinstance(value, Mapping):
         if isinstance(value.get("summaries"), (list, tuple)):
@@ -315,8 +313,6 @@ def _mechanism_signal_items(
         projected = _mechanism_signal_item(raw)
         if projected:
             items.append(projected)
-        if len(items) >= limit:
-            break
     return items
 
 
@@ -369,9 +365,8 @@ def _mechanism_signal_item(raw: Mapping[str, Any]) -> dict[str, Any]:
             ),
             "signal": _short_signal_text(
                 _first_present(raw, ("cluster_signal", "advisory_label")),
-                max_chars=120,
             ),
-            "role": _short_signal_text(raw.get("lesson_role"), max_chars=80),
+            "role": _short_signal_text(raw.get("lesson_role")),
             "evidence": evidence,
             "maturity": _short_signal_text(
                 _first_present(
@@ -384,7 +379,6 @@ def _mechanism_signal_item(raw: Mapping[str, Any]) -> dict[str, Any]:
                         "priority",
                     ),
                 ),
-                max_chars=80,
             ),
             "branches": _short_sequence(
                 raw.get("branch_ids") or raw.get("source_branch_ids")
@@ -407,7 +401,7 @@ def _compact_signal_signature(value: Any) -> dict[str, Any]:
     )
     return _drop_empty(
         {
-            field: _short_signal_text(value.get(field), max_chars=120)
+            field: _short_signal_text(value.get(field))
             for field in fields
             if value.get(field) not in (None, "", [], {}, ())
         }
@@ -447,7 +441,7 @@ def _compact_signal_evidence(value: Any) -> dict[str, Any]:
                 value.get("outcome_tier_counts")
             ),
             "lifecycle_counts": _project_generic_value(value.get("lifecycle_counts")),
-            "basis": _short_signal_text(value.get("basis"), max_chars=160),
+            "basis": _short_signal_text(value.get("basis")),
         }
     )
     if not evidence:
@@ -480,24 +474,32 @@ def _first_present(value: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
     return ""
 
 
-def _short_sequence(value: Any, *, limit: int = 6) -> list[Any]:
+def _short_sequence(
+    value: Any,
+    *,
+    limit: int | None = None,
+    enforce_limit: bool = False,
+) -> list[Any]:
     if not isinstance(value, (list, tuple)):
         return []
     return [
-        _short_signal_text(item, max_chars=80)
-        for item in value[:limit]
+        _short_signal_text(item)
+        for item in value
         if _present(item)
     ]
 
 
-def _short_signal_text(value: Any, *, max_chars: int = 220) -> str:
+def _short_signal_text(
+    value: Any,
+    *,
+    max_chars: int | None = None,
+    enforce_max_chars: bool = False,
+) -> str:
     if isinstance(value, (dict, list, tuple)):
         rendered = json.dumps(_project_generic_value(value), sort_keys=True, default=str)
     else:
         rendered = str(value or "")
     text = re.sub(r"\s+", " ", rendered).strip()
-    if len(text) > max_chars:
-        return text[: max_chars - 3].rstrip() + "..."
     return text
 
 
@@ -584,7 +586,6 @@ def _compact_problem_measurement_diagnostics(payload: Any) -> str:
                     "confidence",
                     "reason_codes",
                 ),
-                limit=6,
             ),
             "policy": _project_generic_value(payload.get("policy")),
         }
@@ -608,7 +609,8 @@ def _project_items(
     *,
     fields: tuple[str, ...],
     accepted_types: set[str] | None = None,
-    limit: int = 8,
+    limit: int | None = None,
+    enforce_limit: bool = False,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, (list, tuple)):
         return []
@@ -622,8 +624,6 @@ def _project_items(
         projected = _project_mapping(raw, fields=fields)
         if projected:
             items.append(projected)
-        if len(items) >= limit:
-            break
     return items
 
 
@@ -653,13 +653,11 @@ def _project_generic_value(value: Any) -> Any:
             }
         )
     if isinstance(value, (list, tuple)):
-        projected = [_project_generic_value(item) for item in value[:8]]
+        projected = [_project_generic_value(item) for item in value]
         return [item for item in projected if _present(item)]
     if isinstance(value, (str, int, float, bool)) or value is None:
-        if isinstance(value, str) and len(value) > 500:
-            return value[:497] + "..."
         return value
-    return str(value)[:500]
+    return str(value)
 
 
 def _allowed_generic_key(key: str) -> bool:

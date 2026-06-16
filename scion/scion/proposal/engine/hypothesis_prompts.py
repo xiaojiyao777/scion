@@ -488,7 +488,7 @@ def _compact_research_signals(
     context: Mapping[str, Any],
     D: Mapping[str, Any],
 ) -> str:
-    """Render a short, default-visible research signal index before rules."""
+    """Render a default-visible research signal index before rules."""
     payload = _drop_empty_mapping(
         {
             "schema_version": "compact_research_signals.v1",
@@ -503,7 +503,6 @@ def _compact_research_signals(
             "problem_measurement_diagnostics": _compact_text_signal(
                 D.get("compact_problem_measurement_diagnostics")
                 or D.get("problem_measurement_diagnostics"),
-                max_chars=900,
             ),
             "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
             "cross_branch_index": _compact_cross_branch_signal_index(context, D),
@@ -530,13 +529,16 @@ def _drop_empty_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _compact_text_signal(value: Any, *, max_chars: int = 420) -> str:
+def _compact_text_signal(
+    value: Any,
+    *,
+    max_chars: int | None = None,
+    enforce_max_chars: bool = False,
+) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if not text or text in {"(none)", "none", "null"}:
         return ""
-    if len(text) <= max_chars:
-        return text
-    return text[: max_chars - 18].rstrip() + " ... [truncated]"
+    return text
 
 
 def _compact_cross_branch_signal_index(
@@ -556,7 +558,7 @@ def _compact_cross_branch_signal_index(
                 if "compact_cross_branch_learning.v1" in text
                 else ""
             ),
-            "signal_hint": _compact_text_signal(_first_nonempty_line(text), max_chars=180),
+            "signal_hint": _compact_text_signal(_first_nonempty_line(text)),
         }
     )
 
@@ -594,8 +596,6 @@ def _lesson_ids_from_context(context: Mapping[str, Any]) -> list[str]:
             ).strip()
             if lesson_id and lesson_id not in ids:
                 ids.append(lesson_id)
-            if len(ids) >= 8:
-                return ids
     return ids
 
 
@@ -950,8 +950,6 @@ def _compact_branch_lesson_records(records: Any) -> list[dict[str, Any]]:
         }
         if item:
             compact.append(item)
-        if len(compact) >= 16:
-            break
     return compact
 
 
@@ -985,11 +983,9 @@ def _compact_branch_lesson_value(value: Any) -> Any:
         }
         return result
     if isinstance(value, (list, tuple)):
-        return [_compact_branch_lesson_value(item) for item in value[:8]]
+        return [_compact_branch_lesson_value(item) for item in value]
     if isinstance(value, str):
         text = re.sub(r"\s+", " ", value).strip()
-        if len(text) > 180:
-            return text[:177].rstrip() + "..."
         return text
     return value
 

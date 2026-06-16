@@ -876,7 +876,7 @@ def test_branch_lesson_context_is_compact_and_prioritized_before_cross_branch_ma
 
 def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signals():
     records = []
-    for idx in range(12):
+    for idx in range(18):
         records.append(
             {
                 "schema_version": "branch_lesson.v1",
@@ -887,7 +887,10 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
                 "lesson_role": "contrast" if idx % 2 else "avoid",
                 "lesson_type": "no_effect_plateau",
                 "maturity": "mature" if idx < 4 else "fresh",
-                "source_branch_ids": [f"branch-stress-{idx}"],
+                "source_branch_ids": [
+                    f"branch-stress-{idx}-extra-{branch_idx:02d}"
+                    for branch_idx in range(10)
+                ],
                 "shared_signature": {
                     "change_locus": "solver_design",
                     "target_file": f"policies/module_{idx}.py",
@@ -900,6 +903,15 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
                     "activation_statuses": {"observed": idx + 2},
                     "effect_statuses": {"zero": idx + 1},
                     "outcome_summary": f"outcome summary {idx}",
+                    "basis": (
+                        f"basis marker {idx} "
+                        + ("long projected evidence text " * 40)
+                        + f"basis-tail-marker-{idx:02d}"
+                    ),
+                    "case_level_counts": [
+                        {"case_marker": f"case-marker-{idx:02d}-{case_idx:02d}"}
+                        for case_idx in range(10)
+                    ],
                     "raw_rows": [
                         {
                             "case": f"secret-raw-row-{idx}",
@@ -909,7 +921,9 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
                 },
                 "summary": (
                     f"mechanism stress_family_{idx % 3} repeatedly activates "
-                    f"without moving the target objective on evidence set {idx}."
+                    f"without moving the target objective on evidence set {idx}. "
+                    + ("long projected summary text " * 40)
+                    + f"summary-tail-marker-{idx:02d}"
                 ),
                 "required_response": {
                     "required_for": "clean_fork_new_branch",
@@ -996,14 +1010,19 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
                     "raw_text": "secret cross raw text",
                     "reason_codes": ["SECRET_CROSS_REASON"],
                 }
+                for hint_idx in range(10)
             ],
             "opportunity_gaps": [
                 {
                     "gap_type": "coverage_gap",
-                    "summary": "Opportunity remains in untested bounded routing.",
+                    "summary": (
+                        "Opportunity remains in untested bounded routing. "
+                        f"opportunity-tail-marker-{gap_idx:02d}"
+                    ),
                     "recommended_action": "try a bounded contrast mechanism",
                     "raw_rows": [{"secret": "cross raw row"}],
                 }
+                for gap_idx in range(10)
             ],
             "portfolio_steering": {
                 "schema_version": "portfolio_steering.v1",
@@ -1055,6 +1074,9 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
     rendered_prompt += "\n" + user_prompt
 
     assert "<truncated agentic context>" not in rendered_prompt
+    assert "... [truncated]" not in rendered_prompt
+    assert "[truncated]" not in rendered_prompt
+    assert "..." not in rendered_prompt
     for forbidden in (
         "raw_text",
         "raw_rows",
@@ -1074,16 +1096,24 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
         "SECRET_PORTFOLIO_REASON",
     ):
         assert forbidden not in rendered_prompt
+    for idx in range(18):
+        assert f"lesson:stress-{idx:02d}" in rendered_prompt
     for expected in (
         "lesson:stress-00",
-        "lesson:stress-11",
+        "lesson:stress-17",
         "mature",
         "fresh",
         "policies/module_0.py",
+        "policies/module_17.py",
         "modify",
         "stress_mechanism_0",
+        "stress_mechanism_17",
         "stress_family_2",
         "outcome summary 0",
+        "summary-tail-marker-17",
+        "basis-tail-marker-17",
+        "case-marker-17-09",
+        "branch-stress-17-extra-09",
         "no_effect",
         "weak_positive",
         "clean_fork_new_branch",
@@ -1092,6 +1122,7 @@ def test_stress_verbose_branch_lessons_render_as_dense_untruncated_prompt_signal
         "mechanism_family",
         "runtime_budget_strategy",
         "Avoid replaying saturated stress families.",
+        "opportunity-tail-marker-09",
         "cluster-stress-family",
         "class ChampionOperator",
     ):
