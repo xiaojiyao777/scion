@@ -46,7 +46,6 @@ from scion.proposal.llm_client import (
     LLMTransientProviderError,
     is_llm_transient_api_error,
 )
-from scion.proposal.negative_facts import render_negative_fact_block
 
 from .agentic_lifecycle import AgenticLifecycleMixin
 from .agentic_refs import AgenticRefsMixin
@@ -199,6 +198,9 @@ class ProposalPipeline(
     agentic_quality_feedback: MutableMapping[str, list[Mapping[str, Any]]] = field(
         default_factory=dict
     )
+    agentic_code_quality_feedback: MutableMapping[
+        str, list[Mapping[str, Any]]
+    ] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.production_campaign and self._agentic_enabled:
@@ -263,22 +265,11 @@ class ProposalPipeline(
                 "schema_version": "proposal-context-ref.v1",
                 "research_process_guidance_audit": guidance_audit,
             }
-        quality_feedback = self._agentic_quality_feedback_for_context(bid)
-        if quality_feedback:
-            context["agentic_prior_quality_blocks"] = quality_feedback
-            context["agentic_prior_quality_block_rule"] = (
-                "Previous agentic proposal attempts on this branch were blocked "
-                "before code because the candidate crossed a hard boundary, "
-                "objective, contract, schema, or activation gate. Treat these "
-                "as hard research constraints: repair the cited contract issue "
-                "before continuing near the same mechanism, and use the cited "
-                "source/gate/failure_code/reason as the grounding evidence."
-            )
-            negative_fact_block = render_negative_fact_block(
-                prior_quality_blocks=quality_feedback
-            )
-            if negative_fact_block:
-                context["agentic_negative_fact_block"] = negative_fact_block
+        self._attach_agentic_quality_feedback_context(
+            context,
+            bid,
+            phase="hypothesis",
+        )
         context_session_ref = _compact_proposal_context_session_ref(context)
         prompt_context = filter_hypothesis_context_for_prompt(context)
         if context_session_ref:
@@ -447,6 +438,11 @@ class ProposalPipeline(
         )
         context["branch_hygiene"] = branch_hygiene_context(branch)
         context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
+        self._attach_agentic_quality_feedback_context(
+            context,
+            bid,
+            phase="code",
+        )
         try:
             result = self.creative.generate_code(context)
             quality_check = validate_problem_patch_quality(
@@ -465,6 +461,8 @@ class ProposalPipeline(
                 self.circuit_breaker.record_failure(quality_check.detail)
                 return None
             self.circuit_breaker.record_success()
+            self._clear_agentic_quality_feedback(bid)
+            self._clear_agentic_code_quality_feedback(bid)
             return result
         except LLMBalanceError as exc:
             logger.critical(

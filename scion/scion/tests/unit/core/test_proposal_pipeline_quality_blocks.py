@@ -11,6 +11,7 @@ from scion.core.proposal_pipeline.classification import (
     _agentic_output_is_quality_blocked,
     _agentic_primary_secondary_failures,
 )
+from scion.proposal.engine.code_prompts import _split_code_context
 
 def test_mechanism_premise_warning_is_not_quality_block_and_returns_patch() -> None:
     creative = FakeCreative()
@@ -585,6 +586,134 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     assert session_ref["primary_failure"]["code"] == (
         "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
     )
+
+
+def test_agentic_patch_quality_block_enters_next_code_context_and_prompt() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="patch-quality-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    class PatchQualityAdapter:
+        def validate_patch_quality(self, **_kwargs):
+            return {
+                "allowed": False,
+                "detail": (
+                    "agent_quality_blocked:"
+                    "warehouse_validation_transfer_patch_quality_missing"
+                ),
+                "structured_rejection": {
+                    "source": "warehouse_problem_adapter",
+                    "gate_name": "warehouse_validation_transfer_patch_quality",
+                    "failure_code": (
+                        "agent_quality_blocked:"
+                        "warehouse_validation_transfer_patch_quality_missing"
+                    ),
+                    "agent_block_reason": "agent_quality_blocked",
+                    "retry_constraint": (
+                        "add activation/effect diagnostic counters before protocol"
+                    ),
+                    "counts_as_screened_round": False,
+                    "counts_as_proposal_quality_attempt": True,
+                },
+            }
+
+    pipeline, branch, runtime, circuit, failures, _ = _pipeline(
+        creative=creative,
+        use_agentic_proposal=True,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    runtime.adapter = PatchQualityAdapter()
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    assert patch is None
+    assert failures == []
+    assert circuit.failures == []
+    assert pipeline.agentic_quality_feedback[branch.branch_id][0]["session_id"] == (
+        "patch-quality-session"
+    )
+
+    class CapturingHypothesisSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="next-hypothesis-session",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline.agentic_session = CapturingHypothesisSession()
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    assert branch.branch_id not in pipeline.agentic_quality_feedback
+    assert pipeline.agentic_code_quality_feedback[branch.branch_id][0][
+        "session_id"
+    ] == "patch-quality-session"
+
+    captured_code_contexts: list[dict] = []
+    captured_prompts: list[str] = []
+
+    class CapturingCodeSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            code_context = dict(request.build_code_context(creative.hypothesis))
+            captured_code_contexts.append(code_context)
+            _, user_prompt = _split_code_context(code_context)
+            captured_prompts.append(user_prompt)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.COMPLETED,
+                session_id="repair-code-session",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                patch=creative.patch,
+                self_check=AgenticSelfCheck(
+                    schema_valid=True,
+                    contract_preview_passed=True,
+                ),
+                termination_reason=AgenticTerminationReason.COMPLETED,
+            )
+
+    runtime.adapter = None
+    pipeline.agentic_session = CapturingCodeSession()
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+
+    assert patch == creative.patch
+    assert captured_code_contexts
+    code_context = captured_code_contexts[0]
+    rendered_context = json.dumps(code_context, sort_keys=True)
+    assert "agentic_prior_quality_blocks" in code_context
+    assert "warehouse_validation_transfer_patch_quality_missing" in rendered_context
+    assert "activation/effect diagnostic counters" in rendered_context
+    assert "hard code repair constraints" in code_context[
+        "agentic_prior_quality_block_rule"
+    ]
+    user_prompt = captured_prompts[0]
+    assert "Prior Agent Quality Blocks For This Code Patch" in user_prompt
+    assert "warehouse_validation_transfer_patch_quality_missing" in user_prompt
+    assert "activation/effect diagnostic counters" in user_prompt
+    assert "Decision input" in user_prompt
+    assert branch.branch_id not in pipeline.agentic_quality_feedback
+    assert branch.branch_id not in pipeline.agentic_code_quality_feedback
 
 
 def test_agentic_session_ref_update_invalidates_cached_partial_ref() -> None:

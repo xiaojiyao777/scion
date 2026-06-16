@@ -849,7 +849,41 @@ def _quality_block_ledger_entry(
         "pre_protocol": _protocol_stage_for_result(result) == "",
         "loop_step": max(0, int(loop_step)),
         "recorded_at": datetime.now().isoformat(),
+        **_proposal_session_ref_fields_from_result(result),
     }
+
+
+def _proposal_session_ref_fields_from_result(result: StepResult) -> dict[str, Any]:
+    session_ref = getattr(result, "proposal_session_ref", None)
+    if not isinstance(session_ref, Mapping):
+        return {}
+    primary = session_ref.get("primary_failure")
+    if not isinstance(primary, Mapping):
+        primary = {}
+    rejection = session_ref.get("rejection_constraint")
+    if not isinstance(rejection, Mapping):
+        rejection = {}
+    fields: dict[str, Any] = {}
+    for key, value in (
+        ("session_id", session_ref.get("session_id")),
+        ("session_status", session_ref.get("status")),
+        ("termination_reason", session_ref.get("termination_reason")),
+        ("agent_block_reason", session_ref.get("agent_block_reason")),
+        (
+            "failure_code",
+            session_ref.get("failure_code")
+            or rejection.get("failure_code")
+            or primary.get("code"),
+        ),
+        (
+            "quality_gate_name",
+            rejection.get("gate_name") or primary.get("gate_name"),
+        ),
+        ("retry_constraint", rejection.get("retry_constraint")),
+    ):
+        if value not in (None, "", [], {}, ()):
+            fields[key] = value
+    return fields
 
 
 def _proposal_quality_loop_limit(

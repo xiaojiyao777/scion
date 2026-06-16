@@ -95,6 +95,11 @@ class AgenticRequestMixin:
             )
             code_context["branch_hygiene"] = branch_hygiene_context(branch)
             code_context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
+            self._attach_agentic_quality_feedback_context(
+                code_context,
+                branch.branch_id,
+                phase="code",
+            )
             return code_context
 
         return AgenticProposalRequest(

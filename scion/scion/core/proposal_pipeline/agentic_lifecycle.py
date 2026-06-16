@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, Mapping
 
 from scion.core.branch_repair_policy import is_branch_lifecycle_policy_block_detail
 from scion.core.models import (
@@ -38,6 +38,7 @@ from scion.proposal.llm_client import (
     LLMTransientProviderError,
     is_llm_transient_api_error,
 )
+from scion.proposal.negative_facts import render_negative_fact_block
 
 from .boundaries import _active_problem_boundary_surfaces_for_runtime
 from .classification import (
@@ -158,7 +159,7 @@ class AgenticLifecycleMixin:
             )
 
         self.circuit_breaker.record_success()
-        self._clear_agentic_quality_feedback(bid)
+        self._stage_agentic_quality_feedback_for_code(bid)
         return output.hypothesis, self._hypothesis_record(branch, output.hypothesis)
 
     def _generate_agentic_code(
@@ -197,6 +198,8 @@ class AgenticLifecycleMixin:
                 return None
             if output.is_completed:
                 self.circuit_breaker.record_success()
+                self._clear_agentic_quality_feedback(bid)
+                self._clear_agentic_code_quality_feedback(bid)
                 return output.patch
             if not self._agentic_output_can_continue(output, hypothesis):
                 detail = self._agentic_failure_detail(output)
@@ -283,6 +286,8 @@ class AgenticLifecycleMixin:
 
         if output.is_completed:
             self.circuit_breaker.record_success()
+            self._clear_agentic_quality_feedback(bid)
+            self._clear_agentic_code_quality_feedback(bid)
             return output.patch
 
         detail = self._agentic_failure_detail(output)
@@ -451,14 +456,93 @@ class AgenticLifecycleMixin:
         bucket.append(entry)
         del bucket[:-3]
 
+    def _attach_agentic_quality_feedback_context(
+        self,
+        context: dict[str, Any],
+        branch_id: str,
+        *,
+        phase: str,
+    ) -> list[Mapping[str, Any]]:
+        include_staged_code_feedback = phase == "code"
+        quality_feedback = self._agentic_quality_feedback_for_context(
+            branch_id,
+            include_staged_code_feedback=include_staged_code_feedback,
+        )
+        if not quality_feedback:
+            return []
+        context["agentic_prior_quality_blocks"] = quality_feedback
+        if phase == "code":
+            context["agentic_prior_quality_block_rule"] = (
+                "Previous agentic proposal attempts on this branch were blocked "
+                "before protocol because the candidate crossed a hard boundary, "
+                "objective, contract, schema, or activation gate. Treat these "
+                "as hard code repair constraints for this patch: implement the "
+                "cited retry_constraint, gate, failure_code, or missing "
+                "diagnostic in code before emitting a near-same mechanism. If "
+                "the approved hypothesis intentionally moved away from the "
+                "blocked mechanism, state that difference in premise_check_reason "
+                "and avoid repeating the cited failure pattern."
+            )
+        else:
+            context["agentic_prior_quality_block_rule"] = (
+                "Previous agentic proposal attempts on this branch were blocked "
+                "before code because the candidate crossed a hard boundary, "
+                "objective, contract, schema, or activation gate. Treat these "
+                "as hard research constraints: repair the cited contract issue "
+                "before continuing near the same mechanism, and use the cited "
+                "source/gate/failure_code/reason as the grounding evidence."
+            )
+        negative_fact_block = render_negative_fact_block(
+            prior_quality_blocks=quality_feedback
+        )
+        if negative_fact_block:
+            existing = str(context.get("agentic_negative_fact_block") or "").strip()
+            context["agentic_negative_fact_block"] = (
+                f"{existing}\n{negative_fact_block}"
+                if existing
+                else negative_fact_block
+            )
+        return quality_feedback
+
+    def _stage_agentic_quality_feedback_for_code(self, branch_id: str) -> None:
+        quality_feedback = self._agentic_quality_feedback_for_context(branch_id)
+        self._clear_agentic_quality_feedback(branch_id)
+        if not quality_feedback:
+            self._clear_agentic_code_quality_feedback(branch_id)
+            return
+        self.agentic_code_quality_feedback[branch_id] = quality_feedback
+
     def _agentic_quality_feedback_for_context(
         self,
         branch_id: str,
+        *,
+        include_staged_code_feedback: bool = False,
     ) -> list[Mapping[str, Any]]:
-        return list(self.agentic_quality_feedback.get(branch_id, ()))
+        buckets: list[list[Mapping[str, Any]]] = [
+            list(self.agentic_quality_feedback.get(branch_id, ()))
+        ]
+        if include_staged_code_feedback:
+            buckets.append(list(self.agentic_code_quality_feedback.get(branch_id, ())))
+        feedback: list[Mapping[str, Any]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for bucket in buckets:
+            for item in bucket:
+                key = (
+                    str(item.get("session_id") or ""),
+                    str(item.get("failure_code") or ""),
+                    str(item.get("recorded_at") or ""),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                feedback.append(item)
+        return feedback
 
     def _clear_agentic_quality_feedback(self, branch_id: str) -> None:
         self.agentic_quality_feedback.pop(branch_id, None)
+
+    def _clear_agentic_code_quality_feedback(self, branch_id: str) -> None:
+        self.agentic_code_quality_feedback.pop(branch_id, None)
 
 
 def _mechanism_id_from_agentic_hypothesis(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from typing import Any, Dict
 
@@ -202,6 +203,9 @@ def _split_code_context(
         prior_failure_section += (
             f"## Branch Code Status\n{D['branch_hygiene_guidance']}\n\n"
         )
+    prior_quality_section = _code_prior_quality_feedback_section(D)
+    if prior_quality_section:
+        prior_failure_section += prior_quality_section
     previous_patch_section = _previous_patch_prompt_section(
         D["previous_patch"],
         current_feedback=D["agentic_code_self_check_feedback"],
@@ -382,6 +386,35 @@ def _split_code_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _code_prior_quality_feedback_section(context: Dict[str, Any]) -> str:
+    prior_quality_blocks = context.get("agentic_prior_quality_blocks")
+    if not prior_quality_blocks:
+        return ""
+    payload: dict[str, Any] = {
+        "rule": str(context.get("agentic_prior_quality_block_rule") or "").strip(),
+        "prior_quality_blocks": prior_quality_blocks,
+    }
+    negative_fact_block = str(context.get("agentic_negative_fact_block") or "").strip()
+    if negative_fact_block:
+        payload["negative_fact_block"] = negative_fact_block
+    rendered = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        default=str,
+        indent=2,
+    )
+    return (
+        "## Prior Agent Quality Blocks For This Code Patch\n"
+        "These are branch-local proposal quality blocks from attempts that "
+        "failed before protocol. They are tainted proposal context and are not "
+        "Decision input, but they are hard repair constraints for this code "
+        "generation call. Do not emit a near-same patch until the cited "
+        "failure_code, gate, or retry_constraint is repaired in code.\n"
+        f"{rendered}\n\n"
+    )
 
 
 def _telemetry_identity_guidance_section(context: Dict[str, Any]) -> str:

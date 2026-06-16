@@ -64,6 +64,7 @@ def _quality_block_ledger_from_steps(
                 "pre_protocol": getattr(step, "protocol_result", None) is None,
                 "loop_step": getattr(step, "round_num", None),
                 "source": "step_history",
+                **_proposal_session_ref_fields(step),
             }
         )
     return ledger
@@ -162,3 +163,36 @@ def _step_failure_category(step: StepRecord) -> str | None:
         category=category,
         failure_stage=stage,
     )
+
+
+def _proposal_session_ref_fields(step: StepRecord) -> dict[str, Any]:
+    session_ref = getattr(step, "proposal_session_ref", None)
+    if not isinstance(session_ref, Mapping):
+        return {}
+    primary = session_ref.get("primary_failure")
+    if not isinstance(primary, Mapping):
+        primary = {}
+    rejection = session_ref.get("rejection_constraint")
+    if not isinstance(rejection, Mapping):
+        rejection = {}
+    fields: dict[str, Any] = {}
+    for key, value in (
+        ("session_id", session_ref.get("session_id")),
+        ("session_status", session_ref.get("status")),
+        ("termination_reason", session_ref.get("termination_reason")),
+        ("agent_block_reason", session_ref.get("agent_block_reason")),
+        (
+            "failure_code",
+            session_ref.get("failure_code")
+            or rejection.get("failure_code")
+            or primary.get("code"),
+        ),
+        (
+            "quality_gate_name",
+            rejection.get("gate_name") or primary.get("gate_name"),
+        ),
+        ("retry_constraint", rejection.get("retry_constraint")),
+    ):
+        if value not in (None, "", [], {}, ()):
+            fields[key] = value
+    return fields

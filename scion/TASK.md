@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse validation-transfer patch-quality session-ref repair committed and WSL rerun launched from `6e13b11`; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
+*Status: warehouse patch-quality code-feedback repair implemented locally after `6e13b11` rerun exposed repeated code-stage quality blocks without code-prompt feedback; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation rejected as-is*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -655,6 +655,36 @@ Exit criteria:
   low-quality transfer-blind hypotheses are blocked before code, or screened
   candidates carry explicit transfer-risk, activation/effect diagnostic plan,
   and screening-only guard claims before validation is interpreted.
+- Completed with failed research-quality acceptance: the clean WSL warehouse
+  patch-quality rerun from commit `6e13b11` finished at
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`
+  (WSL source:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-patch-quality-rerun6r-6e13b11-20260616T203530Z`).
+  It was valid and complete (`6/6` effective rounds, `6` screening rows,
+  wrapper exit `0`), but had `0` validation/frozen/promotions and `6` proposal
+  quality blocks. Four blocks repeated
+  `warehouse_validation_transfer_patch_quality_missing` for missing
+  activation/effect diagnostic code and, later, missing
+  screening/lexicographic guard. Code prompt manifests contained no prior
+  quality-block feedback, so the next code attempts could not see the previous
+  patch-quality failure. The run rejects warehouse efficacy and accepts only
+  the need for another framework repair.
+- Implemented and locally accepted as that repair: code-phase prior quality
+  blocks are now staged from a successful hypothesis into the immediately
+  following code context, rendered in the code prompt as hard proposal-only
+  repair constraints, and cleared after code succeeds. Quality-block ledgers
+  now preserve compact session/ref fields (`session_id`, status,
+  termination_reason, failure_code, gate, retry_constraint) when available.
+  Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-patch-quality-code-feedback-repair-20260616.md`.
+  No `DecisionFeatures`, Protocol thresholds, validation/frozen gates, or
+  problem-owned warehouse semantics changed. Acceptance passed proposal
+  quality-block tests (`21 passed`), proposal pipeline tests (`77 passed`),
+  agentic feedback/warehouse preview tests (`23 passed`), evidence status
+  tests (`53 passed`), Python compile, and `git diff --check`. Next gate:
+  rerun the short warehouse patch-quality field check from this new commit and
+  accept only if repeated patch-quality omissions stop or the code prompt
+  manifest proves the prior block was visible.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

@@ -10,6 +10,9 @@ from scion.core.run_validity import (
     RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
 )
 from scion.core.models import CaseAggregateFeedback, Decision, MechanismChange
+from scion.core.evidence_recording.accounting_quality_blocks import (
+    quality_block_ledger,
+)
 from scion.core.evidence_recording.summary_cache import _campaign_cache_stats
 from scion.core.step_result import StepResult
 
@@ -2537,6 +2540,72 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     assert summary["fresh_runtime_replay_drain"]["accepted_replay_last_result"][
         "accepted_for_drain"
     ] is True
+
+
+def test_quality_block_ledger_from_steps_preserves_agentic_session_ref() -> None:
+    step = replace(
+        _step("/tmp/quality-block.json"),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:code_generation_failed: "
+            "agent_quality_blocked:"
+            "warehouse_validation_transfer_patch_quality_missing"
+        ),
+        counts_toward_max_rounds=False,
+        attempt_kind="proposal_block",
+        proposal_session_ref={
+            "session_id": "patch-quality-session",
+            "status": "failed",
+            "termination_reason": "code_generation_failed",
+            "agent_block_reason": "agent_quality_blocked",
+            "failure_code": (
+                "agent_quality_blocked:"
+                "warehouse_validation_transfer_patch_quality_missing"
+            ),
+            "failure_category": "agent_grounding_failure",
+            "primary_failure": {
+                "stage": "agent_quality_blocked",
+                "code": (
+                    "agent_quality_blocked:"
+                    "warehouse_validation_transfer_patch_quality_missing"
+                ),
+            },
+            "rejection_constraint": {
+                "gate_name": "warehouse_validation_transfer_patch_quality",
+                "retry_constraint": (
+                    "add activation/effect diagnostic counters before protocol"
+                ),
+            },
+        },
+    )
+
+    ledger = quality_block_ledger(
+        steps=[step],
+        loop={},
+        state_map={},
+        quality_blocks=1,
+    )
+
+    assert len(ledger) == 1
+    entry = ledger[0]
+    assert entry["source"] == "step_history"
+    assert entry["session_id"] == "patch-quality-session"
+    assert entry["session_status"] == "failed"
+    assert entry["termination_reason"] == "code_generation_failed"
+    assert entry["agent_block_reason"] == "agent_quality_blocked"
+    assert entry["failure_code"] == (
+        "agent_quality_blocked:"
+        "warehouse_validation_transfer_patch_quality_missing"
+    )
+    assert entry["quality_gate_name"] == (
+        "warehouse_validation_transfer_patch_quality"
+    )
+    assert "activation/effect diagnostic counters" in entry["retry_constraint"]
 
 
 def test_branch_lifecycle_routing_diagnostic_does_not_enter_run_validity(
