@@ -2139,6 +2139,34 @@ Phase B launch design - 2026-06-14:
   earlier independent roots to explain why visible BKS gap did not translate
   into robust broad improvement. Report:
   `scion/docs/experiments/v0.4/v04-vrp-independent-research-process-audit-20260616.md`.
+- Completed: all four process audits returned and were closed. Reports:
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep01-branch-analysis-20260616.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep02-branch-analysis-20260616.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep03-branch-analysis-20260616.md`,
+  and
+  `scion/docs/experiments/v0.4/v04-vrp-independent-research-process-audit-20260616.md`.
+- Main-session synthesis accepted:
+  `scion/docs/experiments/v0.4/v04-warehouse-vrp-process-synthesis-20260616.md`.
+  Judgement: warehouse is not a catastrophic framework regression, because
+  `3 x 24R` reached Protocol/validation/frozen and produced `2/3` single
+  promotions, but it does not recover v0.3-style continuous improvement.
+  Branch lessons are visible in every inspected warehouse session, yet many
+  traces truncate branch-lesson context and the model often fails the strict
+  machine-readable `branch_lesson_usage` linkage. The next warehouse work is a
+  targeted research-loop repair package: deterministic lesson canonicalization,
+  explicit same-mechanism/clean-fork/sibling/weak-positive proposal modes,
+  `semantic_linkage_valid` reporting, robust same-file code patching, cheap
+  warehouse operator invariants, replay-candidate materialization/closure, and
+  earlier all-tie branch stop/diagnosis.
+- VRP judgement: the independent lane has usable process logs, but it also
+  failed to turn BKS headroom into robust broad improvement. `regret4_repair`
+  broadened to `80/80` rows and was rejected at W/T/L `21/31/28`, while the
+  Or-opt VNS candidate was rejected in phase L. BKS gap is therefore targeting
+  information, not Decision evidence. The next VRP rung should be a
+  family/slice mechanism diagnostic that records construction cost,
+  post-initial-local-search cost, ALNS iterations, destroy/repair choices,
+  accepted moves, best-update count, route-count status, runtime phase split,
+  budget tier, and final gap before proposing another broad candidate.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
