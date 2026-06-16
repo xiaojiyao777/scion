@@ -2189,6 +2189,21 @@ Phase B launch design - 2026-06-14:
   regression subset (`45 passed`), `py_compile`, and `git diff --check`. Next
   real campaign must still confirm prompt manifests stay untruncated on live
   warehouse/CVRP traces.
+- Completed and accepted: no-hard-truncation follow-up to W4/P2 prompt
+  signal-density repair. User review clarified that the current research phase
+  should not impose hard prompt budgets, fixed item caps, or field-level
+  truncation on useful projected research context. Worker `Kant`
+  (`019ed11a-7885-7b40-840f-20ba66678ee9`) implemented commit `fd185cf`
+  (`fix: remove prompt research signal hard caps`): compact research signals,
+  branch lesson usage context, cross-branch research map, and generic projected
+  research values no longer apply default character caps, list caps, array
+  slicing, or ellipsis/truncation markers. Noise removal remains intact:
+  raw audit/session rows and `required_response` payloads stay out of
+  provider-visible research context. Main-session acceptance repeated the
+  focused prompt/validation/branch-lesson and proposal pipeline/artifact suites
+  together (`124 passed`), plus `py_compile` and `git diff --check`. Next
+  action returns to the live warehouse/CVRP field check: verify prompt manifests
+  from a real campaign under `fd185cf` or descendant.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

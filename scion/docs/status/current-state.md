@@ -283,6 +283,19 @@ Active work as of the latest handoff:
   proposal pipeline/artifact regression tests, `py_compile`, and
   `git diff --check`. Next warehouse/CVRP campaigns must still verify prompt
   manifests on live traces before considering the repair field-proven.
+- Accepted follow-up after user review: v0.4 research debugging should not use
+  hard prompt budgets, fixed item caps, or field-level truncation for useful
+  projected research context. Worker `Kant`
+  (`019ed11a-7885-7b40-840f-20ba66678ee9`) implemented commit `fd185cf`
+  (`fix: remove prompt research signal hard caps`). Compact research signals,
+  branch lesson usage context, cross-branch research map, and generic projected
+  research values no longer apply default character caps, list caps, array
+  slicing, or ellipsis/truncation markers; raw audit/session/`required_response`
+  noise remains excluded. Main-session acceptance repeated the prompt,
+  validation, branch-lesson, proposal pipeline, and artifact tests together
+  (`124 passed`), plus `py_compile` and `git diff --check`. The next real
+  warehouse/CVRP campaign should validate this no-hard-truncation renderer on
+  live prompt manifests.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

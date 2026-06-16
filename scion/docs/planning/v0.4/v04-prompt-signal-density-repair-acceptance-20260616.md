@@ -15,6 +15,14 @@ The repair must not compress or hide champion/source code needed for code-stage
 grounding. The target is research-signal rendering, not solver source
 visibility.
 
+Current research-stage policy: do not impose hard character budgets, fixed item
+caps, or synthetic truncation markers on useful projected research context.
+The model context window is sufficient for the current debugging phase. The
+right operation is to remove irrelevant noise and raw compliance/audit payloads,
+while preserving the complete structured signal that remains. Any future
+budgeting/truncation policy should be an explicit configurable governance or
+ablation experiment, not the default research-stage renderer.
+
 ## Trigger Evidence
 
 The warehouse `3 x 24R` longrun branch audits found provider-visible truncation
@@ -42,11 +50,11 @@ This violates the 6/11 audit and evidence-uplift roadmap direction:
 
 ### Cross-Branch Research Map
 
-Provider-visible rendering must be a compact mechanism-level map:
+Provider-visible rendering must be a structured mechanism-level map:
 
 - lesson/signature id;
 - target/action/mechanism linkage when available;
-- one-line guidance or summary;
+- guidance or summary;
 - maturity/evidence strength;
 - compact outcome/evidence counts.
 
@@ -76,10 +84,11 @@ prompt schema guidance. It must not be repeated as a large per-lesson
 
 ### Compact Research Signals
 
-This section should be a short index, not a sink for full cross-branch,
-measurement, or runtime payloads. It may point to compact dedicated sections,
-but it must not use a tiny `_bounded_json` budget that truncates the very
-research signal it is meant to protect.
+This section should be an index over the dedicated signal sections, not a sink
+for raw cross-branch, measurement, or runtime payloads. It may point to
+dedicated sections, but it must not use `_bounded_json`, character caps, list
+caps, ellipses, or truncation markers that hide useful projected research
+signal.
 
 ## Acceptance Tests
 
@@ -104,13 +113,16 @@ Run:
 
 Assertions:
 
-- rendered prompt does not contain `<truncated agentic context>`;
+- rendered prompt does not contain `<truncated agentic context>`, synthetic
+  ellipses, or field-level truncation markers;
 - `compact_research_signals`, `branch_lesson_usage_context`, and
   `cross_branch_research_map`, when present, are not `truncated`;
 - prompt does not contain raw text, raw rows, full audit, session metadata, or
   repeated per-lesson `required_response` templates;
 - prompt still contains lesson ids, maturity, target/action/mechanism linkage,
   evidence/outcome summary, and the `branch_lesson_usage` output requirement;
+- prompt still contains all projected lesson ids from the stress fixture,
+  including later records that would be hidden by fixed list caps;
 - champion/current source code remains visible;
 - context metadata remains excluded from `DecisionFeatures`.
 
@@ -134,6 +146,10 @@ git diff --check
 
 Implemented by worker `Lovelace`
 (`019ed10e-aa46-7e02-bcdc-71d5d05383b4`) and accepted by the main session.
+Follow-up no-hard-truncation correction implemented by worker `Kant`
+(`019ed11a-7885-7b40-840f-20ba66678ee9`) in commit `fd185cf`
+(`fix: remove prompt research signal hard caps`) and accepted by the main
+session.
 
 Verification:
 
@@ -143,8 +159,13 @@ Verification:
   passed (`45 passed`).
 - Python compile on touched prompt modules passed.
 - `git diff --check` passed.
+- No-hard-truncation follow-up verification repeated the prompt, validation,
+  branch-lesson, proposal pipeline, and artifact tests together with
+  `124 passed`, plus Python compile and `git diff --check`.
 
 Remaining field check: the next live warehouse/CVRP campaign should inspect
 `api_visible_prompt_manifest_*_hypothesis.json` and `prompt_context.csv` to
 confirm `compact_research_signals`, `branch_lesson_usage_context`, and
-`cross_branch_research_map` remain included/non-truncated on real traces.
+`cross_branch_research_map` remain included/non-truncated on real traces, and
+that useful projected lesson/mechanism/evidence signal is not hidden by
+field-level caps or synthetic ellipses.
