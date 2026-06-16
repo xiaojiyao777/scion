@@ -395,15 +395,33 @@ Active work as of the latest handoff:
   (`97 passed`) and a direct deterministic decision replay. The next evidence
   gate is a short warehouse production rerun from this repair commit; success
   requires validation/frozen evidence, not merely more screening rows.
-- That evidence gate is now active on WSL from commit `3ca26a0`. Launch report:
+- That evidence gate is now complete with failed research-quality acceptance.
+  It ran on WSL from commit `3ca26a0`. Launch report:
   [`../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-postrun-20260616.md).
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
   server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`.
-  Tmux session: `scion_wh_pairsignal_rerun6r_180447`. Initial health passed:
-  WSL checkout is `3ca26a0`, local `gpt-5.5` proxy is reachable, status is
-  `running`, and `run.log` reached warehouse campaign startup.
+  Wrapper exit was `0`; the run completed `6/6` effective rounds with all
+  protocol rows still in screening, no validation/frozen/promotion, no proposal
+  quality blocks, no verification failures, and no fresh-runtime replay drain.
+  This accepts the pair-signal protocol repair as fail-closed, not as warehouse
+  efficacy evidence: no candidate satisfied the new pair-level diagnostic
+  validation path. The remaining failure is research quality. The deep
+  `move_order.py` branch repeated the same `1/2/3` case W/L/T, `3/4/5` pair
+  W/L/T, and median `0.0` signal four times under
+  `SCREENING_MARGINAL_SIGNAL_CONTINUE`.
+- A generic lifecycle repair for that failure is implemented and locally
+  accepted. `BranchLifecyclePolicy` now parks loss-dominated marginal/no-effect
+  follow-ups when case losses exceed wins, pair losses are at least pair wins,
+  and median delta is non-positive. The repair uses only deterministic
+  `DecisionFeatures` numbers and generic lifecycle tiers, adds no warehouse or
+  CVRP semantics to core, and preserves pair-positive marginal branch depth.
+  Acceptance passed `181` branch lifecycle/Decision/finalizer/scheduler tests,
+  `51` orchestrator/scheduler/hygiene tests, Python compile, and
+  `git diff --check`.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse repair rerun 6R active on WSL after second targeted repair; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
+*Status: warehouse pair-signal diagnostic rerun complete and valid but failed research-quality acceptance; generic loss-dominated marginal lifecycle repair accepted locally; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -556,19 +556,32 @@ Exit criteria:
   shape. Next gate: short warehouse production rerun from the new commit,
   accepting only if pair-positive branches actually reach validation and the
   validation/frozen stages reject or confirm them with auditable evidence.
-- Active: that short warehouse production rerun is now running on WSL from
-  commit `3ca26a0`. Launch report:
+- Completed with failed research-quality acceptance: that short warehouse
+  production rerun ran on WSL from commit `3ca26a0`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-pair-signal-diagnostic-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
   server sync root:
-  `/home/clawd/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`;
-  tmux session `scion_wh_pairsignal_rerun6r_180447`. Initial health passed:
-  WSL checkout is `3ca26a0`, local `gpt-5.5` proxy is reachable, status is
-  `running`, and `run.log` reached warehouse campaign startup. Acceptance is
-  validation-behavior focused: pair-positive low-SNR branches should not remain
-  trapped as screening-only when the protocol policy applies, but
-  validation/frozen/promotion gates must remain strict.
+  `/home/clawd/research/scion-experiments/v04-warehouse-pairsignal-diagnostic-rerun6r-20260616T180447Z`.
+  The run completed `6/6` effective rounds with wrapper exit `0`, all protocol
+  rows in screening, no validation/frozen/promotion, no proposal quality blocks,
+  no verification failures, and no fresh-runtime replay drain. This accepts the
+  pair-signal protocol repair as fail-closed: the only expanded-exhausted
+  candidate became negative-median and pair-loss-heavy, so it correctly
+  abandoned. Research quality remains rejected. The deep `move_order.py` branch
+  repeated the same `1/2/3` case W/L/T, `3/4/5` pair W/L/T, and median `0.0`
+  signal four times under `SCREENING_MARGINAL_SIGNAL_CONTINUE`.
+- Implemented and locally accepted as the next repair: generic branch lifecycle
+  now parks loss-dominated marginal/no-effect follow-ups instead of allowing
+  repeated same-branch formal screening when case losses exceed wins, pair
+  losses are at least pair wins, and median delta is non-positive. This uses
+  only deterministic numeric `DecisionFeatures` and generic lifecycle tiers;
+  it adds no warehouse/CVRP semantics to core. Pair-positive marginal depth is
+  preserved. Acceptance passed `181` branch lifecycle/Decision/finalizer/
+  scheduler tests, `51` orchestrator/scheduler/hygiene tests, Python compile,
+  and `git diff --check`.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

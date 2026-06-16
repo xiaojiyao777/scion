@@ -625,6 +625,88 @@ def test_marginal_failed_followup_parks_lineage() -> None:
     assert decision.soft_abandon is True
 
 
+def test_loss_heavy_marginal_pair_followup_parks_rerun_shape() -> None:
+    shape = {
+        "n_cases": 6,
+        "wins": 1,
+        "losses": 2,
+        "ties": 3,
+        "win_rate": 1 / 6,
+        "pair_wins": 3,
+        "pair_losses": 4,
+        "pair_ties": 5,
+        "median_delta": 0.0,
+        "ci_low": -1.0,
+        "ci_high": 1.0,
+        "valid_pairs": 12,
+        "runtime_pairs": 12,
+        "runtime_ratio_median": 1.0,
+        "runtime_regression_rate": 0.0,
+    }
+    policy = BranchLifecyclePolicy()
+
+    prior_evidence = policy.decide(
+        _features(**shape, lifecycle_prior_evidence_tier="marginal")
+    )
+    active_marginal = policy.decide(
+        _features(**shape),
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+    screening_tier = policy.decide(
+        _features(**shape),
+        branch_screening_tier="no_effect",
+    )
+    marginal_streak = policy.decide(
+        _features(**shape),
+        current_marginal_no_effect_streak=1,
+    )
+
+    assert prior_evidence.action == "park_lineage"
+    assert prior_evidence.reason_codes == (
+        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+    )
+    assert active_marginal.action == "park_lineage"
+    assert active_marginal.reason_codes == (
+        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+    )
+    assert screening_tier.action == "park_lineage"
+    assert screening_tier.reason_codes == (
+        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+    )
+    assert marginal_streak.action == "park_lineage"
+    assert marginal_streak.reason_codes == (
+        SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP,
+    )
+
+
+def test_pair_positive_marginal_followup_preserves_branch_depth() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=6,
+            wins=2,
+            losses=0,
+            ties=4,
+            win_rate=1 / 3,
+            pair_wins=6,
+            pair_losses=2,
+            pair_ties=4,
+            median_delta=0.0,
+            ci_low=-0.5,
+            ci_high=0.5,
+            valid_pairs=12,
+            runtime_pairs=12,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+            lifecycle_prior_evidence_tier="marginal",
+        ),
+    )
+
+    assert decision.action == "retain_head"
+    assert decision.reason_codes == (SCREENING_MARGINAL_SIGNAL_CONTINUE,)
+    assert SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP not in decision.reason_codes
+
+
 def test_repeated_marginal_signature_parks_lineage() -> None:
     features = _features(
         n_cases=12,

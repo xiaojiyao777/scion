@@ -240,17 +240,28 @@ class BranchLifecyclePolicy:
         pair_wins = max(0, int(getattr(features, "pair_wins", 0) or 0))
         pair_losses = max(0, int(getattr(features, "pair_losses", 0) or 0))
         next_zero_win_streak = 0 if wins > 0 else current_zero_win_streak + 1
+        branch_evidence_tier = _branch_evidence_tier(
+            branch_code_status,
+            branch_screening_tier,
+        )
         prior_evidence_tier = (
             str(
                 prior_evidence_tier
                 or getattr(features, "lifecycle_prior_evidence_tier", "")
                 or ""
             )
-            or _branch_evidence_tier(
-                branch_code_status,
-                branch_screening_tier,
-            )
+            or branch_evidence_tier
         )
+        loss_heavy_followup_tier = (
+            prior_evidence_tier
+            if prior_evidence_tier in {"marginal", "no_effect"}
+            else branch_evidence_tier
+        )
+        if (
+            loss_heavy_followup_tier not in {"marginal", "no_effect"}
+            and current_marginal_no_effect_streak > 0
+        ):
+            loss_heavy_followup_tier = "marginal"
         signal_signature = decision_features_signal_signature(features)
         previous_signature = str(last_signal_signature or "")
         next_signature_repeat_count = (
@@ -326,10 +337,18 @@ class BranchLifecyclePolicy:
                 reason_codes=(SCREENING_STALE_RESCREEN_FAIL,),
             )
 
-        soft_reasons = self._soft_abandon_reasons(features, wins=wins, losses=losses)
+        soft_reasons = self._soft_abandon_reasons(
+            features,
+            wins=wins,
+            losses=losses,
+            pair_wins=pair_wins,
+            pair_losses=pair_losses,
+            evidence_tier=loss_heavy_followup_tier,
+        )
         if (
             wins > 0
             and not prior_evidence_tier
+            and loss_heavy_followup_tier not in {"marginal", "no_effect"}
             and set(soft_reasons) == {SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP}
         ):
             soft_reasons = ()
@@ -356,6 +375,8 @@ class BranchLifecyclePolicy:
                 branch_screening_tier=branch_screening_tier,
                 has_checkpoint=has_checkpoint,
                 rollback_count=rollback_count,
+                prior_evidence_tier=loss_heavy_followup_tier
+                or prior_evidence_tier,
             )
             return build(
                 action=action,
@@ -595,11 +616,21 @@ class BranchLifecyclePolicy:
         *,
         wins: int,
         losses: int,
+        pair_wins: int,
+        pair_losses: int,
+        evidence_tier: str,
     ) -> tuple[str, ...]:
         reasons: list[str] = []
         if losses > 0 and wins == 0:
             reasons.append(SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN)
-        if wins > 0 and losses >= wins + 2:
+        if (wins > 0 and losses >= wins + 2) or _loss_heavy_marginal_followup(
+            features,
+            wins=wins,
+            losses=losses,
+            pair_wins=pair_wins,
+            pair_losses=pair_losses,
+            evidence_tier=evidence_tier,
+        ):
             reasons.append(SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP)
         if (
             features.ci_low is not None
@@ -644,6 +675,7 @@ class BranchLifecyclePolicy:
         branch_screening_tier: str,
         has_checkpoint: bool,
         rollback_count: int,
+        prior_evidence_tier: str = "",
     ) -> BranchLifecycleAction:
         reason_set = set(reason_codes)
         if (
@@ -652,6 +684,8 @@ class BranchLifecyclePolicy:
         ):
             return "archive_lineage"
         tier = _branch_evidence_tier(branch_code_status, branch_screening_tier)
+        if not tier and prior_evidence_tier in {"marginal", "no_effect"}:
+            tier = prior_evidence_tier
         if tier == "weak_positive" and has_checkpoint:
             if self._rollback_budget_exhausted(
                 rollback_count=rollback_count,
@@ -863,6 +897,28 @@ def _screening_signal_tier(
     if losses > 0 or pair_losses > 0:
         return "regression"
     return "uncertain"
+
+
+def _loss_heavy_marginal_followup(
+    features: DecisionFeatures,
+    *,
+    wins: int,
+    losses: int,
+    pair_wins: int,
+    pair_losses: int,
+    evidence_tier: str,
+) -> bool:
+    if evidence_tier not in {"marginal", "no_effect"}:
+        return False
+    if wins <= 0 or losses <= wins:
+        return False
+    if pair_wins + pair_losses <= 0 or pair_losses < pair_wins:
+        return False
+    median_delta = getattr(features, "median_delta", None)
+    if median_delta is None:
+        return False
+    median = float(median_delta)
+    return isfinite(median) and median <= 0.0
 
 
 def _no_objective_effect(
