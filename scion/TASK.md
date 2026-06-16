@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse patch-quality code-feedback rerun from `5f2d418` proved code-prompt visibility but exposed retry-constraint overwrite; follow-up local repair preserves problem-owned actionable constraints*
+*Status: warehouse `5f2d418` code-feedback rerun restored promotion path but exposed retry-constraint overwrite; `3c2b7b5` retry-constraint field rerun is active on WSL*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -685,24 +685,40 @@ Exit criteria:
   rerun the short warehouse patch-quality field check from this new commit and
   accept only if repeated patch-quality omissions stop or the code prompt
   manifest proves the prior block was visible.
-- Launched: that short warehouse field check from commit `5f2d418`. Launch
+- Completed: that short warehouse field check from commit `5f2d418`. Launch
   report:
   `scion/docs/experiments/v0.4/v04-warehouse-patch-quality-codefeedback-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-patch-quality-codefeedback-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`;
   server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-patch-quality-codefeedback-rerun6r-5f2d418-20260616T210541Z`;
-  tmux session `scion_wh_codefeedback_rerun6r_5f2d418_210541`.
-  Initial health check showed `status=running`, commit `5f2d418`, and the
-  expected first hypothesis-stage validation-transfer quality block.
-  Mid-run inspection accepted the visibility repair: code manifests include
-  `agentic_prior_quality_blocks` and `Prior Agent Quality Blocks For This Code
-  Patch`. It also exposed the next quality issue: session refs/ledgers could
-  still show a generic novelty retry constraint instead of the warehouse
-  problem-owned patch-quality retry text. A local follow-up repair now
-  preserves `structured_rejection.retry_constraint` and carries
-  `missing_claims` / `missing_code_elements` into quality feedback; it is
-  locally verified and awaits commit/field rerun.
+  wrapper exit `0`; `run_validity.status=valid`; `6/6` effective rounds;
+  `5` screening rows, `1` validation row, `1` frozen row; champion advanced to
+  v2. This accepts code-prompt visibility and research-path restoration:
+  manifests include `agentic_prior_quality_blocks` and
+  `Prior Agent Quality Blocks For This Code Patch`. It does not accept the full
+  quality-feedback repair because quality-block ledgers still showed generic
+  novelty retry text instead of the warehouse problem-owned patch-quality retry
+  constraint. Follow-up commit `3c2b7b5` preserves
+  `structured_rejection.retry_constraint` and carries `missing_claims` /
+  `missing_code_elements` into quality feedback.
+- Launched: warehouse retry-constraint code-feedback field rerun from commit
+  `3c2b7b5`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-retryconstraint-codefeedback-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
+  expected server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
+  tmux session `scion_wh_retryconstraint_rerun6r_3c2b7b5_214445`.
+  Initial health check showed `status=running`, commit `3c2b7b5`, and the
+  expected first hypothesis-stage validation-transfer quality block. Acceptance
+  requires final synced artifacts and warehouse-owned retry constraints in the
+  quality-block ledger and later code prompt. Early synced status after two
+  quality blocks already shows warehouse-owned retry constraints preserved in
+  `status.json`, including the patch-quality instruction to add code-visible
+  activation/effect diagnostic counters or a named instrumentation path.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
