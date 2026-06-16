@@ -38,7 +38,7 @@ def test_warehouse_v1_bridge_preserves_surfaces_for_target_preview() -> None:
     _assert_vehicle_level_preview_passes(bridge.problem_spec)
 
 
-def test_warehouse_order_level_interface_renders_problem_owned_runtime_guidance() -> None:
+def test_warehouse_operator_interfaces_render_problem_owned_guidance() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     bridge = bridge_problem_spec_v1(spec_v1)
     adapter = WarehouseDeliveryAdapter(spec_v1)
@@ -60,7 +60,16 @@ def test_warehouse_order_level_interface_renders_problem_owned_runtime_guidance(
         order_interface
     )
     assert "O(n^2) trial evaluation" in order_interface
-    assert "Active Surface Prompt Guidance: vehicle_level" not in vehicle_interface
+    assert "Active Surface Prompt Guidance: vehicle_level" in vehicle_interface
+    assert "Removing, disabling, or replacing split/merge operators" in (
+        vehicle_interface
+    )
+    assert "operators/split_vehicle.py" in vehicle_interface
+    assert "assignment-completeness check" in vehicle_interface
+    assert "keeps every order assigned exactly once" in vehicle_interface
+    assert "Solution.assignment synchronized with Vehicle.order_ids" in (
+        vehicle_interface
+    )
     assert "O(n^2) trial evaluation" not in vehicle_interface
 
 

@@ -321,6 +321,20 @@ Active work as of the latest handoff:
   warehouse research-loop quality: branch-lesson semantic repair feedback,
   V5 solution-consistency prevention for unsafe operator removals, and stronger
   same-branch follow-up for the marginal residual-vehicle absorption signal.
+- That next repair slice is now implemented and accepted as code, not as an
+  efficacy claim. Worker `Huygens` (`019ed14e-6257-7573-9000-29a2b4fb145d`)
+  tightened branch-lesson repair skeletons, marginal same-branch hypothesis
+  prompts, and warehouse `vehicle_level` structural operator guidance. Main
+  verification passed focused branch-lesson/branch-prompt/warehouse preview
+  tests (`38 passed`), broader proposal suites (`98 passed`), branch lifecycle
+  and research-surface suites (`110 passed`), Python compile, and
+  `git diff --check`. No DecisionFeatures, Protocol, promotion, or gate
+  semantics changed. Residual risk remains: unsafe split/merge removal is still
+  prevented by problem-owned prompt/spec guidance, not by a deterministic
+  operator-surface pre-code blocker. The next gate is a short warehouse live
+  field check that accepts only if research-loop behavior improves, especially
+  fewer semantic quality blocks, no repeat V5 unsafe-removal failure, and a
+  same-mechanism causal follow-up on any retained marginal branch.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

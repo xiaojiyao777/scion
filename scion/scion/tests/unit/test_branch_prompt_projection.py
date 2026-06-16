@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.core.branch_hygiene import (
+    branch_hygiene_context,
     branch_hygiene_guidance,
     record_branch_lifecycle_policy_block,
 )
@@ -280,3 +281,53 @@ def test_same_mechanism_constraints_are_prominent_in_hypothesis_prompt() -> None
     assert "telemetry_wiring to modify or integrate" in rendered
     assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in rendered
     assert "new or unrelated mechanism requires a clean branch or clean fork" in rendered
+
+
+def test_marginal_same_branch_prompt_requires_case_causal_refinement() -> None:
+    branch = _branch("marginal123", branch_code_status="active_marginal")
+    branch.last_screening_feedback_tier = "marginal"
+    branch.last_telemetry_outcome = "case_level_positive_signal"
+    branch.branch_mechanism_ids = ("residual_vehicle_absorption",)
+    branch.branch_evidence_summary = {
+        "tier": "marginal",
+        "wins": 2,
+        "losses": 0,
+        "ties": 8,
+        "median_delta": 50,
+        "case_level_winners": [
+            {"case_id": "instance_prod_scr_micro03.json", "result": "win"},
+            {"case_id": "instance_prod_scr_s02.json", "result": "win"},
+        ],
+        "phase_activation_summary": {
+            "activation_status": "observed",
+            "objective_effect_status": "mixed_positive",
+        },
+    }
+
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Warehouse assignment problem",
+            "research_surfaces": "Research surfaces: vehicle_level",
+            "operator_categories": "vehicle_level",
+            "available_actions": "modify, create_new, remove",
+            "targetable_files": "operators/*.py",
+            "champion_operators_code": "# champion code",
+            "champion_stats": "Champion baseline",
+            "experiment_history": "(none)",
+            "blacklist_summary": "(none)",
+            "active_hyp_summary": "(none)",
+            "sibling_summary": "(none)",
+            "branch_hygiene": branch_hygiene_context(branch),
+            "branch_hygiene_guidance": branch_hygiene_guidance(branch),
+        }
+    )
+    rendered = "\n".join(str(block["text"]) for block in system_blocks) + user_prompt
+
+    assert "## Same-Mechanism Follow-up Constraints" in rendered
+    assert "protected_mechanism_ids=residual_vehicle_absorption" in rendered
+    assert "Marginal same-branch refinement" in rendered
+    assert "positive_cases=instance_prod_scr_micro03.json,instance_prod_scr_s02.json" in rendered
+    assert "effect_status=mixed_positive" in rendered
+    assert "causal effect_path" in rendered
+    assert "no_op_condition guard" in rendered
+    assert "broad unrelated exploration" in rendered

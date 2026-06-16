@@ -2235,6 +2235,39 @@ Phase B launch design - 2026-06-14:
   negative screening branches, and one marginal active
   `residual_vehicle_absorption` branch that needs structured follow-up rather
   than broad new exploration.
+- Completed and accepted as a code repair slice, not an efficacy claim:
+  warehouse research-loop quality repair after the no-hard-truncation field
+  check failed research quality. Worker `Huygens`
+  (`019ed14e-6257-7573-9000-29a2b4fb145d`) implemented the patch and main
+  session verified it. The repair keeps v3 boundaries intact: no
+  `DecisionFeatures`, Protocol, gate, or promotion semantics were changed.
+  Changes:
+  - Branch-lesson repair skeletons now emit deterministic
+    `required_item_fields`, `expected_linkage`, and `corrected_fields` for
+    lesson id, target file, action, mechanism id/family, and changed
+    dimensions, making semantic mismatch repair directly actionable.
+  - Same-mechanism hypothesis prompts now add marginal same-branch refinement
+    guidance when branch hygiene exposes `active_marginal`/`marginal` evidence:
+    positive cases are named when available, and the next hypothesis must state
+    causal `effect_path`, preserve or narrow the successful trigger, and include
+    a `no_op_condition` guard for tie-heavy/loss-prone cases.
+  - Warehouse `vehicle_level` problem-owned prompt guidance now warns against
+    deleting, disabling, or replacing split/merge structural operators such as
+    `split_vehicle.py`/`merge_vehicles.py` unless the hypothesis and
+    implementation state an explicit replacement path preserving assignment
+    completeness and `Solution.assignment`/`Vehicle.order_ids` sync.
+  Acceptance commands run by the main session:
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/unit/core/test_branch_lesson_usage.py scion/scion/tests/unit/test_branch_prompt_projection.py scion/scion/tests/unit/test_warehouse_target_preview.py`
+  (`38 passed`);
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/unit/test_hypothesis_context_profiles.py scion/scion/tests/test_proposal_validation.py scion/scion/tests/unit/core/test_proposal_pipeline_hypothesis.py scion/scion/tests/unit/core/test_proposal_pipeline_session_controls.py scion/scion/tests/test_proposal_trajectory_artifacts.py`
+  (`98 passed`);
+  `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/unit/core/test_branch_hygiene_status.py scion/scion/tests/unit/core/test_branch_lifecycle_policy.py scion/scion/tests/test_scheduler.py scion/scion/tests/unit/test_research_surfaces_generic_context.py`
+  (`110 passed`);
+  Python compile for touched prompt/branch-lesson/warehouse adapter modules; and
+  `git diff --check`. Residual risk: warehouse unsafe split/merge removal is
+  currently problem-owned prompt/spec guidance, not a deterministic operator
+  pre-code blocker. The next gate is a short warehouse live field check focused
+  on research quality, not prompt visibility.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

@@ -291,6 +291,34 @@ def test_same_branch_weak_positive_imperfect_usage_is_advisory() -> None:
     )
     assert skeleton["diagnostic"] == "semantic_mismatch"
     assert set(skeleton["missing_fields"]) >= {"target_file", "action", "mechanism"}
+    assert skeleton["required_item_fields"] == [
+        "lesson_id",
+        "target_file",
+        "action",
+        "mechanism_id",
+        "mechanism_family",
+        "changed_dimensions",
+    ]
+    assert skeleton["expected_linkage"]["candidate_lesson_ids"] == [
+        "lesson:local-imperfect"
+    ]
+    assert skeleton["expected_linkage"]["target_file"] == "components/common.py"
+    assert skeleton["expected_linkage"]["action"] == "modify"
+    assert skeleton["expected_linkage"]["mechanism_ids"] == ["generic_signal"]
+    assert skeleton["expected_linkage"]["mechanism_families"] == ["family_a"]
+    assert skeleton["expected_linkage"]["changed_dimensions"] == [
+        "mechanism_family",
+        "target_file",
+    ]
+    assert skeleton["corrected_fields"]["lesson_id"] == "lesson:local-imperfect"
+    assert skeleton["corrected_fields"]["target_file"] == "components/common.py"
+    assert skeleton["corrected_fields"]["action"] == "modify"
+    assert skeleton["corrected_fields"]["mechanism_id"] == "generic_signal"
+    assert skeleton["corrected_fields"]["mechanism_family"] == "family_a"
+    assert skeleton["corrected_fields"]["changed_dimensions"] == [
+        "mechanism_family",
+        "target_file",
+    ]
 
 
 def test_metadata_only_lesson_usage_fails_requirement() -> None:

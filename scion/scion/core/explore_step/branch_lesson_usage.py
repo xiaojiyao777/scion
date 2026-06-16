@@ -663,6 +663,14 @@ def branch_lesson_usage_repair_skeleton(
             "diagnostic": diagnostic,
             "expected_linkage": expected,
             "corrected_fields": corrected,
+            "required_item_fields": [
+                "lesson_id",
+                "target_file",
+                "action",
+                "mechanism_id",
+                "mechanism_family",
+                "changed_dimensions",
+            ],
             "missing_fields": missing,
             "normalized_usage": normalized,
         }
@@ -884,12 +892,22 @@ def _expected_linkage_projection(
                 if _token(value)
             }
         )
+    mechanism_families = sorted(
+        {
+            _token(value)
+            for value in _string_list(metadata.get("candidate_mechanism_families"))
+            if _token(value)
+        }
+    )
     return _drop_empty(
         {
             "target_file": target,
             "action": action,
             "mechanisms": mechanisms,
+            "mechanism_ids": mechanisms,
+            "mechanism_families": mechanism_families,
             "candidate_lesson_ids": sorted(_metadata_candidate_lesson_ids(metadata)),
+            "changed_dimensions": _expected_changed_dimensions(metadata),
         }
     )
 
@@ -903,8 +921,14 @@ def _corrected_fields_projection(
     mechanism = ""
     if isinstance(mechanisms, (list, tuple)) and mechanisms:
         mechanism = str(mechanisms[0])
+    mechanism_families = expected.get("mechanism_families")
+    mechanism_family = ""
+    if isinstance(mechanism_families, (list, tuple)) and mechanism_families:
+        mechanism_family = str(mechanism_families[0])
     return _drop_empty(
         {
+            "lesson_id": _first_expected_lesson_id(expected)
+            or (first_item.get("lesson_id") if first_item else ""),
             "target_file": (
                 expected.get("target_file")
                 or (first_item.get("target_file") if first_item else "")
@@ -917,6 +941,17 @@ def _corrected_fields_projection(
                 mechanism
                 or (first_item.get("mechanism") if first_item else "")
                 or (first_item.get("mechanism_family") if first_item else "")
+            ),
+            "mechanism_id": (
+                mechanism or (first_item.get("mechanism") if first_item else "")
+            ),
+            "mechanism_family": (
+                mechanism_family
+                or (first_item.get("mechanism_family") if first_item else "")
+            ),
+            "changed_dimensions": _corrected_changed_dimensions(
+                first_item,
+                expected,
             ),
         }
     )
@@ -945,6 +980,44 @@ def _repair_missing_fields(
     if diagnostic == "linkage_unrecognized":
         missing.append("recognized_linkage_fields")
     return list(dict.fromkeys(missing))
+
+
+def _expected_changed_dimensions(metadata: Mapping[str, Any]) -> list[str]:
+    values = _string_list(metadata.get("required_contrast_dimensions"))
+    if values:
+        return sorted(dict.fromkeys(values))
+    return [
+        "target_file",
+        "action",
+        "mechanism_id",
+        "mechanism_family",
+        "effect_path",
+        "no_op_condition",
+    ]
+
+
+def _first_expected_lesson_id(expected: Mapping[str, Any]) -> str:
+    ids = expected.get("candidate_lesson_ids")
+    if isinstance(ids, (list, tuple)) and ids:
+        return _clean_text(ids[0])
+    return ""
+
+
+def _corrected_changed_dimensions(
+    first_item: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    existing = _string_list(first_item.get("changed_dimensions"))
+    if existing:
+        return existing
+    expected_dimensions = expected.get("changed_dimensions")
+    if isinstance(expected_dimensions, (list, tuple)):
+        return [
+            str(item).strip()
+            for item in expected_dimensions
+            if str(item).strip()
+        ]
+    return []
 
 
 def _first_normalized_item(normalized: Mapping[str, Any]) -> Mapping[str, Any]:

@@ -108,6 +108,26 @@ research_surfaces:
       modify_allowed: true
       remove_allowed: true
       singleton: false
+    prompt:
+      hypothesis_guidance: >-
+        Vehicle-level hypotheses must name the structural assignment invariant
+        they preserve. Removing, disabling, or replacing split/merge operators
+        such as split_vehicle.py or merge_vehicles.py is allowed only when the
+        hypothesis states an explicit replacement path that keeps every order
+        assigned exactly once and keeps Solution.assignment synchronized with
+        Vehicle.order_ids after every move.
+      implementation_guidance: >-
+        Structural vehicle operators must update both vehicle.order_ids and
+        solution.assignment together, preserve locked orders, call
+        remove_empty_vehicles after moves, and return the original solution
+        when the replacement path cannot prove capacity, region, category,
+        pickup, hazard, and assignment completeness constraints.
+      anti_patterns: >-
+        Do not delete, disable, or neuter split/merge behavior merely because a
+        prior branch failed. Do not remove operators/split_vehicle.py or an
+        equivalent structural vehicle split/merge path without an explicit
+        assignment-completeness check, a synchronized reassignment plan, and a
+        replacement mechanism that preserves all orders.
 
 objective_policy:
   mode: lexicographic

@@ -443,6 +443,7 @@ def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
         _extract_guidance_value(guidance, "forbidden_mechanism_policy")
         or "no_unrelated_mechanism_ids"
     )
+    marginal_guidance = _marginal_same_branch_followup_guidance(context)
     return (
         "## Same-Mechanism Follow-up Constraints\n"
         f"protected_mechanism_ids={protected}\n"
@@ -461,6 +462,7 @@ def _same_mechanism_followup_constraints(context: Mapping[str, Any]) -> str:
         "expected_telemetry or precise instrumentation. "
         "A new or unrelated mechanism requires a clean branch or clean fork "
         "before generation."
+        f"{marginal_guidance}"
     )
 
 
@@ -482,6 +484,69 @@ def _prompt_same_mechanism_allowed_actions(guidance: str) -> str:
 def _extract_guidance_value(text: str, key: str) -> str:
     match = re.search(rf"\b{re.escape(key)}=([^;.\n]+)", text)
     return match.group(1).strip() if match else ""
+
+
+def _marginal_same_branch_followup_guidance(context: Mapping[str, Any]) -> str:
+    hygiene = context.get("branch_hygiene")
+    if not isinstance(hygiene, Mapping):
+        return ""
+    status = str(hygiene.get("branch_code_status") or "").strip()
+    tier = str(hygiene.get("last_screening_feedback_tier") or "").strip()
+    if status != "active_marginal" and tier != "marginal":
+        return ""
+    positive_cases = _case_ids_from_hygiene(hygiene.get("case_level_winners"))
+    if not positive_cases:
+        positive_cases = _case_ids_from_hygiene(
+            hygiene.get("case_level_positive_cases")
+        )
+    case_text = ",".join(positive_cases) if positive_cases else "available positive cases"
+    phase = hygiene.get("phase_activation_summary")
+    effect_status = ""
+    activation_status = ""
+    if isinstance(phase, Mapping):
+        effect_status = str(
+            phase.get("objective_effect_status") or phase.get("effect_status") or ""
+        ).strip()
+        activation_status = str(
+            phase.get("activation_evidence_status")
+            or phase.get("activation_status")
+            or ""
+        ).strip()
+    evidence_bits = []
+    if activation_status:
+        evidence_bits.append(f"activation_status={activation_status}")
+    if effect_status:
+        evidence_bits.append(f"effect_status={effect_status}")
+    evidence_text = "; " + "; ".join(evidence_bits) if evidence_bits else ""
+    return (
+        "\nMarginal same-branch refinement: positive_cases="
+        f"{case_text}{evidence_text}. The next same-branch hypothesis must "
+        "explain the causal effect_path from the protected mechanism to those "
+        "positive cases, preserve or narrow the successful trigger, and state "
+        "a no_op_condition guard for non-matching, tie-heavy, or loss-prone "
+        "cases. Do not use this branch for broad unrelated exploration; if the "
+        "effect_path or no-op guard cannot be named, require a clean branch or "
+        "clean fork."
+    )
+
+
+def _case_ids_from_hygiene(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    case_ids: list[str] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        case_id = str(
+            item.get("case_id")
+            or item.get("case")
+            or item.get("instance")
+            or item.get("name")
+            or ""
+        ).strip()
+        if case_id:
+            case_ids.append(case_id)
+    return case_ids[:8]
 
 
 def _compact_research_signals(
