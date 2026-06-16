@@ -2268,6 +2268,22 @@ Phase B launch design - 2026-06-14:
   currently problem-owned prompt/spec guidance, not a deterministic operator
   pre-code blocker. The next gate is a short warehouse live field check focused
   on research quality, not prompt visibility.
+- Launched: warehouse research-loop repair short `6R` field check. Launch
+  report:
+  `scion/docs/experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`.
+  Server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`.
+  It runs commit `0bb99ec`, local `gpt-5.5`, warehouse production
+  protocol/split/seeds, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, `time_limit_sec=30`, disabled early stop,
+  and `6` rounds. Acceptance is research-quality focused: reconcile validity
+  and artifacts, then check whether semantic lesson quality blocks decrease or
+  repair cleanly, unsafe split/merge removal no longer repeats as a
+  `V5_solution_consistency` failure, and retained marginal branches receive
+  same-mechanism causal follow-up with `effect_path`/`no_op_condition` rather
+  than broad unrelated exploration.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

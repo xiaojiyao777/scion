@@ -335,6 +335,17 @@ Active work as of the latest handoff:
   field check that accepts only if research-loop behavior improves, especially
   fewer semantic quality blocks, no repeat V5 unsafe-removal failure, and a
   same-mechanism causal follow-up on any retained marginal branch.
+- That gate is now running on WSL. Launch report:
+  [`../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-launch-20260616.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`.
+  It runs commit `0bb99ec`, local `gpt-5.5`, `6` rounds, disabled early stop,
+  `measurement_governance=on`, and `compact-measurement-diagnostics`. Initial
+  health is good: WSL preflight passed, campaign entered `status=running`, and
+  `run.log` reached warehouse campaign startup. Acceptance is explicitly
+  research-quality focused, not prompt-visibility-only.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
