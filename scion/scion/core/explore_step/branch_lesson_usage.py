@@ -505,6 +505,71 @@ def branch_lesson_usage_pre_code_block_reason(
     )
 
 
+def canonical_branch_lesson_usage_repair(
+    value: Any,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+    hypothesis: HypothesisProposal | None = None,
+    allow_machine_reject: bool = True,
+) -> dict[str, Any]:
+    """Return a deterministic structure-only repair for lesson usage.
+
+    This helper never invents branch-lesson usage from an empty or metadata-only
+    object.  It only canonicalizes concrete usage that already names/applies a
+    lesson but missed machine-readable linkage fields the repair skeleton can
+    derive from the approved hypothesis and requirement metadata.
+    """
+
+    metadata = metadata or {}
+    if not _metadata_pre_code_block_required(metadata):
+        return {}
+    if not isinstance(value, Mapping) or not _specific_signal_present(value):
+        return {}
+    skeleton = branch_lesson_usage_repair_skeleton(
+        value,
+        metadata=metadata,
+        hypothesis=hypothesis,
+        allow_machine_reject=allow_machine_reject,
+    )
+    if skeleton.get("diagnostic") not in {
+        "semantic_mismatch",
+        "linkage_unrecognized",
+    }:
+        return {}
+    corrected = skeleton.get("corrected_fields")
+    if not isinstance(corrected, Mapping):
+        return {}
+    repair_item = _canonical_repair_item(corrected)
+    if not repair_item:
+        return {}
+    repaired_usage = _canonicalized_usage_with_item(value, repair_item, metadata)
+    if (
+        branch_lesson_usage_requirement_diagnostic(
+            repaired_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+            allow_machine_reject=allow_machine_reject,
+        )
+        != "satisfied"
+    ):
+        return {}
+    return {
+        "schema_version": "branch_lesson_usage_canonical_repair.v1",
+        "proposal_visibility_only": True,
+        "proposal_guidance_only": True,
+        "decision_features_excluded": True,
+        "branch_lesson_usage": repaired_usage,
+        "repair_skeleton": skeleton,
+        "repair_attribution": {
+            "schema_version": "branch_lesson_usage_canonical_repair.v1",
+            "source": "branch_lesson_usage_repair_skeleton",
+            "diagnostic": skeleton.get("diagnostic"),
+            "corrected_fields": dict(corrected),
+            "decision_features_excluded": True,
+        },
+    }
+
+
 def branch_lesson_usage_requirement_satisfied(
     value: Any,
     *,
@@ -723,6 +788,98 @@ def _repair_skeleton_hint(skeleton: Mapping[str, Any]) -> str:
         + "; ".join(parts)
         + "."
     )
+
+
+def _canonical_repair_item(corrected: Mapping[str, Any]) -> dict[str, Any]:
+    lesson_id = _clean_text(corrected.get("lesson_id"))
+    target_file = _path_token(corrected.get("target_file"))
+    action = _token(corrected.get("action"))
+    mechanism_id = _token(
+        corrected.get("mechanism_id") or corrected.get("mechanism")
+    )
+    mechanism_family = _token(corrected.get("mechanism_family"))
+    changed_dimensions = _string_list(corrected.get("changed_dimensions"))
+    if not (
+        lesson_id
+        and target_file
+        and action
+        and (mechanism_id or mechanism_family)
+        and changed_dimensions
+    ):
+        return {}
+    return _drop_empty(
+        {
+            "lesson_id": lesson_id,
+            "target_file": target_file,
+            "action": action,
+            "mechanism_id": mechanism_id,
+            "mechanism_family": mechanism_family,
+            "changed_dimensions": changed_dimensions,
+            "canonical_repair_source": "branch_lesson_usage_repair_skeleton",
+        }
+    )
+
+
+def _canonicalized_usage_with_item(
+    value: Mapping[str, Any],
+    repair_item: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    repaired = _generic_mapping(value)
+    target_field = _canonical_repair_target_field(repaired, metadata)
+    existing = repaired.get(target_field)
+    if isinstance(existing, list) and existing:
+        first = existing[0]
+        existing[0] = (
+            _drop_empty({**first, **repair_item})
+            if isinstance(first, Mapping)
+            else dict(repair_item)
+        )
+    elif isinstance(existing, Mapping):
+        repaired[target_field] = _drop_empty({**existing, **repair_item})
+    else:
+        repaired[target_field] = [dict(repair_item)]
+    if target_field == "contrasted_lessons":
+        claim = repaired.get("clean_fork_diversity_claim")
+        if isinstance(claim, Mapping):
+            repaired["clean_fork_diversity_claim"] = _drop_empty(
+                {
+                    **claim,
+                    "changed_dimensions": repair_item.get("changed_dimensions"),
+                    "sibling_duplication_allowed": False,
+                }
+            )
+        else:
+            repaired["clean_fork_diversity_claim"] = {
+                "changed_dimensions": repair_item.get("changed_dimensions"),
+                "sibling_duplication_allowed": False,
+            }
+    return repaired
+
+
+def _canonical_repair_target_field(
+    value: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> str:
+    required_fors = set(_metadata_required_fors(metadata))
+    if required_fors & _STRICT_REQUIRED_FOR:
+        if value.get("contrasted_lessons"):
+            return "contrasted_lessons"
+        if value.get("rejected_lessons"):
+            return "rejected_lessons"
+        return "contrasted_lessons"
+    if value.get("preserved_same_branch_lesson"):
+        return "preserved_same_branch_lesson"
+    for field in (
+        "contrasted_lessons",
+        "borrowed_lessons",
+        "avoided_lessons",
+        "rejected_weak_positive_lessons",
+        "rejected_lessons",
+    ):
+        if value.get(field):
+            return field
+    return "contrasted_lessons"
 
 
 def branch_lesson_usage_report_projection(value: Any) -> dict[str, Any]:

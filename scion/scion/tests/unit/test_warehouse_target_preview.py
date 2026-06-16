@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scion.config.problem import ProblemSpec
+from scion.core.models import PatchProposal
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
 from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
@@ -73,6 +74,81 @@ def test_warehouse_operator_interfaces_render_problem_owned_guidance() -> None:
     assert "O(n^2) trial evaluation" not in vehicle_interface
 
 
+def test_warehouse_preview_rejects_existing_operator_module_delete() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    surface = _surface(spec_v1, "order_level")
+
+    preview = adapter.preview_research_surface_patch(
+        patch=PatchProposal(
+            file_path="operators/swap_orders.py",
+            action="delete",
+            code_content="",
+        ),
+        surface=surface,
+    )
+
+    assert preview["passed"] is False
+    assert preview["verification_run"] is False
+    assert any("warehouse_operator_module_delete" in issue for issue in preview["issues"])
+    assert preview["checks"][0]["name"] == "warehouse_operator_module_delete"
+
+
+def test_warehouse_preview_rejects_existing_operator_module_remove() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    surface = _surface(spec_v1, "order_level")
+
+    preview = adapter.preview_research_surface_patch(
+        patch=PatchProposal(
+            file_path="operators/move_order.py",
+            action="remove",
+            code_content="",
+        ),
+        surface=surface,
+    )
+
+    assert preview["passed"] is False
+    assert any("warehouse_operator_module_delete" in issue for issue in preview["issues"])
+
+
+def test_warehouse_preview_rejects_undeclared_internal_state_key() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    surface = _surface(spec_v1, "order_level")
+    code = """
+from operators.base import Operator
+
+
+class MoveOrder(Operator):
+    def __init__(self, instance, phase=1):
+        self.instance = instance
+        self.phase = phase
+
+    def execute(self, solution, rng):
+        work = {
+            vid: {"pallets": 0, "hazard": 0}
+            for vid in sorted(solution.vehicles)
+        }
+        return work["v1"]["capacity"]
+"""
+
+    preview = adapter.preview_research_surface_patch(
+        patch=PatchProposal(
+            file_path="operators/move_order.py",
+            action="modify",
+            code_content=code,
+        ),
+        surface=surface,
+    )
+
+    assert preview["passed"] is False
+    assert any(
+        "warehouse_operator_internal_state_key" in issue
+        for issue in preview["issues"]
+    )
+
+
 def _assert_vehicle_level_preview_passes(spec: ProblemSpec) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = ProposalToolContext(
@@ -97,3 +173,7 @@ def _assert_vehicle_level_preview_passes(spec: ProblemSpec) -> None:
     assert observation.structured_payload["issues"] == []
     assert observation.structured_payload["surface"]["name"] == "vehicle_level"
     assert observation.structured_payload["declared_targets"] == ["operators/*.py"]
+
+
+def _surface(spec, name: str):
+    return next(surface for surface in spec.research_surfaces if surface.name == name)

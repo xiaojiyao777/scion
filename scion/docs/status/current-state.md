@@ -335,17 +335,35 @@ Active work as of the latest handoff:
   field check that accepts only if research-loop behavior improves, especially
   fewer semantic quality blocks, no repeat V5 unsafe-removal failure, and a
   same-mechanism causal follow-up on any retained marginal branch.
-- That gate is now running on WSL. Launch report:
+- That gate is complete and failed research-quality acceptance. Launch report:
   [`../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-launch-20260616.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-postrun-20260616.md).
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`;
   server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-research-loop-repair-short-6r-20260616T165145Z`.
-  It runs commit `0bb99ec`, local `gpt-5.5`, `6` rounds, disabled early stop,
-  `measurement_governance=on`, and `compact-measurement-diagnostics`. Initial
-  health is good: WSL preflight passed, campaign entered `status=running`, and
-  `run.log` reached warehouse campaign startup. Acceptance is explicitly
-  research-quality focused, not prompt-visibility-only.
+  It ran commit `0bb99ec`, local `gpt-5.5`, `6` rounds, disabled early stop,
+  `measurement_governance=on`, and `compact-measurement-diagnostics`. The run
+  is valid and complete (`6/6` effective rounds, `7` proposal attempts, `4`
+  screening rows), but all formal rows stayed in screening, no validation/
+  frozen/promotion occurred, one `branch_lesson_usage_semantic_mismatch` block
+  remained, two verification-consumed failures occurred, and one same-branch
+  follow-up collapsed to all-tie evidence with
+  `RUNTIME_TIE_FRESH_CHAMPION_REQUIRED`. Verdict: prompt/source visibility is
+  no longer the immediate blocker, but warehouse research-loop quality is still
+  unacceptable.
+- Accepted next repair after this failed gate: canonical proposal-only
+  `branch_lesson_usage` repair for concrete usage that already carries a
+  specific lesson signal, plus a warehouse problem-owned operator preview that
+  rejects deletion of existing imported operator modules and catches undeclared
+  local nested dict state-key references before heavy V5 verification. This
+  does not change `DecisionFeatures`, Protocol, promotion, or gate semantics.
+  Focused acceptance passed branch-lesson, warehouse preview, proposal/context,
+  agentic schema/session, trajectory/artifact, and research-surface/AST
+  contract suites (`218` tests total), plus Python compile. The repair is code
+  accepted only; it still needs a short live warehouse rerun before any
+  efficacy claim.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

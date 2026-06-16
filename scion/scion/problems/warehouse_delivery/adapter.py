@@ -6,6 +6,7 @@ recomputation) is encapsulated here so Scion core never imports surrogate direct
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -176,6 +177,73 @@ Frozen files (do not modify): {frozen}"""
         if not guidance:
             return interface
         return f"{interface}\n\n{guidance}"
+
+    def preview_research_surface_patch(
+        self,
+        *,
+        patch: Any,
+        surface: Any | None = None,
+        base_workspace: str | None = None,
+        branch_workspace: str | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned cheap preview for warehouse operator patches.
+
+        This deliberately stays short of running verification.  It catches
+        warehouse-specific structural risks before the candidate reaches heavy
+        solution-consistency checks.
+        """
+
+        del base_workspace, branch_workspace
+        surface_name = str(getattr(surface, "name", "") or "").strip()
+        issues: list[str] = []
+        checks: list[dict[str, Any]] = []
+        for change in _patch_changes(patch):
+            file_path = _normalize_patch_path(getattr(change, "file_path", ""))
+            action = str(getattr(change, "action", "") or "").strip()
+            code = str(getattr(change, "code_content", "") or "")
+            if _is_existing_operator_module(file_path) and action in {
+                "delete",
+                "remove",
+            }:
+                detail = (
+                    f"{file_path} is statically imported by the warehouse "
+                    "operator package, solver, and registry. Use a guarded "
+                    "modify/no-op or an explicit registry/weight mechanism; "
+                    "do not delete an existing operator module."
+                )
+                issues.append(
+                    f"warehouse_operator_module_delete: {detail}"
+                )
+                checks.append(
+                    {
+                        "name": "warehouse_operator_module_delete",
+                        "passed": False,
+                        "detail": detail,
+                    }
+                )
+                continue
+            if file_path.startswith("operators/") and file_path.endswith(".py"):
+                _preview_operator_code_static_state(
+                    code,
+                    issues=issues,
+                    checks=checks,
+                )
+        if not checks:
+            checks.append(
+                {
+                    "name": "warehouse_operator_surface_preview",
+                    "passed": True,
+                    "detail": "no warehouse-specific preview issues detected",
+                }
+            )
+        return {
+            "passed": not issues,
+            "surface": surface_name,
+            "checks": checks,
+            "issues": issues,
+            "workspace_materialized": False,
+            "verification_run": False,
+        }
 
     # --- Instance / output ---
 
@@ -436,6 +504,148 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
     if anti_patterns:
         lines.append(f"- anti_patterns: {anti_patterns}")
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+_EXISTING_OPERATOR_MODULES = frozenset(
+    {
+        "operators/change_vehicle_type.py",
+        "operators/destroy_rebuild.py",
+        "operators/merge_vehicles.py",
+        "operators/move_order.py",
+        "operators/split_vehicle.py",
+        "operators/swap_orders.py",
+    }
+)
+
+
+def _patch_changes(patch: Any) -> tuple[Any, ...]:
+    iter_changes = getattr(patch, "iter_file_changes", None)
+    if callable(iter_changes):
+        try:
+            return tuple(iter_changes())
+        except Exception:
+            return (patch,)
+    additional = getattr(patch, "additional_changes", ()) or ()
+    return (patch, *tuple(additional))
+
+
+def _normalize_patch_path(value: Any) -> str:
+    return str(value or "").replace("\\", "/").lstrip("/").strip()
+
+
+def _is_existing_operator_module(file_path: str) -> bool:
+    return _normalize_patch_path(file_path) in _EXISTING_OPERATOR_MODULES
+
+
+def _preview_operator_code_static_state(
+    code: str,
+    *,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError as exc:
+        detail = f"operator code does not parse: {exc.msg}"
+        issues.append(f"warehouse_operator_static_parse: {detail}")
+        checks.append(
+            {
+                "name": "warehouse_operator_static_parse",
+                "passed": False,
+                "detail": detail,
+            }
+        )
+        return
+    declared_keys = _declared_dict_literal_keys(tree)
+    unknown_refs = _unknown_nested_dict_key_refs(tree, declared_keys)
+    if unknown_refs:
+        detail = (
+            "candidate operator references internal state keys not declared "
+            f"in their local dict literals: {', '.join(unknown_refs[:5])}"
+        )
+        issues.append(f"warehouse_operator_internal_state_key: {detail}")
+        checks.append(
+            {
+                "name": "warehouse_operator_internal_state_key",
+                "passed": False,
+                "detail": detail,
+            }
+        )
+        return
+    checks.append(
+        {
+            "name": "warehouse_operator_static_state_keys",
+            "passed": True,
+            "detail": "local dict state key references are internally declared",
+        }
+    )
+
+
+def _declared_dict_literal_keys(tree: ast.AST) -> dict[str, set[str]]:
+    declared: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            keys = _dict_literal_string_keys(node.value)
+            if not keys:
+                continue
+            for target in node.targets:
+                name = _assigned_state_name(target)
+                if name:
+                    declared.setdefault(name, set()).update(keys)
+        elif isinstance(node, ast.AnnAssign):
+            keys = _dict_literal_string_keys(node.value)
+            name = _assigned_state_name(node.target)
+            if name and keys:
+                declared.setdefault(name, set()).update(keys)
+    return declared
+
+
+def _assigned_state_name(target: ast.AST) -> str:
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+        return target.value.id
+    return ""
+
+
+def _dict_literal_string_keys(value: ast.AST | None) -> set[str]:
+    if isinstance(value, ast.Dict):
+        return {
+            key.value
+            for key in value.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+    if isinstance(value, ast.DictComp) and isinstance(value.value, ast.Dict):
+        return _dict_literal_string_keys(value.value)
+    return set()
+
+
+def _unknown_nested_dict_key_refs(
+    tree: ast.AST,
+    declared_keys: Mapping[str, set[str]],
+) -> list[str]:
+    unknown: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Subscript):
+            continue
+        key = _constant_subscript_key(node.slice)
+        if not key:
+            continue
+        base = node.value
+        if not isinstance(base, ast.Subscript) or not isinstance(base.value, ast.Name):
+            continue
+        state_name = base.value.id
+        known = declared_keys.get(state_name)
+        if known is None or key in known:
+            continue
+        unknown.append(f"{state_name}[...][{key!r}]")
+    return sorted(dict.fromkeys(unknown))
+
+
+def _constant_subscript_key(slice_node: ast.AST) -> str:
+    if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+        return slice_node.value
+    return ""
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ from scion.core.explore_step.branch_lesson_usage import (
     branch_lesson_usage_requirement_from_records,
     branch_lesson_usage_requirement_satisfied,
     branch_lesson_usage_requirement_metadata,
+    canonical_branch_lesson_usage_repair,
 )
 from scion.core.explore_step.pipeline import ExploreStepPipeline
 from scion.core.models import (
@@ -319,6 +320,73 @@ def test_same_branch_weak_positive_imperfect_usage_is_advisory() -> None:
         "mechanism_family",
         "target_file",
     ]
+
+
+def test_canonical_repair_fills_strict_linkage_from_skeleton() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:repairable")]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:repairable",
+                    "mechanism_story": "generic_signal",
+                    "changed_dimensions": ["mechanism_family"],
+                }
+            ]
+        }
+    )
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            hypothesis.branch_lesson_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "linkage_unrecognized"
+    )
+    repair = canonical_branch_lesson_usage_repair(
+        hypothesis.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
+
+    repaired_usage = repair["branch_lesson_usage"]
+    repaired_item = repaired_usage["contrasted_lessons"][0]
+    assert repaired_item["lesson_id"] == "lesson:repairable"
+    assert repaired_item["target_file"] == "components/common.py"
+    assert repaired_item["action"] == "modify"
+    assert repaired_item["mechanism_id"] == "generic_signal"
+    assert repaired_item["changed_dimensions"] == ["mechanism_family"]
+    assert (
+        branch_lesson_usage_requirement_diagnostic(
+            repaired_usage,
+            metadata=metadata,
+            hypothesis=hypothesis,
+        )
+        == "satisfied"
+    )
+    assert repair["repair_attribution"]["decision_features_excluded"] is True
+
+
+def test_canonical_repair_does_not_create_missing_usage() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:missing")]
+    }
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert (
+        canonical_branch_lesson_usage_repair(
+            {},
+            metadata=metadata,
+            hypothesis=_hypothesis(),
+        )
+        == {}
+    )
 
 
 def test_metadata_only_lesson_usage_fails_requirement() -> None:
@@ -855,6 +923,98 @@ def test_pipeline_blocks_strict_clean_fork_before_code_when_usage_missing() -> N
     assert steps[0].attempt_kind == "proposal_block"
     assert steps[0].counts_toward_max_rounds is False
     assert steps[0].failure_stage == "proposal"
+
+
+def test_pipeline_canonicalizes_repairable_usage_before_code_block() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [_record("lesson:pipeline-repair")]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:pipeline-repair",
+                    "mechanism_story": "generic_signal",
+                    "changed_dimensions": ["target_file"],
+                }
+            ]
+        }
+    )
+    record = HypothesisRecord(
+        hypothesis_id="hypothesis-repairable",
+        branch_id=branch.branch_id,
+        change_locus=hypothesis.change_locus,
+        action=hypothesis.action,
+        status="active",
+        target_file=hypothesis.target_file,
+    )
+    steps: list[StepRecord] = []
+    failures: list[tuple[Branch, FailureEvent]] = []
+    statuses: list[tuple[str, str]] = []
+
+    class Store:
+        def get_by_status(self, _status: str):
+            return []
+
+        def save(self, _record) -> None:
+            return None
+
+        def mark_status(self, hypothesis_id: str, status: str) -> None:
+            statuses.append((hypothesis_id, status))
+
+    pipeline = ExploreStepPipeline(
+        branch_controller=None,
+        contract_gate=None,
+        verification_gate=None,
+        hypothesis_store=Store(),
+        registry=None,
+        campaign_id="camp",
+        get_champion=_champion,
+        pending_hypotheses={},
+        branch_hypotheses={},
+        branch_patches={},
+        branch_current_hypothesis={},
+        branch_workspaces={},
+        failure_streak={},
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda _branch: (hypothesis, record),
+        generate_code=lambda *_args, **_kwargs: None,
+        attempt_fix=lambda *_args, **_kwargs: None,
+        handle_failure=lambda b, f, **_kwargs: failures.append((b, f)),
+        record_step=steps.append,
+        setup_workspace=lambda _branch: None,
+        apply_patch=lambda *_args, **_kwargs: None,
+        record_verification_pass=lambda *_args, **_kwargs: None,
+        archive_failed_workspace=lambda *_args, **_kwargs: None,
+        evaluate=lambda *_args, **_kwargs: (None, None, None),
+        apply_decision_and_finalize=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args, **_kwargs: None,
+    )
+
+    result = pipeline._block_missing_branch_lesson_usage(
+        branch,
+        hypothesis,
+        record,
+        round_num=1,
+        retry_attempt=False,
+        prior_failure=None,
+    )
+
+    assert result is None
+    assert failures == []
+    assert statuses == []
+    assert steps == []
+    repaired_item = hypothesis.branch_lesson_usage["contrasted_lessons"][0]
+    assert repaired_item["target_file"] == "components/common.py"
+    assert repaired_item["action"] == "modify"
+    assert repaired_item["mechanism_id"] == "generic_signal"
+    assert hypothesis.schema_repair_attribution
+    assert (
+        hypothesis.schema_repair_attribution[-1]["source"]
+        == "branch_lesson_usage_repair_skeleton"
+    )
 
 
 def test_pipeline_reuses_destructive_proposal_ref_for_pre_code_checks() -> None:

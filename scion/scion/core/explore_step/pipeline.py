@@ -61,6 +61,7 @@ from .common import (
 from .branch_lesson_usage import (
     branch_lesson_usage_pre_code_block_reason,
     branch_lesson_usage_requirement_metadata,
+    canonical_branch_lesson_usage_repair,
 )
 from .events import ExploreStepEventMixin
 from .material_difference import (
@@ -214,6 +215,29 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             branch,
             session_ref=session_ref,
         )
+        if detail:
+            repair = canonical_branch_lesson_usage_repair(
+                getattr(hypothesis, "branch_lesson_usage", None),
+                metadata=branch_lesson_usage_requirement_metadata(
+                    branch,
+                    session_ref=session_ref,
+                ),
+                hypothesis=hypothesis,
+            )
+            repaired_usage = repair.get("branch_lesson_usage") if repair else None
+            if isinstance(repaired_usage, dict) and repaired_usage:
+                hypothesis.branch_lesson_usage = repaired_usage
+                attribution = repair.get("repair_attribution")
+                if isinstance(attribution, dict) and attribution:
+                    hypothesis.schema_repair_attribution = (
+                        *tuple(hypothesis.schema_repair_attribution or ()),
+                        attribution,
+                    )
+                detail = branch_lesson_usage_pre_code_block_reason(
+                    hypothesis,
+                    branch,
+                    session_ref=session_ref,
+                )
         if not detail:
             return None
         logger.info(

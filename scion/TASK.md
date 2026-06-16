@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: CVRP size70 validation stopped at failed validation; warehouse targeted repair accepted; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
+*Status: warehouse 6R research-loop field gate failed quality acceptance and triggered a second targeted repair; CVRP size70 validation stopped at failed validation; independent VRP phase L control complete negative; regret4 broader no-LLM validation remains the next CVRP hypothesis gate*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -504,6 +504,21 @@ Exit criteria:
   warehouse campaigns have been run and audited with local `gpt5.5`; evidence
   is now interpreted against A/A MDE/readiness rather than only promotion or
   aggregate win rate.
+- Warehouse research-loop repair check completed and failed quality acceptance.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-research-loop-repair-short-6r-postrun-20260616.md`.
+  The run was valid/complete (`6/6` effective rounds, `7` proposal attempts,
+  `4` screening rows) but all formal rows remained screening-only, no
+  validation/frozen/promotion occurred, one branch-lesson semantic quality
+  block remained, and two verification-consumed failures exposed fragile
+  warehouse operator edits. This confirms that prompt no-hard-truncation was
+  necessary but insufficient. The accepted next repair adds proposal-only
+  canonical `branch_lesson_usage` repair for concrete usage and warehouse
+  problem-owned operator preview checks for existing-operator deletion and
+  undeclared local nested dict state-key references. It changes no
+  `DecisionFeatures`, Protocol, promotion, or gate semantics. Next gate: rerun
+  a short warehouse live check from the new repair commit before any warehouse
+  efficacy or v0.3-continuity claim.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
