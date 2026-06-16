@@ -247,6 +247,14 @@ Active work as of the latest handoff:
   no route-count regressions, but overall W/T/L was `21/31/28`, W-L `-7`,
   median delta `0.0`, and repeated regression families `E`, `M`, and `P`.
   It should not proceed to Scion fixed replay as a broad candidate.
+- Warehouse longrun per-cell branch/process audits are active:
+  `Kepler` (`rep01`), `Russell` (`rep02`), and `Curie` (`rep03`). Their reports
+  will reconstruct branch evolution, agent context/output, branch-lesson
+  transfer, quality failures, and measurement/noise for each cell.
+- VRP independent-research process audit `Halley`
+  (`019ed0db-448e-76a0-865c-901917310c3c`) is active. It will inspect the
+  independent process logs and broader validation to explain why residual VRP
+  BKS gap has not yet translated into a robust broad candidate.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

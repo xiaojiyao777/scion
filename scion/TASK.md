@@ -2123,6 +2123,22 @@ Phase B launch design - 2026-06-14:
   for Scion fixed replay; any future use should be a narrower X-slice
   diagnostic or a new mechanism-family hypothesis, not the broad original
   `regret4_repair` patch.
+- Launched: warehouse longrun per-cell branch/process analysis workers. Each
+  worker has a v3-first brief and must inspect branch evolution, per-round
+  context/output, branch-lesson transfer, proposal/code quality failures, and
+  measurement/noise before writing a report:
+  - `Kepler` (`019ed0da-651c-7741-99be-bc770758840b`): `rep01`, report
+    `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep01-branch-analysis-20260616.md`.
+  - `Russell` (`019ed0da-a9a6-7b63-b4f4-eadecf7ad988`): `rep02`, report
+    `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep02-branch-analysis-20260616.md`.
+  - `Curie` (`019ed0da-ed19-7393-b91e-beee247e2624`): `rep03`, report
+    `scion/docs/experiments/v0.4/v04-warehouse-longrun-rep03-branch-analysis-20260616.md`.
+- Launched: VRP independent-research process audit worker `Halley`
+  (`019ed0db-448e-76a0-865c-901917310c3c`). It must analyze phase K
+  `Helmholtz`, phase L `Newton`, the broader `regret4` validation, and optional
+  earlier independent roots to explain why visible BKS gap did not translate
+  into robust broad improvement. Report:
+  `scion/docs/experiments/v0.4/v04-vrp-independent-research-process-audit-20260616.md`.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
