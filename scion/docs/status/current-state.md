@@ -200,6 +200,18 @@ Active work as of the latest handoff:
   patch dry-runs against clean `HEAD`. This is positive external-control
   evidence only; it has two X-family regressions and needs broader no-LLM
   validation before any Scion replay or default solver change.
+- Independent VRP-only control `Newton`
+  (`019ecded-8a24-7a03-b64b-8b1929c9af49`) is active outside Scion. Launch
+  report:
+  [`../experiments/v0.4/v04-independent-vrp-research-agent-20260616l.md`](../experiments/v0.4/v04-independent-vrp-research-agent-20260616l.md).
+  Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-l-20260616`.
+  This is a fresh, non-forked external research subject forbidden from reading
+  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
+  or prior Scion conclusions. Its first cycle is bounded to real VRP cases,
+  at least `3` seeds, and a `1s` initial budget. Outputs are process evidence
+  and external hypothesis material only; any positive candidate still needs
+  broader no-LLM replay before Scion replay or solver adoption.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP

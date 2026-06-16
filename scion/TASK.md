@@ -2040,6 +2040,22 @@ Phase B launch design - 2026-06-14:
   smoke grid. Treat it as a positive external-control hypothesis seed only:
   it has two X-family regressions and needs broader no-LLM validation before
   any Scion replay or default solver change.
+- Launched: thirteenth independent VRP-only research control `Newton`
+  (`019ecded-8a24-7a03-b64b-8b1929c9af49`). Launch report:
+  `scion/docs/experiments/v0.4/v04-independent-vrp-research-agent-20260616l.md`.
+  This is a fresh, non-forked external research subject and a deliberate
+  exception to the v3-first Scion-subagent rule: it is forbidden from reading
+  `scion/`, `TASK.md`, Scion design/status/audit/planning/experiment artifacts,
+  or prior Scion conclusions. It may only study standalone `vrp/`, available
+  VRP problem data, and standard Python tooling. Artifact root:
+  `/home/clawd/research/vrp-independent-codex-research/phase-l-20260616`.
+  Required outputs are `research_journal.md`, `candidate.patch` or
+  `rejected_candidates.md`, machine-readable experiment results, `summary.md`,
+  and `README.md`. Purpose: keep a bounded but continuing plain-Codex VRP
+  research lane alive as an external-control comparison against Scion-guided
+  branch research. Any positive result is hypothesis material only and must
+  pass broader no-LLM replay before Scion replay, Protocol evidence, or default
+  solver changes.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
