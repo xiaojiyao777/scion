@@ -2090,6 +2090,19 @@ Phase B launch design - 2026-06-14:
   (`019ecf4a-359e-7870-8764-ae389aafb106`) was launched with a v3-first brief
   to poll sparingly, sync the WSL root when complete, and write
   `scion/docs/experiments/v0.4/v04-warehouse-longrun-regression-3x24r-postrun-20260616.md`.
+- Completed: warehouse longrun regression check. Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-regression-3x24r-postrun-20260616.md`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-longrun-regression-3x24r-20260616T071323Z`.
+  Wrapper exit was `0`; all three cells exited `0`; all reached Protocol,
+  validation, and frozen. Promotions were `rep01=1`, `rep02=0`, `rep03=1`;
+  final champions were `v2`, `v1`, and `v2`, respectively. This is valid
+  longrun evidence and rules out a catastrophic v0.4 warehouse launch/preflight
+  regression. It does not recover the v0.3 cadence: v0.3 production Sonnet
+  promoted `3/3` after fixes, while this v0.4 run promoted `2/3` and produced
+  only isolated single promotions rather than a continuous chain. Main limiting
+  path: proposal/context/code-edit quality plus unresolved fresh-runtime replay
+  closure, not lack of warehouse opportunity.
 - Launched: CVRP/VRP `regret4_repair` broader no-LLM validation worker
   `Aquinas` (`019ecf46-fbac-7a42-b360-b1bd4aecf6a0`). This is a Scion worker,
   so its brief requires reading `scion/design/scion-architecture-v3.md` first.
@@ -2099,6 +2112,17 @@ Phase B launch design - 2026-06-14:
   `/home/clawd/research/scion-experiments/v04-vrp-regret4-broader-validation-20260616`.
   This is no-LLM/no-APS external-candidate validation only, not Scion Protocol
   evidence or a solver default change.
+- Completed: CVRP/VRP `regret4_repair` broader no-LLM validation. Postrun:
+  `scion/docs/experiments/v0.4/v04-vrp-regret4-broader-validation-postrun-20260616.md`.
+  Artifact root:
+  `/home/clawd/research/scion-experiments/v04-vrp-regret4-broader-validation-20260616`.
+  Required outputs are present and all `80/80` rows completed. Overall W/T/L
+  was `21/31/28`, W-L `-7`, mean delta `-4.4625`, median delta `0.0`,
+  failures `0`, feasibility regressions `0`, and route-count regressions `0`.
+  Repeated regression families were `E`, `M`, and `P`. Decision: reject as-is
+  for Scion fixed replay; any future use should be a narrower X-slice
+  diagnostic or a new mechanism-family hypothesis, not the broad original
+  `regret4_repair` patch.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.
@@ -2110,9 +2134,9 @@ Phase B launch design - 2026-06-14:
   `RUNTIME_TIE_FRESH_CHAMPION_REQUIRED` without pair-win/no-loss or actionable
   loss-diagnostic signal; `same_branch_refinement` remains non-hard-blocking.
   Main-thread verification passed `149 + 79 + 76` focused tests plus
-  `py_compile` and `git diff --check`. Prompt overhead remains unresolved.
-  Next warehouse gate is another short compact `4-6R` debug, not full
-  `3 x 24R`.
+  `py_compile` and `git diff --check`. The later `3 x 24R` longrun confirms
+  warehouse can still promote, but prompt/context/code-edit overhead and
+  fresh-runtime closure remain unresolved.
 - Prepared: post-repair warehouse short debug design. Report:
   `scion/docs/planning/v0.4/v04-warehouse-postrepair-short-debug-design-20260615.md`.
   This design is not launched. It requires WSL to be fast-forwarded to commit

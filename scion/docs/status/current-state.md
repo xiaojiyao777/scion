@@ -215,8 +215,10 @@ Active work as of the latest handoff:
   `0`, and route-count regressions `0`. The outside-case sanity slice was
   negative (`2/1/6`, mean delta `+5.666667`), so this does not enter broader
   replay or Scion fixed replay.
-- Warehouse longrun regression check is running on WSL. Launch report:
+- Warehouse longrun regression check is complete and valid. Launch report:
   [`../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-launch-20260616.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-postrun-20260616.md).
   Server prep root:
   `/home/clawd/research/scion-experiments/v04-warehouse-longrun-regression-3x24r-20260616T071323Z`.
   WSL run root:
@@ -228,16 +230,23 @@ Active work as of the latest handoff:
   `2`. Purpose: test whether v0.4 warehouse has regressed relative to v0.3
   promotion/continuous-improvement evidence, while inspecting final champion
   quality/gap and distinguishing real plateau from pre-Protocol framework
-  failure. WSL tmux session: `scion_wh_longrun_reg_071323`; initial health
-  check showed `status=running`, commit `f384884`, and `rep01` started.
-  Monitor/postrun worker `Sartre`
-  (`019ecf4a-359e-7870-8764-ae389aafb106`) is responsible for sparse polling,
-  final sync, and the postrun report.
-- CVRP/VRP `regret4_repair` broader no-LLM validation is delegated to worker
-  `Aquinas` (`019ecf46-fbac-7a42-b360-b1bd4aecf6a0`). Artifact root:
+  failure. Wrapper exit was `0`; all three cells exited `0`; all reached
+  Protocol, validation, and frozen. Promotions were `rep01=1`, `rep02=0`,
+  `rep03=1`; final champions were `v2`, `v1`, and `v2`. This rules out a
+  catastrophic v0.4 warehouse launch/preflight regression, but it does not
+  recover the v0.3 cadence (`3/3` production Sonnet promotions after fixes and
+  a strongest synthetic 4-promotion chain). The limiting path is
+  proposal/context/code-edit quality plus unresolved fresh-runtime replay
+  closure.
+- CVRP/VRP `regret4_repair` broader no-LLM validation is complete and rejected
+  as-is. Postrun:
+  [`../experiments/v0.4/v04-vrp-regret4-broader-validation-postrun-20260616.md`](../experiments/v0.4/v04-vrp-regret4-broader-validation-postrun-20260616.md).
+  Artifact root:
   `/home/clawd/research/scion-experiments/v04-vrp-regret4-broader-validation-20260616`.
-  It must use clean baseline/candidate scratch workspaces and is not Scion
-  Protocol evidence.
+  All `80/80` rows completed with no failures, no feasibility regressions, and
+  no route-count regressions, but overall W/T/L was `21/31/28`, W-L `-7`,
+  median delta `0.0`, and repeated regression families `E`, `M`, and `P`.
+  It should not proceed to Scion fixed replay as a broad candidate.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
