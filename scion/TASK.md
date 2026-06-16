@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse `3c2b7b5` retry-constraint repair is field-accepted, but research quality failed; hypothesis-stage prior quality-block repair is local*
+*Status: warehouse `3c2b7b5` retry-constraint repair is field-accepted, but research quality failed; `4b2ee29` hypothesis quality-block rerun is active on WSL*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -726,6 +726,20 @@ Exit criteria:
   `Prior Agent Quality Blocks For This Hypothesis` as hard proposal-only repair
   constraints before analysis steps, so repeated validation-transfer failures
   must be addressed before a near-same mechanism is proposed.
+- Launched: warehouse hypothesis quality-block field rerun from commit
+  `4b2ee29`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-hypothesis-qualityblock-rerun6r-launch-20260616.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
+  tmux session `scion_wh_hypqblock_rerun6r_4b2ee29_222243`. Initial health
+  check shows `status=running`, commit `4b2ee29`, and the expected first
+  warehouse validation-transfer quality block. Acceptance requires later
+  hypothesis traces to show `Prior Agent Quality Blocks For This Hypothesis`
+  after a quality block, and then either fewer repeated validation-transfer
+  blocks, a genuine adapter-owned explanation for remaining blocks, or restored
+  validation/frozen/promotion behavior without regressing prompt visibility.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

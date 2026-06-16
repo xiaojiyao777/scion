@@ -128,8 +128,16 @@ Active work as of the latest handoff:
   screening-only, `0` validation/frozen/promotion occurred, and `9/15` proposal
   attempts were quality-blocked. A local follow-up repair now renders prior
   quality blocks directly in hypothesis prompts as hard proposal-only repair
-  constraints; the next gate is a fresh warehouse short field check from that
-  repair commit.
+  constraints. That fresh warehouse short field check is now active from commit
+  `4b2ee29`; launch report:
+  [`../experiments/v0.4/v04-warehouse-hypothesis-qualityblock-rerun6r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-hypothesis-qualityblock-rerun6r-launch-20260616.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
+  tmux session `scion_wh_hypqblock_rerun6r_4b2ee29_222243`. Initial health
+  check shows `status=running`, commit `4b2ee29`, and the expected first
+  warehouse validation-transfer quality block.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
