@@ -113,3 +113,22 @@ repair only if one of these is true:
 - the code prompt manifests prove that prior quality-block feedback was visible
   and the remaining failure is a genuine research/adapter limitation rather
   than another feedback propagation break.
+
+## Field Acceptance And Remaining Blocker
+
+The `3c2b7b5` retry-constraint rerun accepts the constraint-propagation part of
+the repair and rejects warehouse research quality. Postrun:
+[`v04-warehouse-retryconstraint-codefeedback-rerun6r-postrun-20260616.md`](v04-warehouse-retryconstraint-codefeedback-rerun6r-postrun-20260616.md).
+
+The final run was valid and complete (`6/6` effective rounds). Quality-block
+ledgers and code prompt traces preserved the warehouse-owned hypothesis and
+patch retry constraints, including the activation/effect diagnostic and
+screening/lexicographic guard requirements. This closes the generic fallback
+overwrite bug.
+
+Research quality remains failed: the run produced `6` screening rows, `0`
+validation rows, `0` frozen rows, no promotion, and `9/15` proposal attempts
+were quality-blocked. The next repair moves prior quality-block material into
+hypothesis prompts as hard proposal-only constraints so repeated warehouse
+validation-transfer failures must be addressed before another near-same
+mechanism is proposed.

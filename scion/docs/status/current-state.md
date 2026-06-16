@@ -117,9 +117,19 @@ Active work as of the latest handoff:
   patch retry constraint with generic novelty text. Follow-up commit `3c2b7b5`
   preserves problem-owned retry constraints and carries missing
   claim/code-element fields into the next quality-feedback context. Its field
-  rerun is active on WSL at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
-  tmux session `scion_wh_retryconstraint_rerun6r_3c2b7b5_214445`.
+  rerun is complete and valid at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`
+  after sync to
+  `/home/clawd/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
+  postrun:
+  [`../experiments/v0.4/v04-warehouse-retryconstraint-codefeedback-rerun6r-postrun-20260616.md`](../experiments/v0.4/v04-warehouse-retryconstraint-codefeedback-rerun6r-postrun-20260616.md).
+  It accepts retry-constraint preservation in the ledger and code prompt traces,
+  but rejects warehouse research quality: `6/6` formal rows remained
+  screening-only, `0` validation/frozen/promotion occurred, and `9/15` proposal
+  attempts were quality-blocked. A local follow-up repair now renders prior
+  quality blocks directly in hypothesis prompts as hard proposal-only repair
+  constraints; the next gate is a fresh warehouse short field check from that
+  repair commit.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

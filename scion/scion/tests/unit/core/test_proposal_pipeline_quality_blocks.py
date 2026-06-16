@@ -12,6 +12,8 @@ from scion.core.proposal_pipeline.classification import (
     _agentic_primary_secondary_failures,
 )
 from scion.proposal.engine.code_prompts import _split_code_context
+from scion.proposal.engine.hypothesis_prompts import _split_hypothesis_context
+
 
 def test_mechanism_premise_warning_is_not_quality_block_and_returns_patch() -> None:
     creative = FakeCreative()
@@ -272,6 +274,11 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
     assert "hard boundary, objective, contract" in context[
         "agentic_prior_quality_block_rule"
     ]
+    _, user_prompt = _split_hypothesis_context(context)
+    assert "Prior Agent Quality Blocks For This Hypothesis" in user_prompt
+    assert "objective_policy_contradicted" in user_prompt
+    assert "preserve protected objective policy" in user_prompt
+    assert "hard research constraints" in user_prompt
     assert branch.branch_id not in pipeline.agentic_quality_feedback
 
 
@@ -594,6 +601,37 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     assert session_ref["rejection_constraint"]["missing_code_elements"] == [
         "activation_effect_diagnostic_code"
     ]
+
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingHypothesisSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="next-hypothesis-session",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline.agentic_session = CapturingHypothesisSession()
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    context = captured[0].hypothesis_context
+    _, user_prompt = _split_hypothesis_context(context)
+    assert "Prior Agent Quality Blocks For This Hypothesis" in user_prompt
+    assert "warehouse_validation_transfer_patch_quality_missing" in user_prompt
+    assert "activation/effect diagnostic counters" in user_prompt
+    assert "activation_effect_diagnostic_code" in user_prompt
+    assert "missing_code_elements" in user_prompt
+    assert "hard research constraints" in user_prompt
 
 
 def test_agentic_patch_quality_block_enters_next_code_context_and_prompt() -> None:

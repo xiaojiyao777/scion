@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse `5f2d418` code-feedback rerun restored promotion path but exposed retry-constraint overwrite; `3c2b7b5` retry-constraint field rerun is active on WSL*
+*Status: warehouse `3c2b7b5` retry-constraint repair is field-accepted, but research quality failed; hypothesis-stage prior quality-block repair is local*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -704,21 +704,28 @@ Exit criteria:
   constraint. Follow-up commit `3c2b7b5` preserves
   `structured_rejection.retry_constraint` and carries `missing_claims` /
   `missing_code_elements` into quality feedback.
-- Launched: warehouse retry-constraint code-feedback field rerun from commit
+- Completed: warehouse retry-constraint code-feedback field rerun from commit
   `3c2b7b5`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-retryconstraint-codefeedback-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-retryconstraint-codefeedback-rerun6r-postrun-20260616.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
-  expected server sync root:
+  server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-retryconstraint-codefeedback-rerun6r-3c2b7b5-20260616T214445Z`;
-  tmux session `scion_wh_retryconstraint_rerun6r_3c2b7b5_214445`.
-  Initial health check showed `status=running`, commit `3c2b7b5`, and the
-  expected first hypothesis-stage validation-transfer quality block. Acceptance
-  requires final synced artifacts and warehouse-owned retry constraints in the
-  quality-block ledger and later code prompt. Early synced status after two
-  quality blocks already shows warehouse-owned retry constraints preserved in
-  `status.json`, including the patch-quality instruction to add code-visible
-  activation/effect diagnostic counters or a named instrumentation path.
+  wrapper exit `0`; `run_validity.status=valid`; `6/6` effective rounds;
+  `6` screening rows, `0` validation rows, `0` frozen rows, no promotion, and
+  champion stayed v1. This accepts retry-constraint preservation and context
+  propagation: the final quality-block ledger keeps warehouse-owned hypothesis
+  and patch retry constraints, and code traces include the patch-quality gate,
+  `activation_effect_diagnostic_code`, and no old generic novelty fallback.
+  Research quality is rejected: `9/15` proposal attempts were quality-blocked,
+  every formal candidate remained screening-only, and aggregate screening
+  evidence was loss-heavy/tie-heavy (`6/8/30` case W/L/T; `28/30/30` pair
+  W/L/T). Follow-up local repair: hypothesis prompts now render
+  `Prior Agent Quality Blocks For This Hypothesis` as hard proposal-only repair
+  constraints before analysis steps, so repeated validation-transfer failures
+  must be addressed before a near-same mechanism is proposed.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

@@ -194,6 +194,7 @@ def _split_hypothesis_context(
     dynamic_agentic_prefix = (
         f"{dynamic_agentic_context}\n\n" if dynamic_agentic_context else ""
     )
+    prior_quality_section = _hypothesis_prior_quality_feedback_section(context)
     experiment_history = str(D["experiment_history"]).strip()
     experiment_history_section = (
         f"## Experiment History — This Branch\n{experiment_history}\n\n"
@@ -206,6 +207,7 @@ def _split_hypothesis_context(
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
         f"## Currently Occupied (C10 reports duplicate-risk diagnostics)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
+        f"{prior_quality_section}"
         f"## Analysis Steps (follow in order)\n"
         f"1. Read every relevant champion research-surface file and active solver fact available in context. For operator files, note: what move type, what objective(s) it improves or protects, what it cannot improve. For policy/config files, note the declared bounded lever being changed.\n"
         f"2. Identify the active bottleneck from screening/runtime feedback, objective opportunity profile, and experiment history. Distinguish the primary decision reason from auxiliary telemetry or runtime warnings.\n"
@@ -234,6 +236,33 @@ def _split_hypothesis_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _hypothesis_prior_quality_feedback_section(context: Dict[str, Any]) -> str:
+    prior_quality_blocks = context.get("agentic_prior_quality_blocks")
+    if not prior_quality_blocks:
+        return ""
+    payload: dict[str, Any] = {
+        "rule": str(context.get("agentic_prior_quality_block_rule") or "").strip(),
+        "prior_quality_blocks": prior_quality_blocks,
+    }
+    rendered = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        default=str,
+        indent=2,
+    )
+    return (
+        "## Prior Agent Quality Blocks For This Hypothesis\n"
+        "These are branch-local proposal quality blocks from attempts that "
+        "failed before protocol. They are tainted proposal context and are not "
+        "Decision input, but they are hard research constraints for this "
+        "hypothesis call. Do not propose a near-same mechanism until the cited "
+        "failure_code, gate, retry_constraint, missing_claims, or "
+        "missing_code_elements are explicitly repaired in the hypothesis.\n"
+        f"{rendered}\n\n"
+    )
 
 
 def _split_hypothesis_target_intent_context(
