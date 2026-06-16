@@ -2071,6 +2071,34 @@ Phase B launch design - 2026-06-14:
   negative at W/T/L `2/1/6`, mean delta `+5.666667`, median delta `+6.0`.
   Treat this as negative external-control evidence and do not send it to
   broader replay or Scion fixed replay.
+- Launched: warehouse longrun regression check against the v0.3 promotion
+  reference. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-regression-3x24r-launch-20260616.md`.
+  The run is a single intended-default warehouse arm from commit `f384884`:
+  `measurement_governance=on`, `compact-measurement-diagnostics`, `3` repeats
+  x `24R`, production protocol/split/seeds, `30s` solver cap, disabled early
+  stop, local `gpt-5.5`, and WSL max parallelism `2` with a `900s` stagger.
+  Purpose: verify whether current v0.4 warehouse has regressed relative to v0.3
+  promotion cadence and continuous-improvement evidence. Postrun must compare
+  promotions and final champion version with champion quality/gap, branch
+  depth, Protocol row completeness, and whether no-promotion represents real
+  plateau or pre-Protocol framework failure.
+- Warehouse longrun WSL tmux session: `scion_wh_longrun_reg_071323`. WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-longrun-regression-3x24r-20260616T071323Z`.
+  Initial health check at launch showed `status=running`, commit `f384884`,
+  and `rep01` started. Monitor/postrun worker `Sartre`
+  (`019ecf4a-359e-7870-8764-ae389aafb106`) was launched with a v3-first brief
+  to poll sparingly, sync the WSL root when complete, and write
+  `scion/docs/experiments/v0.4/v04-warehouse-longrun-regression-3x24r-postrun-20260616.md`.
+- Launched: CVRP/VRP `regret4_repair` broader no-LLM validation worker
+  `Aquinas` (`019ecf46-fbac-7a42-b360-b1bd4aecf6a0`). This is a Scion worker,
+  so its brief requires reading `scion/design/scion-architecture-v3.md` first.
+  It must preserve the v3 boundary, create clean baseline/candidate scratch
+  workspaces from `git archive HEAD`, apply the phase K `candidate.patch` only
+  in the candidate copy, and write artifacts under
+  `/home/clawd/research/scion-experiments/v04-vrp-regret4-broader-validation-20260616`.
+  This is no-LLM/no-APS external-candidate validation only, not Scion Protocol
+  evidence or a solver default change.
 - Completed and accepted: targeted warehouse research-quality repair by Scion
   worker `Planck` (`019ecd2c-d228-7292-99c3-4ebc1f855034`). Acceptance report:
   `scion/docs/experiments/v0.4/v04-warehouse-targeted-repair-20260615.md`.

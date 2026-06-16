@@ -215,6 +215,29 @@ Active work as of the latest handoff:
   `0`, and route-count regressions `0`. The outside-case sanity slice was
   negative (`2/1/6`, mean delta `+5.666667`), so this does not enter broader
   replay or Scion fixed replay.
+- Warehouse longrun regression check is running on WSL. Launch report:
+  [`../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-launch-20260616.md`](../experiments/v0.4/v04-warehouse-longrun-regression-3x24r-launch-20260616.md).
+  Server prep root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-longrun-regression-3x24r-20260616T071323Z`.
+  WSL run root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-longrun-regression-3x24r-20260616T071323Z`.
+  It is a single intended-default warehouse arm from commit `f384884`:
+  `3` repeats x `24R`, `measurement_governance=on`,
+  `compact-measurement-diagnostics`, production protocol/split/seeds, `30s`
+  solver cap, disabled early stop, local `gpt-5.5`, and max WSL parallelism
+  `2`. Purpose: test whether v0.4 warehouse has regressed relative to v0.3
+  promotion/continuous-improvement evidence, while inspecting final champion
+  quality/gap and distinguishing real plateau from pre-Protocol framework
+  failure. WSL tmux session: `scion_wh_longrun_reg_071323`; initial health
+  check showed `status=running`, commit `f384884`, and `rep01` started.
+  Monitor/postrun worker `Sartre`
+  (`019ecf4a-359e-7870-8764-ae389aafb106`) is responsible for sparse polling,
+  final sync, and the postrun report.
+- CVRP/VRP `regret4_repair` broader no-LLM validation is delegated to worker
+  `Aquinas` (`019ecf46-fbac-7a42-b360-b1bd4aecf6a0`). Artifact root:
+  `/home/clawd/research/scion-experiments/v04-vrp-regret4-broader-validation-20260616`.
+  It must use clean baseline/candidate scratch workspaces and is not Scion
+  Protocol evidence.
 - CVRP agent behavior debug audit `Gibbs` is complete. Report:
   [`../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md`](../experiments/v0.4/v04-cvrp-agent-behavior-debug-audit-20260615.md).
   It separates path health from research quality: Scion can carry CVRP
