@@ -3011,6 +3011,31 @@ Next gate:
   use WSL for this single-cell check; keep WSL for larger matrices after the
   local signal is clean.
 
+Field gate:
+
+- Completed locally from commit `8688ac9`:
+  `/home/clawd/research/scion-experiments/v04-warehouse-effectzero-guidance-rerun6r-8688ac9-20260617T105940Z`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-effectzero-guidance-rerun6r-postrun-20260617.md`.
+- Split acceptance: the targeted screening effect-zero behavior is
+  field-accepted. Screening rows with
+  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` kept `telemetry_guard.passed=true`,
+  activation observed, and ordinary screening lifecycle; the active
+  `swap_orders` branch expanded and then queued validation instead of being
+  forced into telemetry wiring repair at screening.
+- Research-quality remains rejected: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `6/6` effective rounds, `7` protocol metric
+  rows (`6` screening, `1` validation), `0` frozen rows, `0` promotions, and
+  `6` proposal quality blocks. Validation failed legitimately with
+  `VALIDATION_TELEMETRY_REPAIRABLE` / `TELEMETRY_VALIDATION_REPAIRABLE` because
+  `swap_orders.accepted_moves`, `cost_delta_sum`, and
+  `improving_move_count` were all zero on validation.
+- Next gate: analyze the blocked `change_vehicle_type.py` exact-replace
+  session `f7851de0-0fee-4420-b20d-3c27df9bfd73`, then repair the warehouse
+  problem-owned proposal-quality feedback/skeleton for repeated
+  validation-transfer, telemetry-identity, bounded-candidate, and executable
+  guard misses. Do not launch a broad WSL matrix before that repair.
+
 ## Status Cadence
 
 The main thread updates status after each material event:

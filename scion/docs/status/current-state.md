@@ -181,6 +181,20 @@ Latest warehouse state:
   tests (`25 passed`), py_compile, and `git diff --check`. Next gate is one
   short local warehouse field check on the 2-core server, not a broad WSL
   matrix.
+- That local field check completed from commit `8688ac9` at
+  `/home/clawd/research/scion-experiments/v04-warehouse-effectzero-guidance-rerun6r-8688ac9-20260617T105940Z`;
+  postrun:
+  [`../experiments/v0.4/v04-warehouse-effectzero-guidance-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-effectzero-guidance-rerun6r-postrun-20260617.md).
+  It field-accepts the targeted screening effect-zero behavior: screening
+  rows with `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` kept passed telemetry guards and
+  progressed through expand/queue-validate instead of being forced into
+  telemetry wiring repair. Research quality remains rejected: the run was
+  valid and complete at `6/6`, produced `7` protocol rows (`6` screening,
+  `1` validation), no frozen row, no promotion, and `6` proposal quality
+  blocks. The validation row failed legitimately with hard telemetry repair
+  because `swap_orders.accepted_moves` and all effect counters were all-zero on
+  validation. Next useful work is focused proposal-quality repair, not a broad
+  WSL matrix.
 
 Latest CVRP/VRP state:
 
