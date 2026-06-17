@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.core.branch_hygiene import (
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
     branch_hygiene_context,
     branch_hygiene_guidance,
     record_branch_lifecycle_policy_block,
@@ -101,6 +102,27 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     )
     assert "branch_code_status=clean" not in no_effect_line
     assert "baseline_policy=clean" not in no_effect_line
+
+
+def test_sibling_prompt_projection_marks_effect_zero_without_repair_focus() -> None:
+    effect_zero = _branch(
+        "effectzero1",
+        branch_code_status="active_weak_positive",
+    )
+    effect_zero.last_screening_feedback_tier = "weak_positive"
+    effect_zero.last_telemetry_outcome = TELEMETRY_EFFECT_ZERO_OUTCOME
+    effect_zero.branch_mechanism_ids = ("merge_vehicles",)
+
+    summary = _summarise_siblings([effect_zero])
+    prompt = _hypothesis_prompt_user_text(summary)
+    line = next(line for line in prompt.splitlines() if "effectz" in line)
+
+    assert "branch_code_status=active_weak_positive" in line
+    assert "last_telemetry_outcome=telemetry_effect_zero" in line
+    assert "repair_focus_required=false" in line
+    assert "repair_focus=wiring_suspect_requires_repair" not in line
+    assert "branch_followup_policy=branch_local_followup_or_explicit_bridge" in line
+    assert "hypothesis_generation_mode=branch_local_followup" in line
 
 
 def test_sibling_prompt_projection_includes_lifecycle_reroute_policy() -> None:

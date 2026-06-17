@@ -4,7 +4,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scion.core.branch_hygiene import WIRING_SUSPECT_REQUIRES_REPAIR
+from scion.core.branch_hygiene import (
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
+    WIRING_SUSPECT_REQUIRES_REPAIR,
+)
 from scion.core.models import ExperimentStage, ProtocolResult
 
 TELEMETRY_VALIDATION_REPAIRABLE = "TELEMETRY_VALIDATION_REPAIRABLE"
@@ -15,7 +18,6 @@ VALIDATION_TELEMETRY_FAILED = "VALIDATION_TELEMETRY_FAILED"
 FROZEN_TELEMETRY_FAILED = "FROZEN_TELEMETRY_FAILED"
 TELEMETRY_DECISION_DETAIL_SCHEMA = "scion.telemetry_decision_detail.v1"
 TELEMETRY_EFFECT_ZERO_DIAGNOSTIC = "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"
-TELEMETRY_EFFECT_ZERO_OUTCOME = "telemetry_effect_zero"
 
 _REPAIRABLE_TELEMETRY_CODES = frozenset(
     {

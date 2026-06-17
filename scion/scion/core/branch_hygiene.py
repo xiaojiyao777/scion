@@ -12,6 +12,7 @@ from scion.core.replay_identity_contract import formal_replay_identity_missing_k
 TELEMETRY_WIRING_SUSPECT = "telemetry_wiring_suspect"
 TELEMETRY_INVALID = "telemetry_invalid"
 ACTIVATION_MISSING_OR_WIRING_SUSPECT = "activation_missing_or_wiring_suspect"
+TELEMETRY_EFFECT_ZERO_OUTCOME = "telemetry_effect_zero"
 WIRING_SUSPECT_REQUIRES_REPAIR = "wiring_suspect_requires_repair"
 REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK = (
     "repair_first_same_mechanism_or_clean_fork"
@@ -57,6 +58,19 @@ PARKED_BRANCH_CODE_STATUSES = frozenset(
         "parked",
         "parked_lineage",
         "lineage_parked",
+    }
+)
+HARD_TELEMETRY_REPAIR_REASON_CODES = frozenset(
+    {
+        "SCREENING_TELEMETRY_REPAIRABLE",
+        "TELEMETRY_VALIDATION_REPAIRABLE",
+        "VALIDATION_TELEMETRY_REPAIRABLE",
+    }
+)
+NONBLOCKING_TELEMETRY_EFFECT_ZERO_REASON_CODES = frozenset(
+    {
+        "TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
+        "SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",
     }
 )
 
@@ -121,6 +135,40 @@ def branch_mechanism_ids(branch: Branch | None) -> tuple[str, ...]:
             if str(item).strip()
         ]
     return tuple(dict.fromkeys(ids))
+
+
+def hard_telemetry_repair_reason_present(reason_codes: Iterable[str] | None) -> bool:
+    return bool(
+        set(_clean_reason_codes(reason_codes)) & HARD_TELEMETRY_REPAIR_REASON_CODES
+    )
+
+
+def telemetry_effect_zero_reason_present(reason_codes: Iterable[str] | None) -> bool:
+    return bool(
+        set(_clean_reason_codes(reason_codes))
+        & NONBLOCKING_TELEMETRY_EFFECT_ZERO_REASON_CODES
+    )
+
+
+def nonblocking_telemetry_effect_zero_reason_code(code: str) -> bool:
+    return str(code).strip().upper() in NONBLOCKING_TELEMETRY_EFFECT_ZERO_REASON_CODES
+
+
+def _clean_reason_codes(reason_codes: Iterable[str] | None) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            str(code).strip().upper()
+            for code in (reason_codes or ())
+            if str(code).strip()
+        )
+    )
+
+
+def _branch_has_actionable_failure_codes(branch: Branch) -> bool:
+    codes = _clean_reason_codes(getattr(branch, "failure_codes", None))
+    if not codes:
+        return False
+    return any(not nonblocking_telemetry_effect_zero_reason_code(code) for code in codes)
 
 
 def branch_allows_clean_workspace_reuse(branch: Branch | None) -> bool:
@@ -212,7 +260,7 @@ def branch_has_actionable_diagnostic(branch: Branch | None) -> bool:
         return True
     if getattr(branch, "pending_retry", False):
         return True
-    if getattr(branch, "failure_codes", None):
+    if _branch_has_actionable_failure_codes(branch):
         return True
     if getattr(branch, "branch_lifecycle_policy_blocks", 0):
         return True
@@ -839,6 +887,7 @@ __all__ = [
     "SUSPECT_BRANCH_CODE_STATUSES",
     "RUNTIME_SATURATED_DIVERSITY_REROUTE_GUIDANCE",
     "TELEMETRY_INVALID",
+    "TELEMETRY_EFFECT_ZERO_OUTCOME",
     "TELEMETRY_WIRING_SUSPECT",
     "WIRING_SUSPECT_REQUIRES_REPAIR",
     "branch_allows_clean_workspace_reuse",
@@ -861,6 +910,9 @@ __all__ = [
     "branch_workspace_for_proposal",
     "campaign_branch_lifecycle_reroute_status",
     "campaign_remaining_branch_classification",
+    "hard_telemetry_repair_reason_present",
     "is_branch_lifecycle_policy_block",
+    "nonblocking_telemetry_effect_zero_reason_code",
     "record_branch_lifecycle_policy_block",
+    "telemetry_effect_zero_reason_present",
 ]

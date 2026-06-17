@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import fields
 
 from scion.core.branch_hygiene import (
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
+    branch_has_actionable_diagnostic,
     branch_hygiene_context,
     branch_hygiene_guidance,
+    branch_workspace_for_proposal,
     campaign_branch_lifecycle_reroute_status,
     record_branch_lifecycle_policy_block,
 )
@@ -107,6 +110,58 @@ def test_activation_missing_outcome_requires_repair_even_if_status_is_clean() ->
 
     assert payload["repair_focus_required"] is True
     assert payload["baseline_policy"] == "champion_required_for_repair"
+
+
+def test_effect_zero_outcome_keeps_branch_workspace_followup_visible() -> None:
+    branch = Branch(
+        branch_id="effect-zero-branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        last_telemetry_outcome=TELEMETRY_EFFECT_ZERO_OUTCOME,
+        failure_codes=["TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"],
+        branch_mechanism_ids=("merge_vehicles",),
+        branch_evidence_summary={
+            "stage": "screening",
+            "tier": "weak_positive",
+            "wins": 7,
+            "losses": 1,
+            "ties": 6,
+            "phase_activation_summary": {
+                "stage": "screening",
+                "activation_status": "observed",
+                "effect_status": "case_level_positive_signal",
+                "activation_evidence_status": "activation_observed",
+                "objective_effect_status": "zero",
+                "telemetry_outcome": TELEMETRY_EFFECT_ZERO_OUTCOME,
+            },
+            "reason_codes": ["TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"],
+        },
+    )
+    workspaces = {branch.branch_id: "/tmp/effect-zero-workspace"}
+
+    payload = branch_hygiene_context(branch)
+    guidance = branch_hygiene_guidance(branch)
+
+    assert branch_has_actionable_diagnostic(branch) is False
+    assert branch_workspace_for_proposal(branch, workspaces) == (
+        "/tmp/effect-zero-workspace"
+    )
+    assert payload["last_telemetry_outcome"] == TELEMETRY_EFFECT_ZERO_OUTCOME
+    assert payload["repair_focus_required"] is False
+    assert payload["repair_policy"] is None
+    assert payload["baseline_policy"] == "branch_workspace_branch_local_followup"
+    assert payload["branch_followup_policy"] == (
+        "branch_local_followup_or_explicit_bridge"
+    )
+    assert payload["hypothesis_generation_mode"] == "branch_local_followup"
+    assert payload["phase_activation_summary"]["telemetry_outcome"] == (
+        TELEMETRY_EFFECT_ZERO_OUTCOME
+    )
+    assert "telemetry_outcome=telemetry_effect_zero" in guidance
+    assert "repair_focus=wiring_suspect_requires_repair" not in guidance
 
 
 def test_parked_lineage_context_exposes_inactive_slot_policy() -> None:

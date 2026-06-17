@@ -20,6 +20,7 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     json,
     replace,
 )
+from scion.core.branch_hygiene import TELEMETRY_EFFECT_ZERO_OUTCOME
 
 
 def test_list_and_read_surfaces_return_v2_metadata_without_domain_hardcoding(
@@ -216,6 +217,34 @@ def test_read_branch_state_includes_branch_hygiene_status(tmp_path: Path) -> Non
     )
     assert payload["repair_focus_required"] is True
     assert payload["repair_focus_reason"] == "wiring_suspect_requires_repair"
+
+
+def test_read_branch_state_exposes_effect_zero_without_repair_focus(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    branch = replace(
+        context.branch,
+        branch_code_status="active_weak_positive",
+        last_screening_feedback_tier="weak_positive",
+        last_telemetry_outcome=TELEMETRY_EFFECT_ZERO_OUTCOME,
+        failure_codes=["TELEMETRY_EFFECT_ZERO_DIAGNOSTIC"],
+        branch_mechanism_ids=("merge_vehicles",),
+    )
+    context = replace(context, branch=branch)
+
+    observation = registry.call("context.read_branch_state", {}, context)
+
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["last_telemetry_outcome"] == TELEMETRY_EFFECT_ZERO_OUTCOME
+    assert payload["repair_focus_required"] is False
+    assert payload["repair_policy"] is None
+    assert payload["branch_followup_policy"] == (
+        "branch_local_followup_or_explicit_bridge"
+    )
+    assert payload["hypothesis_generation_mode"] == "branch_local_followup"
 
 
 def test_read_solver_design_compact_payload_stays_below_session_budget(

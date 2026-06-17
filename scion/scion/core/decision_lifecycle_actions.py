@@ -7,8 +7,12 @@ from statistics import median
 from typing import Any, Iterable, Mapping, Optional
 
 from scion.core.branch_hygiene import (
+    ACTIVATION_MISSING_OR_WIRING_SUSPECT,
     BRANCH_LIFECYCLE_NEW_MECHANISM_INELIGIBLE,
     BRANCH_LIFECYCLE_REROUTE_AFTER_POLICY_BLOCK,
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
+    hard_telemetry_repair_reason_present,
+    telemetry_effect_zero_reason_present,
 )
 from scion.core.branch_lifecycle_policy import (
     BRANCH_LIFECYCLE_ARCHIVE_LINEAGE,
@@ -44,6 +48,18 @@ def lifecycle_action(
     if BRANCH_LIFECYCLE_ARCHIVE_LINEAGE in reason_set:
         return "archive_lineage"
     return "retain_head"
+
+
+def _current_telemetry_outcome(
+    branch: Branch,
+    *,
+    reason_codes: Iterable[str] | None,
+) -> str | None:
+    if hard_telemetry_repair_reason_present(reason_codes):
+        return ACTIVATION_MISSING_OR_WIRING_SUSPECT
+    if telemetry_effect_zero_reason_present(reason_codes):
+        return TELEMETRY_EFFECT_ZERO_OUTCOME
+    return getattr(branch, "last_telemetry_outcome", None)
 
 
 def update_branch_lifecycle_signal_state(
@@ -170,6 +186,10 @@ def update_branch_screening_evidence_summary(
         reason_codes,
         protocol_reason_codes=getattr(protocol_result, "reason_codes", ()) or (),
     )
+    telemetry_outcome = _current_telemetry_outcome(
+        branch,
+        reason_codes=reason_codes,
+    )
     gate_observation_reason_codes = _string_tuple(
         getattr(screening_feedback, "gate_observation_reason_codes", None)
     ) or tuple(reason_code_groups.gate_observation_reason_codes)
@@ -239,7 +259,7 @@ def update_branch_screening_evidence_summary(
                 or getattr(protocol_result, "opportunity_status", "")
                 or "unknown"
             ),
-            "telemetry_outcome": getattr(branch, "last_telemetry_outcome", None),
+            "telemetry_outcome": telemetry_outcome,
         },
         "opportunity_diagnostics": list(
             _string_tuple(getattr(screening_feedback, "opportunity_diagnostics", None))

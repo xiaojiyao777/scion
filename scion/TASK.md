@@ -2990,13 +2990,26 @@ Field gate:
 
 Next gate:
 
-- Implement a focused interpretation repair: distinguish
-  `cost_effect_with_protected_split_preserved` from `telemetry_effect_zero`
-  when activation is observed, cost-effect counters are positive, and protected
-  `subcategory_splits` is preserved. Branch cards should not label this final
-  pattern as `activation_missing_or_wiring_suspect`. Cover true no-effect and
-  true missing-activation cases with unit tests before launching a broad WSL
-  warehouse matrix.
+- Implemented and locally accepted as a focused interpretation repair: hard
+  repairable telemetry failures still produce `telemetry_wiring_suspect` /
+  `activation_missing_or_wiring_suspect`, but nonblocking
+  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` now lands as `telemetry_effect_zero` and
+  does not hide an active weak-positive branch workspace behind repair-focus
+  guidance. This does not change the generic Decision gate: the observed
+  `7/1/6` warehouse `merge_vehicles` signal remains screening-only until it
+  earns sufficient screening evidence.
+- Acceptance commands passed:
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py scion/scion/tests/unit/core/test_branch_hygiene_status.py scion/scion/tests/unit/test_agentic_proposal_tools_context.py scion/scion/tests/unit/test_branch_prompt_projection.py`
+  (`68 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/unit/core/test_evaluation_orchestrator_telemetry.py scion/scion/tests/unit/test_runtime_telemetry_guard_mechanism_diagnostics.py`
+  (`47 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_cross_branch_research.py scion/scion/tests/unit/test_research_surfaces_generic_context.py scion/scion/tests/unit/test_branch_dossier.py`
+  (`25 passed`); py_compile and `git diff --check` passed.
+- Next gate after commit: one short local warehouse field check on the 2-core
+  server to verify that the same weak-positive/effect-zero shape is rendered as
+  branch-local refinement/parameterization rather than telemetry wiring. Do not
+  use WSL for this single-cell check; keep WSL for larger matrices after the
+  local signal is clean.
 
 ## Status Cadence
 

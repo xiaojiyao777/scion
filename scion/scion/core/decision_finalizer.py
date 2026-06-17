@@ -10,6 +10,7 @@ from scion.core.branch import BranchController, StateTransitionError
 from scion.core.branch_hygiene import (
     REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK,
     WIRING_SUSPECT_REQUIRES_REPAIR,
+    telemetry_effect_zero_reason_present,
 )
 from scion.core.branch_repair_policy import mechanism_ids_for_repair
 from scion.core.branch_lifecycle_policy import (
@@ -50,7 +51,6 @@ from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic_code
 from scion.core.screening_visibility import runtime_aggregate_exclusion_for_protocol
 from scion.core.telemetry_validation import (
     SCREENING_TELEMETRY_REPAIRABLE,
-    TELEMETRY_EFFECT_ZERO_DIAGNOSTIC,
     TELEMETRY_EFFECT_ZERO_OUTCOME,
     TELEMETRY_VALIDATION_REPAIRABLE,
     VALIDATION_TELEMETRY_REPAIRABLE,
@@ -430,8 +430,9 @@ class DecisionFinalizer:
             decision_reason_codes,
         )
         telemetry_repairable = telemetry_repair_stage is not None
-        telemetry_effect_zero = TELEMETRY_EFFECT_ZERO_DIAGNOSTIC in set(
-            decision_reason_codes or ()
+        telemetry_effect_zero = telemetry_effect_zero_reason_present(
+            tuple(decision_reason_codes or ())
+            + tuple(getattr(protocol_result, "reason_codes", ()) or ())
         )
         park_lineage = lifecycle_action == "park_lineage"
         rollback_to_checkpoint = lifecycle_action == "rollback_to_checkpoint"

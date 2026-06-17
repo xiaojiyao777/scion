@@ -36,6 +36,7 @@ from scion.core.models import (
 )
 from scion.proposal.screening_feedback import screening_feedback_summary
 from scion.core.telemetry_validation import (
+    TELEMETRY_EFFECT_ZERO_OUTCOME,
     TELEMETRY_VALIDATION_REPAIRABLE,
     VALIDATION_TELEMETRY_REPAIRABLE,
 )
@@ -1610,6 +1611,123 @@ def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_wo
     }
     assert hyp_store.statuses == [("h-3", "validation_telemetry_failed")]
     assert controller.get_branch(branch.branch_id).state == BranchState.EXPLORE
+
+
+def test_effect_zero_diagnostic_with_observed_activation_is_not_wiring_suspect() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Refine merge_vehicles on the same branch.",
+        change_locus="solver_design",
+        action="modify",
+        mechanism_changes=(MechanismChange(id="merge_vehicles", change_type="modify"),),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-effect-zero",
+        branch_id=branch.branch_id,
+        change_locus="solver_design",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    patches = {branch.branch_id: patch}
+    hyp_store = _HypothesisStore()
+    discarded: list[str] = []
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches=patches,
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=14,
+            wins=7,
+            losses=1,
+            ties=6,
+            win_rate=0.5,
+            median_delta=775.0,
+            ci_low=1.0,
+            ci_high=900.0,
+            runtime_ratio_median=0.49,
+            runtime_pairs=14,
+        ),
+        gate_outcome="fail",
+        reason_codes=("TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+        exposed_summary="weak signal; telemetry_effect_zero=diagnostic",
+        raw_metrics_ref="/tmp/metrics.json",
+        candidate_operator_attempts=28,
+        mechanism_evidence={
+            "primary_activation_status": "observed",
+            "primary_effect_status": "zero",
+        },
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
+        lifecycle_action="retain_head",
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+    phase = stored.branch_evidence_summary["phase_activation_summary"]
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.attempt_kind == "screening"
+    assert result.counts_toward_max_rounds is True
+    assert discarded == []
+    assert stored.branch_code_status == "active_weak_positive"
+    assert stored.last_telemetry_outcome == TELEMETRY_EFFECT_ZERO_OUTCOME
+    assert stored.telemetry_repair_mechanism_ids == ()
+    assert phase["activation_status"] == "observed"
+    assert phase["telemetry_outcome"] == TELEMETRY_EFFECT_ZERO_OUTCOME
+    assert phase["telemetry_outcome"] != "activation_missing_or_wiring_suspect"
+    assert "TELEMETRY_VALIDATION_REPAIRABLE" not in stored.branch_evidence_summary[
+        "decision_reason_codes"
+    ]
+    assert branch.branch_id in patches
+    assert workspaces[branch.branch_id] == "/tmp/workspace"
+
 
 def test_screening_telemetry_repairable_marks_telemetry_failed_not_code_failed() -> None:
     controller = BranchController()

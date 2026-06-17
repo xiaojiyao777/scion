@@ -169,6 +169,18 @@ Latest warehouse state:
   task is branch-level postrun analysis for the weak-positive `merge_vehicles`
   lineage and the remaining transfer-risk / bounded-candidate / branch-lesson
   quality-block pattern.
+- That branch-level analysis is complete and the focused interpretation repair
+  is locally accepted. Hard repairable telemetry failures still require
+  telemetry wiring repair, but nonblocking
+  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` now becomes `telemetry_effect_zero` and
+  no longer hides an active weak-positive branch workspace behind
+  `activation_missing_or_wiring_suspect`. The repair does not relax the
+  Decision gate: the `merge_vehicles` `7/1/6` signal remains screening-only.
+  Acceptance passed affected branch/finalizer/proposal prompt tests
+  (`68 passed`), evaluation/telemetry tests (`47 passed`), cross-branch/context
+  tests (`25 passed`), py_compile, and `git diff --check`. Next gate is one
+  short local warehouse field check on the 2-core server, not a broad WSL
+  matrix.
 
 Latest CVRP/VRP state:
 
