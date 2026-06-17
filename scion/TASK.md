@@ -3437,6 +3437,21 @@ Field gate:
   screening failed. Next gate is no longer prompt plumbing; it is mechanism
   analysis and a new cadence-trigger design that keeps runtime savings without
   the observed quality losses.
+- Completed CVRP embedded-VNS share-trigger diagnostics. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md`.
+  The failed agentic cadence trigger is accepted as a real negative mechanism
+  result: it over-thinned productive embedded VNS rather than removing pure
+  waste. Local CVRP-owned diagnostics added early-8, share60, and share70
+  cadence-2 probes without changing canonical defaults or generic
+  `DecisionFeatures`/Protocol/gates. Fixed `adaptive_embedded_vns_share70_cadence2`
+  is the current proposal-only opportunity: the focused WSL matrix completed
+  `64/64` rows, preserved `CMT4` and `X-n110-k13` neutrality, improved
+  `P-n65-k10` mean delta to `-1.5`, and finished overall `2/3/11`, mean
+  delta `-0.12`, median `0.0`, with lower embedded-VNS share than early-8.
+  Raw cadence-2, recent-best/stall gates, broad VNS removal, and fixed early-8
+  as a default are rejected or insufficient. CVRP solver-design prompt guidance
+  now prioritizes share70 scheduler refinement for the next short agentic
+  check.
 
 ## Status Cadence
 

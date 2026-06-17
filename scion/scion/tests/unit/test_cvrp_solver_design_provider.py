@@ -224,14 +224,15 @@ def test_cvrp_hypothesis_guidance_exposes_adaptive_vns_opportunity() -> None:
 
     rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
 
-    assert "adaptive embedded-VNS cadence-2" in rendered
+    assert "adaptive embedded-VNS share-70 cadence-2" in rendered
     assert "proposal-only" in rendered
     assert "excluded from DecisionFeatures/promotion gates" in rendered
-    assert "current exception is the adaptive embedded-VNS cadence-2 opportunity" in rendered
-    assert "runtime share from 0.653 to 0.528" in rendered
-    assert "mean ALNS iterations from 4.0 to 6.0" in rendered
+    assert "current exception is the adaptive embedded-VNS share-70 cadence-2 opportunity" in rendered
+    assert "raw adaptive embedded-VNS cadence-2 lowered embedded-VNS runtime pressure" in rendered
+    assert "64-row focused WSL matrix" in rendered
+    assert "mean paired delta -0.12" in rendered
     assert "not as a default solver change" in rendered
-    assert "objective, remaining-budget, recent best-update" in rendered
+    assert "cumulative embedded-VNS runtime-share, objective, remaining-budget" in rendered
     assert "Do not hardcode case ids, BKS values, seeds, or split membership" in rendered
     assert "do not remove VNS broadly" in rendered
 

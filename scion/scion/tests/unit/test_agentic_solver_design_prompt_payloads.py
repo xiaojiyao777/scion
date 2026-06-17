@@ -57,8 +57,9 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
         }
     )
 
-    assert "adaptive embedded-VNS cadence-2" in user_prompt
-    assert "remaining-budget, recent best-update" in user_prompt
+    assert "adaptive embedded-VNS share-70 cadence-2" in user_prompt
+    assert "cumulative embedded-VNS runtime-share" in user_prompt
+    assert "remaining-budget" in user_prompt
     assert "repaired-candidate-improvement signals" in user_prompt
 
 
@@ -89,8 +90,9 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "Current CVRP target-selection priority" in user_prompt
     assert "policies/baseline_modules/scheduler.py" in user_prompt
     assert "not the right owner for the current bottleneck" in user_prompt
-    assert "adaptive embedded-VNS cadence-2" in user_prompt
-    assert "remaining-budget, recent best-update" in user_prompt
+    assert "adaptive embedded-VNS share-70 cadence-2" in user_prompt
+    assert "cumulative embedded-VNS runtime-share" in user_prompt
+    assert "remaining-budget" in user_prompt
     assert "repaired-candidate-improvement signals" in user_prompt
 
 

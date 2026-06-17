@@ -145,20 +145,37 @@ CVRP/VRP:
   (`tier=regression`, median delta `-0.25`, `CMT4` and `X-n110-k13` losses) and
   was discarded. This accepts the steering repair and rejects the generated
   trigger as a solver improvement.
+- Follow-up no-LLM scheduler diagnostics are recorded at
+  [`../experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md`](../experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md).
+  The failed agentic trigger was a real mechanism failure, not infrastructure:
+  it saved time by starving productive embedded VNS on hard cases. Fixed
+  `adaptive_embedded_vns_share70_cadence2` is the current CVRP scheduler
+  opportunity, not a production default: the focused WSL matrix completed
+  `64/64` rows, preserved `CMT4` and `X-n110-k13` as neutral, improved
+  `P-n65-k10` mean delta to `-1.5`, and finished overall `2/3/11`, mean delta
+  `-0.12`, median `0.0`, with lower embedded-VNS share than early-8. Raw
+  cadence-2, recent-best/stall gating, broad VNS removal, and fixed early-8 as
+  a default are rejected or insufficient.
+- CVRP proposal guidance now prioritizes the share-70 cadence-2 scheduler
+  refinement and names `policies/baseline_modules/scheduler.py` as the owner
+  target unless target-intent notes give an evidence-backed deviation. This
+  guidance remains proposal-only and outside `DecisionFeatures`.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- No uncommitted Scion framework repair is currently pending. The latest CVRP
-  steering repair is pushed, WSL-fast-forwarded, and field-accepted.
+- No Scion framework repair is intentionally pending before the next short
+  agentic CVRP share-70 check. The latest CVRP scheduler diagnostic code has
+  been pushed and WSL-fast-forwarded.
 - The latest CVRP no-LLM and agentic artifacts are synced back to the server.
 
 ## Next Actions
 
 1. Treat the CVRP prompt/target steering repair as accepted and move to
-   mechanism analysis: inspect the `adaptive_embedded_vns_cadence2_trigger`
-   patch and case deltas, then design a less aggressive trigger that preserves
-   runtime savings without the `CMT4` / `X-n110-k13` quality losses.
+   a short agentic share-70 refinement check. The next CVRP agent should start
+   from fixed `adaptive_embedded_vns_share70_cadence2` evidence, keep the
+   scheduler target unless it records an evidence-backed deviation, and avoid
+   raw cadence-2/stall-gate repeats.
 2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
    CVRP same-mechanism research line, but do not confuse it with cadence-2
    adaptive-VNS trigger evidence.
