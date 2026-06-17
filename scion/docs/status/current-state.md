@@ -96,8 +96,9 @@ CVRP/VRP:
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL is fast-forwarded to commit `f5c02d7`; the CVRP no-LLM artifacts are
-  synced back to the server.
+- WSL is fast-forwarded to the latest pushed
+  `codex/v04-evidence-repair-plan` branch; the CVRP no-LLM artifacts are synced
+  back to the server.
 
 ## Next Actions
 
