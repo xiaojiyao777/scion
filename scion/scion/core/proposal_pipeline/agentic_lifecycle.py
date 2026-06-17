@@ -438,6 +438,7 @@ class AgenticLifecycleMixin:
             "premise_check",
             "reason",
             "retry_constraint",
+            "repair_template",
             "fact_ids",
             "fact_packet_digest",
             "source_fact_digest",

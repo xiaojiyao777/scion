@@ -259,8 +259,9 @@ def _hypothesis_prior_quality_feedback_section(context: Dict[str, Any]) -> str:
         "failed before protocol. They are tainted proposal context and are not "
         "Decision input, but they are hard research constraints for this "
         "hypothesis call. Do not propose a near-same mechanism until the cited "
-        "failure_code, gate, retry_constraint, missing_claims, or "
-        "missing_code_elements are explicitly repaired in the hypothesis.\n"
+        "failure_code, gate, retry_constraint, repair_template, "
+        "missing_claims, or missing_code_elements are explicitly repaired in "
+        "the hypothesis.\n"
         f"{rendered}\n\n"
     )
 

@@ -339,6 +339,9 @@ Frozen files (do not modify): {frozen}"""
                     "expected activation/effect diagnostics, and explain the "
                     "guard against screening-only improvements."
                 ),
+                "repair_template": _warehouse_hypothesis_quality_repair_template(
+                    missing
+                ),
                 "missing_claims": list(missing),
                 "decision_features_excluded": True,
             },
@@ -390,6 +393,7 @@ Frozen files (do not modify): {frozen}"""
                     "prevents screening-only or lexicographically dominated "
                     "moves."
                 ),
+                "repair_template": _warehouse_patch_quality_repair_template(missing),
                 "missing_code_elements": list(dict.fromkeys(missing)),
                 "target_file": _normalize_patch_path(
                     getattr(hypothesis, "target_file", "")
@@ -747,6 +751,59 @@ def _missing_transfer_quality_claims(hypothesis: Any) -> tuple[str, ...]:
     return tuple(missing)
 
 
+def _warehouse_hypothesis_quality_repair_template(
+    missing: Sequence[str],
+) -> Mapping[str, Any]:
+    return {
+        "repair_type": "warehouse_validation_transfer_hypothesis_quality",
+        "purpose": (
+            "Make the next warehouse operator hypothesis explicitly measurable "
+            "for screening-to-validation transfer before code generation."
+        ),
+        "missing_items": list(dict.fromkeys(str(item) for item in missing)),
+        "required_claims": [
+            (
+                "validation_transfer_risk: name why a screening-positive "
+                "operator can fail formal validation or holdout cases"
+            ),
+            (
+                "activation_effect_diagnostics: name at least one activation "
+                "counter such as operator_invocations, eligible_*_seen, or "
+                "accepted_moves and one effect counter such as split_delta_sum, "
+                "cost_delta_sum, or improving_move_count"
+            ),
+            (
+                "screening_only_guard: state the no-op, case-general, or "
+                "lexicographic guard that prevents screening-only gains"
+            ),
+        ],
+        "hypothesis_field_hints": {
+            "target_weakness": (
+                "Mention validation/formal transfer risk, not only the "
+                "screening symptom."
+            ),
+            "expected_effect": (
+                "Declare activation and effect diagnostics that should move if "
+                "the mechanism is real."
+            ),
+            "no_op_condition": (
+                "State the guard that returns the original solution when the "
+                "move is screening-only, not case-general, or lexicographically "
+                "dominated."
+            ),
+            "risk_to_higher_priority": (
+                "Acknowledge no hierarchical gain / median-delta-zero formal "
+                "failure risk."
+            ),
+        },
+        "must_not": [
+            "Do not propose another warehouse operator hypothesis that only says it may improve screening.",
+            "Do not defer diagnostics to analysis prose; put them in hypothesis fields.",
+        ],
+        "decision_features_excluded": True,
+    }
+
+
 def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
     if not str(code or "").strip():
         return ("activation_effect_diagnostic_code", "screening_or_lexicographic_guard")
@@ -757,6 +814,61 @@ def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
     if not _patch_has_screening_or_lexicographic_guard(code, signal_text):
         missing.append("screening_or_lexicographic_guard")
     return tuple(missing)
+
+
+def _warehouse_patch_quality_repair_template(
+    missing: Sequence[str],
+) -> Mapping[str, Any]:
+    return {
+        "repair_type": "warehouse_validation_transfer_patch_quality",
+        "purpose": (
+            "Make the warehouse operator patch visibly measurable for "
+            "activation/effect transfer and guarded against screening-only or "
+            "lexicographically dominated moves."
+        ),
+        "missing_items": list(dict.fromkeys(str(item) for item in missing)),
+        "required_code_signals": {
+            "activation": [
+                "operator_invocations",
+                "eligible_vehicle_or_order_groups_seen",
+                "accepted_moves",
+            ],
+            "effect": [
+                "split_delta_sum",
+                "cost_delta_sum",
+                "improving_move_count",
+            ],
+            "guard": [
+                "screening_only_guard",
+                "validation_transfer_guard",
+                "no_op_condition",
+                "lexicographic guard comparing subcategory_splits and total_cost",
+            ],
+        },
+        "minimal_shape": [
+            "Initialize or update a validation_transfer_diagnostics dictionary or similarly named counters.",
+            "Increment operator_invocations before evaluating the move.",
+            "Increment an eligible_* counter only when the case-general precondition is true.",
+            "Compute split_delta and cost_delta before accepting a move.",
+            "Only accept when the move improves subcategory_splits or preserves splits and improves total_cost.",
+            "Return the original solution when the move is screening-only, not case-general, or lexicographically dominated.",
+        ],
+        "example_identifiers": [
+            "validation_transfer_diagnostics",
+            "operator_invocations",
+            "eligible_vehicle_or_order_groups_seen",
+            "accepted_moves",
+            "split_delta_sum",
+            "cost_delta_sum",
+            "improving_move_count",
+            "screening_only_guard",
+        ],
+        "must_not": [
+            "Do not add counters in comments only; identifiers must appear in executable code.",
+            "Do not accept moves that worsen subcategory_splits for a cost-only gain.",
+        ],
+        "decision_features_excluded": True,
+    }
 
 
 def _warehouse_operator_patch_code(

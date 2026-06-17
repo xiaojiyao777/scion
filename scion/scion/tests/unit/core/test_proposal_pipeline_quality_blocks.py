@@ -555,6 +555,14 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
                     "retry_constraint": (
                         "add activation/effect diagnostic counters before protocol"
                     ),
+                    "repair_template": {
+                        "repair_type": "warehouse_validation_transfer_patch_quality",
+                        "required_code_signals": {
+                            "activation": ["operator_invocations"],
+                            "effect": ["split_delta_sum"],
+                            "guard": ["screening_only_guard"],
+                        },
+                    },
                     "missing_code_elements": ["activation_effect_diagnostic_code"],
                     "counts_as_screened_round": False,
                     "counts_as_proposal_quality_attempt": True,
@@ -588,6 +596,9 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     )
     assert stored[0]["gate_name"] == "warehouse_validation_transfer_patch_quality"
     assert "activation/effect diagnostic counters" in stored[0]["retry_constraint"]
+    assert stored[0]["repair_template"]["repair_type"] == (
+        "warehouse_validation_transfer_patch_quality"
+    )
     assert stored[0]["missing_code_elements"] == ["activation_effect_diagnostic_code"]
     assert session_ref is not None
     assert session_ref["agent_block_reason"] == "agent_quality_blocked"
@@ -629,6 +640,8 @@ def test_agentic_patch_quality_block_enters_next_hypothesis_context() -> None:
     assert "Prior Agent Quality Blocks For This Hypothesis" in user_prompt
     assert "warehouse_validation_transfer_patch_quality_missing" in user_prompt
     assert "activation/effect diagnostic counters" in user_prompt
+    assert "warehouse_validation_transfer_patch_quality" in user_prompt
+    assert "repair_template" in user_prompt
     assert "activation_effect_diagnostic_code" in user_prompt
     assert "missing_code_elements" in user_prompt
     assert "hard research constraints" in user_prompt
@@ -669,6 +682,14 @@ def test_agentic_patch_quality_block_enters_next_code_context_and_prompt() -> No
                     "retry_constraint": (
                         "add activation/effect diagnostic counters before protocol"
                     ),
+                    "repair_template": {
+                        "repair_type": "warehouse_validation_transfer_patch_quality",
+                        "required_code_signals": {
+                            "activation": ["operator_invocations"],
+                            "effect": ["split_delta_sum"],
+                            "guard": ["screening_only_guard"],
+                        },
+                    },
                     "missing_code_elements": ["activation_effect_diagnostic_code"],
                     "counts_as_screened_round": False,
                     "counts_as_proposal_quality_attempt": True,
@@ -751,6 +772,8 @@ def test_agentic_patch_quality_block_enters_next_code_context_and_prompt() -> No
     assert "agentic_prior_quality_blocks" in code_context
     assert "warehouse_validation_transfer_patch_quality_missing" in rendered_context
     assert "activation/effect diagnostic counters" in rendered_context
+    assert "warehouse_validation_transfer_patch_quality" in rendered_context
+    assert "repair_template" in rendered_context
     assert "activation_effect_diagnostic_code" in rendered_context
     assert "hard code repair constraints" in code_context[
         "agentic_prior_quality_block_rule"
@@ -759,6 +782,7 @@ def test_agentic_patch_quality_block_enters_next_code_context_and_prompt() -> No
     assert "Prior Agent Quality Blocks For This Code Patch" in user_prompt
     assert "warehouse_validation_transfer_patch_quality_missing" in user_prompt
     assert "activation/effect diagnostic counters" in user_prompt
+    assert "repair_template" in user_prompt
     assert "activation_effect_diagnostic_code" in user_prompt
     assert "Decision input" in user_prompt
     assert branch.branch_id not in pipeline.agentic_quality_feedback

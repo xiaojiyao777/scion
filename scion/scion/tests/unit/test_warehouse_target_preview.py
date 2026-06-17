@@ -249,6 +249,12 @@ def test_warehouse_quality_check_blocks_missing_validation_transfer_claims() -> 
         check.structured_rejection["gate_name"]
         == "warehouse_validation_transfer_quality"
     )
+    template = check.structured_rejection["repair_template"]
+    assert template["repair_type"] == (
+        "warehouse_validation_transfer_hypothesis_quality"
+    )
+    assert "validation_transfer_risk" in template["missing_items"]
+    assert "expected_effect" in template["hypothesis_field_hints"]
 
 
 def test_agentic_validation_blocks_warehouse_hypothesis_before_code() -> None:
@@ -395,6 +401,11 @@ class MergeVehicles:
         == "warehouse_validation_transfer_patch_quality"
     )
     assert check.structured_rejection["agent_block_reason"] == "agent_quality_blocked"
+    template = check.structured_rejection["repair_template"]
+    assert template["repair_type"] == "warehouse_validation_transfer_patch_quality"
+    assert "activation_effect_diagnostic_code" in template["missing_items"]
+    assert "operator_invocations" in template["required_code_signals"]["activation"]
+    assert "screening_only_guard" in template["example_identifiers"]
 
 
 def test_warehouse_patch_quality_allows_diagnostics_and_guard_code() -> None:
@@ -500,6 +511,9 @@ class MergeVehicles:
     assert (
         sanitized.structured_rejection["gate_name"]
         == "warehouse_validation_transfer_patch_quality"
+    )
+    assert sanitized.structured_rejection["repair_template"]["repair_type"] == (
+        "warehouse_validation_transfer_patch_quality"
     )
 
 

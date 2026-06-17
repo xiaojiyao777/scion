@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse `3c2b7b5` retry-constraint repair is field-accepted, but research quality failed; `4b2ee29` hypothesis quality-block rerun is active on WSL*
+*Status: warehouse `4b2ee29` hypothesis quality-block prompt visibility is field-accepted, but research quality failed; repair-template follow-up is local*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -726,23 +726,28 @@ Exit criteria:
   `Prior Agent Quality Blocks For This Hypothesis` as hard proposal-only repair
   constraints before analysis steps, so repeated validation-transfer failures
   must be addressed before a near-same mechanism is proposed.
-- Launched: warehouse hypothesis quality-block field rerun from commit
+- Completed: warehouse hypothesis quality-block field rerun from commit
   `4b2ee29`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-hypothesis-qualityblock-rerun6r-launch-20260616.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-hypothesis-qualityblock-rerun6r-postrun-20260617.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
   server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-hypothesis-qualityblock-rerun6r-4b2ee29-20260616T222243Z`;
-  tmux session `scion_wh_hypqblock_rerun6r_4b2ee29_222243`. Initial health
-  check shows `status=running`, commit `4b2ee29`, and the expected first
-  warehouse validation-transfer quality block. Early trace inspection accepts
-  prompt visibility: later hypothesis LLM traces include
+  wrapper exit `0`; `run_validity.status=valid`; `6/6` effective rounds;
+  `11` proposal attempts; `5` quality blocks; `6` formal screening rows;
+  `0` validation rows, `0` frozen rows, no promotion, and champion stayed v1.
+  Prompt visibility is accepted: `7/12` hypothesis LLM traces include
   `Prior Agent Quality Blocks For This Hypothesis` with warehouse-owned
   hypothesis and patch failure codes, retry constraints, and
-  `missing_claims` / `missing_code_elements`. Research-quality acceptance still
-  requires either fewer repeated validation-transfer blocks, a genuine
-  adapter-owned explanation for remaining blocks, or restored
-  validation/frozen/promotion behavior without regressing prompt visibility.
+  `missing_claims` / `missing_code_elements`. Research quality is rejected:
+  all formal candidates stayed screening-only, the best retained branch was
+  only `1/1/12` W/L/T with median `0`, and the same transfer/diagnostic failure
+  family repeated. Follow-up local repair: warehouse quality-block structured
+  rejections now include problem-owned `repair_template` checklists for
+  hypothesis fields, diagnostic identifiers, and screening/lexicographic guard
+  code shape; quality feedback preserves those templates into later prompts.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

@@ -412,7 +412,8 @@ def _code_prior_quality_feedback_section(context: Dict[str, Any]) -> str:
         "failed before protocol. They are tainted proposal context and are not "
         "Decision input, but they are hard repair constraints for this code "
         "generation call. Do not emit a near-same patch until the cited "
-        "failure_code, gate, or retry_constraint is repaired in code.\n"
+        "failure_code, gate, retry_constraint, repair_template, or missing "
+        "code element is repaired in code.\n"
         f"{rendered}\n\n"
     )
 
