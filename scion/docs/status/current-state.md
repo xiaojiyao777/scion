@@ -162,8 +162,15 @@ Active work as of the latest handoff:
   `/home/clawd/research/scion-data`. A local follow-up repair adds
   warehouse `budgets.json` and resolves declared repo-relative data roots from
   the protocol/budget source before falling back to copied `problem.yaml`.
-  Focused data-root/path-safety tests pass; next step is a small server-side
-  warehouse acceptance rerun.
+  Focused data-root/path-safety tests pass. The small server-side warehouse
+  acceptance rerun is active from commit `ad469f0`; launch report:
+  [`../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md).
+  Corrected server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T033450Z`;
+  tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`.
+  Preflight confirmed both production canary cases resolve under
+  `/home/clawd/research/scion-data`, and the campaign log confirms
+  `SCION_WAREHOUSE_DATA_ROOT` activation before campaign startup.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

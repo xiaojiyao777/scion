@@ -771,6 +771,20 @@ Exit criteria:
   Acceptance: focused data-root and protocol path-safety tests pass, and a
   local replay of the copied config resolves both production canary cases under
   `/home/clawd/research/scion-data`.
+- Launched: warehouse data-root repair acceptance rerun from commit `ad469f0`.
+  Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md`.
+  Corrected server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T033450Z`;
+  tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`.
+  This is a single-cell server run, matching the resource policy that 1-2
+  cells can run locally while larger matrices go to WSL. Preflight confirmed
+  `SCION_WAREHOUSE_DATA_ROOT=/home/clawd/research/scion-data` and both
+  production canary cases resolve as `resolved_safe_data_root`. The campaign
+  started normally. A prior wrapper attempt at
+  `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T011900Z`
+  exited before campaign startup due unsupported `--problem-v1`; ignore it as
+  a wrapper typo.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
