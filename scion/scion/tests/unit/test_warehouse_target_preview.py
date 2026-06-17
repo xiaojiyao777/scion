@@ -572,6 +572,208 @@ class MergeVehicles:
     assert check.allowed is True
 
 
+def test_warehouse_quality_blocks_existing_operator_invented_telemetry_key() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine move_order for screening-to-validation transfer using a "
+            "case-general guard rather than a screening-only move."
+        ),
+        change_locus="order_level",
+        action="modify",
+        target_file="operators/move_order.py",
+        target_weakness=(
+            "Formal validation can fail when screening activation has no "
+            "hierarchical gain."
+        ),
+        expected_effect=(
+            "Activation and effect diagnostics should show operator_invocations "
+            "and split_delta_sum under an exportable runtime key."
+        ),
+        no_op_condition=(
+            "Return the original solution when the move is not case-general or "
+            "would worsen lexicographic split/cost objectives."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is a screening-positive no hierarchical "
+            "gain on formal cases."
+        ),
+        expected_telemetry={
+            "activation": [
+                (
+                    "operator_diagnostics."
+                    "split_preserving_vehicle_elimination.operator_invocations"
+                )
+            ],
+            "effect": [
+                (
+                    "operator_diagnostics."
+                    "split_preserving_vehicle_elimination.split_delta_sum"
+                )
+            ],
+        },
+        mechanism_changes=(
+            MechanismChange(
+                id="split_preserving_vehicle_elimination",
+                change_type="modify",
+            ),
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+
+    assert check.allowed is False
+    rejection = check.structured_rejection
+    assert (
+        rejection["failure_code"]
+        == "agent_quality_blocked:warehouse_operator_telemetry_identity_mismatch"
+    )
+    assert rejection["gate_name"] == "warehouse_operator_telemetry_identity"
+    assert rejection["expected_runtime_key"] == "move_order"
+    assert rejection["offending_mechanism_ids"] == [
+        "split_preserving_vehicle_elimination"
+    ]
+    assert "operator_diagnostics.move_order.operator_invocations" in str(
+        rejection["repair_template"]
+    )
+
+
+def test_warehouse_quality_allows_existing_operator_runtime_key_shape() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine move_order for screening-to-validation transfer with a "
+            "case-general order relocation guard."
+        ),
+        change_locus="order_level",
+        action="modify",
+        target_file="operators/move_order.py",
+        target_weakness=(
+            "Prior screening-positive activation can fail formal validation "
+            "with no hierarchical gain."
+        ),
+        expected_effect=(
+            "Activation/effect diagnostics should show "
+            "operator_diagnostics.move_order.operator_invocations and "
+            "operator_diagnostics.move_order.split_delta_sum positive."
+        ),
+        no_op_condition=(
+            "Return the original solution when the move is screening-only, "
+            "not case-general, or lexicographically dominated."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is no hierarchical gain on formal cases."
+        ),
+        expected_telemetry={
+            "activation": [
+                "operator_diagnostics.move_order.operator_invocations",
+                (
+                    "operator_diagnostics.move_order."
+                    "eligible_vehicle_or_order_groups_seen"
+                ),
+                "operator_diagnostics.move_order.accepted_moves",
+            ],
+            "effect": [
+                "operator_diagnostics.move_order.split_delta_sum",
+                "operator_diagnostics.move_order.cost_delta_sum",
+            ],
+        },
+        mechanism_changes=(MechanismChange(id="move_order", change_type="modify"),),
+    )
+    patch = PatchProposal(
+        file_path="operators/move_order.py",
+        action="modify",
+        code_content=_valid_validation_transfer_operator_code("MoveOrder"),
+        mechanism_changes=(MechanismChange(id="move_order", change_type="modify"),),
+    )
+
+    hypothesis_check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+    patch_check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+        patch,
+    )
+
+    assert hypothesis_check.allowed is True
+    assert patch_check.allowed is True
+
+
+def test_warehouse_quality_allows_create_new_operator_runtime_key_shape() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    runtime_key = "same_subcategory_residual_merge"
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Create a same-subcategory residual merge operator for "
+            "screening-to-validation transfer with a case-general merge guard."
+        ),
+        change_locus="vehicle_level",
+        action="create_new",
+        target_file=f"operators/{runtime_key}.py",
+        target_weakness=(
+            "Subcategory residuals can look positive in screening but fail "
+            "formal validation if they do not transfer."
+        ),
+        expected_effect=(
+            "Activation/effect diagnostics should show "
+            f"operator_diagnostics.{runtime_key}.operator_invocations and "
+            f"operator_diagnostics.{runtime_key}.split_delta_sum positive."
+        ),
+        no_op_condition=(
+            "Return the original solution when a merge is screening-only, not "
+            "case-general, or lexicographically dominated."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is no hierarchical gain on formal cases."
+        ),
+        expected_telemetry={
+            "activation": [
+                f"operator_diagnostics.{runtime_key}.operator_invocations",
+                f"operator_diagnostics.{runtime_key}.accepted_moves",
+            ],
+            "effect": [
+                f"operator_diagnostics.{runtime_key}.split_delta_sum",
+                f"operator_diagnostics.{runtime_key}.cost_delta_sum",
+            ],
+        },
+        mechanism_changes=(MechanismChange(id=runtime_key, change_type="add"),),
+    )
+    patch = PatchProposal(
+        file_path=f"operators/{runtime_key}.py",
+        action="create",
+        code_content=_valid_validation_transfer_operator_code(
+            "SameSubcategoryResidualMerge"
+        ),
+        mechanism_changes=(MechanismChange(id=runtime_key, change_type="add"),),
+    )
+
+    hypothesis_check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+    patch_check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+        patch,
+    )
+
+    assert hypothesis_check.allowed is True
+    assert patch_check.allowed is True
+
+
 def test_warehouse_patch_quality_accepts_helper_returned_diagnostics_dict() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     adapter = WarehouseDeliveryAdapter(spec_v1)
@@ -1118,6 +1320,36 @@ def _warehouse_transfer_quality_hypothesis() -> HypothesisProposal:
             "Validation transfer risk is a median delta 0 no hierarchical gain."
         ),
     )
+
+
+def _valid_validation_transfer_operator_code(class_name: str) -> str:
+    return f"""
+class {class_name}:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {{
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }}
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        split_delta = 1
+        cost_delta = 10
+        diagnostics["split_delta_sum"] += split_delta
+        diagnostics["cost_delta_sum"] += cost_delta
+        if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+"""
 
 
 class _AgenticValidationHarness(AgenticValidationMixin):

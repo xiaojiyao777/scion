@@ -16,6 +16,11 @@ from typing import Any, Mapping, Sequence
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
+from scion.runtime.telemetry_guard import (
+    normalize_declared_mechanisms,
+    normalize_expected_telemetry,
+    normalize_expected_telemetry_by_mechanism,
+)
 
 
 class WarehouseDeliveryAdapter:
@@ -83,7 +88,11 @@ class WarehouseDeliveryAdapter:
                         "return that standard dict literal, but its result must "
                         "be assigned to `self.validation_transfer_diagnostics`, "
                         "not only a local dict or undeclared expected_telemetry "
-                        "names."
+                        "names. When modifying an existing operator module, "
+                        "the expected telemetry runtime key must use the target "
+                        "operator registry/export name, for example "
+                        "`operator_diagnostics.move_order.*` for "
+                        "`operators/move_order.py`."
                     ),
                 },
                 {
@@ -405,6 +414,12 @@ Frozen files (do not modify): {frozen}"""
         del step_history
         if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
             return {"allowed": True}
+        identity_rejection = _warehouse_telemetry_identity_rejection(
+            hypothesis=hypothesis,
+            patch=None,
+        )
+        if identity_rejection:
+            return identity_rejection
         missing = _missing_transfer_quality_claims(hypothesis)
         if not missing:
             return {
@@ -454,6 +469,12 @@ Frozen files (do not modify): {frozen}"""
         del step_history
         if not _is_high_risk_warehouse_hypothesis(branch, hypothesis):
             return {"allowed": True}
+        identity_rejection = _warehouse_telemetry_identity_rejection(
+            hypothesis=hypothesis,
+            patch=patch,
+        )
+        if identity_rejection:
+            return identity_rejection
         code, changed_files = _warehouse_operator_patch_code(patch, hypothesis)
         missing = list(_missing_transfer_patch_quality(code))
         if not changed_files:
@@ -752,9 +773,13 @@ def _render_validation_transfer_guidance() -> str:
         "`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, "
         "`split_delta_sum`, `cost_delta_sum`, `improving_move_count`) so the "
         "warehouse solver exports them as "
-        "`runtime.operator_diagnostics.{mechanism}.*`. Do not use a local "
-        "dict or undeclared expected_telemetry keys that cannot be consumed by "
-        "the telemetry guard."
+        "`runtime.operator_diagnostics.{mechanism}.*`. For modify-existing "
+        "operator proposals, `{mechanism}` must be the target operator "
+        "registry/export key derived from the module name, such as "
+        "`move_order` for `operators/move_order.py`; new operator modules may "
+        "use their new registry name as the mechanism. Do not use a local dict "
+        "or undeclared expected_telemetry keys that cannot be consumed by the "
+        "telemetry guard."
     )
 
 
@@ -789,6 +814,9 @@ WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE = (
 )
 WAREHOUSE_VALIDATION_TRANSFER_PATCH_QUALITY_FAILURE = (
     "agent_quality_blocked:warehouse_validation_transfer_patch_quality_missing"
+)
+WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE = (
+    "agent_quality_blocked:warehouse_operator_telemetry_identity_mismatch"
 )
 
 _EXISTING_OPERATOR_MODULES = frozenset(
@@ -970,6 +998,185 @@ def _warehouse_patch_quality_repair_template(
         ],
         "decision_features_excluded": True,
     }
+
+
+def _warehouse_telemetry_identity_rejection(
+    *,
+    hypothesis: Any,
+    patch: Any | None,
+) -> Mapping[str, Any] | None:
+    expected_runtime_key = _existing_operator_runtime_key(hypothesis, patch)
+    if not expected_runtime_key:
+        return None
+
+    declared_ids = _declared_warehouse_telemetry_mechanism_ids(hypothesis, patch)
+    offending = tuple(
+        mechanism
+        for mechanism in declared_ids
+        if mechanism and mechanism != expected_runtime_key
+    )
+    if not offending:
+        return None
+
+    target_file = _existing_operator_target_file(hypothesis, patch)
+    detail = (
+        f"{WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE}: modify-existing "
+        f"warehouse operator target {target_file or '<unknown>'} exports runtime "
+        f"telemetry under operator_diagnostics.{expected_runtime_key}.*, but "
+        "the proposal declared non-exported mechanism id(s) "
+        f"{', '.join(offending)}. Use the target operator registry/export key "
+        "in expected_telemetry or add an explicit exportable registry alias "
+        "before protocol."
+    )
+    return {
+        "allowed": False,
+        "detail": detail,
+        "gate_name": "warehouse_operator_telemetry_identity",
+        "structured_rejection": {
+            "source": "warehouse_problem_adapter",
+            "gate_name": "warehouse_operator_telemetry_identity",
+            "failure_code": WAREHOUSE_OPERATOR_TELEMETRY_IDENTITY_FAILURE,
+            "agent_block_reason": "agent_quality_blocked",
+            "retry_constraint": (
+                "For modify-existing warehouse operator patches, keep the "
+                "mechanism identity aligned with the runtime export key. "
+                f"Use `operator_diagnostics.{expected_runtime_key}.*` for "
+                f"`{target_file}` or include an explicit registry/export alias."
+            ),
+            "target_file": target_file,
+            "expected_runtime_key": expected_runtime_key,
+            "offending_mechanism_ids": list(offending),
+            "repair_template": _warehouse_telemetry_identity_repair_template(
+                target_file=target_file,
+                expected_runtime_key=expected_runtime_key,
+                offending=offending,
+            ),
+            "counts_as_screened_round": False,
+            "counts_as_proposal_quality_attempt": True,
+            "decision_features_excluded": True,
+        },
+    }
+
+
+def _warehouse_telemetry_identity_repair_template(
+    *,
+    target_file: str,
+    expected_runtime_key: str,
+    offending: Sequence[str],
+) -> Mapping[str, Any]:
+    return {
+        "repair_type": "warehouse_operator_telemetry_identity",
+        "purpose": (
+            "Align the declared mechanism id with the warehouse solver's "
+            "operator_diagnostics export key before Protocol runs."
+        ),
+        "target_file": target_file,
+        "expected_runtime_key": expected_runtime_key,
+        "offending_mechanism_ids": list(
+            dict.fromkeys(str(item) for item in offending)
+        ),
+        "required_expected_telemetry_shape": {
+            "activation": [
+                f"operator_diagnostics.{expected_runtime_key}.operator_invocations",
+                (
+                    "operator_diagnostics."
+                    f"{expected_runtime_key}.eligible_vehicle_or_order_groups_seen"
+                ),
+                f"operator_diagnostics.{expected_runtime_key}.accepted_moves",
+            ],
+            "effect": [
+                f"operator_diagnostics.{expected_runtime_key}.split_delta_sum",
+                f"operator_diagnostics.{expected_runtime_key}.cost_delta_sum",
+                f"operator_diagnostics.{expected_runtime_key}.improving_move_count",
+            ],
+        },
+        "allowed_create_new_pattern": (
+            "For create_new operator modules, use the new registered operator "
+            "name as the mechanism id and runtime key."
+        ),
+        "must_not": [
+            (
+                "Do not invent a separate mechanism id for an existing "
+                "operator unless the patch also adds an exportable registry alias."
+            ),
+            "Do not wait for SCREENING_TELEMETRY_FAILED to discover the mismatch.",
+        ],
+        "decision_features_excluded": True,
+    }
+
+
+def _existing_operator_runtime_key(hypothesis: Any, patch: Any | None) -> str:
+    target_file = _existing_operator_target_file(hypothesis, patch)
+    if not target_file:
+        return ""
+    return _operator_runtime_key_from_module_path(target_file)
+
+
+def _existing_operator_target_file(hypothesis: Any, patch: Any | None) -> str:
+    action = str(getattr(hypothesis, "action", "") or "").strip()
+    target_file = _normalize_patch_path(getattr(hypothesis, "target_file", ""))
+    if action == "modify" and _is_existing_operator_module(target_file):
+        return target_file
+    if patch is None:
+        return ""
+    for change in _patch_changes(patch):
+        change_action = str(getattr(change, "action", "") or "").strip()
+        file_path = _normalize_patch_path(getattr(change, "file_path", ""))
+        if change_action == "modify" and _is_existing_operator_module(file_path):
+            return file_path
+    return ""
+
+
+def _operator_runtime_key_from_module_path(file_path: str) -> str:
+    basename = os.path.basename(_normalize_patch_path(file_path))
+    stem, ext = os.path.splitext(basename)
+    if ext != ".py":
+        return ""
+    return stem
+
+
+def _declared_warehouse_telemetry_mechanism_ids(
+    hypothesis: Any,
+    patch: Any | None,
+) -> tuple[str, ...]:
+    declared: list[str] = []
+    for artifact in (hypothesis, patch):
+        if artifact is None:
+            continue
+        expected = getattr(artifact, "expected_telemetry", {}) or {}
+        novelty = getattr(artifact, "novelty_signature", {}) or {}
+        declared.extend(
+            normalize_declared_mechanisms(
+                getattr(artifact, "mechanism_changes", ()) or (),
+                expected_telemetry=expected,
+                novelty_signature=novelty,
+            )
+        )
+        declared.extend(_mechanism_ids_from_expected_telemetry_paths(expected))
+    return tuple(dict.fromkeys(item for item in declared if item))
+
+
+def _mechanism_ids_from_expected_telemetry_paths(
+    expected_telemetry: Any,
+) -> tuple[str, ...]:
+    mechanisms: list[str] = []
+    mechanisms.extend(normalize_expected_telemetry_by_mechanism(expected_telemetry))
+    claims = normalize_expected_telemetry(expected_telemetry)
+    for fields in claims.values():
+        for field in fields:
+            mechanism = _operator_diagnostics_mechanism_from_field(field)
+            if mechanism:
+                mechanisms.append(mechanism)
+    return tuple(dict.fromkeys(mechanisms))
+
+
+def _operator_diagnostics_mechanism_from_field(field: Any) -> str:
+    parts = str(field or "").strip().split(".")
+    for index, part in enumerate(parts[:-1]):
+        if part == "operator_diagnostics" and index + 1 < len(parts):
+            mechanism = parts[index + 1].strip()
+            return mechanism if mechanism and mechanism != "{mechanism}" else ""
+    return ""
 
 
 def _warehouse_operator_patch_code(

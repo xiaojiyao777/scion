@@ -248,6 +248,36 @@ Active work as of the latest handoff:
   (`41 passed`), schema retry (`24 passed`), py_compile, and
   `git diff --check`. The next step is one short warehouse production `6R`
   field gate from the new repair commit.
+  That gate from commit `fdba51e` was intentionally stopped after it produced
+  enough failed-acceptance evidence; launch/postrun report:
+  [`../experiments/v0.4/v04-warehouse-patch-quality-shape-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-patch-quality-shape-rerun6r-launch-20260617.md).
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-patch-quality-shape-rerun6r-fdba51e-20260617T052828Z`;
+  final wrapper `exit_code=1` after main-thread `SIGTERM`,
+  `run_validity.status=valid`, `reason=valid_partial_interrupted`,
+  `effective_rounds_completed=4`, `protocol_metric_results=4`, and
+  `quality_blocks=6`. This is useful partial evidence, not an accepted field
+  gate. It cleared the previous zero-protocol-row blocker and showed that a new
+  `same_subcategory_residual_merge` operator can export consumed
+  `operator_diagnostics`, but research-quality acceptance still fails: repeated
+  warehouse patch-quality blocks recurred, one proposal was blocked for missing
+  validation-transfer risk, and a positive `move_order.py` candidate was
+  abandoned by `SCREENING_TELEMETRY_FAILED` because expected telemetry declared
+  `split_preserving_vehicle_elimination` while runtime exported diagnostics
+  under the existing registry key `move_order`. The next active repair is
+  warehouse-owned mechanism-identity/telemetry-key alignment for modified
+  existing operators; subagent `Huygens`
+  (`019ed429-d893-7c61-a399-47290e4926d2`) owns the bounded code/test slice.
+  That repair is now locally accepted: `WarehouseDeliveryAdapter` blocks
+  modify-existing warehouse operator hypotheses/patches before Protocol when
+  declared telemetry mechanism ids cannot match the runtime export key, while
+  preserving the create-new operator path. No Decision, Protocol, validation/
+  frozen, or promotion semantics changed. Main-thread verification passed
+  warehouse target preview (`29 passed`), proposal quality blocks (`21 passed`),
+  agentic session repair/core (`38 passed`), runtime telemetry/expected
+  telemetry (`41 passed`), CVRP provider plus proposal quality (`43 passed`),
+  py_compile, and `git diff --check`. The next step is one short warehouse
+  production rerun from the new repair commit.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

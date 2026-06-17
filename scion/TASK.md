@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; patch-quality shape repair locally accepted*
+*Status: warehouse mechanism-identity telemetry repair locally accepted; next field gate pending*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -874,6 +874,58 @@ Exit criteria:
   `git diff --check`. Next gate: one short warehouse production `6R` field
   check from the new repair commit, accepted only if it reaches protocol rows
   and no longer loops on the same patch-quality shape block.
+- Stopped with failed field acceptance: warehouse patch-quality shape follow-up
+  `6R` field gate from commit `fdba51e`. Launch/postrun report:
+  `scion/docs/experiments/v0.4/v04-warehouse-patch-quality-shape-rerun6r-launch-20260617.md`.
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-patch-quality-shape-rerun6r-fdba51e-20260617T052828Z`;
+  tmux session `scion_wh_patchshape_fdba51e_052828`; final wrapper
+  `exit_code=1` after main-thread `SIGTERM`, with
+  `run_validity.status=valid`, `reason=valid_partial_interrupted`,
+  `effective_rounds_completed=4`, `protocol_metric_results=4`,
+  `quality_blocks=6`, and no validation/frozen/promotion rows. The run is
+  scientifically useful partial evidence but not an accepted field gate.
+  It proved the `5c78f84` zero-protocol-row blocker was cleared and that newly
+  created operators can export consumed `operator_diagnostics`: metrics
+  `9b304408-e179-4a11-a856-6fb3e00a29b6.json` for
+  `same_subcategory_residual_merge` had telemetry `passed=True` and continued
+  same-mechanism exploration. Field acceptance still fails because repeated
+  `warehouse_validation_transfer_patch_quality_missing` blocks recurred, one
+  proposal was blocked at hypothesis approval for missing
+  `validation_transfer_risk`, and a positive `move_order.py` candidate
+  (`2/1/3` case W/L/T, `5/3/4` pair W/L/T, median `+225.0`) was abandoned by
+  `SCREENING_TELEMETRY_FAILED`. Its declared telemetry mechanism was
+  `split_preserving_vehicle_elimination`, while runtime exported diagnostics
+  under the existing registry key `move_order`. Next active repair is
+  warehouse-owned mechanism-identity/telemetry-key alignment for modified
+  existing operators; the main thread delegated implementation to subagent
+  `Huygens` (`019ed429-d893-7c61-a399-47290e4926d2`) with scope limited to
+  `WarehouseDeliveryAdapter` and focused tests.
+- Implemented and locally accepted: warehouse mechanism-identity telemetry
+  repair by subagent `Huygens` (`019ed429-d893-7c61-a399-47290e4926d2`).
+  The fix stays problem-owned in `WarehouseDeliveryAdapter`: modify-existing
+  warehouse operator hypotheses/patches now fail before Protocol with
+  `warehouse_operator_telemetry_identity` if they declare telemetry mechanisms
+  that cannot match the runtime export key, such as declaring
+  `split_preserving_vehicle_elimination` while modifying
+  `operators/move_order.py`, whose runtime diagnostics export under
+  `operator_diagnostics.move_order.*`. New operator modules remain allowed to
+  use their new registered operator name as the runtime key. No
+  `DecisionFeatures`, Decision, Protocol thresholds, validation/frozen gates, or
+  promotion semantics changed. Main-thread verification passed:
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_warehouse_target_preview.py`
+  (`29 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py`
+  (`21 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_agentic_session_core_flow.py scion/scion/tests/unit/test_agentic_session_preview_repair.py`
+  (`38 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_runtime_telemetry_guard.py scion/scion/tests/unit/test_runtime_telemetry_guard_mechanism_diagnostics.py scion/scion/tests/unit/test_expected_telemetry_activation_contract.py`
+  (`41 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_cvrp_solver_design_provider.py scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py`
+  (`43 passed`); `py_compile`; and `git diff --check`. Next gate: one short
+  warehouse production rerun from the new repair commit, accepted only if
+  telemetry-identity mismatches are blocked before Protocol and no
+  screening-positive candidate is lost to this mismatch shape.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
