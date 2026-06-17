@@ -215,6 +215,14 @@ Latest warehouse state:
   available, but the WSL checkout was still at `4b2ee29` and must be
   fast-forwarded before any new WSL run. Next gate is one short local warehouse
   `6R` field check on the 2-core server.
+- That short local field gate is now running from commit `9853dd4`. Launch
+  report:
+  [`../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-launch-20260617.md).
+  Active root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-quality-skeleton-rerun6r-9853dd4-20260617T120052Z`.
+  tmux:
+  `scion_wh_quality_skeleton_rerun6r_9853dd4_20260617T120052Z`.
+  Initial health check passed and the campaign has started.
 
 Latest CVRP/VRP state:
 

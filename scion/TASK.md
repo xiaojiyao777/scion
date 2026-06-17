@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 frontier analysis complete; warehouse quality-skeleton repair locally accepted; short local warehouse field acceptance next*
+*Status: Phase 4 frontier analysis complete; warehouse quality-skeleton field gate running locally*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3065,6 +3065,20 @@ Field gate:
 - Next gate after commit: one short local warehouse production `6R` field
   check on the 2-core server. Do not launch a broad WSL matrix until this
   quality-skeleton repair is field-accepted.
+- Launched: that short local warehouse production `6R` field check from commit
+  `9853dd4`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-launch-20260617.md`.
+  Active server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-quality-skeleton-rerun6r-9853dd4-20260617T120052Z`.
+  tmux session:
+  `scion_wh_quality_skeleton_rerun6r_9853dd4_20260617T120052Z`.
+  Initial health check passed: `status=running`, campaign log reached
+  `Starting campaign: warehouse_delivery`, and `llm_traces/`, `scion.db`,
+  `status.json`, and `run_status.json` exist. An earlier `nohup` wrapper
+  attempt at
+  `/home/clawd/research/scion-experiments/v04-warehouse-quality-skeleton-rerun6r-9853dd4-20260617T115932Z`
+  is marked `aborted_wrapper_no_campaign`; it created no campaign directory or
+  log and consumed no LLM/protocol work.
 
 ## Status Cadence
 
