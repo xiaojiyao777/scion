@@ -163,24 +163,50 @@ Active work as of the latest handoff:
   warehouse `budgets.json` and resolves declared repo-relative data roots from
   the protocol/budget source before falling back to copied `problem.yaml`.
   Focused data-root/path-safety tests pass. The small server-side warehouse
-  acceptance rerun is active from commit `ad469f0`; launch report:
+  acceptance rerun from commit `ad469f0` is complete; launch report:
   [`../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md).
+  postrun:
+  [`../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-postrun-20260617.md).
   Corrected server root:
   `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T033450Z`;
-  tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`.
-  Preflight confirmed both production canary cases resolve under
+  tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`. Preflight
+  confirmed both production canary cases resolve under
   `/home/clawd/research/scion-data`, and the campaign log confirms
-  `SCION_WAREHOUSE_DATA_ROOT` activation before campaign startup. Live health
-  check has now exercised the repaired path: the run has
-  `formal_screened_candidates=1`, `screening_protocol_results=1`, and
-  `protocol_metric_results=1`; the first formal candidate passed canary and
-  reached screening. The full `6R` run remains active, so final warehouse
-  research-quality interpretation still waits for postrun analysis.
+  `SCION_WAREHOUSE_DATA_ROOT` activation before campaign startup. Final postrun
+  accepts the data-root repair: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `effective_rounds_completed=6`,
+  `formal_screened_candidates=6`, `protocol_metric_results=6`, and
+  `verification_failure_consumed_candidates=0`. Research quality is still
+  rejected: `6/6` formal rows stayed at screening, with `0` validation/frozen
+  rows and no promotion. Branch `792e6d6e` retained marginal signal and branch
+  `ed329b23` retained a best checkpoint, so the next active work is branch-level
+  agent/prompt/artifact analysis rather than another blind rerun.
   A follow-up local taxonomy repair prevents future canary configuration/path
   failures from being recorded as ordinary algorithmic `CANARY_FAILED` lessons:
   structured config/path-root canary failures now surface as
   `CANARY_CONFIG_ERROR`, while ordinary candidate canary vetoes keep
   `CANARY_FAILED`. Focused validation passed with `54 passed`.
+  Boole's branch-level follow-up analysis then narrowed the remaining
+  warehouse blocker to problem-owned telemetry consumption: accepted operators
+  wrote `validation_transfer_diagnostics` dictionaries, but formal metrics
+  still showed activation/effect as `not_declared`. A local repair now exports
+  operator instance `self.validation_transfer_diagnostics` through surrogate
+  solver runtime JSON as `operator_diagnostics.{mechanism}.*`, declares those
+  fields in both warehouse `problem-v1.yaml` files, and fails closed on
+  local-only diagnostics dictionaries in the warehouse patch-quality hook.
+  Repair report:
+  [`../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-repair-20260617.md`](../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-repair-20260617.md).
+  This preserves the v3 boundary: no Decision/Protocol promotion gates changed,
+  and no LLM text, prompt context, or branch lessons enter `DecisionFeatures`.
+  Local verification passed warehouse/spec tests (`18 passed`), solver
+  diagnostics/registry tests (`3 passed`), proposal-pipeline and telemetry guard
+  tests (`54 passed`), surrogate solver tests (`13 passed`), and warehouse
+  adapter smoke (`2 passed`). Main-thread review fixed a registry-name mapping
+  bug so exported diagnostics use mechanism ids from `registry.yaml` `name`
+  fields, with class names only as fallback. Next gate: short warehouse
+  production `6R` field
+  check from the repair commit, looking for consumed declared
+  `operator_diagnostics` on at least one screening-positive candidate.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
@@ -1328,6 +1354,14 @@ When the user-managed reverse tunnel is up, the server can log into WSL with
 `ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1`.
 Continue to treat git plus rsync/handoff directories as the coordination
 surface; do not edit the same unsynced worktree from server and WSL at once.
+As of 2026-06-17 the SSH channel is verified again. WSL reports
+`xjy-workspace`, `10` logical CPUs, `27Gi` RAM, and a usable
+`/home/xjy-ubuntu/miniconda3/bin/conda run -n scion` environment. The WSL repo
+at `/home/xjy-ubuntu/projects/scion` is not currently a clean runner worktree:
+it remains at `4b2ee29` and has many local changes/deletions. Before new WSL
+experiments, use a clean synchronized runner checkout or explicitly sync/clean
+that tree. Short one-cell or two-cell checks may remain on the 2-core server;
+larger parallel matrices belong on WSL.
 
 The latest completed Phase 5 experiment artifact is the warehouse compact
 measurement-governance ON/OFF control:

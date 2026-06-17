@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 import time
 from pathlib import Path
@@ -111,6 +112,81 @@ class TestSmallInstance:
         for oid, vid in sol.assignment.items():
             assert oid in sol.vehicles[vid].order_ids, \
                 f"订单 {oid} 在 assignment 中归属 {vid}，但不在该车 order_ids 中"
+
+    def test_dynamic_operator_diagnostics_serialized(self, tmp_path, monkeypatch):
+        """动态 registry 算子的实例 diagnostics 必须进入 solver runtime JSON。"""
+        import operators as operators_pkg
+
+        operator_dir = tmp_path / "operators"
+        operator_dir.mkdir()
+        operator_file = operator_dir / "diagnostic_operator.py"
+        operator_file.write_text(
+            """
+from operators.base import Operator
+
+
+class DiagnosticOperator(Operator):
+    def __init__(self, instance, phase=1):
+        self.instance = instance
+        self.phase = phase
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        diagnostics["accepted_moves"] += 1
+        diagnostics["split_delta_sum"] += 1
+        diagnostics["cost_delta_sum"] += 2
+        diagnostics["improving_move_count"] += 1
+        return solution.deep_copy()
+""",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            operators_pkg,
+            "__path__",
+            [str(operator_dir), *list(operators_pkg.__path__)],
+        )
+        importlib.invalidate_caches()
+
+        registry = tmp_path / "registry.yaml"
+        registry.write_text(
+            """
+operators:
+  - name: diagnostic_probe
+    file_path: operators/diagnostic_operator.py
+    class_name: DiagnosticOperator
+    weight: 1.0
+""",
+            encoding="utf-8",
+        )
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        cfg = Config(
+            max_iterations=1,
+            no_improve_limit=1,
+            pool_size=1,
+            random_seed=42,
+        )
+
+        sol = solve(inst, cfg, registry_path=registry)
+        raw = solution_to_dict(sol, inst)
+
+        diagnostics = raw["runtime"]["operator_diagnostics"]["diagnostic_probe"]
+        assert diagnostics["operator_invocations"] > 0
+        assert diagnostics["accepted_moves"] > 0
+        assert diagnostics["split_delta_sum"] > 0
+        assert (
+            raw["runtime"]["validation_transfer_diagnostics"]
+            == raw["runtime"]["operator_diagnostics"]
+        )
 
 
 # ---------------------------------------------------------------------------

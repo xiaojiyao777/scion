@@ -79,6 +79,39 @@ research_surfaces:
       modify_allowed: true
       remove_allowed: true
       singleton: false
+    evidence:
+      optional_runtime_fields:
+        - operator_diagnostics
+        - validation_transfer_diagnostics
+      activation_runtime_fields:
+        "{mechanism}":
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+      effect_probe_runtime_fields:
+        - operator_diagnostics.{mechanism}.split_delta_sum
+        - operator_diagnostics.{mechanism}.cost_delta_sum
+        - operator_diagnostics.{mechanism}.improving_move_count
+      runtime_field_roles:
+        mechanism_activation:
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+        mechanism_effect:
+          - operator_diagnostics.{mechanism}.split_delta_sum
+          - operator_diagnostics.{mechanism}.cost_delta_sum
+          - operator_diagnostics.{mechanism}.improving_move_count
+        activity:
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+        effect:
+          - operator_diagnostics.{mechanism}.split_delta_sum
+          - operator_diagnostics.{mechanism}.cost_delta_sum
+          - operator_diagnostics.{mechanism}.improving_move_count
+        diagnostic:
+          - operator_diagnostics
+          - validation_transfer_diagnostics
     prompt:
       hypothesis_guidance: >-
         Order-level and swap-style hypotheses must be selective and bounded:
@@ -98,9 +131,10 @@ research_surfaces:
         Avoid repeated full-solution feasibility/objective recomputation inside
         nested candidate loops. Prefer lightweight activation/effect counters
         such as eligible groups seen, accepted moves, split_delta_sum, and
-        cost_delta_sum as a proposal-level diagnostic plan so a
-        screening-positive proposal can diagnose whether the operator actually
-        transfers to formal validation aggregates. Do not invent undeclared
+        cost_delta_sum. Store them on the operator instance under
+        self.validation_transfer_diagnostics so the solver can export
+        runtime.operator_diagnostics.{mechanism}.* for telemetry guard
+        consumption. Do not use local-only dictionaries or undeclared
         expected_telemetry fields for these counters.
       anti_patterns: >-
         Do not scan every vehicle pair and every order pair without a cap, do
@@ -120,6 +154,39 @@ research_surfaces:
       modify_allowed: true
       remove_allowed: true
       singleton: false
+    evidence:
+      optional_runtime_fields:
+        - operator_diagnostics
+        - validation_transfer_diagnostics
+      activation_runtime_fields:
+        "{mechanism}":
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+      effect_probe_runtime_fields:
+        - operator_diagnostics.{mechanism}.split_delta_sum
+        - operator_diagnostics.{mechanism}.cost_delta_sum
+        - operator_diagnostics.{mechanism}.improving_move_count
+      runtime_field_roles:
+        mechanism_activation:
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+        mechanism_effect:
+          - operator_diagnostics.{mechanism}.split_delta_sum
+          - operator_diagnostics.{mechanism}.cost_delta_sum
+          - operator_diagnostics.{mechanism}.improving_move_count
+        activity:
+          - operator_diagnostics.{mechanism}.operator_invocations
+          - operator_diagnostics.{mechanism}.eligible_vehicle_or_order_groups_seen
+          - operator_diagnostics.{mechanism}.accepted_moves
+        effect:
+          - operator_diagnostics.{mechanism}.split_delta_sum
+          - operator_diagnostics.{mechanism}.cost_delta_sum
+          - operator_diagnostics.{mechanism}.improving_move_count
+        diagnostic:
+          - operator_diagnostics
+          - validation_transfer_diagnostics
     prompt:
       hypothesis_guidance: >-
         Vehicle-level hypotheses must name the structural assignment invariant
@@ -139,11 +206,11 @@ research_surfaces:
         when the replacement path cannot prove capacity, region, category,
         pickup, hazard, and assignment completeness constraints. Prefer
         lightweight activation/effect counters such as eligible vehicle groups
-        seen, accepted merges, split_delta_sum, and cost_delta_sum so a
-        screening-positive proposal can diagnose whether the operator actually
-        transfers to formal validation aggregates. Treat these as a
-        proposal-level diagnostic plan unless matching runtime telemetry is
-        explicitly declared; do not invent undeclared expected_telemetry fields.
+        seen, accepted merges, split_delta_sum, and cost_delta_sum. Store them
+        on the operator instance under self.validation_transfer_diagnostics so
+        the solver can export runtime.operator_diagnostics.{mechanism}.* for
+        telemetry guard consumption. Do not use local-only dictionaries or
+        undeclared expected_telemetry fields.
       anti_patterns: >-
         Do not delete, disable, or neuter split/merge behavior merely because a
         prior branch failed. Do not remove operators/split_vehicle.py or an

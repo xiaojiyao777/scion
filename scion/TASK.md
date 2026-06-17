@@ -1,8 +1,8 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse `4b2ee29` prompt visibility is accepted but research quality failed; `4a316e1` repair-template rerun is active on server*
-*Updated: 2026-06-16*
+*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; short field gate pending*
+*Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
 experiments. The goal is not to keep tuning campaign knobs blindly. The goal is
@@ -111,6 +111,11 @@ For warehouse, effective research requires:
 - Do not treat aggregate win rate as sufficient evidence. Pair-level deltas,
   per-case behavior, seed/RNG sensitivity, runtime events, and branch trajectory
   must be inspected for experiments whose purpose depends on them.
+- Resource policy: one or two live cells may run on the 2-core server when they
+  are short acceptance checks or single-run diagnostics. Larger matrices and
+  long parallel experiments should run on WSL through the reverse SSH channel,
+  but only from a synchronized clean runner worktree; do not run new WSL cells
+  from an unsynced dirty project tree.
 
 ## Required Reading
 
@@ -771,9 +776,11 @@ Exit criteria:
   Acceptance: focused data-root and protocol path-safety tests pass, and a
   local replay of the copied config resolves both production canary cases under
   `/home/clawd/research/scion-data`.
-- Launched: warehouse data-root repair acceptance rerun from commit `ad469f0`.
+- Completed: warehouse data-root repair acceptance rerun from commit `ad469f0`.
   Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-launch-20260617.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-dataroot-repair-rerun6r-postrun-20260617.md`.
   Corrected server root:
   `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T033450Z`;
   tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`.
@@ -785,11 +792,16 @@ Exit criteria:
   `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T011900Z`
   exited before campaign startup due unsupported `--problem-v1`; ignore it as
   a wrapper typo.
-  Live health check now accepts the data-root repair entry criterion:
-  `formal_screened_candidates=1`, `screening_protocol_results=1`,
-  `protocol_metric_results=1`, and the first formal candidate passed canary
-  before screening. The full `6R` run is still active, so research-quality
-  acceptance waits for final postrun analysis.
+  Final postrun accepts the data-root repair: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `effective_rounds_completed=6`,
+  `formal_screened_candidates=6`, `protocol_metric_results=6`, and
+  `verification_failure_consumed_candidates=0`. It rejects warehouse
+  research-quality acceptance: all `6` formal rows remained screening-only,
+  `0` validation rows, `0` frozen rows, no promotion, `10` proposal attempts,
+  and `4` quality blocks. The two retained branches show real branch-internal
+  continuation and marginal signal, but still no validation transfer. Deep
+  branch/prompt/artifact analysis is now delegated before another warehouse
+  rerun.
 - Completed locally: canary failure taxonomy repair after the invalid
   `4a316e1` run showed `absolute_outside_roots` / canary configuration errors
   being surfaced as ordinary `CANARY_FAILED` branch lessons. The repair adds a
@@ -800,6 +812,28 @@ Exit criteria:
   `DecisionFeatures`. Focused validation:
   `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_canary_failure_taxonomy.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/unit/core/test_evaluation_orchestrator_telemetry.py scion/scion/tests/unit/core/test_decision_coordinator.py scion/scion/tests/unit/core/test_campaign_finalization_status_reconcile.py -q`
   passed with `54 passed`, plus `py_compile` and `git diff --check`.
+- Implemented locally: warehouse operator diagnostics telemetry repair. Boole's
+  data-root rerun branch analysis showed accepted operators writing
+  `validation_transfer_diagnostics` dictionaries while formal metrics still
+  exposed activation/effect as `not_declared`. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-repair-20260617.md`.
+  The repair exports operator instance
+  `self.validation_transfer_diagnostics` through surrogate solver runtime JSON
+  as `operator_diagnostics.{mechanism}.*`, declares those fields in both
+  warehouse `problem-v1.yaml` files, and tightens the warehouse patch-quality
+  hook so local-only diagnostics dictionaries fail closed. It preserves the v3
+  boundary: no Decision/Protocol promotion gate changed, and no LLM text,
+  branch lessons, or raw prompt material became `DecisionFeatures`. Focused
+  validation passed warehouse/spec tests (`18 passed`), solver
+  diagnostics/registry tests (`3 passed`), proposal-pipeline and telemetry guard
+  tests (`54 passed`), surrogate solver tests (`13 passed`), and warehouse
+  adapter smoke (`2 passed`). The main-thread review found and fixed one
+  registry-name mapping issue so runtime diagnostics use registry `name`
+  values such as `fill_and_downsize` / `locked_anchor_repack` rather than
+  class-name-only fallbacks. Next gate: a short warehouse production `6R`
+  field check from the repair commit; accept only if screening-positive
+  candidates show consumed declared `operator_diagnostics` telemetry instead of
+  `not_declared` activation/effect.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

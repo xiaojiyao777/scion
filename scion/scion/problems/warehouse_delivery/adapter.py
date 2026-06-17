@@ -652,9 +652,15 @@ def _render_validation_transfer_guidance() -> str:
         "operator activation counters should become positive, which effect "
         "counters should show subcategory split or cost improvement, and what "
         "guard prevents a screening-only no-effect move from being accepted. "
-        "Treat those counters as a proposal-level diagnostic plan unless the "
-        "active research surface explicitly declares matching runtime telemetry "
-        "fields; do not invent undeclared expected_telemetry keys."
+        "Store runtime counters on the operator instance under "
+        "`self.validation_transfer_diagnostics` using the declared standard "
+        "keys (`operator_invocations`, "
+        "`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, "
+        "`split_delta_sum`, `cost_delta_sum`, `improving_move_count`) so the "
+        "warehouse solver exports them as "
+        "`runtime.operator_diagnostics.{mechanism}.*`. Do not use a local "
+        "dict or undeclared expected_telemetry keys that cannot be consumed by "
+        "the telemetry guard."
     )
 
 
@@ -809,7 +815,7 @@ def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
         return ("activation_effect_diagnostic_code", "screening_or_lexicographic_guard")
     signal_text = _code_signal_text(code)
     missing: list[str] = []
-    if not _patch_has_activation_effect_diagnostics(signal_text):
+    if not _patch_has_activation_effect_diagnostics(code, signal_text):
         missing.append("activation_effect_diagnostic_code")
     if not _patch_has_screening_or_lexicographic_guard(code, signal_text):
         missing.append("screening_or_lexicographic_guard")
@@ -846,7 +852,7 @@ def _warehouse_patch_quality_repair_template(
             ],
         },
         "minimal_shape": [
-            "Initialize or update a validation_transfer_diagnostics dictionary or similarly named counters.",
+            "Initialize or update self.validation_transfer_diagnostics on the operator instance; local dictionaries are not exportable telemetry.",
             "Increment operator_invocations before evaluating the move.",
             "Increment an eligible_* counter only when the case-general precondition is true.",
             "Compute split_delta and cost_delta before accepting a move.",
@@ -865,6 +871,7 @@ def _warehouse_patch_quality_repair_template(
         ],
         "must_not": [
             "Do not add counters in comments only; identifiers must appear in executable code.",
+            "Do not store diagnostics only in a local dict; the solver exports self.validation_transfer_diagnostics from operator instances.",
             "Do not accept moves that worsen subcategory_splits for a cost-only gain.",
         ],
         "decision_features_excluded": True,
@@ -919,83 +926,180 @@ def _code_signal_text(code: str) -> str:
     return " ".join(parts).lower()
 
 
-def _patch_has_activation_effect_diagnostics(signal_text: str) -> bool:
-    has_named_activation = any(
-        term in signal_text
-        for term in (
-            "operator_invocations",
-            "operator_invocation_count",
-            "eligible_vehicle_or_order_groups_seen",
-            "eligible_vehicle_groups_seen",
-            "eligible_order_groups_seen",
-            "accepted_moves",
-            "accepted_move_count",
-        )
+def _patch_has_activation_effect_diagnostics(code: str, signal_text: str) -> bool:
+    del signal_text
+    return _patch_has_exportable_validation_transfer_diagnostics(code)
+
+
+_STANDARD_VALIDATION_TRANSFER_KEYS = frozenset(
+    {
+        "operator_invocations",
+        "eligible_vehicle_or_order_groups_seen",
+        "accepted_moves",
+        "split_delta_sum",
+        "cost_delta_sum",
+        "improving_move_count",
+    }
+)
+_ACTIVATION_DIAGNOSTIC_KEYS = frozenset(
+    {
+        "operator_invocations",
+        "eligible_vehicle_or_order_groups_seen",
+        "accepted_moves",
+    }
+)
+_EFFECT_DIAGNOSTIC_KEYS = frozenset(
+    {
+        "split_delta_sum",
+        "cost_delta_sum",
+        "improving_move_count",
+    }
+)
+
+
+def _patch_has_exportable_validation_transfer_diagnostics(code: str) -> bool:
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError:
+        return False
+
+    aliases: set[str] = set()
+    declared_keys: set[str] = set()
+    mutating_keys: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            if any(_is_self_validation_transfer_attr(target) for target in node.targets):
+                declared_keys.update(_literal_dict_string_keys(node.value))
+            if _is_self_validation_transfer_attr(node.value):
+                aliases.update(_name_targets(node.targets))
+            for target in node.targets:
+                if _is_exportable_diagnostic_target(target, aliases):
+                    mutating_keys.update(_diagnostic_keys_from_node(target))
+        elif isinstance(node, ast.AnnAssign):
+            if _is_self_validation_transfer_attr(node.target):
+                declared_keys.update(_literal_dict_string_keys(node.value))
+            if _is_self_validation_transfer_attr(node.value):
+                aliases.update(_name_targets((node.target,)))
+            if _is_exportable_diagnostic_target(node.target, aliases):
+                mutating_keys.update(_diagnostic_keys_from_node(node.target))
+        elif isinstance(node, ast.AugAssign):
+            if _is_exportable_diagnostic_target(node.target, aliases):
+                mutating_keys.update(_diagnostic_keys_from_node(node.target))
+
+    return (
+        _STANDARD_VALIDATION_TRANSFER_KEYS <= declared_keys
+        and bool(mutating_keys & _ACTIVATION_DIAGNOSTIC_KEYS)
+        and bool(mutating_keys & _EFFECT_DIAGNOSTIC_KEYS)
     )
-    has_named_effect = any(
-        term in signal_text
-        for term in (
-            "split_delta_sum",
-            "cost_delta_sum",
-            "improving_move_count",
-            "effect_delta_sum",
-        )
+
+
+def _name_targets(targets: Sequence[ast.AST]) -> set[str]:
+    return {target.id for target in targets if isinstance(target, ast.Name)}
+
+
+def _is_self_validation_transfer_attr(node: ast.AST | None) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "validation_transfer_diagnostics"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
     )
-    if has_named_activation and has_named_effect:
-        return True
-    has_activation_signal = any(
-        term in signal_text
-        for term in (
-            "activation",
-            "invocation",
-            "eligible",
-            "accepted_move",
-            "accepted",
-        )
+
+
+def _is_exportable_diagnostic_target(node: ast.AST, aliases: set[str]) -> bool:
+    if not isinstance(node, ast.Subscript):
+        return False
+    root = node.value
+    return _is_self_validation_transfer_attr(root) or (
+        isinstance(root, ast.Name) and root.id in aliases
     )
-    has_effect_signal = any(
-        term in signal_text
-        for term in ("effect", "split_delta", "cost_delta", "improving", "delta")
-    )
-    has_instrumentation_path = any(
-        term in signal_text
-        for term in ("diagnostic", "telemetry", "counter", "metric", "instrument")
-    )
-    return has_activation_signal and has_effect_signal and has_instrumentation_path
+
+
+def _diagnostic_keys_from_node(node: ast.AST) -> set[str]:
+    keys: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            value = child.value.strip()
+            if value in _STANDARD_VALIDATION_TRANSFER_KEYS:
+                keys.add(value)
+    return keys
+
+
+def _literal_dict_string_keys(node: ast.AST | None) -> set[str]:
+    if not isinstance(node, ast.Dict):
+        return set()
+    keys: set[str] = set()
+    for key in node.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value.strip())
+    return keys
 
 
 def _patch_has_screening_or_lexicographic_guard(
     code: str,
     signal_text: str,
 ) -> bool:
+    del signal_text
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test_text = _ast_signal_text(node.test)
+        if not _guard_test_is_transfer_relevant(test_text):
+            continue
+        if any(_returns_original_solution(child) for child in ast.walk(node)):
+            return True
+    return False
+
+
+def _ast_signal_text(node: ast.AST) -> str:
+    parts: list[str] = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            parts.append(child.id)
+        elif isinstance(child, ast.Attribute):
+            parts.append(child.attr)
+        elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+            parts.append(child.value)
+    return " ".join(parts).lower()
+
+
+def _guard_test_is_transfer_relevant(test_text: str) -> bool:
     if any(
-        term in signal_text
+        term in test_text
         for term in (
             "screening_only",
-            "screening",
-            "validation",
-            "overfit",
-            "generalize",
-            "generalization",
-            "guard",
+            "validation_transfer_guard",
+            "lexicographic",
+            "no_op_condition",
             "no_op",
             "noop",
         )
     ):
         return True
-    has_split_signal = any(
-        term in signal_text
+    has_split = any(
+        term in test_text
         for term in ("subcategory_splits", "split_delta", "split_delta_sum")
     )
-    has_cost_signal = any(
-        term in signal_text for term in ("total_cost", "cost_delta", "cost_delta_sum")
+    has_cost = any(
+        term in test_text for term in ("total_cost", "cost_delta", "cost_delta_sum")
     )
-    code_lower = str(code or "").lower()
-    has_control_flow = any(
-        term in code_lower
-        for term in ("if ", "return ", "continue", "break", "lexicographic")
-    )
-    return has_split_signal and has_cost_signal and has_control_flow
+    return has_split and has_cost
+
+
+def _returns_original_solution(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Return):
+        return False
+    value = node.value
+    if isinstance(value, ast.Name):
+        return value.id in {"solution", "original_solution", "base_solution"}
+    if isinstance(value, ast.Attribute):
+        return value.attr in {"solution", "original_solution", "base_solution"}
+    return False
 
 
 def _hypothesis_quality_text(hypothesis: Any) -> str:

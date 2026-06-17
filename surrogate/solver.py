@@ -12,10 +12,14 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import math
+import re
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from random import Random
+from typing import Any
 
 from config import Config
 from greedy_init import greedy_init
@@ -98,7 +102,7 @@ def _load_operators_from_registry(
     registry_path: str | Path,
     instance: Instance,
     phase: int,
-) -> tuple[list, list[float]]:
+) -> tuple[list, list[float], list[str]]:
     """从 Scion 导出的 registry.yaml 动态加载算子。
 
     registry.yaml 格式：
@@ -117,6 +121,7 @@ def _load_operators_from_registry(
 
     operators = []
     weights = []
+    names = []
     for entry in registry["operators"]:
         # entry["file_path"] 格式如 "operators/swap_orders.py"
         # 提取模块名："operators.swap_orders"
@@ -126,8 +131,102 @@ def _load_operators_from_registry(
         cls = getattr(module, entry["class_name"])
         operators.append(cls(instance, phase))
         weights.append(entry.get("weight", 1.0))
+        names.append(str(entry.get("name") or entry.get("class_name") or cls.__name__))
 
-    return operators, weights
+    return operators, weights, names
+
+
+_STANDARD_DIAGNOSTIC_KEYS = (
+    "operator_invocations",
+    "eligible_vehicle_or_order_groups_seen",
+    "accepted_moves",
+    "split_delta_sum",
+    "cost_delta_sum",
+    "improving_move_count",
+)
+
+_DIAGNOSTIC_KEY_ALIASES = {
+    "operator_invocation_count": "operator_invocations",
+    "eligible_vehicle_groups_seen": "eligible_vehicle_or_order_groups_seen",
+    "eligible_order_groups_seen": "eligible_vehicle_or_order_groups_seen",
+    "accepted_move_count": "accepted_moves",
+    "effect_delta_sum": "cost_delta_sum",
+}
+
+
+def _operator_runtime_diagnostics(
+    operators: list,
+    operator_names: list[str],
+) -> dict[str, Any]:
+    """Collect Scion-visible runtime diagnostics from operator instances."""
+    diagnostics: dict[str, dict[str, float | int]] = {}
+    for op, raw_name in zip(operators, operator_names):
+        raw = getattr(op, "validation_transfer_diagnostics", None)
+        normalized = _normalize_validation_transfer_diagnostics(raw)
+        if not normalized:
+            continue
+        mechanism = _mechanism_id(raw_name) or _mechanism_id(op.__class__.__name__)
+        if not mechanism:
+            continue
+        bucket = diagnostics.setdefault(
+            mechanism,
+            {key: 0 for key in _STANDARD_DIAGNOSTIC_KEYS},
+        )
+        for key, value in normalized.items():
+            bucket[key] += value
+
+    if not diagnostics:
+        return {}
+
+    return {
+        "operator_diagnostics": diagnostics,
+        "validation_transfer_diagnostics": diagnostics,
+    }
+
+
+def _normalize_validation_transfer_diagnostics(
+    raw: Any,
+) -> dict[str, float | int]:
+    if not isinstance(raw, Mapping):
+        return {}
+    normalized = {key: 0 for key in _STANDARD_DIAGNOSTIC_KEYS}
+    for raw_key, raw_value in raw.items():
+        key = str(raw_key or "").strip()
+        key = _DIAGNOSTIC_KEY_ALIASES.get(key, key)
+        if key not in normalized:
+            continue
+        value = _numeric_runtime_value(raw_value)
+        if value is None:
+            continue
+        normalized[key] += value
+    return {key: value for key, value in normalized.items() if value != 0}
+
+
+def _numeric_runtime_value(value: Any) -> float | int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    try:
+        parsed = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    if parsed.is_integer():
+        return int(parsed)
+    return parsed
+
+
+def _mechanism_id(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", text).lower()
+    snake = re.sub(r"[^a-z0-9_]+", "_", snake).strip("_")
+    return snake
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +257,19 @@ def solution_to_dict(solution: Solution, instance: Instance | None = None, phase
         feas = check_feasibility(solution, instance, phase)
         feasible = feas.is_feasible
 
-    return {
+    payload = {
         "vehicles": vehicles_out,
         "assignment": solution.assignment,
         "objective": objective_out,
         "feasible": feasible,
     }
+    runtime = getattr(solution, "_scion_runtime", None)
+    if isinstance(runtime, dict) and runtime:
+        payload["runtime"] = runtime
+        operator_diagnostics = runtime.get("operator_diagnostics")
+        if isinstance(operator_diagnostics, dict):
+            payload["operator_diagnostics"] = operator_diagnostics
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +314,7 @@ def solve(
         SplitVehicle,
     ]
     operators = [cls(instance, instance.phase) for cls in operator_classes]
+    operator_names = [cls.__name__ for cls in operator_classes]
     weights = [
         cfg.operator_weights.get(cls.__name__, 1.0)
         for cls in operator_classes
@@ -215,7 +322,7 @@ def solve(
 
     # 2b. 如果提供了 registry，覆盖算子列表（Scion 动态加载）
     if registry_path is not None:
-        operators, weights = _load_operators_from_registry(
+        operators, weights, operator_names = _load_operators_from_registry(
             registry_path, instance, instance.phase
         )
 
@@ -227,6 +334,9 @@ def solve(
         operator_weights=weights,
         cfg=cfg,
     )
+    runtime = _operator_runtime_diagnostics(operators, operator_names)
+    if runtime:
+        setattr(best, "_scion_runtime", runtime)
 
     return best
 

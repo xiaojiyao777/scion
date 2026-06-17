@@ -9,6 +9,7 @@ from scion.core.models import (
     BranchState,
     ChampionState,
     HypothesisProposal,
+    MechanismChange,
     PatchProposal,
 )
 from scion.core.proposal_pipeline.agentic_validation import AgenticValidationMixin
@@ -28,6 +29,8 @@ from scion.proposal.agentic_session import (
     AgenticTerminationReason,
 )
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
+from scion.runtime.surface_telemetry import declared_surface_telemetry_fields
+from scion.runtime.telemetry_guard import build_telemetry_guard_summary
 from scion.proposal.tools import (
     ContextExposurePolicy,
     ProposalToolContext,
@@ -42,6 +45,12 @@ _WAREHOUSE_PROBLEM = (
     / "problem.yaml"
 )
 _WAREHOUSE_PROBLEM_V1 = _WAREHOUSE_PROBLEM.with_name("problem-v1.yaml")
+_PACKAGED_WAREHOUSE_PROBLEM_V1 = (
+    Path(__file__).resolve().parents[2]
+    / "problems"
+    / "warehouse_delivery"
+    / "problem-v1.yaml"
+)
 
 
 def test_warehouse_vehicle_level_surface_passes_target_preview() -> None:
@@ -97,8 +106,9 @@ def test_warehouse_operator_interfaces_render_problem_owned_guidance() -> None:
     assert "operator activation counters" in order_interface
     assert "effect counters" in vehicle_interface
     assert "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN" in vehicle_interface
-    assert "proposal-level diagnostic plan" in order_interface
-    assert "do not invent undeclared expected_telemetry fields" in (
+    assert "self.validation_transfer_diagnostics" in order_interface
+    assert "operator_diagnostics.{mechanism}.*" in order_interface
+    assert "undeclared expected_telemetry fields" in (
         vehicle_interface
     )
 
@@ -136,6 +146,58 @@ def test_warehouse_problem_context_surfaces_validation_transfer_diagnostic() -> 
     assert "operator_invocations" in diagnostic
     assert "split_delta_sum" in diagnostic
     assert "excluded_from_decision_features" in diagnostic
+
+
+def test_warehouse_problem_spec_declares_operator_diagnostics_telemetry() -> None:
+    for path in (_WAREHOUSE_PROBLEM_V1, _PACKAGED_WAREHOUSE_PROBLEM_V1):
+        spec_v1 = load_problem_spec_v1_from_yaml(path)
+        rendered = path.read_text(encoding="utf-8")
+        assert "screening-to-validation transfer risk" in rendered
+        assert "operator_diagnostics.{mechanism}.operator_invocations" in rendered
+
+        for surface_name in ("order_level", "vehicle_level"):
+            surface = _surface(spec_v1, surface_name)
+            fields = declared_surface_telemetry_fields(
+                surface,
+                problem_spec=spec_v1,
+                declared_mechanisms=("fill_and_downsize",),
+            )
+            assert (
+                "operator_diagnostics.fill_and_downsize.operator_invocations"
+                in fields
+            )
+            assert "operator_diagnostics.fill_and_downsize.accepted_moves" in fields
+            assert (
+                "operator_diagnostics.fill_and_downsize.split_delta_sum" in fields
+            )
+
+            summary = build_telemetry_guard_summary(
+                candidate_runtimes=[
+                    {
+                        "operator_diagnostics": {
+                            "fill_and_downsize": {
+                                "operator_invocations": 4,
+                                "eligible_vehicle_or_order_groups_seen": 2,
+                                "accepted_moves": 1,
+                                "split_delta_sum": 1,
+                                "cost_delta_sum": 575,
+                                "improving_move_count": 1,
+                            }
+                        }
+                    }
+                ],
+                problem_spec=spec_v1,
+                selected_surface=surface_name,
+                declared_mechanisms=(
+                    MechanismChange(id="fill_and_downsize", change_type="add"),
+                ),
+            )
+
+            diagnostic = summary["mechanism_diagnostics"][0]
+            assert summary["passed"] is True
+            assert diagnostic["mechanism"] == "fill_and_downsize"
+            assert diagnostic["activation_status"] == "observed"
+            assert diagnostic["effect_status"] == "positive"
 
 
 def test_warehouse_preview_rejects_existing_operator_module_delete() -> None:
@@ -458,6 +520,83 @@ class MergeVehicles:
     )
 
     assert check.allowed is True
+
+
+def test_warehouse_patch_quality_rejects_local_only_diagnostics_dict() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    branch = _warehouse_weak_positive_branch()
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def execute(self, solution, rng):
+        validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+        validation_transfer_diagnostics["operator_invocations"] += 1
+        validation_transfer_diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        validation_transfer_diagnostics["split_delta_sum"] += 1
+        validation_transfer_diagnostics["cost_delta_sum"] += 1
+        candidate = solution.deep_copy()
+        validation_transfer_guard = True
+        if not validation_transfer_guard:
+            return solution
+        validation_transfer_diagnostics["accepted_moves"] += 1
+        validation_transfer_diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        branch,
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "activation_effect_diagnostic_code" in check.detail
+    template = check.structured_rejection["repair_template"]
+    assert "self.validation_transfer_diagnostics" in " ".join(
+        template["minimal_shape"]
+    )
+
+
+def test_warehouse_patch_quality_rejects_nonstandard_counters_and_text_signals() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def execute(self, solution, rng):
+        diagnostic_counter_metric = {
+            "operator_invocation_count": 1,
+            "effect_delta_sum": 0,
+        }
+        screening_only_guard = "mentioned but not executable"
+        return solution.deep_copy()
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "activation_effect_diagnostic_code" in check.detail
+    assert "screening_or_lexicographic_guard" in check.detail
 
 
 def test_agentic_validation_blocks_warehouse_patch_without_transfer_diagnostics() -> None:
