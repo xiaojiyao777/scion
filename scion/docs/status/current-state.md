@@ -96,17 +96,15 @@ CVRP/VRP:
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL was fast-forwarded after the latest completed no-LLM matrix; the CVRP
-  artifacts are synced back to the server. Fast-forward WSL again after the
-  proposal-context repair commit.
+- WSL is fast-forwarded to commit `f5c02d7`; the CVRP no-LLM artifacts are
+  synced back to the server.
 
 ## Next Actions
 
-1. Commit and push the proposal-context repair, then fast-forward WSL.
-2. Run a short CVRP agentic campaign to refine cadence-2 with
+1. Run a short CVRP agentic campaign to refine cadence-2 with
    objective/budget/best-update triggers, not broad VNS removal or destroy-ratio
    tuning.
-3. Keep a later warehouse repeat available to test whether champion `v2`
+2. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Evidence Index
