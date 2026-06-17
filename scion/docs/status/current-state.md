@@ -87,18 +87,22 @@ CVRP/VRP:
   paired delta stayed `0.0`, and mean delta was `+1.8`. The next CVRP agent
   task should refine cadence-2 using objective/budget/best-update triggers,
   especially preserving `CMT2` gains while avoiding `P-n76-k4` losses.
+- The cadence-2 opportunity is now wired into CVRP solver-design hypothesis
+  context as proposal-only guidance:
+  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md).
+  The repair also makes hypothesis context consume the problem-owned
+  solver-design prompt provider, matching the existing code-context path.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL was fast-forwarded to matrix run commit `eddaf8c`; the latest no-LLM CVRP
-  artifacts are synced back to the server.
+- WSL was fast-forwarded after the latest completed no-LLM matrix; the CVRP
+  artifacts are synced back to the server. Fast-forward WSL again after the
+  proposal-context repair commit.
 
 ## Next Actions
 
-1. Add a CVRP problem-owned proposal opportunity summary for cadence-2 adaptive
-   embedded-VNS scheduling; keep raw BKS/case shortcuts out of generic
-   `DecisionFeatures`.
+1. Commit and push the proposal-context repair, then fast-forward WSL.
 2. Run a short CVRP agentic campaign to refine cadence-2 with
    objective/budget/best-update triggers, not broad VNS removal or destroy-ratio
    tuning.
@@ -134,6 +138,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md)
 
 WSL coordination:
 

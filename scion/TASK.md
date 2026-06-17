@@ -3359,6 +3359,16 @@ Field gate:
   cadence-4 remains too blunt. Next CVRP gate is to expose the cadence-2
   opportunity summary to proposal context and run a short agentic refinement
   campaign focused on objective/budget/best-update triggers.
+- Implemented locally: CVRP adaptive-trigger proposal-context repair. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`.
+  CVRP solver-design hypothesis prompts now receive the cadence-2 opportunity
+  as proposal-only guidance, and hypothesis context now consumes the
+  problem-owned solver-design prompt provider the same way code context already
+  did. This does not change Decision, Protocol, lifecycle, promotion,
+  `DecisionFeatures`, or the canonical solver default. Local acceptance:
+  py_compile passed, provider/context/prompt tests `44 passed`, and
+  `git diff --check` passed. Next gate is a short CVRP agentic refinement
+  campaign from this context.
 
 ## Status Cadence
 

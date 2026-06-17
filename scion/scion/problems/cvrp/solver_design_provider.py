@@ -151,6 +151,23 @@ class CvrpSolverDesignProvider:
                 "over another phase-order or weight tweak."
             ),
             (
+                "Current CVRP no-LLM opportunity, proposal-only and excluded "
+                "from DecisionFeatures/promotion gates: adaptive embedded-VNS "
+                "cadence-2 lowered whole-matrix embedded-VNS runtime share "
+                "from 0.653 to 0.528, raised mean ALNS iterations from 4.0 "
+                "to 6.0, kept median paired delta at 0.0, and had mean paired "
+                "delta +1.8 with no route/fleet regressions. Treat this as a "
+                "refinement target, not as a default solver change."
+            ),
+            (
+                "If using that adaptive-VNS opportunity, refine the trigger with "
+                "objective, remaining-budget, recent best-update, or repaired-"
+                "candidate-improvement signals. Preserve the cadence-2 gains on "
+                "CMT-like medium cases while avoiding the P-like small-case losses. "
+                "Do not hardcode case ids, BKS values, seeds, or split membership; "
+                "do not remove VNS broadly."
+            ),
+            (
                 "Before selecting a `solver_design` hypothesis target, read "
                 "`context.read_active_solver_map.research_lever_digest` as "
                 "CVRP-owned proposal-only advisory context. Use it to compare "

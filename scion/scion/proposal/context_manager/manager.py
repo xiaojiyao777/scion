@@ -833,6 +833,15 @@ class ContextManager:
             "problem_measurement_diagnostics": problem_measurement_diagnostics,
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
+            "solver_design_prompt_provider": solver_design_prompt_provider,
+            "solver_design_prompt_provider_ref": (
+                (
+                    f"{type(solver_design_prompt_provider).__module__}."
+                    f"{type(solver_design_prompt_provider).__qualname__}"
+                )
+                if solver_design_prompt_provider is not None
+                else ""
+            ),
             "search_control_guidance": search_control_guidance,
             "runtime_feedback": runtime_feedback,
             "runtime_failure_guidance": runtime_failure_guidance,

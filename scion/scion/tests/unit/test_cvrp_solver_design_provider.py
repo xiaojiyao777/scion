@@ -217,6 +217,24 @@ def test_cvrp_hypothesis_guidance_defaults_policy_telemetry_to_indirect_evidence
     assert "do not claim ordinary ALNS best-improvement bookkeeping" in rendered
 
 
+def test_cvrp_hypothesis_guidance_exposes_adaptive_vns_opportunity() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
+
+    assert "adaptive embedded-VNS cadence-2" in rendered
+    assert "proposal-only" in rendered
+    assert "excluded from DecisionFeatures/promotion gates" in rendered
+    assert "runtime share from 0.653 to 0.528" in rendered
+    assert "mean ALNS iterations from 4.0 to 6.0" in rendered
+    assert "not as a default solver change" in rendered
+    assert "objective, remaining-budget, recent best-update" in rendered
+    assert "Do not hardcode case ids, BKS values, seeds, or split membership" in rendered
+    assert "do not remove VNS broadly" in rendered
+
+
 def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(
     tmp_path,
 ) -> None:

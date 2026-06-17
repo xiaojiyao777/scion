@@ -38,6 +38,9 @@ def test_cvrp_hypothesis_context_exposes_only_active_solver_design() -> None:
     assert ctx["operator_categories"] == "solver_design"
     assert ctx["active_problem_boundary_surfaces"] == "solver_design"
     assert "solver_design [solver_design]" in prompt_text
+    assert "adaptive embedded-VNS cadence-2" in prompt_text
+    assert "proposal-only" in prompt_text
+    assert "Do not hardcode case ids, BKS values, seeds, or split membership" in prompt_text
     assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
     assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
     assert "policies/search_policy.py" not in ctx["targetable_files"]
