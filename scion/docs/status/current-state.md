@@ -383,6 +383,14 @@ Latest CVRP/VRP state:
   `M-n151-k12` regressed slightly. Next CVRP proof is a deeper canonical vs
   `initial_vns_disabled` seed matrix and objective-probe analysis for a
   case-general trigger.
+- The deeper canonical-vs-`initial_vns_disabled` WSL matrix from commit
+  `6d742c6` is complete:
+  [`../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md).
+  It completed `160/160` rows and rejects disabling initial VNS as a stable
+  standalone mechanism: overall `25/51/4`, median delta `+2.0`; CMT2 `8/12/0`,
+  median `+3.5`; P-n76 `9/8/3`, median `0.0`. Objective probes show initial
+  VNS gain is constant within each case, so a future CVRP target needs a richer
+  early-ALNS starvation or budget-pressure trigger before any LLM campaign.
 
 Active work as of the latest handoff:
 

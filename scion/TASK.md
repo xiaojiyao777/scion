@@ -3257,6 +3257,16 @@ Field gate:
   and `M-n151-k12`. Next CVRP gate is a deeper canonical vs
   `initial_vns_disabled` seed matrix plus objective-probe analysis to derive a
   case-general initial-VNS scheduling trigger before any CVRP LLM campaign.
+- Completed the deeper canonical-vs-`initial_vns_disabled` WSL matrix from
+  commit `6d742c6`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`.
+  It completed `160/160` rows and rejects disabling initial VNS as a stable
+  standalone mechanism: overall W/L/T `25/51/4`, median delta `+2.0`. CMT2
+  also regressed at 20 seeds (`8/12/0`, median `+3.5`), and P-n76 was neutral
+  (`9/8/3`, median `0.0`). Objective probes show initial VNS gain is constant
+  within each case, so win/loss variation comes from later ALNS random paths.
+  Next CVRP work should use these probes to design a richer early-ALNS
+  starvation or budget-pressure scheduling hypothesis before any LLM campaign.
 
 ## Status Cadence
 
