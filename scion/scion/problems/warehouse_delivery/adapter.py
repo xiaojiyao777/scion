@@ -125,6 +125,22 @@ class WarehouseDeliveryAdapter:
                     ),
                 },
                 {
+                    "id": "validation_transfer_acceptance_contract",
+                    "summary": (
+                        "Order-level transfer candidates must encode the "
+                        "split/cost acceptance contract in executable code."
+                    ),
+                    "constraint": (
+                        "Prefer split-positive moves. If the mechanism is "
+                        "split-preserving cost-only, accept only when computed "
+                        "`split_delta == 0` and `cost_delta > 0`, update "
+                        "exported `split_delta_sum` and `cost_delta_sum` from "
+                        "those computed values, and return the original solution "
+                        "otherwise. Hypothesis text or validation W/T/L alone is "
+                        "not enough."
+                    ),
+                },
+                {
                     "id": "effect_scope_and_bounded_runtime",
                     "summary": (
                         "Merge-style operators must declare their split/cost effect "
@@ -147,6 +163,8 @@ class WarehouseDeliveryAdapter:
                 "local-only validation_transfer_diagnostics dict",
                 "comments or strings as the only screening/lexicographic guard",
                 "accepting cost-only moves that worsen subcategory_splits",
+                "accepting cost-only moves without computed split_delta == 0 "
+                "and cost_delta > 0",
                 "unbounded full vehicle-pair scans in merge_vehicles.py",
             ),
         }
@@ -416,6 +434,11 @@ Frozen files (do not modify): {frozen}"""
                     "what operator activation counter should become positive",
                     "what effect counter should prove subcategory split or cost gain",
                     "how the operator avoids screening-only activation",
+                    (
+                        "the validation-transfer acceptance contract: prefer "
+                        "split-positive moves; cost-only moves require computed "
+                        "split_delta == 0 and cost_delta > 0"
+                    ),
                     (
                         "whether the intended effect is true split-positive "
                         "improvement or split-preserving cost-only compression"
@@ -835,6 +858,11 @@ def _render_validation_transfer_guidance() -> str:
         "operator activation counters should become positive, which effect "
         "counters should show subcategory split or cost improvement, and what "
         "guard prevents a screening-only no-effect move from being accepted. "
+        "Treat the validation-transfer acceptance contract as proposal-visible "
+        "and code-visible: prefer split-positive moves; if the mechanism is "
+        "split-preserving cost-only, accept only computed `split_delta == 0` "
+        "and `cost_delta > 0`, update exported `split_delta_sum` and "
+        "`cost_delta_sum`, and return the original solution otherwise. "
         "For merge/vehicle-level candidates, distinguish true split-positive "
         "improvement from split-preserving cost-only compression. If the "
         "proposal is cost-only, explain why it should not overfit the "
@@ -987,6 +1015,11 @@ def _warehouse_hypothesis_quality_repair_template(
                 "is expected to be split-positive or split-preserving "
                 "cost-only, and if cost-only why it will not overfit "
                 "screening/validation or regress frozen holdout"
+            ),
+            (
+                "validation_transfer_acceptance_contract: prefer "
+                "split-positive moves; if the mechanism is cost-only, require "
+                "computed split_delta == 0 and cost_delta > 0 before accepting"
             ),
             (
                 "runtime_bounded_acceptance: state the top-k, limit, "

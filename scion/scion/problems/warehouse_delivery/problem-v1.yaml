@@ -130,7 +130,12 @@ research_surfaces:
         failed with median delta -200, split_delta_sum equal to zero, and
         runtime regression; order-level cost-only wins must prove a positive
         formal median and preserved split structure rather than just isolated
-        screening wins.
+        screening wins. Treat validation-transfer acceptance as a hard
+        proposal/code contract: prefer split-positive moves, and accept
+        split-preserving cost-only moves only when executable code computes
+        split_delta == 0 and cost_delta > 0, exports those deltas through
+        validation_transfer_diagnostics, and returns the original solution
+        otherwise.
       implementation_guidance: >-
         An order-level operator may be invoked repeatedly inside the search
         loop. Precompute vehicle/order summaries once per execute call, inspect
@@ -142,8 +147,11 @@ research_surfaces:
         cost_delta_sum. Store them on the operator instance under
         self.validation_transfer_diagnostics so the solver can export
         runtime.operator_diagnostics.{mechanism}.* for telemetry guard
-        consumption. Do not use local-only dictionaries or undeclared
-        expected_telemetry fields for these counters.
+        consumption. Apply the split/cost acceptance contract before
+        incrementing accepted_moves: split-positive moves may be accepted, but
+        cost-only moves require split_delta == 0 and cost_delta > 0. Do not use
+        local-only dictionaries or undeclared expected_telemetry fields for
+        these counters.
       anti_patterns: >-
         Do not scan every vehicle pair and every order pair without a cap, do
         not clone the whole solution for each trial pair, and do not perform a
@@ -153,7 +161,9 @@ research_surfaces:
         avoids the known formal-validation no-gain pattern
         VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. Do not treat validation W/T/L
         alone as sufficient when the median delta is non-positive, split_delta
-        is zero, or runtime regresses.
+        is zero, or runtime regresses. Do not accept cost-only moves unless the
+        code proves split preservation with split_delta == 0 and positive
+        cost_delta before mutating diagnostics.
   - name: vehicle_level
     kind: operator
     description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."

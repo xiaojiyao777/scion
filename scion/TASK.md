@@ -3214,6 +3214,29 @@ Field gate:
   get worse without canonical VNS. Next CVRP action should be deeper
   `P-n76-k4` fixed-candidate/no-LLM seed diagnostics and phase-telemetry
   comparison, not a long broad LLM CVRP campaign.
+- Completed the deeper `P-n76-k4` 20-seed WSL diagnostic from commit
+  `14c2a34`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-p76-deepseed-wsl-14c2a34-postrun-20260617.md`.
+  It completed `60/60` rows and rejects the earlier `3/4` local-win signal as
+  unstable: both `alns_only` and `size70_two_opt_candidate` finished
+  `6/14/0` versus canonical, with median delta `+8.0`. Do not launch a CVRP
+  LLM campaign from the P-n76 pocket. Next CVRP work should split the
+  no-LLM variants into initial-VNS disabled, embedded-VNS disabled, current
+  size70/two-opt fallback, and pure ALNS/no polish, while recording VNS
+  before/after objective telemetry to explain the VNS timing/global-best
+  mismatch.
+- Implemented local warehouse problem-owned acceptance-contract guidance
+  repair. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md`.
+  This strengthens order-level/swap-style guidance and active subject code
+  constraints so split-positive moves are preferred, split-preserving
+  cost-only moves require computed `split_delta == 0` and `cost_delta > 0`,
+  exported `split_delta_sum`/`cost_delta_sum`, and a no-op fallback. No
+  generic Decision, Protocol threshold, validation/frozen gate, or
+  `DecisionFeatures` behavior changed. Local acceptance:
+  `test_warehouse_target_preview.py` `42 passed`; py_compile passed. Next
+  warehouse gate is one short agentic `6R` behavior check when model/API
+  conditions are healthy.
 
 ## Status Cadence
 

@@ -345,6 +345,25 @@ Latest CVRP/VRP state:
   High-gap `CMT2`, `CMT4`, and `M-n151-k12` do not support removing or
   bypassing VNS. Next CVRP work should deepen `P-n76-k4` fixed-candidate
   diagnostics and compare phase telemetry before any long LLM CVRP campaign.
+- The deeper `P-n76-k4` 20-seed WSL diagnostic from commit `14c2a34` is
+  complete:
+  [`../experiments/v0.4/v04-cvrp-p76-deepseed-wsl-14c2a34-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-p76-deepseed-wsl-14c2a34-postrun-20260617.md).
+  It rejects the earlier local-win pocket as unstable: both candidate
+  mechanisms were `6/14/0` versus canonical with median delta `+8.0`.
+  Do not launch a CVRP LLM campaign from `P-n76-k4`. The next CVRP step is
+  no-LLM variant separation and telemetry: initial-VNS disabled,
+  embedded-VNS disabled, current size70/two-opt fallback, pure ALNS/no polish,
+  and VNS before/after objective progress.
+- Warehouse validation-transfer acceptance-contract guidance repair is locally
+  accepted:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md).
+  Order-level/swap-style candidates now see a problem-owned hard contract:
+  prefer split-positive moves; split-preserving cost-only moves must compute
+  `split_delta == 0` and `cost_delta > 0`, export those deltas, and no-op
+  otherwise. This is prompt/code-constraint context only; generic Decision,
+  Protocol thresholds, validation/frozen gates, and `DecisionFeatures` are
+  unchanged. Local acceptance: warehouse target preview `42 passed`;
+  py_compile passed.
 
 Active work as of the latest handoff:
 
