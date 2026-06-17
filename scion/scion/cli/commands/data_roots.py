@@ -48,9 +48,14 @@ def activate_declared_problem_data_root(
         )
 
     data_root = _find_repo_relative_root(
-        start=problem_yaml.parent,
+        start=budgets_path.parent,
         relative_path=Path(rel_root),
     )
+    if data_root is None:
+        data_root = _find_repo_relative_root(
+            start=problem_yaml.parent,
+            relative_path=Path(rel_root),
+        )
     if data_root is None:
         return DataRootActivation(
             env_name=env_name,

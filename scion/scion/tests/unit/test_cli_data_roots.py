@@ -18,14 +18,19 @@ from scion.protocol.experiment.selection import (
 )
 
 
-def _write_budget(protocol_dir: Path) -> Path:
+def _write_budget(
+    protocol_dir: Path,
+    *,
+    env_name: str = "SCION_PROBLEM_DATA_ROOT",
+    relative_root: str = "vrp",
+) -> Path:
     protocol_dir.mkdir(parents=True)
     budgets = protocol_dir / "budgets.json"
     budgets.write_text(
         json.dumps(
             {
-                "data_root_env": "SCION_PROBLEM_DATA_ROOT",
-                "data_root_expected_repo_relative": "vrp",
+                "data_root_env": env_name,
+                "data_root_expected_repo_relative": relative_root,
             }
         ),
         encoding="utf-8",
@@ -161,3 +166,69 @@ def test_declared_data_root_is_wired_into_protocol_safe_roots(
     )
     with pytest.raises(ValueError, match="absolute_outside_roots"):
         validate_case_path_resolution(outside_resolution, strict=True)
+
+
+def test_declared_data_root_uses_protocol_repo_when_problem_yaml_is_copied(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Experiment-local problem copies must not break repo-relative data roots."""
+
+    env_name = "SCION_WAREHOUSE_DATA_ROOT"
+    monkeypatch.delenv(env_name, raising=False)
+    repo = tmp_path / "research" / "or-autoresearch-agent"
+    protocol_dir = repo / "scion" / "problems" / "warehouse_delivery"
+    protocol = _write_budget(
+        protocol_dir,
+        env_name=env_name,
+        relative_root="../scion-data",
+    )
+    data_root = tmp_path / "research" / "scion-data"
+    case = data_root / "production" / "generated" / "instance_prod_can_s01.json"
+    case.parent.mkdir(parents=True)
+    case.write_text("{}", encoding="utf-8")
+
+    copied_problem_yaml = (
+        tmp_path
+        / "research"
+        / "scion-experiments"
+        / "run"
+        / "config"
+        / "problem.yaml"
+    )
+    copied_problem_yaml.parent.mkdir(parents=True)
+    copied_problem_yaml.write_text("name: warehouse_delivery\n", encoding="utf-8")
+    split_manifest = SplitManifest(
+        version="warehouse-test",
+        canary=[str(case)],
+        screening=[],
+        validation=[],
+        frozen=[],
+    )
+
+    activation = activate_declared_problem_data_root(
+        problem_yaml=copied_problem_yaml,
+        protocol_path=protocol,
+    )
+    validate_declared_problem_data_cases(
+        activation=activation,
+        problem_yaml=copied_problem_yaml,
+        split_manifest=split_manifest,
+    )
+    wired_manifest = with_declared_problem_data_roots(
+        activation=activation,
+        split_manifest=split_manifest,
+    )
+
+    assert activation is not None
+    assert activation.activated is True
+    assert activation.env_name == env_name
+    assert activation.data_root == data_root
+    assert wired_manifest.safe_data_roots == [str(data_root.resolve())]
+    resolved = resolve_case_path_details(
+        str(case),
+        workspace=str(tmp_path / "candidate"),
+        safe_data_roots=wired_manifest.safe_data_roots,
+    )
+    validate_case_path_resolution(resolved, strict=True)
+    assert resolved.status == "resolved_safe_data_root"

@@ -2,7 +2,7 @@
 
 *Date: 2026-06-17*
 *Commit under test: `4a316e1`*
-*Status: running on server*
+*Status: finished; invalid as research evidence*
 
 ## Purpose
 
@@ -100,3 +100,16 @@ Research-quality improvement is accepted only if one of these occurs:
   `repair_template` content is visible; or
 - validation/frozen/promotion behavior is restored without regressing
   retry-constraint and prompt-visibility evidence.
+
+## Postrun Update
+
+The wrapper finished with exit `0`, but the campaign is invalid as research
+evidence: `run_validity.status=invalid`, `reason=invalid_no_protocol_rows`,
+`17` proposal attempts, `10` quality blocks, and `0` protocol rows.
+
+The failure was a copied-split safe-root issue, not an algorithm-quality
+conclusion. The experiment-local `split_manifest_prod.yaml` resolved
+`../../../../scion-data` to `/home/clawd/scion-data`, while production canary
+cases live under `/home/clawd/research/scion-data`; strict protocol therefore
+raised `absolute_outside_roots` during canary. See
+[`v04-warehouse-repairtemplate-rerun6r-postrun-20260617.md`](v04-warehouse-repairtemplate-rerun6r-postrun-20260617.md).

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-06-16*
+*Last updated: 2026-06-17*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -146,13 +146,24 @@ Active work as of the latest handoff:
   quality is still rejected; the local follow-up repair now adds warehouse
   problem-owned `repair_template` checklists to quality-block structured
   rejections and preserves those templates into later prompts. The field check
-  for that repair is active from commit `4a316e1`; launch report:
+  for that repair from commit `4a316e1` is complete but invalid as research
+  evidence; launch report:
   [`../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md).
+  postrun:
+  [`../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-postrun-20260617.md).
   Server root:
   `/home/clawd/research/scion-experiments/v04-warehouse-repairtemplate-rerun6r-4a316e1-20260617T002824Z`;
-  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`. Early trace
-  inspection accepts repair-template propagation in both later hypothesis and
-  code prompts; research-quality acceptance still waits for the full run.
+  wrapper exit `0`, `run_validity.status=invalid`, `reason=invalid_no_protocol_rows`,
+  `17` proposal attempts, `10` quality blocks, and `0` protocol rows. Early
+  trace inspection accepts repair-template propagation in both later hypothesis
+  and code prompts, but postrun diagnosis found a copied-split safe-root false
+  canary failure: experiment-local `../../../../scion-data` resolved to
+  `/home/clawd/scion-data` while production cases live under
+  `/home/clawd/research/scion-data`. A local follow-up repair adds
+  warehouse `budgets.json` and resolves declared repo-relative data roots from
+  the protocol/budget source before falling back to copied `problem.yaml`.
+  Focused data-root/path-safety tests pass; next step is a small server-side
+  warehouse acceptance rerun.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

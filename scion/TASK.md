@@ -748,23 +748,29 @@ Exit criteria:
   rejections now include problem-owned `repair_template` checklists for
   hypothesis fields, diagnostic identifiers, and screening/lexicographic guard
   code shape; quality feedback preserves those templates into later prompts.
-- Launched: warehouse repair-template field rerun from commit `4a316e1`.
+- Completed: warehouse repair-template field rerun from commit `4a316e1`.
   Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-postrun-20260617.md`.
   Server root:
   `/home/clawd/research/scion-experiments/v04-warehouse-repairtemplate-rerun6r-4a316e1-20260617T002824Z`;
-  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`.
-  Initial health check shows `status=running`, commit `4a316e1`, warehouse
-  production `6R`, measurement governance on, compact diagnostics, and local
-  `gpt-5.5`. This run is on the server because the WSL reverse SSH endpoint
-  timed out during banner exchange during postrun sync. Acceptance requires
-  later traces to show warehouse `repair_template` content in proposal prompts,
-  plus fewer repeated validation-transfer blocks or restored validation/frozen
-  behavior. Early trace inspection accepts repair-template propagation: the
-  second hypothesis trace includes `Prior Agent Quality Blocks For This
-  Hypothesis` plus `repair_template`, and the first code trace after that
-  includes `Prior Agent Quality Blocks For This Code Patch` plus
-  `repair_template`.
+  wrapper exit `0`; `run_validity.status=invalid`,
+  `reason=invalid_no_protocol_rows`; `6/6` effective rounds; `17` proposal
+  attempts; `10` quality blocks; `0` protocol rows. This is not warehouse
+  research evidence. Postrun diagnosis found a path-root false canary failure:
+  copied `split_manifest_prod.yaml` resolved its relative `safe_data_roots`
+  from the experiment-local config directory to `/home/clawd/scion-data` while
+  the absolute production cases live under `/home/clawd/research/scion-data`.
+  Strict protocol therefore reported `absolute_outside_roots` and vetoed
+  formal candidates before screening. Prompt propagation remains accepted:
+  later hypothesis and code traces included warehouse `repair_template`
+  sections. Follow-up local repair adds a warehouse `budgets.json` data-root
+  declaration and updates data-root activation to resolve repo-relative roots
+  from the protocol/budget source before falling back to copied `problem.yaml`.
+  Acceptance: focused data-root and protocol path-safety tests pass, and a
+  local replay of the copied config resolves both production canary cases under
+  `/home/clawd/research/scion-data`.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
