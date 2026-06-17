@@ -212,6 +212,19 @@ def available_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
             overlays=("config_adaptive_embedded_vns_cadence2",),
         ),
         CvrpMechanismSpec(
+            mechanism_id="adaptive_embedded_vns_early8_cadence2",
+            label="adaptive embedded VNS early-8 then cadence 2",
+            mechanism_family="candidate_probe",
+            mechanism_slice="adaptive_embedded_vns_early8_cadence2",
+            description=(
+                "Focused scheduler probe that keeps initial VNS, protects "
+                "embedded VNS during the first eight ALNS iterations, then "
+                "thins to cadence-2 while still polishing repaired candidates "
+                "that improve current/best."
+            ),
+            overlays=("config_adaptive_embedded_vns_early8_cadence2",),
+        ),
+        CvrpMechanismSpec(
             mechanism_id="adaptive_embedded_vns_improve_only",
             label="adaptive embedded VNS improve-only",
             mechanism_family="candidate_probe",

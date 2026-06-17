@@ -5,6 +5,7 @@ from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
 from .config import (
     ENABLE_EMBEDDED_VNS,
     EMBEDDED_VNS_CADENCE,
+    EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS,
     EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT,
     ENABLE_INITIAL_VNS,
     ENABLE_SIZE70_TWO_OPT_FALLBACK,
@@ -402,6 +403,9 @@ class _ALNSVNSSolver:
             or instance.customer_count > self.vns_threshold
         ):
             return False
+        early_always_iterations = int(EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS)
+        if early_always_iterations > 0 and iteration <= early_always_iterations:
+            return True
         cadence = int(EMBEDDED_VNS_CADENCE)
         if cadence > 0 and (cadence <= 1 or iteration % cadence == 0):
             return True

@@ -18,6 +18,9 @@ ENABLE_EMBEDDED_VNS = True
 # Positive values run embedded VNS every N ALNS iterations. Zero disables the
 # fixed cadence and leaves repair-improvement triggering available.
 EMBEDDED_VNS_CADENCE = 1
+# Positive values force embedded VNS during the first N ALNS iterations before
+# cadence thinning applies. The default preserves canonical every-iteration VNS.
+EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS = 0
 EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True
 ENABLE_SIZE70_TWO_OPT_FALLBACK = True
 SIZE70_TWO_OPT_MIN_CUSTOMERS = 70
