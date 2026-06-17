@@ -127,8 +127,25 @@ Latest warehouse state:
   guard mentions. Main-thread validation passed warehouse target preview
   (`37 passed`), agentic/proposal suites (`64 passed`),
   telemetry/session preview suites (`48 passed`), py_compile, and
-  `git diff --check`. The next gate is one local server `6R` acceptance check
-  from the follow-up commit, not a WSL long matrix.
+  `git diff --check`.
+- The fresh local server `6R` field rerun from `a1dba41` is complete and
+  documented in
+  [`../experiments/v0.4/v04-warehouse-helperguard-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-helperguard-rerun6r-postrun-20260617.md).
+  It is accepted as useful partial field evidence and rejected as
+  research-quality acceptance: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `reason=valid_partial_interrupted`,
+  `stopped_reason=proposal_attempt_limit_exhausted`,
+  `effective_rounds_completed=5/6`, `protocol_metric_results=10`,
+  stage counts `screening=10`, `validation=0`, `frozen=0`,
+  `formal_screened_candidates=5`, `quality_blocks=13`, and champion stayed v1.
+  The framework no longer has the stopped `bbb80db` zero-Protocol-row failure,
+  but the agent still failed to produce warehouse research that reaches
+  validation/frozen.
+- Do not start a broad WSL warehouse matrix from this state. The next useful
+  task is narrow code-stage behavior analysis: compare blocked `move_order.py`
+  and `destroy_rebuild.py` patches with
+  `warehouse_validation_transfer_patch_quality` to distinguish true agent code
+  weakness from any remaining problem-owned detector false negatives.
 
 Latest CVRP/VRP state:
 
