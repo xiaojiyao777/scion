@@ -150,7 +150,9 @@ Active work as of the latest handoff:
   [`../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md).
   Server root:
   `/home/clawd/research/scion-experiments/v04-warehouse-repairtemplate-rerun6r-4a316e1-20260617T002824Z`;
-  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`.
+  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`. Early trace
+  inspection accepts repair-template propagation in both later hypothesis and
+  code prompts; research-quality acceptance still waits for the full run.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

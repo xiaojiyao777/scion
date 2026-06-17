@@ -67,10 +67,30 @@ The campaign started with:
 Starting campaign: warehouse_delivery (max_rounds=6, mock_llm=False, disable_early_stop=True)
 ```
 
+## Early Trace Check
+
+Early traces accept repair-template prompt propagation:
+
+- first hypothesis trace: no prior block, as expected before any quality block;
+- second hypothesis trace: includes
+  `Prior Agent Quality Blocks For This Hypothesis` and `repair_template`;
+- first code trace after the repaired hypothesis: includes
+  `Prior Agent Quality Blocks For This Code Patch` and `repair_template`.
+
+Current early accounting:
+
+- `proposal_attempts_total`: `2`;
+- `quality_blocks`: `1`;
+- `formal_screened_candidates`: `0`;
+- protocol stage counts: `0` screening, `0` validation, `0` frozen.
+
+This accepts the propagation part of the `4a316e1` repair. Research-quality
+acceptance still requires the full run outcome.
+
 ## Acceptance Criteria
 
-Prompt repair-template propagation is accepted only if later hypothesis/code
-traces show `repair_template` content from warehouse quality blocks.
+Prompt repair-template propagation has been observed in early hypothesis/code
+traces.
 
 Research-quality improvement is accepted only if one of these occurs:
 

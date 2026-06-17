@@ -760,7 +760,11 @@ Exit criteria:
   timed out during banner exchange during postrun sync. Acceptance requires
   later traces to show warehouse `repair_template` content in proposal prompts,
   plus fewer repeated validation-transfer blocks or restored validation/frozen
-  behavior.
+  behavior. Early trace inspection accepts repair-template propagation: the
+  second hypothesis trace includes `Prior Agent Quality Blocks For This
+  Hypothesis` plus `repair_template`, and the first code trace after that
+  includes `Prior Agent Quality Blocks For This Code Patch` plus
+  `repair_template`.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
