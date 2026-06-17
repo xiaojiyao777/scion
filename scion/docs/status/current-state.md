@@ -62,9 +62,9 @@ CVRP/VRP:
   evidence: pair W/L/T `10/3/19`, median delta `0.0`, favorable mean delta
   `+1.406`, no case-level losses, and X-n110/CMT4/M-n200 neutral.
 - `route_merge_repair` is not promoted, but it is now the active CVRP branch
-  lesson to continue. It has direct mechanism telemetry under its own phase id
-  and should get same-mechanism follow-up before opening another unrelated
-  scheduler target.
+  lesson to continue. The provider guidance now preserves the pair/effect
+  evidence and points the next agent toward guarded same-mechanism refinement in
+  `destroy_repair.py` before opening another unrelated target.
 
 ## Active Work
 
@@ -76,9 +76,11 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Continue CVRP on the `route_merge_repair` branch: inspect activation/effect
-   rows, explain why A/B/E improve while CMT2/P are mixed, and refine trigger or
-   acceptance conditions without touching generic gates.
+1. Run the next CVRP agentic field check on the provider-guided
+   `route_merge_repair` continuation. The intended refinement is a guarded
+   route-absorption variant that preserves A/B/E gains, reduces mixed CMT2/P
+   trajectory harm, keeps X-n110/CMT4/M-n200 neutral, and does not touch generic
+   gates.
 2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.

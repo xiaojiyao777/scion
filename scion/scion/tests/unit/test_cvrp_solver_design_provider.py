@@ -239,6 +239,44 @@ def test_cvrp_hypothesis_guidance_exposes_share70_tail_diagnostic_lessons() -> N
     assert "do not remove VNS broadly" in rendered
 
 
+def test_cvrp_hypothesis_guidance_exposes_route_merge_followup_lessons() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
+
+    assert "post-share70 target-selection run selected `destroy_repair.py`" in rendered
+    assert "`route_merge_repair`, completed `32/32` valid screening pairs" in rendered
+    assert "pair W/L/T `10/3/19`" in rendered
+    assert "Direct `route_merge_repair` effect telemetry was positive in `19/32` pairs" in rendered
+    assert "continue the `route_merge_repair` mechanism" in rendered
+    assert "`policies/baseline_modules/destroy_repair.py`" in rendered
+    assert "preserve the A/B/E gains" in rendered
+    assert "mixed CMT2/P losses" in rendered
+    assert "X-n110/CMT4/M-n200 neutral" in rendered
+    assert "Do not add case-id, BKS, seed, split-membership" in rendered
+    assert "`route_merge_repair_guarded_v2`" in rendered
+    assert "plain non-worsening absorption" in rendered
+
+
+def test_cvrp_target_intent_guidance_prefers_route_merge_followup() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = "\n".join(provider.solver_design_target_intent_guidance({}))
+
+    assert "Current active non-scheduler branch" in rendered
+    assert "continue the `route_merge_repair` follow-up" in rendered
+    assert "`policies/baseline_modules/destroy_repair.py`" in rendered
+    assert "`32/32` valid pairs" in rendered
+    assert "W/L/T `10/3/19`" in rendered
+    assert "direct effect positive in `19/32` pairs" in rendered
+    assert "A/B/E positive, CMT2/P mixed" in rendered
+    assert "X-n110/CMT4/M-n200 neutral" in rendered
+
+
 def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(
     tmp_path,
 ) -> None:

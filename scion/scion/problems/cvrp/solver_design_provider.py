@@ -185,6 +185,40 @@ class CvrpSolverDesignProvider:
                 "do not remove VNS broadly."
             ),
             (
+                "Current CVRP same-mechanism continuation, proposal-only and "
+                "excluded from DecisionFeatures/promotion gates: the post-share70 "
+                "target-selection run selected `destroy_repair.py` and "
+                "`route_merge_repair`, completed `32/32` valid screening pairs, "
+                "and reached `expand_screening` with pair W/L/T `10/3/19` and "
+                "median delta `0.0`. Direct `route_merge_repair` effect "
+                "telemetry was positive in `19/32` pairs; all final wins came "
+                "from rows with direct route-merge effect, while rows without "
+                "effect were neutral."
+            ),
+            (
+                "For the next CVRP solver-design proposal, continue the "
+                "`route_merge_repair` mechanism before opening an unrelated "
+                "target unless target-intent gives concrete evidence that the "
+                "branch is no longer active. Keep ownership in "
+                "`policies/baseline_modules/destroy_repair.py`; scheduler.py "
+                "may only carry minimal wiring such as passing context or route "
+                "limits. A useful refinement should preserve the A/B/E gains, "
+                "reduce the mixed CMT2/P losses caused by local route absorption "
+                "changing later search trajectory, and keep X-n110/CMT4/M-n200 "
+                "neutral. Do not add case-id, BKS, seed, split-membership, "
+                "Decision, Protocol, promotion-gate, or generic budget rules."
+            ),
+            (
+                "A concrete same-mechanism direction is "
+                "`route_merge_repair_guarded_v2`: run route absorption only "
+                "when repair created a new route or route pressure is present, "
+                "and require material non-pressure improvement rather than "
+                "plain non-worsening absorption. Keep "
+                "`route_merge_repair` activation/runtime/effect telemetry under "
+                "the same mechanism id so the follow-up can distinguish A/B/E "
+                "retention from unresolved CMT2/P trajectory harm."
+            ),
+            (
                 "Before selecting a `solver_design` hypothesis target, read "
                 "`context.read_active_solver_map.research_lever_digest` as "
                 "CVRP-owned proposal-only advisory context. Use it to compare "
@@ -210,6 +244,16 @@ class CvrpSolverDesignProvider:
                 "`policies/baseline_modules/scheduler.py` only for a materially "
                 "different X-n110 tail-loss repair; otherwise prefer a concrete "
                 "non-scheduler solver-design owner."
+            ),
+            (
+                "Current active non-scheduler branch: continue the "
+                "`route_merge_repair` follow-up in "
+                "`policies/baseline_modules/destroy_repair.py` before opening "
+                "a new unrelated target, unless target-intent explains why the "
+                "post-share70 evidence no longer applies. The evidence is "
+                "`32/32` valid pairs, W/L/T `10/3/19`, direct effect positive "
+                "in `19/32` pairs, A/B/E positive, CMT2/P mixed, and "
+                "X-n110/CMT4/M-n200 neutral."
             ),
             (
                 "A non-scheduler target is now acceptable when the selected "
