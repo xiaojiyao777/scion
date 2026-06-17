@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse quality-skeleton gate interrupted; detector false-negative repair locally accepted*
+*Status: Phase 4 warehouse sequential-guard field gate invalid; copied-config data-root fallback locally accepted*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3111,18 +3111,41 @@ Field gate:
   two-cell checks on the 2-core server; use synchronized WSL for larger
   parallel matrices.
 - Completed readiness and launch: a minimal local `gpt-5.5` structured-tool
-  call returned `LLM_OK`, so the API/proxy blocker is cleared for the next
-  local gate. WSL SSH is healthy, the WSL runner is fast-forwarded to
-  `6921f70`, and WSL conda/proxy preflight passed. A short local warehouse
-  production `6R` field gate is now running from `6921f70`. Launch report:
+  call returned `LLM_OK`, so the API/proxy blocker cleared for the next local
+  gate. WSL SSH was healthy, the WSL runner was fast-forwarded to `6921f70`,
+  and WSL conda/proxy preflight passed. A short local warehouse production
+  `6R` field gate launched from `6921f70`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md`.
   Run root:
   `/home/clawd/research/scion-experiments/v04-warehouse-sequentialguard-rerun6r-6921f70-20260617T123751Z`.
-  tmux session:
-  `scion_wh_sequentialguard_rerun6r_6921f70_20260617T123751Z`. Initial health
-  check passed: `status=running`, the campaign log reached
-  `Starting campaign: warehouse_delivery`, and `llm_traces/`,
-  `agentic_sessions/`, `status.json`, and `scion.db` exist.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-postrun-20260617.md`.
+  It completed but is invalid field evidence: wrapper exit `0`,
+  `run_validity.status=invalid`, `reason=invalid_no_protocol_rows`,
+  `effective_rounds_completed=6/6`, `proposal_attempts=13`,
+  `proposal_quality_blocks=7`, `protocol_metric_results=0`, `n_experiments=0`,
+  and champion stayed v1. Five completed candidate sessions reached Contract
+  and Verification but were abandoned before Protocol with
+  `CANARY_CONFIG_ERROR`.
+- Root cause: the copied experiment `config/` omitted `budgets.json`, while the
+  copied `split_manifest_prod.yaml` relative `safe_data_roots` resolved to
+  `/home/clawd/scion-data` instead of `/home/clawd/research/scion-data`.
+  Strict canary path safety therefore rejected production canary absolute paths
+  before formal Protocol. This is a framework/config wiring failure, not
+  warehouse operator evidence.
+- Implemented and locally accepted: copied-config data-root fallback. When a
+  copied experiment config lacks sibling `budgets.json`, an explicit
+  `SCION_PROBLEM_DATA_ROOT` is wired into `split_manifest.safe_data_roots`.
+  Existing problem-owned `budgets.json` behavior is unchanged; strict canary
+  path safety remains enabled; no Decision, Protocol threshold,
+  proposal-quality, or `DecisionFeatures` behavior changed. Focused validation
+  passed data-root/path-safety tests (`10 passed`), canary taxonomy/evaluation
+  tests (`18 passed`), py_compile, and `git diff --check`.
+- Next gate after commit: rerun one short local warehouse production `6R` field
+  check from the copied-config data-root fallback repair. Accept the sequential
+  guard detector repair only if the run reaches formal Protocol and the
+  sequential split/cost false negative does not recur. Do not launch a broad
+  WSL matrix from this state.
 
 ## Status Cadence
 

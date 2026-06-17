@@ -246,17 +246,39 @@ Latest warehouse state:
   local `gpt-5.5` structured-tool call returned `LLM_OK`. WSL SSH is healthy
   after restart, and the WSL runner checkout is fast-forwarded to `6921f70`
   with conda `scion` and `/v1/models` preflight passing.
-- A short local warehouse `6R` field gate from `6921f70` is now running on the
+- A short local warehouse `6R` field gate from `6921f70` completed on the
   2-core server. Launch report:
   [`../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md).
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-postrun-20260617.md).
   Run root:
   `/home/clawd/research/scion-experiments/v04-warehouse-sequentialguard-rerun6r-6921f70-20260617T123751Z`.
-  tmux:
-  `scion_wh_sequentialguard_rerun6r_6921f70_20260617T123751Z`.
-  Initial health check passed: `status=running`, the log reached
-  `Starting campaign: warehouse_delivery`, and `llm_traces/`,
-  `agentic_sessions/`, `status.json`, and `scion.db` exist. Keep WSL for
-  larger synchronized matrices after this single-cell gate completes.
+  The wrapper exited `0`, but this is invalid field evidence:
+  `run_validity.status=invalid`, `reason=invalid_no_protocol_rows`,
+  `effective_rounds_completed=6/6`, `proposal_attempts=13`,
+  `proposal_quality_blocks=7`, `protocol_metric_results=0`, `n_experiments=0`,
+  and champion stayed v1. Five completed candidate sessions reached Contract
+  and Verification but were abandoned before Protocol with
+  `CANARY_CONFIG_ERROR`.
+- Root cause: the copied experiment `config/` omitted `budgets.json`, while the
+  copied `split_manifest_prod.yaml` relative `safe_data_roots` resolved to
+  `/home/clawd/scion-data` instead of `/home/clawd/research/scion-data`.
+  Strict canary path safety rejected the production canary absolute path before
+  formal Protocol. This is copied-config data-root wiring failure, not
+  warehouse operator evidence.
+- A narrow generic CLI data-root fallback is locally accepted. If copied
+  experiment configs omit sibling `budgets.json`, explicit
+  `SCION_PROBLEM_DATA_ROOT` now wires strict case-path safe roots. Existing
+  problem-owned `budgets.json` behavior is unchanged; strict canary path safety
+  remains enabled; no Decision, Protocol threshold, proposal-quality, or
+  `DecisionFeatures` behavior changed. Validation passed data-root/path-safety
+  tests (`10 passed`), canary taxonomy/evaluation tests (`18 passed`),
+  py_compile, and `git diff --check`.
+- Next gate after commit: rerun one short local warehouse production `6R` field
+  check from the copied-config data-root fallback repair. Accept the sequential
+  guard detector repair only if the run reaches formal Protocol and the
+  sequential split/cost false negative does not recur. Do not launch a broad
+  WSL matrix from this state.
 
 Latest CVRP/VRP state:
 

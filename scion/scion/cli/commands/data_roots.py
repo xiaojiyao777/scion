@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+GENERIC_DATA_ROOT_ENV = "SCION_PROBLEM_DATA_ROOT"
+
 
 @dataclass(frozen=True)
 class DataRootActivation:
@@ -24,14 +26,18 @@ def activate_declared_problem_data_root(
     """Activate a data root declared by protocol-side budget metadata.
 
     The framework stays problem-agnostic here: a problem package may declare a
-    data-root environment variable in a sibling ``budgets.json``. When that env
-    var is unset, Scion resolves the declared repo-relative root before solver
-    subprocesses are launched.
+    data-root environment variable in a sibling ``budgets.json``. When copied
+    experiment configs omit that file, an explicit ``SCION_PROBLEM_DATA_ROOT``
+    environment variable still wires strict case-path safety for the run.
     """
 
     budgets_path = _budgets_path_for_protocol(protocol_path)
     if budgets_path is None:
+        fallback = _generic_env_data_root(problem_yaml)
+        if fallback is not None:
+            return fallback
         return None
+
     budget = _load_budget_json(budgets_path)
     env_name = str(budget.get("data_root_env") or "").strip()
     rel_root = str(budget.get("data_root_expected_repo_relative") or "").strip()
@@ -149,6 +155,20 @@ def _load_budget_json(path: Path) -> dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return data if isinstance(data, dict) else {}
+
+
+def _generic_env_data_root(source: Path) -> DataRootActivation | None:
+    """Use the explicit generic data-root env when copied configs lack budgets."""
+
+    existing = os.environ.get(GENERIC_DATA_ROOT_ENV, "").strip()
+    if not existing:
+        return None
+    return DataRootActivation(
+        env_name=GENERIC_DATA_ROOT_ENV,
+        data_root=Path(existing).expanduser().resolve(strict=False),
+        source=source,
+        activated=False,
+    )
 
 
 def _find_repo_relative_root(*, start: Path, relative_path: Path) -> Path | None:

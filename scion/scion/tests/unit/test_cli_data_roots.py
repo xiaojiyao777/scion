@@ -232,3 +232,67 @@ def test_declared_data_root_uses_protocol_repo_when_problem_yaml_is_copied(
     )
     validate_case_path_resolution(resolved, strict=True)
     assert resolved.status == "resolved_safe_data_root"
+
+
+def test_copied_config_without_budget_uses_generic_env_safe_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run-local config copies may omit budgets.json but still set data-root env."""
+
+    data_root = tmp_path / "research" / "scion-data"
+    wrong_root = tmp_path / "wrong" / "scion-data"
+    case = data_root / "production" / "generated" / "instance_prod_can_s01.json"
+    case.parent.mkdir(parents=True)
+    case.write_text("{}", encoding="utf-8")
+
+    copied_config = (
+        tmp_path
+        / "research"
+        / "scion-experiments"
+        / "run"
+        / "config"
+    )
+    copied_config.mkdir(parents=True)
+    copied_problem_yaml = copied_config / "problem.yaml"
+    copied_problem_yaml.write_text("name: warehouse_delivery\n", encoding="utf-8")
+    copied_protocol = copied_config / "protocol_prod.yaml"
+    copied_protocol.write_text("version: test\n", encoding="utf-8")
+    split_manifest = SplitManifest(
+        version="warehouse-test",
+        safe_data_roots=[str(wrong_root)],
+        canary=[str(case)],
+        screening=[],
+        validation=[],
+        frozen=[],
+    )
+    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(data_root))
+
+    activation = activate_declared_problem_data_root(
+        problem_yaml=copied_problem_yaml,
+        protocol_path=copied_protocol,
+    )
+    validate_declared_problem_data_cases(
+        activation=activation,
+        problem_yaml=copied_problem_yaml,
+        split_manifest=split_manifest,
+    )
+    wired_manifest = with_declared_problem_data_roots(
+        activation=activation,
+        split_manifest=split_manifest,
+    )
+
+    assert activation is not None
+    assert activation.activated is False
+    assert activation.env_name == "SCION_PROBLEM_DATA_ROOT"
+    assert wired_manifest.safe_data_roots == [
+        str(wrong_root.resolve()),
+        str(data_root.resolve()),
+    ]
+    resolved = resolve_case_path_details(
+        str(case),
+        workspace=str(tmp_path / "candidate"),
+        safe_data_roots=wired_manifest.safe_data_roots,
+    )
+    validate_case_path_resolution(resolved, strict=True)
+    assert resolved.status == "resolved_safe_data_root"
