@@ -251,6 +251,36 @@ def available_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
             overlays=("config_adaptive_embedded_vns_share70_cadence2",),
         ),
         CvrpMechanismSpec(
+            mechanism_id="adaptive_embedded_vns_share70_hardcap_cadence2",
+            label="adaptive embedded VNS share-70 hard cap then cadence 2",
+            mechanism_family="candidate_probe",
+            mechanism_slice="adaptive_embedded_vns_share70_hardcap_cadence2",
+            description=(
+                "Focused scheduler diagnostic that reproduces the agentic "
+                "share-70 hard-cap idea: keep initial VNS, protect embedded "
+                "VNS while ALNS-loop runtime share is below 70%, then suppress "
+                "cadence and repair-improvement rescue above the cap. Records "
+                "mechanism-specific activation, budget, and direct effect "
+                "telemetry under adaptive_embedded_vns_share70_trigger."
+            ),
+            overlays=("config_adaptive_embedded_vns_share70_hardcap_cadence2",),
+        ),
+        CvrpMechanismSpec(
+            mechanism_id="adaptive_embedded_vns_share70_softrescue_cadence2",
+            label="adaptive embedded VNS share-70 cap with repair rescue",
+            mechanism_family="candidate_probe",
+            mechanism_slice="adaptive_embedded_vns_share70_softrescue_cadence2",
+            description=(
+                "Focused scheduler diagnostic that caps non-promising embedded "
+                "VNS once ALNS-loop runtime share reaches 70%, but still runs "
+                "embedded VNS above the cap when the repaired candidate already "
+                "improves current or best. Records mechanism-specific "
+                "activation, budget, and direct effect telemetry under "
+                "adaptive_embedded_vns_share70_trigger."
+            ),
+            overlays=("config_adaptive_embedded_vns_share70_softrescue_cadence2",),
+        ),
+        CvrpMechanismSpec(
             mechanism_id="adaptive_embedded_vns_improve_only",
             label="adaptive embedded VNS improve-only",
             mechanism_family="candidate_probe",

@@ -24,7 +24,12 @@ EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS = 0
 # Positive values force embedded VNS while its cumulative runtime share within
 # the ALNS loop is below the configured floor; cadence thinning applies after.
 EMBEDDED_VNS_MIN_RUNTIME_SHARE = 0.0
+# Positive values cap embedded VNS once its cumulative runtime share reaches the
+# configured ceiling. Zero disables the cap and preserves canonical behavior.
+EMBEDDED_VNS_MAX_RUNTIME_SHARE = 0.0
+EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE = True
 EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True
+EMBEDDED_VNS_DIAGNOSTIC_PHASE = ""
 ENABLE_SIZE70_TWO_OPT_FALLBACK = True
 SIZE70_TWO_OPT_MIN_CUSTOMERS = 70
 CW_THRESHOLD = 1500

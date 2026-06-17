@@ -5,7 +5,10 @@ from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
 from .config import (
     ENABLE_EMBEDDED_VNS,
     EMBEDDED_VNS_CADENCE,
+    EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE,
+    EMBEDDED_VNS_DIAGNOSTIC_PHASE,
     EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS,
+    EMBEDDED_VNS_MAX_RUNTIME_SHARE,
     EMBEDDED_VNS_MIN_RUNTIME_SHARE,
     EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT,
     ENABLE_INITIAL_VNS,
@@ -173,7 +176,11 @@ class _ALNSVNSSolver:
                     current=current,
                     best=best,
                 ):
+                    diagnostic_phase = str(EMBEDDED_VNS_DIAGNOSTIC_PHASE or "").strip()
+                    if diagnostic_phase:
+                        self.context.record_iteration(diagnostic_phase, 1)
                     phase_ms = self.context.elapsed_ms()
+                    before_vns_distance = float(candidate.total_cost)
                     self.context.record_objective_probe("vns_embedded_before", candidate)
                     improved = _vns(
                         candidate,
@@ -186,6 +193,14 @@ class _ALNSVNSSolver:
                     self.context.record_phase("vns_embedded", phase_elapsed_ms)
                     embedded_vns_runtime_ms += max(0, phase_elapsed_ms)
                     candidate.remove_empty_routes()
+                    after_vns_distance = float(candidate.total_cost)
+                    self._record_embedded_vns_diagnostic(
+                        diagnostic_phase,
+                        phase_elapsed_ms=phase_elapsed_ms,
+                        before_vns_distance=before_vns_distance,
+                        after_vns_distance=after_vns_distance,
+                        best=best,
+                    )
                     self.context.record_objective_probe(
                         "vns_embedded_after",
                         candidate,
@@ -412,6 +427,23 @@ class _ALNSVNSSolver:
             or instance.customer_count > self.vns_threshold
         ):
             return False
+        improves_repaired = False
+        if candidate_after_repair_distance is not None:
+            improves_repaired = (
+                candidate_after_repair_distance + _EPS < current.total_cost
+                or candidate_after_repair_distance + _EPS < best.total_cost
+            )
+        max_runtime_share = float(EMBEDDED_VNS_MAX_RUNTIME_SHARE)
+        if max_runtime_share > 0.0 and alns_elapsed_ms_before > 0:
+            share_cap = min(1.0, max(0.0, max_runtime_share))
+            embedded_share = float(max(0, embedded_vns_runtime_ms)) / float(
+                max(1, alns_elapsed_ms_before)
+            )
+            if embedded_share >= share_cap:
+                return (
+                    bool(EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE)
+                    and improves_repaired
+                )
         early_always_iterations = int(EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS)
         if early_always_iterations > 0 and iteration <= early_always_iterations:
             return True
@@ -430,12 +462,7 @@ class _ALNSVNSSolver:
             return True
         if not EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT:
             return False
-        if candidate_after_repair_distance is None:
-            return False
-        return (
-            candidate_after_repair_distance + _EPS < current.total_cost
-            or candidate_after_repair_distance + _EPS < best.total_cost
-        )
+        return improves_repaired
 
     def _run_size70_two_opt_polish(
         self,
@@ -478,6 +505,29 @@ class _ALNSVNSSolver:
         if callable(remaining_time_ms):
             return remaining_time_ms()
         return int(max(0.0, self.context.remaining_time()) * 1000.0)
+
+    def _record_embedded_vns_diagnostic(
+        self,
+        phase,
+        *,
+        phase_elapsed_ms,
+        before_vns_distance,
+        after_vns_distance,
+        best,
+    ):
+        if not phase:
+            return
+        self.context.record_phase(phase, phase_elapsed_ms)
+        vns_delta = max(0.0, float(before_vns_distance) - float(after_vns_distance))
+        self.context.record_move(
+            phase,
+            attempted=1,
+            accepted=1 if vns_delta > _EPS else 0,
+            delta=vns_delta,
+            best_improved=1
+            if float(after_vns_distance) + _EPS < float(best.total_cost)
+            else 0,
+        )
 
     def _record_alns_iteration_trace(
         self,
