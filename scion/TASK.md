@@ -3110,6 +3110,19 @@ Field gate:
   short local warehouse `6R` gate from the repaired commit. Keep single or
   two-cell checks on the 2-core server; use synchronized WSL for larger
   parallel matrices.
+- Completed readiness and launch: a minimal local `gpt-5.5` structured-tool
+  call returned `LLM_OK`, so the API/proxy blocker is cleared for the next
+  local gate. WSL SSH is healthy, the WSL runner is fast-forwarded to
+  `6921f70`, and WSL conda/proxy preflight passed. A short local warehouse
+  production `6R` field gate is now running from `6921f70`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md`.
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-sequentialguard-rerun6r-6921f70-20260617T123751Z`.
+  tmux session:
+  `scion_wh_sequentialguard_rerun6r_6921f70_20260617T123751Z`. Initial health
+  check passed: `status=running`, the campaign log reached
+  `Starting campaign: warehouse_delivery`, and `llm_traces/`,
+  `agentic_sessions/`, `status.json`, and `scion.db` exist.
 
 ## Status Cadence
 

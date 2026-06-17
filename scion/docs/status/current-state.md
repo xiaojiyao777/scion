@@ -241,9 +241,22 @@ Latest warehouse state:
   no-op while still rejecting split-only, cost-only, string/comment-only, and
   local-only diagnostic shapes. Validation passed warehouse target preview
   (`42 passed`), proposal-quality/recorder tests (`74 passed`), py_compile,
-  and `git diff --check`. Do not start another LLM run until API balance is
-  restored; after that, rerun a short local warehouse `6R` gate from the
-  repaired commit before any WSL matrix.
+  and `git diff --check`.
+- API balance/proxy readiness is restored enough for the next gate: a minimal
+  local `gpt-5.5` structured-tool call returned `LLM_OK`. WSL SSH is healthy
+  after restart, and the WSL runner checkout is fast-forwarded to `6921f70`
+  with conda `scion` and `/v1/models` preflight passing.
+- A short local warehouse `6R` field gate from `6921f70` is now running on the
+  2-core server. Launch report:
+  [`../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-sequentialguard-rerun6r-launch-20260617.md).
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-sequentialguard-rerun6r-6921f70-20260617T123751Z`.
+  tmux:
+  `scion_wh_sequentialguard_rerun6r_6921f70_20260617T123751Z`.
+  Initial health check passed: `status=running`, the log reached
+  `Starting campaign: warehouse_delivery`, and `llm_traces/`,
+  `agentic_sessions/`, `status.json`, and `scion.db` exist. Keep WSL for
+  larger synchronized matrices after this single-cell gate completes.
 
 Latest CVRP/VRP state:
 
