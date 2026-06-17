@@ -18,6 +18,7 @@ from scion.problems.cvrp.solver_runtime.timing import _remaining_time_sec
 
 _BASELINE_ALGORITHM_RELATIVE_PATH = "policies/baseline_algorithm.py"
 _BEST_UPDATE_TRACE_LIMIT = 32
+_ALNS_ITERATION_TRACE_LIMIT = 32
 
 
 def load_baseline_algorithm(
@@ -196,6 +197,7 @@ def solver_algorithm_defaults(
         "solver_algorithm_best_improving_moves": 0,
         "solver_algorithm_best_delta": 0.0,
         "solver_algorithm_best_update_trace": [],
+        "solver_algorithm_alns_iteration_trace": [],
         "solver_algorithm_objective_probes": [],
         "solver_algorithm_best_update_summary": _best_update_summary_template(),
         "solver_algorithm_phase_delta_sum": {"none": 0.0},
@@ -548,6 +550,58 @@ class SolverAlgorithmContext:
                 if isinstance(value, (str, int, float, bool)) or value is None
             }
         probes.append(event)
+
+    def record_alns_iteration(
+        self,
+        *,
+        iteration: int,
+        elapsed_ms_before: int | float,
+        remaining_ms_before: int | float,
+        q: int,
+        destroy_operator: str,
+        repair_operator: str,
+        candidate_after_repair_distance: int | float | None = None,
+        candidate_after_polish_distance: int | float | None = None,
+        accepted: bool = False,
+        acceptance_reason: str = "",
+        best_improved: bool = False,
+        elapsed_ms_after: int | float | None = None,
+        remaining_ms_after: int | float | None = None,
+    ) -> None:
+        """Record bounded ALNS iteration diagnostics for budget pressure analysis."""
+
+        trace = self._audit.setdefault("solver_algorithm_alns_iteration_trace", [])
+        if not isinstance(trace, list):
+            trace = []
+            self._audit["solver_algorithm_alns_iteration_trace"] = trace
+        if len(trace) >= _ALNS_ITERATION_TRACE_LIMIT:
+            return
+        event: dict[str, Any] = {
+            "iteration": _as_nonnegative_int(iteration),
+            "elapsed_ms_before": _as_nonnegative_int(elapsed_ms_before),
+            "remaining_ms_before": _as_nonnegative_int(remaining_ms_before),
+            "q": _as_nonnegative_int(q),
+            "destroy_operator": str(destroy_operator or "").strip() or "unknown",
+            "repair_operator": str(repair_operator or "").strip() or "unknown",
+            "accepted": bool(accepted),
+            "acceptance_reason": str(acceptance_reason or "").strip() or "unknown",
+            "best_improved": bool(best_improved),
+        }
+        repair_distance = _optional_nonnegative_float(
+            candidate_after_repair_distance
+        )
+        polish_distance = _optional_nonnegative_float(
+            candidate_after_polish_distance
+        )
+        if repair_distance is not None:
+            event["candidate_after_repair_distance"] = repair_distance
+        if polish_distance is not None:
+            event["candidate_after_polish_distance"] = polish_distance
+        if elapsed_ms_after is not None:
+            event["elapsed_ms_after"] = _as_nonnegative_int(elapsed_ms_after)
+        if remaining_ms_after is not None:
+            event["remaining_ms_after"] = _as_nonnegative_int(remaining_ms_after)
+        trace.append(event)
 
     def set_stop_reason(self, reason: str) -> None:
         value = str(reason or "").strip()
@@ -903,6 +957,16 @@ def _as_nonnegative_float(value: Any) -> float:
         number = float(value)
     except (TypeError, ValueError):
         return 0.0
+    return max(0.0, number)
+
+
+def _optional_nonnegative_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
     return max(0.0, number)
 
 

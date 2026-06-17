@@ -3283,6 +3283,16 @@ Field gate:
   `agentic_sessions/`, `run_status.json`, `status.json`, and `scion.db`
   artifacts exist. Accept only as behavior evidence unless validation/frozen/
   promotion or clear branch-depth improvement appears.
+- Implemented local CVRP scheduler-iteration telemetry repair. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`.
+  The repair fixes construction/initial-VNS phase accounting, adds
+  `alns_core` timing, preserves bounded
+  `solver_algorithm_alns_iteration_trace` in raw/results artifacts, and adds
+  ALNS/VNS timing columns to the mechanism-matrix summary CSV. Local
+  acceptance: CVRP runtime/matrix tests `20 passed`, py_compile passed, and a
+  one-job P-n76 no-LLM smoke confirmed trace/result/CSV fields. Next CVRP gate
+  after commit/sync is a compact no-LLM instrumentation matrix, not a long LLM
+  campaign.
 
 ## Status Cadence
 

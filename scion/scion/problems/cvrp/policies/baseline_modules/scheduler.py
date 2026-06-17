@@ -68,9 +68,7 @@ class _ALNSVNSSolver:
         start_ms = self.context.elapsed_ms()
         reserve = max(0.05, self.time_limit * EXIT_RESERVE_FRACTION)
 
-        phase_ms = self.context.elapsed_ms()
         current = self._initial_solution(instance, reserve)
-        self.context.record_phase("construction", self.context.elapsed_ms() - phase_ms)
         initial_route_count = len(current.routes)
         initial_total_distance = float(current.total_cost)
         best = current.copy()
@@ -123,17 +121,40 @@ class _ALNSVNSSolver:
             accepted = False
             best_improved = False
             delta = 0.0
+            acceptance_reason = "rejected"
+            iteration_elapsed_before = self.context.elapsed_ms()
+            iteration_remaining_before = self._remaining_time_ms()
+            candidate_after_repair_distance = None
+            candidate_after_polish_distance = None
+            alns_core_ms = 0
+            core_phase_ms = self.context.elapsed_ms()
 
             try:
                 removed = destroy_op(candidate, q, rng)
                 if not removed:
+                    alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+                    self.context.record_phase("alns_core", alns_core_ms)
                     destroy_weights.record(d_idx, 0.0)
                     repair_weights.record(r_idx, 0.0)
                     annealing.cool()
                     self.context.record_move("alns", attempted=1, accepted=0)
+                    self._record_alns_iteration_trace(
+                        iteration=iteration,
+                        elapsed_ms_before=iteration_elapsed_before,
+                        remaining_ms_before=iteration_remaining_before,
+                        q=q,
+                        destroy_operator=destroy_name,
+                        repair_operator=repair_name,
+                        candidate_after_repair_distance=None,
+                        candidate_after_polish_distance=None,
+                        accepted=False,
+                        acceptance_reason="destroy_empty",
+                    )
                     continue
                 repair_op(candidate, removed, rng)
                 candidate.remove_empty_routes()
+                candidate_after_repair_distance = float(candidate.total_cost)
+                alns_core_ms += self.context.elapsed_ms() - core_phase_ms
                 if (
                     ENABLE_EMBEDDED_VNS
                     and self.use_vns
@@ -160,6 +181,7 @@ class _ALNSVNSSolver:
                     )
                     if improved:
                         candidate.rebuild_index()
+                    candidate_after_polish_distance = float(candidate.total_cost)
                 elif self._should_run_size70_two_opt(instance):
                     self._run_size70_two_opt_polish(
                         candidate,
@@ -168,24 +190,70 @@ class _ALNSVNSSolver:
                         iteration=iteration,
                         record_best_update=False,
                     )
+                    candidate_after_polish_distance = float(candidate.total_cost)
+                else:
+                    candidate_after_polish_distance = candidate_after_repair_distance
             except ValueError:
+                alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+                self.context.record_phase("alns_core", alns_core_ms)
                 destroy_weights.record(d_idx, 0.0)
                 repair_weights.record(r_idx, 0.0)
                 annealing.cool()
                 self.context.record_move("alns", attempted=1, accepted=0)
+                self._record_alns_iteration_trace(
+                    iteration=iteration,
+                    elapsed_ms_before=iteration_elapsed_before,
+                    remaining_ms_before=iteration_remaining_before,
+                    q=q,
+                    destroy_operator=destroy_name,
+                    repair_operator=repair_name,
+                    candidate_after_repair_distance=candidate_after_repair_distance,
+                    candidate_after_polish_distance=candidate_after_polish_distance,
+                    accepted=False,
+                    acceptance_reason="repair_error",
+                )
                 continue
 
+            core_phase_ms = self.context.elapsed_ms()
             if not candidate.is_feasible():
+                alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+                self.context.record_phase("alns_core", alns_core_ms)
                 destroy_weights.record(d_idx, 0.0)
                 repair_weights.record(r_idx, 0.0)
                 annealing.cool()
                 self.context.record_move("alns", attempted=1, accepted=0)
+                self._record_alns_iteration_trace(
+                    iteration=iteration,
+                    elapsed_ms_before=iteration_elapsed_before,
+                    remaining_ms_before=iteration_remaining_before,
+                    q=q,
+                    destroy_operator=destroy_name,
+                    repair_operator=repair_name,
+                    candidate_after_repair_distance=candidate_after_repair_distance,
+                    candidate_after_polish_distance=candidate_after_polish_distance,
+                    accepted=False,
+                    acceptance_reason="infeasible",
+                )
                 continue
             if self.max_routes is not None and len(candidate.routes) > self.max_routes:
+                alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+                self.context.record_phase("alns_core", alns_core_ms)
                 destroy_weights.record(d_idx, 0.0)
                 repair_weights.record(r_idx, 0.0)
                 annealing.cool()
                 self.context.record_move("alns", attempted=1, accepted=0)
+                self._record_alns_iteration_trace(
+                    iteration=iteration,
+                    elapsed_ms_before=iteration_elapsed_before,
+                    remaining_ms_before=iteration_remaining_before,
+                    q=q,
+                    destroy_operator=destroy_name,
+                    repair_operator=repair_name,
+                    candidate_after_repair_distance=candidate_after_repair_distance,
+                    candidate_after_polish_distance=candidate_after_polish_distance,
+                    accepted=False,
+                    acceptance_reason="route_limit",
+                )
                 continue
 
             if candidate.total_cost + _EPS < best.total_cost:
@@ -194,6 +262,7 @@ class _ALNSVNSSolver:
                 current = candidate
                 accepted = True
                 best_improved = True
+                acceptance_reason = "new_best"
                 score = SIGMA_BEST
                 self.context.record_best_update(
                     best.routes_as_tuples(),
@@ -206,10 +275,12 @@ class _ALNSVNSSolver:
             elif candidate.total_cost + _EPS < current.total_cost:
                 current = candidate
                 accepted = True
+                acceptance_reason = "improves_current"
                 score = SIGMA_BETTER
             elif annealing.accept(current.total_cost, candidate.total_cost, rng):
                 current = candidate
                 accepted = True
+                acceptance_reason = "annealing_accept"
                 score = SIGMA_ACCEPTED
 
             destroy_weights.record(d_idx, score)
@@ -219,6 +290,21 @@ class _ALNSVNSSolver:
                 attempted=1,
                 accepted=1 if accepted else 0,
                 delta=delta,
+                best_improved=best_improved,
+            )
+            alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+            self.context.record_phase("alns_core", alns_core_ms)
+            self._record_alns_iteration_trace(
+                iteration=iteration,
+                elapsed_ms_before=iteration_elapsed_before,
+                remaining_ms_before=iteration_remaining_before,
+                q=q,
+                destroy_operator=destroy_name,
+                repair_operator=repair_name,
+                candidate_after_repair_distance=candidate_after_repair_distance,
+                candidate_after_polish_distance=candidate_after_polish_distance,
+                accepted=accepted,
+                acceptance_reason=acceptance_reason,
                 best_improved=best_improved,
             )
             if iteration % self.segment_length == 0:
@@ -240,6 +326,7 @@ class _ALNSVNSSolver:
         return best
 
     def _initial_solution(self, instance, reserve):
+        phase_ms = self.context.elapsed_ms()
         if instance.customer_count > self.cw_threshold:
             solution = _sweep_construction(instance)
         else:
@@ -255,6 +342,7 @@ class _ALNSVNSSolver:
                 f"initial solution uses {len(solution.routes)} routes; "
                 f"max_routes={self.max_routes}"
             )
+        self.context.record_phase("construction", self.context.elapsed_ms() - phase_ms)
         self.context.record_objective_probe("initial_before_local_search", solution)
         if (
             ENABLE_INITIAL_VNS
@@ -330,3 +418,43 @@ class _ALNSVNSSolver:
     def _within_budget(self, start_ms, reserve):
         elapsed_s = max(0.0, (self.context.elapsed_ms() - start_ms) / 1000.0)
         return elapsed_s < self.time_limit and self.context.remaining_time() > reserve
+
+    def _remaining_time_ms(self):
+        remaining_time_ms = getattr(self.context, "remaining_time_ms", None)
+        if callable(remaining_time_ms):
+            return remaining_time_ms()
+        return int(max(0.0, self.context.remaining_time()) * 1000.0)
+
+    def _record_alns_iteration_trace(
+        self,
+        *,
+        iteration,
+        elapsed_ms_before,
+        remaining_ms_before,
+        q,
+        destroy_operator,
+        repair_operator,
+        candidate_after_repair_distance,
+        candidate_after_polish_distance,
+        accepted,
+        acceptance_reason,
+        best_improved=False,
+    ):
+        recorder = getattr(self.context, "record_alns_iteration", None)
+        if not callable(recorder):
+            return
+        recorder(
+            iteration=iteration,
+            elapsed_ms_before=elapsed_ms_before,
+            remaining_ms_before=remaining_ms_before,
+            q=q,
+            destroy_operator=destroy_operator,
+            repair_operator=repair_operator,
+            candidate_after_repair_distance=candidate_after_repair_distance,
+            candidate_after_polish_distance=candidate_after_polish_distance,
+            accepted=accepted,
+            acceptance_reason=acceptance_reason,
+            best_improved=best_improved,
+            elapsed_ms_after=self.context.elapsed_ms(),
+            remaining_ms_after=self._remaining_time_ms(),
+        )

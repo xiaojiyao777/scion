@@ -177,6 +177,7 @@ research_surfaces:
         - solver_algorithm_events
         - solver_algorithm_best_update_trace
         - solver_algorithm_best_update_summary
+        - solver_algorithm_alns_iteration_trace
         - solver_algorithm_phase_move_attempts
         - solver_algorithm_phase_accepted_moves
         - solver_algorithm_runtime_budget_hit

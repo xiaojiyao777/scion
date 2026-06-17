@@ -54,8 +54,10 @@ def test_solver_design_surface_declares_active_algorithm_runtime_fields(
     assert "solver_algorithm_actionability_summary" in required_fields
     assert "solver_algorithm_best_update_trace" not in required_fields
     assert "solver_algorithm_best_update_summary" not in required_fields
+    assert "solver_algorithm_alns_iteration_trace" not in required_fields
     assert "solver_algorithm_best_update_trace" in optional_fields
     assert "solver_algorithm_best_update_summary" in optional_fields
+    assert "solver_algorithm_alns_iteration_trace" in optional_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
     assert runtime["solver_algorithm_loaded"] is True
@@ -413,6 +415,62 @@ def test_solver_design_best_update_trace_is_bounded_and_summarized(
     assert summary["operator_pair_counts"] == {"shaw+regret2": 40}
     actionability = runtime["solver_algorithm_actionability_summary"]
     assert actionability["best_update_summary"]["best_update_count"] == 40
+
+
+def test_solver_design_alns_iteration_trace_is_bounded(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "baseline_algorithm.py").write_text(
+        "\n".join(
+            [
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    solution = context.nearest_neighbor()",
+                "    for iteration in range(1, 41):",
+                "        context.record_iteration('alns', 1)",
+                "        context.record_alns_iteration(",
+                "            iteration=iteration,",
+                "            elapsed_ms_before=iteration,",
+                "            remaining_ms_before=1000 - iteration,",
+                "            q=3,",
+                "            destroy_operator='shaw',",
+                "            repair_operator='regret3',",
+                "            candidate_after_repair_distance=120.0,",
+                "            candidate_after_polish_distance=118.0,",
+                "            accepted=(iteration % 2 == 0),",
+                "            acceptance_reason='new_best' if iteration % 2 == 0 else 'rejected',",
+                "            best_improved=(iteration % 2 == 0),",
+                "            elapsed_ms_after=iteration + 1,",
+                "            remaining_ms_after=999 - iteration,",
+                "        )",
+                "    return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+
+    trace = runtime["solver_algorithm_alns_iteration_trace"]
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_search_iterations"] == 40
+    assert len(trace) == 32
+    assert trace[0]["iteration"] == 1
+    assert trace[-1]["iteration"] == 32
+    assert trace[0]["q"] == 3
+    assert trace[0]["destroy_operator"] == "shaw"
+    assert trace[0]["repair_operator"] == "regret3"
+    assert trace[0]["candidate_after_repair_distance"] == 120.0
+    assert trace[0]["candidate_after_polish_distance"] == 118.0
+    assert trace[1]["accepted"] is True
+    assert trace[1]["acceptance_reason"] == "new_best"
+    assert trace[1]["best_improved"] is True
 
 
 def test_baseline_scheduler_best_update_records_public_routes_not_internal_solution(

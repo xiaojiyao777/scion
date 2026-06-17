@@ -426,6 +426,12 @@ def _write_summary_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         "improving_moves",
         "best_delta",
         "best_update_count",
+        "alns_iterations",
+        "alns_iteration_trace_count",
+        "alns_core_runtime_ms",
+        "vns_initial_runtime_ms",
+        "vns_embedded_runtime_ms",
+        "vns_embedded_runtime_fraction",
         "solver_algorithm_elapsed_ms",
         "solver_algorithm_stop_reason",
         "solver_algorithm_runtime_budget_hit",
@@ -444,7 +450,15 @@ def _csv_row(row: Mapping[str, Any], fieldnames: Sequence[str]) -> dict[str, Any
     flags = _dict_or_empty(row.get("route_fleet_regression_flags"))
     moves = _dict_or_empty(row.get("accepted_moves"))
     best = _dict_or_empty(row.get("best_update_telemetry"))
+    phase = _dict_or_empty(row.get("phase_telemetry"))
     runtime = _dict_or_empty(row.get("runtime_phase_split"))
+    phase_runtime = _dict_or_empty(runtime.get("phase_runtime_ms"))
+    phase_fraction = _dict_or_empty(runtime.get("phase_runtime_fraction"))
+    actionability = _dict_or_empty(phase.get("actionability_summary"))
+    actionability_phases = _dict_or_empty(actionability.get("phases"))
+    alns_actionability = _dict_or_empty(actionability_phases.get("alns"))
+    alns_trace = phase.get("alns_iteration_trace")
+    alns_trace_count = len(alns_trace) if isinstance(alns_trace, list) else 0
     values = {
         "status": row.get("status"),
         "job_id": row.get("job_id"),
@@ -478,6 +492,12 @@ def _csv_row(row: Mapping[str, Any], fieldnames: Sequence[str]) -> dict[str, Any
         "improving_moves": moves.get("improving_moves"),
         "best_delta": best.get("best_delta"),
         "best_update_count": best.get("best_update_count"),
+        "alns_iterations": alns_actionability.get("iterations"),
+        "alns_iteration_trace_count": alns_trace_count,
+        "alns_core_runtime_ms": phase_runtime.get("alns_core"),
+        "vns_initial_runtime_ms": phase_runtime.get("vns_initial"),
+        "vns_embedded_runtime_ms": phase_runtime.get("vns_embedded"),
+        "vns_embedded_runtime_fraction": phase_fraction.get("vns_embedded"),
         "solver_algorithm_elapsed_ms": runtime.get("solver_algorithm_elapsed_ms"),
         "solver_algorithm_stop_reason": runtime.get("solver_algorithm_stop_reason"),
         "solver_algorithm_runtime_budget_hit": runtime.get(

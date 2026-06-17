@@ -43,10 +43,12 @@ CVRP/VRP:
   disablement: `160/160` rows, overall W/L/T `25/51/4`, median delta `+2.0`.
   Objective probes show the skipped initial work mostly shifts pressure into
   embedded VNS rather than creating stable ALNS benefit.
-- Next CVRP work should instrument scheduler-local budget/iteration behavior:
-  construction vs initial VNS phase accounting, ALNS core timing, and a bounded
-  per-iteration trace around destroy/repair, embedded VNS, acceptance, and best
-  updates. Do not launch a long LLM CVRP campaign from the current evidence.
+- CVRP scheduler-local budget/iteration instrumentation is locally implemented
+  and accepted:
+  [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md).
+  It fixes construction/initial-VNS phase accounting, adds `alns_core` timing,
+  and records bounded `solver_algorithm_alns_iteration_trace`. Do not launch a
+  long LLM CVRP campaign from the current evidence.
 
 ## Active Work
 
@@ -69,8 +71,8 @@ CVRP/VRP:
 
 1. Finish the running warehouse gate: sync artifacts back, write a postrun, and
    judge behavior acceptance separately from research-quality acceptance.
-2. Implement the CVRP scheduler-local instrumentation slice, keeping all new
-   fields in CVRP runtime/report artifacts and out of generic Decision.
+2. Commit and sync the CVRP scheduler-local instrumentation slice after the
+   running warehouse gate no longer depends on the WSL checkout state.
 3. Run a compact no-LLM CVRP instrumentation validation matrix before any
    agentic CVRP campaign. Preferred first matrix: `P-n76-k4`, `CMT2`, `CMT4`,
    `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns`,
@@ -101,6 +103,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md)
 
 WSL coordination:
 

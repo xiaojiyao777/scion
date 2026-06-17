@@ -365,6 +365,9 @@ def summarize_solver_output_for_job(
     objective_probes = _list_or_empty(
         runtime.get("solver_algorithm_objective_probes")
     )
+    alns_iteration_trace = _list_or_empty(
+        runtime.get("solver_algorithm_alns_iteration_trace")
+    )
     actionability = _dict_or_none(
         runtime.get("solver_algorithm_actionability_summary")
     )
@@ -457,6 +460,7 @@ def summarize_solver_output_for_job(
                 runtime.get("solver_algorithm_phase_improvement_counts")
             ),
             "objective_probes": objective_probes,
+            "alns_iteration_trace": alns_iteration_trace,
             "actionability_summary": actionability,
         },
         "runtime_phase_split": {
@@ -565,6 +569,7 @@ def _reserved_result_fields() -> dict[str, Any]:
             "phase_best_delta",
             "phase_improvement_counts",
             "objective_probes",
+            "alns_iteration_trace",
             "actionability_summary",
         ],
         "runtime_phase_split": [
@@ -628,6 +633,7 @@ def _empty_phase_telemetry() -> dict[str, Any]:
         "phase_best_delta": {},
         "phase_improvement_counts": {},
         "objective_probes": [],
+        "alns_iteration_trace": [],
         "actionability_summary": None,
     }
 

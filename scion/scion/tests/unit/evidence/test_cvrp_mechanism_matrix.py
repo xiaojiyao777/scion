@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
 import sys
@@ -209,11 +210,34 @@ def test_planned_result_and_summary_keep_quality_and_phase_diagnostics(
         {"name": "vns_initial_before", "total_distance": 1530.0},
         {"name": "vns_initial_after", "total_distance": 1510.0},
     ]
+    assert alns_result["phase_telemetry"]["alns_iteration_trace"] == [
+        {
+            "iteration": 1,
+            "q": 8,
+            "destroy_operator": "shaw",
+            "repair_operator": "regret3",
+            "accepted": True,
+            "acceptance_reason": "new_best",
+        }
+    ]
     assert alns_result["runtime_phase_split"]["phase_runtime_ms"] == {
         "construction": 10,
+        "alns_core": 12,
         "alns": 70,
         "vns": 20,
+        "vns_initial": 5,
+        "vns_embedded": 30,
     }
+
+    tool = _load_tool()
+    summary_path = tmp_path / "summary.csv"
+    tool._write_summary_csv(summary_path, [alns_result])
+    rows = list(csv.DictReader(summary_path.open(encoding="utf-8")))
+    assert rows[0]["alns_iterations"] == "4"
+    assert rows[0]["alns_iteration_trace_count"] == "1"
+    assert rows[0]["alns_core_runtime_ms"] == "12"
+    assert rows[0]["vns_initial_runtime_ms"] == "5"
+    assert rows[0]["vns_embedded_runtime_ms"] == "30"
 
 
 def test_load_cases_and_cli_dry_run_write_manifest_and_results(
@@ -372,6 +396,16 @@ def _raw_solver_output(*, total_distance: float, routes: int) -> dict[str, objec
             "solver_algorithm_best_update_trace": [
                 {"phase": "alns", "total_distance": total_distance}
             ],
+            "solver_algorithm_alns_iteration_trace": [
+                {
+                    "iteration": 1,
+                    "q": 8,
+                    "destroy_operator": "shaw",
+                    "repair_operator": "regret3",
+                    "accepted": True,
+                    "acceptance_reason": "new_best",
+                }
+            ],
             "solver_algorithm_objective_probes": [
                 {
                     "name": "vns_initial_before",
@@ -385,8 +419,14 @@ def _raw_solver_output(*, total_distance: float, routes: int) -> dict[str, objec
             "solver_algorithm_phase_improvement_counts": {"alns": 2, "vns": 1},
             "solver_algorithm_phase_runtime_ms": {
                 "construction": 10,
+                "alns_core": 12,
                 "alns": 70,
                 "vns": 20,
+                "vns_initial": 5,
+                "vns_embedded": 30,
+            },
+            "solver_algorithm_actionability_summary": {
+                "phases": {"alns": {"iterations": 4}},
             },
             "solver_algorithm_stop_reason": "time_limit",
             "solver_algorithm_runtime_budget_hit": True,
