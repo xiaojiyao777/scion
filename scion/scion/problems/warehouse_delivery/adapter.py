@@ -554,10 +554,15 @@ Frozen files (do not modify): {frozen}"""
                 "retry_constraint": (
                     "Revise the warehouse operator patch before protocol: "
                     "add code-visible activation/effect diagnostic counters or "
-                    "a named instrumentation path, and include a guard that "
-                    "prevents screening-only or lexicographically dominated "
-                    "moves. For merge-style vehicle-pair scans, include an "
-                    "executable top-k/cap/limit/early-exit candidate policy."
+                    "a named instrumentation path, compute base/candidate "
+                    "subcategory splits and total cost, and accept only "
+                    "`split_delta > 0 or (split_delta == 0 and cost_delta > 0)`. "
+                    "Return the original solution otherwise. For "
+                    "change_vehicle_type/downsize patches, a cost-only filter "
+                    "is not enough unless the code proves assignment consistency "
+                    "and computes/preserves split_delta. For merge-style "
+                    "vehicle-pair scans, include an executable pre-evaluation "
+                    "top-k/cap/limit/early-exit candidate policy."
                 ),
                 "repair_template": _warehouse_patch_quality_repair_template(missing),
                 "missing_code_elements": list(dict.fromkeys(missing)),
@@ -1063,16 +1068,54 @@ def _warehouse_patch_quality_repair_template(
                 "max_candidates",
                 "candidate cap",
                 "early exit",
-                "sorted candidates sliced before expensive trial evaluation",
+                "sorted/ranked candidates sliced before expensive trial evaluation",
             ],
+        },
+        "lexicographic_guard_skeleton": [
+            "base_splits = count_subcategory_splits(solution)",
+            "base_cost = total_cost(solution)",
+            "candidate = build_candidate(solution)",
+            "candidate_splits = count_subcategory_splits(candidate)",
+            "candidate_cost = total_cost(candidate)",
+            "split_delta = base_splits - candidate_splits",
+            "cost_delta = base_cost - candidate_cost",
+            "if not (split_delta > 0 or (split_delta == 0 and cost_delta > 0)):",
+            "    return solution",
+            "diagnostics['split_delta_sum'] += split_delta",
+            "diagnostics['cost_delta_sum'] += cost_delta",
+            "diagnostics['accepted_moves'] += 1",
+            "diagnostics['improving_move_count'] += 1",
+            "return candidate",
+        ],
+        "bounded_candidate_policy_skeleton": [
+            "ranked_candidates = sorted(raw_candidates, key=score_candidate)",
+            "for candidate_ref in ranked_candidates[:max_candidates]:",
+            "    candidate = build_and_evaluate_trial(candidate_ref)",
+            "    ... apply the split_delta/cost_delta guard before accepting ...",
+            "or: increment a generated_count counter and break before trial evaluation when generated_count >= max_candidates.",
+        ],
+        "operator_specific_hints": {
+            "change_vehicle_type_downsize": (
+                "Vehicle type changes may be split-preserving only when the "
+                "code proves/checks assignment consistency, computes "
+                "candidate_splits, and computes/preserves split_delta. A "
+                "patch that filters only `cost_delta <= 0` is still missing "
+                "the validation-transfer lexicographic guard."
+            ),
+            "merge_vehicle_pair_scan": (
+                "A real bound must cap candidates before expensive trial "
+                "evaluation. Building/sorting all pair trials and then using "
+                "`candidates[:32][0]` is not a generation bound for pair scans."
+            ),
         },
         "minimal_shape": [
             "Initialize or update self.validation_transfer_diagnostics on the operator instance; local dictionaries are not exportable telemetry.",
             "Increment operator_invocations before evaluating the move.",
             "Increment an eligible_* counter only when the case-general precondition is true.",
-            "Compute split_delta and cost_delta before accepting a move.",
-            "Only accept when the move improves subcategory_splits or preserves splits and improves total_cost.",
-            "For merge-style vehicle scans, bound candidate pairs before expensive evaluation.",
+            "Compute base_splits/base_cost and candidate_splits/candidate_cost, or equivalent split_delta/cost_delta values, before accepting a move.",
+            "Only accept when split_delta > 0 or when split_delta == 0 and cost_delta > 0.",
+            "Increment split_delta_sum and cost_delta_sum only from the computed split_delta/cost_delta values.",
+            "For merge-style vehicle scans, bound candidate pairs before expensive trial evaluation.",
             "Return the original solution when the move is screening-only, not case-general, or lexicographically dominated.",
         ],
         "example_identifiers": [
@@ -1091,6 +1134,8 @@ def _warehouse_patch_quality_repair_template(
             "Do not add counters in comments only; identifiers must appear in executable code.",
             "Do not store diagnostics only in a local dict; the solver exports self.validation_transfer_diagnostics from operator instances.",
             "Do not accept moves that worsen subcategory_splits for a cost-only gain.",
+            "Do not use a cost-only `cost_delta <= 0` filter for change_vehicle_type/downsize without computing split_delta or proving split preservation.",
+            "Do not build and evaluate all vehicle-pair trials and then pick `candidates[:32][0]`; cap generation or pre-evaluation iteration.",
             "Do not run an unbounded nested vehicle-pair scan in merge_vehicles.py.",
         ],
         "decision_features_excluded": True,

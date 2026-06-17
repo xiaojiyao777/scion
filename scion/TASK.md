@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 frontier analysis complete; warehouse candidate-filter guard detector repair locally accepted; short local warehouse field acceptance next*
+*Status: Phase 4 frontier analysis complete; warehouse quality-skeleton repair locally accepted; short local warehouse field acceptance next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3035,6 +3035,36 @@ Field gate:
   problem-owned proposal-quality feedback/skeleton for repeated
   validation-transfer, telemetry-identity, bounded-candidate, and executable
   guard misses. Do not launch a broad WSL matrix before that repair.
+- Completed: the blocked `change_vehicle_type.py` session was classified as a
+  true quality block, not a detector miss. The recovered patch filtered on
+  `cost_delta <= 0` but did not compute `split_delta`, `base_splits`,
+  `candidate_splits`, or an equivalent lexicographic objective comparison.
+  The warehouse detector was therefore correct to return
+  `screening_or_lexicographic_guard`.
+- Implemented and locally accepted: warehouse-owned quality feedback/skeleton
+  repair. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-quality-skeleton-repair-20260617.md`.
+  The repair strengthens the retry constraint and repair template with an
+  executable split/cost lexicographic guard skeleton, a
+  `change_vehicle_type` / downsize cost-only warning, computed-delta telemetry
+  guidance, and real pre-evaluation bounded-candidate policy guidance. It does
+  not relax `_patch_has_screening_or_lexicographic_guard`, Decision, or
+  `DecisionFeatures`.
+- Acceptance commands passed:
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_warehouse_target_preview.py`
+  (`41 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py`
+  (`74 passed`); py_compile and `git diff --check` passed.
+- Runtime/resource check: no server or WSL Scion experiment process is active.
+  WSL SSH is healthy at
+  `ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 xjy-ubuntu@127.0.0.1`
+  and exposes `10` logical CPUs with about `27Gi` memory, but its checkout was
+  still at `4b2ee29` while the server branch had advanced. Before any new WSL
+  matrix, fast-forward the WSL runner worktree. One or two short cells can run
+  locally on the 2-core server; larger matrices belong on synchronized WSL.
+- Next gate after commit: one short local warehouse production `6R` field
+  check on the 2-core server. Do not launch a broad WSL matrix until this
+  quality-skeleton repair is field-accepted.
 
 ## Status Cadence
 

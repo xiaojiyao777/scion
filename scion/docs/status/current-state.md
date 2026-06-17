@@ -195,6 +195,26 @@ Latest warehouse state:
   because `swap_orders.accepted_moves` and all effect counters were all-zero on
   validation. Next useful work is focused proposal-quality repair, not a broad
   WSL matrix.
+- The blocked `change_vehicle_type.py` exact-replace session
+  `f7851de0-0fee-4420-b20d-3c27df9bfd73` is now classified as a true quality
+  block, not a detector false negative. Its recovered patch only filtered on
+  `cost_delta <= 0`; it did not compute `split_delta`, `base_splits`,
+  `candidate_splits`, or an equivalent split/cost lexicographic objective
+  comparison before acceptance.
+- A warehouse-owned quality-skeleton repair is locally accepted. Report:
+  [`../experiments/v0.4/v04-warehouse-quality-skeleton-repair-20260617.md`](../experiments/v0.4/v04-warehouse-quality-skeleton-repair-20260617.md).
+  The repair strengthens retry feedback with an executable lexicographic guard
+  skeleton, a `change_vehicle_type` / downsize cost-only warning, computed
+  split/cost diagnostics, and real pre-evaluation bounded-candidate guidance.
+  It does not relax the warehouse guard detector, Decision, or
+  `DecisionFeatures`. Acceptance passed warehouse target preview (`41
+  passed`), proposal-quality/recorder tests (`74 passed`), py_compile, and
+  `git diff --check`.
+- Resource check: no Scion experiment process is active on the server or WSL.
+  WSL SSH is healthy, with `10` logical CPUs and about `27Gi` memory
+  available, but the WSL checkout was still at `4b2ee29` and must be
+  fast-forwarded before any new WSL run. Next gate is one short local warehouse
+  `6R` field check on the 2-core server.
 
 Latest CVRP/VRP state:
 

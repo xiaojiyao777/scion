@@ -625,6 +625,21 @@ class MergeVehicles:
     assert "activation_effect_diagnostic_code" in template["missing_items"]
     assert "operator_invocations" in template["required_code_signals"]["activation"]
     assert "screening_only_guard" in template["example_identifiers"]
+    assert "split_delta > 0 or (split_delta == 0 and cost_delta > 0)" in " ".join(
+        template["lexicographic_guard_skeleton"]
+    )
+    assert "base_splits = count_subcategory_splits(solution)" in (
+        template["lexicographic_guard_skeleton"]
+    )
+    assert "diagnostics['split_delta_sum'] += split_delta" in (
+        template["lexicographic_guard_skeleton"]
+    )
+    assert "cost_delta <= 0" in template["operator_specific_hints"][
+        "change_vehicle_type_downsize"
+    ]
+    assert "computes/preserves split_delta" in template["operator_specific_hints"][
+        "change_vehicle_type_downsize"
+    ]
 
 
 def test_warehouse_patch_quality_allows_diagnostics_and_guard_code() -> None:
@@ -699,6 +714,62 @@ def test_warehouse_patch_quality_rejects_unbounded_nested_vehicle_pair_scan() ->
     assert "bounded_candidate_policy" in check.detail
     template = check.structured_rejection["repair_template"]
     assert "bounded_candidate_policy" in template["missing_items"]
+    bounded_skeleton = " ".join(template["bounded_candidate_policy_skeleton"])
+    assert "ranked_candidates[:max_candidates]" in bounded_skeleton
+    assert "before trial evaluation" in bounded_skeleton
+    assert "candidates[:32][0]" in template["operator_specific_hints"][
+        "merge_vehicle_pair_scan"
+    ]
+
+
+def test_warehouse_patch_quality_repair_template_warns_change_vehicle_type_cost_only_filter() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/change_vehicle_type.py",
+        action="modify",
+        code_content="""
+class ChangeVehicleType:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        candidate = solution.deep_copy()
+        cost_delta = self._cost(solution) - self._cost(candidate)
+        if cost_delta <= 0:
+            return solution
+        diagnostics["cost_delta_sum"] += cost_delta
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "screening_or_lexicographic_guard" in check.detail
+    template = check.structured_rejection["repair_template"]
+    change_hint = template["operator_specific_hints"]["change_vehicle_type_downsize"]
+    assert "Vehicle type changes" in change_hint
+    assert "assignment consistency" in change_hint
+    assert "A patch that filters only `cost_delta <= 0`" in change_hint
+    assert "split_delta" in " ".join(template["lexicographic_guard_skeleton"])
 
 
 def test_warehouse_patch_quality_allows_bounded_top_k_vehicle_pair_scan() -> None:
