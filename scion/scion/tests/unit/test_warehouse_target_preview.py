@@ -1488,6 +1488,72 @@ class MergeVehicles:
     assert "screening_or_lexicographic_guard" in check.detail
 
 
+def test_warehouse_patch_quality_allows_sequential_split_cost_candidate_filters() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/change_vehicle_type.py",
+        action="modify",
+        code_content="""
+class ChangeVehicleType:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        ranked_candidates = self._rank_candidates(solution)
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += len(ranked_candidates)
+        base_splits = self._count_subcategory_splits(solution)
+        base_cost = self._total_cost(solution)
+        for candidate_ref in ranked_candidates[:16]:
+            candidate = self._build_candidate(solution, candidate_ref)
+            candidate_splits = self._count_subcategory_splits(candidate)
+            candidate_cost = self._total_cost(candidate)
+            split_delta = base_splits - candidate_splits
+            cost_delta = base_cost - candidate_cost
+            if split_delta < 0:
+                continue
+            if cost_delta <= 0:
+                continue
+            diagnostics["split_delta_sum"] += split_delta
+            diagnostics["cost_delta_sum"] += cost_delta
+            diagnostics["accepted_moves"] += 1
+            diagnostics["improving_move_count"] += 1
+            return candidate
+        return solution
+
+    def _rank_candidates(self, solution):
+        return sorted(solution.candidates, key=lambda item: item.score)
+
+    def _build_candidate(self, solution, candidate_ref):
+        return candidate_ref.solution
+
+    def _count_subcategory_splits(self, solution):
+        return solution.split_count
+
+    def _total_cost(self, solution):
+        return solution.total_cost
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
 def test_warehouse_patch_quality_rejects_helper_with_string_only_guard() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     adapter = WarehouseDeliveryAdapter(spec_v1)

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 frontier analysis complete; warehouse quality-skeleton field gate running locally*
+*Status: Phase 4 warehouse quality-skeleton gate interrupted; detector false-negative repair locally accepted*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3079,6 +3079,37 @@ Field gate:
   `/home/clawd/research/scion-experiments/v04-warehouse-quality-skeleton-rerun6r-9853dd4-20260617T115932Z`
   is marked `aborted_wrapper_no_campaign`; it created no campaign directory or
   log and consumed no LLM/protocol work.
+- Completed as interrupted partial evidence: the `9853dd4` field gate stopped
+  with API balance exhaustion. Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-postrun-20260617.md`.
+  Wrapper `exit_code=20`, `stopped_reason=api_balance_exhausted`,
+  `run_validity.reason=valid_partial_interrupted`,
+  `effective_rounds_completed=1/6`, `proposal_quality_blocks=9`,
+  `protocol_metric_results=2`, `formal_candidate_artifact_count=3`, and
+  champion stayed v1. This is not a completed field gate or warehouse efficacy
+  result.
+- Curie's trace audit classified two late `change_vehicle_type.py` blocks:
+  `a1931a64` was a true block, while `c0e6a00c` was a warehouse detector false
+  negative. The valid patch used sequential executable candidate filters
+  `if split_delta < 0: continue` and `if cost_delta <= 0: continue`, then
+  returned the original solution when no candidate passed. The old recognizer
+  required both metrics in one guard expression.
+- Implemented and locally accepted: narrow warehouse-owned detector repair for
+  same-loop sequential split/cost candidate filters with fallback no-op. It
+  still rejects split-only, cost-only, string/comment-only, and local-only
+  diagnostic shapes; no Decision, Protocol threshold, or `DecisionFeatures`
+  behavior changed.
+- Acceptance commands passed:
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_warehouse_target_preview.py`
+  (`42 passed`);
+  `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py`
+  (`74 passed`); py_compile and `git diff --check` passed.
+- Current experiment constraint: no server or WSL Scion experiment process is
+  active, and WSL SSH is healthy after restart, but no new LLM field gate
+  should be launched until API balance is restored. After that, rerun one
+  short local warehouse `6R` gate from the repaired commit. Keep single or
+  two-cell checks on the 2-core server; use synchronized WSL for larger
+  parallel matrices.
 
 ## Status Cadence
 

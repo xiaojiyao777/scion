@@ -212,17 +212,38 @@ Latest warehouse state:
   `git diff --check`.
 - Resource check: no Scion experiment process is active on the server or WSL.
   WSL SSH is healthy, with `10` logical CPUs and about `27Gi` memory
-  available, but the WSL checkout was still at `4b2ee29` and must be
-  fast-forwarded before any new WSL run. Next gate is one short local warehouse
-  `6R` field check on the 2-core server.
-- That short local field gate is now running from commit `9853dd4`. Launch
-  report:
+  available. One or two short live cells can run on the 2-core server; larger
+  synchronized matrices should run on WSL after the runner checkout is
+  fast-forwarded.
+- The short local field gate from commit `9853dd4` was interrupted by API
+  balance exhaustion. Launch report:
   [`../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-launch-20260617.md).
-  Active root:
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-quality-skeleton-rerun6r-postrun-20260617.md).
+  Run root:
   `/home/clawd/research/scion-experiments/v04-warehouse-quality-skeleton-rerun6r-9853dd4-20260617T120052Z`.
-  tmux:
-  `scion_wh_quality_skeleton_rerun6r_9853dd4_20260617T120052Z`.
-  Initial health check passed and the campaign has started.
+  Wrapper `exit_code=20`, `stopped_reason=api_balance_exhausted`,
+  `run_validity.reason=valid_partial_interrupted`,
+  `effective_rounds_completed=1/6`, `proposal_quality_blocks=9`,
+  `protocol_metric_results=2`, `formal_candidate_artifact_count=3`, and
+  champion stayed v1. The run is useful partial diagnostic evidence, not a
+  completed warehouse field gate or research-quality acceptance.
+- Curie classified the two late `change_vehicle_type.py` code-stage blocks:
+  `a1931a64` was a true block, while `c0e6a00c` was a detector false
+  negative. The latter computed base/candidate splits and costs, used
+  sequential executable candidate filters
+  `if split_delta < 0: continue` and `if cost_delta <= 0: continue`, and
+  returned the original solution when no candidate passed. The warehouse
+  recognizer was too syntactic because it required both metrics in one guard
+  expression.
+- A narrow warehouse-owned detector repair is locally accepted: the adapter now
+  recognizes same-loop sequential split/cost candidate filters with fallback
+  no-op while still rejecting split-only, cost-only, string/comment-only, and
+  local-only diagnostic shapes. Validation passed warehouse target preview
+  (`42 passed`), proposal-quality/recorder tests (`74 passed`), py_compile,
+  and `git diff --check`. Do not start another LLM run until API balance is
+  restored; after that, rerun a short local warehouse `6R` gate from the
+  repaired commit before any WSL matrix.
 
 Latest CVRP/VRP state:
 

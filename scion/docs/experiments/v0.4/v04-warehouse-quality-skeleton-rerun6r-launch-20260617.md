@@ -2,7 +2,10 @@
 
 *Date: 2026-06-17*
 *Commit under test: `9853dd4`*
-*Status: running on server*
+*Status: interrupted; see postrun*
+
+Postrun:
+[`v04-warehouse-quality-skeleton-rerun6r-postrun-20260617.md`](v04-warehouse-quality-skeleton-rerun6r-postrun-20260617.md).
 
 ## Purpose
 

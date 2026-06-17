@@ -1612,8 +1612,42 @@ def _function_has_candidate_filter_transfer_guard(
             has_transfer_filter = True
             break
     if not has_transfer_filter:
+        has_transfer_filter = _function_has_sequential_metric_candidate_filters(node)
+    if not has_transfer_filter:
         return False
     return any(_returns_original_solution(child) for child in ast.walk(node))
+
+
+def _function_has_sequential_metric_candidate_filters(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Accept equivalent split/cost filters expressed as sequential continues."""
+
+    for child in ast.walk(node):
+        if not isinstance(child, (ast.For, ast.AsyncFor, ast.While)):
+            continue
+        has_split_filter = False
+        has_cost_filter = False
+        for loop_child in ast.walk(child):
+            if not isinstance(loop_child, ast.If):
+                continue
+            if _is_string_only_guard_value(loop_child.test):
+                continue
+            if not any(
+                isinstance(grandchild, ast.Continue)
+                for grandchild in ast.walk(loop_child)
+            ):
+                continue
+            test_text = _ast_signal_text(loop_child.test)
+            has_split_filter = has_split_filter or _guard_expression_has_split_metric(
+                test_text
+            )
+            has_cost_filter = has_cost_filter or _guard_expression_has_cost_metric(
+                test_text
+            )
+        if has_split_filter and has_cost_filter:
+            return True
+    return False
 
 
 def _executable_transfer_guard_names(tree: ast.AST) -> set[str]:
@@ -1693,7 +1727,13 @@ def _guard_test_is_transfer_relevant(
 
 
 def _guard_expression_has_metric_pair(test_text: str) -> bool:
-    has_split = any(
+    return _guard_expression_has_split_metric(
+        test_text
+    ) and _guard_expression_has_cost_metric(test_text)
+
+
+def _guard_expression_has_split_metric(test_text: str) -> bool:
+    return any(
         term in test_text
         for term in (
             "subcategory_splits",
@@ -1705,7 +1745,10 @@ def _guard_expression_has_metric_pair(test_text: str) -> bool:
             "split",
         )
     )
-    has_cost = any(
+
+
+def _guard_expression_has_cost_metric(test_text: str) -> bool:
+    return any(
         term in test_text
         for term in (
             "total_cost",
@@ -1716,7 +1759,6 @@ def _guard_expression_has_metric_pair(test_text: str) -> bool:
             "cost",
         )
     )
-    return has_split and has_cost
 
 
 def _returns_original_solution(node: ast.AST) -> bool:
