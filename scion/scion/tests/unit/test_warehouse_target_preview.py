@@ -18,6 +18,7 @@ from scion.core.proposal_pipeline.problem_quality import (
     validate_problem_patch_quality,
 )
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
+from scion.problem.providers import active_subject_taxonomy_payload
 from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
 from scion.proposal.engine.hypothesis_context_profiles import (
     filter_hypothesis_context_for_prompt,
@@ -146,6 +147,23 @@ def test_warehouse_problem_context_surfaces_validation_transfer_diagnostic() -> 
     assert "operator_invocations" in diagnostic
     assert "split_delta_sum" in diagnostic
     assert "excluded_from_decision_features" in diagnostic
+
+
+def test_warehouse_adapter_declares_structural_activation_refs() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+
+    taxonomy = active_subject_taxonomy_payload(
+        problem_spec=spec_v1,
+        adapter=adapter,
+        surface="vehicle_level",
+    )
+
+    assert "operator_invocations" in taxonomy["telemetry_activation_refs"]
+    assert "eligible_vehicle_or_order_groups_seen" in taxonomy[
+        "telemetry_activation_refs"
+    ]
+    assert "accepted_moves" in taxonomy["telemetry_activation_refs"]
 
 
 def test_warehouse_problem_spec_declares_operator_diagnostics_telemetry() -> None:

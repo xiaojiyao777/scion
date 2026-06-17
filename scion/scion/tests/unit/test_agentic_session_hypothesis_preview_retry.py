@@ -148,6 +148,103 @@ def test_schema_retry_identity_helpers_keep_existing_behavior() -> None:
     assert "Do not explore" in feedback["retry_constraint"]
 
 
+def test_schema_retry_ignores_structural_activation_counter_leaf_names() -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            target_file="operators/upgrade_pack.py",
+            expected_telemetry={
+                "activation": [
+                    "operator_invocations",
+                    "eligible_vehicle_or_order_groups_seen",
+                    "accepted_moves",
+                ],
+            },
+        ),
+        mechanism_changes=(
+            MechanismChange(
+                id="same_subcategory_upgrade_merge",
+                change_type="add",
+            ),
+        ),
+    )
+    preserve_hypothesis = {
+        "action": "modify",
+        "target_file": "operators/upgrade_pack.py",
+        "mechanism_changes": [
+            {"id": "same_subcategory_upgrade_merge", "change_type": "add"}
+        ],
+    }
+
+    drift = hypothesis_facade._schema_retry_preservation_drift(
+        hypothesis,
+        [
+            {
+                "attempt": 1,
+                "failure_code": "C11_expected_telemetry",
+                "preserve_hypothesis": preserve_hypothesis,
+            }
+        ],
+        attempt=2,
+        structural_activation_refs={
+            "operator_invocations",
+            "eligible_vehicle_or_order_groups_seen",
+            "accepted_moves",
+        },
+    )
+
+    assert drift is None
+
+
+def test_schema_retry_still_blocks_nested_activation_mechanism_drift() -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            target_file="operators/upgrade_pack.py",
+            expected_telemetry={
+                "activation": [
+                    "operator_diagnostics.unrelated_repack.operator_invocations",
+                    "operator_diagnostics.unrelated_repack.accepted_moves",
+                ],
+            },
+        ),
+        mechanism_changes=(
+            MechanismChange(
+                id="same_subcategory_upgrade_merge",
+                change_type="add",
+            ),
+        ),
+    )
+    preserve_hypothesis = {
+        "action": "modify",
+        "target_file": "operators/upgrade_pack.py",
+        "mechanism_changes": [
+            {"id": "same_subcategory_upgrade_merge", "change_type": "add"}
+        ],
+    }
+
+    drift = hypothesis_facade._schema_retry_preservation_drift(
+        hypothesis,
+        [
+            {
+                "attempt": 1,
+                "failure_code": "C11_expected_telemetry",
+                "preserve_hypothesis": preserve_hypothesis,
+            }
+        ],
+        attempt=2,
+        structural_activation_refs={
+            "operator_diagnostics",
+            "operator_invocations",
+            "accepted_moves",
+        },
+    )
+
+    assert drift is not None
+    assert drift["drift_fields"] == ["expected_telemetry.activation"]
+    assert drift["observed"]["expected_telemetry.activation"][
+        "activation_mechanism_refs"
+    ] == ["unrelated_repack"]
+
+
 def test_target_intent_binding_retry_feedback_names_allowed_repair_paths() -> None:
     selected = {
         "change_locus": "solver_design",

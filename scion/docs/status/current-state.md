@@ -203,9 +203,25 @@ Active work as of the latest handoff:
   tests (`54 passed`), surrogate solver tests (`13 passed`), and warehouse
   adapter smoke (`2 passed`). Main-thread review fixed a registry-name mapping
   bug so exported diagnostics use mechanism ids from `registry.yaml` `name`
-  fields, with class names only as fallback. Next gate: short warehouse
-  production `6R` field
-  check from the repair commit, looking for consumed declared
+  fields, with class names only as fallback. The first short warehouse
+  production `6R` field gate from commit `9ad5465` was stopped as an invalid
+  shakedown before protocol rows after two repeated `schema_retry_drift`
+  failures. Launch report:
+  [`../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-launch-20260617.md).
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-operator-diagnostics-telemetry-rerun6r-9ad5465-20260617T045136Z`;
+  exit `1`, `effective_rounds_completed=0`, `protocol_metric_results=0`,
+  `quality_blocks=2`. It started cleanly with
+  `SCION_WAREHOUSE_DATA_ROOT=/home/clawd/research/scion-data`, but schema retry
+  treated bare structural counter names (`operator_invocations`,
+  `eligible_vehicle_or_order_groups_seen`, `accepted_moves`) as mechanism ids.
+  A follow-up local repair now declares warehouse structural activation refs
+  through `active_subject_taxonomy` and updates schema retry mechanism-ref
+  extraction so nested runtime map mechanism segments are still protected.
+  Focused tests passed: schema retry `24 passed`, selected schema drift
+  regression `4 passed`, warehouse/telemetry guard `52 passed`,
+  proposal/expected telemetry `29 passed`, plus py_compile and
+  `git diff --check`. Next rerun acceptance still requires consumed declared
   `operator_diagnostics` on at least one screening-positive candidate.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:

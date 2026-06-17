@@ -432,8 +432,7 @@ def _mechanism_refs_from_telemetry_path(path: Any) -> set[str]:
     if not text:
         return set()
     refs: set[str] = set()
-    candidate = text.rsplit(".", 1)[-1] if "." in text else text
-    parts = [part for part in re.split(r"[\[\]/:\s]+", candidate) if part]
+    parts = [part for part in re.split(r"[.\[\]/:\s]+", text) if part]
     for part in parts:
         token = _mechanism_ref_token(part)
         if token:

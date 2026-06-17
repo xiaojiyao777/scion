@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; short field gate pending*
+*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; schema retry shakedown repair ready for rerun*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -830,10 +830,24 @@ Exit criteria:
   adapter smoke (`2 passed`). The main-thread review found and fixed one
   registry-name mapping issue so runtime diagnostics use registry `name`
   values such as `fill_and_downsize` / `locked_anchor_repack` rather than
-  class-name-only fallbacks. Next gate: a short warehouse production `6R`
-  field check from the repair commit; accept only if screening-positive
-  candidates show consumed declared `operator_diagnostics` telemetry instead of
-  `not_declared` activation/effect.
+  class-name-only fallbacks. The first short warehouse production `6R` field
+  gate from repair commit `9ad5465` was stopped as an invalid shakedown before
+  protocol rows after two repeated `schema_retry_drift` failures. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-launch-20260617.md`.
+  Run root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-operator-diagnostics-telemetry-rerun6r-9ad5465-20260617T045136Z`;
+  exit `1`, `effective_rounds_completed=0`, `protocol_metric_results=0`,
+  `quality_blocks=2`. This exposed a schema-retry preservation bug, not a
+  warehouse research result: bare structural counter names such as
+  `operator_invocations` and `accepted_moves` were treated as mechanism ids.
+  Follow-up local repair declares warehouse structural activation refs through
+  `active_subject_taxonomy` and updates schema retry mechanism-ref extraction
+  so nested runtime map mechanism segments are still protected. Focused tests
+  passed: schema retry `24 passed`, selected schema drift regression `4 passed`,
+  warehouse/telemetry guard `52 passed`, proposal/expected-telemetry `29
+  passed`, plus py_compile and `git diff --check`. Next rerun must accept only
+  if screening-positive candidates show consumed declared `operator_diagnostics`
+  telemetry instead of `not_declared` activation/effect.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

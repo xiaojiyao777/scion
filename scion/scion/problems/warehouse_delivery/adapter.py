@@ -29,6 +29,28 @@ class WarehouseDeliveryAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
+    def active_subject_policy_provider(self) -> "WarehouseDeliveryAdapter":
+        return self
+
+    def active_subject_taxonomy(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any]:
+        del context, surface, subject_id
+        return {
+            "telemetry_activation_refs": (
+                "operator_diagnostics",
+                "validation_transfer_diagnostics",
+                "validation_transfer",
+                "operator_invocations",
+                "eligible_vehicle_or_order_groups_seen",
+                "accepted_moves",
+            )
+        }
+
     # --- lazy import of surrogate modules ---
 
     def _ensure_modules(self) -> None:
