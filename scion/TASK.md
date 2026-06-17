@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; schema retry shakedown repair ready for rerun*
+*Status: warehouse data-root repair is accepted; operator diagnostics telemetry repair is locally accepted; patch-quality shape repair locally accepted*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -848,6 +848,32 @@ Exit criteria:
   passed`, plus py_compile and `git diff --check`. Next rerun must accept only
   if screening-positive candidates show consumed declared `operator_diagnostics`
   telemetry instead of `not_declared` activation/effect.
+- Stopped: warehouse operator diagnostics telemetry follow-up field gate from
+  commit `5c78f84`. Launch/postrun report:
+  `scion/docs/experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-5c78f84-launch-20260617.md`.
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-operator-diagnostics-telemetry-rerun6r-5c78f84-20260617T050235Z`;
+  wrapper `exit_code=1`, `run_validity.status=invalid`,
+  `reason=invalid_no_effective_rounds`, `protocol_metric_results=0`, and
+  `quality_blocks=2`. Startup was clean and the prior `schema_retry_drift`
+  blocker did not recur, but the run was stopped before protocol rows after
+  repeated `warehouse_validation_transfer_patch_quality_missing` blocks.
+  Read-only trace analysis showed the remaining issue is not a Decision or
+  Protocol gate problem: the warehouse problem-owned patch-quality gate and
+  code prompt were too narrow for valid helper/alias diagnostics and split/cost
+  guard shapes. A bounded worker implemented the local repair in
+  `WarehouseDeliveryAdapter`: first code prompts now receive active-subject code
+  constraints for exportable validation-transfer diagnostics and executable
+  guards; the static quality gate accepts helper-returned standard diagnostics
+  dictionaries assigned to `self.validation_transfer_diagnostics`, alias
+  mutations, split/cost delta guards, and candidate/base split-cost guards while
+  still rejecting comments, strings, local-only dictionaries, and missing keys.
+  Focused verification passed `test_warehouse_target_preview.py` (`26 passed`),
+  provider/proposal quality suites (`43 passed`), telemetry/expected-telemetry
+  suites (`41 passed`), schema retry suite (`24 passed`), py_compile, and
+  `git diff --check`. Next gate: one short warehouse production `6R` field
+  check from the new repair commit, accepted only if it reaches protocol rows
+  and no longer loops on the same patch-quality shape block.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

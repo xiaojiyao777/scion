@@ -18,7 +18,10 @@ from scion.core.proposal_pipeline.problem_quality import (
     validate_problem_patch_quality,
 )
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
-from scion.problem.providers import active_subject_taxonomy_payload
+from scion.problem.providers import (
+    active_subject_code_constraints_payload,
+    active_subject_taxonomy_payload,
+)
 from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
 from scion.proposal.engine.hypothesis_context_profiles import (
     filter_hypothesis_context_for_prompt,
@@ -164,6 +167,35 @@ def test_warehouse_adapter_declares_structural_activation_refs() -> None:
         "telemetry_activation_refs"
     ]
     assert "accepted_moves" in taxonomy["telemetry_activation_refs"]
+
+
+def test_warehouse_adapter_exposes_active_subject_code_constraints() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+
+    constraints = active_subject_code_constraints_payload(
+        problem_spec=spec_v1,
+        adapter=adapter,
+        surface="vehicle_level",
+    )
+
+    rendered = str(constraints)
+    assert constraints["version"] == (
+        "warehouse_operator_validation_transfer_code_constraints.v1"
+    )
+    assert "self.validation_transfer_diagnostics" in rendered
+    assert "self._new_diagnostics()" in rendered
+    assert "new_diagnostics()" in rendered
+    assert "operator_invocations" in rendered
+    assert "eligible_vehicle_or_order_groups_seen" in rendered
+    assert "accepted_moves" in rendered
+    assert "split_delta_sum" in rendered
+    assert "cost_delta_sum" in rendered
+    assert "improving_move_count" in rendered
+    assert "activation" in rendered
+    assert "effect counters" in rendered
+    assert "lexicographic" in rendered
+    assert "Comments or string mentions" in rendered
 
 
 def test_warehouse_problem_spec_declares_operator_diagnostics_telemetry() -> None:
@@ -538,6 +570,285 @@ class MergeVehicles:
     )
 
     assert check.allowed is True
+
+
+def test_warehouse_patch_quality_accepts_helper_returned_diagnostics_dict() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = self._new_diagnostics()
+
+    def _new_diagnostics(self):
+        return {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        split_delta = 1
+        cost_delta = 0
+        diagnostics["split_delta_sum"] += split_delta
+        diagnostics["cost_delta_sum"] += cost_delta
+        if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_rejects_helper_diagnostics_missing_keys() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+def new_diagnostics():
+    return {
+        "operator_invocations": 0,
+        "eligible_vehicle_or_order_groups_seen": 0,
+        "accepted_moves": 0,
+        "split_delta_sum": 0,
+        "cost_delta_sum": 0,
+    }
+
+
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = new_diagnostics()
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        split_delta = 1
+        cost_delta = 0
+        diagnostics["split_delta_sum"] += split_delta
+        diagnostics["cost_delta_sum"] += cost_delta
+        if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "activation_effect_diagnostic_code" in check.detail
+
+
+def test_warehouse_patch_quality_accepts_split_and_cost_delta_guard() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        split_delta = 0
+        cost_delta = 1200
+        diagnostics["split_delta_sum"] += split_delta
+        diagnostics["cost_delta_sum"] += cost_delta
+        if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_accepts_candidate_base_split_cost_guard() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate = solution.deep_copy()
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        base_splits = 3
+        candidate_splits = 2
+        base_cost = 7200
+        candidate_cost = 5100
+        diagnostics["split_delta_sum"] += base_splits - candidate_splits
+        diagnostics["cost_delta_sum"] += base_cost - candidate_cost
+        lexicographic_guard = (
+            candidate_splits < base_splits
+            or candidate_splits == base_splits
+            and candidate_cost < base_cost
+        )
+        if not lexicographic_guard:
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return candidate
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_rejects_string_only_guard_with_diagnostics() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        diagnostics["split_delta_sum"] += 1
+        diagnostics["cost_delta_sum"] += 1
+        if "lexicographic guard with split_delta and cost_delta":
+            return solution
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return solution.deep_copy()
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "screening_or_lexicographic_guard" in check.detail
+
+
+def test_warehouse_patch_quality_rejects_comment_only_guard_with_diagnostics() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        diagnostics["split_delta_sum"] += 1
+        diagnostics["cost_delta_sum"] += 1
+        # lexicographic guard: split_delta and cost_delta checked elsewhere
+        diagnostics["accepted_moves"] += 1
+        diagnostics["improving_move_count"] += 1
+        return solution.deep_copy()
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "screening_or_lexicographic_guard" in check.detail
 
 
 def test_warehouse_patch_quality_rejects_local_only_diagnostics_dict() -> None:

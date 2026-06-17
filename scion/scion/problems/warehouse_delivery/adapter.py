@@ -51,6 +51,78 @@ class WarehouseDeliveryAdapter:
             )
         }
 
+    def active_subject_code_constraints(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        del context, subject_id
+        selected = str(surface or "").strip()
+        if selected not in {"", "order_level", "vehicle_level"}:
+            return None
+        return {
+            "surface": selected or "warehouse_operator",
+            "subject_id": "warehouse_delivery.operator.validation_transfer",
+            "version": "warehouse_operator_validation_transfer_code_constraints.v1",
+            "constraints": (
+                {
+                    "id": "exportable_validation_transfer_diagnostics",
+                    "summary": (
+                        "Warehouse operator diagnostics must be stored on the "
+                        "operator instance for solver/runtime export."
+                    ),
+                    "constraint": (
+                        "Initialize or update `self.validation_transfer_diagnostics` "
+                        "with the exact standard keys `operator_invocations`, "
+                        "`eligible_vehicle_or_order_groups_seen`, `accepted_moves`, "
+                        "`split_delta_sum`, `cost_delta_sum`, and "
+                        "`improving_move_count`; a helper such as "
+                        "`self._new_diagnostics()` or `new_diagnostics()` may "
+                        "return that standard dict literal, but its result must "
+                        "be assigned to `self.validation_transfer_diagnostics`, "
+                        "not only a local dict or undeclared expected_telemetry "
+                        "names."
+                    ),
+                },
+                {
+                    "id": "activation_and_effect_mutations",
+                    "summary": (
+                        "Code must mutate both activation and effect counters before "
+                        "the patch reaches protocol."
+                    ),
+                    "constraint": (
+                        "Increment activation counters such as `operator_invocations` "
+                        "and `eligible_vehicle_or_order_groups_seen`, then mutate "
+                        "`self.validation_transfer_diagnostics` or an alias of "
+                        "that operator-instance field for effect counters such as "
+                        "`split_delta_sum`, `cost_delta_sum`, or "
+                        "`improving_move_count` from computed candidate/base deltas."
+                    ),
+                },
+                {
+                    "id": "screening_only_lexicographic_guard",
+                    "summary": (
+                        "Accepted moves must be guarded against screening-only or "
+                        "lexicographically dominated changes."
+                    ),
+                    "constraint": (
+                        "Compute split and cost deltas, or candidate/base split and "
+                        "cost values, and return the original solution when the "
+                        "candidate worsens subcategory splits or only offers a "
+                        "lower-priority cost gain after harming splits. Comments or "
+                        "string mentions of a lexicographic guard are not sufficient."
+                    ),
+                },
+            ),
+            "forbidden_patterns": (
+                "local-only validation_transfer_diagnostics dict",
+                "comments or strings as the only screening/lexicographic guard",
+                "accepting cost-only moves that worsen subcategory_splits",
+            ),
+        }
+
     # --- lazy import of surrogate modules ---
 
     def _ensure_modules(self) -> None:
@@ -988,11 +1060,14 @@ def _patch_has_exportable_validation_transfer_diagnostics(code: str) -> bool:
     aliases: set[str] = set()
     declared_keys: set[str] = set()
     mutating_keys: set[str] = set()
+    helper_return_keys = _diagnostic_helper_return_keys(tree)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             if any(_is_self_validation_transfer_attr(target) for target in node.targets):
-                declared_keys.update(_literal_dict_string_keys(node.value))
+                declared_keys.update(
+                    _diagnostic_initializer_keys(node.value, helper_return_keys)
+                )
             if _is_self_validation_transfer_attr(node.value):
                 aliases.update(_name_targets(node.targets))
             for target in node.targets:
@@ -1000,7 +1075,9 @@ def _patch_has_exportable_validation_transfer_diagnostics(code: str) -> bool:
                     mutating_keys.update(_diagnostic_keys_from_node(target))
         elif isinstance(node, ast.AnnAssign):
             if _is_self_validation_transfer_attr(node.target):
-                declared_keys.update(_literal_dict_string_keys(node.value))
+                declared_keys.update(
+                    _diagnostic_initializer_keys(node.value, helper_return_keys)
+                )
             if _is_self_validation_transfer_attr(node.value):
                 aliases.update(_name_targets((node.target,)))
             if _is_exportable_diagnostic_target(node.target, aliases):
@@ -1018,6 +1095,44 @@ def _patch_has_exportable_validation_transfer_diagnostics(code: str) -> bool:
 
 def _name_targets(targets: Sequence[ast.AST]) -> set[str]:
     return {target.id for target in targets if isinstance(target, ast.Name)}
+
+
+def _diagnostic_helper_return_keys(tree: ast.AST) -> dict[str, set[str]]:
+    helpers: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        returned_keys: set[str] = set()
+        for child in ast.walk(node):
+            if isinstance(child, ast.Return):
+                returned_keys.update(_literal_dict_string_keys(child.value))
+        if returned_keys:
+            helpers[node.name] = returned_keys
+    return helpers
+
+
+def _diagnostic_initializer_keys(
+    node: ast.AST | None,
+    helper_return_keys: Mapping[str, set[str]],
+) -> set[str]:
+    keys = _literal_dict_string_keys(node)
+    if keys:
+        return keys
+    helper_name = _diagnostic_helper_call_name(node)
+    if not helper_name:
+        return set()
+    return set(helper_return_keys.get(helper_name, set()))
+
+
+def _diagnostic_helper_call_name(node: ast.AST | None) -> str | None:
+    if not isinstance(node, ast.Call):
+        return None
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
 
 
 def _is_self_validation_transfer_attr(node: ast.AST | None) -> bool:
@@ -1067,14 +1182,67 @@ def _patch_has_screening_or_lexicographic_guard(
         tree = ast.parse(code or "")
     except SyntaxError:
         return False
+    executable_guard_names = _executable_transfer_guard_names(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.If):
             continue
+        if _is_string_only_guard_value(node.test):
+            continue
         test_text = _ast_signal_text(node.test)
-        if not _guard_test_is_transfer_relevant(test_text):
+        test_names = _ast_name_texts(node.test)
+        if not _guard_test_is_transfer_relevant(
+            test_text,
+            test_names=test_names,
+            executable_guard_names=executable_guard_names,
+        ):
             continue
         if any(_returns_original_solution(child) for child in ast.walk(node)):
             return True
+    return False
+
+
+def _executable_transfer_guard_names(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        targets: Sequence[ast.AST]
+        value: ast.AST | None
+        if isinstance(node, ast.Assign):
+            targets = tuple(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = (node.target,)
+            value = node.value
+        elif isinstance(node, ast.NamedExpr):
+            targets = (node.target,)
+            value = node.value
+        else:
+            continue
+        if value is None or _is_string_only_guard_value(value):
+            continue
+        value_text = _ast_signal_text(value)
+        if not _guard_expression_has_metric_pair(value_text):
+            continue
+        for target in targets:
+            names.update(_assigned_name_texts(target))
+    return names
+
+
+def _assigned_name_texts(node: ast.AST) -> set[str]:
+    if isinstance(node, ast.Name):
+        return {node.id.lower()}
+    if isinstance(node, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for child in node.elts:
+            names.update(_assigned_name_texts(child))
+        return names
+    return set()
+
+
+def _is_string_only_guard_value(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_is_string_only_guard_value(child) for child in node.elts)
     return False
 
 
@@ -1090,25 +1258,48 @@ def _ast_signal_text(node: ast.AST) -> str:
     return " ".join(parts).lower()
 
 
-def _guard_test_is_transfer_relevant(test_text: str) -> bool:
-    if any(
-        term in test_text
-        for term in (
-            "screening_only",
-            "validation_transfer_guard",
-            "lexicographic",
-            "no_op_condition",
-            "no_op",
-            "noop",
-        )
-    ):
+def _ast_name_texts(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            names.add(child.id.lower())
+    return names
+
+
+def _guard_test_is_transfer_relevant(
+    test_text: str,
+    *,
+    test_names: set[str],
+    executable_guard_names: set[str],
+) -> bool:
+    if test_names & executable_guard_names:
         return True
+    return _guard_expression_has_metric_pair(test_text)
+
+
+def _guard_expression_has_metric_pair(test_text: str) -> bool:
     has_split = any(
         term in test_text
-        for term in ("subcategory_splits", "split_delta", "split_delta_sum")
+        for term in (
+            "subcategory_splits",
+            "candidate_splits",
+            "base_splits",
+            "split_delta",
+            "split_delta_sum",
+            "splits",
+            "split",
+        )
     )
     has_cost = any(
-        term in test_text for term in ("total_cost", "cost_delta", "cost_delta_sum")
+        term in test_text
+        for term in (
+            "total_cost",
+            "candidate_cost",
+            "base_cost",
+            "cost_delta",
+            "cost_delta_sum",
+            "cost",
+        )
     )
     return has_split and has_cost
 

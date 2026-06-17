@@ -223,6 +223,31 @@ Active work as of the latest handoff:
   proposal/expected telemetry `29 passed`, plus py_compile and
   `git diff --check`. Next rerun acceptance still requires consumed declared
   `operator_diagnostics` on at least one screening-positive candidate.
+  That follow-up `6R` field gate from commit `5c78f84` was stopped as an
+  invalid shakedown. Launch/postrun report:
+  [`../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-5c78f84-launch-20260617.md`](../experiments/v0.4/v04-warehouse-operator-diagnostics-telemetry-rerun6r-5c78f84-launch-20260617.md).
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-operator-diagnostics-telemetry-rerun6r-5c78f84-20260617T050235Z`;
+  final wrapper `exit_code=1`, `run_validity.status=invalid`,
+  `reason=invalid_no_effective_rounds`, `effective_rounds_completed=0`,
+  `protocol_metric_results=0`, and `quality_blocks=2`. Startup was clean and
+  the earlier `schema_retry_drift` blocker did not recur. The exposed blocker
+  is now warehouse problem-owned code quality shape: completed patches can move
+  toward validation-transfer diagnostics and split/cost guarding, but the first
+  code prompt did not expose the exact accepted scaffold and the static gate
+  recognized too narrow a set of helper/alias diagnostics and guard forms. The
+  local patch-quality shape repair is accepted in `WarehouseDeliveryAdapter`:
+  first code prompts now receive active-subject code constraints for
+  exportable validation-transfer diagnostics and executable split/cost guards;
+  the static quality gate accepts helper-returned standard diagnostics
+  dictionaries assigned to `self.validation_transfer_diagnostics`, alias
+  mutations, split/cost delta guards, and candidate/base split-cost guards,
+  while still rejecting comments, strings, local-only dictionaries, and missing
+  keys. Verification passed warehouse preview (`26 passed`),
+  provider/proposal quality (`43 passed`), telemetry/expected-telemetry
+  (`41 passed`), schema retry (`24 passed`), py_compile, and
+  `git diff --check`. The next step is one short warehouse production `6R`
+  field gate from the new repair commit.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
