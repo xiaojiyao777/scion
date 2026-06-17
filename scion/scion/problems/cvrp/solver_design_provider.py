@@ -182,6 +182,45 @@ class CvrpSolverDesignProvider:
             ),
         )
 
+    def solver_design_target_intent_guidance(self, context: Any) -> Sequence[str]:
+        return (
+            (
+                "For `solver_design` target-intent preflight, choose the target "
+                "file by mechanism ownership, not by convenience."
+            ),
+            (
+                "Current CVRP target-selection priority, proposal-only and "
+                "excluded from DecisionFeatures: first evaluate the adaptive "
+                "embedded-VNS cadence-2 trigger refinement. Unless an active "
+                "same-branch constraint or explicit evidence rules it out, "
+                "select `policies/baseline_modules/scheduler.py` as the owner "
+                "target and use a mechanism id such as "
+                "`adaptive_embedded_vns_trigger_refinement` or "
+                "`adaptive_embedded_vns_cadence2_trigger`."
+            ),
+            (
+                "A non-scheduler target is acceptable only when the selected "
+                "target-intent notes give concrete evidence that cadence-2 "
+                "trigger refinement is not the right owner for the current "
+                "bottleneck. Do not default to another local-search operator "
+                "solely because it is concrete or easy to implement."
+            ),
+            (
+                "For the cadence-2 refinement, use objective, remaining-budget, "
+                "recent best-update, or repaired-candidate-improvement signals "
+                "as trigger evidence. Preserve the cadence-2 gains on CMT-like "
+                "medium cases while avoiding the P-like small-case losses. Do "
+                "not hardcode case ids, BKS values, seeds, or split membership; "
+                "do not remove VNS broadly."
+            ),
+            (
+                "Use `context.read_active_solver_map.research_lever_digest` as "
+                "proposal-only advisory context when comparing the scheduler "
+                "lever against construction, destroy, repair, local-search, "
+                "and acceptance/weights alternatives."
+            ),
+        )
+
     def solver_design_plateau_target_guidance(
         self,
         target_counts: Sequence[tuple[str, int]] = (),

@@ -3404,6 +3404,23 @@ Field gate:
   commit/push, WSL fast-forward, and a short rerun whose first
   `hypothesis_target_intent` trace itself contains cadence-2 guidance before
   the selected mechanism is interpreted.
+- Completed that target-intent visibility rerun from commit `75bd938`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`.
+  The run was valid with wrapper `exit_code=0`, `1` effective screening round,
+  `1` formal candidate artifact, `32/32` screening pairs, `0` failed pairs,
+  and high-confidence runtime evidence. It field-verifies the target-intent
+  visibility repair: the live `hypothesis_target_intent` trace contains the
+  cadence-2 opportunity text. It also proves visibility is not enough: the
+  agent still selected `cross_route_2opt_reconnect` in `local_search.py`.
+  Local follow-up now adds a CVRP-owned target-intent guidance hook that makes
+  adaptive embedded-VNS cadence-2 trigger refinement the current
+  target-selection priority, names `policies/baseline_modules/scheduler.py` as
+  the owner target, and requires explicit deviation notes for non-scheduler
+  targets. This remains proposal-only and outside Decision/Protocol/lifecycle
+  semantics. Focused prompt/provider tests pass. Next gate is commit/push, WSL
+  fast-forward, and a short rerun whose target-intent artifact selects the
+  cadence scheduler trigger owner or records an evidence-backed deviation
+  reason.
 
 ## Status Cadence
 

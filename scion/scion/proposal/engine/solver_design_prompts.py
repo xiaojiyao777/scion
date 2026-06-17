@@ -53,6 +53,18 @@ def _solver_design_hypothesis_guidance(context: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _solver_design_target_intent_guidance(context: Mapping[str, Any]) -> list[str]:
+    provider = _solver_design_prompt_provider(context)
+    lines = _provider_prompt_lines(
+        provider,
+        "solver_design_target_intent_guidance",
+        context,
+    )
+    if lines:
+        return lines
+    return _solver_design_hypothesis_guidance(context)
+
+
 def _solver_design_code_rules_section(
     context: Mapping[str, Any],
     *,
@@ -252,6 +264,7 @@ def _has_solver_design_prompt_method(provider: Any | None) -> bool:
             "solver_design_code_rules",
             "solver_design_scope_guidance",
             "solver_design_user_constraints",
+            "solver_design_target_intent_guidance",
             "solver_design_broad_scope_terms",
         )
     )

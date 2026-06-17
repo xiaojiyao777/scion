@@ -123,21 +123,33 @@ CVRP/VRP:
   repair now exposes solver-design guidance to `hypothesis_target_intent`
   whenever solver-design is targetable. This remains proposal-only and outside
   `DecisionFeatures`.
+- The follow-up target-intent field check from commit `75bd938` verified that
+  live `hypothesis_target_intent` traces now contain the cadence-2 opportunity
+  text:
+  [`../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md).
+  The campaign was valid (`32/32` screening pairs, `0` failed pairs), but the
+  agent still selected `cross_route_2opt_reconnect` in `local_search.py`.
+  Guidance visibility is fixed; target-selection priority is still too weak.
+- Local follow-up now adds a CVRP-owned target-intent guidance hook that makes
+  cadence-2 trigger refinement the current target-selection priority, names
+  `policies/baseline_modules/scheduler.py` as the owner target, and requires
+  explicit notes if the agent deviates to a non-scheduler mechanism. This
+  remains proposal-only and outside `DecisionFeatures`.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- Local code has a focused target-intent prompt repair and regression test.
-  WSL must be fast-forwarded after commit/push before the next CVRP agentic
-  rerun.
+- Local code has a focused CVRP target-selection-priority repair and regression
+  test. WSL must be fast-forwarded after commit/push before the next CVRP
+  agentic rerun.
 - The latest CVRP no-LLM and agentic artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Commit and push the target-intent solver-design guidance repair, fast-forward
-   WSL, then rerun a short targeted CVRP agentic campaign. First inspect the
-   live `hypothesis_target_intent` trace for the cadence-2 opportunity text;
-   only then interpret the selected mechanism.
+1. Commit and push the CVRP target-selection-priority repair, fast-forward WSL,
+   then rerun a short targeted CVRP agentic campaign. First inspect the live
+   `hypothesis_target_intent` artifact: it should select the cadence-2 scheduler
+   trigger owner or state an explicit evidence-backed deviation reason.
 2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
    CVRP same-mechanism research line, but do not confuse it with cadence-2
    adaptive-VNS trigger evidence.
@@ -176,6 +188,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md)
 
 WSL coordination:
 

@@ -86,6 +86,9 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     )
 
     assert "Solver-design target-selection guidance" in user_prompt
+    assert "Current CVRP target-selection priority" in user_prompt
+    assert "policies/baseline_modules/scheduler.py" in user_prompt
+    assert "not the right owner for the current bottleneck" in user_prompt
     assert "adaptive embedded-VNS cadence-2" in user_prompt
     assert "remaining-budget, recent best-update" in user_prompt
     assert "repaired-candidate-improvement signals" in user_prompt

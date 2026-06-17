@@ -11,7 +11,10 @@ from .prompt_common import (
     _DefaultDict,
     _agentic_research_context_block,
 )
-from .solver_design_prompts import _solver_design_hypothesis_guidance
+from .solver_design_prompts import (
+    _solver_design_hypothesis_guidance,
+    _solver_design_target_intent_guidance,
+)
 
 _PROMPT_SAME_MECHANISM_ALLOWED_ACTIONS = (
     "tune",
@@ -405,7 +408,7 @@ def _split_hypothesis_target_intent_context(
         operator_categories=str(D["operator_categories"]),
     ):
         task_lines.append("Solver-design target-selection guidance:")
-        task_lines.extend(_solver_design_hypothesis_guidance(context))
+        task_lines.extend(_solver_design_target_intent_guidance(context))
     task_lines.extend(
         _material_difference_requirement_task_lines(context, preflight=True)
     )
