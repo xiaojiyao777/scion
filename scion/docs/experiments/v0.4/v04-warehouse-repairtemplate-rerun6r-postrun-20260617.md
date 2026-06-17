@@ -2,7 +2,7 @@
 
 *Date: 2026-06-17*
 *Run commit: `4a316e1`*
-*Postrun repair commit: pending*
+*Postrun repair commit: `7c35363`*
 *Status: invalid as research evidence*
 
 ## Artifacts
