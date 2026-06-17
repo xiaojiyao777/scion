@@ -391,6 +391,20 @@ Latest CVRP/VRP state:
   median `+3.5`; P-n76 `9/8/3`, median `0.0`. Objective probes show initial
   VNS gain is constant within each case, so a future CVRP target needs a richer
   early-ALNS starvation or budget-pressure trigger before any LLM campaign.
+- The warehouse validation-transfer acceptance-contract short behavior gate
+  from commit `ce5d884` is running on WSL:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md).
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
+  tmux session: `scion_wh_vt_contract_rerun6r_ce5d884_152944`.
+  Shape: one warehouse production `6R` cell, `rep01/full_context`,
+  measurement governance `on`, disabled early stop, full proposal context,
+  local WSL `gpt-5.5`, and no stage-drain/retry/session-timeout override.
+  Initial health check passed and early campaign artifacts exist. This gate is
+  behavior evidence unless it reaches validation/frozen/promotion or clear
+  branch-depth improvement.
 
 Active work as of the latest handoff:
 

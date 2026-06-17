@@ -3267,6 +3267,22 @@ Field gate:
   within each case, so win/loss variation comes from later ALNS random paths.
   Next CVRP work should use these probes to design a richer early-ALNS
   starvation or budget-pressure scheduling hypothesis before any LLM campaign.
+- Launched the warehouse validation-transfer acceptance-contract short
+  behavior gate from commit `ce5d884`. Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`.
+  WSL root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
+  server sync root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
+  tmux session: `scion_wh_vt_contract_rerun6r_ce5d884_152944`.
+  Shape: one warehouse production `6R` cell, `rep01/full_context`,
+  measurement governance `on`, disabled early stop, full proposal context,
+  local WSL `gpt-5.5`, and no stage-drain/retry/session-timeout override.
+  Initial health check passed: `status=running`, campaign log reached
+  `Starting campaign: warehouse_delivery`, and early `llm_traces/`,
+  `agentic_sessions/`, `run_status.json`, `status.json`, and `scion.db`
+  artifacts exist. Accept only as behavior evidence unless validation/frozen/
+  promotion or clear branch-depth improvement appears.
 
 ## Status Cadence
 
