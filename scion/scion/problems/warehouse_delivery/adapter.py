@@ -1490,19 +1490,56 @@ def _patch_has_screening_or_lexicographic_guard(
     for node in ast.walk(tree):
         if not isinstance(node, ast.If):
             continue
-        if _is_string_only_guard_value(node.test):
-            continue
-        test_text = _ast_signal_text(node.test)
-        test_names = _ast_name_texts(node.test)
-        if not _guard_test_is_transfer_relevant(
-            test_text,
-            test_names=test_names,
+        if not _is_transfer_guard_if(
+            node,
             executable_guard_names=executable_guard_names,
         ):
             continue
         if any(_returns_original_solution(child) for child in ast.walk(node)):
             return True
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _function_has_helper_based_transfer_guard(
+            node,
+            executable_guard_names=executable_guard_names,
+        ):
+            return True
     return False
+
+
+def _is_transfer_guard_if(
+    node: ast.If,
+    *,
+    executable_guard_names: set[str],
+) -> bool:
+    if _is_string_only_guard_value(node.test):
+        return False
+    test_text = _ast_signal_text(node.test)
+    test_names = _ast_name_texts(node.test)
+    return _guard_test_is_transfer_relevant(
+        test_text,
+        test_names=test_names,
+        executable_guard_names=executable_guard_names,
+    )
+
+
+def _function_has_helper_based_transfer_guard(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    *,
+    executable_guard_names: set[str],
+) -> bool:
+    has_transfer_acceptance = False
+    for child in ast.walk(node):
+        if isinstance(child, ast.If) and _is_transfer_guard_if(
+            child,
+            executable_guard_names=executable_guard_names,
+        ):
+            has_transfer_acceptance = True
+            break
+    if not has_transfer_acceptance:
+        return False
+    return any(_returns_none(child) for child in ast.walk(node))
 
 
 def _executable_transfer_guard_names(tree: ast.AST) -> set[str]:
@@ -1617,6 +1654,14 @@ def _returns_original_solution(node: ast.AST) -> bool:
     if isinstance(value, ast.Attribute):
         return value.attr in {"solution", "original_solution", "base_solution"}
     return False
+
+
+def _returns_none(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Return):
+        return False
+    return node.value is None or (
+        isinstance(node.value, ast.Constant) and node.value.value is None
+    )
 
 
 def _hypothesis_quality_text(hypothesis: Any) -> str:

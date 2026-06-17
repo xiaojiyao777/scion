@@ -113,11 +113,22 @@ Latest warehouse state:
   bounded candidate/runtime policy; unbounded nested `merge_vehicles.py`
   vehicle-pair scans are blocked before Protocol unless executable top-k/cap/
   early-exit logic is visible.
-- Main-thread validation for this local repair passed warehouse target preview
-  (`34 passed`), agentic/proposal suites (`64 passed`),
+- The first local short rerun from commit `bbb80db` was stopped as diagnostic
+  evidence, not accepted or rejected field evidence. It reached
+  `8` proposal attempts, `8` quality blocks, and `0` protocol rows. Trace
+  inspection showed that new problem guidance, prior quality blocks,
+  `repair_template`, and `missing_code_elements` were visible in code prompts;
+  `warehouse_operator_module_delete` was a real contract block, but the
+  `warehouse_validation_transfer_patch_quality` static guard was too narrow
+  for helper-based split/cost guards that reject bad candidates with
+  `return None` / `continue` and no-op at the caller.
+- The local follow-up repair remains warehouse-owned: it accepts executable
+  helper-based split/cost guard shapes while still rejecting string/comment-only
+  guard mentions. Main-thread validation passed warehouse target preview
+  (`37 passed`), agentic/proposal suites (`64 passed`),
   telemetry/session preview suites (`48 passed`), py_compile, and
-  `git diff --check`. The next gate is one local server `6R` acceptance check,
-  not a WSL long matrix.
+  `git diff --check`. The next gate is one local server `6R` acceptance check
+  from the follow-up commit, not a WSL long matrix.
 
 Latest CVRP/VRP state:
 
