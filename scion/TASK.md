@@ -2964,11 +2964,39 @@ Acceptance commands:
 - `PYTHONPATH=scion python -m py_compile scion/scion/problems/warehouse_delivery/adapter.py`
   and `git diff --check` passed.
 
+Field gate:
+
+- Commit `2774afd` was pushed and one short local warehouse `6R` acceptance
+  check completed at
+  `/home/clawd/research/scion-experiments/v04-warehouse-candidatefilter-rerun6r-2774afd-20260617T100032Z`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-candidatefilter-rerun6r-postrun-20260617.md`.
+- The run field-accepts the detector repair: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `effective_rounds_completed=6/6`, and the only
+  code-stage patch-quality block was `missing=bounded_candidate_policy`, not
+  `missing=screening_or_lexicographic_guard`.
+- It rejects warehouse research-quality acceptance: `8` screening metric rows,
+  `0` validation/frozen rows, `0` promotions, and `7` proposal quality blocks.
+  The active weak-positive `merge_vehicles` branch has W/L/T `7/1/6`, median
+  delta `775.0`, and allowed next actions `repair` / `telemetry_wiring`, but
+  telemetry reports `activation_missing_or_wiring_suspect`.
+- Branch-level analysis completed in
+  `scion/docs/experiments/v0.4/v04-warehouse-mergevehicles-branch-analysis-20260617.md`.
+  The final candidate exported activation and cost-effect diagnostics
+  correctly; `operator_diagnostics.merge_vehicles.split_delta_sum` stayed zero
+  because the branch is split-preserving cost compression. The next repair is
+  branch-lifecycle/protocol interpretation, followed by prompt/branch-lesson
+  guidance, not solver instrumentation or warehouse telemetry consumption.
+
 Next gate:
 
-- Commit the repair and run one short local warehouse `6R` acceptance check on
-  the 2-core server. Do not use WSL for this single-cell check. WSL remains
-  reserved for larger parallel matrices after a local acceptance signal.
+- Implement a focused interpretation repair: distinguish
+  `cost_effect_with_protected_split_preserved` from `telemetry_effect_zero`
+  when activation is observed, cost-effect counters are positive, and protected
+  `subcategory_splits` is preserved. Branch cards should not label this final
+  pattern as `activation_missing_or_wiring_suspect`. Cover true no-effect and
+  true missing-activation cases with unit tests before launching a broad WSL
+  warehouse matrix.
 
 ## Status Cadence
 

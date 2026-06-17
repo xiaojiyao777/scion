@@ -151,8 +151,24 @@ Latest warehouse state:
   local-only, and missing-diagnostics patches. Validation passed warehouse
   target preview (`40 passed`), agentic/proposal suites (`64 passed`),
   telemetry/session preview suites (`48 passed`), py_compile, and
-  `git diff --check`. The next gate is one short local warehouse `6R`
-  acceptance check on the server; do not use WSL for this single-cell check.
+  `git diff --check`.
+- Commit `2774afd` was pushed and the short local warehouse `6R` acceptance
+  check completed at
+  `/home/clawd/research/scion-experiments/v04-warehouse-candidatefilter-rerun6r-2774afd-20260617T100032Z`;
+  postrun:
+  [`../experiments/v0.4/v04-warehouse-candidatefilter-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-candidatefilter-rerun6r-postrun-20260617.md).
+  The detector repair is field-accepted: wrapper `exit_code=0`,
+  `run_validity.status=valid`, `6/6` effective rounds, and no repeated
+  `screening_or_lexicographic_guard` block. Research quality is still
+  rejected: `8` screening metric rows, `0` validation/frozen rows, `0`
+  promotions, and `7` proposal quality blocks. The active weak-positive
+  `merge_vehicles` lineage has W/L/T `7/1/6`, median delta `775.0`, and
+  allowed next actions `repair` / `telemetry_wiring`, but telemetry reports
+  `activation_missing_or_wiring_suspect`.
+- Do not start a broad WSL warehouse matrix from this state. The next useful
+  task is branch-level postrun analysis for the weak-positive `merge_vehicles`
+  lineage and the remaining transfer-risk / bounded-candidate / branch-lesson
+  quality-block pattern.
 
 Latest CVRP/VRP state:
 
