@@ -74,6 +74,11 @@ CVRP/VRP:
   ALNS iterations rose from `4.0` to `8.35`, but paired quality was still worse
   overall (`4/7/9`, mean delta `+6.95`). Cadence-only skipping is too blunt for
   a long CVRP LLM campaign.
+- Local adaptive-trigger variants are implemented and accepted for the next
+  no-LLM matrix:
+  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md).
+  The selectable mechanisms are `adaptive_embedded_vns_cadence2` and
+  `adaptive_embedded_vns_improve_only`.
 
 ## Active Work
 
@@ -83,9 +88,9 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Run a small no-LLM adaptive-trigger follow-up before any long CVRP LLM
-   campaign: `cadence2`, `improve_only`, or a dynamic budget/best-update
-   trigger are the current candidates.
+1. Run the compact no-LLM adaptive-trigger WSL matrix before any long CVRP LLM
+   campaign: canonical, `adaptive_embedded_vns_cadence2`,
+   `adaptive_embedded_vns_improve_only`, and cadence-4 as prior reference.
 2. Feed CVRP proposal context only after a trigger variant preserves paired
    quality while reducing embedded-VNS pressure.
 3. Keep a later warehouse repeat available to test whether champion `v2`
@@ -118,6 +123,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md)
 
 WSL coordination:
 

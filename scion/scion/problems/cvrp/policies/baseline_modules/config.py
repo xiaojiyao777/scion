@@ -15,6 +15,8 @@ VNS_MAX_NO_IMPROVE = 5000
 USE_VNS = True
 ENABLE_INITIAL_VNS = True
 ENABLE_EMBEDDED_VNS = True
+# Positive values run embedded VNS every N ALNS iterations. Zero disables the
+# fixed cadence and leaves repair-improvement triggering available.
 EMBEDDED_VNS_CADENCE = 1
 EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True
 ENABLE_SIZE70_TWO_OPT_FALLBACK = True

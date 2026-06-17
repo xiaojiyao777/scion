@@ -402,8 +402,8 @@ class _ALNSVNSSolver:
             or instance.customer_count > self.vns_threshold
         ):
             return False
-        cadence = max(1, int(EMBEDDED_VNS_CADENCE))
-        if cadence <= 1 or iteration % cadence == 0:
+        cadence = int(EMBEDDED_VNS_CADENCE)
+        if cadence > 0 and (cadence <= 1 or iteration % cadence == 0):
             return True
         if not EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT:
             return False

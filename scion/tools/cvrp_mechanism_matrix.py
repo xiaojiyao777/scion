@@ -318,6 +318,20 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
                 "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
                 True,
             )
+        elif overlay == "config_adaptive_embedded_vns_cadence2":
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 2)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
+                True,
+            )
+        elif overlay == "config_adaptive_embedded_vns_improve_only":
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 0)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
+                True,
+            )
         elif overlay == "config_disable_size70_two_opt":
             _overlay_config_bool(workspace, "ENABLE_SIZE70_TWO_OPT_FALLBACK", False)
         elif overlay == "config_vns_threshold_70":

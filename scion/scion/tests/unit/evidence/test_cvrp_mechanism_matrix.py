@@ -99,6 +99,8 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
         "embedded_vns_disabled",
         "pure_alns_no_polish",
         "adaptive_embedded_vns_cadence4",
+        "adaptive_embedded_vns_cadence2",
+        "adaptive_embedded_vns_improve_only",
     }
     assert mechanisms["initial_vns_disabled"].overlays == (
         "config_disable_initial_vns",
@@ -112,6 +114,12 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
     )
     assert mechanisms["adaptive_embedded_vns_cadence4"].overlays == (
         "config_adaptive_embedded_vns_cadence4",
+    )
+    assert mechanisms["adaptive_embedded_vns_cadence2"].overlays == (
+        "config_adaptive_embedded_vns_cadence2",
+    )
+    assert mechanisms["adaptive_embedded_vns_improve_only"].overlays == (
+        "config_adaptive_embedded_vns_improve_only",
     )
 
 
@@ -363,6 +371,10 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
             "pure_alns_no_polish",
             "--mechanism",
             "adaptive_embedded_vns_cadence4",
+            "--mechanism",
+            "adaptive_embedded_vns_cadence2",
+            "--mechanism",
+            "adaptive_embedded_vns_improve_only",
             "--seed",
             "11",
             "--time-budget-sec",
@@ -377,6 +389,8 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
         "initial_vns_disabled",
         "pure_alns_no_polish",
         "adaptive_embedded_vns_cadence4",
+        "adaptive_embedded_vns_cadence2",
+        "adaptive_embedded_vns_improve_only",
     ]
 
 

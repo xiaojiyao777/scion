@@ -3333,6 +3333,17 @@ Field gate:
   adaptive-trigger matrix (`cadence2`, `improve_only`, or a dynamic
   budget/best-update trigger) before any agentic CVRP campaign or
   proposal-context exposure.
+- Implemented locally: CVRP adaptive-trigger variant repair. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`.
+  New selectable mechanisms are `adaptive_embedded_vns_cadence2` and
+  `adaptive_embedded_vns_improve_only`. Canonical behavior remains unchanged:
+  default `EMBEDDED_VNS_CADENCE=1` still runs embedded VNS every ALNS
+  iteration. `EMBEDDED_VNS_CADENCE=0` is now the problem-owned improve-only
+  mode. Local acceptance: py_compile passed, focused runtime/matrix tests
+  `20 passed`, broader related suite `35 passed`, `git diff --check` passed,
+  and a 1-second P-n76 smoke completed `3/3` with equal total distance while
+  reducing embedded-VNS fraction for both new variants. Next gate is the compact
+  WSL no-LLM adaptive-trigger matrix.
 
 ## Status Cadence
 
