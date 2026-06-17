@@ -6,6 +6,7 @@ from .config import (
     ENABLE_EMBEDDED_VNS,
     EMBEDDED_VNS_CADENCE,
     EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE,
+    EMBEDDED_VNS_CAP_RESCUE_CADENCE,
     EMBEDDED_VNS_DIAGNOSTIC_PHASE,
     EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS,
     EMBEDDED_VNS_MAX_RUNTIME_SHARE,
@@ -440,10 +441,13 @@ class _ALNSVNSSolver:
                 max(1, alns_elapsed_ms_before)
             )
             if embedded_share >= share_cap:
-                return (
+                if (
                     bool(EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE)
                     and improves_repaired
-                )
+                ):
+                    return True
+                rescue_cadence = int(EMBEDDED_VNS_CAP_RESCUE_CADENCE)
+                return rescue_cadence > 0 and iteration % rescue_cadence == 0
         early_always_iterations = int(EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS)
         if early_always_iterations > 0 and iteration <= early_always_iterations:
             return True

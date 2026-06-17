@@ -387,6 +387,26 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
                 "EMBEDDED_VNS_DIAGNOSTIC_PHASE",
                 "adaptive_embedded_vns_share70_trigger",
             )
+        elif overlay == "config_adaptive_embedded_vns_share70_tail6_cadence2":
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 2)
+            _overlay_config_float(workspace, "EMBEDDED_VNS_MIN_RUNTIME_SHARE", 0.70)
+            _overlay_config_float(workspace, "EMBEDDED_VNS_MAX_RUNTIME_SHARE", 0.70)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE",
+                True,
+            )
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CAP_RESCUE_CADENCE", 6)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
+                True,
+            )
+            _overlay_config_string(
+                workspace,
+                "EMBEDDED_VNS_DIAGNOSTIC_PHASE",
+                "adaptive_embedded_vns_share70_trigger",
+            )
         elif overlay == "config_adaptive_embedded_vns_improve_only":
             _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 0)
             _overlay_config_bool(

@@ -105,6 +105,7 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
         "adaptive_embedded_vns_share70_cadence2",
         "adaptive_embedded_vns_share70_hardcap_cadence2",
         "adaptive_embedded_vns_share70_softrescue_cadence2",
+        "adaptive_embedded_vns_share70_tail6_cadence2",
         "adaptive_embedded_vns_improve_only",
     }
     assert mechanisms["initial_vns_disabled"].overlays == (
@@ -137,6 +138,9 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
     )
     assert mechanisms["adaptive_embedded_vns_share70_softrescue_cadence2"].overlays == (
         "config_adaptive_embedded_vns_share70_softrescue_cadence2",
+    )
+    assert mechanisms["adaptive_embedded_vns_share70_tail6_cadence2"].overlays == (
+        "config_adaptive_embedded_vns_share70_tail6_cadence2",
     )
     assert mechanisms["adaptive_embedded_vns_improve_only"].overlays == (
         "config_adaptive_embedded_vns_improve_only",
@@ -580,6 +584,46 @@ def test_share70_softrescue_overlay_patches_config(tmp_path: Path) -> None:
     assert "EMBEDDED_VNS_MIN_RUNTIME_SHARE = 0.70" in text
     assert "EMBEDDED_VNS_MAX_RUNTIME_SHARE = 0.70" in text
     assert "EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE = True" in text
+    assert "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True" in text
+    assert (
+        'EMBEDDED_VNS_DIAGNOSTIC_PHASE = "adaptive_embedded_vns_share70_trigger"'
+        in text
+    )
+
+
+def test_share70_tail6_overlay_patches_config(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    config_dir = workspace / "policies" / "baseline_modules"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "config.py"
+    config_path.write_text(
+        "\n".join(
+            [
+                "EMBEDDED_VNS_CADENCE = 1",
+                "EMBEDDED_VNS_MIN_RUNTIME_SHARE = 0.0",
+                "EMBEDDED_VNS_MAX_RUNTIME_SHARE = 0.0",
+                "EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE = False",
+                "EMBEDDED_VNS_CAP_RESCUE_CADENCE = 0",
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = False",
+                'EMBEDDED_VNS_DIAGNOSTIC_PHASE = ""',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    tool = _load_tool()
+
+    tool._apply_mechanism_overlays(
+        workspace,
+        ("config_adaptive_embedded_vns_share70_tail6_cadence2",),
+    )
+
+    text = config_path.read_text(encoding="utf-8")
+    assert "EMBEDDED_VNS_CADENCE = 2" in text
+    assert "EMBEDDED_VNS_MIN_RUNTIME_SHARE = 0.70" in text
+    assert "EMBEDDED_VNS_MAX_RUNTIME_SHARE = 0.70" in text
+    assert "EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE = True" in text
+    assert "EMBEDDED_VNS_CAP_RESCUE_CADENCE = 6" in text
     assert "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True" in text
     assert (
         'EMBEDDED_VNS_DIAGNOSTIC_PHASE = "adaptive_embedded_vns_share70_trigger"'

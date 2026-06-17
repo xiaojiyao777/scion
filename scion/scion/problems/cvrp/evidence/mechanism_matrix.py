@@ -281,6 +281,23 @@ def available_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
             overlays=("config_adaptive_embedded_vns_share70_softrescue_cadence2",),
         ),
         CvrpMechanismSpec(
+            mechanism_id="adaptive_embedded_vns_share70_tail6_cadence2",
+            label="adaptive embedded VNS share-70 cap with sparse tail rescue",
+            mechanism_family="candidate_probe",
+            mechanism_slice="adaptive_embedded_vns_share70_tail6_cadence2",
+            description=(
+                "Focused scheduler diagnostic that caps embedded VNS once "
+                "ALNS-loop runtime share reaches 70%, preserves repaired-"
+                "candidate improvement rescue, and additionally allows one "
+                "post-cap embedded-VNS rescue every sixth ALNS iteration. This "
+                "tests whether X-like tail losses need occasional polish even "
+                "when a repaired candidate is not already better before VNS. "
+                "Records mechanism-specific activation, budget, and direct "
+                "effect telemetry under adaptive_embedded_vns_share70_trigger."
+            ),
+            overlays=("config_adaptive_embedded_vns_share70_tail6_cadence2",),
+        ),
+        CvrpMechanismSpec(
             mechanism_id="adaptive_embedded_vns_improve_only",
             label="adaptive embedded VNS improve-only",
             mechanism_family="candidate_probe",
