@@ -172,6 +172,14 @@ class CvrpSolverDesignProvider:
                 "budget, or repaired-candidate-improvement signals. Preserve "
                 "the share-70 protection on CMT/X-like medium cases while "
                 "seeking savings on VNS-heavy small cases. "
+                "If the patch introduces a mechanism-specific trigger bucket "
+                "such as `adaptive_embedded_vns_share70_trigger`, record direct "
+                "effect telemetry with `context.record_move` under that same id "
+                "only when the triggered embedded VNS actually improves the "
+                "candidate, for example "
+                "`context.record_move('<mechanism>', attempted=1, accepted=..., "
+                "delta=..., best_improved=...)`; activation/runtime counters "
+                "alone leave effect attribution missing. "
                 "Do not hardcode case ids, BKS values, seeds, or split membership; "
                 "do not remove VNS broadly."
             ),
@@ -215,7 +223,11 @@ class CvrpSolverDesignProvider:
                 "embedded-VNS runtime-share, objective, remaining-budget, or "
                 "repaired-candidate-improvement signals as trigger evidence. "
                 "Preserve the CMT/X neutral behavior while seeking savings on "
-                "VNS-heavy small cases. Do not hardcode case ids, BKS values, "
+                "VNS-heavy small cases. If the trigger gets its own mechanism "
+                "id, record direct effect telemetry with `context.record_move` "
+                "under that same id when the triggered embedded VNS improves the "
+                "candidate; activation/runtime counters alone leave effect "
+                "attribution missing. Do not hardcode case ids, BKS values, "
                 "seeds, or split membership; do not remove VNS broadly."
             ),
             (

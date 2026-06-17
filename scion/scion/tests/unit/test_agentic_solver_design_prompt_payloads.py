@@ -61,6 +61,8 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "cumulative embedded-VNS runtime-share" in user_prompt
     assert "remaining-budget" in user_prompt
     assert "repaired-candidate-improvement signals" in user_prompt
+    assert "record direct effect telemetry with `context.record_move`" in user_prompt
+    assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:

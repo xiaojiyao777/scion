@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP target steering accepted; cadence mechanism analysis next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP share70 agentic low-SNR expansion accepted; effect-telemetry guidance next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled

@@ -2,222 +2,89 @@
 
 Last updated: 2026-06-17
 
-This file is the short operational snapshot for resuming work. It should not be
-used as an append-only experiment log. Detailed run facts live in
-[`../experiments/v0.4/`](../experiments/v0.4/); older milestone notes live in
-[`v0.4-history.md`](v0.4-history.md).
+This is the short operational resume point. It is not an append-only run log.
+Detailed evidence belongs in `scion/docs/experiments/v0.4/`; curated milestone
+history belongs in `scion/docs/status/v0.4-history.md`.
 
 ## Operating Frame
 
 - Active branch: `codex/v04-evidence-repair-plan`.
-- Governing design: [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
+- Governing design: `scion/design/scion-architecture-v3.md`.
 - v0.4 closeout goal: make Scion stable enough that warehouse can recover
   continuous useful research and CVRP/VRP can produce evidence-backed solver
   hypotheses before v0.5 broad experiment matrices.
-- Do not use broad budgets, truncation, compression, or generic gate tightening
-  as the next repair. Keep CVRP/warehouse semantics in problem-owned layers;
-  keep generic `DecisionFeatures` problem-neutral.
+- Current repair posture: do not add broad budgets, truncation, compression, or
+  generic gate tightening. Keep CVRP/warehouse semantics in problem-owned
+  layers and keep generic `DecisionFeatures` problem-neutral.
 
 ## Current Conclusions
 
 Warehouse:
 
-- The short validation-transfer acceptance-contract WSL gate completed cleanly
-  from commit `ce5d884` and is accepted as positive warehouse recovery
-  evidence:
-  [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md).
-- The run reached screening, validation, frozen holdout, and promoted champion
-  `v2`: `6/6` effective rounds, `8` Protocol rows, stage counts
-  `screening=5`, `validation=2`, `frozen=1`, `1` promotion, wrapper exit `0`,
-  and run validity `valid`.
-- The promoted `pack_compatible_vehicles` operator is a split-preserving
-  cost-compression mechanism. It matched the repaired contract by computing
-  `split_delta == 0`, `cost_delta > 0`, exporting diagnostics, bounding
-  enumeration, and no-oping when no candidate qualifies.
-- This is a warehouse recovery checkpoint, not a final continuous-promotion
-  proof. The remaining measurement caveat is that diagnostics still emit
-  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` for zero `split_delta_sum` even when the
-  declared useful effect is cost compression.
+- Warehouse recovery checkpoint is accepted. The short validation-transfer
+  acceptance-contract WSL gate from commit `ce5d884` completed validly, reached
+  screening/validation/frozen holdout, and promoted champion `v2`.
+- This restores a useful warehouse research path, but it is not yet a long-run
+  continuous-promotion proof.
+- Remaining caveat: split-preserving cost-compression effects still need cleaner
+  measurement interpretation, because diagnostics can over-read zero
+  `split_delta_sum` even when the declared useful effect is cost compression.
 
 CVRP/VRP:
 
-- Scion can carry CVRP candidates through the repaired framework, but it has
-  not yet produced effective CVRP research against canonical ALNS+VNS.
-- Broad VNS removal, pure ALNS/no-polish, and size70/two-opt as broad
-  replacements are rejected by no-LLM evidence.
-- The deep `initial_vns_disabled` matrix rejected simple initial-VNS
-  disablement: `160/160` rows, overall W/L/T `25/51/4`, median delta `+2.0`.
-  Objective probes show the skipped initial work mostly shifts pressure into
-  embedded VNS rather than creating stable ALNS benefit.
-- CVRP scheduler-local budget/iteration instrumentation is locally implemented
-  and accepted:
-  [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md).
-  It fixes construction/initial-VNS phase accounting, adds `alns_core` timing,
-  and records bounded `solver_algorithm_alns_iteration_trace`.
-- The compact WSL instrumentation matrix completed `60/60` no-LLM rows and
-  accepted the telemetry path:
-  [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md).
-  Disabling embedded VNS increases ALNS iterations from mean `4.0` to `22.4`,
-  but is still worse or tied overall (`2/8/10`, mean delta `+17.3`). Pure
-  ALNS/no-polish is worse (`2/18/0`, mean delta `+35.6`). Do not launch a long
-  agentic CVRP campaign from a broad VNS-removal idea.
-- A narrow adaptive embedded-VNS scheduling probe is locally implemented and
-  accepted:
-  [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md).
-  `adaptive_embedded_vns_cadence4` keeps initial VNS, runs embedded VNS every
-  fourth ALNS iteration, and still polishes candidates that already improve
-  current/best after repair. Canonical behavior is unchanged by default.
-- The compact WSL adaptive matrix completed `40/40` no-LLM rows:
-  [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md).
-  It is accepted as mechanism evidence and rejected as a production candidate:
-  whole-matrix embedded-VNS runtime share dropped from `0.651` to `0.361`, mean
-  ALNS iterations rose from `4.0` to `8.35`, but paired quality was still worse
-  overall (`4/7/9`, mean delta `+6.95`). Cadence-only skipping is too blunt for
-  a long CVRP LLM campaign.
-- Local adaptive-trigger variants are implemented and accepted for the next
-  no-LLM matrix:
-  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md).
-  The selectable mechanisms are `adaptive_embedded_vns_cadence2` and
-  `adaptive_embedded_vns_improve_only`.
-- The compact WSL adaptive-trigger matrix completed `80/80` no-LLM rows:
-  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md).
-  `adaptive_embedded_vns_cadence2` is accepted as a proposal-context
-  opportunity source, not as a production default: embedded-VNS share dropped
-  from `0.653` to `0.528`, ALNS iterations rose from `4.0` to `6.0`, median
-  paired delta stayed `0.0`, and mean delta was `+1.8`. The next CVRP agent
-  task should refine cadence-2 using objective/budget/best-update triggers,
-  especially preserving `CMT2` gains while avoiding `P-n76-k4` losses.
-- The cadence-2 opportunity is now wired into CVRP solver-design hypothesis
-  context as proposal-only guidance:
-  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md).
-  The repair also makes hypothesis context consume the problem-owned
-  solver-design prompt provider, matching the existing code-context path.
-- The first post-repair CVRP agentic `4R` WSL run completed with wrapper
-  `exit_code=0`, `4/4` effective screening rounds, `4` Protocol rows, `3`
-  formal candidate artifacts, `19` `gpt-5.5` traces, and no infra failures:
-  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md).
-  It is accepted as positive CVRP research-loop behavior evidence: Scion formed
-  a depth-3 `route_limit_aware_regret_repair` branch, continued weak screening
-  signal in the same mechanism family, retained the active branch as marginal,
-  and abandoned a loss-heavy `local_search.py` clean fork.
-- The same postrun found that the intended cadence-2 adaptive embedded-VNS
-  opportunity text was absent from live hypothesis prompts. The prompt engine
-  used fallback solver-design guidance because agentic context sanitization
-  removed the provider object and the resolver did not recover from
-  `solver_design_prompt_provider_ref`. The prompt-provider-ref repair and
-  cadence-specific guidance wording repair are now accepted by focused tests
-  and field-verified for final hypothesis rendering.
-- The targeted post-repair CVRP agentic `1R` WSL run completed with wrapper
-  `exit_code=0`, run validity `valid`, `1` effective screening round, `1`
-  formal candidate artifact, `32/32` screening pairs, `0` failed pairs, and
-  high-confidence runtime evidence:
-  [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md).
-  It verified that the final `hypothesis` trace contains cadence-2 opportunity
-  text, but the earlier `hypothesis_target_intent` trace does not. The agent
-  selected `route_merge_savings_vns` in `local_search.py`, stayed bound to that
-  target, and produced an `active_marginal` branch rather than a cadence-trigger
-  refinement.
-- The current CVRP prompt steering fault is therefore precise: problem-owned
-  solver-design opportunity guidance reaches the final hypothesis call too
-  late to steer target/action/mechanism selection. A local proposal-layer
-  repair now exposes solver-design guidance to `hypothesis_target_intent`
-  whenever solver-design is targetable. This remains proposal-only and outside
-  `DecisionFeatures`.
-- The follow-up target-intent field check from commit `75bd938` verified that
-  live `hypothesis_target_intent` traces now contain the cadence-2 opportunity
-  text:
-  [`../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md).
-  The campaign was valid (`32/32` screening pairs, `0` failed pairs), but the
-  agent still selected `cross_route_2opt_reconnect` in `local_search.py`.
-  Guidance visibility is fixed; target-selection priority is still too weak.
-- Local follow-up now adds a CVRP-owned target-intent guidance hook that makes
-  cadence-2 trigger refinement the current target-selection priority, names
-  `policies/baseline_modules/scheduler.py` as the owner target, and requires
-  explicit notes if the agent deviates to a non-scheduler mechanism. This
-  remains proposal-only and outside `DecisionFeatures`.
-- The priority-guided field check from commit `0ac863a` selected the intended
-  scheduler-owned cadence trigger:
-  [`../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md).
-  The run was valid (`32/32` screening pairs, `0` failed pairs) and generated a
-  real `adaptive_embedded_vns_cadence2_trigger` patch in
-  `scheduler.py`. The candidate saved runtime (`runtime_ratio_median=0.9936`,
-  `runtime_delta_median=-155.5 ms`) but failed objective screening
-  (`tier=regression`, median delta `-0.25`, `CMT4` and `X-n110-k13` losses) and
-  was discarded. This accepts the steering repair and rejects the generated
-  trigger as a solver improvement.
-- Follow-up no-LLM scheduler diagnostics are recorded at
-  [`../experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md`](../experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md).
-  The failed agentic trigger was a real mechanism failure, not infrastructure:
-  it saved time by starving productive embedded VNS on hard cases. Fixed
-  `adaptive_embedded_vns_share70_cadence2` is the current CVRP scheduler
-  opportunity, not a production default: the focused WSL matrix completed
-  `64/64` rows, preserved `CMT4` and `X-n110-k13` as neutral, improved
-  `P-n65-k10` mean delta to `-1.5`, and finished overall `2/3/11`, mean delta
-  `-0.12`, median `0.0`, with lower embedded-VNS share than early-8. Raw
-  cadence-2, recent-best/stall gating, broad VNS removal, and fixed early-8 as
-  a default are rejected or insufficient.
-- CVRP proposal guidance now prioritizes the share-70 cadence-2 scheduler
-  refinement and names `policies/baseline_modules/scheduler.py` as the owner
-  target unless target-intent notes give an evidence-backed deviation. This
-  guidance remains proposal-only and outside `DecisionFeatures`.
+- The framework can now steer CVRP agents to problem-owned solver-design
+  opportunities and carry candidates through repaired formal screening without
+  infrastructure failures.
+- Rejected default directions remain: broad VNS removal, pure ALNS/no-polish,
+  simple initial-VNS disablement, raw cadence-2, recent-best/stall gating, and
+  fixed early-8 as a production default.
+- Accepted current opportunity: scheduler-owned adaptive embedded-VNS share70
+  refinement. The fixed no-LLM `adaptive_embedded_vns_share70_cadence2`
+  diagnostic is proposal-only evidence, not a default solver change.
+- Latest agentic field check from commit `7e312a7` is positive research-loop
+  evidence: target-intent, hypothesis, tool-selection, and code all stayed on
+  `policies/baseline_modules/scheduler.py` /
+  `adaptive_embedded_vns_share70_trigger`; formal screening completed `32/32`
+  valid pairs with `0` failures; Decision chose `expand_screening` for
+  `SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT`.
+- The generated hard share70 cap is not accepted as a production solver
+  improvement. It produced pair W/L/T `16/11/5`, median candidate-minus-champion
+  delta `-0.5`, mean `+2.0`, CMT4 case-level win, M-n200 neutrality, and an
+  X-n110 tail loss (`+116`) that prevents promotion.
+- Current telemetry gap: the candidate recorded trigger activation/runtime but
+  not direct mechanism effect attribution. This should be repaired through
+  CVRP-owned proposal/code guidance, not by adding another generic gate.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- No Scion framework repair is intentionally pending before the next short
-  agentic CVRP share-70 check. The latest CVRP scheduler diagnostic code has
-  been pushed and WSL-fast-forwarded.
-- The latest CVRP no-LLM and agentic artifacts are synced back to the server.
+- Latest WSL artifacts are synced back to the server under
+  `/home/clawd/research/scion-experiments/`.
+- Local follow-up has added CVRP-owned guidance requiring share70 trigger
+  candidates to record direct effect telemetry with `context.record_move` when
+  triggered embedded VNS improves the candidate.
 
 ## Next Actions
 
-1. Treat the CVRP prompt/target steering repair as accepted and move to
-   a short agentic share-70 refinement check. The next CVRP agent should start
-   from fixed `adaptive_embedded_vns_share70_cadence2` evidence, keep the
-   scheduler target unless it records an evidence-backed deviation, and avoid
-   raw cadence-2/stall-gate repeats.
-2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
-   CVRP same-mechanism research line, but do not confuse it with cadence-2
-   adaptive-VNS trigger evidence.
+1. Run focused tests for the share70 effect-telemetry guidance repair and keep
+   it problem-owned.
+2. Continue the CVRP scheduler mechanism family with a target that addresses
+   X-n110 tail losses and preserves CMT4/M-n200 behavior. Treat runtime as
+   supporting evidence only.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
-## Evidence Index
+## Key Evidence
 
-Core audits and plan:
-
-- [`../../reports/v04-core-framework-review-20260611.md`](../../reports/v04-core-framework-review-20260611.md)
-- [`../../reports/v04-core-framework-code-review-20260611.md`](../../reports/v04-core-framework-code-review-20260611.md)
-- [`../../design/v0.5-evidence-uplift-roadmap.md`](../../design/v0.5-evidence-uplift-roadmap.md)
-- [`../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`](../planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md)
-
-Warehouse current evidence:
-
-- [`../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md)
-- [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md)
-- [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md)
-
-CVRP current evidence:
-
-- [`../experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md`](../experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-focused5-mechanism-wsl-70dfc53-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-focused5-mechanism-wsl-70dfc53-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-p76-deepseed-wsl-14c2a34-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-p76-deepseed-wsl-14c2a34-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md)
-- [`../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md)
-
-WSL coordination:
-
-- `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
-- `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/RSYNC_PATHS.md`
+- Core reset: `scion/reports/v04-core-framework-review-20260611.md`,
+  `scion/reports/v04-core-framework-code-review-20260611.md`,
+  `scion/design/v0.5-evidence-uplift-roadmap.md`.
+- Warehouse recovery:
+  `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`.
+- CVRP share70 no-LLM diagnostic:
+  `scion/docs/experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md`.
+- CVRP share70 agentic field check:
+  `scion/docs/experiments/v0.4/v04-cvrp-share70-agentic-1r-7e312a7-postrun-20260617.md`.
+- WSL reference docs:
+  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
+  and `RSYNC_PATHS.md`.

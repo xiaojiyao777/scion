@@ -233,6 +233,8 @@ def test_cvrp_hypothesis_guidance_exposes_adaptive_vns_opportunity() -> None:
     assert "mean paired delta -0.12" in rendered
     assert "not as a default solver change" in rendered
     assert "cumulative embedded-VNS runtime-share, objective, remaining-budget" in rendered
+    assert "record direct effect telemetry with `context.record_move`" in rendered
+    assert "activation/runtime counters alone leave effect attribution missing" in rendered
     assert "Do not hardcode case ids, BKS values, seeds, or split membership" in rendered
     assert "do not remove VNS broadly" in rendered
 
