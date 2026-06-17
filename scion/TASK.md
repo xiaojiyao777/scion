@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse `4b2ee29` hypothesis quality-block prompt visibility is field-accepted, but research quality failed; repair-template follow-up is local*
+*Status: warehouse `4b2ee29` prompt visibility is accepted but research quality failed; `4a316e1` repair-template rerun is active on server*
 *Updated: 2026-06-16*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -748,6 +748,19 @@ Exit criteria:
   rejections now include problem-owned `repair_template` checklists for
   hypothesis fields, diagnostic identifiers, and screening/lexicographic guard
   code shape; quality feedback preserves those templates into later prompts.
+- Launched: warehouse repair-template field rerun from commit `4a316e1`.
+  Launch report:
+  `scion/docs/experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md`.
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-repairtemplate-rerun6r-4a316e1-20260617T002824Z`;
+  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`.
+  Initial health check shows `status=running`, commit `4a316e1`, warehouse
+  production `6R`, measurement governance on, compact diagnostics, and local
+  `gpt-5.5`. This run is on the server because the WSL reverse SSH endpoint
+  timed out during banner exchange during postrun sync. Acceptance requires
+  later traces to show warehouse `repair_template` content in proposal prompts,
+  plus fewer repeated validation-transfer blocks or restored validation/frozen
+  behavior.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

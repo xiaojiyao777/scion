@@ -145,7 +145,12 @@ Active work as of the latest handoff:
   codes, retry constraints, and missing claim/code-element fields. Research
   quality is still rejected; the local follow-up repair now adds warehouse
   problem-owned `repair_template` checklists to quality-block structured
-  rejections and preserves those templates into later prompts.
+  rejections and preserves those templates into later prompts. The field check
+  for that repair is active from commit `4a316e1`; launch report:
+  [`../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-repairtemplate-rerun6r-launch-20260617.md).
+  Server root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-repairtemplate-rerun6r-4a316e1-20260617T002824Z`;
+  tmux session `scion_wh_repairtemplate_rerun6r_4a316e1_002824`.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).
