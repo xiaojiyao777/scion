@@ -122,7 +122,11 @@ research_surfaces:
         screening-to-validation transfer risk, why the mechanism should
         generalize beyond screening cases, the expected operator activation
         and effect counters, and the guard that prevents a screening-only
-        no-effect move from being accepted.
+        no-effect move from being accepted. If the intended effect is
+        split-preserving cost-only compression rather than true split-positive
+        improvement, explain why it should not overfit screening/validation
+        distribution and how frozen holdout and runtime regression risk are
+        bounded.
       implementation_guidance: >-
         An order-level operator may be invoked repeatedly inside the search
         loop. Precompute vehicle/order summaries once per execute call, inspect
@@ -198,7 +202,13 @@ research_surfaces:
         screening-to-validation transfer risk, why the consolidation or resize
         mechanism should generalize beyond screening cases, the expected
         activation/effect counters, and the guard that prevents a
-        screening-only no-effect merge from being accepted.
+        screening-only no-effect merge from being accepted. They must
+        distinguish true split-positive improvement from split-preserving
+        cost-only compression; if cost-only, explain why the mechanism should
+        not overfit screening/validation distribution and how frozen holdout
+        and runtime risk are bounded. They must state the top-k, limit,
+        max_candidates, candidate cap, early-exit, or runtime budget strategy
+        before code generation.
       implementation_guidance: >-
         Structural vehicle operators must update both vehicle.order_ids and
         solution.assignment together, preserve locked orders, call
@@ -210,7 +220,10 @@ research_surfaces:
         on the operator instance under self.validation_transfer_diagnostics so
         the solver can export runtime.operator_diagnostics.{mechanism}.* for
         telemetry guard consumption. Do not use local-only dictionaries or
-        undeclared expected_telemetry fields.
+        undeclared expected_telemetry fields. Merge-style operators must avoid
+        unbounded full vehicle-pair scans; build or sort candidate pairs with
+        an executable top_k, limit, max_candidates, candidate cap, or early-exit
+        policy before expensive feasibility/objective evaluation.
       anti_patterns: >-
         Do not delete, disable, or neuter split/merge behavior merely because a
         prior branch failed. Do not remove operators/split_vehicle.py or an
@@ -219,7 +232,11 @@ research_surfaces:
         replacement mechanism that preserves all orders. Do not propose a
         consolidation operator that only explains why it may pass screening
         while omitting how it avoids the known formal-validation no-gain
-        pattern VALIDATION_FAIL_NO_HIERARCHICAL_GAIN.
+        pattern VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. Do not propose
+        merge_vehicles.py changes that enumerate every vehicle pair without a
+        bounded candidate policy, and do not treat split-preserving cost-only
+        compression as equivalent to true split-positive improvement without
+        frozen/runtime risk analysis.
 
 objective_policy:
   mode: lexicographic

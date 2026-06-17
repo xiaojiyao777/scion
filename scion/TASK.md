@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse telemetry-identity field gate finished invalid; repair-attempt accounting fix under validation*
+*Status: Phase 4 frontier analysis complete; warehouse split/cost-runtime guidance repair under local validation*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -981,6 +981,30 @@ Exit criteria:
   v1. Acceptance: framework repair passes; warehouse research quality is
   partially restored but still needs frozen-generalization analysis before any
   broader warehouse matrix.
+- Completed: Phase 4 frontier analysis after the `f81bb73` field gate. Report:
+  `scion/docs/experiments/v0.4/v04-phase4-frontier-analysis-20260617.md`.
+  Warehouse conclusion: do not launch a broad matrix yet. The `merge_vehicles`
+  candidate mostly produced split-preserving cost compression, nearly all
+  `split_delta_sum=0`, negative frozen median, and runtime regression; this is
+  a problem-owned guidance/quality issue, not a generic Decision/Protocol
+  failure. CVRP/VRP conclusion: do not launch another blind long LLM campaign.
+  Scion is now CVRP research-capable but not research-effective; next CVRP/VRP
+  work should be no-LLM family/slice mechanism diagnostics, then a short
+  behavior debug only if a narrow measurable mechanism is found.
+- Implemented locally by subagent `Anscombe`: warehouse problem-owned
+  split-vs-cost effect-scope and bounded-runtime proposal/code quality repair.
+  It updates `WarehouseDeliveryAdapter`, warehouse `problem-v1.yaml`, and
+  focused tests so high-risk warehouse operator hypotheses must declare whether
+  they target true split-positive improvement or split-preserving cost-only
+  compression, must state a bounded candidate/runtime policy, and
+  `merge_vehicles.py` patches with unbounded nested vehicle-pair scans are
+  blocked before Protocol unless an executable cap/top-k/early-exit policy is
+  present. No Decision, Protocol, validation/frozen, promotion, or
+  `DecisionFeatures` semantics changed. Main-thread validation passed
+  warehouse target preview (`34 passed`), agentic/proposal suites
+  (`64 passed`), telemetry/session preview suites (`48 passed`), py_compile,
+  and `git diff --check`. Next gate after commit: one local server `6R`
+  warehouse acceptance check, not a WSL long matrix.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

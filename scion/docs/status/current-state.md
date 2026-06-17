@@ -87,6 +87,55 @@ The current high-value v0.4 work is now a closeout-and-next-rung sequence:
    reproduction matrices, problem-family comparisons, prompt/context ablations,
    and mechanism studies that quantify Scion's value.
 
+## Current Frontier - 2026-06-17
+
+The current Phase 4 frontier is summarized in
+[`../experiments/v0.4/v04-phase4-frontier-analysis-20260617.md`](../experiments/v0.4/v04-phase4-frontier-analysis-20260617.md).
+
+Latest warehouse state:
+
+- The `f81bb73` repair-cap `6R` field gate is accepted as framework evidence:
+  wrapper `exit_code=0`, `run_validity.status=valid`,
+  `effective_rounds_completed=6`, stage counts `screening=3`,
+  `validation=2`, `frozen=1`, and the old run-level
+  `telemetry_repair_attempt_budget_exhausted` did not recur.
+- It is not promotion evidence. The strongest `merge_vehicles.py` candidate
+  reached frozen but failed with median `-650.0` and
+  `FROZEN_PROTOCOL_GATE_NOT_PASS`.
+- Branch-level analysis shows the candidate mostly delivered
+  split-preserving cost compression: nearly all `split_delta_sum` observations
+  were zero, frozen losses were total-cost regressions under preserved split
+  count, and frozen runtime regressed. This is a warehouse problem-owned
+  guidance/quality issue, not a generic Decision or Protocol failure.
+- A local warehouse repair now tightens problem-owned proposal/code quality:
+  high-risk operator hypotheses must distinguish true split-positive
+  improvement from split-preserving cost-only compression and must state a
+  bounded candidate/runtime policy; unbounded nested `merge_vehicles.py`
+  vehicle-pair scans are blocked before Protocol unless executable top-k/cap/
+  early-exit logic is visible.
+- Main-thread validation for this local repair passed warehouse target preview
+  (`34 passed`), agentic/proposal suites (`64 passed`),
+  telemetry/session preview suites (`48 passed`), py_compile, and
+  `git diff --check`. The next gate is one local server `6R` acceptance check,
+  not a WSL long matrix.
+
+Latest CVRP/VRP state:
+
+- CVRP is research-capable but not yet research-effective. Phase C showed
+  branch depth and validation/frozen reach, especially on ALNS-only, but no
+  promotion and no accepted improvement against canonical ALNS+VNS.
+- ALNS+VNS remains the canonical baseline. ALNS-only is a copied diagnostic
+  research surface with lower MDE and more headroom, not a production
+  replacement.
+- Existing large-X runtime curves, candidate replays, single-round debug, and
+  independent VRP controls argue against another blind long LLM campaign as the
+  next move.
+- Next CVRP/VRP work should be a no-LLM family/slice mechanism diagnostic that
+  separates A/B/E/P/M/X and ALNS+VNS vs ALNS-only, records construction/post-
+  search cost, accepted moves, best-update density, route-count, runtime phase
+  split, and final gap, and keeps all BKS/gap/VNS/family diagnostics outside
+  `DecisionFeatures`.
+
 Active work as of the latest handoff:
 
 - Warehouse validation-transfer patch-quality acceptance is still open. Commit

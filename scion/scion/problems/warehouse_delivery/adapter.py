@@ -124,11 +124,30 @@ class WarehouseDeliveryAdapter:
                         "string mentions of a lexicographic guard are not sufficient."
                     ),
                 },
+                {
+                    "id": "effect_scope_and_bounded_runtime",
+                    "summary": (
+                        "Merge-style operators must declare their split/cost effect "
+                        "scope and keep candidate enumeration bounded."
+                    ),
+                    "constraint": (
+                        "For vehicle-level merge or resize operators, distinguish a "
+                        "true split-positive improvement from split-preserving "
+                        "cost-only compression. If the intended effect is cost-only, "
+                        "state why it should not overfit screening/validation and "
+                        "how frozen holdout and runtime regression risk are bounded. "
+                        "Use an executable bounded candidate policy such as top_k, "
+                        "limit, max_candidates, a candidate cap, an early exit, or "
+                        "sorted candidates sliced before expensive trial evaluation; "
+                        "do not rely on unbounded full vehicle-pair scans."
+                    ),
+                },
             ),
             "forbidden_patterns": (
                 "local-only validation_transfer_diagnostics dict",
                 "comments or strings as the only screening/lexicographic guard",
                 "accepting cost-only moves that worsen subcategory_splits",
+                "unbounded full vehicle-pair scans in merge_vehicles.py",
             ),
         }
 
@@ -369,18 +388,34 @@ Frozen files (do not modify): {frozen}"""
                 "risk_model": (
                     "screening-positive operator changes may activate on the "
                     "small screening distribution while producing no "
-                    "hierarchical gain on formal validation aggregates"
+                    "hierarchical gain on formal validation aggregates, or may "
+                    "compress cost while preserving the same split structure and "
+                    "then regress on frozen holdout/runtime"
                 ),
                 "historical_pattern": (
                     "same_subcategory_consolidate-style operator: screening "
                     "positive, formal aggregate 2/3/0, paired 6/9/0, median "
                     "delta 0, failure VALIDATION_FAIL_NO_HIERARCHICAL_GAIN"
                 ),
+                "latest_field_gate_pattern": (
+                    "merge_vehicles-style candidate: strong screening and "
+                    "validation cost signal, mostly split-preserving "
+                    "cost-only compression, negative frozen median, and "
+                    "roughly 30s runtime regression"
+                ),
                 "required_hypothesis_claims": [
                     "why the mechanism should transfer beyond screening cases",
                     "what operator activation counter should become positive",
                     "what effect counter should prove subcategory split or cost gain",
                     "how the operator avoids screening-only activation",
+                    (
+                        "whether the intended effect is true split-positive "
+                        "improvement or split-preserving cost-only compression"
+                    ),
+                    (
+                        "what top-k, cap, limit, early-exit, or runtime "
+                        "budget strategy bounds candidate search"
+                    ),
                 ],
             },
             "required_diagnostics": {
@@ -430,7 +465,9 @@ Frozen files (do not modify): {frozen}"""
             f"{WAREHOUSE_VALIDATION_TRANSFER_QUALITY_FAILURE}: warehouse "
             "operator proposal must explain validation-case transfer risk, "
             "expected activation/effect diagnostics, and how it avoids "
-            "screening-only gains before code generation; missing="
+            "screening-only gains before code generation; merge-style "
+            "warehouse proposals must also declare split-vs-cost effect scope "
+            "and bounded runtime/candidate policy; missing="
             + ",".join(missing)
         )
         return {
@@ -446,7 +483,10 @@ Frozen files (do not modify): {frozen}"""
                     "Rewrite the warehouse operator hypothesis before code: "
                     "state the screening-to-validation transfer risk, declare "
                     "expected activation/effect diagnostics, and explain the "
-                    "guard against screening-only improvements."
+                    "guard against screening-only improvements. Also state "
+                    "whether the mechanism targets true split-positive gain or "
+                    "split-preserving cost-only compression, and name the "
+                    "top-k/cap/early-exit/runtime budget strategy."
                 ),
                 "repair_template": _warehouse_hypothesis_quality_repair_template(
                     missing
@@ -476,7 +516,17 @@ Frozen files (do not modify): {frozen}"""
         if identity_rejection:
             return identity_rejection
         code, changed_files = _warehouse_operator_patch_code(patch, hypothesis)
-        missing = list(_missing_transfer_patch_quality(code))
+        missing = list(
+            _missing_transfer_patch_quality(
+                code,
+                target_files=changed_files
+                or (
+                    _normalize_patch_path(
+                        getattr(hypothesis, "target_file", "")
+                    ),
+                ),
+            )
+        )
         if not changed_files:
             missing.insert(0, "warehouse_operator_patch_code")
         if not missing:
@@ -506,7 +556,8 @@ Frozen files (do not modify): {frozen}"""
                     "add code-visible activation/effect diagnostic counters or "
                     "a named instrumentation path, and include a guard that "
                     "prevents screening-only or lexicographically dominated "
-                    "moves."
+                    "moves. For merge-style vehicle-pair scans, include an "
+                    "executable top-k/cap/limit/early-exit candidate policy."
                 ),
                 "repair_template": _warehouse_patch_quality_repair_template(missing),
                 "missing_code_elements": list(dict.fromkeys(missing)),
@@ -767,6 +818,12 @@ def _render_validation_transfer_guidance() -> str:
         "operator activation counters should become positive, which effect "
         "counters should show subcategory split or cost improvement, and what "
         "guard prevents a screening-only no-effect move from being accepted. "
+        "For merge/vehicle-level candidates, distinguish true split-positive "
+        "improvement from split-preserving cost-only compression. If the "
+        "proposal is cost-only, explain why it should not overfit the "
+        "screening/validation distribution and how it controls frozen holdout "
+        "and runtime regression risk. State a concrete top-k, candidate cap, "
+        "limit, early-exit, or runtime budget strategy before code generation. "
         "Store runtime counters on the operator instance under "
         "`self.validation_transfer_diagnostics` using the declared standard "
         "keys (`operator_invocations`, "
@@ -876,6 +933,10 @@ def _missing_transfer_quality_claims(hypothesis: Any) -> tuple[str, ...]:
         missing.append("activation_effect_diagnostics")
     if not _mentions_screening_only_guard(text):
         missing.append("screening_only_guard")
+    if not _mentions_effect_scope_or_split_cost_risk(text):
+        missing.append("effect_scope_or_split_cost_risk")
+    if not _mentions_runtime_bounded_acceptance(text):
+        missing.append("runtime_bounded_acceptance")
     return tuple(missing)
 
 
@@ -904,6 +965,17 @@ def _warehouse_hypothesis_quality_repair_template(
                 "screening_only_guard: state the no-op, case-general, or "
                 "lexicographic guard that prevents screening-only gains"
             ),
+            (
+                "effect_scope_or_split_cost_risk: state whether the mechanism "
+                "is expected to be split-positive or split-preserving "
+                "cost-only, and if cost-only why it will not overfit "
+                "screening/validation or regress frozen holdout"
+            ),
+            (
+                "runtime_bounded_acceptance: state the top-k, limit, "
+                "max_candidates, candidate cap, early-exit, or runtime budget "
+                "strategy that bounds candidate evaluation"
+            ),
         ],
         "hypothesis_field_hints": {
             "target_weakness": (
@@ -912,7 +984,8 @@ def _warehouse_hypothesis_quality_repair_template(
             ),
             "expected_effect": (
                 "Declare activation and effect diagnostics that should move if "
-                "the mechanism is real."
+                "the mechanism is real, including whether split_delta or "
+                "cost_delta is the intended effect scope."
             ),
             "no_op_condition": (
                 "State the guard that returns the original solution when the "
@@ -921,7 +994,13 @@ def _warehouse_hypothesis_quality_repair_template(
             ),
             "risk_to_higher_priority": (
                 "Acknowledge no hierarchical gain / median-delta-zero formal "
-                "failure risk."
+                "failure risk, and frozen/runtime risk for cost-only "
+                "compression."
+            ),
+            "runtime_budget_strategy": (
+                "Name the bounded search policy, e.g. top_k candidate pairs, "
+                "max_candidates cap, early exit after the first accepted move, "
+                "or another runtime budget."
             ),
         },
         "must_not": [
@@ -932,7 +1011,11 @@ def _warehouse_hypothesis_quality_repair_template(
     }
 
 
-def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
+def _missing_transfer_patch_quality(
+    code: str,
+    *,
+    target_files: Sequence[str] = (),
+) -> tuple[str, ...]:
     if not str(code or "").strip():
         return ("activation_effect_diagnostic_code", "screening_or_lexicographic_guard")
     signal_text = _code_signal_text(code)
@@ -941,6 +1024,8 @@ def _missing_transfer_patch_quality(code: str) -> tuple[str, ...]:
         missing.append("activation_effect_diagnostic_code")
     if not _patch_has_screening_or_lexicographic_guard(code, signal_text):
         missing.append("screening_or_lexicographic_guard")
+    if _patch_has_unbounded_merge_vehicle_pair_scan(code, target_files):
+        missing.append("bounded_candidate_policy")
     return tuple(missing)
 
 
@@ -972,6 +1057,14 @@ def _warehouse_patch_quality_repair_template(
                 "no_op_condition",
                 "lexicographic guard comparing subcategory_splits and total_cost",
             ],
+            "bounded_candidate_policy": [
+                "top_k",
+                "limit",
+                "max_candidates",
+                "candidate cap",
+                "early exit",
+                "sorted candidates sliced before expensive trial evaluation",
+            ],
         },
         "minimal_shape": [
             "Initialize or update self.validation_transfer_diagnostics on the operator instance; local dictionaries are not exportable telemetry.",
@@ -979,6 +1072,7 @@ def _warehouse_patch_quality_repair_template(
             "Increment an eligible_* counter only when the case-general precondition is true.",
             "Compute split_delta and cost_delta before accepting a move.",
             "Only accept when the move improves subcategory_splits or preserves splits and improves total_cost.",
+            "For merge-style vehicle scans, bound candidate pairs before expensive evaluation.",
             "Return the original solution when the move is screening-only, not case-general, or lexicographically dominated.",
         ],
         "example_identifiers": [
@@ -990,11 +1084,14 @@ def _warehouse_patch_quality_repair_template(
             "cost_delta_sum",
             "improving_move_count",
             "screening_only_guard",
+            "top_k",
+            "max_candidates",
         ],
         "must_not": [
             "Do not add counters in comments only; identifiers must appear in executable code.",
             "Do not store diagnostics only in a local dict; the solver exports self.validation_transfer_diagnostics from operator instances.",
             "Do not accept moves that worsen subcategory_splits for a cost-only gain.",
+            "Do not run an unbounded nested vehicle-pair scan in merge_vehicles.py.",
         ],
         "decision_features_excluded": True,
     }
@@ -1615,6 +1712,176 @@ def _mentions_screening_only_guard(text: str) -> bool:
             "guard",
         )
     )
+
+
+def _mentions_effect_scope_or_split_cost_risk(text: str) -> bool:
+    has_scope_term = any(
+        term in text
+        for term in (
+            "effect scope",
+            "intended effect",
+            "split-positive",
+            "split positive",
+            "split_delta",
+            "split delta",
+            "cost_delta",
+            "cost delta",
+            "split-preserving",
+            "split preserving",
+            "cost-only",
+            "cost only",
+        )
+    )
+    has_split = any(term in text for term in ("split_delta", "split delta", "split"))
+    has_cost = any(term in text for term in ("cost_delta", "cost delta", "cost"))
+    if not (has_scope_term and has_split and has_cost):
+        return False
+    if any(term in text for term in ("cost-only", "cost only", "split-preserving")):
+        return any(
+            term in text
+            for term in (
+                "overfit",
+                "overfitting",
+                "frozen",
+                "holdout",
+                "runtime",
+                "validation distribution",
+                "screening/validation",
+            )
+        )
+    return True
+
+
+def _mentions_runtime_bounded_acceptance(text: str) -> bool:
+    return any(
+        term in text
+        for term in (
+            "top-k",
+            "top_k",
+            "top k",
+            "limit",
+            "max_candidates",
+            "max candidates",
+            "candidate cap",
+            "cap candidate",
+            "early-exit",
+            "early exit",
+            "runtime budget",
+            "time budget",
+            "bounded candidate",
+            "bounded search",
+        )
+    )
+
+
+def _patch_has_unbounded_merge_vehicle_pair_scan(
+    code: str,
+    target_files: Sequence[str],
+) -> bool:
+    normalized_targets = {
+        _normalize_patch_path(path) for path in target_files if str(path or "").strip()
+    }
+    if "operators/merge_vehicles.py" not in normalized_targets:
+        return False
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError:
+        return False
+    if not _has_nested_vehicle_pair_loop(tree):
+        return False
+    return not _has_executable_bounded_candidate_policy(tree)
+
+
+def _has_nested_vehicle_pair_loop(tree: ast.AST) -> bool:
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.For):
+            continue
+        if not _loop_mentions_vehicle_pair_space(node):
+            continue
+        for child in ast.walk(node):
+            if child is node or not isinstance(child, ast.For):
+                continue
+            if _loop_mentions_vehicle_pair_space(child):
+                return True
+    return False
+
+
+def _loop_mentions_vehicle_pair_space(node: ast.For) -> bool:
+    text = " ".join(
+        (
+            _ast_signal_text(node.target),
+            _ast_signal_text(node.iter),
+        )
+    )
+    return "vehicle" in text or "vehicles" in text
+
+
+_BOUNDED_CANDIDATE_TERMS = frozenset(
+    {
+        "top_k",
+        "topk",
+        "limit",
+        "max_candidates",
+        "candidate_cap",
+        "pair_cap",
+        "merge_cap",
+        "runtime_budget",
+        "time_budget",
+    }
+)
+
+
+def _has_executable_bounded_candidate_policy(tree: ast.AST) -> bool:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript) and _slice_has_upper_bound(node.slice):
+            if _expr_uses_bounded_candidate_term(node.slice):
+                return True
+        if isinstance(node, ast.Call) and _call_name(node.func) == "islice":
+            return True
+        if isinstance(node, ast.If):
+            test_uses_bound = _expr_uses_bounded_candidate_term(node.test)
+            has_exit = any(
+                isinstance(child, (ast.Break, ast.Return))
+                for child in ast.walk(node)
+            )
+            if test_uses_bound and has_exit:
+                return True
+            if _is_accepted_move_early_exit(node) and has_exit:
+                return True
+    return False
+
+
+def _slice_has_upper_bound(node: ast.AST) -> bool:
+    return isinstance(node, ast.Slice) and node.upper is not None
+
+
+def _expr_uses_bounded_candidate_term(node: ast.AST | None) -> bool:
+    if node is None:
+        return False
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name) and child.id.lower() in _BOUNDED_CANDIDATE_TERMS:
+            return True
+        if (
+            isinstance(child, ast.Attribute)
+            and child.attr.lower() in _BOUNDED_CANDIDATE_TERMS
+        ):
+            return True
+    return False
+
+
+def _is_accepted_move_early_exit(node: ast.If) -> bool:
+    text = _ast_signal_text(node.test)
+    if not any(term in text for term in ("accepted_moves", "improving_move_count")):
+        return False
+    return any(isinstance(child, ast.Compare) for child in ast.walk(node.test))
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
 
 
 def _patch_changes(patch: Any) -> tuple[Any, ...]:

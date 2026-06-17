@@ -194,6 +194,9 @@ def test_warehouse_adapter_exposes_active_subject_code_constraints() -> None:
     assert "improving_move_count" in rendered
     assert "activation" in rendered
     assert "effect counters" in rendered
+    assert "split-preserving cost-only compression" in rendered
+    assert "unbounded full vehicle-pair scans" in rendered
+    assert "top_k" in rendered
     assert "lexicographic" in rendered
     assert "Comments or string mentions" in rendered
 
@@ -357,6 +360,8 @@ def test_warehouse_quality_check_blocks_missing_validation_transfer_claims() -> 
     assert "validation_transfer_risk" in check.detail
     assert "activation_effect_diagnostics" in check.detail
     assert "screening_only_guard" in check.detail
+    assert "effect_scope_or_split_cost_risk" in check.detail
+    assert "runtime_bounded_acceptance" in check.detail
     assert (
         check.structured_rejection["gate_name"]
         == "warehouse_validation_transfer_quality"
@@ -458,7 +463,9 @@ def test_warehouse_quality_check_allows_transfer_and_diagnostics_claims() -> Non
         ),
         expected_effect=(
             "Activation/effect diagnostics should show accepted_moves and "
-            "split_delta_sum positive, not merely screening wins."
+            "split_delta_sum positive, not merely screening wins. The intended "
+            "effect scope is true split-positive improvement, with cost_delta "
+            "as a secondary tie-breaker."
         ),
         no_op_condition=(
             "Guard and return the original solution when the move would be "
@@ -466,6 +473,10 @@ def test_warehouse_quality_check_allows_transfer_and_diagnostics_claims() -> Non
         ),
         risk_to_higher_priority=(
             "Validation transfer risk is a median delta 0 no hierarchical gain."
+        ),
+        runtime_budget_strategy=(
+            "Use a top_k candidate cap and early exit after one accepted merge "
+            "to keep runtime comparable to the champion."
         ),
         expected_telemetry={
             "activation": ["accepted_moves"],
@@ -477,6 +488,102 @@ def test_warehouse_quality_check_allows_transfer_and_diagnostics_claims() -> Non
         SimpleNamespace(adapter=adapter),
         branch,
         hypothesis,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_hypothesis_quality_rejects_missing_split_cost_effect_scope() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine merge_vehicles for screening-to-validation transfer using "
+            "case-general same-subcategory groups."
+        ),
+        change_locus="vehicle_level",
+        action="modify",
+        target_file="operators/merge_vehicles.py",
+        target_weakness=(
+            "A screening-positive merge can fail formal validation with no "
+            "hierarchical gain."
+        ),
+        expected_effect=(
+            "Activation/effect diagnostics should show operator_invocations, "
+            "accepted_moves, and improving_move_count positive."
+        ),
+        no_op_condition=(
+            "Return the original solution when the move is screening-only or "
+            "lexicographically dominated on formal cases."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is median delta 0 on formal cases."
+        ),
+        runtime_budget_strategy=(
+            "Use a top_k candidate cap and early exit after one accepted merge."
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+
+    assert check.allowed is False
+    assert "effect_scope_or_split_cost_risk" in check.detail
+    assert "runtime_bounded_acceptance" not in check.detail
+
+
+def test_warehouse_hypothesis_quality_rejects_missing_runtime_bound() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Refine merge_vehicles for screening-to-validation transfer using "
+            "case-general same-subcategory groups."
+        ),
+        change_locus="vehicle_level",
+        action="modify",
+        target_file="operators/merge_vehicles.py",
+        target_weakness=(
+            "A screening-positive merge can fail formal validation with no "
+            "hierarchical gain."
+        ),
+        expected_effect=(
+            "Activation/effect diagnostics should show operator_invocations, "
+            "accepted_moves, split_delta_sum, and cost_delta_sum. The intended "
+            "effect scope is true split-positive improvement, with cost_delta "
+            "as a secondary tie-breaker."
+        ),
+        no_op_condition=(
+            "Return the original solution when the move is screening-only or "
+            "lexicographically dominated on formal cases."
+        ),
+        risk_to_higher_priority=(
+            "Validation transfer risk is median delta 0 on formal cases."
+        ),
+    )
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        hypothesis,
+    )
+
+    assert check.allowed is False
+    assert "runtime_bounded_acceptance" in check.detail
+    assert "effect_scope_or_split_cost_risk" not in check.detail
+
+
+def test_warehouse_hypothesis_quality_allows_split_cost_scope_and_runtime_bound() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+
+    check = validate_problem_hypothesis_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
     )
 
     assert check.allowed is True
@@ -565,6 +672,47 @@ class MergeVehicles:
     check = validate_problem_patch_quality(
         SimpleNamespace(adapter=adapter),
         branch,
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_rejects_unbounded_nested_vehicle_pair_scan() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content=_merge_vehicle_pair_scan_code(bounded=False),
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "bounded_candidate_policy" in check.detail
+    template = check.structured_rejection["repair_template"]
+    assert "bounded_candidate_policy" in template["missing_items"]
+
+
+def test_warehouse_patch_quality_allows_bounded_top_k_vehicle_pair_scan() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content=_merge_vehicle_pair_scan_code(bounded=True),
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
         _warehouse_transfer_quality_hypothesis(),
         patch,
     )
@@ -661,7 +809,9 @@ def test_warehouse_quality_allows_existing_operator_runtime_key_shape() -> None:
         expected_effect=(
             "Activation/effect diagnostics should show "
             "operator_diagnostics.move_order.operator_invocations and "
-            "operator_diagnostics.move_order.split_delta_sum positive."
+            "operator_diagnostics.move_order.split_delta_sum positive. The "
+            "intended effect scope is true split-positive improvement, with "
+            "cost_delta as a secondary tie-breaker."
         ),
         no_op_condition=(
             "Return the original solution when the move is screening-only, "
@@ -669,6 +819,9 @@ def test_warehouse_quality_allows_existing_operator_runtime_key_shape() -> None:
         ),
         risk_to_higher_priority=(
             "Validation transfer risk is no hierarchical gain on formal cases."
+        ),
+        runtime_budget_strategy=(
+            "Use a top_k order-pair cap and early exit after one accepted move."
         ),
         expected_telemetry={
             "activation": [
@@ -728,7 +881,9 @@ def test_warehouse_quality_allows_create_new_operator_runtime_key_shape() -> Non
         expected_effect=(
             "Activation/effect diagnostics should show "
             f"operator_diagnostics.{runtime_key}.operator_invocations and "
-            f"operator_diagnostics.{runtime_key}.split_delta_sum positive."
+            f"operator_diagnostics.{runtime_key}.split_delta_sum positive. "
+            "The intended effect scope is true split-positive improvement, "
+            "with cost_delta as a secondary tie-breaker."
         ),
         no_op_condition=(
             "Return the original solution when a merge is screening-only, not "
@@ -736,6 +891,9 @@ def test_warehouse_quality_allows_create_new_operator_runtime_key_shape() -> Non
         ),
         risk_to_higher_priority=(
             "Validation transfer risk is no hierarchical gain on formal cases."
+        ),
+        runtime_budget_strategy=(
+            "Use a max_candidates cap and early exit after one accepted merge."
         ),
         expected_telemetry={
             "activation": [
@@ -1310,16 +1468,70 @@ def _warehouse_transfer_quality_hypothesis() -> HypothesisProposal:
             "Activation/effect diagnostics should show operator_invocations, "
             "eligible_vehicle_or_order_groups_seen, accepted_moves, "
             "split_delta_sum, cost_delta_sum, and improving_move_count "
-            "positive, not merely screening wins."
+            "positive, not merely screening wins. The intended effect scope is "
+            "true split-positive improvement, with cost_delta as a secondary "
+            "tie-breaker rather than split-preserving cost-only compression."
         ),
         no_op_condition=(
             "Guard and return the original solution when the move would be "
             "screening-only or lexicographically dominated on formal cases."
         ),
         risk_to_higher_priority=(
-            "Validation transfer risk is a median delta 0 no hierarchical gain."
+            "Validation transfer risk is a median delta 0 no hierarchical gain; "
+            "if a candidate only compresses cost while preserving splits, it "
+            "may overfit screening/validation and regress frozen/runtime."
+        ),
+        runtime_budget_strategy=(
+            "Use a top_k candidate-pair cap and early exit after one accepted "
+            "merge to bound runtime."
         ),
     )
+
+
+def _merge_vehicle_pair_scan_code(*, bounded: bool) -> str:
+    candidate_policy = ""
+    iter_source = "candidate_pairs"
+    if bounded:
+        candidate_policy = """
+        top_k = 8
+        candidate_pairs = sorted(candidate_pairs, key=lambda item: item[0])[:top_k]
+"""
+    return f"""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {{
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }}
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidate_pairs = []
+        for source_id, source_vehicle in solution.vehicles.items():
+            for target_id, target_vehicle in solution.vehicles.items():
+                if source_id == target_id:
+                    continue
+                candidate_pairs.append((0, source_id, target_id))
+{candidate_policy}
+        for _score, source_id, target_id in {iter_source}:
+            diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+            candidate = solution.deep_copy()
+            split_delta = 1
+            cost_delta = 10
+            diagnostics["split_delta_sum"] += split_delta
+            diagnostics["cost_delta_sum"] += cost_delta
+            if split_delta < 0 or (split_delta == 0 and cost_delta <= 0):
+                return solution
+            diagnostics["accepted_moves"] += 1
+            diagnostics["improving_move_count"] += 1
+            return candidate
+        return solution
+"""
 
 
 def _valid_validation_transfer_operator_code(class_name: str) -> str:
