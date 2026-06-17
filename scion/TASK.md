@@ -3141,15 +3141,20 @@ Field gate:
   proposal-quality, or `DecisionFeatures` behavior changed. Focused validation
   passed data-root/path-safety tests (`10 passed`), canary taxonomy/evaluation
   tests (`18 passed`), py_compile, and `git diff --check`.
-- Committed and pushed: copied-config data-root fallback as `5630697`. A short
-  local warehouse production `6R` field check is running from that commit at
+- Completed: copied-config data-root fallback field gate from `5630697`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-datarootfallback-full-rerun6r-postrun-20260617.md`.
+  Run root:
   `/home/clawd/research/scion-experiments/v04-warehouse-datarootfallback-full-rerun6r-5630697-20260617T132912Z`.
-  Current partial field evidence already clears the previous
-  `invalid_no_protocol_rows` failure shape: strict canary paths resolve under
-  `/home/clawd/research/scion-data`, and the run has produced formal
-  screening Protocol metric rows instead of failing before Protocol. Final
-  acceptance still waits for wrapper exit, `run_validity`, stage counts, and
-  branch-level research-quality audit.
+  Wrapper exit `0`, `run_validity.status=valid`,
+  `effective_rounds_completed=6/6`, `protocol_metric_results=10`, stage counts
+  `screening=9`, `validation=1`, `frozen=0`, and champion stayed v1. This
+  field-accepts the copied-config data-root fallback: the prior
+  `invalid_no_protocol_rows` / `CANARY_CONFIG_ERROR` shape did not recur, all
+  inspected case paths resolved under `/home/clawd/research/scion-data`, and
+  the run reached validation. Research quality remains rejected: no frozen row,
+  no promotion, and the validation `swap_orders` candidate failed with
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`.
 - Integrated and locally accepted: CVRP no-LLM mechanism diagnostics plus the
   size70/two-opt active solver fallback. Report:
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md`.
@@ -3159,8 +3164,10 @@ Field gate:
   `DecisionFeatures`. Solver runtime tests, research-surface tests, matrix
   tests, py_compile, `git diff --check`, dry-run, and one tiny live smoke all
   passed.
-- Next gates: finish the live warehouse postrun before accepting/rejecting the
-  sequential guard field repair. The first small WSL no-LLM CVRP
+- Next gates: do a focused warehouse branch/trace audit of the `swap_orders`
+  validation failure and the remaining proposal/code quality blocks, especially
+  session `549918fe-964b-46b7-b2ed-05bb041cea73`, before another warehouse
+  live rerun. The first small WSL no-LLM CVRP
   family/slice/mechanism matrix is complete and documented in
   `scion/docs/experiments/v0.4/v04-cvrp-mechanism-matrix-wsl-224ca7f-postrun-20260617.md`.
   It completed `96/96` rows and confirms the matrix runner/overlay path, but

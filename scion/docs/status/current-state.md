@@ -274,14 +274,21 @@ Latest warehouse state:
   `DecisionFeatures` behavior changed. Validation passed data-root/path-safety
   tests (`10 passed`), canary taxonomy/evaluation tests (`18 passed`),
   py_compile, and `git diff --check`.
-- The copied-config data-root fallback was committed and pushed as `5630697`.
-  A short local warehouse production `6R` field gate is running at
+- The copied-config data-root fallback field gate from `5630697` is complete.
+  Postrun:
+  [`../experiments/v0.4/v04-warehouse-datarootfallback-full-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-datarootfallback-full-rerun6r-postrun-20260617.md).
+  Run root:
   `/home/clawd/research/scion-experiments/v04-warehouse-datarootfallback-full-rerun6r-5630697-20260617T132912Z`.
-  Current partial evidence clears the previous `invalid_no_protocol_rows`
-  shape: strict case paths resolve under `/home/clawd/research/scion-data` and
-  the campaign has produced formal screening Protocol rows. Final acceptance
-  still waits for wrapper exit, `run_validity`, stage reconciliation, and
-  branch-level research-quality audit.
+  Wrapper exit `0`, `run_validity.status=valid`,
+  `effective_rounds_completed=6/6`, `protocol_metric_results=10`, stage counts
+  `screening=9`, `validation=1`, `frozen=0`, and champion stayed v1. This
+  field-accepts the data-root fallback and rejects research-quality
+  acceptance: the previous `invalid_no_protocol_rows` / `CANARY_CONFIG_ERROR`
+  shape is gone, but the only validation row (`swap_orders`) failed
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, and no frozen/promotion row occurred.
+  Next warehouse work should be focused branch/trace analysis of `swap_orders`
+  validation behavior and the remaining true-or-suspect quality blocks, not a
+  broad warehouse matrix.
 
 Latest CVRP/VRP state:
 
