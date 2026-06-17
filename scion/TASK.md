@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse `swap_orders` validation audit complete; CVRP focused case diagnostics prepared*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP instrumentation matrix next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3267,22 +3267,27 @@ Field gate:
   within each case, so win/loss variation comes from later ALNS random paths.
   Next CVRP work should use these probes to design a richer early-ALNS
   starvation or budget-pressure scheduling hypothesis before any LLM campaign.
-- Launched the warehouse validation-transfer acceptance-contract short
+- Completed the warehouse validation-transfer acceptance-contract short
   behavior gate from commit `ce5d884`. Launch report:
   `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`.
   WSL root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
   server sync root:
   `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`;
-  tmux session: `scion_wh_vt_contract_rerun6r_ce5d884_152944`.
-  Shape: one warehouse production `6R` cell, `rep01/full_context`,
+  shape: one warehouse production `6R` cell, `rep01/full_context`,
   measurement governance `on`, disabled early stop, full proposal context,
-  local WSL `gpt-5.5`, and no stage-drain/retry/session-timeout override.
-  Initial health check passed: `status=running`, campaign log reached
-  `Starting campaign: warehouse_delivery`, and early `llm_traces/`,
-  `agentic_sessions/`, `run_status.json`, `status.json`, and `scion.db`
-  artifacts exist. Accept only as behavior evidence unless validation/frozen/
-  promotion or clear branch-depth improvement appears.
+  local WSL `gpt-5.5`, and no stage-drain/retry/session-timeout override. The
+  run is valid and complete: wrapper `exit_code=0`, stopped reason
+  `max_rounds_exhausted`, `6/6` effective rounds, `8` Protocol rows, stage
+  counts `screening=5`, `validation=2`, `frozen=1`, `6` proposal quality
+  blocks, `0` verification-consumed failures, and champion v2 promoted. This
+  field-accepts the warehouse acceptance-contract behavior and is positive
+  v0.4 warehouse recovery evidence. It is not a final continuous-promotion
+  proof: the promoted `pack_compatible_vehicles` mechanism is split-preserving
+  cost compression, so `split_delta_sum=0` remains a nonblocking diagnostic
+  while `cost_delta_sum` is positive.
 - Implemented local CVRP scheduler-iteration telemetry repair. Report:
   `scion/docs/experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`.
   The repair fixes construction/initial-VNS phase accounting, adds

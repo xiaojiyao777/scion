@@ -22,16 +22,22 @@ used as an append-only experiment log. Detailed run facts live in
 
 Warehouse:
 
-- The framework path is no longer catastrophically blocked: recent warehouse
-  gates can reach Protocol, validation, and in some runs frozen holdout.
-- Continuous improvement is still not recovered. The active bottleneck is
-  proposal/code behavior for validation-transfer operators: candidates often
-  preserve split count and compress cost, or omit executable split/cost
-  diagnostics and bounded candidate policy.
-- The latest local repair strengthened warehouse-owned guidance and code
-  constraints for validation transfer: prefer split-positive moves; accept
-  split-preserving cost-only moves only with executable `split_delta == 0` and
-  `cost_delta > 0`; export deltas; no-op when no candidate qualifies.
+- The short validation-transfer acceptance-contract WSL gate completed cleanly
+  from commit `ce5d884` and is accepted as positive warehouse recovery
+  evidence:
+  [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md).
+- The run reached screening, validation, frozen holdout, and promoted champion
+  `v2`: `6/6` effective rounds, `8` Protocol rows, stage counts
+  `screening=5`, `validation=2`, `frozen=1`, `1` promotion, wrapper exit `0`,
+  and run validity `valid`.
+- The promoted `pack_compatible_vehicles` operator is a split-preserving
+  cost-compression mechanism. It matched the repaired contract by computing
+  `split_delta == 0`, `cost_delta > 0`, exporting diagnostics, bounding
+  enumeration, and no-oping when no candidate qualifies.
+- This is a warehouse recovery checkpoint, not a final continuous-promotion
+  proof. The remaining measurement caveat is that diagnostics still emit
+  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` for zero `split_delta_sum` even when the
+  declared useful effect is cost compression.
 
 CVRP/VRP:
 
@@ -52,34 +58,23 @@ CVRP/VRP:
 
 ## Active Work
 
-- Warehouse short field gate is running on WSL from commit `ce5d884`.
-  Launch report:
-  [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md).
-- WSL root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`.
-- Server sync root:
-  `/home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z`.
-- tmux session: `scion_wh_vt_contract_rerun6r_ce5d884_152944`.
-- Shape: one warehouse production `6R` cell, `rep01/full_context`,
-  measurement governance `on`, disabled early stop, WSL-local `gpt-5.5`, and
-  no stage-drain/retry/session-timeout override.
-- Initial health passed. The first observed signal was a problem-owned quality
-  block for a missing `screening_or_lexicographic_guard`, which is behavior
-  evidence only until the run completes.
+- No LLM campaign is currently running.
+- WSL still needs to be fast-forwarded from the completed warehouse run commit
+  to the latest pushed CVRP telemetry commit before launching the next no-LLM
+  matrix.
 
 ## Next Actions
 
-1. Finish the running warehouse gate: sync artifacts back, write a postrun, and
-   judge behavior acceptance separately from research-quality acceptance.
-2. Commit and sync the CVRP scheduler-local instrumentation slice after the
-   running warehouse gate no longer depends on the WSL checkout state.
-3. Run a compact no-LLM CVRP instrumentation validation matrix before any
+1. Fast-forward the WSL runner checkout to the latest pushed branch head.
+2. Run a compact no-LLM CVRP instrumentation validation matrix before any
    agentic CVRP campaign. Preferred first matrix: `P-n76-k4`, `CMT2`, `CMT4`,
    `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns`,
    `embedded_vns_disabled`, and `pure_alns_no_polish`. Expand only if the new
    trace is informative.
-4. Only after warehouse behavior is accepted and CVRP instrumentation is
-   informative, decide whether to run longer warehouse/CVRP campaigns.
+3. Use the CVRP matrix to decide whether the next CVRP repair is scheduler
+   semantics, opportunity diagnostics, or a narrow agentic solver-design brief.
+4. Keep a later warehouse repeat available to test whether champion `v2`
+   enables continuous follow-on improvement.
 
 ## Evidence Index
 
@@ -94,6 +89,7 @@ Warehouse current evidence:
 
 - [`../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-acceptance-contract-repair-20260617.md)
 - [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-launch-20260617.md)
+- [`../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-validation-transfer-contract-rerun6r-postrun-20260617.md)
 
 CVRP current evidence:
 
