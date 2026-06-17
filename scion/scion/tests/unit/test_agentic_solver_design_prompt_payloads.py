@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
-from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.engine import (
+    _split_code_context,
+    _split_hypothesis_context,
+    _split_hypothesis_target_intent_context,
+)
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_solver_design_test_support import *
 
@@ -53,6 +57,35 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
         }
     )
 
+    assert "adaptive embedded-VNS cadence-2" in user_prompt
+    assert "remaining-budget, recent best-update" in user_prompt
+    assert "repaired-candidate-improvement signals" in user_prompt
+
+
+def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
+    _system_blocks, user_prompt = _split_hypothesis_target_intent_context(
+        {
+            "problem_summary": "CVRP.",
+            "research_surfaces": "solver_design [solver_design]",
+            "objective_policy_guidance": "",
+            "solver_mechanics": "",
+            "champion_operators_code": "",
+            "champion_stats": "{}",
+            "operator_categories": "solver_design",
+            "available_actions": "modify",
+            "targetable_files": "policies/baseline_modules/scheduler.py",
+            "active_problem_boundary_surfaces": "solver_design",
+            # Agentic target-intent runs before final hypothesis binding, so it
+            # also needs the durable ref when sanitizer drops provider objects.
+            "solver_design_prompt_provider": {"sanitized": True},
+            "solver_design_prompt_provider_ref": (
+                "scion.problems.cvrp.solver_design_provider."
+                "CvrpSolverDesignProvider"
+            ),
+        }
+    )
+
+    assert "Solver-design target-selection guidance" in user_prompt
     assert "adaptive embedded-VNS cadence-2" in user_prompt
     assert "remaining-budget, recent best-update" in user_prompt
     assert "repaired-candidate-improvement signals" in user_prompt

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP agentic research-loop evidence positive; cadence-trigger prompt repair rerun next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP agentic research-loop evidence positive; target-intent cadence steering repair next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3387,6 +3387,23 @@ Field gate:
   related provider/context/prompt tests `45 passed`, py_compile passed, and
   `git diff --check` passed. Next gate is to rerun a short targeted CVRP
   campaign and first verify the cadence-2 opportunity text in live traces.
+- Completed that targeted WSL CVRP agentic `1R` campaign from commit
+  `6c842f6`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`.
+  The run finished with wrapper `exit_code=0`, run validity `valid`,
+  `1` effective screening round, `1` formal candidate artifact, `32/32`
+  screening pairs, `0` failed pairs, and high-confidence runtime evidence.
+  It field-verifies provider-ref recovery for the final hypothesis prompt: the
+  live `hypothesis` trace contains the cadence-2 opportunity text. It also
+  identifies the next steering fault: `hypothesis_target_intent` did not see
+  that guidance, selected `route_merge_savings_vns` in `local_search.py`, and
+  the final hypothesis correctly stayed bound to that preflight target. This is
+  accepted as framework/prompt evidence, not as cadence-2 refinement evidence.
+  Local repair now exposes solver-design guidance to target-intent preflight
+  whenever solver-design is targetable; focused prompt tests pass. Next gate is
+  commit/push, WSL fast-forward, and a short rerun whose first
+  `hypothesis_target_intent` trace itself contains cadence-2 guidance before
+  the selected mechanism is interpreted.
 
 ## Status Cadence
 

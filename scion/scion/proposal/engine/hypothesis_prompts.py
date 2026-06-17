@@ -399,6 +399,13 @@ def _split_hypothesis_target_intent_context(
             "hypothesis; it requires a clean branch/fork signal before formal "
             "hypothesis generation."
         )
+    if _target_intent_solver_design_context(
+        forced_surface=forced_surface,
+        active_boundary=active_boundary,
+        operator_categories=str(D["operator_categories"]),
+    ):
+        task_lines.append("Solver-design target-selection guidance:")
+        task_lines.extend(_solver_design_hypothesis_guidance(context))
     task_lines.extend(
         _material_difference_requirement_task_lines(context, preflight=True)
     )
@@ -413,6 +420,18 @@ def _split_hypothesis_target_intent_context(
         "- `confidence` and `notes` when useful\n"
     )
     return system_blocks, user_prompt
+
+
+def _target_intent_solver_design_context(
+    *,
+    forced_surface: str,
+    active_boundary: str,
+    operator_categories: str,
+) -> bool:
+    for value in (forced_surface, active_boundary, operator_categories):
+        if "solver_design" in str(value or ""):
+            return True
+    return False
 
 
 _AGENTIC_CONTEXT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)

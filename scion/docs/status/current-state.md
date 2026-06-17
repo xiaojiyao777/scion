@@ -104,23 +104,40 @@ CVRP/VRP:
   opportunity text was absent from live hypothesis prompts. The prompt engine
   used fallback solver-design guidance because agentic context sanitization
   removed the provider object and the resolver did not recover from
-  `solver_design_prompt_provider_ref`. A local prompt-provider-ref repair and
-  cadence-specific guidance wording repair are in place and covered by focused
-  tests; the next CVRP run must verify the cadence-2 text appears in live
-  traces before interpreting mechanisms as cadence-trigger refinements.
+  `solver_design_prompt_provider_ref`. The prompt-provider-ref repair and
+  cadence-specific guidance wording repair are now accepted by focused tests
+  and field-verified for final hypothesis rendering.
+- The targeted post-repair CVRP agentic `1R` WSL run completed with wrapper
+  `exit_code=0`, run validity `valid`, `1` effective screening round, `1`
+  formal candidate artifact, `32/32` screening pairs, `0` failed pairs, and
+  high-confidence runtime evidence:
+  [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md).
+  It verified that the final `hypothesis` trace contains cadence-2 opportunity
+  text, but the earlier `hypothesis_target_intent` trace does not. The agent
+  selected `route_merge_savings_vns` in `local_search.py`, stayed bound to that
+  target, and produced an `active_marginal` branch rather than a cadence-trigger
+  refinement.
+- The current CVRP prompt steering fault is therefore precise: problem-owned
+  solver-design opportunity guidance reaches the final hypothesis call too
+  late to steer target/action/mechanism selection. A local proposal-layer
+  repair now exposes solver-design guidance to `hypothesis_target_intent`
+  whenever solver-design is targetable. This remains proposal-only and outside
+  `DecisionFeatures`.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL is fast-forwarded to the latest pushed
-  `codex/v04-evidence-repair-plan` branch; the CVRP no-LLM and latest agentic
-  artifacts are synced back to the server.
+- Local code has a focused target-intent prompt repair and regression test.
+  WSL must be fast-forwarded after commit/push before the next CVRP agentic
+  rerun.
+- The latest CVRP no-LLM and agentic artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Commit and push the prompt-provider-ref repair, then rerun a short targeted
-   CVRP agentic campaign and first inspect the live hypothesis trace for the
-   cadence-2 opportunity text.
+1. Commit and push the target-intent solver-design guidance repair, fast-forward
+   WSL, then rerun a short targeted CVRP agentic campaign. First inspect the
+   live `hypothesis_target_intent` trace for the cadence-2 opportunity text;
+   only then interpret the selected mechanism.
 2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
    CVRP same-mechanism research line, but do not confuse it with cadence-2
    adaptive-VNS trigger evidence.
@@ -158,6 +175,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md)
 
 WSL coordination:
 
