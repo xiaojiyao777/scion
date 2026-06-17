@@ -306,8 +306,26 @@ Active work as of the latest handoff:
   (`37 passed`), finalization/status reconciliation (`61 passed`), warehouse
   target preview (`29 passed`), runtime telemetry/expected telemetry
   (`41 passed`), agentic session repair/core (`38 passed`), py_compile, and
-  `git diff --check`. Next gate: commit this repair and run one short warehouse
-  production `6R` field check on the 2-core server.
+  `git diff --check`. The repair was committed as `f81bb73` and pushed. Its
+  server-side `6R` field gate is complete; postrun:
+  [`../experiments/v0.4/v04-warehouse-repaircap-rerun6r-postrun-20260617.md`](../experiments/v0.4/v04-warehouse-repaircap-rerun6r-postrun-20260617.md).
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-repaircap-rerun6r-f81bb73-20260617T064032Z`.
+  The run is valid and complete: wrapper `exit_code=0`,
+  `effective_rounds_completed=6`, `protocol_metric_results=7`,
+  stage counts `screening=3`, `validation=2`, `frozen=1`,
+  `quality_blocks=4`, and `stopped_reason=max_rounds_exhausted`. The old
+  run-level `telemetry_repair_attempt_budget_exhausted` did not recur:
+  `campaign_loop.telemetry_repair_attempts=1` and
+  `campaign_loop.telemetry_repair_attempt_limit_exhausted_keys=[]`. Research
+  path recovered through screening expansion, validation expansion, and frozen
+  holdout. The strongest candidate modified `operators/merge_vehicles.py`:
+  screening reached case `8/0/6`, pair `19/0/9`, median `+950.0`; validation
+  passed with median `+22400.0`; frozen holdout failed with median `-650.0`
+  and reason `FROZEN_PROTOCOL_GATE_NOT_PASS`, so no promotion occurred and
+  champion stayed v1. Next active work: analyze why this warehouse candidate
+  overfit validation/fails frozen, and inspect its branch/prompt/code path
+  before deciding whether to run a longer warehouse matrix.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

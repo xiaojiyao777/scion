@@ -959,8 +959,28 @@ Exit criteria:
   (`37 passed`), finalization/status reconciliation (`61 passed`), warehouse
   target preview (`29 passed`), runtime telemetry/expected telemetry
   (`41 passed`), agentic session repair/core (`38 passed`), py_compile, and
-  `git diff --check`. Next gate: commit this repair and run one short warehouse
-  production `6R` field check on the server.
+  `git diff --check`. The repair was committed as `f81bb73` and pushed.
+- Completed: warehouse repair-cap follow-up `6R` field gate from commit
+  `f81bb73`. Postrun report:
+  `scion/docs/experiments/v0.4/v04-warehouse-repaircap-rerun6r-postrun-20260617.md`.
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-repaircap-rerun6r-f81bb73-20260617T064032Z`;
+  wrapper `exit_code=0`, `run_validity.status=valid`,
+  `effective_rounds_completed=6`, `protocol_metric_results=7`, stage counts
+  `screening=3`, `validation=2`, `frozen=1`, `quality_blocks=4`, and
+  `stopped_reason=max_rounds_exhausted`. The old run-level
+  `telemetry_repair_attempt_budget_exhausted` did not recur:
+  `campaign_loop.telemetry_repair_attempts=1` and
+  `campaign_loop.telemetry_repair_attempt_limit_exhausted_keys=[]`. Research
+  path recovered through screening expansion, validation expansion, and frozen
+  holdout. The strongest candidate modified `operators/merge_vehicles.py`:
+  screening reached case `8/0/6`, pair `19/0/9`, median `+950.0`, then
+  validation passed with median `+22400.0` and `queue_frozen`. Frozen holdout
+  failed with median `-650.0`, reason
+  `FROZEN_PROTOCOL_GATE_NOT_PASS`, so no promotion occurred and champion stayed
+  v1. Acceptance: framework repair passes; warehouse research quality is
+  partially restored but still needs frozen-generalization analysis before any
+  broader warehouse matrix.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:
