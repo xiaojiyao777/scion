@@ -3344,6 +3344,21 @@ Field gate:
   and a 1-second P-n76 smoke completed `3/3` with equal total distance while
   reducing embedded-VNS fraction for both new variants. Next gate is the compact
   WSL no-LLM adaptive-trigger matrix.
+- Completed the compact WSL adaptive-trigger matrix from commit `eddaf8c`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`.
+  It completed `80/80` no-LLM rows across `P-n76-k4`, `CMT2`, `CMT4`, and
+  `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns`,
+  `adaptive_embedded_vns_cadence4`, `adaptive_embedded_vns_cadence2`, and
+  `adaptive_embedded_vns_improve_only`; time budget `3s`. Result:
+  `cadence2` is accepted as a problem-owned proposal-context opportunity
+  source, not as a production default. It reduced embedded-VNS share from
+  `0.653` to `0.528`, raised mean ALNS iterations from `4.0` to `6.0`, kept
+  median paired delta `0.0`, and had mean delta `+1.8` with no route/fleet
+  regressions. `improve_only` saved more runtime but lost more quality;
+  cadence-4 remains too blunt. Next CVRP gate is to expose the cadence-2
+  opportunity summary to proposal context and run a short agentic refinement
+  campaign focused on objective/budget/best-update triggers.
 
 ## Status Cadence
 

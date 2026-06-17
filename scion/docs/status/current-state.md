@@ -79,20 +79,29 @@ CVRP/VRP:
   [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md).
   The selectable mechanisms are `adaptive_embedded_vns_cadence2` and
   `adaptive_embedded_vns_improve_only`.
+- The compact WSL adaptive-trigger matrix completed `80/80` no-LLM rows:
+  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md).
+  `adaptive_embedded_vns_cadence2` is accepted as a proposal-context
+  opportunity source, not as a production default: embedded-VNS share dropped
+  from `0.653` to `0.528`, ALNS iterations rose from `4.0` to `6.0`, median
+  paired delta stayed `0.0`, and mean delta was `+1.8`. The next CVRP agent
+  task should refine cadence-2 using objective/budget/best-update triggers,
+  especially preserving `CMT2` gains while avoiding `P-n76-k4` losses.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL was fast-forwarded to matrix run commit `dd5b17a`; the latest no-LLM CVRP
+- WSL was fast-forwarded to matrix run commit `eddaf8c`; the latest no-LLM CVRP
   artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Run the compact no-LLM adaptive-trigger WSL matrix before any long CVRP LLM
-   campaign: canonical, `adaptive_embedded_vns_cadence2`,
-   `adaptive_embedded_vns_improve_only`, and cadence-4 as prior reference.
-2. Feed CVRP proposal context only after a trigger variant preserves paired
-   quality while reducing embedded-VNS pressure.
+1. Add a CVRP problem-owned proposal opportunity summary for cadence-2 adaptive
+   embedded-VNS scheduling; keep raw BKS/case shortcuts out of generic
+   `DecisionFeatures`.
+2. Run a short CVRP agentic campaign to refine cadence-2 with
+   objective/budget/best-update triggers, not broad VNS removal or destroy-ratio
+   tuning.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -124,6 +133,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md)
 
 WSL coordination:
 
