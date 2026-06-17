@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP instrumentation matrix next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP adaptive-trigger tuning next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3319,8 +3319,20 @@ Field gate:
   `EMBEDDED_VNS_CADENCE` is `1`. Local acceptance: py_compile passed,
   runtime/matrix tests `20 passed`, broader related suite `35 passed`, and a
   1-second P-n76 smoke completed `2/2` with adaptive reducing embedded-VNS
-  runtime from `601ms` to `17ms` at equal total distance. Next gate is a WSL
-  no-LLM canonical-vs-adaptive matrix before any agentic CVRP campaign.
+  runtime from `601ms` to `17ms` at equal total distance.
+- Completed the compact WSL canonical-vs-adaptive matrix from commit
+  `dd5b17a`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`.
+  It completed `40/40` no-LLM rows across `P-n76-k4`, `CMT2`, `CMT4`, and
+  `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns` and
+  `adaptive_embedded_vns_cadence4`; time budget `3s`. The result is accepted
+  as mechanism evidence but rejected as a production candidate: whole-matrix
+  embedded-VNS runtime share fell from `0.651` to `0.361`, mean ALNS
+  iterations rose from `4.0` to `8.35`, but paired quality remained worse
+  overall (`4/7/9`, mean delta `+6.95`). Next CVRP gate is a small no-LLM
+  adaptive-trigger matrix (`cadence2`, `improve_only`, or a dynamic
+  budget/best-update trigger) before any agentic CVRP campaign or
+  proposal-context exposure.
 
 ## Status Cadence
 

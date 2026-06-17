@@ -67,19 +67,27 @@ CVRP/VRP:
   `adaptive_embedded_vns_cadence4` keeps initial VNS, runs embedded VNS every
   fourth ALNS iteration, and still polishes candidates that already improve
   current/best after repair. Canonical behavior is unchanged by default.
+- The compact WSL adaptive matrix completed `40/40` no-LLM rows:
+  [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md).
+  It is accepted as mechanism evidence and rejected as a production candidate:
+  whole-matrix embedded-VNS runtime share dropped from `0.651` to `0.361`, mean
+  ALNS iterations rose from `4.0` to `8.35`, but paired quality was still worse
+  overall (`4/7/9`, mean delta `+6.95`). Cadence-only skipping is too blunt for
+  a long CVRP LLM campaign.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL was fast-forwarded to matrix run commit `875dc83`; the latest no-LLM CVRP
+- WSL was fast-forwarded to matrix run commit `dd5b17a`; the latest no-LLM CVRP
   artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Commit and run the WSL no-LLM canonical-vs-`adaptive_embedded_vns_cadence4`
-   probe matrix before any long CVRP LLM campaign.
-2. If the adaptive probe preserves quality while reducing embedded-VNS runtime,
-   feed that problem-owned opportunity summary into CVRP proposal context.
+1. Run a small no-LLM adaptive-trigger follow-up before any long CVRP LLM
+   campaign: `cadence2`, `improve_only`, or a dynamic budget/best-update
+   trigger are the current candidates.
+2. Feed CVRP proposal context only after a trigger variant preserves paired
+   quality while reducing embedded-VNS pressure.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -109,6 +117,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-compact-wsl-dd5b17a-postrun-20260617.md)
 
 WSL coordination:
 
