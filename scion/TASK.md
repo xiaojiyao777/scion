@@ -3296,7 +3296,10 @@ The main thread updates status after each material event:
 
 Status updates must identify the current phase, artifact path, commit/branch,
 tests or commands used for acceptance, known caveats, next gate, and whether the
-next action belongs to the main thread or a subagent.
+next action belongs to the main thread or a subagent. Keep detailed run facts in
+launch/postrun reports. `current-state.md` should stay a short operational
+snapshot, and `v0.4-history.md` should stay a curated milestone index rather
+than an append-only event stream.
 
 Status docs to keep aligned:
 
