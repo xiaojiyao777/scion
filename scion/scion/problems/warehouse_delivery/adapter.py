@@ -403,6 +403,14 @@ Frozen files (do not modify): {frozen}"""
                     "cost-only compression, negative frozen median, and "
                     "roughly 30s runtime regression"
                 ),
+                "latest_formal_no_gain_pattern": (
+                    "swap_orders candidate: screening improved enough to reach "
+                    "formal validation, then validation produced W/T/L 8/1/6 "
+                    "with median delta -200, VALIDATION_FAIL_NO_HIERARCHICAL_GAIN, "
+                    "split_delta_sum 0 across validation transfer diagnostics, "
+                    "and median runtime ratio about 1.025. Cost-only wins were "
+                    "not enough to prove case-general hierarchical improvement."
+                ),
                 "required_hypothesis_claims": [
                     "why the mechanism should transfer beyond screening cases",
                     "what operator activation counter should become positive",
@@ -818,7 +826,11 @@ def _render_validation_transfer_guidance() -> str:
         "same_subcategory_consolidate-style operator that looked positive in "
         "screening but failed formal validation with aggregate 2/3/0, paired "
         "6/9/0, median delta 0, and "
-        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. Before code generation, state "
+        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. A newer `swap_orders` pattern "
+        "reached validation but failed with W/T/L 8/1/6, median delta -200, "
+        "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN, `split_delta_sum` 0, and about "
+        "1.025 median runtime ratio; wins without a positive formal median and "
+        "split/effect transfer are not enough. Before code generation, state "
         "why the mechanism should generalize beyond screening cases, which "
         "operator activation counters should become positive, which effect "
         "counters should show subcategory split or cost improvement, and what "

@@ -126,7 +126,11 @@ research_surfaces:
         split-preserving cost-only compression rather than true split-positive
         improvement, explain why it should not overfit screening/validation
         distribution and how frozen holdout and runtime regression risk are
-        bounded.
+        bounded. A recent swap_orders validation reached W/T/L 8/1/6 but still
+        failed with median delta -200, split_delta_sum equal to zero, and
+        runtime regression; order-level cost-only wins must prove a positive
+        formal median and preserved split structure rather than just isolated
+        screening wins.
       implementation_guidance: >-
         An order-level operator may be invoked repeatedly inside the search
         loop. Precompute vehicle/order summaries once per execute call, inspect
@@ -147,7 +151,9 @@ research_surfaces:
         heavy recomputation on small canary cases. Do not propose an operator
         that only explains why it may pass screening while omitting how it
         avoids the known formal-validation no-gain pattern
-        VALIDATION_FAIL_NO_HIERARCHICAL_GAIN.
+        VALIDATION_FAIL_NO_HIERARCHICAL_GAIN. Do not treat validation W/T/L
+        alone as sufficient when the median delta is non-positive, split_delta
+        is zero, or runtime regresses.
   - name: vehicle_level
     kind: operator
     description: "Warehouse operators that merge, split, resize, or rebuild vehicle assignments."

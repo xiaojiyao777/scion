@@ -108,6 +108,8 @@ def test_warehouse_operator_interfaces_render_problem_owned_guidance() -> None:
     assert "O(n^2) trial evaluation" not in vehicle_interface
     assert "screening-to-validation transfer risk" in order_interface
     assert "operator activation counters" in order_interface
+    assert "swap_orders" in order_interface
+    assert "median delta -200" in order_interface
     assert "effect counters" in vehicle_interface
     assert "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN" in vehicle_interface
     assert "self.validation_transfer_diagnostics" in order_interface
@@ -146,6 +148,9 @@ def test_warehouse_problem_context_surfaces_validation_transfer_diagnostic() -> 
     assert "same_subcategory_consolidate-style operator" in summary
     assert "formal aggregate 2/3/0" in diagnostic
     assert "paired 6/9/0" in diagnostic
+    assert "swap_orders candidate" in diagnostic
+    assert "W/T/L 8/1/6" in diagnostic
+    assert "median delta -200" in diagnostic
     assert "VALIDATION_FAIL_NO_HIERARCHICAL_GAIN" in diagnostic
     assert "operator_invocations" in diagnostic
     assert "split_delta_sum" in diagnostic

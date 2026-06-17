@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 copied-config data-root fallback field gate running; CVRP mechanism diagnostics locally accepted*
+*Status: Phase 4 warehouse `swap_orders` validation audit complete; CVRP focused case diagnostics prepared*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3176,6 +3176,30 @@ Field gate:
   be a focused no-LLM or fixed-candidate diagnostic on the local-win `P` family
   and high-gap canonical cases (`M-n151-k12`, `CMT2`, `CMT4`, `P-n76-k4`)
   before any longer LLM CVRP campaign.
+- Completed the focused warehouse audit and CVRP diagnostic prep. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-swaporders-cvrp-focused-diagnostic-prep-20260617.md`.
+  The `swap_orders` validation failure is accepted as real mechanism
+  insufficiency, not infra, Contract, Verification, or telemetry false failure:
+  it reached validation through expanded pair-level signal, then failed with
+  W/T/L `8/1/6`, median delta `-200`,
+  `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, `split_delta_sum=0`, and about
+  `1.025` median runtime ratio. The latest aggregate no-gain pattern is now
+  visible in warehouse proposal diagnostics and order-level guidance, while
+  remaining excluded from `DecisionFeatures`.
+- Do not tighten generic Decision or Protocol gates in this slice. The
+  validation step produced useful research diagnosis; the next warehouse move
+  should generate a split-positive or honestly split-preserving cost candidate
+  with executable split/cost guards and exported diagnostics.
+- Prepared exact CVRP no-LLM follow-up diagnostics by adding repeatable
+  `--case-id` support to `scion/tools/cvrp_mechanism_matrix.py`. This allows
+  direct P-family/high-gap runs for `P-n76-k4`, `P-n101-k4`,
+  `M-n151-k12`, `CMT2`, and `CMT4` without running a full 16-case matrix.
+  Local acceptance: targeted warehouse/CVRP tests `48 passed`; py_compile
+  passed.
+- WSL usage docs are in the external handoff channel:
+  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
+  and `RSYNC_PATHS.md`. Current live WSL runner path remains
+  `/home/xjy-ubuntu/research/or-autoresearch-agent`.
 
 ## Status Cadence
 

@@ -62,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     cases = load_case_entries(
         args.case_manifest,
         case_limit=args.case_limit,
+        case_id_filter=tuple(args.case_id),
         family_filter=tuple(args.family),
         slice_filter=tuple(args.slice),
     )
@@ -562,6 +563,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--family", action="append", default=[])
     parser.add_argument("--slice", action="append", default=[])
+    parser.add_argument(
+        "--case-id",
+        action="append",
+        default=[],
+        help=(
+            "Case id to include exactly, e.g. P-n76-k4. Repeatable; combines "
+            "with --family and --slice filters before --case-limit is applied."
+        ),
+    )
     parser.add_argument("--case-limit", type=int, default=1)
     parser.add_argument("--seed", action="append", default=[])
     parser.add_argument("--time-budget-sec", default="1")

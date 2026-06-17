@@ -45,6 +45,22 @@ def _case_manifest(path: Path) -> None:
                         "dimension": 64,
                         "bks": 1401.0,
                         "bks_routes": 9,
+                    },
+                    {
+                        "case_id": "P-n76-k4",
+                        "source_path": "cvrplib/P/P-n76-k4.vrp",
+                        "subset": "P",
+                        "dimension": 76,
+                        "bks": 593.0,
+                        "bks_routes": 4,
+                    },
+                    {
+                        "case_id": "CMT4",
+                        "source_path": "cvrplib/CMT/CMT4.vrp",
+                        "subset": "CMT",
+                        "dimension": 151,
+                        "bks": 1028.0,
+                        "bks_routes": 12,
                     }
                 ],
             }
@@ -211,6 +227,60 @@ def test_load_cases_and_cli_dry_run_write_manifest_and_results(
     assert len(results["jobs"]) == 3
     assert {row["status"] for row in results["jobs"]} == {"planned"}
     assert (output_dir / "summary.csv").exists()
+
+
+def test_case_id_filter_selects_exact_cases_before_case_limit(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "cases.json"
+    _case_manifest(manifest_path)
+
+    cases = load_case_entries(
+        manifest_path,
+        case_id_filter=("P-n76-k4", "CMT4"),
+        case_limit=1,
+    )
+
+    assert [case.case_id for case in cases] == ["P-n76-k4"]
+
+
+def test_cli_dry_run_accepts_repeatable_case_id_filter(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "cases.json"
+    _case_manifest(manifest_path)
+    output_dir = tmp_path / "matrix"
+    tool = _load_tool()
+
+    status = tool.main(
+        [
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--repo-root",
+            str(tmp_path / "repo"),
+            "--data-root",
+            str(tmp_path / "vrp"),
+            "--case-manifest",
+            str(manifest_path),
+            "--output-dir",
+            str(output_dir),
+            "--case-id",
+            "P-n76-k4",
+            "--case-id",
+            "CMT4",
+            "--case-limit",
+            "2",
+            "--seed",
+            "11",
+            "--time-budget-sec",
+            "1",
+            "--dry-run",
+        ]
+    )
+
+    assert status == 0
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert [case["case_id"] for case in manifest["cases"]] == ["P-n76-k4", "CMT4"]
+    assert {job["case"]["case_id"] for job in manifest["jobs"]} == {
+        "P-n76-k4",
+        "CMT4",
+    }
 
 
 def _raw_solver_output(*, total_distance: float, routes: int) -> dict[str, object]:

@@ -317,6 +317,24 @@ Latest CVRP/VRP state:
   diagnostics for the local-win `P` family and high-gap canonical cases
   (`M-n151-k12`, `CMT2`, `CMT4`, `P-n76-k4`) before any longer LLM CVRP
   campaign.
+- Focused warehouse audit and CVRP diagnostic preparation are complete:
+  [`../experiments/v0.4/v04-warehouse-swaporders-cvrp-focused-diagnostic-prep-20260617.md`](../experiments/v0.4/v04-warehouse-swaporders-cvrp-focused-diagnostic-prep-20260617.md).
+  The `swap_orders` validation failure is now classified as real mechanism
+  insufficiency, not infra or telemetry false failure: it reached validation
+  through expanded pair-level signal, then failed with W/T/L `8/1/6`, median
+  delta `-200`, `VALIDATION_FAIL_NO_HIERARCHICAL_GAIN`, `split_delta_sum=0`,
+  and about `1.025` median runtime ratio. Warehouse proposal-visible
+  diagnostics now include this aggregate pattern, excluded from
+  `DecisionFeatures`.
+- CVRP exact-case no-LLM diagnostics are prepared: the mechanism matrix tool
+  now supports repeatable `--case-id`, filtering exact cases before
+  `--case-limit`. Use it on synchronized WSL for P-family/high-gap cases
+  before any long LLM CVRP campaign.
+- WSL handoff/connection docs live outside the repo in
+  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
+  and `RSYNC_PATHS.md`.
+- Local acceptance for this slice: targeted warehouse/CVRP tests `48 passed`;
+  py_compile passed.
 
 Active work as of the latest handoff:
 

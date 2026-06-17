@@ -151,6 +151,7 @@ def load_case_entries(
     manifest_path: str | Path,
     *,
     case_limit: int | None = None,
+    case_id_filter: Sequence[str] = (),
     family_filter: Sequence[str] = (),
     slice_filter: Sequence[str] = (),
 ) -> tuple[CvrpMatrixCase, ...]:
@@ -164,6 +165,7 @@ def load_case_entries(
     if not isinstance(cases_payload, list):
         raise ValueError("CVRP case manifest must contain a cases list")
 
+    case_id_allow = {str(item) for item in case_id_filter if str(item).strip()}
     family_allow = {str(item) for item in family_filter if str(item).strip()}
     slice_allow = {str(item) for item in slice_filter if str(item).strip()}
     cases: list[CvrpMatrixCase] = []
@@ -171,6 +173,8 @@ def load_case_entries(
         if not isinstance(item, dict):
             raise ValueError("CVRP case entries must be JSON objects")
         case = _case_from_payload(item)
+        if case_id_allow and case.case_id not in case_id_allow:
+            continue
         if family_allow and case.case_family not in family_allow:
             continue
         if slice_allow and case.case_slice not in slice_allow:
