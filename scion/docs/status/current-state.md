@@ -61,6 +61,12 @@ CVRP/VRP:
   but is still worse or tied overall (`2/8/10`, mean delta `+17.3`). Pure
   ALNS/no-polish is worse (`2/18/0`, mean delta `+35.6`). Do not launch a long
   agentic CVRP campaign from a broad VNS-removal idea.
+- A narrow adaptive embedded-VNS scheduling probe is locally implemented and
+  accepted:
+  [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md).
+  `adaptive_embedded_vns_cadence4` keeps initial VNS, runs embedded VNS every
+  fourth ALNS iteration, and still polishes candidates that already improve
+  current/best after repair. Canonical behavior is unchanged by default.
 
 ## Active Work
 
@@ -70,11 +76,10 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Add or test a narrow adaptive embedded-VNS scheduling probe before any long
-   CVRP LLM campaign.
-2. Feed the accepted CVRP opportunity summary into problem-owned proposal
-   context so agents target adaptive VNS scheduling, not broad VNS removal or
-   vague ALNS tuning.
+1. Commit and run the WSL no-LLM canonical-vs-`adaptive_embedded_vns_cadence4`
+   probe matrix before any long CVRP LLM campaign.
+2. If the adaptive probe preserves quality while reducing embedded-VNS runtime,
+   feed that problem-owned opportunity summary into CVRP proposal context.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -103,6 +108,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md)
 
 WSL coordination:
 

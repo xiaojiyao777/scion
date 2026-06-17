@@ -311,6 +311,13 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
             _overlay_config_bool(workspace, "ENABLE_INITIAL_VNS", False)
         elif overlay == "config_disable_embedded_vns":
             _overlay_config_bool(workspace, "ENABLE_EMBEDDED_VNS", False)
+        elif overlay == "config_adaptive_embedded_vns_cadence4":
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 4)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
+                True,
+            )
         elif overlay == "config_disable_size70_two_opt":
             _overlay_config_bool(workspace, "ENABLE_SIZE70_TWO_OPT_FALLBACK", False)
         elif overlay == "config_vns_threshold_70":
@@ -330,6 +337,13 @@ def _overlay_config_bool(workspace: Path, name: str, value: bool) -> None:
     config_path = workspace / "policies" / "baseline_modules" / "config.py"
     text = config_path.read_text(encoding="utf-8")
     text = _replace_line_prefix(text, f"{name} =", f"{name} = {replacement}")
+    config_path.write_text(text, encoding="utf-8")
+
+
+def _overlay_config_int(workspace: Path, name: str, value: int) -> None:
+    config_path = workspace / "policies" / "baseline_modules" / "config.py"
+    text = config_path.read_text(encoding="utf-8")
+    text = _replace_line_prefix(text, f"{name} =", f"{name} = {int(value)}")
     config_path.write_text(text, encoding="utf-8")
 
 

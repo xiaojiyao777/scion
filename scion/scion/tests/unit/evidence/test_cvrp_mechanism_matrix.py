@@ -98,6 +98,7 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
         "initial_vns_disabled",
         "embedded_vns_disabled",
         "pure_alns_no_polish",
+        "adaptive_embedded_vns_cadence4",
     }
     assert mechanisms["initial_vns_disabled"].overlays == (
         "config_disable_initial_vns",
@@ -108,6 +109,9 @@ def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
     assert mechanisms["pure_alns_no_polish"].overlays == (
         "config_use_vns_false",
         "config_disable_size70_two_opt",
+    )
+    assert mechanisms["adaptive_embedded_vns_cadence4"].overlays == (
+        "config_adaptive_embedded_vns_cadence4",
     )
 
 
@@ -357,6 +361,8 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
             "initial_vns_disabled",
             "--mechanism",
             "pure_alns_no_polish",
+            "--mechanism",
+            "adaptive_embedded_vns_cadence4",
             "--seed",
             "11",
             "--time-budget-sec",
@@ -370,6 +376,7 @@ def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None
     assert [job["mechanism_id"] for job in manifest["jobs"]] == [
         "initial_vns_disabled",
         "pure_alns_no_polish",
+        "adaptive_embedded_vns_cadence4",
     ]
 
 

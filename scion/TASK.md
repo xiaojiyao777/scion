@@ -3310,6 +3310,17 @@ Field gate:
   ALNS/no-polish is `2/18/0` with mean delta `+35.6`. Next CVRP work should
   test adaptive embedded-VNS scheduling/triggering and feed that problem-owned
   opportunity summary into proposal context before any long agentic campaign.
+- Implemented locally: CVRP adaptive embedded-VNS scheduling probe. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-embedded-vns-probe-repair-20260617.md`.
+  The new selectable mechanism `adaptive_embedded_vns_cadence4` keeps initial
+  VNS, runs embedded VNS every fourth ALNS iteration, and still runs embedded
+  VNS when the repaired candidate already improves current/best before polish.
+  Canonical behavior remains unchanged because the default
+  `EMBEDDED_VNS_CADENCE` is `1`. Local acceptance: py_compile passed,
+  runtime/matrix tests `20 passed`, broader related suite `35 passed`, and a
+  1-second P-n76 smoke completed `2/2` with adaptive reducing embedded-VNS
+  runtime from `601ms` to `17ms` at equal total distance. Next gate is a WSL
+  no-LLM canonical-vs-adaptive matrix before any agentic CVRP campaign.
 
 ## Status Cadence
 

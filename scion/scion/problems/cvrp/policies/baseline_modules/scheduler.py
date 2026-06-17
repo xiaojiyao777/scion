@@ -4,6 +4,8 @@ from __future__ import annotations
 from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
 from .config import (
     ENABLE_EMBEDDED_VNS,
+    EMBEDDED_VNS_CADENCE,
+    EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT,
     ENABLE_INITIAL_VNS,
     ENABLE_SIZE70_TWO_OPT_FALLBACK,
     EXIT_RESERVE_FRACTION,
@@ -155,10 +157,12 @@ class _ALNSVNSSolver:
                 candidate.remove_empty_routes()
                 candidate_after_repair_distance = float(candidate.total_cost)
                 alns_core_ms += self.context.elapsed_ms() - core_phase_ms
-                if (
-                    ENABLE_EMBEDDED_VNS
-                    and self.use_vns
-                    and instance.customer_count <= self.vns_threshold
+                if self._should_run_embedded_vns(
+                    instance,
+                    iteration=iteration,
+                    candidate_after_repair_distance=candidate_after_repair_distance,
+                    current=current,
+                    best=best,
                 ):
                     phase_ms = self.context.elapsed_ms()
                     self.context.record_objective_probe("vns_embedded_before", candidate)
@@ -381,6 +385,33 @@ class _ALNSVNSSolver:
             and self.time_limit > 0
             and instance.customer_count >= SIZE70_TWO_OPT_MIN_CUSTOMERS
             and (not self.use_vns or instance.customer_count > self.vns_threshold)
+        )
+
+    def _should_run_embedded_vns(
+        self,
+        instance,
+        *,
+        iteration,
+        candidate_after_repair_distance,
+        current,
+        best,
+    ):
+        if (
+            not ENABLE_EMBEDDED_VNS
+            or not self.use_vns
+            or instance.customer_count > self.vns_threshold
+        ):
+            return False
+        cadence = max(1, int(EMBEDDED_VNS_CADENCE))
+        if cadence <= 1 or iteration % cadence == 0:
+            return True
+        if not EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT:
+            return False
+        if candidate_after_repair_distance is None:
+            return False
+        return (
+            candidate_after_repair_distance + _EPS < current.total_cost
+            or candidate_after_repair_distance + _EPS < best.total_cost
         )
 
     def _run_size70_two_opt_polish(
