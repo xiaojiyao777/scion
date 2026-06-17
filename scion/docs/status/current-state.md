@@ -139,13 +139,20 @@ Latest warehouse state:
   stage counts `screening=10`, `validation=0`, `frozen=0`,
   `formal_screened_candidates=5`, `quality_blocks=13`, and champion stayed v1.
   The framework no longer has the stopped `bbb80db` zero-Protocol-row failure,
-  but the agent still failed to produce warehouse research that reaches
-  validation/frozen.
-- Do not start a broad WSL warehouse matrix from this state. The next useful
-  task is narrow code-stage behavior analysis: compare blocked `move_order.py`
-  and `destroy_rebuild.py` patches with
-  `warehouse_validation_transfer_patch_quality` to distinguish true agent code
-  weakness from any remaining problem-owned detector false negatives.
+  but warehouse still did not reach validation/frozen.
+- The follow-up code-stage behavior analysis is complete. The nine code-stage
+  `warehouse_validation_transfer_patch_quality_missing` blocks were primarily
+  a warehouse problem-owned detector false negative: blocked patches used
+  executable candidate-loop split/cost filters with `continue` plus a no-
+  accepted-candidate `return solution`, while the detector only accepted direct
+  `return solution` guards or helper `return None` guards.
+- A local warehouse-owned detector repair now accepts those candidate-filter
+  guard shapes while still rejecting split-only, string/comment-only,
+  local-only, and missing-diagnostics patches. Validation passed warehouse
+  target preview (`40 passed`), agentic/proposal suites (`64 passed`),
+  telemetry/session preview suites (`48 passed`), py_compile, and
+  `git diff --check`. The next gate is one short local warehouse `6R`
+  acceptance check on the server; do not use WSL for this single-cell check.
 
 Latest CVRP/VRP state:
 

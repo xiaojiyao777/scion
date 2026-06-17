@@ -1505,6 +1505,11 @@ def _patch_has_screening_or_lexicographic_guard(
             executable_guard_names=executable_guard_names,
         ):
             return True
+        if _function_has_candidate_filter_transfer_guard(
+            node,
+            executable_guard_names=executable_guard_names,
+        ):
+            return True
     return False
 
 
@@ -1540,6 +1545,30 @@ def _function_has_helper_based_transfer_guard(
     if not has_transfer_acceptance:
         return False
     return any(_returns_none(child) for child in ast.walk(node))
+
+
+def _function_has_candidate_filter_transfer_guard(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    *,
+    executable_guard_names: set[str],
+) -> bool:
+    """Accept loop-level candidate filters that fall back to the original solution."""
+
+    has_transfer_filter = False
+    for child in ast.walk(node):
+        if not isinstance(child, ast.If):
+            continue
+        if not _is_transfer_guard_if(
+            child,
+            executable_guard_names=executable_guard_names,
+        ):
+            continue
+        if any(isinstance(grandchild, ast.Continue) for grandchild in ast.walk(child)):
+            has_transfer_filter = True
+            break
+    if not has_transfer_filter:
+        return False
+    return any(_returns_original_solution(child) for child in ast.walk(node))
 
 
 def _executable_transfer_guard_names(tree: ast.AST) -> set[str]:

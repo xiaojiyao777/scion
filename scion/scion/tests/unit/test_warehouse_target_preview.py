@@ -1254,6 +1254,169 @@ class MergeVehicles:
     assert check.allowed is True
 
 
+def test_warehouse_patch_quality_accepts_direct_candidate_continue_guard() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidates = self._rank_candidates(solution)[:16]
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += len(candidates)
+        base_splits = self._subcategory_splits(solution)
+        base_cost = self._total_cost(solution)
+        for candidate in candidates:
+            new_sol = self._apply_candidate(solution, candidate)
+            candidate_splits = self._subcategory_splits(new_sol)
+            candidate_cost = self._total_cost(new_sol)
+            split_delta = base_splits - candidate_splits
+            cost_delta = base_cost - candidate_cost
+            if split_delta < 0:
+                continue
+            if split_delta == 0 and cost_delta <= 0:
+                continue
+            diagnostics["split_delta_sum"] += split_delta
+            diagnostics["cost_delta_sum"] += cost_delta
+            diagnostics["accepted_moves"] += 1
+            diagnostics["improving_move_count"] += 1
+            return new_sol
+        return solution
+
+    def _rank_candidates(self, solution):
+        max_candidates = 16
+        return sorted(solution.candidates)[:max_candidates]
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_accepts_direct_split_preserving_cost_guard() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidates = self._rank_candidates(solution)[:16]
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += len(candidates)
+        base_split = self._subcategory_splits(solution)
+        base_cost = self._total_cost(solution)
+        for candidate in candidates:
+            new_sol = self._apply_candidate(solution, candidate)
+            split_delta = base_split - self._subcategory_splits(new_sol)
+            cost_delta = base_cost - self._total_cost(new_sol)
+            if split_delta != 0 or cost_delta <= 0:
+                continue
+            diagnostics["split_delta_sum"] += split_delta
+            diagnostics["cost_delta_sum"] += cost_delta
+            diagnostics["accepted_moves"] += 1
+            diagnostics["improving_move_count"] += 1
+            return new_sol
+        return solution
+
+    def _rank_candidates(self, solution):
+        max_candidates = 16
+        return sorted(solution.candidates)[:max_candidates]
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is True
+
+
+def test_warehouse_patch_quality_rejects_split_only_candidate_continue_guard() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    adapter = WarehouseDeliveryAdapter(spec_v1)
+    patch = PatchProposal(
+        file_path="operators/merge_vehicles.py",
+        action="modify",
+        code_content="""
+class MergeVehicles:
+    def __init__(self):
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        candidates = self._rank_candidates(solution)[:16]
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += len(candidates)
+        for candidate in candidates:
+            split_delta = candidate.split_delta
+            diagnostics["split_delta_sum"] += split_delta
+            diagnostics["cost_delta_sum"] += candidate.cost_delta
+            if split_delta < 0:
+                continue
+            diagnostics["accepted_moves"] += 1
+            diagnostics["improving_move_count"] += 1
+            return candidate.solution
+        return solution
+
+    def _rank_candidates(self, solution):
+        max_candidates = 16
+        return sorted(solution.candidates)[:max_candidates]
+""",
+    )
+
+    check = validate_problem_patch_quality(
+        SimpleNamespace(adapter=adapter),
+        _warehouse_weak_positive_branch(),
+        _warehouse_transfer_quality_hypothesis(),
+        patch,
+    )
+
+    assert check.allowed is False
+    assert "screening_or_lexicographic_guard" in check.detail
+
+
 def test_warehouse_patch_quality_rejects_helper_with_string_only_guard() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
     adapter = WarehouseDeliveryAdapter(spec_v1)

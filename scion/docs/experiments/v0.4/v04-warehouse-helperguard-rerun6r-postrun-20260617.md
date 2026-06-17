@@ -88,10 +88,13 @@ The `13` quality blocks split into:
 
 The code-stage failures were not a recurrence of the earlier
 `merge_vehicles.py` helper-based guard false positive. The new run reached
-Protocol rows after `a1dba41`. Later blocks occurred on new
-`subcategory_bin_repack.py` and repeated `move_order.py` / `destroy_rebuild.py`
-attempts where the hypothesis prose described guards, but the problem-owned
-patch-quality hook did not see an executable enough guard in the patch.
+Protocol rows after `a1dba41`. Follow-up trace analysis showed that the later
+blocks were primarily another detector false negative: blocked patches used
+executable candidate-loop split/cost filters with `continue` and then returned
+the original solution when no candidate was accepted. The previous static
+detector accepted direct `return solution` guards and helper `return None`
+guards, but missed direct candidate-filter guards such as `split_delta < 0`,
+`split_delta == 0 and cost_delta <= 0`, and split-preserving cost-only forms.
 
 ## Interpretation
 
@@ -111,22 +114,18 @@ Rejected:
 
 - Warehouse did not reproduce the v0.3-style repeated promotion behavior.
 - The run did not reach validation or frozen.
-- The agent repeatedly failed to turn the problem-owned split/cost/runtime
-  rules into executable code that satisfies the gate.
+- The problem-owned static detector still missed a legitimate executable guard
+  shape and therefore consumed proposal attempts before Protocol.
 - Most evidence remained screening-only, with low win rates and weak or failed
   telemetry effect signals.
 
 ## Next Step
 
-Do not start a broad WSL warehouse matrix from this state.
+The narrow code-stage behavior analysis is complete. The follow-up repair
+belongs in `WarehouseDeliveryAdapter`: accept executable direct candidate-loop
+`continue` guard shapes when the enclosing function also has a no-accepted-
+candidate `return solution`, while preserving rejection of split-only,
+string/comment-only, local-only, and missing-diagnostics patches.
 
-The next useful step is a narrow code-stage behavior analysis task: compare the
-blocked `move_order.py` / `destroy_rebuild.py` patches against the
-`warehouse_validation_transfer_patch_quality` detector and decide whether:
-
-1. the agent is genuinely failing to write executable lexicographic guards, or
-2. the detector still misses a legitimate guard shape outside the helper-based
-   pattern fixed in `a1dba41`.
-
-Only after that distinction is resolved should another local 6R acceptance run
-be started.
+After that repair is committed, run one short local warehouse `6R` acceptance
+check on the server. Do not start a broad WSL warehouse matrix from this state.

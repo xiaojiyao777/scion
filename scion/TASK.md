@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 frontier analysis complete; warehouse helper-guard field rerun rejected as research-quality acceptance; code-stage behavior analysis next*
+*Status: Phase 4 frontier analysis complete; warehouse candidate-filter guard detector repair locally accepted; short local warehouse field acceptance next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -2920,6 +2920,55 @@ Boundary status:
 - All three repair slices are report/manifest/replay tooling only.
 - No repair changes `DecisionFeatures`, Protocol gates, scheduler state,
   campaign execution semantics, lifecycle policy, or promotion state.
+
+## Current Warehouse Candidate-Filter Guard Repair - 2026-06-17
+
+The code-stage behavior analysis for the `a1dba41` helper-guard rerun is
+complete.
+
+Accepted diagnosis:
+
+- The rerun ended as useful partial field evidence but failed research-quality
+  acceptance: `5/6` effective rounds, `13` proposal quality blocks, `10`
+  screening metric rows, `0` validation/frozen rows, and no promotion.
+- The nine code-stage `warehouse_validation_transfer_patch_quality_missing`
+  blocks were primarily a warehouse problem-owned detector false negative.
+  Blocked code patches used executable candidate-loop filters that skip
+  dominated candidates with `continue` and return the original solution when
+  no candidate is accepted.
+- Previously accepted shapes covered direct `return solution` guards and
+  helper-based `return None` guards, but not direct candidate-loop
+  `continue` filters such as `split_delta < 0`, `split_delta == 0 and
+  cost_delta <= 0`, and split-preserving cost-only forms like
+  `split_delta != 0 or cost_delta <= 0`.
+
+Accepted local repair:
+
+- `WarehouseDeliveryAdapter` now accepts executable direct candidate-filter
+  split/cost guard shapes when the enclosing function also has a no-accepted-
+  candidate `return solution` path.
+- The repair remains problem-owned. It does not change generic Contract,
+  Verification, Protocol, Decision, lifecycle, promotion, validation/frozen
+  exposure, or `DecisionFeatures`.
+- Regression tests still reject split-only, string/comment-only, local-only,
+  and missing-diagnostics shapes.
+
+Acceptance commands:
+
+- `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_warehouse_target_preview.py`
+  passed with `40 passed`.
+- `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_agentic_session_hypothesis_preview_retry.py scion/scion/tests/unit/test_agentic_session_core_flow.py scion/scion/tests/unit/core/test_proposal_pipeline_quality_blocks.py`
+  passed with `64 passed`.
+- `PYTHONPATH=scion python -m pytest -q scion/scion/tests/unit/test_runtime_telemetry_guard.py scion/scion/tests/unit/test_expected_telemetry_activation_contract.py scion/scion/tests/unit/test_agentic_session_preview_repair.py`
+  passed with `48 passed`.
+- `PYTHONPATH=scion python -m py_compile scion/scion/problems/warehouse_delivery/adapter.py`
+  and `git diff --check` passed.
+
+Next gate:
+
+- Commit the repair and run one short local warehouse `6R` acceptance check on
+  the 2-core server. Do not use WSL for this single-cell check. WSL remains
+  reserved for larger parallel matrices after a local acceptance signal.
 
 ## Status Cadence
 
