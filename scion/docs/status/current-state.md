@@ -54,10 +54,17 @@ CVRP/VRP:
 - Follow-up no-LLM diagnostics added direct mechanism effect telemetry and
   rejected share70 floor/hardcap/softrescue/tail6 as X-n110 fixes. X-n110 30s
   seed 43 keeps the `+116` tail loss across those variants.
-- Current guidance now tells the agent not to repeat those share70 scheduler
-  variants. A next scheduler proposal must be materially different and explain
-  the X-tail repair; otherwise target selection should pivot to a concrete
-  non-scheduler solver-design owner.
+- Post-share70 target-selection field check from commit `7557a15` accepted the
+  guidance repair in the field. Target-intent selected
+  `policies/baseline_modules/destroy_repair.py` / `route_merge_repair`, not
+  another scheduler/share70 variant. Formal screening was valid (`32/32`, `0`
+  failed pairs) and Decision chose `expand_screening` for low-SNR divergent
+  evidence: pair W/L/T `10/3/19`, median delta `0.0`, favorable mean delta
+  `+1.406`, no case-level losses, and X-n110/CMT4/M-n200 neutral.
+- `route_merge_repair` is not promoted, but it is now the active CVRP branch
+  lesson to continue. It has direct mechanism telemetry under its own phase id
+  and should get same-mechanism follow-up before opening another unrelated
+  scheduler target.
 
 ## Active Work
 
@@ -69,11 +76,12 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Use the share70 diagnostics as branch lessons, not as the next default
-   target. Do not repeat floor, hardcap, softrescue, or tail6.
-2. Choose the next CVRP target by mechanism ownership. Prefer a concrete
-   non-scheduler solver-design owner unless a scheduler proposal gives a
-   materially different X-tail repair with evidence.
+1. Continue CVRP on the `route_merge_repair` branch: inspect activation/effect
+   rows, explain why A/B/E improve while CMT2/P are mixed, and refine trigger or
+   acceptance conditions without touching generic gates.
+2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
+   softrescue, or tail6 unless a future scheduler hypothesis is materially
+   different and explains the X-tail mechanism.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -90,6 +98,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-share70-agentic-1r-7e312a7-postrun-20260617.md`.
 - CVRP share70 cap/tail diagnostics:
   `scion/docs/experiments/v0.4/v04-cvrp-share70-cap-tail-diagnostics-20260617.md`.
+- CVRP post-share70 target-selection field check:
+  `scion/docs/experiments/v0.4/v04-cvrp-post-share70-targetselect-agentic-1r-7557a15-postrun-20260617.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP share70 cap/tail diagnostics accepted as lessons; next CVRP target should pivot or give a materially different X-tail repair*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP post-share70 target selection accepted; route_merge_repair branch needs same-mechanism follow-up*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3461,6 +3461,18 @@ Field gate:
   `policies/baseline_modules/scheduler.py` only for a materially different
   X-tail repair; otherwise pivot to a concrete non-scheduler solver-design
   owner.
+- Completed the post-share70 CVRP target-selection agentic `1R` field check
+  from commit `7557a15`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-post-share70-targetselect-agentic-1r-7557a15-postrun-20260617.md`.
+  The run field-accepts the guidance pivot: target-intent selected
+  `policies/baseline_modules/destroy_repair.py` and mechanism
+  `route_merge_repair`, not another scheduler/share70 variant. It was valid
+  with `1/1` effective round, `32/32` screening pairs, `0` failed pairs, and
+  Decision `expand_screening` for low-SNR trajectory-divergent evidence.
+  Pair W/L/T was `10/3/19`, median delta `0.0`, favorable mean delta `+1.406`,
+  with no case-level losses and X-n110/CMT4/M-n200 neutral. This is not a
+  promotion; next CVRP gate is same-mechanism follow-up on route-merge
+  activation/effect and mixed CMT2/P behavior.
 
 ## Status Cadence
 
