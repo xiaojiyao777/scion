@@ -303,25 +303,19 @@ class CampaignLoop:
             else:
                 if kind == "validation_repair_required":
                     validation_repair_required_attempts += 1
-                    repair_count = record_repair_attempt(result)
+                    record_repair_attempt(result)
                     if (
                         validation_repair_required_attempts
                         >= validation_repair_required_limit
                     ):
                         final_reason = "validation_repair_required_budget_exhausted"
-                    elif repair_count >= telemetry_repair_attempt_limit:
-                        final_reason = "telemetry_repair_attempt_budget_exhausted"
                 elif kind == "telemetry_repairable":
                     telemetry_repairable_attempts += 1
-                    repair_count = record_repair_attempt(result)
+                    record_repair_attempt(result)
                     if telemetry_repairable_attempts >= telemetry_repairable_limit:
                         final_reason = "telemetry_repairable_budget_exhausted"
-                    elif repair_count >= telemetry_repair_attempt_limit:
-                        final_reason = "telemetry_repair_attempt_budget_exhausted"
                 elif kind == "telemetry_repair":
-                    repair_count = record_repair_attempt(result)
-                    if repair_count >= telemetry_repair_attempt_limit:
-                        final_reason = "telemetry_repair_attempt_budget_exhausted"
+                    record_repair_attempt(result)
                 elif kind == "branch_lifecycle_policy":
                     branch_lifecycle_policy_blocks += 1
                     if (
@@ -1313,6 +1307,11 @@ def _campaign_loop_status(
         "telemetry_repair_attempts_by_branch_mechanism": dict(
             telemetry_repair_attempt_counts
         ),
+        "telemetry_repair_attempt_limit_exhausted_keys": [
+            key
+            for key, count in sorted(telemetry_repair_attempt_counts.items())
+            if int(count) >= max(1, int(telemetry_repair_attempt_limit))
+        ],
         "branch_lifecycle_policy_blocks": branch_lifecycle_blocks,
         "branch_lifecycle_policy_block_limit": max(
             1,

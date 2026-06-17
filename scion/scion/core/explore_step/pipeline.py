@@ -1241,6 +1241,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             if not ids:
                 ids = branch_repair_mechanism_ids(branch)
             return "branch_lifecycle_policy", ids, str(failure_detail or "")
+        if _is_agent_quality_blocked_detail(failure_detail):
+            return "proposal_block", (), None
         if not branch_requires_repair_focus(branch):
             return "proposal_block", (), None
         repair_ids = branch_repair_mechanism_ids(branch)

@@ -5,6 +5,7 @@ from typing import Any
 
 from .proposal_pipeline_test_support import *  # noqa: F401,F403
 from scion.core.branch_hygiene import branch_hygiene_context
+from scion.core.branch_repair_policy import REPAIR_FIRST_POLICY_VIOLATION
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.explore_step.pipeline import ExploreStepPipeline
 from scion.core.models import Branch, BranchState, MechanismChange
@@ -220,6 +221,51 @@ def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:
     assert "wiring_suspect_requires_repair" in (
         creative.hypothesis_context["branch_hygiene_guidance"]
     )
+
+
+def test_agent_quality_block_on_repair_branch_remains_proposal_block() -> None:
+    branch = Branch(
+        branch_id="repair-branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="hash-1",
+    )
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.telemetry_repair_mechanism_ids = ("bounded_probe",)
+
+    attempt_kind, repair_ids, reason = ExploreStepPipeline._repair_attempt_metadata(
+        SimpleNamespace(step_history=()),
+        branch,
+        (
+            "agentic_proposal:hypothesis_approval_failed: "
+            "agent_quality_blocked:warehouse_validation_transfer_quality_missing"
+        ),
+    )
+
+    assert attempt_kind == "proposal_block"
+    assert repair_ids == ()
+    assert reason is None
+
+
+def test_repair_policy_violation_on_repair_branch_counts_as_telemetry_repair() -> None:
+    branch = Branch(
+        branch_id="repair-branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="hash-1",
+    )
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.telemetry_repair_mechanism_ids = ("bounded_probe",)
+
+    attempt_kind, repair_ids, reason = ExploreStepPipeline._repair_attempt_metadata(
+        SimpleNamespace(step_history=()),
+        branch,
+        f"{REPAIR_FIRST_POLICY_VIOLATION}: unrelated mechanism",
+    )
+
+    assert attempt_kind == "telemetry_repair"
+    assert repair_ids == ("bounded_probe",)
+    assert reason == f"{REPAIR_FIRST_POLICY_VIOLATION}: unrelated mechanism"
 
 
 def test_generate_hypothesis_rejects_new_mechanism_on_suspect_branch() -> None:

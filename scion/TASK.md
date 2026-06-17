@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: warehouse mechanism-identity telemetry repair locally accepted; next field gate pending*
+*Status: warehouse telemetry-identity field gate finished invalid; repair-attempt accounting fix under validation*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -926,6 +926,41 @@ Exit criteria:
   warehouse production rerun from the new repair commit, accepted only if
   telemetry-identity mismatches are blocked before Protocol and no
   screening-positive candidate is lost to this mismatch shape.
+- Completed: warehouse mechanism-identity telemetry follow-up `6R` field gate
+  from commit `7fe46a7`. Launch/postrun report:
+  `scion/docs/experiments/v0.4/v04-warehouse-telemetry-identity-rerun6r-launch-20260617.md`.
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-telemetry-identity-rerun6r-7fe46a7-20260617T061211Z`;
+  wrapper `exit_code=0`, but `run_validity.status=invalid`,
+  `reason=invalid_no_effective_rounds`, and
+  `stopped_reason=telemetry_repair_attempt_budget_exhausted`. The repair did
+  clear the prior identity-mismatch shape enough to reach Protocol: one
+  `operators/merge_vehicles.py` screening row was produced with declared and
+  consumed telemetry under `operator_diagnostics.merge_vehicles.*`. That row was
+  non-effective and negative (`case 0/4/2`, `pair 0/8/4`, median `-4575.0`)
+  with telemetry outcome `mechanism_executed_no_improvement`. The run then hit
+  a hypothesis quality block missing `validation_transfer_risk`; because the
+  branch was already `telemetry_wiring_suspect`, the failure was misclassified
+  as `telemetry_repair`, reached the default same branch/mechanism repair limit
+  of `2`, and stopped the entire campaign before any effective screening round.
+  This is not warehouse research evidence. Popper
+  (`019ed442-338a-7122-ac18-58fa34d18965`) confirmed in a read-only audit that
+  `telemetry_repair_attempt_budget_exhausted` is an implementation-level
+  run-stop, not a v3 boundary. Local follow-up repair now keeps
+  `agent_quality_blocked` failures on repair-focused branches in the proposal
+  quality-block path, preserves explicit repair-first policy violations as
+  telemetry repair attempts, and downgrades the same branch/mechanism telemetry
+  repair cap from run-level termination to a diagnostic status field
+  `telemetry_repair_attempt_limit_exhausted_keys`. Strict telemetry,
+  Contract/Verification/Protocol, validation/frozen, and promotion gates remain
+  unchanged; runs with no effective rounds still report invalid scientific
+  validity. Focused verification currently passes campaign-loop retry
+  accounting (`35 passed`), proposal-pipeline hypothesis plus proposal quality
+  (`37 passed`), finalization/status reconciliation (`61 passed`), warehouse
+  target preview (`29 passed`), runtime telemetry/expected telemetry
+  (`41 passed`), agentic session repair/core (`38 passed`), py_compile, and
+  `git diff --check`. Next gate: commit this repair and run one short warehouse
+  production `6R` field check on the server.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

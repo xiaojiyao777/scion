@@ -276,8 +276,38 @@ Active work as of the latest handoff:
   warehouse target preview (`29 passed`), proposal quality blocks (`21 passed`),
   agentic session repair/core (`38 passed`), runtime telemetry/expected
   telemetry (`41 passed`), CVRP provider plus proposal quality (`43 passed`),
-  py_compile, and `git diff --check`. The next step is one short warehouse
-  production rerun from the new repair commit.
+  py_compile, and `git diff --check`. The short warehouse production rerun from
+  commit `7fe46a7` is complete; launch/postrun report:
+  [`../experiments/v0.4/v04-warehouse-telemetry-identity-rerun6r-launch-20260617.md`](../experiments/v0.4/v04-warehouse-telemetry-identity-rerun6r-launch-20260617.md).
+  Root:
+  `/home/clawd/research/scion-experiments/v04-warehouse-telemetry-identity-rerun6r-7fe46a7-20260617T061211Z`;
+  wrapper `exit_code=0`, but `run_validity.status=invalid`,
+  `reason=invalid_no_effective_rounds`, and
+  `stopped_reason=telemetry_repair_attempt_budget_exhausted`. It reached one
+  formal screening metric row for `operators/merge_vehicles.py`, with telemetry
+  consumed under the correct `operator_diagnostics.merge_vehicles.*` identity,
+  so the previous mechanism-key mismatch shape is no longer the active blocker.
+  The row was non-effective and negative (`case 0/4/2`, `pair 0/8/4`, median
+  `-4575.0`) and the next hypothesis quality block was incorrectly counted as
+  a telemetry repair attempt because the branch was already
+  `telemetry_wiring_suspect`. Popper
+  (`019ed442-338a-7122-ac18-58fa34d18965`) confirmed in a read-only audit that
+  `telemetry_repair_attempt_budget_exhausted` is an implementation-level
+  run-stop, not a v3 boundary requirement. A local follow-up repair now keeps
+  `agent_quality_blocked` failures on repair-focused branches in the proposal
+  quality-block path, while explicit repair-first policy violations still count
+  as telemetry repair. It also downgrades the same branch/mechanism telemetry
+  repair cap from run-level termination to the diagnostic status field
+  `telemetry_repair_attempt_limit_exhausted_keys`. Strict telemetry,
+  Contract/Verification/Protocol, validation/frozen, and promotion gates remain
+  unchanged; runs with no effective rounds still report invalid scientific
+  validity. Focused verification passes campaign-loop retry accounting
+  (`35 passed`), proposal-pipeline hypothesis plus proposal quality
+  (`37 passed`), finalization/status reconciliation (`61 passed`), warehouse
+  target preview (`29 passed`), runtime telemetry/expected telemetry
+  (`41 passed`), agentic session repair/core (`38 passed`), py_compile, and
+  `git diff --check`. Next gate: commit this repair and run one short warehouse
+  production `6R` field check on the 2-core server.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

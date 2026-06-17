@@ -1584,7 +1584,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
     assert "max_rounds_exhausted" in stopped_reasons
 
 
-def test_campaign_loop_caps_repeated_telemetry_repair_by_branch_mechanism() -> None:
+def test_campaign_loop_records_repeated_telemetry_repair_without_stopping_run() -> None:
     results = [
         StepResult(
             action="explore",
@@ -1595,8 +1595,14 @@ def test_campaign_loop_caps_repeated_telemetry_repair_by_branch_mechanism() -> N
             attempt_kind="telemetry_repairable",
             repair_mechanism_ids=("probe",),
         )
-        for _ in range(5)
+        for _ in range(2)
     ]
+    results.extend(
+        [
+            _screening_result(branch_id="b2", reason="screening 1"),
+            _screening_result(branch_id="b3", reason="screening 2"),
+        ]
+    )
     calls = 0
     stopped_reasons: list[str | None] = []
     loop_statuses: list[dict[str, Any]] = []
@@ -1633,18 +1639,22 @@ def test_campaign_loop_caps_repeated_telemetry_repair_by_branch_mechanism() -> N
         wait_weight_opt_all=lambda timeout: None,
     )
 
-    loop.run(max_rounds=4)
+    loop.run(max_rounds=2)
 
-    assert calls == 2
-    assert "telemetry_repair_attempt_budget_exhausted" in stopped_reasons
-    assert loop_statuses[-1]["requested_rounds"] == 4
-    assert loop_statuses[-1]["proposal_attempts_consumed"] == 0
-    assert loop_statuses[-1]["effective_rounds_completed"] == 0
+    assert calls == 4
+    assert "telemetry_repair_attempt_budget_exhausted" not in stopped_reasons
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["requested_rounds"] == 2
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 2
+    assert loop_statuses[-1]["effective_rounds_completed"] == 2
     assert loop_statuses[-1]["telemetry_diagnostic_attempts"] == 2
     assert loop_statuses[-1]["telemetry_repair_attempts"] == 2
     assert loop_statuses[-1]["telemetry_repair_attempts_by_branch_mechanism"] == {
         "b1:probe": 2
     }
+    assert loop_statuses[-1]["telemetry_repair_attempt_limit_exhausted_keys"] == [
+        "b1:probe"
+    ]
 
 
 def test_campaign_loop_telemetry_repairable_does_not_consume_proposal_attempts() -> None:
