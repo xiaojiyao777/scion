@@ -3295,9 +3295,21 @@ Field gate:
   `solver_algorithm_alns_iteration_trace` in raw/results artifacts, and adds
   ALNS/VNS timing columns to the mechanism-matrix summary CSV. Local
   acceptance: CVRP runtime/matrix tests `20 passed`, py_compile passed, and a
-  one-job P-n76 no-LLM smoke confirmed trace/result/CSV fields. Next CVRP gate
-  after commit/sync is a compact no-LLM instrumentation matrix, not a long LLM
-  campaign.
+  one-job P-n76 no-LLM smoke confirmed trace/result/CSV fields.
+- Completed the compact WSL CVRP scheduler-instrumentation matrix from commit
+  `875dc83`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`.
+  It completed `60/60` no-LLM rows across `P-n76-k4`, `CMT2`, `CMT4`, and
+  `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns`,
+  `embedded_vns_disabled`, and `pure_alns_no_polish`; time budget `3s`.
+  Instrumentation acceptance passed: `alns_iteration_trace`, `alns_core`,
+  `vns_initial`, and `vns_embedded` fields were preserved in raw/results/CSV
+  with the expected mechanism coverage. Mechanism conclusion: broad embedded
+  VNS removal is rejected. It raises mean ALNS iterations from `4.0` to `22.4`
+  but is still `2/8/10` versus canonical with mean delta `+17.3`; pure
+  ALNS/no-polish is `2/18/0` with mean delta `+35.6`. Next CVRP work should
+  test adaptive embedded-VNS scheduling/triggering and feed that problem-owned
+  opportunity summary into proposal context before any long agentic campaign.
 
 ## Status Cadence
 

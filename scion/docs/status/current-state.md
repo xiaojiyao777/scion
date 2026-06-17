@@ -53,27 +53,29 @@ CVRP/VRP:
   and accepted:
   [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md).
   It fixes construction/initial-VNS phase accounting, adds `alns_core` timing,
-  and records bounded `solver_algorithm_alns_iteration_trace`. Do not launch a
-  long LLM CVRP campaign from the current evidence.
+  and records bounded `solver_algorithm_alns_iteration_trace`.
+- The compact WSL instrumentation matrix completed `60/60` no-LLM rows and
+  accepted the telemetry path:
+  [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md).
+  Disabling embedded VNS increases ALNS iterations from mean `4.0` to `22.4`,
+  but is still worse or tied overall (`2/8/10`, mean delta `+17.3`). Pure
+  ALNS/no-polish is worse (`2/18/0`, mean delta `+35.6`). Do not launch a long
+  agentic CVRP campaign from a broad VNS-removal idea.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- WSL still needs to be fast-forwarded from the completed warehouse run commit
-  to the latest pushed CVRP telemetry commit before launching the next no-LLM
-  matrix.
+- WSL was fast-forwarded to matrix run commit `875dc83`; the latest no-LLM CVRP
+  artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Fast-forward the WSL runner checkout to the latest pushed branch head.
-2. Run a compact no-LLM CVRP instrumentation validation matrix before any
-   agentic CVRP campaign. Preferred first matrix: `P-n76-k4`, `CMT2`, `CMT4`,
-   `M-n151-k12`; seeds `1..5`; mechanisms `canonical_alns_vns`,
-   `embedded_vns_disabled`, and `pure_alns_no_polish`. Expand only if the new
-   trace is informative.
-3. Use the CVRP matrix to decide whether the next CVRP repair is scheduler
-   semantics, opportunity diagnostics, or a narrow agentic solver-design brief.
-4. Keep a later warehouse repeat available to test whether champion `v2`
+1. Add or test a narrow adaptive embedded-VNS scheduling probe before any long
+   CVRP LLM campaign.
+2. Feed the accepted CVRP opportunity summary into problem-owned proposal
+   context so agents target adaptive VNS scheduling, not broad VNS removal or
+   vague ALNS tuning.
+3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Evidence Index
@@ -100,6 +102,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-initial-vns-deepseed-wsl-6d742c6-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-iteration-telemetry-repair-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-scheduler-instrumentation-compact-wsl-875dc83-postrun-20260617.md)
 
 WSL coordination:
 
