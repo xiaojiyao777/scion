@@ -3248,6 +3248,15 @@ Field gate:
   produced `3` jobs, and a 3-second P-n76 smoke completed `4/4` with objective
   probes. Next gate is the WSL variant matrix over `P-n76-k4`, `CMT2`, `CMT4`,
   and `M-n151-k12`.
+- Completed the WSL CVRP VNS variant matrix from commit `6d742c6`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md`.
+  It completed `80/80` rows. The result rejects broad VNS removal and pure
+  ALNS/no-polish again, but identifies a real candidate mechanism:
+  `initial_vns_disabled` is positive on `CMT2` (`3/1/0`, median `-54.5`) and
+  `P-n76-k4` (`3/1/0`, median `-8.0`), while regressing slightly on `CMT4`
+  and `M-n151-k12`. Next CVRP gate is a deeper canonical vs
+  `initial_vns_disabled` seed matrix plus objective-probe analysis to derive a
+  case-general initial-VNS scheduling trigger before any CVRP LLM campaign.
 
 ## Status Cadence
 

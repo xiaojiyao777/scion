@@ -374,6 +374,15 @@ Latest CVRP/VRP state:
   dry-run still produced `3` jobs, and a 3-second P-n76 smoke completed `4/4`
   with objective probes. Next CVRP gate is a WSL variant matrix on `P-n76-k4`,
   `CMT2`, `CMT4`, and `M-n151-k12`.
+- The WSL CVRP VNS variant matrix from commit `6d742c6` is complete:
+  [`../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-matrix-wsl-6d742c6-postrun-20260617.md).
+  It completed `80/80` rows. Broad VNS removal and pure ALNS/no-polish are
+  still rejected, but `initial_vns_disabled` is a plausible conditional
+  scheduling mechanism: `CMT2` improved `3/1/0` with median `-54.5`, and
+  `P-n76-k4` improved `3/1/0` with median `-8.0`, while `CMT4` and
+  `M-n151-k12` regressed slightly. Next CVRP proof is a deeper canonical vs
+  `initial_vns_disabled` seed matrix and objective-probe analysis for a
+  case-general trigger.
 
 Active work as of the latest handoff:
 
