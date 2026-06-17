@@ -300,8 +300,15 @@ Latest CVRP/VRP state:
   `size70_two_opt_candidate`, plus a CVRP-owned size70/two-opt active solver
   fallback when full VNS is skipped. BKS/gap/route/runtime/phase diagnostics
   stay report-only and outside generic `DecisionFeatures`.
-- Next CVRP/VRP gate: after committing and syncing a clean WSL runner checkout,
-  run a small no-LLM family/slice/mechanism matrix before any longer LLM CVRP
+- The first small WSL no-LLM CVRP family/slice/mechanism matrix from `224ca7f`
+  is complete:
+  [`../experiments/v0.4/v04-cvrp-mechanism-matrix-wsl-224ca7f-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-mechanism-matrix-wsl-224ca7f-postrun-20260617.md).
+  It completed `96/96` result rows and field-accepts the matrix runner/overlay
+  path. It does not support replacing canonical ALNS+VNS with ALNS-only or
+  size70/two-opt broadly: both candidate mechanisms were `4/0/28` versus
+  canonical. Next CVRP gate should focus on no-LLM or fixed-candidate
+  diagnostics for the local-win `P` family and high-gap canonical cases
+  (`M-n151-k12`, `CMT2`, `CMT4`, `P-n76-k4`) before any longer LLM CVRP
   campaign.
 
 Active work as of the latest handoff:

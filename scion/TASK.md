@@ -3160,9 +3160,15 @@ Field gate:
   tests, py_compile, `git diff --check`, dry-run, and one tiny live smoke all
   passed.
 - Next gates: finish the live warehouse postrun before accepting/rejecting the
-  sequential guard field repair; then sync a clean WSL runner checkout and run
-  a small no-LLM CVRP family/slice/mechanism matrix before any longer LLM CVRP
-  campaign.
+  sequential guard field repair. The first small WSL no-LLM CVRP
+  family/slice/mechanism matrix is complete and documented in
+  `scion/docs/experiments/v0.4/v04-cvrp-mechanism-matrix-wsl-224ca7f-postrun-20260617.md`.
+  It completed `96/96` rows and confirms the matrix runner/overlay path, but
+  rejects ALNS-only or size70/two-opt as broad canonical replacements
+  (`4/0/28` vs canonical for each candidate mechanism). Next CVRP work should
+  be a focused no-LLM or fixed-candidate diagnostic on the local-win `P` family
+  and high-gap canonical cases (`M-n151-k12`, `CMT2`, `CMT4`, `P-n76-k4`)
+  before any longer LLM CVRP campaign.
 
 ## Status Cadence
 
