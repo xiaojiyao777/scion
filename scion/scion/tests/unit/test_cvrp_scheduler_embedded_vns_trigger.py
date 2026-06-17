@@ -84,6 +84,15 @@ def test_embedded_vns_runtime_share_floor_precedes_cadence(monkeypatch) -> None:
 
     assert solver._should_run_embedded_vns(
         instance,
+        iteration=1,
+        alns_elapsed_ms_before=0,
+        embedded_vns_runtime_ms=0,
+        candidate_after_repair_distance=1010.0,
+        current=current,
+        best=best,
+    )
+    assert solver._should_run_embedded_vns(
+        instance,
         iteration=9,
         alns_elapsed_ms_before=1000,
         embedded_vns_runtime_ms=500,

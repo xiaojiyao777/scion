@@ -416,7 +416,9 @@ class _ALNSVNSSolver:
         if early_always_iterations > 0 and iteration <= early_always_iterations:
             return True
         min_runtime_share = float(EMBEDDED_VNS_MIN_RUNTIME_SHARE)
-        if min_runtime_share > 0.0 and alns_elapsed_ms_before > 0:
+        if min_runtime_share > 0.0:
+            if alns_elapsed_ms_before <= 0:
+                return True
             share_floor = min(1.0, max(0.0, min_runtime_share))
             embedded_share = float(max(0, embedded_vns_runtime_ms)) / float(
                 max(1, alns_elapsed_ms_before)
