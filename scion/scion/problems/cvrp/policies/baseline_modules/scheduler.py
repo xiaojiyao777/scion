@@ -6,6 +6,7 @@ from .config import (
     ENABLE_EMBEDDED_VNS,
     EMBEDDED_VNS_CADENCE,
     EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS,
+    EMBEDDED_VNS_MIN_RUNTIME_SHARE,
     EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT,
     ENABLE_INITIAL_VNS,
     ENABLE_SIZE70_TWO_OPT_FALLBACK,
@@ -107,6 +108,8 @@ class _ALNSVNSSolver:
         low = max(0.0, min(float(low), float(high)))
         high = max(low, float(high))
         iteration = 0
+        alns_start_ms = self.context.elapsed_ms()
+        embedded_vns_runtime_ms = 0
 
         while self._within_budget(start_ms, reserve):
             iteration += 1
@@ -161,6 +164,11 @@ class _ALNSVNSSolver:
                 if self._should_run_embedded_vns(
                     instance,
                     iteration=iteration,
+                    alns_elapsed_ms_before=max(
+                        0,
+                        iteration_elapsed_before - alns_start_ms,
+                    ),
+                    embedded_vns_runtime_ms=embedded_vns_runtime_ms,
                     candidate_after_repair_distance=candidate_after_repair_distance,
                     current=current,
                     best=best,
@@ -174,10 +182,9 @@ class _ALNSVNSSolver:
                         self.context,
                         reserve,
                     )
-                    self.context.record_phase(
-                        "vns_embedded",
-                        self.context.elapsed_ms() - phase_ms,
-                    )
+                    phase_elapsed_ms = self.context.elapsed_ms() - phase_ms
+                    self.context.record_phase("vns_embedded", phase_elapsed_ms)
+                    embedded_vns_runtime_ms += max(0, phase_elapsed_ms)
                     candidate.remove_empty_routes()
                     self.context.record_objective_probe(
                         "vns_embedded_after",
@@ -393,6 +400,8 @@ class _ALNSVNSSolver:
         instance,
         *,
         iteration,
+        alns_elapsed_ms_before,
+        embedded_vns_runtime_ms,
         candidate_after_repair_distance,
         current,
         best,
@@ -406,6 +415,14 @@ class _ALNSVNSSolver:
         early_always_iterations = int(EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS)
         if early_always_iterations > 0 and iteration <= early_always_iterations:
             return True
+        min_runtime_share = float(EMBEDDED_VNS_MIN_RUNTIME_SHARE)
+        if min_runtime_share > 0.0 and alns_elapsed_ms_before > 0:
+            share_floor = min(1.0, max(0.0, min_runtime_share))
+            embedded_share = float(max(0, embedded_vns_runtime_ms)) / float(
+                max(1, alns_elapsed_ms_before)
+            )
+            if embedded_share < share_floor:
+                return True
         cadence = int(EMBEDDED_VNS_CADENCE)
         if cadence > 0 and (cadence <= 1 or iteration % cadence == 0):
             return True

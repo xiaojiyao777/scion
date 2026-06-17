@@ -26,6 +26,7 @@ def test_embedded_vns_early_protect_then_cadence2(monkeypatch) -> None:
     monkeypatch.setattr(scheduler, "ENABLE_EMBEDDED_VNS", True)
     monkeypatch.setattr(scheduler, "EMBEDDED_VNS_CADENCE", 2)
     monkeypatch.setattr(scheduler, "EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS", 8)
+    monkeypatch.setattr(scheduler, "EMBEDDED_VNS_MIN_RUNTIME_SHARE", 0.0)
     monkeypatch.setattr(scheduler, "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT", True)
     solver = _solver()
     instance = SimpleNamespace(customer_count=151)
@@ -35,6 +36,8 @@ def test_embedded_vns_early_protect_then_cadence2(monkeypatch) -> None:
     assert solver._should_run_embedded_vns(
         instance,
         iteration=1,
+        alns_elapsed_ms_before=0,
+        embedded_vns_runtime_ms=0,
         candidate_after_repair_distance=1010.0,
         current=current,
         best=best,
@@ -42,6 +45,8 @@ def test_embedded_vns_early_protect_then_cadence2(monkeypatch) -> None:
     assert not solver._should_run_embedded_vns(
         instance,
         iteration=9,
+        alns_elapsed_ms_before=1000,
+        embedded_vns_runtime_ms=800,
         candidate_after_repair_distance=1010.0,
         current=current,
         best=best,
@@ -49,6 +54,8 @@ def test_embedded_vns_early_protect_then_cadence2(monkeypatch) -> None:
     assert solver._should_run_embedded_vns(
         instance,
         iteration=10,
+        alns_elapsed_ms_before=1000,
+        embedded_vns_runtime_ms=800,
         candidate_after_repair_distance=1010.0,
         current=current,
         best=best,
@@ -56,7 +63,40 @@ def test_embedded_vns_early_protect_then_cadence2(monkeypatch) -> None:
     assert solver._should_run_embedded_vns(
         instance,
         iteration=9,
+        alns_elapsed_ms_before=1000,
+        embedded_vns_runtime_ms=800,
         candidate_after_repair_distance=990.0,
+        current=current,
+        best=best,
+    )
+
+
+def test_embedded_vns_runtime_share_floor_precedes_cadence(monkeypatch) -> None:
+    monkeypatch.setattr(scheduler, "ENABLE_EMBEDDED_VNS", True)
+    monkeypatch.setattr(scheduler, "EMBEDDED_VNS_CADENCE", 2)
+    monkeypatch.setattr(scheduler, "EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS", 0)
+    monkeypatch.setattr(scheduler, "EMBEDDED_VNS_MIN_RUNTIME_SHARE", 0.60)
+    monkeypatch.setattr(scheduler, "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT", True)
+    solver = _solver()
+    instance = SimpleNamespace(customer_count=151)
+    current = SimpleNamespace(total_cost=1000.0)
+    best = SimpleNamespace(total_cost=995.0)
+
+    assert solver._should_run_embedded_vns(
+        instance,
+        iteration=9,
+        alns_elapsed_ms_before=1000,
+        embedded_vns_runtime_ms=500,
+        candidate_after_repair_distance=1010.0,
+        current=current,
+        best=best,
+    )
+    assert not solver._should_run_embedded_vns(
+        instance,
+        iteration=9,
+        alns_elapsed_ms_before=1000,
+        embedded_vns_runtime_ms=700,
+        candidate_after_repair_distance=1010.0,
         current=current,
         best=best,
     )

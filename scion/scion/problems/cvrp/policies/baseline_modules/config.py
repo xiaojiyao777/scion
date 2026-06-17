@@ -21,6 +21,9 @@ EMBEDDED_VNS_CADENCE = 1
 # Positive values force embedded VNS during the first N ALNS iterations before
 # cadence thinning applies. The default preserves canonical every-iteration VNS.
 EMBEDDED_VNS_EARLY_ALWAYS_ITERATIONS = 0
+# Positive values force embedded VNS while its cumulative runtime share within
+# the ALNS loop is below the configured floor; cadence thinning applies after.
+EMBEDDED_VNS_MIN_RUNTIME_SHARE = 0.0
 EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT = True
 ENABLE_SIZE70_TWO_OPT_FALLBACK = True
 SIZE70_TWO_OPT_MIN_CUSTOMERS = 70

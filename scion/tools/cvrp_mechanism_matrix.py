@@ -333,6 +333,14 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
                 "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
                 True,
             )
+        elif overlay == "config_adaptive_embedded_vns_share60_cadence2":
+            _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 2)
+            _overlay_config_float(workspace, "EMBEDDED_VNS_MIN_RUNTIME_SHARE", 0.60)
+            _overlay_config_bool(
+                workspace,
+                "EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT",
+                True,
+            )
         elif overlay == "config_adaptive_embedded_vns_improve_only":
             _overlay_config_int(workspace, "EMBEDDED_VNS_CADENCE", 0)
             _overlay_config_bool(
@@ -366,6 +374,13 @@ def _overlay_config_int(workspace: Path, name: str, value: int) -> None:
     config_path = workspace / "policies" / "baseline_modules" / "config.py"
     text = config_path.read_text(encoding="utf-8")
     text = _replace_line_prefix(text, f"{name} =", f"{name} = {int(value)}")
+    config_path.write_text(text, encoding="utf-8")
+
+
+def _overlay_config_float(workspace: Path, name: str, value: float) -> None:
+    config_path = workspace / "policies" / "baseline_modules" / "config.py"
+    text = config_path.read_text(encoding="utf-8")
+    text = _replace_line_prefix(text, f"{name} =", f"{name} = {float(value):.2f}")
     config_path.write_text(text, encoding="utf-8")
 
 
