@@ -69,6 +69,44 @@ def _two_opt_intra(solution, context, reserve):
     return improved
 
 
+def _two_opt_intra_polish(solution, context, reserve, phase):
+    accepted_moves = 0
+    delta_sum = 0.0
+    for route in solution.routes:
+        found = True
+        while found and context.remaining_time() > reserve:
+            found = False
+            customers = route.customers
+            for i in range(len(customers) - 1):
+                if context.remaining_time() <= reserve:
+                    break
+                for j in range(i + 1, len(customers)):
+                    trial = customers[:i] + list(reversed(customers[i : j + 1]))
+                    trial += customers[j + 1 :]
+                    delta = route.cost - _route_distance(solution.instance, trial)
+                    if delta > _EPS:
+                        route.customers = trial
+                        route.recalculate()
+                        solution.rebuild_index()
+                        context.record_iteration(phase, 1)
+                        context.record_move(
+                            phase,
+                            attempted=1,
+                            accepted=1,
+                            delta=delta,
+                            best_improved=True,
+                        )
+                        found = True
+                        accepted_moves += 1
+                        delta_sum += float(delta)
+                        break
+                if found:
+                    break
+    if accepted_moves <= 0:
+        context.record_move(phase, attempted=1, accepted=0)
+    return accepted_moves, delta_sum
+
+
 def _relocate(solution, context, reserve):
     improved = False
     found = True

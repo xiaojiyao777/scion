@@ -528,3 +528,138 @@ def test_baseline_scheduler_best_update_records_public_routes_not_internal_solut
     assert best.routes_as_tuples() == ((1, 2, 3),)
     assert audit["solver_algorithm_best_update_summary"]["best_update_count"] == 1
     assert audit["solver_algorithm_best_update_trace"][0]["route_count"] == 1
+
+
+def _line_instance(customer_count: int) -> CvrpInstance:
+    return CvrpInstance(
+        name=f"line_{customer_count}",
+        capacity=customer_count + 1,
+        depot=0,
+        nodes=tuple(
+            [CvrpNode(id=0, x=0, y=0, demand=0)]
+            + [
+                CvrpNode(id=customer, x=customer, y=0, demand=1)
+                for customer in range(1, customer_count + 1)
+            ]
+        ),
+        allowed_routes=1,
+        use_integer_cost=True,
+    )
+
+
+def _runtime_context_for_instance(
+    instance: CvrpInstance,
+) -> tuple[dict[str, object], SolverAlgorithmContext]:
+    audit = solver_algorithm_defaults("policies/baseline_algorithm.py")
+    context = SolverAlgorithmContext(
+        instance=instance,
+        instance_path=f"unit/{instance.name}.json",
+        seed=1,
+        rng=random.Random(1),
+        time_limit_sec=1.0,
+        start_time=time.perf_counter(),
+        adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
+        audit=audit,
+    )
+    return audit, context
+
+
+def _scheduler_with_thresholds(
+    context: SolverAlgorithmContext,
+    *,
+    use_vns: bool,
+    vns_threshold: int,
+    alns_threshold: int,
+) -> baseline_scheduler._ALNSVNSSolver:
+    return baseline_scheduler._ALNSVNSSolver(
+        time_limit=1.0,
+        destroy_ratio=(0.1, 0.1),
+        segment_length=10,
+        reaction_factor=0.2,
+        vns_max_no_improve=1,
+        use_vns=use_vns,
+        cw_threshold=0,
+        vns_threshold=vns_threshold,
+        alns_threshold=alns_threshold,
+        max_destroy_customers=1,
+        max_routes=1,
+        context=context,
+    )
+
+
+def test_size70_two_opt_fallback_activates_when_full_vns_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = _line_instance(70)
+    bad_initial = _Solution(
+        instance,
+        [_Route(instance, [1, 3, 2] + list(range(4, 71)))],
+    )
+    monkeypatch.setattr(
+        baseline_scheduler,
+        "_sweep_construction",
+        lambda current_instance: bad_initial.copy(),
+    )
+    audit, context = _runtime_context_for_instance(instance)
+    solver = _scheduler_with_thresholds(
+        context,
+        use_vns=True,
+        vns_threshold=69,
+        alns_threshold=69,
+    )
+
+    best = solver.solve(instance, random.Random(1))
+
+    phase = "size70_two_opt_initial"
+    assert best.routes_as_tuples()[0][:4] == (1, 2, 3, 4)
+    assert best.stop_reason == "alns_threshold"
+    assert phase in audit["solver_algorithm_phase_runtime_ms"]
+    assert "vns_initial" not in audit["solver_algorithm_phase_runtime_ms"]
+    assert audit["solver_algorithm_phase_accepted_moves"][phase] >= 1
+    assert audit["solver_algorithm_phase_best_delta"][phase] > 0.0
+    assert audit["solver_algorithm_best_delta"] > 0.0
+    assert audit["solver_algorithm_best_update_summary"]["best_update_count"] == 1
+    assert audit["solver_algorithm_best_update_summary"]["phase_counts"][phase] == 1
+    assert audit["solver_algorithm_best_update_trace"][0]["phase"] == phase
+    assert audit["solver_algorithm_best_update_trace"][0]["operator"] == "two_opt_intra"
+    assert audit["solver_algorithm_best_update_trace"][0]["delta_from_previous_best"] > 0.0
+
+
+def test_below_size70_keeps_existing_vns_initial_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = _line_instance(69)
+    initial = _Solution(
+        instance,
+        [_Route(instance, [1, 3, 2] + list(range(4, 70)))],
+    )
+    vns_calls: list[int] = []
+
+    def fake_vns(solution, operators, max_no_improve, context, reserve):
+        vns_calls.append(len(operators))
+        return False
+
+    def fail_two_opt(*args, **kwargs):
+        raise AssertionError("below-size70 path must keep full VNS behavior")
+
+    monkeypatch.setattr(
+        baseline_scheduler,
+        "_sweep_construction",
+        lambda current_instance: initial.copy(),
+    )
+    monkeypatch.setattr(baseline_scheduler, "_vns", fake_vns)
+    monkeypatch.setattr(baseline_scheduler, "_two_opt_intra_polish", fail_two_opt)
+    audit, context = _runtime_context_for_instance(instance)
+    solver = _scheduler_with_thresholds(
+        context,
+        use_vns=True,
+        vns_threshold=69,
+        alns_threshold=68,
+    )
+
+    best = solver.solve(instance, random.Random(1))
+
+    assert vns_calls == [7]
+    assert best.routes_as_tuples()[0][:4] == (1, 3, 2, 4)
+    assert "vns_initial" in audit["solver_algorithm_phase_runtime_ms"]
+    assert "size70_two_opt_initial" not in audit["solver_algorithm_phase_runtime_ms"]

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse sequential-guard field gate invalid; copied-config data-root fallback locally accepted*
+*Status: Phase 4 copied-config data-root fallback field gate running; CVRP mechanism diagnostics locally accepted*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3141,11 +3141,28 @@ Field gate:
   proposal-quality, or `DecisionFeatures` behavior changed. Focused validation
   passed data-root/path-safety tests (`10 passed`), canary taxonomy/evaluation
   tests (`18 passed`), py_compile, and `git diff --check`.
-- Next gate after commit: rerun one short local warehouse production `6R` field
-  check from the copied-config data-root fallback repair. Accept the sequential
-  guard detector repair only if the run reaches formal Protocol and the
-  sequential split/cost false negative does not recur. Do not launch a broad
-  WSL matrix from this state.
+- Committed and pushed: copied-config data-root fallback as `5630697`. A short
+  local warehouse production `6R` field check is running from that commit at
+  `/home/clawd/research/scion-experiments/v04-warehouse-datarootfallback-full-rerun6r-5630697-20260617T132912Z`.
+  Current partial field evidence already clears the previous
+  `invalid_no_protocol_rows` failure shape: strict canary paths resolve under
+  `/home/clawd/research/scion-data`, and the run has produced formal
+  screening Protocol metric rows instead of failing before Protocol. Final
+  acceptance still waits for wrapper exit, `run_validity`, stage counts, and
+  branch-level research-quality audit.
+- Integrated and locally accepted: CVRP no-LLM mechanism diagnostics plus the
+  size70/two-opt active solver fallback. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md`.
+  The matrix compares `canonical_alns_vns`, `alns_only`, and
+  `size70_two_opt_candidate`, records BKS/gap/route/runtime/phase telemetry as
+  CVRP-owned report fields only, and explicitly keeps them out of generic
+  `DecisionFeatures`. Solver runtime tests, research-surface tests, matrix
+  tests, py_compile, `git diff --check`, dry-run, and one tiny live smoke all
+  passed.
+- Next gates: finish the live warehouse postrun before accepting/rejecting the
+  sequential guard field repair; then sync a clean WSL runner checkout and run
+  a small no-LLM CVRP family/slice/mechanism matrix before any longer LLM CVRP
+  campaign.
 
 ## Status Cadence
 

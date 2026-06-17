@@ -274,11 +274,14 @@ Latest warehouse state:
   `DecisionFeatures` behavior changed. Validation passed data-root/path-safety
   tests (`10 passed`), canary taxonomy/evaluation tests (`18 passed`),
   py_compile, and `git diff --check`.
-- Next gate after commit: rerun one short local warehouse production `6R` field
-  check from the copied-config data-root fallback repair. Accept the sequential
-  guard detector repair only if the run reaches formal Protocol and the
-  sequential split/cost false negative does not recur. Do not launch a broad
-  WSL matrix from this state.
+- The copied-config data-root fallback was committed and pushed as `5630697`.
+  A short local warehouse production `6R` field gate is running at
+  `/home/clawd/research/scion-experiments/v04-warehouse-datarootfallback-full-rerun6r-5630697-20260617T132912Z`.
+  Current partial evidence clears the previous `invalid_no_protocol_rows`
+  shape: strict case paths resolve under `/home/clawd/research/scion-data` and
+  the campaign has produced formal screening Protocol rows. Final acceptance
+  still waits for wrapper exit, `run_validity`, stage reconciliation, and
+  branch-level research-quality audit.
 
 Latest CVRP/VRP state:
 
@@ -291,11 +294,15 @@ Latest CVRP/VRP state:
 - Existing large-X runtime curves, candidate replays, single-round debug, and
   independent VRP controls argue against another blind long LLM campaign as the
   next move.
-- Next CVRP/VRP work should be a no-LLM family/slice mechanism diagnostic that
-  separates A/B/E/P/M/X and ALNS+VNS vs ALNS-only, records construction/post-
-  search cost, accepted moves, best-update density, route-count, runtime phase
-  split, and final gap, and keeps all BKS/gap/VNS/family diagnostics outside
-  `DecisionFeatures`.
+- A local CVRP repair/diagnostic slice is implemented and locally accepted:
+  [`../experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md`](../experiments/v0.4/v04-cvrp-mechanism-matrix-and-size70-repair-20260617.md).
+  It adds a no-LLM mechanism matrix for `canonical_alns_vns`, `alns_only`, and
+  `size70_two_opt_candidate`, plus a CVRP-owned size70/two-opt active solver
+  fallback when full VNS is skipped. BKS/gap/route/runtime/phase diagnostics
+  stay report-only and outside generic `DecisionFeatures`.
+- Next CVRP/VRP gate: after committing and syncing a clean WSL runner checkout,
+  run a small no-LLM family/slice/mechanism matrix before any longer LLM CVRP
+  campaign.
 
 Active work as of the latest handoff:
 

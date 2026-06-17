@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
-from .config import EXIT_RESERVE_FRACTION, SIGMA_ACCEPTED, SIGMA_BEST, SIGMA_BETTER, _EPS
+from .config import (
+    EXIT_RESERVE_FRACTION,
+    SIGMA_ACCEPTED,
+    SIGMA_BEST,
+    SIGMA_BETTER,
+    SIZE70_TWO_OPT_MIN_CUSTOMERS,
+    _EPS,
+)
 from .construction import (
     _capacity_balanced_construction,
     _clarke_wright_savings,
@@ -18,7 +25,10 @@ from .destroy_repair import (
     _shaw_removal,
     _worst_removal,
 )
-from .local_search import _default_vns_operators, _vns
+from .local_search import _default_vns_operators, _two_opt_intra_polish, _vns
+
+_SIZE70_TWO_OPT_INITIAL_PHASE = "size70_two_opt_initial"
+_SIZE70_TWO_OPT_EMBEDDED_PHASE = "size70_two_opt_embedded"
 
 
 class _ALNSVNSSolver:
@@ -134,6 +144,14 @@ class _ALNSVNSSolver:
                     candidate.remove_empty_routes()
                     if improved:
                         candidate.rebuild_index()
+                elif self._should_run_size70_two_opt(instance):
+                    self._run_size70_two_opt_polish(
+                        candidate,
+                        phase=_SIZE70_TWO_OPT_EMBEDDED_PHASE,
+                        reserve=reserve,
+                        iteration=iteration,
+                        record_best_update=False,
+                    )
             except ValueError:
                 destroy_weights.record(d_idx, 0.0)
                 repair_weights.record(r_idx, 0.0)
@@ -232,7 +250,54 @@ class _ALNSVNSSolver:
             )
             self.context.record_phase("vns_initial", self.context.elapsed_ms() - phase_ms)
             solution.remove_empty_routes()
+        elif self._should_run_size70_two_opt(instance):
+            self._run_size70_two_opt_polish(
+                solution,
+                phase=_SIZE70_TWO_OPT_INITIAL_PHASE,
+                reserve=reserve,
+                iteration=0,
+                record_best_update=True,
+            )
         return solution
+
+    def _should_run_size70_two_opt(self, instance):
+        return (
+            self.time_limit > 0
+            and instance.customer_count >= SIZE70_TWO_OPT_MIN_CUSTOMERS
+            and (not self.use_vns or instance.customer_count > self.vns_threshold)
+        )
+
+    def _run_size70_two_opt_polish(
+        self,
+        solution,
+        *,
+        phase,
+        reserve,
+        iteration,
+        record_best_update,
+    ):
+        if self.context.remaining_time() <= reserve:
+            return False
+        phase_ms = self.context.elapsed_ms()
+        accepted_moves, delta_sum = _two_opt_intra_polish(
+            solution,
+            self.context,
+            reserve,
+            phase,
+        )
+        self.context.record_phase(phase, self.context.elapsed_ms() - phase_ms)
+        if accepted_moves > 0:
+            solution.remove_empty_routes()
+            solution.rebuild_index()
+            if record_best_update:
+                self.context.record_best_update(
+                    solution.routes_as_tuples(),
+                    phase=phase,
+                    iteration=iteration,
+                    delta_from_previous_best=delta_sum,
+                    operator="two_opt_intra",
+                )
+        return accepted_moves > 0
 
     def _within_budget(self, start_ms, reserve):
         elapsed_s = max(0.0, (self.context.elapsed_ms() - start_ms) / 1000.0)
