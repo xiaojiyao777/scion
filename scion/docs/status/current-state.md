@@ -38,9 +38,9 @@ CVRP/VRP:
 - Rejected default directions remain: broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating, and
   fixed early-8 as a production default.
-- Accepted current opportunity: scheduler-owned adaptive embedded-VNS share70
-  refinement. The fixed no-LLM `adaptive_embedded_vns_share70_cadence2`
-  diagnostic is proposal-only evidence, not a default solver change.
+- Accepted current lesson: scheduler-owned adaptive embedded-VNS share70
+  refinement was useful for steering and diagnostics, but the tested variants
+  are not production solver improvements.
 - Latest agentic field check from commit `7e312a7` is positive research-loop
   evidence: target-intent, hypothesis, tool-selection, and code all stayed on
   `policies/baseline_modules/scheduler.py` /
@@ -51,26 +51,29 @@ CVRP/VRP:
   improvement. It produced pair W/L/T `16/11/5`, median candidate-minus-champion
   delta `-0.5`, mean `+2.0`, CMT4 case-level win, M-n200 neutrality, and an
   X-n110 tail loss (`+116`) that prevents promotion.
-- Current telemetry gap: the candidate recorded trigger activation/runtime but
-  not direct mechanism effect attribution. This should be repaired through
-  CVRP-owned proposal/code guidance, not by adding another generic gate.
+- Follow-up no-LLM diagnostics added direct mechanism effect telemetry and
+  rejected share70 floor/hardcap/softrescue/tail6 as X-n110 fixes. X-n110 30s
+  seed 43 keeps the `+116` tail loss across those variants.
+- Current guidance now tells the agent not to repeat those share70 scheduler
+  variants. A next scheduler proposal must be materially different and explain
+  the X-tail repair; otherwise target selection should pivot to a concrete
+  non-scheduler solver-design owner.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Local follow-up has added CVRP-owned guidance requiring share70 trigger
-  candidates to record direct effect telemetry with `context.record_move` when
-  triggered embedded VNS improves the candidate.
+- Latest CVRP share70 cap/tail diagnostic artifacts are synced back to the
+  server experiment root.
 
 ## Next Actions
 
-1. Run focused tests for the share70 effect-telemetry guidance repair and keep
-   it problem-owned.
-2. Continue the CVRP scheduler mechanism family with a target that addresses
-   X-n110 tail losses and preserves CMT4/M-n200 behavior. Treat runtime as
-   supporting evidence only.
+1. Use the share70 diagnostics as branch lessons, not as the next default
+   target. Do not repeat floor, hardcap, softrescue, or tail6.
+2. Choose the next CVRP target by mechanism ownership. Prefer a concrete
+   non-scheduler solver-design owner unless a scheduler proposal gives a
+   materially different X-tail repair with evidence.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -85,6 +88,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-embedded-vns-share-trigger-focus-20260617.md`.
 - CVRP share70 agentic field check:
   `scion/docs/experiments/v0.4/v04-cvrp-share70-agentic-1r-7e312a7-postrun-20260617.md`.
+- CVRP share70 cap/tail diagnostics:
+  `scion/docs/experiments/v0.4/v04-cvrp-share70-cap-tail-diagnostics-20260617.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

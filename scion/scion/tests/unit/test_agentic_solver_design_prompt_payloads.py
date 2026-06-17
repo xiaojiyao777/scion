@@ -57,10 +57,10 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
         }
     )
 
-    assert "adaptive embedded-VNS share-70 cadence-2" in user_prompt
-    assert "cumulative embedded-VNS runtime-share" in user_prompt
-    assert "remaining-budget" in user_prompt
-    assert "repaired-candidate-improvement signals" in user_prompt
+    assert "adaptive embedded-VNS share-70 line has already been tested" in user_prompt
+    assert "floor, hard-cap, repair-rescue, and sparse-tail-rescue" in user_prompt
+    assert "X-n110 30s checks reproduced the tail loss" in user_prompt
+    assert "materially different from floor, hard-cap, repair-rescue" in user_prompt
     assert "record direct effect telemetry with `context.record_move`" in user_prompt
     assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
 
@@ -89,13 +89,13 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     )
 
     assert "Solver-design target-selection guidance" in user_prompt
-    assert "Current CVRP target-selection priority" in user_prompt
+    assert "Current CVRP target-selection guidance" in user_prompt
     assert "policies/baseline_modules/scheduler.py" in user_prompt
-    assert "not the right owner for the current bottleneck" in user_prompt
-    assert "adaptive embedded-VNS share-70 cadence-2" in user_prompt
-    assert "cumulative embedded-VNS runtime-share" in user_prompt
-    assert "remaining-budget" in user_prompt
-    assert "repaired-candidate-improvement signals" in user_prompt
+    assert "do not repeat the adaptive embedded-VNS share70 floor" in user_prompt
+    assert "materially different X-n110 tail-loss repair" in user_prompt
+    assert "non-scheduler solver-design owner" in user_prompt
+    assert "explicitly contrast against the rejected floor" in user_prompt
+    assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
 
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:

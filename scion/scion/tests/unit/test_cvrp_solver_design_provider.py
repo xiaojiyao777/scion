@@ -217,22 +217,22 @@ def test_cvrp_hypothesis_guidance_defaults_policy_telemetry_to_indirect_evidence
     assert "do not claim ordinary ALNS best-improvement bookkeeping" in rendered
 
 
-def test_cvrp_hypothesis_guidance_exposes_adaptive_vns_opportunity() -> None:
+def test_cvrp_hypothesis_guidance_exposes_share70_tail_diagnostic_lessons() -> None:
     provider = CvrpAdapter(
         load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     ).solver_design_prompt_provider()
 
     rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
 
-    assert "adaptive embedded-VNS share-70 cadence-2" in rendered
+    assert "adaptive embedded-VNS share-70 line has already been tested" in rendered
     assert "proposal-only" in rendered
     assert "excluded from DecisionFeatures/promotion gates" in rendered
-    assert "current exception is the adaptive embedded-VNS share-70 cadence-2 opportunity" in rendered
-    assert "raw adaptive embedded-VNS cadence-2 lowered embedded-VNS runtime pressure" in rendered
-    assert "64-row focused WSL matrix" in rendered
-    assert "mean paired delta -0.12" in rendered
-    assert "not as a default solver change" in rendered
-    assert "cumulative embedded-VNS runtime-share, objective, remaining-budget" in rendered
+    assert "floor, hard-cap, repair-rescue, and sparse-tail-rescue" in rendered
+    assert "X-n110 30s checks reproduced the tail loss" in rendered
+    assert "`+116` on seed 43" in rendered
+    assert "simple share70 cap/rescue variants are rejected" in rendered
+    assert "materially different from floor, hard-cap, repair-rescue" in rendered
+    assert "preserve the X-n110 seed-43 canonical improvement" in rendered
     assert "record direct effect telemetry with `context.record_move`" in rendered
     assert "activation/runtime counters alone leave effect attribution missing" in rendered
     assert "Do not hardcode case ids, BKS values, seeds, or split membership" in rendered

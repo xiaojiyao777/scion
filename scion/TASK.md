@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP share70 agentic low-SNR expansion accepted; effect-telemetry guidance next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP share70 cap/tail diagnostics accepted as lessons; next CVRP target should pivot or give a materially different X-tail repair*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3450,8 +3450,17 @@ Field gate:
   delta `-0.12`, median `0.0`, with lower embedded-VNS share than early-8.
   Raw cadence-2, recent-best/stall gates, broad VNS removal, and fixed early-8
   as a default are rejected or insufficient. CVRP solver-design prompt guidance
-  now prioritizes share70 scheduler refinement for the next short agentic
-  check.
+  then prioritized share70 scheduler refinement for one short agentic check.
+- Completed CVRP share70 cap/tail diagnostics. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-share70-cap-tail-diagnostics-20260617.md`.
+  Direct trigger effect telemetry is accepted, but share70 floor, hardcap,
+  softrescue, and tail6 all preserve the X-n110 30s seed-43 `+116` tail loss.
+  These variants are rejected as production solver improvements and should not
+  be repeated by the next agent. CVRP prompt guidance now treats share70 as a
+  diagnostic lesson rather than the default target-selection priority: select
+  `policies/baseline_modules/scheduler.py` only for a materially different
+  X-tail repair; otherwise pivot to a concrete non-scheduler solver-design
+  owner.
 
 ## Status Cadence
 
