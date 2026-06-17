@@ -135,21 +135,30 @@ CVRP/VRP:
   `policies/baseline_modules/scheduler.py` as the owner target, and requires
   explicit notes if the agent deviates to a non-scheduler mechanism. This
   remains proposal-only and outside `DecisionFeatures`.
+- The priority-guided field check from commit `0ac863a` selected the intended
+  scheduler-owned cadence trigger:
+  [`../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md).
+  The run was valid (`32/32` screening pairs, `0` failed pairs) and generated a
+  real `adaptive_embedded_vns_cadence2_trigger` patch in
+  `scheduler.py`. The candidate saved runtime (`runtime_ratio_median=0.9936`,
+  `runtime_delta_median=-155.5 ms`) but failed objective screening
+  (`tier=regression`, median delta `-0.25`, `CMT4` and `X-n110-k13` losses) and
+  was discarded. This accepts the steering repair and rejects the generated
+  trigger as a solver improvement.
 
 ## Active Work
 
 - No LLM campaign is currently running.
-- Local code has a focused CVRP target-selection-priority repair and regression
-  test. WSL must be fast-forwarded after commit/push before the next CVRP
-  agentic rerun.
+- No uncommitted Scion framework repair is currently pending. The latest CVRP
+  steering repair is pushed, WSL-fast-forwarded, and field-accepted.
 - The latest CVRP no-LLM and agentic artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Commit and push the CVRP target-selection-priority repair, fast-forward WSL,
-   then rerun a short targeted CVRP agentic campaign. First inspect the live
-   `hypothesis_target_intent` artifact: it should select the cadence-2 scheduler
-   trigger owner or state an explicit evidence-backed deviation reason.
+1. Treat the CVRP prompt/target steering repair as accepted and move to
+   mechanism analysis: inspect the `adaptive_embedded_vns_cadence2_trigger`
+   patch and case deltas, then design a less aggressive trigger that preserves
+   runtime savings without the `CMT4` / `X-n110-k13` quality losses.
 2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
    CVRP same-mechanism research line, but do not confuse it with cadence-2
    adaptive-VNS trigger evidence.
@@ -189,6 +198,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-cadence2-providerref-agentic-1r-6c842f6-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-targetintent-cadence-agentic-1r-75bd938-postrun-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md)
 
 WSL coordination:
 

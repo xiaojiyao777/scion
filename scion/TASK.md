@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP agentic research-loop evidence positive; target-intent cadence steering repair next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP target steering accepted; cadence mechanism analysis next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3421,6 +3421,22 @@ Field gate:
   fast-forward, and a short rerun whose target-intent artifact selects the
   cadence scheduler trigger owner or records an evidence-backed deviation
   reason.
+- Completed the priority-guided CVRP agentic `1R` field check from commit
+  `0ac863a`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-priority-cadence-agentic-1r-0ac863a-postrun-20260617.md`.
+  The steering repair is accepted: target-intent selected
+  `policies/baseline_modules/scheduler.py` and mechanism
+  `adaptive_embedded_vns_cadence2_trigger`, then code generation produced a
+  real scheduler patch. The run was valid with wrapper `exit_code=0`,
+  `1` effective screening round, `1` formal candidate artifact, `32/32`
+  screening pairs, and `0` failed pairs. The candidate is rejected as a solver
+  improvement: objective evidence was `tier=regression`, median delta `-0.25`,
+  with clear `CMT4` and `X-n110-k13` losses, although runtime improved
+  (`runtime_ratio_median=0.9936`, `runtime_delta_median=-155.5 ms`). Branch
+  discard is accepted because runtime is supporting evidence only and objective
+  screening failed. Next gate is no longer prompt plumbing; it is mechanism
+  analysis and a new cadence-trigger design that keeps runtime savings without
+  the observed quality losses.
 
 ## Status Cadence
 
