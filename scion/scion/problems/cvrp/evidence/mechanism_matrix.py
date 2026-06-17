@@ -17,6 +17,7 @@ __all__ = [
     "CvrpMatrixCase",
     "CvrpMatrixJob",
     "CvrpMechanismSpec",
+    "available_cvrp_mechanisms",
     "build_jobs",
     "build_cvrp_mechanism_matrix_manifest",
     "case_slice_for_dimension",
@@ -109,7 +110,7 @@ class CvrpMatrixJob:
 
 
 def default_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
-    """Return the required CVRP-owned no-LLM mechanism surfaces."""
+    """Return the default CVRP-owned no-LLM mechanism surfaces."""
 
     return (
         CvrpMechanismSpec(
@@ -143,6 +144,46 @@ def default_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
                 "and restricts the local-search list to intra-route two-opt."
             ),
             overlays=("config_vns_threshold_70", "local_search_two_opt_only"),
+        ),
+    )
+
+
+def available_cvrp_mechanisms() -> tuple[CvrpMechanismSpec, ...]:
+    """Return all selectable CVRP no-LLM mechanisms, including focused probes."""
+
+    return default_cvrp_mechanisms() + (
+        CvrpMechanismSpec(
+            mechanism_id="initial_vns_disabled",
+            label="initial VNS disabled",
+            mechanism_family="diagnostic_probe",
+            mechanism_slice="disable_initial_vns",
+            description=(
+                "Focused scheduler diagnostic that keeps embedded VNS enabled "
+                "but disables the initial VNS phase."
+            ),
+            overlays=("config_disable_initial_vns",),
+        ),
+        CvrpMechanismSpec(
+            mechanism_id="embedded_vns_disabled",
+            label="embedded VNS disabled",
+            mechanism_family="diagnostic_probe",
+            mechanism_slice="disable_embedded_vns",
+            description=(
+                "Focused scheduler diagnostic that keeps initial VNS enabled "
+                "but disables VNS inside ALNS candidate evaluation."
+            ),
+            overlays=("config_disable_embedded_vns",),
+        ),
+        CvrpMechanismSpec(
+            mechanism_id="pure_alns_no_polish",
+            label="pure ALNS without local-search polish",
+            mechanism_family="diagnostic_probe",
+            mechanism_slice="pure_alns_no_polish",
+            description=(
+                "Focused diagnostic with VNS disabled and the size70/two-opt "
+                "fallback disabled, separating ALNS from cheap local polish."
+            ),
+            overlays=("config_use_vns_false", "config_disable_size70_two_opt"),
         ),
     )
 
@@ -321,6 +362,9 @@ def summarize_solver_output_for_job(
     best_update_summary = _dict_or_none(
         runtime.get("solver_algorithm_best_update_summary")
     )
+    objective_probes = _list_or_empty(
+        runtime.get("solver_algorithm_objective_probes")
+    )
     actionability = _dict_or_none(
         runtime.get("solver_algorithm_actionability_summary")
     )
@@ -412,6 +456,7 @@ def summarize_solver_output_for_job(
             "phase_improvement_counts": _dict_ints(
                 runtime.get("solver_algorithm_phase_improvement_counts")
             ),
+            "objective_probes": objective_probes,
             "actionability_summary": actionability,
         },
         "runtime_phase_split": {
@@ -519,6 +564,7 @@ def _reserved_result_fields() -> dict[str, Any]:
             "phase_delta_sum",
             "phase_best_delta",
             "phase_improvement_counts",
+            "objective_probes",
             "actionability_summary",
         ],
         "runtime_phase_split": [
@@ -581,6 +627,7 @@ def _empty_phase_telemetry() -> dict[str, Any]:
         "phase_delta_sum": {},
         "phase_best_delta": {},
         "phase_improvement_counts": {},
+        "objective_probes": [],
         "actionability_summary": None,
     }
 

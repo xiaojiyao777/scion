@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scion.problems.cvrp.evidence.mechanism_matrix import (
     CvrpMatrixCase,
+    available_cvrp_mechanisms,
     build_cvrp_mechanism_matrix_manifest,
     build_jobs,
     default_cvrp_mechanisms,
@@ -83,6 +84,29 @@ def test_default_mechanisms_cover_required_cvrp_surfaces() -> None:
     assert mechanisms[2].overlays == (
         "config_vns_threshold_70",
         "local_search_two_opt_only",
+    )
+
+
+def test_available_mechanisms_include_focused_vns_diagnostics() -> None:
+    mechanisms = {item.mechanism_id: item for item in available_cvrp_mechanisms()}
+
+    assert set(mechanisms) >= {
+        "canonical_alns_vns",
+        "alns_only",
+        "size70_two_opt_candidate",
+        "initial_vns_disabled",
+        "embedded_vns_disabled",
+        "pure_alns_no_polish",
+    }
+    assert mechanisms["initial_vns_disabled"].overlays == (
+        "config_disable_initial_vns",
+    )
+    assert mechanisms["embedded_vns_disabled"].overlays == (
+        "config_disable_embedded_vns",
+    )
+    assert mechanisms["pure_alns_no_polish"].overlays == (
+        "config_use_vns_false",
+        "config_disable_size70_two_opt",
     )
 
 
@@ -181,6 +205,10 @@ def test_planned_result_and_summary_keep_quality_and_phase_diagnostics(
         "alns": 4.0,
         "vns": 2.0,
     }
+    assert alns_result["phase_telemetry"]["objective_probes"] == [
+        {"name": "vns_initial_before", "total_distance": 1530.0},
+        {"name": "vns_initial_after", "total_distance": 1510.0},
+    ]
     assert alns_result["runtime_phase_split"]["phase_runtime_ms"] == {
         "construction": 10,
         "alns": 70,
@@ -283,6 +311,44 @@ def test_cli_dry_run_accepts_repeatable_case_id_filter(tmp_path: Path) -> None:
     }
 
 
+def test_cli_dry_run_accepts_focused_mechanism_selection(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "cases.json"
+    _case_manifest(manifest_path)
+    output_dir = tmp_path / "matrix"
+    tool = _load_tool()
+
+    status = tool.main(
+        [
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--repo-root",
+            str(tmp_path / "repo"),
+            "--data-root",
+            str(tmp_path / "vrp"),
+            "--case-manifest",
+            str(manifest_path),
+            "--output-dir",
+            str(output_dir),
+            "--mechanism",
+            "initial_vns_disabled",
+            "--mechanism",
+            "pure_alns_no_polish",
+            "--seed",
+            "11",
+            "--time-budget-sec",
+            "1",
+            "--dry-run",
+        ]
+    )
+
+    assert status == 0
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert [job["mechanism_id"] for job in manifest["jobs"]] == [
+        "initial_vns_disabled",
+        "pure_alns_no_polish",
+    ]
+
+
 def _raw_solver_output(*, total_distance: float, routes: int) -> dict[str, object]:
     return {
         "objective": {
@@ -305,6 +371,13 @@ def _raw_solver_output(*, total_distance: float, routes: int) -> dict[str, objec
             "solver_algorithm_best_update_summary": {"best_update_count": 3},
             "solver_algorithm_best_update_trace": [
                 {"phase": "alns", "total_distance": total_distance}
+            ],
+            "solver_algorithm_objective_probes": [
+                {
+                    "name": "vns_initial_before",
+                    "total_distance": total_distance + 20.0,
+                },
+                {"name": "vns_initial_after", "total_distance": total_distance},
             ],
             "solver_algorithm_phase_move_attempts": {"alns": 8, "vns": 3},
             "solver_algorithm_phase_delta_sum": {"alns": 7.0, "vns": 2.0},

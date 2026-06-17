@@ -196,6 +196,7 @@ def solver_algorithm_defaults(
         "solver_algorithm_best_improving_moves": 0,
         "solver_algorithm_best_delta": 0.0,
         "solver_algorithm_best_update_trace": [],
+        "solver_algorithm_objective_probes": [],
         "solver_algorithm_best_update_summary": _best_update_summary_template(),
         "solver_algorithm_phase_delta_sum": {"none": 0.0},
         "solver_algorithm_phase_best_delta": {"none": 0.0},
@@ -511,6 +512,42 @@ class SolverAlgorithmContext:
         if len(trace) < _BEST_UPDATE_TRACE_LIMIT:
             trace.append(event)
         _refresh_solver_algorithm_best_update_summary(self._audit, event)
+
+    def record_objective_probe(
+        self,
+        name: str,
+        solution: Any,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Record bounded objective snapshots for phase attribution diagnostics."""
+
+        coerced = _coerce_solution(solution)
+        if coerced is None and callable(getattr(solution, "routes_as_tuples", None)):
+            coerced = _coerce_solution(solution.routes_as_tuples())
+        if coerced is None:
+            raise ValueError("solution cannot be coerced to CvrpSolution")
+        objective = self.objective(coerced)
+        probes = self._audit.setdefault("solver_algorithm_objective_probes", [])
+        if not isinstance(probes, list):
+            probes = []
+            self._audit["solver_algorithm_objective_probes"] = probes
+        if len(probes) >= _BEST_UPDATE_TRACE_LIMIT:
+            return
+        event: dict[str, Any] = {
+            "elapsed_ms": self.elapsed_ms(),
+            "name": str(name or "").strip() or "objective_probe",
+            "objective": dict(objective),
+            "total_distance": float(objective.get("total_distance", 0.0)),
+            "route_count": len(coerced.routes),
+        }
+        if metadata:
+            event["metadata"] = {
+                str(key): value
+                for key, value in metadata.items()
+                if isinstance(value, (str, int, float, bool)) or value is None
+            }
+        probes.append(event)
 
     def set_stop_reason(self, reason: str) -> None:
         value = str(reason or "").strip()

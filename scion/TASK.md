@@ -3237,6 +3237,17 @@ Field gate:
   `test_warehouse_target_preview.py` `42 passed`; py_compile passed. Next
   warehouse gate is one short agentic `6R` behavior check when model/API
   conditions are healthy.
+- Implemented local CVRP VNS variant/telemetry diagnostic repair. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md`.
+  Default mechanism matrices still run the existing three mechanisms, but
+  explicit `--mechanism` selection can now run `initial_vns_disabled`,
+  `embedded_vns_disabled`, and `pure_alns_no_polish`. The scheduler records
+  bounded objective probes before/after VNS phases so no-LLM matrices can
+  explain VNS timing/global-best mismatch. Local acceptance:
+  mechanism-matrix tests `8 passed`, py_compile passed, default dry-run still
+  produced `3` jobs, and a 3-second P-n76 smoke completed `4/4` with objective
+  probes. Next gate is the WSL variant matrix over `P-n76-k4`, `CMT2`, `CMT4`,
+  and `M-n151-k12`.
 
 ## Status Cadence
 

@@ -24,6 +24,7 @@ from scion.problems.cvrp.evidence.mechanism_matrix import (
     RESULTS_SCHEMA,
     CvrpMatrixJob,
     CvrpMechanismSpec,
+    available_cvrp_mechanisms,
     build_cvrp_mechanism_matrix_manifest,
     build_jobs,
     default_cvrp_mechanisms,
@@ -306,6 +307,12 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
     for overlay in overlays:
         if overlay == "config_use_vns_false":
             _overlay_config_use_vns_false(workspace)
+        elif overlay == "config_disable_initial_vns":
+            _overlay_config_bool(workspace, "ENABLE_INITIAL_VNS", False)
+        elif overlay == "config_disable_embedded_vns":
+            _overlay_config_bool(workspace, "ENABLE_EMBEDDED_VNS", False)
+        elif overlay == "config_disable_size70_two_opt":
+            _overlay_config_bool(workspace, "ENABLE_SIZE70_TWO_OPT_FALLBACK", False)
         elif overlay == "config_vns_threshold_70":
             _overlay_config_vns_threshold(workspace, threshold=70)
         elif overlay == "local_search_two_opt_only":
@@ -315,9 +322,14 @@ def _apply_mechanism_overlays(workspace: Path, overlays: Sequence[str]) -> None:
 
 
 def _overlay_config_use_vns_false(workspace: Path) -> None:
+    _overlay_config_bool(workspace, "USE_VNS", False)
+
+
+def _overlay_config_bool(workspace: Path, name: str, value: bool) -> None:
+    replacement = "True" if value else "False"
     config_path = workspace / "policies" / "baseline_modules" / "config.py"
     text = config_path.read_text(encoding="utf-8")
-    text = _replace_once(text, "USE_VNS = True", "USE_VNS = False")
+    text = _replace_line_prefix(text, f"{name} =", f"{name} = {replacement}")
     config_path.write_text(text, encoding="utf-8")
 
 
@@ -351,10 +363,10 @@ def _overlay_local_search_two_opt_only(workspace: Path) -> None:
 
 def _selected_mechanisms(selected: Sequence[str]) -> tuple[CvrpMechanismSpec, ...]:
     mechanisms_by_id = {
-        mechanism.mechanism_id: mechanism for mechanism in default_cvrp_mechanisms()
+        mechanism.mechanism_id: mechanism for mechanism in available_cvrp_mechanisms()
     }
     if not selected:
-        return tuple(mechanisms_by_id.values())
+        return default_cvrp_mechanisms()
     mechanisms: list[CvrpMechanismSpec] = []
     for value in selected:
         mechanism_id = str(value or "").strip()

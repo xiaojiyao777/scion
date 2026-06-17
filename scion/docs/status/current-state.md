@@ -364,6 +364,16 @@ Latest CVRP/VRP state:
   Protocol thresholds, validation/frozen gates, and `DecisionFeatures` are
   unchanged. Local acceptance: warehouse target preview `42 passed`;
   py_compile passed.
+- CVRP VNS variant/telemetry diagnostic repair is locally accepted:
+  [`../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md`](../experiments/v0.4/v04-cvrp-vns-variant-telemetry-repair-20260617.md).
+  Default matrices remain the existing three mechanisms; explicit
+  `--mechanism` can now select `initial_vns_disabled`,
+  `embedded_vns_disabled`, and `pure_alns_no_polish`. Scheduler telemetry now
+  records objective probes around VNS phases for no-LLM attribution. Local
+  acceptance: mechanism-matrix tests `8 passed`, py_compile passed, default
+  dry-run still produced `3` jobs, and a 3-second P-n76 smoke completed `4/4`
+  with objective probes. Next CVRP gate is a WSL variant matrix on `P-n76-k4`,
+  `CMT2`, `CMT4`, and `M-n151-k12`.
 
 Active work as of the latest handoff:
 

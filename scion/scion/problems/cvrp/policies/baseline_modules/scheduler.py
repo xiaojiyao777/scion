@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
 from .config import (
+    ENABLE_EMBEDDED_VNS,
+    ENABLE_INITIAL_VNS,
+    ENABLE_SIZE70_TWO_OPT_FALLBACK,
     EXIT_RESERVE_FRACTION,
     SIGMA_ACCEPTED,
     SIGMA_BEST,
@@ -131,8 +134,13 @@ class _ALNSVNSSolver:
                     continue
                 repair_op(candidate, removed, rng)
                 candidate.remove_empty_routes()
-                if self.use_vns and instance.customer_count <= self.vns_threshold:
+                if (
+                    ENABLE_EMBEDDED_VNS
+                    and self.use_vns
+                    and instance.customer_count <= self.vns_threshold
+                ):
                     phase_ms = self.context.elapsed_ms()
+                    self.context.record_objective_probe("vns_embedded_before", candidate)
                     improved = _vns(
                         candidate,
                         _default_vns_operators(),
@@ -140,8 +148,16 @@ class _ALNSVNSSolver:
                         self.context,
                         reserve,
                     )
-                    self.context.record_phase("vns_embedded", self.context.elapsed_ms() - phase_ms)
+                    self.context.record_phase(
+                        "vns_embedded",
+                        self.context.elapsed_ms() - phase_ms,
+                    )
                     candidate.remove_empty_routes()
+                    self.context.record_objective_probe(
+                        "vns_embedded_after",
+                        candidate,
+                        metadata={"improved": bool(improved), "iteration": iteration},
+                    )
                     if improved:
                         candidate.rebuild_index()
                 elif self._should_run_size70_two_opt(instance):
@@ -239,8 +255,15 @@ class _ALNSVNSSolver:
                 f"initial solution uses {len(solution.routes)} routes; "
                 f"max_routes={self.max_routes}"
             )
-        if self.use_vns and self.time_limit > 0 and instance.customer_count <= self.vns_threshold:
+        self.context.record_objective_probe("initial_before_local_search", solution)
+        if (
+            ENABLE_INITIAL_VNS
+            and self.use_vns
+            and self.time_limit > 0
+            and instance.customer_count <= self.vns_threshold
+        ):
             phase_ms = self.context.elapsed_ms()
+            self.context.record_objective_probe("vns_initial_before", solution)
             _vns(
                 solution,
                 _default_vns_operators(),
@@ -248,8 +271,12 @@ class _ALNSVNSSolver:
                 self.context,
                 reserve,
             )
-            self.context.record_phase("vns_initial", self.context.elapsed_ms() - phase_ms)
             solution.remove_empty_routes()
+            self.context.record_phase(
+                "vns_initial",
+                self.context.elapsed_ms() - phase_ms,
+            )
+            self.context.record_objective_probe("vns_initial_after", solution)
         elif self._should_run_size70_two_opt(instance):
             self._run_size70_two_opt_polish(
                 solution,
@@ -262,7 +289,8 @@ class _ALNSVNSSolver:
 
     def _should_run_size70_two_opt(self, instance):
         return (
-            self.time_limit > 0
+            ENABLE_SIZE70_TWO_OPT_FALLBACK
+            and self.time_limit > 0
             and instance.customer_count >= SIZE70_TWO_OPT_MIN_CUSTOMERS
             and (not self.use_vns or instance.customer_count > self.vns_threshold)
         )
