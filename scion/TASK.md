@@ -3194,12 +3194,26 @@ Field gate:
   `--case-id` support to `scion/tools/cvrp_mechanism_matrix.py`. This allows
   direct P-family/high-gap runs for `P-n76-k4`, `P-n101-k4`,
   `M-n151-k12`, `CMT2`, and `CMT4` without running a full 16-case matrix.
+  Multi-case exact runs must pass `--case-limit` at least equal to the number
+  of requested case ids because the matrix tool default remains conservative.
   Local acceptance: targeted warehouse/CVRP tests `48 passed`; py_compile
   passed.
 - WSL usage docs are in the external handoff channel:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`. Current live WSL runner path remains
   `/home/xjy-ubuntu/research/or-autoresearch-agent`.
+- Completed the focused 5-case WSL no-LLM CVRP matrix from commit `70dfc53`.
+  Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-focused5-mechanism-wsl-70dfc53-postrun-20260617.md`.
+  It completed `60/60` rows for `P-n76-k4`, `P-n101-k4`,
+  `M-n151-k12`, `CMT2`, and `CMT4` across four seeds. The result again rejects
+  `alns_only` and `size70_two_opt_candidate` as broad replacements
+  (`4/15/1` overall vs canonical, median delta `7.0`). The only useful local
+  signal is narrow: `P-n76-k4` wins `3/4` seeds with median delta `-4.0`, no
+  route regression, and no fleet violation. High-gap cases, especially `CMT2`,
+  get worse without canonical VNS. Next CVRP action should be deeper
+  `P-n76-k4` fixed-candidate/no-LLM seed diagnostics and phase-telemetry
+  comparison, not a long broad LLM CVRP campaign.
 
 ## Status Cadence
 

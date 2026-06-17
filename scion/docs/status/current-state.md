@@ -329,12 +329,22 @@ Latest CVRP/VRP state:
 - CVRP exact-case no-LLM diagnostics are prepared: the mechanism matrix tool
   now supports repeatable `--case-id`, filtering exact cases before
   `--case-limit`. Use it on synchronized WSL for P-family/high-gap cases
-  before any long LLM CVRP campaign.
+  before any long LLM CVRP campaign, and set `--case-limit` to at least the
+  number of requested exact case ids.
 - WSL handoff/connection docs live outside the repo in
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
 - Local acceptance for this slice: targeted warehouse/CVRP tests `48 passed`;
   py_compile passed.
+- The focused 5-case WSL no-LLM CVRP matrix from commit `70dfc53` is complete:
+  [`../experiments/v0.4/v04-cvrp-focused5-mechanism-wsl-70dfc53-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-focused5-mechanism-wsl-70dfc53-postrun-20260617.md).
+  It completed `60/60` jobs and again rejects broad `alns_only` or
+  `size70_two_opt_candidate` replacement (`4/15/1` overall vs canonical,
+  median delta `7.0`). The only replicated local positive signal is
+  `P-n76-k4` (`3/4` seeds, median delta `-4.0`, no route/fleet regression).
+  High-gap `CMT2`, `CMT4`, and `M-n151-k12` do not support removing or
+  bypassing VNS. Next CVRP work should deepen `P-n76-k4` fixed-candidate
+  diagnostics and compare phase telemetry before any long LLM CVRP campaign.
 
 Active work as of the latest handoff:
 

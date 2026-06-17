@@ -72,6 +72,10 @@ Implemented preparation:
 - this enables direct focused runs for `P-n76-k4`, `P-n101-k4`, `P-n65-k10`,
   `M-n151-k12`, `CMT2`, and `CMT4`.
 
+Because the matrix tool keeps a conservative default `--case-limit=1`, focused
+multi-case runs must set `--case-limit` to at least the number of requested
+exact case ids.
+
 Example next WSL command shape:
 
 ```bash
@@ -89,6 +93,7 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   --case-id P-n101-k4 \
   --case-id M-n151-k12 \
   --case-id CMT4 \
+  --case-limit 4 \
   --seed 11 --seed 23 --seed 37 --seed 47 \
   --time-budget-sec 3 \
   --timeout-padding-sec 60
