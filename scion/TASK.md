@@ -3381,6 +3381,8 @@ Field gate:
   postrun prompt audit showed the cadence-2 opportunity text was absent from
   live hypothesis prompts. Local repair now makes solver-design prompt provider
   resolution survive agentic sanitization via `solver_design_prompt_provider_ref`.
+  The CVRP provider wording also now treats cadence-2 as the explicit exception
+  to the older warning against blind scheduler tweaks.
   Acceptance for that repair: agentic solver-design prompt tests `19 passed`,
   related provider/context/prompt tests `45 passed`, py_compile passed, and
   `git diff --check` passed. Next gate is to rerun a short targeted CVRP

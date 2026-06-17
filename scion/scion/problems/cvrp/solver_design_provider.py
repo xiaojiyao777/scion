@@ -146,9 +146,12 @@ class CvrpSolverDesignProvider:
                 "solver_design optimization directions."
             ),
             (
-                "After win-rate-zero scheduler variants, prefer a non-scheduler "
-                "mechanism module or a stable-entrypoint algorithm-body change "
-                "over another phase-order or weight tweak."
+                "After win-rate-zero scheduler variants, avoid another blind "
+                "phase-order or weight tweak. The current exception is the "
+                "adaptive embedded-VNS cadence-2 opportunity below; refine it "
+                "only with explicit objective, budget, best-update, or repaired-"
+                "candidate trigger evidence. Otherwise prefer a non-scheduler "
+                "mechanism module or a stable-entrypoint algorithm-body change."
             ),
             (
                 "Current CVRP no-LLM opportunity, proposal-only and excluded "

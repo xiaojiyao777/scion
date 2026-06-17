@@ -92,6 +92,10 @@ Local repair after the run:
 - `scion/scion/proposal/engine/solver_design_prompts.py` now ignores
   non-callable provider placeholders and can instantiate a provider from
   `solver_design_prompt_provider_ref`.
+- `scion/scion/problems/cvrp/solver_design_provider.py` now treats the
+  cadence-2 adaptive embedded-VNS opportunity as the explicit exception to the
+  older "avoid blind scheduler tweaks" guidance, so the provider no longer
+  steers away from the current target.
 - `scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py` now
   covers sanitized provider context and asserts the cadence-2 opportunity text
   appears in the hypothesis prompt.

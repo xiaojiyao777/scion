@@ -104,10 +104,10 @@ CVRP/VRP:
   opportunity text was absent from live hypothesis prompts. The prompt engine
   used fallback solver-design guidance because agentic context sanitization
   removed the provider object and the resolver did not recover from
-  `solver_design_prompt_provider_ref`. A local prompt-provider-ref repair is in
-  place and covered by focused tests; the next CVRP run must verify the
-  cadence-2 text appears in live traces before interpreting mechanisms as
-  cadence-trigger refinements.
+  `solver_design_prompt_provider_ref`. A local prompt-provider-ref repair and
+  cadence-specific guidance wording repair are in place and covered by focused
+  tests; the next CVRP run must verify the cadence-2 text appears in live
+  traces before interpreting mechanisms as cadence-trigger refinements.
 
 ## Active Work
 
