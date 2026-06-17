@@ -92,20 +92,39 @@ CVRP/VRP:
   [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md).
   The repair also makes hypothesis context consume the problem-owned
   solver-design prompt provider, matching the existing code-context path.
+- The first post-repair CVRP agentic `4R` WSL run completed with wrapper
+  `exit_code=0`, `4/4` effective screening rounds, `4` Protocol rows, `3`
+  formal candidate artifacts, `19` `gpt-5.5` traces, and no infra failures:
+  [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md).
+  It is accepted as positive CVRP research-loop behavior evidence: Scion formed
+  a depth-3 `route_limit_aware_regret_repair` branch, continued weak screening
+  signal in the same mechanism family, retained the active branch as marginal,
+  and abandoned a loss-heavy `local_search.py` clean fork.
+- The same postrun found that the intended cadence-2 adaptive embedded-VNS
+  opportunity text was absent from live hypothesis prompts. The prompt engine
+  used fallback solver-design guidance because agentic context sanitization
+  removed the provider object and the resolver did not recover from
+  `solver_design_prompt_provider_ref`. A local prompt-provider-ref repair is in
+  place and covered by focused tests; the next CVRP run must verify the
+  cadence-2 text appears in live traces before interpreting mechanisms as
+  cadence-trigger refinements.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - WSL is fast-forwarded to the latest pushed
-  `codex/v04-evidence-repair-plan` branch; the CVRP no-LLM artifacts are synced
-  back to the server.
+  `codex/v04-evidence-repair-plan` branch; the CVRP no-LLM and latest agentic
+  artifacts are synced back to the server.
 
 ## Next Actions
 
-1. Run a short CVRP agentic campaign to refine cadence-2 with
-   objective/budget/best-update triggers, not broad VNS removal or destroy-ratio
-   tuning.
-2. Keep a later warehouse repeat available to test whether champion `v2`
+1. Commit and push the prompt-provider-ref repair, then rerun a short targeted
+   CVRP agentic campaign and first inspect the live hypothesis trace for the
+   cadence-2 opportunity text.
+2. Preserve the `route_limit_aware_regret_repair` branch evidence as a viable
+   CVRP same-mechanism research line, but do not confuse it with cadence-2
+   adaptive-VNS trigger evidence.
+3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Evidence Index
@@ -138,6 +157,7 @@ CVRP current evidence:
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-variants-repair-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-compact-wsl-eddaf8c-postrun-20260617.md)
 - [`../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-proposal-context-repair-20260617.md)
+- [`../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`](../experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md)
 
 WSL coordination:
 

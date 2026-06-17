@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any, Mapping
 
 from scion.problem.providers import resolve_solver_design_prompt_provider
@@ -225,12 +226,51 @@ def _solver_design_prompt_provider(context: Mapping[str, Any]) -> Any | None:
         "prompt_provider",
     ):
         provider = context.get(key)
-        if provider is not None:
+        if _has_solver_design_prompt_method(provider):
+            return provider
+    for key in (
+        "solver_design_prompt_provider_ref",
+        "problem_prompt_provider_ref",
+        "prompt_provider_ref",
+    ):
+        provider = _provider_from_ref(context.get(key))
+        if _has_solver_design_prompt_method(provider):
             return provider
     return resolve_solver_design_prompt_provider(
         problem_spec=context.get("problem_spec"),
         adapter=context.get("adapter"),
     )
+
+
+def _has_solver_design_prompt_method(provider: Any | None) -> bool:
+    if provider is None:
+        return False
+    return any(
+        callable(getattr(provider, method_name, None))
+        for method_name in (
+            "solver_design_hypothesis_guidance",
+            "solver_design_code_rules",
+            "solver_design_scope_guidance",
+            "solver_design_user_constraints",
+            "solver_design_broad_scope_terms",
+        )
+    )
+
+
+def _provider_from_ref(ref: Any) -> Any | None:
+    ref_text = str(ref or "").strip()
+    if not ref_text or "." not in ref_text or not ref_text.startswith("scion."):
+        return None
+    module_name, _, qualname = ref_text.rpartition(".")
+    if not module_name or not qualname:
+        return None
+    try:
+        obj: Any = import_module(module_name)
+        for part in qualname.split("."):
+            obj = getattr(obj, part)
+        return obj() if isinstance(obj, type) else obj
+    except Exception:
+        return None
 
 
 def _provider_prompt_lines(

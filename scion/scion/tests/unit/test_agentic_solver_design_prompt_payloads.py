@@ -26,6 +26,38 @@ class SyntheticSolverDesignPromptProvider:
         )
 
 
+def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
+    _system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "CVRP.",
+            "research_surfaces": "solver_design [solver_design]",
+            "objective_policy_guidance": "",
+            "solver_mechanics": "",
+            "champion_operators_code": "",
+            "champion_stats": "{}",
+            "experiment_history": "",
+            "blacklist_summary": "",
+            "active_hyp_summary": "",
+            "sibling_summary": "",
+            "operator_categories": "solver_design",
+            "available_actions": "modify",
+            "targetable_files": "policies/baseline_modules/scheduler.py",
+            "active_problem_boundary_surfaces": "solver_design",
+            # Agentic context sanitization removes provider objects; the ref is
+            # the durable bridge back to the problem-owned prompt provider.
+            "solver_design_prompt_provider": {"sanitized": True},
+            "solver_design_prompt_provider_ref": (
+                "scion.problems.cvrp.solver_design_provider."
+                "CvrpSolverDesignProvider"
+            ),
+        }
+    )
+
+    assert "adaptive embedded-VNS cadence-2" in user_prompt
+    assert "remaining-budget, recent best-update" in user_prompt
+    assert "repaired-candidate-improvement signals" in user_prompt
+
+
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
     client = CapturingToolClient()
     creative = CreativeLayer(client)

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP adaptive-trigger tuning next*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP agentic research-loop evidence positive; cadence-trigger prompt repair rerun next*
 *Updated: 2026-06-17*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -3369,6 +3369,22 @@ Field gate:
   py_compile passed, provider/context/prompt tests `44 passed`, and
   `git diff --check` passed. Next gate is a short CVRP agentic refinement
   campaign from this context.
+- Completed a WSL CVRP agentic `4R` campaign from commit `7104928`. Postrun:
+  `scion/docs/experiments/v0.4/v04-cvrp-adaptive-trigger-agentic-4r-7104928-postrun-20260617.md`.
+  The run finished with wrapper `exit_code=0`, `4/4` effective screening
+  rounds, `4` Protocol rows, `3` formal candidate artifacts, `19` `gpt-5.5`
+  traces, and champion still at v1. It is accepted as positive CVRP
+  research-loop behavior evidence: Scion created a depth-3
+  `route_limit_aware_regret_repair` branch, continued weak signal in the same
+  mechanism family, and abandoned a loss-heavy clean-fork local-search branch.
+  It is not accepted as cadence-2 adaptive embedded-VNS trigger evidence:
+  postrun prompt audit showed the cadence-2 opportunity text was absent from
+  live hypothesis prompts. Local repair now makes solver-design prompt provider
+  resolution survive agentic sanitization via `solver_design_prompt_provider_ref`.
+  Acceptance for that repair: agentic solver-design prompt tests `19 passed`,
+  related provider/context/prompt tests `45 passed`, py_compile passed, and
+  `git diff --check` passed. Next gate is to rerun a short targeted CVRP
+  campaign and first verify the cadence-2 opportunity text in live traces.
 
 ## Status Cadence
 
