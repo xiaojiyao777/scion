@@ -170,7 +170,17 @@ Active work as of the latest handoff:
   tmux session `scion_wh_dataroot_repair_rerun6r_ad469f0_033450`.
   Preflight confirmed both production canary cases resolve under
   `/home/clawd/research/scion-data`, and the campaign log confirms
-  `SCION_WAREHOUSE_DATA_ROOT` activation before campaign startup.
+  `SCION_WAREHOUSE_DATA_ROOT` activation before campaign startup. Live health
+  check has now exercised the repaired path: the run has
+  `formal_screened_candidates=1`, `screening_protocol_results=1`, and
+  `protocol_metric_results=1`; the first formal candidate passed canary and
+  reached screening. The full `6R` run remains active, so final warehouse
+  research-quality interpretation still waits for postrun analysis.
+  A follow-up local taxonomy repair prevents future canary configuration/path
+  failures from being recorded as ordinary algorithmic `CANARY_FAILED` lessons:
+  structured config/path-root canary failures now surface as
+  `CANARY_CONFIG_ERROR`, while ordinary candidate canary vetoes keep
+  `CANARY_FAILED`. Focused validation passed with `54 passed`.
 - CVRP size70 Tier 1 Large-X completion diagnostic is complete and accepted.
   Postrun:
   [`../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md`](../experiments/v0.4/v04-cvrp-size70-tier1-largeX-postrun-20260615.md).

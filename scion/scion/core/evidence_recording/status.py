@@ -611,6 +611,12 @@ def _canary_result_payload(
         "passed": bool(getattr(canary_result, "passed", False)),
         "reason": getattr(canary_result, "reason", None),
     }
+    failure_category = str(getattr(canary_result, "failure_category", "") or "")
+    if failure_category:
+        payload["failure_category"] = failure_category
+    reason_codes = tuple(getattr(canary_result, "reason_codes", ()) or ())
+    if reason_codes:
+        payload["reason_codes"] = list(reason_codes)
     if isinstance(details, Mapping):
         payload.update(dict(details))
     payload.setdefault("schema_version", "scion.canary_result.v1")

@@ -127,6 +127,32 @@ class _RaisingProtocol:
         raise RuntimeError("protocol boom")
 
 
+class _PathSafetyCanaryProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(
+            passed=False,
+            reason=(
+                "canary configuration error: Unsafe case path in strict "
+                "ExperimentProtocol: absolute_outside_roots outside workspace "
+                "and safe_data_roots"
+            ),
+        )
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        raise AssertionError("screening should not run after canary config failure")
+
+
+class _OrdinaryFailingCanaryProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(
+            passed=False,
+            reason="Candidate infeasible on canary_x (champion was feasible)",
+        )
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        raise AssertionError("screening should not run after canary failure")
+
+
 class _ActivityTelemetryFailureProtocol:
     def run_canary(self, *_args, **_kwargs) -> CanaryResult:
         return CanaryResult(passed=True)
@@ -505,6 +531,113 @@ def test_evaluation_exception_returns_structured_failure_without_decision() -> N
     assert branch_controller.soft_abandoned is False
     assert failures and failures[-1].category == "evaluation"
     assert "protocol boom" in failures[-1].detail
+
+
+def test_canary_config_failure_rewrites_public_reason_without_changing_decision_boundary() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_PathSafetyCanaryProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+    )
+
+    decision, protocol_result, canary_result = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.ABANDON
+    assert protocol_result is None
+    assert canary_result.passed is False
+    assert canary_result.failure_category == "configuration_error"
+    assert canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
+    assert decision_reason_codes[branch.branch_id] == ("CANARY_CONFIG_ERROR",)
+    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == (
+        "CANARY_FAILED",
+    )
+    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
+        "CANARY_CONFIG_ERROR",
+    )
+
+
+def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_OrdinaryFailingCanaryProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+    )
+
+    decision, protocol_result, canary_result = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.ABANDON
+    assert protocol_result is None
+    assert canary_result.failure_category == "candidate_failure"
+    assert canary_result.reason_codes == ("CANARY_FAILED",)
+    assert decision_reason_codes[branch.branch_id] == ("CANARY_FAILED",)
+    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == (
+        "CANARY_FAILED",
+    )
+    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == ()
 
 
 def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:

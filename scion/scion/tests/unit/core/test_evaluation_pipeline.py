@@ -169,6 +169,39 @@ class MissingCanaryProtocol:
         return _protocol_result()
 
 
+class PathSafetyCanaryProtocol:
+    def __init__(self) -> None:
+        self.experiment_called = False
+
+    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
+        return CanaryResult(
+            passed=False,
+            reason=(
+                "case path /tmp/outside.json failed strict resolution: "
+                "absolute_outside_roots outside workspace and safe_data_roots"
+            ),
+        )
+
+    def run_experiment(self, **kwargs: object) -> ProtocolResult:
+        self.experiment_called = True
+        return _protocol_result()
+
+
+class OrdinaryFailingCanaryProtocol:
+    def __init__(self) -> None:
+        self.experiment_called = False
+
+    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
+        return CanaryResult(
+            passed=False,
+            reason="Candidate infeasible on canary_x (champion was feasible)",
+        )
+
+    def run_experiment(self, **kwargs: object) -> ProtocolResult:
+        self.experiment_called = True
+        return _protocol_result()
+
+
 def test_screening_pass_generates_expected_decision_features() -> None:
     protocol = RecordingProtocol(_protocol_result())
     pipeline = EvaluationPipeline(
@@ -316,6 +349,37 @@ def test_missing_canary_fails_closed_and_skips_protocol_experiment() -> None:
     assert outcome.decision_features.canary_passed is False
     assert protocol.experiment_called is False
     assert "Canary split not configured" in (outcome.canary_result.reason or "")
+    assert outcome.canary_result.failure_category == "configuration_error"
+    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
+
+
+def test_path_safety_canary_failure_is_config_reason_code() -> None:
+    protocol = PathSafetyCanaryProtocol()
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is None
+    assert outcome.raw_metrics_ref is None
+    assert outcome.canary_result.passed is False
+    assert outcome.decision_features.canary_passed is False
+    assert protocol.experiment_called is False
+    assert outcome.canary_result.failure_category == "configuration_error"
+    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
+
+
+def test_ordinary_canary_failure_keeps_algorithm_reason_code() -> None:
+    protocol = OrdinaryFailingCanaryProtocol()
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is None
+    assert outcome.canary_result.passed is False
+    assert outcome.decision_features.canary_passed is False
+    assert protocol.experiment_called is False
+    assert outcome.canary_result.failure_category == "candidate_failure"
+    assert outcome.canary_result.reason_codes == ("CANARY_FAILED",)
 
 
 def test_required_experiment_protocol_none_fails_closed() -> None:
@@ -331,6 +395,8 @@ def test_required_experiment_protocol_none_fails_closed() -> None:
     assert outcome.decision_features.canary_passed is False
     assert "experiment_protocol is required" in (outcome.canary_result.reason or "")
     assert "skeleton fallback disabled" in (outcome.canary_result.reason or "")
+    assert outcome.canary_result.failure_category == "configuration_error"
+    assert outcome.canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
 
 
 @pytest.mark.parametrize(

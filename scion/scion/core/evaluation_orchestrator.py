@@ -15,6 +15,11 @@ from scion.core.branch_lifecycle_policy import (
     VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
     TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
 )
+from scion.core.canary_failure import (
+    decision_reason_codes_for_canary,
+    is_canary_config_error,
+    public_canary_reason_codes,
+)
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
 from scion.core.features import BudgetState, SafeFeatureExtractor
@@ -250,6 +255,17 @@ class EvaluationOrchestrator:
             decision_engine=coordinated.reason_codes,
             lifecycle=tuple(getattr(coordinated, "lifecycle_reason_codes", ()) or ()),
         )
+        canary_reason_codes = public_canary_reason_codes(canary_result)
+        if canary_reason_codes and not canary_result.passed:
+            self.decision_reason_codes[bid] = decision_reason_codes_for_canary(
+                self.decision_reason_codes.get(bid, ()),
+                canary_result,
+            )
+            if is_canary_config_error(canary_result):
+                self.diagnostic_reason_codes[bid] = _merge_reason_codes(
+                    self.diagnostic_reason_codes.get(bid, ()),
+                    canary_reason_codes,
+                )
         if features.telemetry_effect_zero_diagnostic:
             self.decision_reason_codes[bid] = _merge_reason_codes(
                 self.decision_reason_codes[bid],

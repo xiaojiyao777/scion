@@ -785,6 +785,21 @@ Exit criteria:
   `/home/clawd/research/scion-experiments/v04-warehouse-dataroot-repair-rerun6r-ad469f0-20260617T011900Z`
   exited before campaign startup due unsupported `--problem-v1`; ignore it as
   a wrapper typo.
+  Live health check now accepts the data-root repair entry criterion:
+  `formal_screened_candidates=1`, `screening_protocol_results=1`,
+  `protocol_metric_results=1`, and the first formal candidate passed canary
+  before screening. The full `6R` run is still active, so research-quality
+  acceptance waits for final postrun analysis.
+- Completed locally: canary failure taxonomy repair after the invalid
+  `4a316e1` run showed `absolute_outside_roots` / canary configuration errors
+  being surfaced as ordinary `CANARY_FAILED` branch lessons. The repair adds a
+  generic `CanaryResult` failure category / reason-code layer and maps
+  configuration/path-root failures to `CANARY_CONFIG_ERROR`, while preserving
+  ordinary candidate canary vetoes as `CANARY_FAILED`. This keeps Decision on
+  deterministic structured codes; free-form canary text does not enter
+  `DecisionFeatures`. Focused validation:
+  `PYTHONPATH=scion python -m pytest scion/scion/tests/unit/core/test_canary_failure_taxonomy.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/unit/core/test_evaluation_orchestrator_telemetry.py scion/scion/tests/unit/core/test_decision_coordinator.py scion/scion/tests/unit/core/test_campaign_finalization_status_reconcile.py -q`
+  passed with `54 passed`, plus `py_compile` and `git diff --check`.
 - Launched: Phase 4 first-rung 4R focused validation runs from commit
   `32ab596` using local `gpt5.5`.
   CVRP formal run:

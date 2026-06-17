@@ -5,6 +5,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional, Protocol
 
+from scion.core.canary_failure import (
+    canary_configuration_error,
+    normalize_canary_result,
+)
 from scion.core.features import BudgetState, SafeFeatureExtractor
 from scion.core.models import (
     Branch,
@@ -140,10 +144,8 @@ class EvaluationPipeline:
                         selected_surface=request.selected_surface,
                     )
                 except (ValueError, NotImplementedError) as exc:
-                    canary_result = CanaryResult(
-                        passed=False,
-                        reason=f"canary configuration error: {exc}",
-                    )
+                    canary_result = canary_configuration_error(exc)
+                canary_result = normalize_canary_result(canary_result)
 
                 if canary_result.passed:
                     protocol_result = _run_protocol_experiment(
@@ -172,12 +174,14 @@ class EvaluationPipeline:
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
                 if self._require_experiment_protocol:
-                    canary_result = CanaryResult(
-                        passed=False,
-                        reason=(
-                            "experiment_protocol is required for production "
-                            "campaign; skeleton fallback disabled"
-                        ),
+                    canary_result = normalize_canary_result(
+                        CanaryResult(
+                            passed=False,
+                            reason=(
+                                "experiment_protocol is required for production "
+                                "campaign; skeleton fallback disabled"
+                            ),
+                        )
                     )
                 else:
                     canary_result = CanaryResult(

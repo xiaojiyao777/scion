@@ -212,6 +212,8 @@ class CanaryResult:
     passed: bool
     reason: Optional[str] = None
     details: Dict[str, Any] = field(default_factory=dict)
+    failure_category: str = ""
+    reason_codes: Tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class MetricEvalStats:
