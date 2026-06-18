@@ -89,6 +89,11 @@ Framework:
   focus, current problem-owned research-focus/default-avoid handoff, CVRP
   measurement/opportunity diagnostics, and resume source; inventory/contract/
   readiness checks remain report-only and outside `DecisionFeatures`.
+  Existing unstarted prepared roots can be refreshed with
+  `scion/tools/rebuild_prepared_handoff.py`, which rewrites the prepared
+  analysis brief, artifact inventory, launch-readiness snapshot, and rebuild
+  manifest without starting the campaign or mutating campaign/scheduler/
+  promotion state.
   For CVRP, the prepared contract now requires those measurement/opportunity
   diagnostics before static launch readiness can pass, plus default-avoid
   coverage, direct-effect route-merge/construction-seed rules, and a
@@ -136,6 +141,8 @@ Warehouse:
   viability.
 - Prepared but not launched:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
+  Its prepared handoff artifacts were rebuilt from checkout `86d8561`; all
+  warehouse `problem_specific_requirements` are available.
 
 CVRP/VRP:
 
@@ -159,6 +166,8 @@ CVRP/VRP:
   from `DecisionFeatures`, Protocol gates, lifecycle, scheduler, and promotion.
 - Prepared but not launched:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`.
+  Its prepared handoff artifacts were rebuilt from checkout `86d8561`; all
+  CVRP `problem_specific_requirements` are available.
 
 Infrastructure:
 
@@ -169,7 +178,8 @@ Infrastructure:
   with `classification=not_authenticated`, and readiness includes
   `operator_action.login_url`. The auth pool may move between expired and
   refreshing states, but launch remains blocked until a real completion
-  succeeds. The current `317cacb` prepared roots pass static readiness and
+  succeeds. The current `317cacb` prepared roots pass static readiness, have
+  current prepared handoff artifacts rebuilt from checkout `86d8561`, and
   remain unstarted.
   Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty output after re-login/token refresh.
@@ -208,6 +218,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   Current prepared-root refresh:
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
+  Current prepared-handoff rebuild tool and active-root refresh:
+  `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
   Current launcher-default repair:
   `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
   Current Phase 4 continuity coverage repair:
