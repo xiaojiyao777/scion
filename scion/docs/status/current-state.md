@@ -77,9 +77,9 @@ Framework observability:
 - The launcher resume path is repaired: use `--completion-preflight` before
   campaign startup, use `--api-key-env` for non-local keys, and keep generated
   `launch.env` secret-safe. CVRP and warehouse now both have prepare-only
-  launch helpers for their next focused agentic checks; the warehouse helper
-  also resumes from the accepted `v2` campaign and writes postrun acceptance
-  reports by default after Scion exits.
+  launch helpers for their next focused agentic checks and both write postrun
+  acceptance reports by default after Scion exits. The warehouse helper also
+  resumes from the accepted `v2` campaign.
 - Latest WSL artifacts are synced back under
   `/home/clawd/research/scion-experiments/`; the latest accepted CVRP
   post-pivot artifacts are under
@@ -101,8 +101,9 @@ Framework observability:
    output; `/v1/models` is not enough, and a tiny OK completion is only an auth
    preflight. Then rerun the next CVRP research slice from a clean synchronized
    commit using launcher `--completion-preflight` and, for non-local keys,
-   `--api-key-env`. First inspect live target-intent/hypothesis traces for the
-   construction-pivot lesson.
+   `--api-key-env`. Keep the default postrun report bundle enabled, then first
+   inspect live target-intent/hypothesis traces for the construction-pivot
+   lesson.
 2. The next CVRP mechanism must not be unchanged demand-slack, unchanged
    route-merge absorption, unchanged `cross_route_2opt_reconnect`, unchanged
    `cluster_biased_worst_removal`, or unchanged
