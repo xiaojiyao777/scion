@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +34,8 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--launch" in result.stdout
     assert "--base-url" in result.stdout
     assert "--api-key" in result.stdout
+    assert "--api-key-env" in result.stdout
+    assert "--completion-preflight" in result.stdout
     assert "--python" in result.stdout
     assert "--problem" in result.stdout
     assert "--protocol" in result.stdout
@@ -80,6 +83,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_MODEL=gpt-5.5" in launch_env
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in launch_env
     assert "SCION_API_KEY=pwd" in launch_env
+    assert "SCION_API_KEY_ENV=''" in launch_env
+    assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
     assert "ROUNDS=4" in launch_env
     assert "PROBLEM=scion/problems/cvrp/problem.yaml" in launch_env
@@ -102,6 +107,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
+    assert "COMPLETION_PREFLIGHT=0" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
@@ -265,6 +271,184 @@ def test_cvrp_agentic_launcher_prepare_accepts_api_key_override(
     assert "SCION_API_KEY=test-proxy-key" in launch_env
     assert "test-proxy-key" not in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
+
+
+def test_cvrp_agentic_launcher_prepare_accepts_api_key_env_without_secret(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-key-env",
+            "--base-url",
+            "https://aihubmix.com",
+            "--api-key-env",
+            "SCION_API_KEY",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env_path = run_root / "launch.env"
+    launch_env = launch_env_path.read_text(encoding="utf-8")
+    run_sh_text = (run_root / "run.sh").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+
+    assert "SCION_BASE_URL=https://aihubmix.com" in launch_env
+    assert "SCION_API_KEY=''" in launch_env
+    assert "SCION_API_KEY_ENV=SCION_API_KEY" in launch_env
+    assert "SCION_API_KEY=<from-env:SCION_API_KEY>" in command_txt
+    assert "${!SCION_API_KEY_ENV}" in run_sh_text
+    assert "SCION_API_KEY_ENV_MISSING" in run_sh_text
+    assert oct(launch_env_path.stat().st_mode & 0o777) == "0o600"
+
+    subprocess.run(["bash", "-n", str(run_root / "run.sh")], check=True)
+
+
+def test_cvrp_agentic_launcher_api_key_env_missing_fails_before_campaign(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-missing-key-env",
+            "--api-key-env",
+            "SCION_MISSING_TEST_KEY",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    run_result = subprocess.run(
+        ["bash", str(run_root / "run.sh")],
+        text=True,
+        capture_output=True,
+    )
+
+    assert run_result.returncode == 64
+    assert not (run_root / "campaign" / "campaign_summary.json").exists()
+    assert "SCION_API_KEY_ENV_MISSING:SCION_MISSING_TEST_KEY" in (
+        run_root / "exit.txt"
+    ).read_text(encoding="utf-8")
+    status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
+    assert status["wrapper_exit_status"] == 64
+    assert status["api_key_env_missing"] == "SCION_MISSING_TEST_KEY"
+
+
+def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-preflight",
+            "--completion-preflight",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    run_sh_text = (run_root / "run.sh").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+
+    assert "COMPLETION_PREFLIGHT=1" in launch_env
+    assert "COMPLETION_PREFLIGHT=1" in command_txt
+    assert "COMPLETION_PREFLIGHT_OK" in run_sh_text
+    assert "pre_campaign_completion_preflight" in run_sh_text
+    assert "/v1/models" not in run_sh_text
+
+    subprocess.run(["bash", "-n", str(run_root / "run.sh")], check=True)
+
+
+def test_cvrp_agentic_launcher_rejects_api_key_and_api_key_env(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-key-conflict",
+            "--api-key",
+            "test-key",
+            "--api-key-env",
+            "SCION_API_KEY",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "--api-key and --api-key-env are mutually exclusive" in result.stderr
+
+
+def test_cvrp_agentic_launcher_rejects_invalid_api_key_env(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-key-invalid",
+            "--api-key-env",
+            "not-valid-name",
+            "--experiments-root",
+            str(tmp_path),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "--api-key-env must be a valid shell environment variable name" in (
+        result.stderr
+    )
 
 
 def test_cvrp_agentic_launcher_preflight_rejects_parameter_search_enabled(

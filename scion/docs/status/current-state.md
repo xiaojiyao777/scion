@@ -118,6 +118,10 @@ CVRP/VRP:
   also produced `0` effective rounds because the account returned
   `insufficient_user_quota`; the official OpenAI key also returned
   `insufficient_quota`.
+- The CVRP launcher has been repaired for this resume path: non-local keys can
+  now be supplied with `--api-key-env` so secrets are not written to
+  `launch.env`, `launch.env` is `0600`, and `--completion-preflight` performs
+  a real chat-completion readiness check before campaign startup.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -129,8 +133,10 @@ CVRP/VRP:
 1. Restore a live `gpt-5.5` completion path before launching another campaign.
    For WSL, `/v1/chat/completions` must return HTTP `200` and non-empty
    text/tool output; `/v1/models` is not enough. Then rerun the next CVRP
-   research slice from a clean synchronized commit and first inspect live
-   target-intent/hypothesis traces for the construction-pivot lesson.
+   research slice from a clean synchronized commit using launcher
+   `--completion-preflight` and, for non-local keys, `--api-key-env`. First
+   inspect live target-intent/hypothesis traces for the construction-pivot
+   lesson.
 2. The next CVRP mechanism must not be unchanged demand-slack, unchanged
    route-merge absorption, unchanged `cross_route_2opt_reconnect`, unchanged
    `cluster_biased_worst_removal`, or unchanged
@@ -172,6 +178,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-postrun-20260618.md`.
 - Current CVRP construction-pivot infra failures:
   `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
+- CVRP launcher secret/preflight repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

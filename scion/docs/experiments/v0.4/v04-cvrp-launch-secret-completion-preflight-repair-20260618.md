@@ -1,0 +1,73 @@
+# CVRP Launch Secret and Completion-Preflight Repair
+
+Date: 2026-06-18
+Commit: recorded by the git commit containing this report
+
+## Purpose
+
+The construction-pivot follow-up could not continue because both available LLM
+paths failed before Scion produced an effective round. The failure exposed two
+launcher gaps:
+
+- Passing a non-local API key with `--api-key` writes the secret into
+  `launch.env`, which is unsafe for shared experiment roots and rsync.
+- A proxy can pass `/v1/models` while real `/v1/chat/completions` fails, so a
+  model-list preflight is too weak for campaign launch readiness.
+
+## Change
+
+`scion/tools/launch_cvrp_agentic_campaign.py` now supports:
+
+- `--api-key-env NAME`: writes only the environment variable name to
+  `launch.env`; `run.sh` resolves the real value at runtime and fails before
+  campaign startup if the variable is unset.
+- `--completion-preflight`: before invoking `scion.cli.main run`, `run.sh`
+  performs a real OpenAI-compatible chat completion with
+  `SCION_MODEL`/`SCION_BASE_URL`/`SCION_API_KEY`, requires non-empty
+  text/tool output, redacts the API key from errors, and writes terminal
+  wrapper artifacts if the preflight fails.
+- `launch.env` is written with mode `0600`.
+
+This is launch/readiness plumbing only. It does not change Decision,
+Protocol, validation gates, lifecycle semantics, `DecisionFeatures`, or CVRP
+solver behavior.
+
+## Acceptance
+
+Local focused checks:
+
+```text
+python -m py_compile scion/tools/launch_cvrp_agentic_campaign.py
+PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_cvrp_agentic_launcher.py
+```
+
+Result:
+
+- `12 passed`
+
+Coverage added:
+
+- `--api-key-env` appears in help.
+- `launch.env` records `SCION_API_KEY=''` and `SCION_API_KEY_ENV=...`, while
+  `command.txt` records only `<from-env:...>`.
+- Missing API-key environment variable exits before campaign startup and writes
+  `run_status.json`.
+- `--completion-preflight` writes a real completion preflight block to
+  `run.sh`.
+- `--api-key` and `--api-key-env` are mutually exclusive.
+- Invalid environment variable names are rejected.
+
+## Resume Use
+
+After restoring a live `gpt-5.5` route, the next CVRP construction-pivot check
+should launch with:
+
+```text
+--api-key-env SCION_API_KEY
+--completion-preflight
+```
+
+For WSL, keep the established synchronized runner worktree and
+`PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. The
+completion preflight should be treated as the launch readiness proof; do not
+use `/v1/models` alone.

@@ -22,6 +22,7 @@ DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
 DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
 DEFAULT_USER_SUFFIX = "claw"
+PREFLIGHT_FAILURE_EXIT_CODE = 64
 
 PROBLEM = "scion/problems/cvrp/problem.yaml"
 PROTOCOL = "scion/problems/cvrp/formal/protocol.yaml"
@@ -38,6 +39,90 @@ PROPOSAL_CONTEXT_ABLATION_CHOICES = (
     "no-measurement-diagnostics",
     "minimal-research-context",
 )
+ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+COMPLETION_PREFLIGHT_SNIPPET = r'''
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
+  "$PY" - <<'PY' >> "$RUN_ROOT/run.log" 2>&1
+import os
+import sys
+
+model = os.environ.get("SCION_MODEL", "").strip()
+base_url = os.environ.get("SCION_BASE_URL", "").strip().rstrip("/")
+api_key = os.environ.get("SCION_API_KEY", "")
+
+def fail(message: str) -> None:
+    print("COMPLETION_PREFLIGHT_FAILED: " + message[:800])
+    raise SystemExit(64)
+
+if not model:
+    fail("SCION_MODEL is empty")
+if not base_url:
+    fail("SCION_BASE_URL is empty")
+if not api_key:
+    fail("SCION_API_KEY is empty")
+
+try:
+    import openai
+except Exception as exc:
+    fail("openai import failed: " + str(exc))
+
+if "api.deepseek.com" not in base_url and not base_url.endswith("/v1"):
+    base_url += "/v1"
+
+try:
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        max_retries=0,
+        timeout=60,
+    )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": "Reply exactly with the two letters OK and nothing else.",
+            }
+        ],
+        max_tokens=256,
+    )
+    choice = response.choices[0]
+    message = choice.message
+    content = (message.content or "").strip()
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if not content and not tool_calls:
+        fail(
+            "empty completion; finish_reason="
+            + str(getattr(choice, "finish_reason", None))
+        )
+    print(
+        "COMPLETION_PREFLIGHT_OK: model="
+        + model
+        + " finish_reason="
+        + str(getattr(choice, "finish_reason", None))
+        + " content_len="
+        + str(len(content))
+    )
+except SystemExit:
+    raise
+except Exception as exc:
+    message = str(exc).replace(api_key, "<redacted>")
+    fail(type(exc).__name__ + ": " + message)
+PY
+  PREFLIGHT_STATUS=$?
+  if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
+    {
+      echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_STATUS"
+      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED:1"
+    } > "$RUN_ROOT/exit.txt"
+    printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
+    exit "$PREFLIGHT_STATUS"
+  fi
+fi
+'''
 
 
 def _repo_root() -> Path:
@@ -75,6 +160,13 @@ def _shell_assign(name: str, value: object) -> str:
     return f"{name}={shlex.quote(str(value))}"
 
 
+def _validate_env_var_name(name: str) -> None:
+    if not ENV_VAR_RE.fullmatch(name):
+        raise SystemExit(
+            "--api-key-env must be a valid shell environment variable name"
+        )
+
+
 def _default_api_key_for_base_url(base_url: str) -> str:
     normalized = base_url.strip().rstrip("/")
     if normalized in {
@@ -85,6 +177,15 @@ def _default_api_key_for_base_url(base_url: str) -> str:
     }:
         return DEFAULT_LOCAL_PROXY_API_KEY
     return ""
+
+
+def _resolve_api_key(args: argparse.Namespace) -> tuple[str, str]:
+    api_key_env = args.api_key_env or ""
+    if api_key_env:
+        return "", api_key_env
+    if args.api_key is not None:
+        return args.api_key, ""
+    return _default_api_key_for_base_url(args.base_url), ""
 
 
 def _resolve_spec_path(scion_dir: Path, spec_path: str) -> Path:
@@ -153,10 +254,12 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_MODEL",
         "SCION_BASE_URL",
         "SCION_API_KEY",
+        "SCION_API_KEY_ENV",
         "SCION_SDK_MAX_RETRIES",
         "SCION_LLM_MAX_RETRIES",
         "SCION_STAGE_TRANSITION_DRAIN_LIMIT",
         "SCION_PROBLEM_DATA_ROOT",
+        "COMPLETION_PREFLIGHT",
         "PROBLEM",
         "PROTOCOL",
         "SPLIT",
@@ -173,13 +276,27 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "STARTED_UTC",
     ]
     content = "\n".join(_shell_assign(key, env[key]) for key in ordered_keys) + "\n"
-    (run_root / "launch.env").write_text(content, encoding="utf-8")
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(content, encoding="utf-8")
+    launch_env.chmod(0o600)
 
 
 def _write_run_sh(run_root: Path, command: str) -> None:
     content = f"""#!/usr/bin/env bash
 set -uo pipefail
 source "$(dirname "$0")/launch.env"
+if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
+  if [[ -z "${{!SCION_API_KEY_ENV:-}}" ]]; then
+    {{
+      echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "SCION_API_KEY_ENV_MISSING:$SCION_API_KEY_ENV"
+    }} > "$RUN_ROOT/exit.txt"
+    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":%s}}\n' "$(printf '%s' "$SCION_API_KEY_ENV" | "$PY" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" > "$RUN_ROOT/run_status.json"
+    exit {PREFLIGHT_FAILURE_EXIT_CODE}
+  fi
+  SCION_API_KEY="${{!SCION_API_KEY_ENV}}"
+fi
 cd "$SCION_DIR" || exit 1
 export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_PROBLEM_DATA_ROOT
 {{
@@ -188,6 +305,7 @@ export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES
   echo "CWD:$PWD"
   echo "COMMAND:{command}"
 }} >> "$RUN_ROOT/run.log"
+{COMPLETION_PREFLIGHT_SNIPPET}
 "$PY" -m scion.cli.main run \\
   --problem "$PROBLEM" \\
   --protocol "$PROTOCOL" \\
@@ -252,6 +370,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     run_root = args.experiments_root.expanduser().resolve() / run_name
     campaign_dir = run_root / "campaign"
     campaign_dir.mkdir(parents=True, exist_ok=False)
+    api_key, api_key_env = _resolve_api_key(args)
 
     env: dict[str, object] = {
         "RUN_ROOT": run_root,
@@ -262,15 +381,13 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "PYTHONPATH": scion_dir,
         "SCION_MODEL": args.model,
         "SCION_BASE_URL": args.base_url,
-        "SCION_API_KEY": (
-            args.api_key
-            if args.api_key is not None
-            else _default_api_key_for_base_url(args.base_url)
-        ),
+        "SCION_API_KEY": api_key,
+        "SCION_API_KEY_ENV": api_key_env,
         "SCION_SDK_MAX_RETRIES": 0,
         "SCION_LLM_MAX_RETRIES": 2,
         "SCION_STAGE_TRANSITION_DRAIN_LIMIT": args.stage_transition_drain_limit,
         "SCION_PROBLEM_DATA_ROOT": repo_root / "vrp",
+        "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
         "PROBLEM": args.problem,
         "PROTOCOL": args.protocol,
         "SPLIT": args.split,
@@ -290,6 +407,13 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     command = _build_command(env)
     _write_launch_env(run_root, env)
     _write_run_sh(run_root, command)
+    api_key_display = (
+        f"<from-env:{env['SCION_API_KEY_ENV']}>"
+        if str(env["SCION_API_KEY_ENV"])
+        else "<set>"
+        if str(env["SCION_API_KEY"])
+        else "<unset>"
+    )
     (run_root / "command.txt").write_text(
         (
             "environment:\n"
@@ -297,8 +421,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
             f"SCION_STAGE_TRANSITION_DRAIN_LIMIT="
             f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']}\n\n"
+            f"COMPLETION_PREFLIGHT={env['COMPLETION_PREFLIGHT']}\n\n"
             "SCION_API_KEY="
-            f"{'<set>' if str(env['SCION_API_KEY']) else '<unset>'}\n\n"
+            f"{api_key_display}\n\n"
             "report_metadata:\n"
             f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n\n"
             "command:\n"
@@ -356,6 +481,24 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help=(
+            "Read the API key from this environment variable when run.sh starts. "
+            "Use this for non-local or shared runners so secrets are not written "
+            "to launch.env or command.txt."
+        ),
+    )
+    parser.add_argument(
+        "--completion-preflight",
+        action="store_true",
+        help=(
+            "Before starting Scion, require a real chat completion with "
+            "SCION_MODEL/SCION_BASE_URL/SCION_API_KEY. This catches broken "
+            "proxy sessions that still pass /v1/models."
+        ),
+    )
+    parser.add_argument(
         "--python",
         type=Path,
         default=DEFAULT_PYTHON,
@@ -404,6 +547,10 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
     if args.stage_transition_drain_limit < 0:
         raise SystemExit("--stage-transition-drain-limit must be >= 0")
+    if args.api_key is not None and args.api_key_env:
+        raise SystemExit("--api-key and --api-key-env are mutually exclusive")
+    if args.api_key_env:
+        _validate_env_var_name(args.api_key_env)
     if not str(args.python).strip():
         raise SystemExit("--python must not be empty")
     if not args.base_url.strip():

@@ -312,6 +312,15 @@ Current checkpoint:
   and non-empty output from `/v1/chat/completions`; `/v1/models` is not an
   adequate preflight. Then rerun the same one-round construction-pivot guidance
   check from a clean synchronized commit.
+- Implemented the CVRP launcher repair needed for that resume path. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
+  `launch_cvrp_agentic_campaign.py` now supports `--api-key-env` so real
+  non-local keys are read by `run.sh` at runtime instead of written to
+  `launch.env`; `launch.env` is mode `0600`; and `--completion-preflight`
+  performs a real chat-completion readiness check before campaign startup.
+  Local acceptance: launcher suite `12 passed`; launcher py_compile passed.
+  The next restored-channel CVRP rerun should use `--completion-preflight` and
+  `--api-key-env SCION_API_KEY` when the key is not the local 8080 proxy key.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
