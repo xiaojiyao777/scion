@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness projection repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -362,6 +362,14 @@ Current checkpoint:
   semantics. Acceptance: focused status sync test `1 passed`, full
   summary/status file `53 passed`, py_compile passed, and `git diff --check`
   passed.
+- Repaired research-efficiency observability projection. Report:
+  `scion/docs/experiments/v0.4/v04-research-efficiency-observability-projection-repair-20260618.md`.
+  `report research-efficiency` now includes reduced `measurement_readiness`,
+  compact research-shape diagnostics, and cross-branch observability counters
+  for branch lessons, same-branch refinement allowance, weak-positive transfer,
+  clean-fork contrast, and material-difference pressure. This is report-only
+  and does not change Decision, `DecisionFeatures`, Protocol, scheduling,
+  gates, budgets, lifecycle policy, proposal context, or problem semantics.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

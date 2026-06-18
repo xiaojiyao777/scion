@@ -35,6 +35,19 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
         "frozen": 0,
         "fresh_runtime_replay": 1,
     }
+    assert data["measurement_readiness"]["status"] == "ready"
+    assert data["measurement_readiness"]["mde_at_power_80"] == 9.9
+    assert "calibration_ref" not in data["measurement_readiness"]
+    assert data["research_shape"]["decision_features_excluded"] is True
+    assert data["research_shape"]["max_branch_depth"] == 3
+    assert data["research_shape"]["branch_depth_distribution"] == {"1": 1, "3": 1}
+    assert data["cross_branch_observability"]["observable_step_count"] == 5
+    assert data["cross_branch_observability"][
+        "preserved_same_branch_lesson_count"
+    ] == 2
+    assert data["cross_branch_observability"][
+        "same_branch_refinement_allowance_count"
+    ] == 1
     assert data["fresh_runtime_replay_drain"]["executed"] == 1
     assert data["fresh_runtime_replay_drain"]["skipped"] == 1
     assert data["proposal_quality"]["proposal_quality_blocks"] == 1
@@ -142,6 +155,75 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
         "stopped_reason": "max_rounds_exhausted",
         "run_complete": True,
         "run_completeness_status": "complete",
+        "measurement_readiness": {
+            "status": "ready",
+            "reason_code": "ok",
+            "calibration_age_days": 3,
+            "calibration_max_age_days": 90,
+            "n_pairs": 96,
+            "mde_at_power_80": 9.9,
+            "noise_band_p90_abs": 14.0,
+            "effect_to_mde_ratio": 0.202,
+            "signal_to_noise_tier": "low_power",
+            "decision_features_excluded": True,
+            "calibration_ref": "formal/calibration/aa_noise_floor.json",
+        },
+        "cross_branch_research_observability": {
+            "schema_version": "cross_branch_research_observability.v1",
+            "policy": "proposal_observability_only",
+            "decision_input_policy": "excluded_from_decision_features",
+            "source_counts": {
+                "observable_step_count": 5,
+                "branch_row_count": 2,
+            },
+            "observable_step_count": 5,
+            "near_duplicate_count": 1,
+            "saturated_signature_count": 0,
+            "material_difference_requirement_count": 1,
+            "branch_lesson_record_count": 3,
+            "branch_lesson_usage_requirement_count": 2,
+            "branch_lesson_usage_present_count": 2,
+            "branch_lesson_usage_satisfied_count": 2,
+            "branch_lesson_usage_missing_block_count": 0,
+            "borrowed_lesson_count": 1,
+            "avoided_lesson_count": 1,
+            "contrasted_lesson_count": 1,
+            "preserved_same_branch_lesson_count": 2,
+            "clean_fork_contrast_satisfied_count": 1,
+            "weak_positive_transfer_count": 1,
+            "weak_positive_transfer_reject_count": 0,
+            "same_branch_refinement_allowance_count": 1,
+            "same_branch_refinement_not_selected_count": 0,
+            "reason_code_counts": {"SCREENING_WEAK_SIGNAL_CONTINUE": 2},
+            "research_shape_diagnostics": {
+                "schema_version": "campaign_research_shape_diagnostics.v1",
+                "policy": "summary_status_observability_only",
+                "decision_features_excluded": True,
+                "decision_input_policy": "excluded_from_decision_features",
+                "source": {
+                    "step_history": "campaign_summary_step_history",
+                    "branch_depth_source": "step_history_branch_counts",
+                },
+                "branch_depth_distribution": {"1": 1, "3": 1},
+                "branch_depth_by_branch": {"branch-a": 3, "branch-b": 1},
+                "max_branch_depth": 3,
+                "mean_branch_depth": 2.0,
+                "active_research_shape_signal": {
+                    "active_branch_count": 1,
+                    "active_branch_ids": ["branch-a"],
+                    "active_mechanism_family_count": 1,
+                    "active_mechanism_families": ["regret_insertion"],
+                    "shape": "deep_focused",
+                },
+                "mechanism_family_breadth": {
+                    "family_count": 2,
+                    "families": {
+                        "regret_insertion": 3,
+                        "route_merge": 1,
+                    },
+                },
+            },
+        },
         "protocol_metric_stage_counts": {
             "screening": 7,
             "validation": 1,

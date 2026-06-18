@@ -146,6 +146,10 @@ CVRP/VRP:
   `campaign_summary.json` now expose the same reduced
   `measurement_readiness` payload, including missing/stale/low-power readiness
   states, without leaking `calibration_ref` or raw A/A evidence.
+- Postrun research-efficiency reporting now projects reduced measurement
+  readiness plus existing research-shape and cross-branch observability
+  counters, so branch depth, same-branch lesson use, refinement allowance, and
+  weak-positive transfer can be audited from one report artifact.
 - Warehouse split-preserving cost-compression telemetry interpretation is
   repaired as a generic diagnostic interpretation fix. This changes neither
   protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.
@@ -217,6 +221,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
 - Measurement readiness status projection repair:
   `scion/docs/experiments/v0.4/v04-measurement-readiness-status-projection-repair-20260618.md`.
+- Research-efficiency observability projection repair:
+  `scion/docs/experiments/v0.4/v04-research-efficiency-observability-projection-repair-20260618.md`.
 - Warehouse cost-compression telemetry interpretation repair:
   `scion/docs/experiments/v0.4/v04-warehouse-cost-compression-telemetry-interpretation-repair-20260618.md`.
 - WSL reference docs:

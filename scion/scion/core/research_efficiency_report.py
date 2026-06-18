@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
+
 SCHEMA_VERSION = "scion.research_efficiency_report.v1"
 DEFAULT_REPORT_FILENAME = "research_efficiency_report.v1.json"
 FORMAL_CANDIDATE_INDEX_REF = "artifacts/formal_candidates/index.jsonl"
@@ -89,6 +91,15 @@ def build_research_efficiency_report(
     ) or _mapping_value(status.get("protocol_metric_stage_counts"))
     protocol_stage_counts = _mapping_value(summary.get("protocol_stage_counts")) or (
         _mapping_value(status.get("protocol_stage_counts"))
+    )
+    measurement_readiness = reduced_measurement_readiness_payload(
+        summary.get("measurement_readiness")
+    ) or reduced_measurement_readiness_payload(status.get("measurement_readiness"))
+    cross_branch_observability = _mapping_value(
+        summary.get("cross_branch_research_observability")
+    ) or _mapping_value(status.get("cross_branch_research_observability"))
+    research_shape_diagnostics = _mapping_value(
+        cross_branch_observability.get("research_shape_diagnostics")
     )
 
     report = {
@@ -238,6 +249,13 @@ def build_research_efficiency_report(
                 status.get("fresh_runtime_replay_protocol_results"),
             ),
         },
+        "measurement_readiness": measurement_readiness or {},
+        "research_shape": _compact_research_shape_diagnostics(
+            research_shape_diagnostics
+        ),
+        "cross_branch_observability": _compact_cross_branch_observability(
+            cross_branch_observability
+        ),
         "fresh_runtime_replay_drain": {
             "attempts": _first_int(
                 summary.get("fresh_runtime_replay_drain_attempts"),
@@ -690,6 +708,105 @@ def _quality_block_reasons(summary: Mapping[str, Any], status: Mapping[str, Any]
     return reasons
 
 
+def _compact_research_shape_diagnostics(
+    diagnostics: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(diagnostics, Mapping) or not diagnostics:
+        return {}
+    return {
+        "schema_version": _first_str(diagnostics.get("schema_version")),
+        "policy": _first_str(diagnostics.get("policy")),
+        "decision_features_excluded": _first_bool(
+            diagnostics.get("decision_features_excluded"),
+            True,
+        ),
+        "decision_input_policy": _first_str(
+            diagnostics.get("decision_input_policy")
+        ),
+        "source": _mapping_value(diagnostics.get("source")),
+        "branch_depth_distribution": _mapping_value(
+            diagnostics.get("branch_depth_distribution")
+        ),
+        "branch_depth_by_branch": _mapping_value(
+            diagnostics.get("branch_depth_by_branch")
+        ),
+        "max_branch_depth": _first_int(diagnostics.get("max_branch_depth")),
+        "mean_branch_depth": _first_float(diagnostics.get("mean_branch_depth")),
+        "active_research_shape_signal": _mapping_value(
+            diagnostics.get("active_research_shape_signal")
+        ),
+        "mechanism_family_breadth": _mapping_value(
+            diagnostics.get("mechanism_family_breadth")
+        ),
+    }
+
+
+def _compact_cross_branch_observability(
+    observability: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(observability, Mapping) or not observability:
+        return {}
+    return {
+        "schema_version": _first_str(observability.get("schema_version")),
+        "policy": _first_str(observability.get("policy")),
+        "decision_input_policy": _first_str(
+            observability.get("decision_input_policy")
+        ),
+        "source_counts": _mapping_value(observability.get("source_counts")),
+        "observable_step_count": _first_int(
+            observability.get("observable_step_count")
+        ),
+        "near_duplicate_count": _first_int(observability.get("near_duplicate_count")),
+        "saturated_signature_count": _first_int(
+            observability.get("saturated_signature_count")
+        ),
+        "material_difference_requirement_count": _first_int(
+            observability.get("material_difference_requirement_count")
+        ),
+        "branch_lesson_record_count": _first_int(
+            observability.get("branch_lesson_record_count")
+        ),
+        "branch_lesson_usage_requirement_count": _first_int(
+            observability.get("branch_lesson_usage_requirement_count")
+        ),
+        "branch_lesson_usage_present_count": _first_int(
+            observability.get("branch_lesson_usage_present_count")
+        ),
+        "branch_lesson_usage_satisfied_count": _first_int(
+            observability.get("branch_lesson_usage_satisfied_count")
+        ),
+        "branch_lesson_usage_missing_block_count": _first_int(
+            observability.get("branch_lesson_usage_missing_block_count")
+        ),
+        "borrowed_lesson_count": _first_int(
+            observability.get("borrowed_lesson_count")
+        ),
+        "avoided_lesson_count": _first_int(observability.get("avoided_lesson_count")),
+        "contrasted_lesson_count": _first_int(
+            observability.get("contrasted_lesson_count")
+        ),
+        "preserved_same_branch_lesson_count": _first_int(
+            observability.get("preserved_same_branch_lesson_count")
+        ),
+        "clean_fork_contrast_satisfied_count": _first_int(
+            observability.get("clean_fork_contrast_satisfied_count")
+        ),
+        "weak_positive_transfer_count": _first_int(
+            observability.get("weak_positive_transfer_count")
+        ),
+        "weak_positive_transfer_reject_count": _first_int(
+            observability.get("weak_positive_transfer_reject_count")
+        ),
+        "same_branch_refinement_allowance_count": _first_int(
+            observability.get("same_branch_refinement_allowance_count")
+        ),
+        "same_branch_refinement_not_selected_count": _first_int(
+            observability.get("same_branch_refinement_not_selected_count")
+        ),
+        "reason_code_counts": _mapping_value(observability.get("reason_code_counts")),
+    }
+
+
 def _source_ref(path: Path | None) -> str:
     if path is None:
         return ""
@@ -717,6 +834,17 @@ def _first_bool(*values: Any) -> bool | None:
                 return True
             if normalized in {"false", "no", "0"}:
                 return False
+    return None
+
+
+def _first_float(*values: Any) -> float | None:
+    for value in values:
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
     return None
 
 
