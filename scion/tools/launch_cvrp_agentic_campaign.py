@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shlex
 import shutil
@@ -439,6 +440,34 @@ def _launch(run_root: Path) -> str:
     return pid
 
 
+def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
+    campaign_dir = Path(env["CAMPAIGN_DIR"])
+    resume_from = str(env.get("RESUME_FROM_CAMPAIGN") or "")
+    status = {
+        "schema": "scion.launcher_prepare.v1",
+        "status": "prepared",
+        "prepared_only": True,
+        "run_root": str(run_root),
+        "campaign_dir": str(campaign_dir),
+        "resume_from_campaign": resume_from,
+        "copied_campaign_status_present": bool(resume_from)
+        and (campaign_dir / "run_status.json").is_file(),
+        "copied_campaign_summary_present": bool(resume_from)
+        and (campaign_dir / "campaign_summary.json").is_file(),
+        "scion_model": str(env["SCION_MODEL"]),
+        "scion_base_url": str(env["SCION_BASE_URL"]),
+        "completion_preflight": bool(int(env["COMPLETION_PREFLIGHT"])),
+        "postrun_reports": bool(int(env["POSTRUN_REPORTS"])),
+        "control_pair_key": str(env.get("CONTROL_PAIR_KEY") or ""),
+        "git_commit": str(env["GIT_COMMIT"]),
+        "started_utc": str(env["STARTED_UTC"]),
+    }
+    (run_root / "run_status.json").write_text(
+        json.dumps(status, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     repo_root = _repo_root()
     scion_dir = repo_root / "scion"
@@ -537,6 +566,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         encoding="utf-8",
     )
 
+    if not args.launch:
+        _write_prepare_status(run_root, env)
     pid = _launch(run_root) if args.launch else None
     return run_root, pid
 

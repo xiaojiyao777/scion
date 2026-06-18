@@ -70,6 +70,17 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert (run_root / "campaign").is_dir()
     assert (run_root / "config").is_dir()
     assert not (run_root / "pid").exists()
+    prepare_status = json.loads(
+        (run_root / "run_status.json").read_text(encoding="utf-8")
+    )
+    assert prepare_status["schema"] == "scion.launcher_prepare.v1"
+    assert prepare_status["status"] == "prepared"
+    assert prepare_status["prepared_only"] is True
+    assert prepare_status["campaign_dir"] == str(run_root / "campaign")
+    assert prepare_status["resume_from_campaign"] == ""
+    assert prepare_status["copied_campaign_status_present"] is False
+    assert prepare_status["completion_preflight"] is False
+    assert prepare_status["postrun_reports"] is True
 
     launch_env_path = run_root / "launch.env"
     launch_env = launch_env_path.read_text(encoding="utf-8")
@@ -154,6 +165,14 @@ def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> 
         encoding="utf-8",
     )
     (source_campaign / "scion.db").write_text("fake-db", encoding="utf-8")
+    (source_campaign / "run_status.json").write_text(
+        json.dumps({"status": "finished", "wrapper_exit_status": 0}),
+        encoding="utf-8",
+    )
+    (source_campaign / "campaign_summary.json").write_text(
+        json.dumps({"run_complete": True}),
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
         [
@@ -184,6 +203,14 @@ def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> 
     assert (
         run_root / "campaign" / "champions" / "champion_v2" / "registry.yaml"
     ).is_file()
+    prepare_status = json.loads(
+        (run_root / "run_status.json").read_text(encoding="utf-8")
+    )
+    assert prepare_status["status"] == "prepared"
+    assert prepare_status["prepared_only"] is True
+    assert prepare_status["resume_from_campaign"] == str(source_campaign)
+    assert prepare_status["copied_campaign_status_present"] is True
+    assert prepare_status["copied_campaign_summary_present"] is True
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in launch_env
