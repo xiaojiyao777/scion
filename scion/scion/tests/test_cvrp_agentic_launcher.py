@@ -46,6 +46,7 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--proposal-context-ablation" in result.stdout
     assert "--control-pair-key" in result.stdout
     assert "--stage-transition-drain-limit" in result.stdout
+    assert "--resume-from-campaign" in result.stdout
 
 
 def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
@@ -88,6 +89,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
+    assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert "ROUNDS=4" in launch_env
     assert "PROBLEM=scion/problems/cvrp/problem.yaml" in launch_env
     assert "PROTOCOL=scion/problems/cvrp/formal/protocol.yaml" in launch_env
@@ -119,6 +121,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "COMPLETION_PREFLIGHT=0" in command_txt
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
+    assert "RESUME_FROM_CAMPAIGN=" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
@@ -127,6 +130,57 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
+
+
+def test_cvrp_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> None:
+    source_campaign = tmp_path / "source-campaign"
+    (source_campaign / "champions" / "champion_v3").mkdir(parents=True)
+    (source_campaign / "champions" / "champion_v3" / "registry.yaml").write_text(
+        "operators: {}\n",
+        encoding="utf-8",
+    )
+    (source_campaign / "scion.db").write_text("fake-cvrp-db", encoding="utf-8")
+    (source_campaign / "artifacts" / "branch_evidence").mkdir(parents=True)
+    (
+        source_campaign / "artifacts" / "branch_evidence" / "branch-a.json"
+    ).write_text("{}", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "2",
+            "--label",
+            "unit-cvrp-resume",
+            "--experiments-root",
+            str(tmp_path / "experiments"),
+            "--resume-from-campaign",
+            str(source_campaign),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    assert (
+        run_root / "campaign" / "scion.db"
+    ).read_text(encoding="utf-8") == "fake-cvrp-db"
+    assert (
+        run_root / "campaign" / "champions" / "champion_v3" / "registry.yaml"
+    ).is_file()
+    assert (
+        run_root / "campaign" / "artifacts" / "branch_evidence" / "branch-a.json"
+    ).is_file()
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+    assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in launch_env
+    assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in command_txt
 
 
 def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(

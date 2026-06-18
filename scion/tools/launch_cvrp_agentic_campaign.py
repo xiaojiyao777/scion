@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import shlex
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -291,6 +292,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
     ordered_keys = [
         "RUN_ROOT",
         "CAMPAIGN_DIR",
+        "RESUME_FROM_CAMPAIGN",
         "REPO_ROOT",
         "SCION_DIR",
         "PY",
@@ -422,12 +424,24 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     )
     run_root = args.experiments_root.expanduser().resolve() / run_name
     campaign_dir = run_root / "campaign"
-    campaign_dir.mkdir(parents=True, exist_ok=False)
+    if args.resume_from_campaign is None:
+        campaign_dir.mkdir(parents=True, exist_ok=False)
+        resume_from_campaign = ""
+    else:
+        resume_source = args.resume_from_campaign.expanduser().resolve()
+        if not resume_source.is_dir():
+            raise SystemExit(
+                f"--resume-from-campaign is not a directory: {resume_source}"
+            )
+        run_root.mkdir(parents=True, exist_ok=False)
+        shutil.copytree(resume_source, campaign_dir)
+        resume_from_campaign = str(resume_source)
     api_key, api_key_env = _resolve_api_key(args)
 
     env: dict[str, object] = {
         "RUN_ROOT": run_root,
         "CAMPAIGN_DIR": campaign_dir,
+        "RESUME_FROM_CAMPAIGN": resume_from_campaign,
         "REPO_ROOT": repo_root,
         "SCION_DIR": scion_dir,
         "PY": args.python,
@@ -482,6 +496,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n"
             f"POSTRUN_REPORTS={env['POSTRUN_REPORTS']}\n"
             f"POSTRUN_REPORT_DIR={env['RUN_ROOT'] / 'postrun_acceptance'}\n\n"
+            f"RESUME_FROM_CAMPAIGN={env['RESUME_FROM_CAMPAIGN']}\n\n"
             "command:\n"
             f"{command}\n\n"
             "launch:\n"
@@ -591,6 +606,16 @@ def parse_args() -> argparse.Namespace:
             "Bounded post-budget validation/frozen drain cap. Written as "
             "SCION_STAGE_TRANSITION_DRAIN_LIMIT; use 0 only to disable the "
             "post-budget drain."
+        ),
+    )
+    parser.add_argument(
+        "--resume-from-campaign",
+        type=Path,
+        default=None,
+        help=(
+            "Copy an existing campaign directory into the new run root before "
+            "launch so a focused CVRP follow-up can continue from restored "
+            "champion, branch, and evidence state."
         ),
     )
     parser.add_argument(

@@ -34,6 +34,10 @@ launcher gaps:
   wrapper exit code.
 - `--skip-postrun-reports` for shell/config smoke runs that should avoid
   postrun report generation.
+- `--resume-from-campaign` support that copies an existing campaign into the
+  new run root before launch, so focused follow-ups can continue from restored
+  champion, branch, workspace, and evidence state instead of relying on manual
+  copy steps.
 - `launch.env` is written with mode `0600`.
 
 This is launch/readiness plumbing only. It does not change Decision,
@@ -55,6 +59,7 @@ Result:
 - `12 passed`
 - Updated after the inherited-`SCION_API_KEY` self-reference fix: `13 passed`
 - Updated after default postrun report wiring: `14 passed`
+- Updated after resume-campaign copy wiring: `15 passed`
 
 Coverage added:
 
@@ -72,6 +77,8 @@ Coverage added:
   report CLI arm `record_only` and `--control-pair-key` kept out of the
   `scion run` command block.
 - `--skip-postrun-reports` records `POSTRUN_REPORTS=0`.
+- `--resume-from-campaign` copies champion, database, and branch-evidence
+  artifacts and records the source in `launch.env` and `command.txt`.
 - `--api-key` and `--api-key-env` are mutually exclusive.
 - Invalid environment variable names are rejected.
 

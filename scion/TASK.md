@@ -261,7 +261,8 @@ Current checkpoint:
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching. Use the
   repaired launcher `--completion-preflight` and `--api-key-env` paths when
-  appropriate, and keep its default postrun acceptance report bundle enabled.
+  appropriate, use `--resume-from-campaign` for branch-continuation checks, and
+  keep its default postrun acceptance report bundle enabled.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
