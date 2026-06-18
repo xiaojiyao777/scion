@@ -70,3 +70,37 @@ Observed `branch_research_state_summary.available=true`,
 `current_run_evidence=true`, `branch_count=1`, `lineage_count=1`,
 `branch_state_counts.explore=1`, `events_by_kind.proposal_fail=1`, and
 `events_by_kind.scheduler_result=1`.
+
+## WSL Verification
+
+After pushing commit `b483b361`, the WSL checkout fast-forwarded to the same
+branch and passed the focused suite:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/rebuild_postrun_acceptance.py
+```
+
+Result: `12 passed`; py-compile clean.
+
+WSL smoke check on an existing current-run CVRP root:
+
+```text
+ROOT=/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-route-merge-pivot-guidance-agentic-1r-gpt55-20260618T031817Z-claw
+available=true
+current_run_evidence=true
+branch_count=1
+lineage_count=1
+branch_state_counts=explore_expand=1
+events_by_kind=agentic_proposal_session=2,decision=1,experiment=1,scheduler_result=2
+top_branch=8b1621af-a5e2-4267-8245-1c521d316fc1
+top_branch_state=explore_expand
+```
