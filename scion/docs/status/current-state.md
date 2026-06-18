@@ -51,6 +51,10 @@ Framework:
   now carry explicit launcher lifecycle/evidence-scope metadata, so copied
   resume snapshots are marked `prepared_only/not_started` with zero current-run
   effective rounds instead of masquerading as completed postrun evidence.
+- If a prepared root is started while completion preflight fails, launcher
+  reports now mark the root `invalid_infra_only` with zero current-run evidence
+  and skip current-run report families while preserving analysis brief,
+  inventory, and rebuild manifest artifacts.
 - Historical and current run roots can be normalized for delegated analysis with
   `scion/tools/rebuild_postrun_acceptance.py`. The rebuild manifest reports
   per-family success/failure and preserves Phase 4 evidence gaps instead of
@@ -66,7 +70,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-rebuildentry-6r-gpt55-20260618T132911Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-preflightguard2-6r-gpt55-20260618T134648Z-claw`.
 
 CVRP/VRP:
 
@@ -84,15 +88,15 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-rebuildentry-1r-gpt55-20260618T132909Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-preflightguard2-1r-gpt55-20260618T134635Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
-  `gpt-5.5` chat-completion preflight reaches the proxy and reports
-  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
-  completion still returns HTTP `401` with `classification=auth_token_invalidated`.
+  `gpt-5.5` chat-completion preflight reaches the proxy but reports
+  `AUTH_STATUS authenticated=False active=0 refreshing=1`; the real chat
+  completion returns HTTP `401` with `classification=not_authenticated`.
   Do not
   launch prepared roots until `/v1/chat/completions` returns HTTP `200` with
   non-empty output after re-login.
@@ -149,6 +153,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-only-handoff-lifecycle-repair-20260618.md`.
 - Current postrun acceptance rebuild tool:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-rebuild-tool-20260618.md`.
+- Current preflight-failed launch-root evidence guard:
+  `scion/docs/experiments/v0.4/v04-preflight-failed-launch-root-evidence-guard-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
