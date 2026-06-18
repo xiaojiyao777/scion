@@ -159,6 +159,29 @@ def render_markdown(brief: dict[str, Any]) -> str:
     else:
         lines.append("  - None recorded in the prepared manifest.")
 
+    research_focus = prepared_contract.get("research_focus")
+    if isinstance(research_focus, dict) and research_focus:
+        lines.extend(
+            [
+                "- Current research focus:",
+                f"  - Question: {_display(research_focus.get('current_question'))}",
+                "  - Default-avoid directions:",
+            ]
+        )
+        avoid = research_focus.get("default_avoid_directions")
+        if isinstance(avoid, list) and avoid:
+            lines.extend(f"    - {_display(item)}" for item in avoid)
+        else:
+            lines.append("    - None recorded in the prepared manifest.")
+        for key, label in (
+            ("route_merge_exception_rule", "Route-merge exception"),
+            ("construction_seed_rule", "Construction-seed rule"),
+            ("decision_boundary", "Decision boundary"),
+        ):
+            value = research_focus.get(key)
+            if value:
+                lines.append(f"  - {label}: {_display(value)}")
+
     lines.extend(
         [
             "| Check | Passed | Detail |",

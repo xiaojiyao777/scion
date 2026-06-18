@@ -54,6 +54,45 @@ CVRP_ANALYSIS_INTENT = (
     "solver mechanism is materially different from rejected/default-avoid "
     "directions before accepting any conclusion."
 )
+CVRP_DEFAULT_AVOID_DIRECTIONS = (
+    "unchanged broad VNS removal",
+    "pure ALNS/no-polish",
+    "simple initial-VNS disablement",
+    "raw cadence-2",
+    "recent-best/stall gating",
+    "fixed early-8",
+    "tested share70 cap/rescue variants",
+    "route-merge absorption",
+    "demand-slack regret insertion",
+    "cross-route 2-opt reconnect",
+    "cluster-biased worst removal",
+    "route-limit seed diversification",
+)
+CVRP_CURRENT_RESEARCH_FOCUS = {
+    "schema_version": "scion.cvrp_research_focus.v1",
+    "scope": "report_only_prepared_handoff",
+    "current_question": (
+        "Select a materially different CVRP solver-design mechanism, or justify "
+        "a new causal path with direct objective-effect evidence before spending "
+        "another route-merge or construction-seed branch slot."
+    ),
+    "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
+    "route_merge_exception_rule": (
+        "Only continue route_merge_repair when the proposal names a causal path "
+        "beyond tested local absorption/guarded variants and defines direct "
+        "activation-to-objective-effect evidence."
+    ),
+    "construction_seed_rule": (
+        "Treat fallback activation, seed-pool size, or merely selecting a seed "
+        "as activation/design evidence only; require same-run seed baseline or "
+        "same-mechanism accepted delta for objective-effect claims."
+    ),
+    "decision_boundary": (
+        "This focus is proposal/delegated-analysis guidance only and must not "
+        "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
+        "state."
+    ),
+}
 POSTRUN_ACCEPTANCE_FAMILIES = (
     "summaries",
     "failures",
@@ -442,6 +481,7 @@ def _write_prepared_run_manifest(
         "promotion_state_mutated": False,
         "problem_family": "cvrp",
         "analysis_intent": CVRP_ANALYSIS_INTENT,
+        "research_focus": CVRP_CURRENT_RESEARCH_FOCUS,
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,
@@ -490,6 +530,9 @@ def _write_prepared_run_manifest(
             "Do not treat aggregate win rate alone as sufficient evidence.",
             "Interpret candidate evidence against A/A MDE and case-level variance.",
             "Require branch depth, mechanism continuity, useful branch lessons, and source visibility checks.",
+            "Check the research_focus default-avoid list before accepting "
+            "route-merge, construction-seed, cadence, or VNS follow-up as "
+            "materially new.",
             "Treat this manifest as launch/handoff evidence only, not as Decision input.",
         ],
         "started_utc": str(env["STARTED_UTC"]),
@@ -508,9 +551,11 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
     config = manifest["config"]
     execution = manifest["execution"]
     reports = manifest["report_metadata"]
+    research_focus = manifest["research_focus"]
     assert isinstance(config, dict)
     assert isinstance(execution, dict)
     assert isinstance(reports, dict)
+    assert isinstance(research_focus, dict)
     lines = [
         "# Prepared Run Manifest",
         "",
@@ -526,8 +571,16 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "## Analysis Intent",
         str(manifest["analysis_intent"]),
         "",
-        "## Config",
+        "## Current Research Focus",
+        f"- Question: {research_focus['current_question']}",
+        f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
+        f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
+        f"- Decision boundary: {research_focus['decision_boundary']}",
+        "- Default-avoid directions:",
     ]
+    for item in research_focus["default_avoid_directions"]:
+        lines.append(f"  - {item}")
+    lines.extend(["", "## Config"])
     for key in ("problem", "protocol", "split", "seeds", "data_root"):
         lines.append(f"- {key}: `{config[key]}`")
     lines.extend(["", "## Execution"])

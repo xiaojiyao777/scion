@@ -101,6 +101,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["report_only"] is True
     assert prepared_manifest["decision_features_excluded"] is True
     assert prepared_manifest["problem_family"] == "cvrp"
+    assert prepared_manifest["research_focus"]["scope"] == (
+        "report_only_prepared_handoff"
+    )
+    assert "route-merge absorption" in prepared_manifest["research_focus"][
+        "default_avoid_directions"
+    ]
+    assert "DecisionFeatures" in prepared_manifest["research_focus"][
+        "decision_boundary"
+    ]
     assert prepared_manifest["execution"]["rounds"] == 4
     assert prepared_manifest["execution"]["stage_transition_drain_limit"] == 4
     assert prepared_manifest["config"]["problem"] == "scion/problems/cvrp/problem.yaml"
@@ -123,6 +132,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     ]
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "CVRP post-pivot" in prepared_manifest_md
+    assert "## Current Research Focus" in prepared_manifest_md
+    assert "route-merge absorption" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
     assert f"PY={sys.executable}" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
@@ -252,6 +263,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP post-pivot" in prepared_brief["prepared_run_contract"][
         "analysis_intent"
     ]
+    assert prepared_brief["prepared_run_contract"]["research_focus"][
+        "scope"
+    ] == "report_only_prepared_handoff"
+    assert "route-merge absorption" in prepared_brief["prepared_run_contract"][
+        "research_focus"
+    ]["default_avoid_directions"]
     assert any(
         "Decision input" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
@@ -269,10 +286,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "## Prepared Run Contract"
         in brief_md.read_text(encoding="utf-8")
     )
+    assert "Current research focus" in brief_md.read_text(encoding="utf-8")
     assert (
         "## Launcher Artifacts"
         in inventory_md.read_text(encoding="utf-8")
     )
+    assert "### Prepared Research Focus" in inventory_md.read_text(encoding="utf-8")
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )

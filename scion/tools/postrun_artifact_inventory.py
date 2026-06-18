@@ -237,6 +237,32 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             )
         )
 
+    research_focus = inventory["launcher"]["prepared_run_contract"].get(
+        "research_focus"
+    )
+    if isinstance(research_focus, dict) and research_focus:
+        lines.extend(
+            [
+                "",
+                "### Prepared Research Focus",
+                f"- Question: {_display(research_focus.get('current_question'))}",
+                "- Default-avoid directions:",
+            ]
+        )
+        avoid = research_focus.get("default_avoid_directions")
+        if isinstance(avoid, list) and avoid:
+            lines.extend(f"  - {_display(item)}" for item in avoid)
+        else:
+            lines.append("  - None recorded in the prepared manifest.")
+        for key, label in (
+            ("route_merge_exception_rule", "Route-merge exception"),
+            ("construction_seed_rule", "Construction-seed rule"),
+            ("decision_boundary", "Decision boundary"),
+        ):
+            value = research_focus.get(key)
+            if value:
+                lines.append(f"- {label}: {_display(value)}")
+
     lines.extend(
         [
             "",
@@ -551,6 +577,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
             "model": None,
             "analysis_intent": None,
             "acceptance_focus": [],
+            "research_focus": {},
             "resume_from_campaign": None,
             "control_pair_key": None,
             "completion_preflight": None,
@@ -670,6 +697,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "model": model.get("name"),
         "analysis_intent": _string_or_none(manifest.get("analysis_intent")),
         "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
+        "research_focus": _mapping_or_empty(manifest.get("research_focus")),
         "resume_from_campaign": _string_or_none(manifest.get("resume_from_campaign")),
         "git": git_consistency,
         "control_pair_key": report_metadata.get("control_pair_key"),
@@ -677,6 +705,12 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "postrun_reports": report_metadata.get("postrun_reports"),
         "checks": checks,
     }
+
+
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
 
 
 def _prepared_contract_checks_for_markdown(value: Any) -> dict[str, dict[str, Any]]:
