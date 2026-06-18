@@ -1205,11 +1205,31 @@ def _same_branch_refinement_allowed(
     source_branch_ids: list[str],
     summaries_by_branch: Mapping[str, Mapping[str, Any]],
 ) -> bool:
-    if scope != "branch_local" or lesson_type != "weak_positive":
+    if scope != "branch_local":
         return False
-    return any(
-        _weak_positive_source_is_current(branch_id, summaries_by_branch)
-        for branch_id in source_branch_ids
+    if lesson_type == "weak_positive":
+        return any(
+            _weak_positive_source_is_current(branch_id, summaries_by_branch)
+            for branch_id in source_branch_ids
+        )
+    if lesson_type == "no_effect":
+        return any(
+            _low_signal_source_is_current(branch_id, summaries_by_branch)
+            for branch_id in source_branch_ids
+        )
+    return False
+
+
+def _low_signal_source_is_current(
+    branch_id: str,
+    summaries_by_branch: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    summary = summaries_by_branch.get(branch_id, {})
+    outcome = summary.get("outcome_summary", {}) or {}
+    return (
+        bool(summary.get("is_current_branch"))
+        and summary.get("final_or_active_state") == "active"
+        and outcome.get("outcome_pattern") == "no_effect"
     )
 
 

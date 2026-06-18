@@ -322,6 +322,48 @@ def test_same_branch_weak_positive_imperfect_usage_is_advisory() -> None:
     ]
 
 
+def test_same_branch_no_effect_contrast_satisfies_advisory_requirement() -> None:
+    branch = _branch()
+    branch.branch_evidence_summary = {
+        "branch_lesson_records": [
+            _record(
+                "lesson:local-no-effect",
+                required_for="same_branch_refinement",
+                lesson_role="avoid",
+                lesson_type="no_effect",
+            )
+        ]
+    }
+    hypothesis = _hypothesis(
+        branch_lesson_usage={
+            "contrasted_lessons": [
+                {
+                    "lesson_id": "lesson:local-no-effect",
+                    "changed_dimensions": ["activation_path"],
+                    "target_file": "components/common.py",
+                    "action": "modify",
+                    "mechanism": "generic_signal",
+                    "contrast_reason": (
+                        "Previous no-effect branch activated but did not move objective."
+                    ),
+                }
+            ]
+        }
+    )
+    metadata = branch_lesson_usage_requirement_metadata(branch)
+
+    assert metadata["required_for"] == "same_branch_refinement"
+    assert metadata["candidate_lesson_types"] == ["no_effect"]
+    assert metadata["candidate_lesson_roles"] == ["avoid"]
+    assert metadata["pre_code_block_required"] is False
+    assert branch_lesson_usage_pre_code_block_reason(hypothesis, branch) is None
+    assert branch_lesson_usage_requirement_satisfied(
+        hypothesis.branch_lesson_usage,
+        metadata=metadata,
+        hypothesis=hypothesis,
+    )
+
+
 def test_canonical_repair_fills_strict_linkage_from_skeleton() -> None:
     branch = _branch()
     branch.branch_evidence_summary = {

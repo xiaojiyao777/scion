@@ -16,6 +16,9 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
+from scion.core.explore_step.branch_lesson_usage import (
+    branch_lesson_usage_requirement_from_records,
+)
 from scion.proposal.context import cross_branch_research as cross_branch_module
 from scion.proposal.context import (
     cross_branch_research_coverage as cross_branch_coverage_module,
@@ -1040,6 +1043,54 @@ def test_cross_branch_research_keeps_active_weak_positive_refinement_allowed() -
     assert contrast_lesson["required_response"]["required_for"] == (
         "sibling_nearby_attempt"
     )
+
+
+def test_current_no_effect_branch_lesson_requires_same_branch_refinement_usage() -> None:
+    current = _branch("branch-current", mechanism_ids=("bounded_signal_probe",))
+    current.branch_code_status = "active_no_effect"
+    current.last_screening_feedback_tier = "no_effect"
+    steps = [
+        _screening_step(
+            "branch-current",
+            round_num=1,
+            mechanism_id="bounded_signal_probe",
+            target_file="policies/shared.py",
+            change_locus="activation_policy",
+            reason_codes=("SCREENING_TELEMETRY_EFFECT_ZERO_DIAGNOSTIC",),
+            mechanism_evidence={
+                "activation": {"status": "observed"},
+                "effect": {"status": "zero"},
+            },
+        )
+    ]
+
+    payload = build_cross_branch_research_map(current, [current], steps)
+
+    no_effect_lesson = [
+        lesson
+        for lesson in payload["branch_lesson_records"]
+        if lesson["lesson_type"] == "no_effect"
+        and lesson["source_branch_ids"] == ["branch-current"]
+    ][0]
+    requirement = branch_lesson_usage_requirement_from_records(
+        payload["branch_lesson_records"]
+    )
+
+    assert no_effect_lesson["lesson_role"] == "avoid"
+    assert no_effect_lesson["scope"] == "branch_local"
+    assert no_effect_lesson["required_response"]["required_for"] == (
+        "same_branch_refinement"
+    )
+    assert (
+        no_effect_lesson["required_response"]["same_branch_refinement_allowed"]
+        is True
+    )
+    assert no_effect_lesson["required_response"]["sibling_duplication_allowed"] is False
+    assert requirement["required_for"] == "same_branch_refinement"
+    assert requirement["required_fors"] == ["same_branch_refinement"]
+    assert requirement["same_branch_refinement_allowed"] is True
+    assert requirement["pre_code_block_required"] is False
+    assert requirement["decision_features_excluded"] is True
 
 
 def test_cross_branch_research_exposes_sibling_weak_positive_borrow_lesson() -> None:

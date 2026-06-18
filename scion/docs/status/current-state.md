@@ -40,6 +40,10 @@ Framework:
   `refine_active` work rather than `repair_diagnostic`, so a retained
   no-effect branch selected for one same-mechanism sample is not misreported to
   downstream status/lineage surfaces as repair work.
+- Current active no-effect branch-local lessons now become advisory
+  `same_branch_refinement` proposal requirements, so the next same-mechanism
+  hypothesis must contrast the prior no-effect evidence instead of merely being
+  allowed to continue.
 - Measurement integration is covered against real CVRP formal and warehouse
   production assets: problem-owned practical deltas, runtime model, pairing
   validity, and reduced readiness feed deterministic protocol config fields;
@@ -158,6 +162,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-budget-exhausting-finalizer-retain-head-repair-20260618.md`.
 - Current low-signal scheduling repair:
   `scion/docs/experiments/v0.4/v04-low-signal-same-branch-scheduler-slot-repair-20260618.md`.
+- Current low-signal lesson-usage repair:
+  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-lesson-usage-repair-20260618.md`.
 - Current measurement-integration repair:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - Current calibration evidence repair:
