@@ -440,6 +440,9 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
             "contract_complete": False,
             "problem_family": None,
             "model": None,
+            "analysis_intent": None,
+            "acceptance_focus": [],
+            "resume_from_campaign": None,
             "control_pair_key": None,
             "completion_preflight": None,
             "postrun_reports": None,
@@ -556,6 +559,9 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "contract_complete": all(item["passed"] for item in checks.values()),
         "problem_family": manifest.get("problem_family"),
         "model": model.get("name"),
+        "analysis_intent": _string_or_none(manifest.get("analysis_intent")),
+        "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
+        "resume_from_campaign": _string_or_none(manifest.get("resume_from_campaign")),
         "git": git_consistency,
         "control_pair_key": report_metadata.get("control_pair_key"),
         "completion_preflight": model.get("completion_preflight"),
@@ -1389,6 +1395,19 @@ def _string_list(value: Any) -> list[str]:
             return [part.strip() for part in text.split(",") if part.strip()]
         return _string_list(parsed)
     return [str(value)]
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _counter_text(counter: dict[str, int]) -> str:

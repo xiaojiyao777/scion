@@ -137,6 +137,20 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"`{_display(prepared_contract.get('model'))}`",
             "- Control pair: "
             f"`{_display(prepared_contract.get('control_pair_key'))}`",
+            "- Resume from campaign: "
+            f"`{_display(prepared_contract.get('resume_from_campaign'))}`",
+            f"- Analysis intent: {_display(prepared_contract.get('analysis_intent'))}",
+            "- Acceptance focus:",
+        ]
+    )
+    acceptance_focus = prepared_contract.get("acceptance_focus")
+    if isinstance(acceptance_focus, list) and acceptance_focus:
+        lines.extend(f"  - {_display(item)}" for item in acceptance_focus)
+    else:
+        lines.append("  - None recorded in the prepared manifest.")
+
+    lines.extend(
+        [
             "| Check | Passed | Detail |",
             "|---|---:|---|",
         ]

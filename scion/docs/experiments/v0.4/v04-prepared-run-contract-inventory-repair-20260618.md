@@ -40,7 +40,10 @@ for:
   do not force another prepared-root regeneration.
 
 The analysis brief renders the same block so delegated postrun review can start
-from one artifact instead of manually diffing launcher files.
+from one artifact instead of manually diffing launcher files. It also surfaces
+the prepared manifest's `analysis_intent`, `acceptance_focus`, and
+`resume_from_campaign`, so subagent review starts from the pre-registered
+research purpose rather than only an artifact-presence checklist.
 
 ## Verification
 
@@ -81,3 +84,8 @@ Validation confirmed top-level `prepared` status, completion preflight,
 the WSL artifact inventory tool. After the docs-only pointer refresh, local
 smoke checks still report `git_runtime_consistent=True` with
 `checkout differs, but runtime guard paths are unchanged`.
+
+The generated analysis briefs for the current CVRP and warehouse prepared roots
+now render the manifest intent and acceptance focus directly in the
+`Prepared Run Contract` section. This remains report-only launch/handoff
+metadata and does not enter `DecisionFeatures`.

@@ -148,8 +148,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["prepared_run_contract"]["quality_judgment"] is False
     assert brief["prepared_run_contract"]["decision_features_excluded"] is True
     assert brief["prepared_run_contract"]["contract_complete"] is False
+    assert brief["prepared_run_contract"]["acceptance_focus"] == []
     assert "## Minimum Delegated Analysis" in markdown
     assert "## Prepared Run Contract" in markdown
+    assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
 

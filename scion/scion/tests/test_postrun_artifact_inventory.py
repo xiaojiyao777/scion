@@ -325,6 +325,12 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
             "run_root": remote_root,
             "campaign_dir": f"{remote_root}/campaign",
             "problem_family": "cvrp",
+            "analysis_intent": "Prepared CVRP analysis intent.",
+            "acceptance_focus": [
+                "Interpret evidence against A/A MDE.",
+                "Keep manifest evidence out of DecisionFeatures.",
+            ],
+            "resume_from_campaign": f"{remote_root}/previous/campaign",
             "command": command,
             "model": {
                 "name": "gpt-5.5",
@@ -381,6 +387,12 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert contract["problem_family"] == "cvrp"
     assert contract["model"] == "gpt-5.5"
     assert contract["control_pair_key"] == "cvrp.prepared:rep01"
+    assert contract["analysis_intent"] == "Prepared CVRP analysis intent."
+    assert contract["acceptance_focus"] == [
+        "Interpret evidence against A/A MDE.",
+        "Keep manifest evidence out of DecisionFeatures.",
+    ]
+    assert contract["resume_from_campaign"] == f"{remote_root}/previous/campaign"
     assert all(item["passed"] for item in contract["checks"].values())
     assert contract["git"]["consistent"] is True
     assert "- Prepared contract complete: True" in markdown

@@ -32,7 +32,9 @@ Give the analysis subagent exactly these paths and constraints:
 The generated brief is a report-only delegation aid. It summarizes validity,
 required artifacts, prepared-run contract checks, Phase 4 evidence coverage,
 and the required questions below. It is not a quality judgment and must not be
-used as a gate by itself.
+used as a gate by itself. When a prepared-run manifest is present, the brief
+also carries the pre-registered analysis intent, acceptance focus, and resume
+source so the delegated review answers the intended research question.
 
 ## Required Artifact Pass
 
