@@ -26,6 +26,11 @@ Framework:
   follow-up. Copied campaigns restore champion, active branch, workspace,
   hypothesis, candidate patch, branch evidence, compact status/progress, reduced
   measurement readiness, and research-efficiency projections.
+- Research-efficiency reports now include report-only `research_continuity`
+  metrics for same-mechanism follow-up selection, branch-lesson satisfaction and
+  semantic gaps, weak-positive transfer acceptance, lesson actions, and branch
+  shape. These are postrun audit fields only; they do not feed Decision,
+  Protocol gates, scheduling, lifecycle, promotion, or proposal context.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -156,61 +161,12 @@ Infrastructure:
   `scion/reports/v04-core-framework-code-review-20260611.md`,
   `scion/design/v0.5-evidence-uplift-roadmap.md`, and
   `scion/design/scion-architecture-v3.md`.
-- Current milestone index: `scion/docs/status/v0.4-history.md`.
-- Current runtime-semantics repair:
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-screening-feedback-runtime-tier-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-finalizer-retain-head-repair-20260618.md`.
-- Current low-signal scheduling repair:
-  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-scheduler-slot-repair-20260618.md`.
-- Current low-signal lesson-usage repair:
-  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-lesson-usage-repair-20260618.md`.
-- Current all-tie low-SNR expand repair:
-  `scion/docs/experiments/v0.4/v04-trajectory-divergent-all-tie-low-snr-expand-repair-20260618.md`.
-- Current measurement-integration repair:
-  `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
-- Current calibration evidence repair:
-  `scion/docs/experiments/v0.4/v04-aa-calibration-runtime-budget-hit-evidence-20260618.md`.
-- Current launcher prepared-status repair:
-  `scion/docs/experiments/v0.4/v04-launcher-prepared-status-repair-20260618.md`.
-- Current proxy healthcheck helper:
-  `scion/docs/experiments/v0.4/v04-gpt55-proxy-healthcheck-tool-20260618.md`.
-- Current postrun inventory launcher repair:
-  `scion/docs/experiments/v0.4/v04-postrun-artifact-inventory-launcher-repair-20260618.md`.
-- Current postrun analysis-brief launcher repair:
-  `scion/docs/experiments/v0.4/v04-postrun-analysis-brief-launcher-repair-20260618.md`.
-- Current prepared-run manifest launcher repair:
-  `scion/docs/experiments/v0.4/v04-prepared-run-manifest-launcher-repair-20260618.md`.
-- Current prepared-run contract inventory repair:
-  `scion/docs/experiments/v0.4/v04-prepared-run-contract-inventory-repair-20260618.md`.
-- Current prepared-handoff launcher repair:
-  `scion/docs/experiments/v0.4/v04-prepared-handoff-launcher-repair-20260618.md`.
-- Current prepared-only handoff lifecycle repair:
-  `scion/docs/experiments/v0.4/v04-prepared-only-handoff-lifecycle-repair-20260618.md`.
-- Current postrun acceptance rebuild tool:
-  `scion/docs/experiments/v0.4/v04-postrun-acceptance-rebuild-tool-20260618.md`.
-- Current preflight-failed launch-root evidence guard:
-  `scion/docs/experiments/v0.4/v04-preflight-failed-launch-root-evidence-guard-20260618.md`.
-- Current actionable preflight-failure status artifact repair:
-  `scion/docs/experiments/v0.4/v04-preflight-failure-actionable-status-artifact-repair-20260618.md`.
-- Current launch-root resume snapshot isolation repair:
-  `scion/docs/experiments/v0.4/v04-launch-root-resume-snapshot-current-run-isolation-repair-20260618.md`.
-- Current analysis-brief resume snapshot repair:
-  `scion/docs/experiments/v0.4/v04-postrun-analysis-brief-resume-snapshot-repair-20260618.md`.
-- Current launch readiness helper:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
-- Current launch-readiness login actionability repair:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-login-actionability-repair-20260618.md`.
-- Current prepared-root runtime guard refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-bd3e0d7-20260618.md`.
-- Current CVRP prepared research-focus handoff:
-  `scion/docs/experiments/v0.4/v04-cvrp-prepared-research-focus-handoff-repair-20260618.md`.
-- Current warehouse prepared research-focus handoff:
-  `scion/docs/experiments/v0.4/v04-warehouse-prepared-research-focus-handoff-repair-20260618.md`.
+- Current task and milestone summaries:
+  `scion/TASK.md`, `scion/docs/status/v0.4-history.md`, and
+  `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
+- Detailed repair, launch, and postrun evidence:
+  `scion/docs/experiments/v0.4/`. Current report-only observability slice:
+  `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

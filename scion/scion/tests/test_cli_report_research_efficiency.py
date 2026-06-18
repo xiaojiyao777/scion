@@ -61,6 +61,23 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert data["cross_branch_observability"][
         "same_branch_refinement_allowance_count"
     ] == 1
+    continuity = data["research_continuity"]
+    assert continuity["decision_features_excluded"] is True
+    assert continuity["same_mechanism_followup"] == {
+        "selected_same_branch_refinement_count": 1,
+        "not_selected_same_branch_refinement_count": 0,
+        "observed_opportunity_count": 1,
+        "selection_rate": 1.0,
+        "interpretation": "all_observed_same_mechanism_followups_selected",
+    }
+    assert continuity["branch_lesson_usage"]["requirement_count"] == 2
+    assert continuity["branch_lesson_usage"]["satisfied_count"] == 2
+    assert continuity["branch_lesson_usage"]["satisfaction_rate"] == 1.0
+    assert continuity["branch_lesson_usage"]["semantic_gap_count"] == 0
+    assert continuity["weak_positive_transfer"]["acceptance_rate"] == 1.0
+    assert continuity["lesson_action_counts"]["preserved_same_branch"] == 2
+    assert continuity["research_shape_summary"]["max_branch_depth"] == 3
+    assert continuity["research_shape_summary"]["mechanism_family_count"] == 2
     assert data["fresh_runtime_replay_drain"]["executed"] == 1
     assert data["fresh_runtime_replay_drain"]["skipped"] == 1
     assert data["proposal_quality"]["proposal_quality_blocks"] == 1

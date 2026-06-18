@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired, including report-only research-continuity metrics for same-mechanism follow-up, branch lesson usage, and weak-positive transfer; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -242,6 +242,13 @@ Current checkpoint:
   follow-up: copied campaigns restore champion, active branch, workspace,
   hypothesis, candidate patch, branch evidence, follow-up case targeting, compact
   status/progress, measurement readiness, and research-efficiency reporting.
+- Research-efficiency reports now include a report-only `research_continuity`
+  block that turns existing observability counters into same-mechanism follow-up
+  selection rate, branch-lesson satisfaction/semantic-gap rates, weak-positive
+  transfer acceptance rate, lesson action counts, and branch-shape summary. This
+  is postrun audit material only; it does not feed Decision, Protocol gates,
+  scheduling, lifecycle, promotion, or proposal context. Report:
+  `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
 - Budget-exhausting runtime semantics now avoid treating high aggregate
   `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
   soft-abandon signal, repeated-signal discriminator, screening feedback

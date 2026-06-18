@@ -270,6 +270,10 @@ def build_research_efficiency_report(
         "cross_branch_observability": _compact_cross_branch_observability(
             cross_branch_observability
         ),
+        "research_continuity": _research_continuity_metrics(
+            cross_branch_observability,
+            research_shape_diagnostics,
+        ),
         "fresh_runtime_replay_drain": {
             "attempts": _first_int(
                 summary.get("fresh_runtime_replay_drain_attempts"),
@@ -792,6 +796,27 @@ def _compact_cross_branch_observability(
         "branch_lesson_usage_missing_block_count": _first_int(
             observability.get("branch_lesson_usage_missing_block_count")
         ),
+        "branch_lesson_usage_present_not_semantic_count": _first_int(
+            observability.get("branch_lesson_usage_present_not_semantic_count")
+        ),
+        "branch_lesson_usage_metadata_only_count": _first_int(
+            observability.get("branch_lesson_usage_metadata_only_count")
+        ),
+        "branch_lesson_usage_metadata_only_block_count": _first_int(
+            observability.get("branch_lesson_usage_metadata_only_block_count")
+        ),
+        "branch_lesson_usage_linkage_unrecognized_count": _first_int(
+            observability.get("branch_lesson_usage_linkage_unrecognized_count")
+        ),
+        "branch_lesson_usage_linkage_unrecognized_block_count": _first_int(
+            observability.get("branch_lesson_usage_linkage_unrecognized_block_count")
+        ),
+        "branch_lesson_usage_semantic_mismatch_count": _first_int(
+            observability.get("branch_lesson_usage_semantic_mismatch_count")
+        ),
+        "branch_lesson_usage_semantic_mismatch_block_count": _first_int(
+            observability.get("branch_lesson_usage_semantic_mismatch_block_count")
+        ),
         "borrowed_lesson_count": _first_int(
             observability.get("borrowed_lesson_count")
         ),
@@ -819,6 +844,137 @@ def _compact_cross_branch_observability(
         ),
         "reason_code_counts": _mapping_value(observability.get("reason_code_counts")),
     }
+
+
+def _research_continuity_metrics(
+    observability: Mapping[str, Any],
+    research_shape_diagnostics: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(observability, Mapping) or not observability:
+        return {}
+    shape = _mapping_value(research_shape_diagnostics)
+    selected_same_branch = _int_or_zero(
+        observability.get("same_branch_refinement_allowance_count")
+    )
+    not_selected_same_branch = _int_or_zero(
+        observability.get("same_branch_refinement_not_selected_count")
+    )
+    same_branch_opportunities = selected_same_branch + not_selected_same_branch
+
+    lesson_requirements = _int_or_zero(
+        observability.get("branch_lesson_usage_requirement_count")
+    )
+    lessons_present = _int_or_zero(
+        observability.get("branch_lesson_usage_present_count")
+    )
+    lessons_satisfied = _int_or_zero(
+        observability.get("branch_lesson_usage_satisfied_count")
+    )
+    present_not_semantic = _int_or_zero(
+        observability.get("branch_lesson_usage_present_not_semantic_count")
+    )
+    missing_blocks = _int_or_zero(
+        observability.get("branch_lesson_usage_missing_block_count")
+    )
+    weak_positive_accepts = _int_or_zero(
+        observability.get("weak_positive_transfer_count")
+    )
+    weak_positive_rejects = _int_or_zero(
+        observability.get("weak_positive_transfer_reject_count")
+    )
+    weak_positive_opportunities = weak_positive_accepts + weak_positive_rejects
+    active_shape = _mapping_value(shape.get("active_research_shape_signal"))
+    mechanism_breadth = _mapping_value(shape.get("mechanism_family_breadth"))
+
+    return {
+        "schema_version": "scion.research_continuity_metrics.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": "excluded_from_decision_features",
+        "metric_semantics": (
+            "postrun summary/status observability; not Decision input and not "
+            "a promotion criterion"
+        ),
+        "same_mechanism_followup": {
+            "selected_same_branch_refinement_count": selected_same_branch,
+            "not_selected_same_branch_refinement_count": not_selected_same_branch,
+            "observed_opportunity_count": same_branch_opportunities,
+            "selection_rate": _safe_ratio(
+                selected_same_branch,
+                same_branch_opportunities,
+            ),
+            "interpretation": _same_branch_followup_interpretation(
+                selected_same_branch,
+                not_selected_same_branch,
+            ),
+        },
+        "branch_lesson_usage": {
+            "requirement_count": lesson_requirements,
+            "present_count": lessons_present,
+            "satisfied_count": lessons_satisfied,
+            "missing_block_count": missing_blocks,
+            "present_not_semantic_count": present_not_semantic,
+            "satisfaction_rate": _safe_ratio(
+                lessons_satisfied,
+                lesson_requirements,
+            ),
+            "present_rate": _safe_ratio(lessons_present, lesson_requirements),
+            "semantic_gap_count": max(0, lessons_present - lessons_satisfied),
+            "semantic_gap_rate": _safe_ratio(
+                max(0, lessons_present - lessons_satisfied),
+                max(lessons_present, lesson_requirements),
+            ),
+        },
+        "weak_positive_transfer": {
+            "accepted_count": weak_positive_accepts,
+            "rejected_count": weak_positive_rejects,
+            "observed_opportunity_count": weak_positive_opportunities,
+            "acceptance_rate": _safe_ratio(
+                weak_positive_accepts,
+                weak_positive_opportunities,
+            ),
+        },
+        "lesson_action_counts": {
+            "borrowed": _int_or_zero(observability.get("borrowed_lesson_count")),
+            "avoided": _int_or_zero(observability.get("avoided_lesson_count")),
+            "contrasted": _int_or_zero(observability.get("contrasted_lesson_count")),
+            "preserved_same_branch": _int_or_zero(
+                observability.get("preserved_same_branch_lesson_count")
+            ),
+            "clean_fork_contrast_satisfied": _int_or_zero(
+                observability.get("clean_fork_contrast_satisfied_count")
+            ),
+        },
+        "research_shape_summary": {
+            "max_branch_depth": _first_int(shape.get("max_branch_depth")),
+            "mean_branch_depth": _first_float(shape.get("mean_branch_depth")),
+            "branch_depth_distribution": _mapping_value(
+                shape.get("branch_depth_distribution")
+            ),
+            "active_shape": _first_str(active_shape.get("shape")),
+            "active_branch_count": _first_int(active_shape.get("active_branch_count")),
+            "active_mechanism_family_count": _first_int(
+                active_shape.get("active_mechanism_family_count")
+            ),
+            "mechanism_family_count": _first_int(
+                mechanism_breadth.get("family_count")
+            ),
+        },
+    }
+
+
+def _same_branch_followup_interpretation(
+    selected_count: int,
+    not_selected_count: int,
+) -> str:
+    total = selected_count + not_selected_count
+    if total <= 0:
+        return "no_same_mechanism_followup_opportunities_observed"
+    if selected_count > 0 and not_selected_count == 0:
+        return "all_observed_same_mechanism_followups_selected"
+    if selected_count > 0:
+        return "some_same_mechanism_followups_selected"
+    return "same_mechanism_followup_opportunities_not_selected"
 
 
 def _protocol_effects_vs_mde(
@@ -1241,6 +1397,17 @@ def _first_bool(*values: Any) -> bool | None:
             if normalized in {"false", "no", "0"}:
                 return False
     return None
+
+
+def _int_or_zero(value: Any) -> int:
+    parsed = _first_int(value)
+    return parsed if parsed is not None else 0
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return round(numerator / denominator, 6)
 
 
 def _first_float(*values: Any) -> float | None:
