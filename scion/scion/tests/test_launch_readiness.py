@@ -32,6 +32,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
+    markdown = readiness_tool.render_markdown(report)
+    assert markdown.startswith("# Launch Readiness:")
+    assert "Launch only after rerunning this tool" in markdown
 
 
 def test_launch_readiness_rejects_already_started_root(tmp_path: Path) -> None:

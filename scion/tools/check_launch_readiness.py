@@ -189,6 +189,47 @@ def build_readiness(
     }
 
 
+def render_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        f"# Launch Readiness: {Path(str(report['run_root'])).name}",
+        "",
+        "- Schema: `scion.launch_readiness.v1`",
+        "- Scope: report-only prepared-root launch check.",
+        "- Boundary: this report does not mutate campaign state, scheduler state, "
+        "promotion state, `DecisionFeatures`, or Protocol evidence.",
+        f"- Static ready: `{_display(report.get('static_ready'))}`",
+        f"- Launch ready: `{_display(report.get('launch_ready'))}`",
+        f"- Completion preflight required: `{_display(report.get('completion_preflight_required'))}`",
+        "",
+        "## Checks",
+        "| Check | Status | Required | Detail |",
+        "|---|---:|---:|---|",
+    ]
+    checks = report.get("checks")
+    if isinstance(checks, dict):
+        for name, item in sorted(checks.items()):
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "| {name} | {status} | {required} | {detail} |".format(
+                    name=name,
+                    status=_display(item.get("status")),
+                    required=_display(item.get("required")),
+                    detail=_display(item.get("detail")),
+                )
+            )
+    lines.extend(
+        [
+            "",
+            "## Launch Rule",
+            "- Static readiness is not enough to start an LLM campaign.",
+            "- Launch only after rerunning this tool with `--completion-preflight` "
+            "and seeing `launch_ready=true`.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_root")
@@ -222,11 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print(f"STATIC_READY={int(bool(report['static_ready']))}")
-        print(f"LAUNCH_READY={int(bool(report['launch_ready']))}")
-        print(f"RUN_ROOT={report['run_root']}")
-        for name, item in sorted(report["checks"].items()):
-            print(f"{name}={item['status']}")
+        print(render_markdown(report), end="")
     return 0 if report["ready"] else UNREADY_EXIT
 
 
@@ -332,6 +369,14 @@ def _int_or_zero(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _display(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
+    return str(value)
 
 
 if __name__ == "__main__":

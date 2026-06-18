@@ -66,6 +66,7 @@ POSTRUN_ACCEPTANCE_FAMILIES = (
 PREPARED_HANDOFF_FAMILIES = (
     "analysis_brief",
     "inventory",
+    "launch_readiness",
 )
 
 
@@ -573,6 +574,10 @@ def _write_prepared_handoff(run_root: Path, env: dict[str, object]) -> None:
         build_inventory,
         render_markdown as render_inventory_markdown,
     )
+    from check_launch_readiness import (  # noqa: PLC0415
+        build_readiness,
+        render_markdown as render_readiness_markdown,
+    )
 
     report_stem = (
         "cvrp_"
@@ -582,8 +587,10 @@ def _write_prepared_handoff(run_root: Path, env: dict[str, object]) -> None:
     handoff_dir = run_root / "prepared_handoff"
     brief_dir = handoff_dir / "analysis_brief"
     inventory_dir = handoff_dir / "inventory"
+    readiness_dir = handoff_dir / "launch_readiness"
     brief_dir.mkdir(parents=True, exist_ok=True)
     inventory_dir.mkdir(parents=True, exist_ok=True)
+    readiness_dir.mkdir(parents=True, exist_ok=True)
 
     brief = build_brief(run_root)
     (brief_dir / f"{report_stem}.prepared_analysis_brief.v1.json").write_text(
@@ -602,6 +609,16 @@ def _write_prepared_handoff(run_root: Path, env: dict[str, object]) -> None:
     )
     (inventory_dir / f"{report_stem}.prepared_artifact_inventory.md").write_text(
         render_inventory_markdown(inventory),
+        encoding="utf-8",
+    )
+
+    readiness = build_readiness(run_root)
+    (readiness_dir / f"{report_stem}.prepared_launch_readiness.v1.json").write_text(
+        json.dumps(readiness, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (readiness_dir / f"{report_stem}.prepared_launch_readiness.md").write_text(
+        render_readiness_markdown(readiness),
         encoding="utf-8",
     )
 

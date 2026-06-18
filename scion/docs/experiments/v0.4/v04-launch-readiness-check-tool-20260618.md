@@ -29,6 +29,11 @@ projection. It checks:
 It reports both `static_ready` and `launch_ready`. `launch_ready` is true only
 when `--completion-preflight` is required and succeeds.
 
+CVRP and warehouse launchers now also write the static readiness report into
+`prepared_handoff/launch_readiness/` when preparing a root. That artifact is a
+handoff snapshot only; operators must rerun the tool with `--completion-preflight`
+immediately before launch.
+
 ## Boundary Check
 
 This tool does not change campaign state, scheduler state, promotion state,

@@ -116,6 +116,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["report_metadata"]["prepared_handoff_families"] == [
         "analysis_brief",
         "inventory",
+        "launch_readiness",
     ]
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "Warehouse champion-v2" in prepared_manifest_md
@@ -221,12 +222,25 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         / "inventory"
         / "warehouse_on_full.prepared_artifact_inventory.md"
     )
+    readiness_json = (
+        prepared_handoff
+        / "launch_readiness"
+        / "warehouse_on_full.prepared_launch_readiness.v1.json"
+    )
+    readiness_md = (
+        prepared_handoff
+        / "launch_readiness"
+        / "warehouse_on_full.prepared_launch_readiness.md"
+    )
     assert brief_json.is_file()
     assert brief_md.is_file()
     assert inventory_json.is_file()
     assert inventory_md.is_file()
+    assert readiness_json.is_file()
+    assert readiness_md.is_file()
     prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
+    prepared_readiness = json.loads(readiness_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
     assert prepared_brief["lifecycle"]["prepared_only"] is True
@@ -248,6 +262,16 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
+    assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
+    assert prepared_readiness["static_ready"] is False
+    assert prepared_readiness["launch_ready"] is False
+    assert prepared_readiness["checks"]["prepared_contract_complete"][
+        "status"
+    ] == "failed"
+    assert prepared_readiness["checks"]["completion_preflight"]["status"] == "skipped"
+    assert "Launch only after rerunning this tool" in readiness_md.read_text(
+        encoding="utf-8"
+    )
     assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")
 
