@@ -92,6 +92,76 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert "raw_metrics_ref" not in rendered
 
 
+def test_feedback_query_screening_marks_budget_exhausting_runtime_as_report_only(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    budget_exhausting_step = replace(
+        context.step_history[0],
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(
+                n_cases=8,
+                wins=0,
+                losses=0,
+                ties=8,
+                win_rate=0.0,
+                median_delta=0.0,
+                runtime_ratio_median=1.18,
+                runtime_delta_median_ms=29.0,
+                runtime_regression_rate=1.0,
+                runtime_pairs=8,
+                total_pairs=8,
+                attempted_pairs=8,
+                valid_pairs=8,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="case-level gate failed",
+            raw_metrics_ref="/SECRET/raw/budget.json",
+            candidate_surface_runtime_summary={
+                "runtime_budget_diagnostic": {
+                    "runtime_model": "budget_exhausting",
+                    "severity": "info",
+                },
+            },
+            pair_feedback=tuple(
+                PairwiseCaseFeedback(
+                    case_id=f"case-{idx}",
+                    seed=idx,
+                    comparison="tie",
+                    delta=0.0,
+                )
+                for idx in range(8)
+            ),
+        ),
+    )
+    context = replace(context, step_history=(budget_exhausting_step,))
+
+    summary = screening_feedback_summary(budget_exhausting_step.protocol_result)
+    observation = registry.call("feedback.query_screening", {}, context)
+    row = observation.structured_payload["screening_steps"][0]
+    runtime_summary = row["screening_feedback"]["runtime_summary"]
+    runtime_evidence = row["screening_feedback"]["phase_causal_summary"][
+        "runtime_evidence"
+    ]
+
+    assert summary.tier == "no_effect"
+    assert row["screening_feedback_tier"] == "no_effect"
+    assert runtime_summary["runtime_regression_rate"] == 1.0
+    assert runtime_summary["runtime_model"] == "budget_exhausting"
+    assert (
+        runtime_summary["runtime_regression_rate_interpretation"]
+        == "not_applicable_budget_exhausting"
+    )
+    assert runtime_evidence["runtime_model"] == "budget_exhausting"
+    assert (
+        runtime_evidence["runtime_regression_rate_interpretation"]
+        == "not_applicable_budget_exhausting"
+    )
+
+
 def test_screening_feedback_exposes_bounded_phase_causal_summary(
     tmp_path: Path,
 ) -> None:

@@ -60,6 +60,8 @@ class ScreeningFeedbackSummary:
     runtime_ratio_median: float | None
     runtime_delta_median_ms: float | None
     runtime_regression_rate: float | None
+    runtime_model: str
+    runtime_regression_rate_interpretation: str | None
     runtime_pairs: int
     activation_status: str
     effect_status: str
@@ -127,6 +129,10 @@ class ScreeningFeedbackSummary:
             "runtime_ratio_median": self.runtime_ratio_median,
             "runtime_delta_median_ms": self.runtime_delta_median_ms,
             "runtime_regression_rate": self.runtime_regression_rate,
+            "runtime_model": self.runtime_model,
+            "runtime_regression_rate_interpretation": (
+                self.runtime_regression_rate_interpretation
+            ),
             "runtime_pairs": self.runtime_pairs,
         }
 
@@ -156,6 +162,12 @@ def screening_feedback_summary(
         getattr(stats, "runtime_regression_rate", None)
     )
     runtime_pairs = _safe_int(getattr(stats, "runtime_pairs", 0))
+    runtime_model = _protocol_runtime_model(protocol)
+    runtime_regression_rate_interpretation = (
+        "not_applicable_budget_exhausting"
+        if runtime_model == "budget_exhausting"
+        else None
+    )
     reason_codes = tuple(
         dict.fromkeys(
             str(code).strip()
@@ -215,6 +227,7 @@ def screening_feedback_summary(
         runtime_delta=runtime_delta,
         runtime_regression_rate=runtime_regression_rate,
         runtime_pairs=runtime_pairs,
+        runtime_model=runtime_model,
     )
     runtime_confidence = runtime_confidence_for_protocol(
         protocol,
@@ -272,6 +285,10 @@ def screening_feedback_summary(
         runtime_ratio_median=runtime_ratio,
         runtime_delta_median_ms=runtime_delta,
         runtime_regression_rate=runtime_regression_rate,
+        runtime_model=runtime_model,
+        runtime_regression_rate_interpretation=(
+            runtime_regression_rate_interpretation
+        ),
         runtime_pairs=runtime_pairs,
         activation_status=activation_status,
         effect_status=effect_status,
@@ -306,6 +323,11 @@ def screening_feedback_summary(
             mechanism_evidence=mechanism_evidence,
             runtime_ratio=runtime_ratio,
             runtime_delta=runtime_delta,
+            runtime_regression_rate=runtime_regression_rate,
+            runtime_model=runtime_model,
+            runtime_regression_rate_interpretation=(
+                runtime_regression_rate_interpretation
+            ),
         ),
     )
     return _with_digest(summary)
@@ -332,6 +354,8 @@ def _summary(
     runtime_ratio_median: float | None = None,
     runtime_delta_median_ms: float | None = None,
     runtime_regression_rate: float | None = None,
+    runtime_model: str = "",
+    runtime_regression_rate_interpretation: str | None = None,
     runtime_pairs: int = 0,
     activation_status: str = "unknown",
     effect_status: str = "uncertain",
@@ -359,6 +383,10 @@ def _summary(
         runtime_ratio_median=runtime_ratio_median,
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_regression_rate=runtime_regression_rate,
+        runtime_model=runtime_model,
+        runtime_regression_rate_interpretation=(
+            runtime_regression_rate_interpretation
+        ),
         runtime_pairs=runtime_pairs,
         activation_status=activation_status,
         effect_status=effect_status,
@@ -461,7 +489,10 @@ def _runtime_slowdown(
     runtime_delta: float | None,
     runtime_regression_rate: float | None,
     runtime_pairs: int,
+    runtime_model: str,
 ) -> bool:
+    if runtime_model == "budget_exhausting":
+        return False
     confidence = _runtime_confidence(
         runtime_ratio=runtime_ratio,
         runtime_delta=runtime_delta,
@@ -558,6 +589,9 @@ def _phase_causal_summary(
     mechanism_evidence: Mapping[str, Any],
     runtime_ratio: float | None,
     runtime_delta: float | None,
+    runtime_regression_rate: float | None,
+    runtime_model: str,
+    runtime_regression_rate_interpretation: str | None,
 ) -> dict[str, Any]:
     """Return bounded proposal-only causal feedback for screening evidence."""
 
@@ -681,9 +715,28 @@ def _phase_causal_summary(
             "runtime_confidence": runtime_confidence,
             "runtime_ratio_median": runtime_ratio,
             "runtime_delta_median_ms": runtime_delta,
+            "runtime_regression_rate": runtime_regression_rate,
+            "runtime_model": runtime_model,
+            "runtime_regression_rate_interpretation": (
+                runtime_regression_rate_interpretation
+            ),
         },
         "opportunity_status": opportunity_status,
     }
+
+
+def _protocol_runtime_model(protocol: ProtocolResult) -> str:
+    summary = getattr(protocol, "candidate_surface_runtime_summary", None)
+    if isinstance(summary, Mapping):
+        diagnostic = summary.get("runtime_budget_diagnostic")
+        if isinstance(diagnostic, Mapping):
+            text = str(diagnostic.get("runtime_model") or "").strip()
+            if text in {"comparative", "budget_exhausting"}:
+                return text
+        text = str(summary.get("runtime_model") or "").strip()
+        if text in {"comparative", "budget_exhausting"}:
+            return text
+    return ""
 
 
 def _phase_positive(

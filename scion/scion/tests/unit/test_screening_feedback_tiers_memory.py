@@ -216,6 +216,37 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
     ).tier == "runtime_regression"
 
 
+def test_budget_exhausting_runtime_rate_does_not_drive_screening_tier() -> None:
+    summary = screening_feedback_summary(
+        _protocol(
+            case_wins=0,
+            case_losses=0,
+            case_ties=8,
+            runtime_delta_median_ms=29.0,
+            runtime_ratio_median=1.18,
+            runtime_regression_rate=1.0,
+            candidate_surface_runtime_summary={
+                "runtime_budget_diagnostic": {
+                    "runtime_model": "budget_exhausting",
+                    "severity": "info",
+                },
+            },
+        )
+    )
+
+    assert summary.tier == "no_effect"
+    runtime_summary = summary.runtime_summary_payload()
+    assert runtime_summary["runtime_regression_rate"] == 1.0
+    assert runtime_summary["runtime_model"] == "budget_exhausting"
+    assert (
+        runtime_summary["runtime_regression_rate_interpretation"]
+        == "not_applicable_budget_exhausting"
+    )
+    assert summary.phase_causal_summary["runtime_evidence"]["runtime_model"] == (
+        "budget_exhausting"
+    )
+
+
 def test_two_case_runtime_noise_is_low_confidence_not_runtime_regression() -> None:
     summary = screening_feedback_summary(
         _protocol(
