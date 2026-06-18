@@ -136,8 +136,8 @@ Infrastructure:
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for the new CVRP prepared root returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `expired=1` /
-  `refreshing=0` / `total=1`.
+  `not_authenticated`, and no active authenticated account in the proxy auth
+  pool. The non-active pool state may appear as expired or refreshing.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
