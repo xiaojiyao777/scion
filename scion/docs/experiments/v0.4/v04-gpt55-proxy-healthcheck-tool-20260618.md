@@ -12,6 +12,10 @@ dashboard status can be misleading because they may succeed while
 it performs a real chat-completion request, classifies common auth failures,
 and can print a proxy OAuth login URL when completion is unhealthy.
 
+The CVRP and warehouse agentic launchers now call the same helper during
+`COMPLETION_PREFLIGHT=1`, so prepared roots and manual checks share one
+definition of "LLM route healthy".
+
 ## Boundary Check
 
 - This is an infrastructure preflight helper only.
@@ -19,6 +23,9 @@ and can print a proxy OAuth login URL when completion is unhealthy.
   lifecycle policy, proposal context, or problem semantics.
 - It reinforces the existing rule that live Scion campaigns must not launch
   until `/v1/chat/completions` returns HTTP `200` with non-empty content.
+- Launcher integration only changes pre-campaign failure diagnostics. A failed
+  healthcheck still exits before Scion starts and writes the existing outer
+  wrapper `pre_campaign_completion_preflight=failed` status.
 
 ## Usage
 
@@ -64,6 +71,9 @@ Result:
 - `28 passed`
 - `py_compile` passed
 - `git diff --check` passed
+
+WSL check after installing the tool on commit `04bc996` correctly classified
+the live proxy failure as unhealthy without launching a campaign.
 
 ## Residual Blocker
 

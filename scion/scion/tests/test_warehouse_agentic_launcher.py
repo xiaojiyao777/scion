@@ -135,7 +135,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
     assert "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED" in run_sh_text
     assert "WAREHOUSE_DATA_ROOT_MISSING" in run_sh_text
-    assert "COMPLETION_PREFLIGHT_FAILED" in run_sh_text
+    assert "tools/check_gpt55_proxy.py" in run_sh_text
+    assert "--login-url-on-failure" in run_sh_text
     assert "postrun_acceptance" in run_sh_text
     assert "report summary" in run_sh_text
     assert "report failures" in run_sh_text
@@ -252,6 +253,9 @@ def test_warehouse_agentic_launcher_api_key_env_avoids_secret_file(
     assert "SCION_API_KEY_ENV=SCION_API_KEY" in launch_env
     assert "COMPLETION_PREFLIGHT=1" in launch_env
     assert "SCION_API_KEY=<from-env:SCION_API_KEY>" in command_txt
+    assert "tools/check_gpt55_proxy.py" in (run_root / "run.sh").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(

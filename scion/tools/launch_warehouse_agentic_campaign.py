@@ -44,73 +44,13 @@ ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 COMPLETION_PREFLIGHT_SNIPPET = r'''
 if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
-  "$PY" - <<'PY' >> "$RUN_ROOT/run.log" 2>&1
-import os
-import sys
-
-model = os.environ.get("SCION_MODEL", "").strip()
-base_url = os.environ.get("SCION_BASE_URL", "").strip().rstrip("/")
-api_key = os.environ.get("SCION_API_KEY", "")
-
-def fail(message: str) -> None:
-    print("COMPLETION_PREFLIGHT_FAILED: " + message[:800])
-    raise SystemExit(64)
-
-if not model:
-    fail("SCION_MODEL is empty")
-if not base_url:
-    fail("SCION_BASE_URL is empty")
-if not api_key:
-    fail("SCION_API_KEY is empty")
-
-try:
-    import openai
-except Exception as exc:
-    fail("openai import failed: " + str(exc))
-
-if "api.deepseek.com" not in base_url and not base_url.endswith("/v1"):
-    base_url += "/v1"
-
-try:
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        max_retries=0,
-        timeout=60,
-    )
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": "Reply exactly with the two letters OK and nothing else.",
-            }
-        ],
-        max_tokens=256,
-    )
-    choice = response.choices[0]
-    message = choice.message
-    content = (message.content or "").strip()
-    tool_calls = getattr(message, "tool_calls", None) or []
-    if not content and not tool_calls:
-        fail(
-            "empty completion; finish_reason="
-            + str(getattr(choice, "finish_reason", None))
-        )
-    print(
-        "COMPLETION_PREFLIGHT_OK: model="
-        + model
-        + " finish_reason="
-        + str(getattr(choice, "finish_reason", None))
-        + " content_len="
-        + str(len(content))
-    )
-except SystemExit:
-    raise
-except Exception as exc:
-    message = str(exc).replace(api_key, "<redacted>")
-    fail(type(exc).__name__ + ": " + message)
-PY
+  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" \
+    --base-url "$SCION_BASE_URL" \
+    --model "$SCION_MODEL" \
+    --api-key "$SCION_API_KEY" \
+    --timeout-sec 60 \
+    --login-url-on-failure \
+    >> "$RUN_ROOT/run.log" 2>&1
   PREFLIGHT_STATUS=$?
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     {
