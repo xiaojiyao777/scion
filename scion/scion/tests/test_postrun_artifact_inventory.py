@@ -4,6 +4,7 @@ import importlib.util
 import json
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -347,6 +348,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "Interpret evidence against A/A MDE.",
                 "Keep manifest evidence out of DecisionFeatures.",
             ],
+            "research_focus": _cvrp_research_focus(),
             "resume_from_campaign": f"{remote_root}/previous/campaign",
             "command": command,
             "model": {
@@ -411,10 +413,110 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "Keep manifest evidence out of DecisionFeatures.",
     ]
     assert contract["resume_from_campaign"] == f"{remote_root}/previous/campaign"
+    assert contract["research_focus"]["measurement_opportunity_diagnostics"][
+        "screening_mde_at_power_80"
+    ] == 9.9
+    assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is True
+    assert (
+        contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is True
+    )
     assert all(item["passed"] for item in contract["checks"].values())
     assert contract["git"]["consistent"] is True
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
+
+
+def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "prepared-run"
+    campaign_dir = run_root / "campaign"
+    config_dir = run_root / "config"
+    campaign_dir.mkdir(parents=True)
+    config_dir.mkdir()
+    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
+        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+
+    command = (
+        f"{sys.executable} -m scion.cli.main run "
+        f"--problem {config_dir / 'problem.yaml'} "
+        f"--protocol {config_dir / 'protocol.yaml'} "
+        f"--split {config_dir / 'split.yaml'} "
+        f"--seeds {config_dir / 'seeds.yaml'} "
+        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "problem_family": "cvrp",
+            "analysis_intent": "Prepared CVRP analysis intent.",
+            "acceptance_focus": [
+                "Interpret evidence against A/A MDE.",
+                "Keep manifest evidence out of DecisionFeatures.",
+            ],
+            "resume_from_campaign": "/tmp/source-campaign",
+            "command": command,
+            "model": {
+                "name": "gpt-5.5",
+                "base_url": "http://127.0.0.1:8080",
+                "completion_preflight": True,
+            },
+            "git": {
+                "commit": _git_head_short(),
+                "runtime_guard_paths": "scion/tools",
+            },
+            "config": {
+                "problem": str(config_dir / "problem.yaml"),
+                "protocol": str(config_dir / "protocol.yaml"),
+                "split": str(config_dir / "split.yaml"),
+                "seeds": str(config_dir / "seeds.yaml"),
+            },
+            "report_metadata": {
+                "control_pair_key": "cvrp.prepared:rep01",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "rebuild",
+                ],
+            },
+        },
+    )
+    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
+    (run_root / "command.txt").write_text(
+        "\n".join(
+            [
+                "report_metadata:",
+                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
+                "",
+                "command:",
+                command,
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+
+    contract = data["launcher"]["prepared_run_contract"]
+    assert contract["contract_complete"] is False
+    assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
+    assert (
+        contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is False
+    )
 
 
 def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
@@ -650,6 +752,31 @@ def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _cvrp_research_focus() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_research_focus.v1",
+        "scope": "report_only_prepared_handoff",
+        "measurement_opportunity_diagnostics": {
+            "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "practical_screen_delta": 2.0,
+            "screening_mde_at_power_80": 9.9,
+            "reason_codes": [
+                "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+                "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
+            ],
+        },
+        "measurable_opportunity_classes": [
+            "construction_seed_portfolio",
+            "destroy_repair_selection",
+            "bounded_local_search_variant",
+            "acceptance_or_adaptive_weighting",
+        ],
+    }
 
 
 def _git_head_short() -> str:

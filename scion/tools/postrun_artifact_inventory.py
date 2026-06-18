@@ -70,6 +70,18 @@ PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = Path(__file__).resolve().parents[2]
+CVRP_REQUIRED_MEASUREMENT_REASON_CODES = frozenset(
+    (
+        "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+        "TRAJECTORY_DIVERGENT_LOW_SNR",
+    )
+)
+CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
+    "construction_seed_portfolio",
+    "destroy_repair_selection",
+    "bounded_local_search_variant",
+    "acceptance_or_adaptive_weighting",
+)
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -761,6 +773,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         git_consistency.get("consistent") is True,
         git_consistency.get("detail"),
     )
+    _add_cvrp_measurement_handoff_checks(manifest, add_check)
 
     return {
         "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
@@ -782,6 +795,92 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "postrun_reports": report_metadata.get("postrun_reports"),
         "checks": checks,
     }
+
+
+def _add_cvrp_measurement_handoff_checks(
+    manifest: dict[str, Any],
+    add_check: Any,
+) -> None:
+    if manifest.get("problem_family") != "cvrp":
+        return
+
+    research_focus = manifest.get("research_focus")
+    focus_is_dict = isinstance(research_focus, dict)
+    measurement = (
+        research_focus.get("measurement_opportunity_diagnostics")
+        if focus_is_dict
+        else None
+    )
+    measurement_is_dict = isinstance(measurement, dict)
+    add_check(
+        "cvrp_measurement_handoff_present",
+        focus_is_dict and measurement_is_dict,
+        "research_focus.measurement_opportunity_diagnostics",
+    )
+
+    if not isinstance(measurement, dict):
+        measurement = {}
+    add_check(
+        "cvrp_measurement_handoff_report_only",
+        measurement.get("proposal_visibility_only") is True
+        and measurement.get("decision_features_excluded") is True,
+        {
+            "proposal_visibility_only": measurement.get("proposal_visibility_only"),
+            "decision_features_excluded": measurement.get(
+                "decision_features_excluded"
+            ),
+        },
+    )
+    add_check(
+        "cvrp_measurement_handoff_mde_present",
+        _positive_number(measurement.get("screening_mde_at_power_80"))
+        and _positive_number(measurement.get("practical_screen_delta")),
+        {
+            "screening_mde_at_power_80": measurement.get(
+                "screening_mde_at_power_80"
+            ),
+            "practical_screen_delta": measurement.get("practical_screen_delta"),
+        },
+    )
+
+    reason_codes = set(_string_items(measurement.get("reason_codes")))
+    missing_reason_codes = sorted(
+        CVRP_REQUIRED_MEASUREMENT_REASON_CODES - reason_codes
+    )
+    add_check(
+        "cvrp_measurement_handoff_reason_codes",
+        not missing_reason_codes,
+        {
+            "required": sorted(CVRP_REQUIRED_MEASUREMENT_REASON_CODES),
+            "missing": missing_reason_codes,
+        },
+    )
+
+    opportunity_classes = (
+        research_focus.get("measurable_opportunity_classes")
+        if focus_is_dict
+        else None
+    )
+    opportunity_items = _string_items(opportunity_classes)
+    opportunity_text = "\n".join(opportunity_items)
+    missing_opportunity_tokens = [
+        token
+        for token in CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS
+        if token not in opportunity_text
+    ]
+    add_check(
+        "cvrp_measurable_opportunity_classes_present",
+        len(opportunity_items) >= len(CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS)
+        and not missing_opportunity_tokens,
+        {
+            "count": len(opportunity_items),
+            "missing": missing_opportunity_tokens,
+        },
+    )
+
+
+def _positive_number(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (float, int)) and value > 0
 
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:

@@ -72,6 +72,22 @@ def test_launch_readiness_rejects_preflight_failed_root(tmp_path: Path) -> None:
     assert report["checks"]["postrun_acceptance_not_present"]["status"] == "failed"
 
 
+def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path, include_research_focus=False)
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    assert contract["contract_complete"] is False
+    assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
+
+
 def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     tmp_path: Path,
     monkeypatch,
@@ -219,7 +235,11 @@ def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
     assert payload["checks"]["not_already_started"]["status"] == "failed"
 
 
-def _write_prepared_root(tmp_path: Path) -> Path:
+def _write_prepared_root(
+    tmp_path: Path,
+    *,
+    include_research_focus: bool = True,
+) -> Path:
     run_root = tmp_path / "prepared-root"
     campaign_dir = run_root / "campaign"
     config_dir = run_root / "config"
@@ -248,53 +268,53 @@ def _write_prepared_root(tmp_path: Path) -> Path:
             "copied_campaign_summary_present": True,
         },
     )
-    _write_json(
-        run_root / "prepared_run_manifest.v1.json",
-        {
-            "schema_version": "scion.launcher_prepared_run_manifest.v1",
-            "report_only": True,
-            "quality_judgment": False,
-            "decision_features_excluded": True,
-            "campaign_state_mutated": False,
-            "scheduler_state_mutated": False,
-            "promotion_state_mutated": False,
-            "run_root": str(run_root),
-            "campaign_dir": str(campaign_dir),
-            "problem_family": "cvrp",
-            "analysis_intent": "Prepared launch readiness fixture.",
-            "acceptance_focus": ["Stay report-only."],
-            "resume_from_campaign": "/tmp/source-campaign",
-            "command": command,
-            "model": {
-                "name": "gpt-5.5",
-                "base_url": "http://127.0.0.1:8080",
-                "completion_preflight": True,
-            },
-            "git": {
-                "commit": _git_head_short(),
-                "runtime_guard_paths": "scion/tools",
-            },
-            "config": {
-                "problem": str(config_dir / "problem.yaml"),
-                "protocol": str(config_dir / "protocol.yaml"),
-                "split": str(config_dir / "split.yaml"),
-                "seeds": str(config_dir / "seeds.yaml"),
-            },
-            "report_metadata": {
-                "control_pair_key": "cvrp.ready:rep01",
-                "postrun_reports": True,
-                "postrun_acceptance_families": [
-                    "summaries",
-                    "failures",
-                    "research_efficiency",
-                    "manifests",
-                    "analysis_brief",
-                    "inventory",
-                    "rebuild",
-                ],
-            },
+    manifest = {
+        "schema_version": "scion.launcher_prepared_run_manifest.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "run_root": str(run_root),
+        "campaign_dir": str(campaign_dir),
+        "problem_family": "cvrp",
+        "analysis_intent": "Prepared launch readiness fixture.",
+        "acceptance_focus": ["Stay report-only."],
+        "resume_from_campaign": "/tmp/source-campaign",
+        "command": command,
+        "model": {
+            "name": "gpt-5.5",
+            "base_url": "http://127.0.0.1:8080",
+            "completion_preflight": True,
         },
-    )
+        "git": {
+            "commit": _git_head_short(),
+            "runtime_guard_paths": "scion/tools",
+        },
+        "config": {
+            "problem": str(config_dir / "problem.yaml"),
+            "protocol": str(config_dir / "protocol.yaml"),
+            "split": str(config_dir / "split.yaml"),
+            "seeds": str(config_dir / "seeds.yaml"),
+        },
+        "report_metadata": {
+            "control_pair_key": "cvrp.ready:rep01",
+            "postrun_reports": True,
+            "postrun_acceptance_families": [
+                "summaries",
+                "failures",
+                "research_efficiency",
+                "manifests",
+                "analysis_brief",
+                "inventory",
+                "rebuild",
+            ],
+        },
+    }
+    if include_research_focus:
+        manifest["research_focus"] = _cvrp_research_focus()
+    _write_json(run_root / "prepared_run_manifest.v1.json", manifest)
     (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
     (run_root / "command.txt").write_text(
         "\n".join(
@@ -326,6 +346,31 @@ fi
         encoding="utf-8",
     )
     return run_root
+
+
+def _cvrp_research_focus() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_research_focus.v1",
+        "scope": "report_only_prepared_handoff",
+        "measurement_opportunity_diagnostics": {
+            "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "practical_screen_delta": 2.0,
+            "screening_mde_at_power_80": 9.9,
+            "reason_codes": [
+                "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+                "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
+            ],
+        },
+        "measurable_opportunity_classes": [
+            "construction_seed_portfolio",
+            "destroy_repair_selection",
+            "bounded_local_search_variant",
+            "acceptance_or_adaptive_weighting",
+        ],
+    }
 
 
 def _write_json(path: Path, payload: object) -> None:
