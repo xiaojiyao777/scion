@@ -41,9 +41,10 @@ Framework:
   problem specs no longer hard-code local absolute surrogate paths.
 - A/A calibration pair evidence now records explicit champion/candidate runtime
   budget-hit ratios and flags so budget saturation can be audited per replay.
-- CVRP and warehouse launch helpers now support prepared follow-up roots,
-  completion preflight, secret-safe API-key env wiring, runtime-source guards,
-  campaign copy/resume, and default postrun report generation.
+- CVRP and warehouse launch helpers now support prepared follow-up roots with
+  top-level `prepared` status, completion preflight, secret-safe API-key env
+  wiring, runtime-source guards, campaign copy/resume, and default postrun
+  report generation.
 
 Warehouse:
 
@@ -54,7 +55,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-calibbudgetfix-6r-gpt55-20260618T105613Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-preparedstatus-6r-gpt55-20260618T111015Z-claw`.
 
 CVRP/VRP:
 
@@ -72,7 +73,7 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-1r-gpt55-calibbudgetfix-1r-gpt55-20260618T105613Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-preparedstatus-1r-gpt55-20260618T111015Z-claw`.
 
 Infrastructure:
 
