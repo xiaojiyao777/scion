@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -249,6 +249,12 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
   and
   `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`.
+- Measurement integration now has real-asset coverage for CVRP formal and
+  warehouse production problem/protocol loading. Problem-owned practical
+  deltas, runtime model, pairing validity, and reduced readiness feed
+  deterministic `ProtocolConfig` fields; raw calibration diagnostics remain
+  outside `DecisionFeatures`. Report:
+  `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - CVRP live agentic checks now demonstrate useful research-loop behavior
   without yet demonstrating solver improvement. The framework can steer
   target-intent, carry branch lessons into prompts, generate material solver

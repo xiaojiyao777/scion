@@ -1,10 +1,17 @@
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 import os
 import yaml
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest
+from scion.problem.bridge import load_problem_spec_v1_from_yaml
+
+
+SCION_DIR = Path(__file__).resolve().parents[2]
+PACKAGE_PROBLEMS_DIR = SCION_DIR / "scion" / "problems"
+LEGACY_PROBLEMS_DIR = SCION_DIR / "problems"
 
 def test_problem_spec_loader(tmp_path):
     d = tmp_path / "problem"
@@ -165,6 +172,60 @@ def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
     assert config.validation_min_practical_delta == 0.8
     assert config.runtime.runtime_model == "comparative"
     assert config.pairing_validity == "trajectory_stable"
+
+
+def test_cvrp_formal_protocol_consumes_problem_measurement_declaration():
+    problem = load_problem_spec_v1_from_yaml(
+        PACKAGE_PROBLEMS_DIR / "cvrp" / "problem-v1.yaml"
+    )
+    base = ProtocolConfig.from_yaml(
+        PACKAGE_PROBLEMS_DIR / "cvrp" / "formal" / "protocol.yaml"
+    )
+
+    config = base.with_problem_measurement(
+        problem,
+        measurement_readiness_as_of=date(2026, 6, 11),
+    )
+
+    assert config.measurement_governance == "on"
+    assert config.screening_min_practical_delta == pytest.approx(2.0)
+    assert config.validation_min_practical_delta == pytest.approx(1.0)
+    assert config.runtime.runtime_model == "budget_exhausting"
+    assert config.pairing_validity == "trajectory_divergent"
+    assert config.measurement_readiness.status == "ready"
+    assert config.measurement_readiness.reason_code == "ok"
+    assert config.measurement_readiness.mde_at_power_80 == pytest.approx(9.9)
+    status_payload = config.measurement_readiness.model_dump()
+    assert "calibration_ref" not in status_payload
+    assert "pair_evidence" not in status_payload
+    assert "raw_calibration_pair_rows" not in status_payload
+
+
+def test_warehouse_prod_protocol_consumes_problem_measurement_declaration():
+    problem = load_problem_spec_v1_from_yaml(
+        LEGACY_PROBLEMS_DIR / "warehouse_delivery" / "problem-v1.yaml"
+    )
+    base = ProtocolConfig.from_yaml(
+        LEGACY_PROBLEMS_DIR / "warehouse_delivery" / "protocol_prod.yaml"
+    )
+
+    config = base.with_problem_measurement(
+        problem,
+        measurement_readiness_as_of=date(2026, 6, 11),
+    )
+
+    assert config.measurement_governance == "on"
+    assert config.screening_min_practical_delta == pytest.approx(0.001)
+    assert config.validation_min_practical_delta == pytest.approx(0.001)
+    assert config.runtime.runtime_model == "comparative"
+    assert config.pairing_validity == "trajectory_divergent"
+    assert config.measurement_readiness.status == "ready"
+    assert config.measurement_readiness.reason_code == "ok"
+    assert config.measurement_readiness.mde_at_power_80 == pytest.approx(577.5)
+    status_payload = config.measurement_readiness.model_dump()
+    assert "calibration_ref" not in status_payload
+    assert "pair_evidence" not in status_payload
+    assert "raw_calibration_pair_rows" not in status_payload
 
 
 def test_protocol_config_normalizes_measurement_governance_alias():

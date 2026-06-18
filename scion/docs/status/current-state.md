@@ -34,6 +34,10 @@ Framework:
   low-SNR trajectory-divergent screening expansion, drives lifecycle
   soft-abandon/repeated-signal noise, or creates strong prompt actionability
   when the problem declares `runtime_model=budget_exhausting`.
+- Measurement integration is covered against real CVRP formal and warehouse
+  production assets: problem-owned practical deltas, runtime model, pairing
+  validity, and reduced readiness feed deterministic protocol config fields;
+  raw calibration diagnostics stay outside `DecisionFeatures`.
 - CVRP and warehouse launch helpers now support prepared follow-up roots,
   completion preflight, secret-safe API-key env wiring, runtime-source guards,
   campaign copy/resume, and default postrun report generation.
@@ -102,6 +106,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
   and
   `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`.
+- Current measurement-integration repair:
+  `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
