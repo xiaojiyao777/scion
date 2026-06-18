@@ -15,6 +15,10 @@ from scion.core.telemetry_validation import formal_telemetry_guard_failed
 
 from .common import _stage_value
 
+_BRANCH_FINAL_CLASSIFICATION_SCHEMA = "scion.branch_final_classification.v1"
+_PARKED_BRANCH_CODE_STATUSES = {"parked", "parked_lineage", "lineage_parked"}
+_TERMINAL_HISTORY_STATUSES = {"abandoned", "archived", "parked_lineage", "promoted"}
+
 
 def _branch_cards_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [
@@ -42,6 +46,12 @@ def _branch_history_cards(
             latest
         )
         status = _history_card_status(card, _step_status(latest))
+        compact_status = _history_card_compact_status(
+            card,
+            status,
+            evidence,
+            reason_codes,
+        )
         gate_observation_reason_codes = _step_gate_observation_reason_codes(latest)
         lifecycle_action_reason_codes = _step_lifecycle_action_reason_codes(latest)
         retained = bool(
@@ -55,6 +65,15 @@ def _branch_history_cards(
                 "direction": card.get("direction")
                 or f"{latest.hypothesis.action}/{latest.hypothesis.change_locus}",
                 "status": status,
+                "branch_code_status": compact_status["branch_code_status"],
+                "lineage_status": compact_status["lineage_status"],
+                "active_slot_status": compact_status["active_slot_status"],
+                "counts_toward_active_slots": compact_status[
+                    "counts_toward_active_slots"
+                ],
+                "final_branch_classification": compact_status[
+                    "final_branch_classification"
+                ],
                 "mechanism_ids": card.get("mechanism_ids")
                 or _step_mechanism_ids(branch_steps),
                 "current_head_status": card.get("current_head_status")
@@ -370,19 +389,169 @@ def _step_status(step: StepRecord) -> str:
     )
 
 
+def _history_card_compact_status(
+    card: Mapping[str, Any],
+    status: str,
+    evidence: Mapping[str, Any],
+    reason_codes: Iterable[str],
+) -> dict[str, Any]:
+    branch_code_status = _clean_status_token(card.get("branch_code_status"))
+    if not branch_code_status:
+        branch_code_status = _derived_branch_code_status(
+            status,
+            evidence,
+            reason_codes,
+        )
+    lineage_status = _clean_status_token(card.get("lineage_status"))
+    if not lineage_status:
+        lineage_status = _derived_lineage_status(status, branch_code_status)
+    active_slot_status = _clean_status_token(card.get("active_slot_status"))
+    if not active_slot_status:
+        active_slot_status = _derived_active_slot_status(status, branch_code_status)
+    counts = card.get("counts_toward_active_slots")
+    if not isinstance(counts, bool):
+        counts = active_slot_status == "active_slot"
+        if status in _TERMINAL_HISTORY_STATUSES or active_slot_status != "active_slot":
+            counts = False
+    final_classification = card.get("final_branch_classification")
+    if not isinstance(final_classification, Mapping):
+        final_classification = _derived_final_branch_classification(
+            status=status,
+            lineage_status=lineage_status,
+            branch_code_status=branch_code_status,
+            counts_toward_active_slots=counts,
+        )
+    else:
+        final_classification = dict(final_classification)
+    return {
+        "branch_code_status": branch_code_status,
+        "lineage_status": lineage_status,
+        "active_slot_status": active_slot_status,
+        "counts_toward_active_slots": counts,
+        "final_branch_classification": final_classification,
+    }
+
+
+def _clean_status_token(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _derived_branch_code_status(
+    status: str,
+    evidence: Mapping[str, Any],
+    reason_codes: Iterable[str],
+) -> str:
+    if status in _PARKED_BRANCH_CODE_STATUSES:
+        return "parked_lineage"
+    if status == "abandoned":
+        codes = {
+            str(code).strip().upper()
+            for code in reason_codes
+            if str(code).strip()
+        }
+        tier = str(evidence.get("tier") or "").strip()
+        effect = evidence.get("effect")
+        median_delta = None
+        if isinstance(effect, Mapping):
+            try:
+                median_delta = float(effect.get("median_delta"))
+            except (TypeError, ValueError):
+                median_delta = None
+        losses = _nonnegative_int(evidence.get("losses"))
+        wins = _nonnegative_int(evidence.get("wins"))
+        if tier == "regression" or losses > wins or (
+            median_delta is not None and median_delta < 0.0
+        ):
+            return "quality_regression"
+        if tier == "invalid":
+            return "abandoned_terminal"
+        if "BRANCH_LIFECYCLE_ARCHIVE_LINEAGE" in codes:
+            return "discarded"
+        return "discarded"
+    if status in {"archived", "promoted"}:
+        return status
+    return ""
+
+
+def _derived_lineage_status(status: str, branch_code_status: str) -> str:
+    if (
+        status in _PARKED_BRANCH_CODE_STATUSES
+        or branch_code_status in _PARKED_BRANCH_CODE_STATUSES
+    ):
+        return "parked"
+    if status == "abandoned":
+        return "abandoned"
+    if status in {"archived", "promoted"}:
+        return status
+    return branch_code_status
+
+
+def _derived_active_slot_status(status: str, branch_code_status: str) -> str:
+    if (
+        status in _PARKED_BRANCH_CODE_STATUSES
+        or branch_code_status in _PARKED_BRANCH_CODE_STATUSES
+    ):
+        return "parked_lineage"
+    if status in _TERMINAL_HISTORY_STATUSES:
+        return "inactive"
+    return ""
+
+
+def _derived_final_branch_classification(
+    *,
+    status: str,
+    lineage_status: str,
+    branch_code_status: str,
+    counts_toward_active_slots: bool,
+) -> dict[str, Any]:
+    if status == "abandoned" or lineage_status == "abandoned":
+        classification = "abandoned"
+        next_action = "do_not_schedule"
+        reason = "terminal_abandoned"
+    elif status in _PARKED_BRANCH_CODE_STATUSES or lineage_status == "parked":
+        classification = "parked"
+        next_action = "clean_fork"
+        reason = "parked_lineage"
+    elif counts_toward_active_slots:
+        classification = "active"
+        next_action = "normal_scheduler_policy"
+        reason = "active_branch"
+    else:
+        classification = "inactive"
+        next_action = "do_not_schedule"
+        reason = "inactive_or_unknown_state"
+    return {
+        "schema_version": _BRANCH_FINAL_CLASSIFICATION_SCHEMA,
+        "classification": classification,
+        "next_action": next_action,
+        "reason": reason,
+        "branch_state": status,
+        "branch_code_status": branch_code_status,
+        "deterministic_lifecycle_status": True,
+        "promotion_boundary": "not_a_promotion_or_validation_decision",
+        "decision_features_excluded": True,
+    }
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _history_card_status(card: Mapping[str, Any], step_status: str) -> str:
     card_status = str(card.get("status") or "").strip()
     current_head_status = str(card.get("current_head_status") or "").strip()
     branch_code_status = str(card.get("branch_code_status") or "").strip()
     active_slot_status = str(card.get("active_slot_status") or "").strip()
-    terminal_statuses = {"abandoned", "archived", "parked_lineage", "promoted"}
     for status in (
         card_status,
         current_head_status,
         branch_code_status,
         active_slot_status,
     ):
-        if status in terminal_statuses:
+        if status in _TERMINAL_HISTORY_STATUSES:
             return status
     if step_status == "abandoned":
         return step_status

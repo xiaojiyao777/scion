@@ -1051,6 +1051,21 @@ def test_campaign_summary_reports_branch_history_cards_and_checkpoints(
     }
     abandoned_card = history["abandoned-branch"]
     assert abandoned_card["status"] == "abandoned"
+    assert abandoned_card["branch_code_status"] == "quality_regression"
+    assert abandoned_card["lineage_status"] == "abandoned"
+    assert abandoned_card["active_slot_status"] == "inactive"
+    assert abandoned_card["counts_toward_active_slots"] is False
+    assert abandoned_card["final_branch_classification"] == {
+        "schema_version": "scion.branch_final_classification.v1",
+        "classification": "abandoned",
+        "next_action": "do_not_schedule",
+        "reason": "terminal_abandoned",
+        "branch_state": "abandoned",
+        "branch_code_status": "quality_regression",
+        "deterministic_lifecycle_status": True,
+        "promotion_boundary": "not_a_promotion_or_validation_decision",
+        "decision_features_excluded": True,
+    }
     assert abandoned_card["mechanism_ids"] == ["generic_adjustment"]
     assert abandoned_card["current_head_status"] == "regression"
     assert abandoned_card["latest_head_failed"] is True
@@ -1196,6 +1211,21 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
     ]
     assert history["parked-branch"]["status"] == "parked_lineage"
     assert history["parked-branch"]["current_head_status"] == "parked_lineage"
+    assert history["parked-branch"]["lineage_status"] == "parked"
+    assert history["parked-branch"]["active_slot_status"] == "parked_lineage"
+    assert history["parked-branch"]["counts_toward_active_slots"] is False
+    assert history["parked-branch"]["final_branch_classification"] == {
+        "schema_version": "scion.branch_final_classification.v1",
+        "classification": "parked",
+        "next_action": "clean_fork",
+        "reason": "parked_lineage",
+        "branch_state": "parked_lineage",
+        "branch_code_status": "parked_lineage",
+        "deterministic_lifecycle_status": True,
+        "promotion_boundary": "not_a_promotion_or_validation_decision",
+        "decision_features_excluded": True,
+    }
+    assert "lineage_status=parked" in parked_text
     assert history["parked-branch"]["gate_observation_reason_codes"] == [
         "SCREENING_FAIL_WIN_RATE"
     ]
@@ -1208,6 +1238,7 @@ def test_branch_history_card_text_rerenders_structured_reason_codes(
     assert "SCREENING_NEUTRAL_SIGNAL_CONTINUE" in active_text
     assert "why_not_promoted_reason_codes=BRANCH_LIFECYCLE_PARK_LINEAGE" in parked_text
     assert "SCREENING_SOFT_ABANDON_NON_POSITIVE_CI" in parked_text
+    assert "lineage_status=abandoned" in abandoned_text
     assert "why_abandoned_reason_codes=SCREENING_FAIL_WIN_RATE" in abandoned_text
     assert "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN" in abandoned_text
 

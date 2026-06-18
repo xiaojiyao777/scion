@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; branch-history status projection repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -327,6 +327,16 @@ Current checkpoint:
   path: launcher suite `13 passed`; launcher py_compile passed.
   The next restored-channel CVRP rerun should use `--completion-preflight` and
   `--api-key-env SCION_API_KEY` when the key is not the local 8080 proxy key.
+- Repaired campaign-summary branch-history status projection. Report:
+  `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
+  Reconstructed terminal history cards now carry compact
+  `branch_code_status`, `lineage_status`, `active_slot_status`,
+  `counts_toward_active_slots`, and `final_branch_classification` fields even
+  when the branch is no longer present in live branch rows. Existing live-card
+  values remain authoritative. Acceptance: branch-history focused summary tests
+  `2 passed`, full summary/status file `53 passed`, py_compile passed, and
+  `git diff --check` passed. In-flight `run_status.json` formal-screening
+  projection remains a separate status-progress polish item.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

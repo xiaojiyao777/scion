@@ -126,6 +126,11 @@ CVRP/VRP:
   now be supplied with `--api-key-env` so secrets are not written to
   `launch.env`, `launch.env` is `0600`, and `--completion-preflight` performs
   a real chat-completion readiness check before campaign startup.
+- Campaign-summary branch-history status projection is repaired: reconstructed
+  abandoned/parked terminal cards now retain compact branch code, lineage,
+  active-slot, and final-classification fields even when the live branch row is
+  gone. This is summary/report-only and does not change Decision, Protocol,
+  scheduling, gates, budgets, or problem semantics.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -147,10 +152,9 @@ CVRP/VRP:
    `cluster_biased_worst_removal`, or unchanged
    `route_limit_seed_diversification`. It should choose a materially different
    problem-owned owner or explain a new causal path with CMT2/CMT4 protection.
-3. Clean up status/projection polish separately: abandoned branch DB rows retain
-   mechanism/evidence, but their history-card projection can still drop compact
-   status fields; in-flight `run_status.json` also remains too coarse during
-   long formal screening.
+3. Clean up the remaining status-progress projection polish separately:
+   in-flight `run_status.json` remains too coarse during long formal screening.
+   The campaign-summary branch-history compact-status gap is already repaired.
 4. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -185,6 +189,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
 - CVRP launcher secret/preflight repair:
   `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
+- Branch-history compact status projection repair:
+  `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
