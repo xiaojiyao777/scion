@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 
@@ -330,6 +331,10 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "base_url": "http://127.0.0.1:8080",
                 "completion_preflight": True,
             },
+            "git": {
+                "commit": _git_head_short(),
+                "runtime_guard_paths": "scion/scion :(exclude)scion/scion/tests",
+            },
             "config": {
                 "problem": f"{remote_root}/config/problem.yaml",
                 "protocol": f"{remote_root}/config/protocol.yaml",
@@ -377,6 +382,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert contract["model"] == "gpt-5.5"
     assert contract["control_pair_key"] == "cvrp.prepared:rep01"
     assert all(item["passed"] for item in contract["checks"].values())
+    assert contract["git"]["consistent"] is True
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
 
@@ -409,6 +415,13 @@ def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _git_head_short() -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", "--short", "HEAD"],
+        text=True,
+    ).strip()
 
 
 def _write_db(path: Path) -> None:

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,7 @@ POSTRUN_REPORT_DIRS = (
 PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = Path(__file__).resolve().parents[2]
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -453,6 +455,9 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
     model = manifest.get("model")
     if not isinstance(model, dict):
         model = {}
+    git = manifest.get("git")
+    if not isinstance(git, dict):
+        git = {}
     config = manifest.get("config")
     if not isinstance(config, dict):
         config = {}
@@ -534,6 +539,12 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         not missing_config_paths,
         ",".join(missing_config_paths),
     )
+    git_consistency = _git_runtime_consistency(git)
+    add_check(
+        "git_runtime_consistent",
+        git_consistency.get("consistent") is True,
+        git_consistency.get("detail"),
+    )
 
     return {
         "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
@@ -545,6 +556,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "contract_complete": all(item["passed"] for item in checks.values()),
         "problem_family": manifest.get("problem_family"),
         "model": model.get("name"),
+        "git": git_consistency,
         "control_pair_key": report_metadata.get("control_pair_key"),
         "completion_preflight": model.get("completion_preflight"),
         "postrun_reports": report_metadata.get("postrun_reports"),
@@ -638,6 +650,96 @@ def _manifest_path_resolves(
         except ValueError:
             pass
     return any(candidate.exists() for candidate in candidates)
+
+
+def _git_runtime_consistency(git: dict[str, Any]) -> dict[str, Any]:
+    manifest_commit = str(git.get("commit") or "").strip()
+    runtime_guard_paths = str(git.get("runtime_guard_paths") or "").strip()
+    checkout_commit = _git_output(("rev-parse", "--short", "HEAD"))
+    if not manifest_commit:
+        return {
+            "consistent": False,
+            "manifest_commit": None,
+            "checkout_commit": checkout_commit,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "missing manifest git.commit",
+        }
+    if not checkout_commit:
+        return {
+            "consistent": False,
+            "manifest_commit": manifest_commit,
+            "checkout_commit": None,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "unable to read checkout HEAD",
+        }
+    if checkout_commit == manifest_commit:
+        return {
+            "consistent": True,
+            "manifest_commit": manifest_commit,
+            "checkout_commit": checkout_commit,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "checkout matches manifest commit",
+        }
+    if not runtime_guard_paths:
+        return {
+            "consistent": False,
+            "manifest_commit": manifest_commit,
+            "checkout_commit": checkout_commit,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "checkout differs and runtime guard paths are missing",
+        }
+    pathspecs = runtime_guard_paths.split()
+    diff = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(REPO_DIR),
+            "diff",
+            "--quiet",
+            f"{manifest_commit}..HEAD",
+            "--",
+            *pathspecs,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if diff.returncode == 0:
+        return {
+            "consistent": True,
+            "manifest_commit": manifest_commit,
+            "checkout_commit": checkout_commit,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "checkout differs, but runtime guard paths are unchanged",
+        }
+    if diff.returncode == 1:
+        return {
+            "consistent": False,
+            "manifest_commit": manifest_commit,
+            "checkout_commit": checkout_commit,
+            "runtime_guard_paths": runtime_guard_paths,
+            "detail": "checkout differs and runtime guard paths changed",
+        }
+    detail = (diff.stderr or diff.stdout or "git diff failed").strip()
+    return {
+        "consistent": False,
+        "manifest_commit": manifest_commit,
+        "checkout_commit": checkout_commit,
+        "runtime_guard_paths": runtime_guard_paths,
+        "detail": detail,
+    }
+
+
+def _git_output(args: tuple[str, ...]) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(REPO_DIR), *args],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
 
 
 def _phase4_evidence_coverage(

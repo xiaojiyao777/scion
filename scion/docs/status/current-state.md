@@ -46,7 +46,7 @@ Framework:
   wiring, runtime-source guards, campaign copy/resume, and default postrun
   report generation, including a secret-free prepared-run manifest, delegated
   analysis brief, artifact/count inventory, report-only Phase 4 evidence
-  coverage flags, and prepared-run contract consistency checks.
+  coverage flags, and prepared-run contract/runtime-guard consistency checks.
 
 Warehouse:
 

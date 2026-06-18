@@ -35,6 +35,9 @@ for:
 - `gpt-5.5` model and completion-preflight requirement;
 - `control_pair_key` and postrun report family completeness;
 - config path resolvability, including local mirrors of WSL absolute paths.
+- git runtime consistency: a newer checkout is accepted only when the manifest's
+  declared `runtime_guard_paths` are unchanged, so docs-only pointer refreshes
+  do not force another prepared-root regeneration.
 
 The analysis brief renders the same block so delegated postrun review can start
 from one artifact instead of manually diffing launcher files.
@@ -75,4 +78,6 @@ Both roots are mirrored locally under `/home/clawd/research/scion-experiments/`.
 Validation confirmed top-level `prepared` status, completion preflight,
 `GIT_COMMIT=1baab1b`, `bash -n` clean `run.sh`, secret-free manifest JSON,
 `PREPARED_RUN_MANIFEST=` in `command.txt`, and `contract_complete=True` through
-the WSL artifact inventory tool.
+the WSL artifact inventory tool. After the docs-only pointer refresh, local
+smoke checks still report `git_runtime_consistent=True` with
+`checkout differs, but runtime guard paths are unchanged`.
