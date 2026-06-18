@@ -64,3 +64,30 @@ The local experiment archive does not currently contain a real
 `agentic_sessions/prompt_manifests/*.json` sample for a live smoke. The focused
 tests construct sanitized hypothesis/code prompt manifests and verify both the
 trajectory fingerprint and postrun brief aggregation paths.
+
+## WSL Verification
+
+After pushing commit `3c2cbd3a`, the WSL checkout fast-forwarded to the same
+branch and passed the focused suite:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_proposal_trajectory_artifacts.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/scion/core/proposal_trajectory_artifacts.py \
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/rebuild_postrun_acceptance.py
+```
+
+Result: `29 passed`; py-compile clean.
+
+The WSL experiment archive also did not contain a real
+`campaign/agentic_sessions/prompt_manifests/*.json` sample for a live smoke, so
+the WSL verification is limited to the focused generated-manifest and brief
+aggregation tests.
