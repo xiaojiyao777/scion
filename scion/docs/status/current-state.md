@@ -147,9 +147,10 @@ CVRP/VRP:
   `measurement_readiness` payload, including missing/stale/low-power readiness
   states, without leaking `calibration_ref` or raw A/A evidence.
 - Postrun research-efficiency reporting now projects reduced measurement
-  readiness plus existing research-shape and cross-branch observability
-  counters, so branch depth, same-branch lesson use, refinement allowance, and
-  weak-positive transfer can be audited from one report artifact.
+  readiness, protocol effect-vs-MDE summaries, and existing research-shape /
+  cross-branch observability counters, so branch depth, same-branch lesson use,
+  refinement allowance, weak-positive transfer, and MDE interpretation can be
+  audited from one report artifact.
 - Warehouse split-preserving cost-compression telemetry interpretation is
   repaired as a generic diagnostic interpretation fix. This changes neither
   protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.

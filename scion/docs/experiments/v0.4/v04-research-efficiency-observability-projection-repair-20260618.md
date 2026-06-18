@@ -6,8 +6,8 @@
 observability and research-shape diagnostics, but
 `report research-efficiency` only summarized accounting and failure taxonomy.
 Postrun acceptance still needed manual joins across artifacts to answer Phase 4
-questions about branch depth, same-branch lesson use, refinement allowance, and
-measurement readiness.
+questions about branch depth, same-branch lesson use, refinement allowance,
+measurement readiness, and whether protocol effects exceeded the A/A MDE.
 
 The research-efficiency report now projects those existing deterministic,
 report-only fields directly.
@@ -16,13 +16,18 @@ report-only fields directly.
 
 - `scion/scion/core/research_efficiency_report.py` now includes:
   - reduced `measurement_readiness`;
+  - `protocol_effects_vs_mde`, including row counts, positive/nonpositive
+    counts, effect/MDE ratios, stage-level summaries, CI-high-below-MDE counts,
+    and compact top rows by effect/MDE;
   - compact `research_shape` diagnostics, including branch-depth distribution,
     max/mean depth, active research-shape signal, and mechanism-family breadth;
   - compact `cross_branch_observability` counters for branch lessons,
     same-branch refinement allowance, weak-positive transfer, clean-fork
     contrast, near duplicates, and material-difference pressure.
 - `scion/scion/tests/test_cli_report_research_efficiency.py` now asserts those
-  fields are present and that `calibration_ref` is not leaked.
+  fields are present, that effect/MDE interpretation is computed, and that
+  `calibration_ref` and raw metrics refs are not leaked through the compact
+  readiness/effect rows.
 
 ## Boundary Check
 

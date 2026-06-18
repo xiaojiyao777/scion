@@ -365,11 +365,12 @@ Current checkpoint:
 - Repaired research-efficiency observability projection. Report:
   `scion/docs/experiments/v0.4/v04-research-efficiency-observability-projection-repair-20260618.md`.
   `report research-efficiency` now includes reduced `measurement_readiness`,
-  compact research-shape diagnostics, and cross-branch observability counters
-  for branch lessons, same-branch refinement allowance, weak-positive transfer,
-  clean-fork contrast, and material-difference pressure. This is report-only
-  and does not change Decision, `DecisionFeatures`, Protocol, scheduling,
-  gates, budgets, lifecycle policy, proposal context, or problem semantics.
+  protocol effect-vs-MDE summaries, compact research-shape diagnostics, and
+  cross-branch observability counters for branch lessons, same-branch
+  refinement allowance, weak-positive transfer, clean-fork contrast, and
+  material-difference pressure. This is report-only and does not change
+  Decision, `DecisionFeatures`, Protocol, scheduling, gates, budgets,
+  lifecycle policy, proposal context, or problem semantics.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

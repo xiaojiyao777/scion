@@ -38,6 +38,18 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert data["measurement_readiness"]["status"] == "ready"
     assert data["measurement_readiness"]["mde_at_power_80"] == 9.9
     assert "calibration_ref" not in data["measurement_readiness"]
+    power = data["protocol_effects_vs_mde"]
+    assert power["decision_features_excluded"] is True
+    assert power["mde_at_power_80"] == 9.9
+    assert power["interpretation"] == "has_positive_protocol_effect_at_or_above_mde"
+    assert power["protocol_row_count"] == 3
+    assert power["rows_at_or_above_mde"] == 1
+    assert power["rows_with_ci_high_below_mde"] == 2
+    assert power["max_effect_to_mde_ratio"] == 1.212121
+    assert power["by_stage"]["screening"]["rows_at_or_above_mde"] == 1
+    assert power["by_stage"]["validation"]["nonpositive_rows"] == 1
+    assert power["top_rows_by_effect_to_mde"][0]["branch_id"] == "branch-a"
+    assert "raw_metrics_ref" not in power["top_rows_by_effect_to_mde"][0]
     assert data["research_shape"]["decision_features_excluded"] is True
     assert data["research_shape"]["max_branch_depth"] == 3
     assert data["research_shape"]["branch_depth_distribution"] == {"1": 1, "3": 1}
@@ -230,6 +242,49 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
             "frozen": 0,
         },
         "steps": [
+            {
+                "round": 1,
+                "branch_id": "branch-a",
+                "decision": "queue_validate",
+                "protocol_result": {
+                    "stage": "screening",
+                    "win_rate": 0.75,
+                    "median_delta": 12.0,
+                    "ci_low": 1.0,
+                    "ci_high": 15.0,
+                    "gate_outcome": "pass",
+                    "effective_reason_codes": ["SCREENING_PASS"],
+                    "raw_metrics_ref": "/tmp/internal-screening-a.json",
+                },
+            },
+            {
+                "round": 2,
+                "branch_id": "branch-b",
+                "decision": "abandon",
+                "protocol_result": {
+                    "stage": "screening",
+                    "win_rate": 0.5,
+                    "median_delta": 2.5,
+                    "ci_low": -1.0,
+                    "ci_high": 7.0,
+                    "gate_outcome": "fail",
+                    "reason_codes": ["SCREENING_WEAK_SIGNAL_CONTINUE"],
+                },
+            },
+            {
+                "round": 3,
+                "branch_id": "branch-a",
+                "decision": "abandon",
+                "protocol_result": {
+                    "stage": "validation",
+                    "win_rate": 0.25,
+                    "median_delta": -1.0,
+                    "ci_low": -4.0,
+                    "ci_high": 3.0,
+                    "gate_outcome": "fail",
+                    "reason_codes": ["VALIDATION_FAIL"],
+                },
+            },
             {
                 "failure_stage": "verification",
                 "failure_detail": "V9_perf_guard",

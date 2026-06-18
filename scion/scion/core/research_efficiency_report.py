@@ -250,6 +250,10 @@ def build_research_efficiency_report(
             ),
         },
         "measurement_readiness": measurement_readiness or {},
+        "protocol_effects_vs_mde": _protocol_effects_vs_mde(
+            steps,
+            measurement_readiness or {},
+        ),
         "research_shape": _compact_research_shape_diagnostics(
             research_shape_diagnostics
         ),
@@ -807,6 +811,193 @@ def _compact_cross_branch_observability(
     }
 
 
+def _protocol_effects_vs_mde(
+    steps: list[Any],
+    measurement_readiness: Mapping[str, Any],
+) -> dict[str, Any]:
+    mde = _first_float(measurement_readiness.get("mde_at_power_80"))
+    rows: list[dict[str, Any]] = []
+    for item in steps:
+        if not isinstance(item, Mapping):
+            continue
+        protocol = item.get("protocol_result")
+        if not isinstance(protocol, Mapping):
+            continue
+        row = _protocol_effect_row(item, protocol, mde)
+        if row:
+            rows.append(row)
+
+    stage_buckets: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        stage_buckets.setdefault(str(row.get("stage") or "unknown"), []).append(row)
+
+    return {
+        "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": "excluded_from_decision_features",
+        "measurement_readiness_status": _first_str(
+            measurement_readiness.get("status")
+        ),
+        "measurement_readiness_reason_code": _first_str(
+            measurement_readiness.get("reason_code")
+        ),
+        "mde_at_power_80": mde,
+        "mde_source": (
+            "measurement_readiness.mde_at_power_80"
+            if mde is not None and mde > 0
+            else "unavailable"
+        ),
+        "interpretation": _effect_vs_mde_interpretation(rows, mde),
+        **_effect_row_counts(rows, mde),
+        "by_stage": {
+            stage: _effect_row_counts(stage_rows, mde)
+            for stage, stage_rows in sorted(stage_buckets.items())
+        },
+        "top_rows_by_effect_to_mde": _top_effect_rows(rows),
+    }
+
+
+def _protocol_effect_row(
+    step: Mapping[str, Any],
+    protocol: Mapping[str, Any],
+    mde: float | None,
+) -> dict[str, Any] | None:
+    median_delta = _first_float(protocol.get("median_delta"))
+    ci_low = _first_float(protocol.get("ci_low"))
+    ci_high = _first_float(protocol.get("ci_high"))
+    win_rate = _first_float(protocol.get("win_rate"), protocol.get("case_win_rate"))
+    effect_to_mde_ratio = (
+        round(median_delta / mde, 6)
+        if median_delta is not None and mde is not None and mde > 0
+        else None
+    )
+    return {
+        "round": _first_int(step.get("round")),
+        "branch_id": _first_str(step.get("branch_id")),
+        "stage": _first_str(protocol.get("stage"), "unknown"),
+        "decision": _first_str(step.get("decision")),
+        "gate_outcome": _first_str(protocol.get("gate_outcome")),
+        "median_delta": median_delta,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "win_rate": win_rate,
+        "effect_to_mde_ratio": effect_to_mde_ratio,
+        "positive_effect_at_or_above_mde": bool(
+            median_delta is not None
+            and mde is not None
+            and mde > 0
+            and median_delta >= mde
+        ),
+        "ci_high_below_mde": bool(
+            ci_high is not None and mde is not None and mde > 0 and ci_high < mde
+        ),
+        "reason_codes": _list_of_str(protocol.get("effective_reason_codes"))
+        or _list_of_str(protocol.get("reason_codes")),
+    }
+
+
+def _effect_row_counts(
+    rows: list[Mapping[str, Any]],
+    mde: float | None,
+) -> dict[str, Any]:
+    rows_with_median = [
+        row for row in rows if _first_float(row.get("median_delta")) is not None
+    ]
+    positive_rows = [
+        row for row in rows_with_median if _first_float(row.get("median_delta")) > 0
+    ]
+    nonpositive_rows = [
+        row for row in rows_with_median if _first_float(row.get("median_delta")) <= 0
+    ]
+    rows_at_or_above_mde = [
+        row for row in rows_with_median if row.get("positive_effect_at_or_above_mde")
+    ]
+    rows_with_ci_high_below_mde = [
+        row for row in rows_with_median if row.get("ci_high_below_mde")
+    ]
+    ratios = [
+        ratio
+        for row in rows_with_median
+        for ratio in [_first_float(row.get("effect_to_mde_ratio"))]
+        if ratio is not None
+    ]
+    median_values = [
+        value
+        for row in rows_with_median
+        for value in [_first_float(row.get("median_delta"))]
+        if value is not None
+    ]
+    return {
+        "protocol_row_count": len(rows),
+        "rows_with_median_delta": len(rows_with_median),
+        "positive_rows": len(positive_rows),
+        "nonpositive_rows": len(nonpositive_rows),
+        "rows_at_or_above_mde": len(rows_at_or_above_mde),
+        "rows_below_mde": (
+            len(rows_with_median) - len(rows_at_or_above_mde)
+            if mde is not None and mde > 0
+            else None
+        ),
+        "rows_with_ci_high_below_mde": len(rows_with_ci_high_below_mde),
+        "max_median_delta": max(median_values) if median_values else None,
+        "max_effect_to_mde_ratio": max(ratios) if ratios else None,
+    }
+
+
+def _effect_vs_mde_interpretation(
+    rows: list[Mapping[str, Any]],
+    mde: float | None,
+) -> str:
+    if not rows:
+        return "no_protocol_rows"
+    if mde is None or mde <= 0:
+        return "mde_unavailable"
+    if any(row.get("positive_effect_at_or_above_mde") for row in rows):
+        return "has_positive_protocol_effect_at_or_above_mde"
+    ci_rows = [row for row in rows if row.get("ci_high") is not None]
+    if ci_rows and all(row.get("ci_high_below_mde") for row in ci_rows):
+        return "all_available_ci_high_below_mde"
+    return "protocol_effects_below_mde_or_inconclusive"
+
+
+def _top_effect_rows(
+    rows: list[Mapping[str, Any]],
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    sortable = [
+        row
+        for row in rows
+        if _first_float(row.get("effect_to_mde_ratio")) is not None
+    ]
+    sortable.sort(
+        key=lambda row: _first_float(row.get("effect_to_mde_ratio")) or float("-inf"),
+        reverse=True,
+    )
+    return [
+        {
+            key: row.get(key)
+            for key in (
+                "round",
+                "branch_id",
+                "stage",
+                "decision",
+                "gate_outcome",
+                "median_delta",
+                "ci_low",
+                "ci_high",
+                "win_rate",
+                "effect_to_mde_ratio",
+                "positive_effect_at_or_above_mde",
+                "ci_high_below_mde",
+                "reason_codes",
+            )
+        }
+        for row in sortable[:limit]
+    ]
+
+
 def _source_ref(path: Path | None) -> str:
     if path is None:
         return ""
@@ -864,6 +1055,10 @@ def _mapping_value(value: Any) -> dict[str, Any]:
 
 def _list_value(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
+
+
+def _list_of_str(value: Any) -> list[str]:
+    return [str(item) for item in value] if isinstance(value, list) else []
 
 
 def _mapping_int(mapping: Mapping[str, Any] | None, key: str) -> int | None:
