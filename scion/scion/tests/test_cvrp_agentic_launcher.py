@@ -111,6 +111,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "manifests",
         "analysis_brief",
         "inventory",
+        "rebuild",
     ]
     assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
         run_root / "prepared_handoff"
@@ -163,18 +164,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         run_sh_text
     )
     assert "postrun_acceptance" in run_sh_text
-    assert "report summary" in run_sh_text
-    assert "report failures" in run_sh_text
-    assert "report research-efficiency" in run_sh_text
-    assert "report proposal-trajectory-manifest" in run_sh_text
-    assert "tools/postrun_analysis_brief.py" in run_sh_text
-    assert "postrun_analysis_brief.v1.json" in run_sh_text
-    assert "postrun_analysis_brief.md" in run_sh_text
-    assert "tools/postrun_artifact_inventory.py" in run_sh_text
-    assert "postrun_artifact_inventory.v1.json" in run_sh_text
-    assert "postrun_artifact_inventory.md" in run_sh_text
+    assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
+    assert '--report-stem "$REPORT_STEM"' in run_sh_text
+    assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
-    assert 'manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
+    assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
@@ -407,7 +401,7 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
         '"$PY" -m scion.cli.main run \\', maxsplit=1
     )[1].split("STATUS=$?", maxsplit=1)[0]
     assert "--control-pair-key" not in run_command_block
-    assert 'manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
+    assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
 
     subprocess.run(["bash", "-n", str(run_root / "run.sh")], check=True)
 

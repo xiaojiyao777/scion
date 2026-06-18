@@ -186,6 +186,23 @@ def rebuild_postrun_acceptance(
     }
     manifest_path = report_dir / "rebuild" / "rebuild_manifest.v1.json"
     manifest_path.write_text(_stable_json(manifest), encoding="utf-8")
+    if family_results.get("inventory", {}).get("status") == "ok":
+        family_results["inventory"] = _write_family(
+            "inventory",
+            [
+                report_dir
+                / "inventory"
+                / f"{stem}.postrun_artifact_inventory.v1.json",
+                report_dir / "inventory" / f"{stem}.postrun_artifact_inventory.md",
+            ],
+            lambda: _write_inventory(root, report_dir, stem),
+        )
+        manifest["families"] = family_results
+        manifest["complete"] = all(
+            result.get("status") == "ok" for result in family_results.values()
+        )
+        manifest_path.write_text(_stable_json(manifest), encoding="utf-8")
+        complete = bool(manifest["complete"])
     if strict and not complete:
         failed = ", ".join(
             name

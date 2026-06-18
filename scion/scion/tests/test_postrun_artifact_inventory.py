@@ -95,6 +95,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
             "normal.postrun_analysis_brief.v1.json",
         ): {},
         ("inventory", "normal.postrun_artifact_inventory.v1.json"): {},
+        ("rebuild", "rebuild_manifest.v1.json"): {},
     }
     for (subdir, filename), payload in postrun_payloads.items():
         _write_json(run_root / "postrun_acceptance" / subdir / filename, payload)
@@ -233,6 +234,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "failures": 1,
         "inventory": 1,
         "manifests": 1,
+        "rebuild": 1,
         "research_efficiency": 1,
         "summaries": 1,
     }
@@ -361,6 +363,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                     "manifests",
                     "analysis_brief",
                     "inventory",
+                    "rebuild",
                 ],
             },
         },

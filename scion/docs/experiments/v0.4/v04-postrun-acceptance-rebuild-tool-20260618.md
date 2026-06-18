@@ -52,6 +52,10 @@ inventory, and rebuild manifest, while marking current-run postrun families as
 `skipped`. This prevents copied resume campaign artifacts from being promoted
 back into current-run research evidence.
 
+CVRP and warehouse launchers now call this tool as the standard postrun report
+entry point, so future launched roots write the same rebuild manifest instead
+of maintaining a separate shell copy of each report command.
+
 ## Smoke Evidence
 
 The accepted warehouse validation-transfer root was rebuilt locally:
@@ -86,18 +90,22 @@ current-run effective rounds.
 
 ```bash
 PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py \
   scion/scion/tests/test_rebuild_postrun_acceptance.py \
   scion/scion/tests/test_postrun_artifact_inventory.py \
   scion/scion/tests/test_postrun_analysis_brief.py
 python -m py_compile \
   scion/tools/rebuild_postrun_acceptance.py \
   scion/tools/postrun_artifact_inventory.py \
-  scion/tools/postrun_analysis_brief.py
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/launch_cvrp_agentic_campaign.py \
+  scion/tools/launch_warehouse_agentic_campaign.py
 git diff --check
 ```
 
 Result:
 
-- `8 passed`
+- `32 passed`
 - `py_compile` passed
 - `git diff --check` passed

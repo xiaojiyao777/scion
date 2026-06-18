@@ -278,10 +278,10 @@ Current checkpoint:
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
-  latest WSL preflight reaches the proxy and reports
-  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
-  completion returns HTTP `401` with
-  `classification=auth_token_invalidated`. Use the repaired launcher
+  latest WSL preflight reaches the proxy but reports
+  `AUTH_STATUS authenticated=False active=0 refreshing=1`; the real chat
+  completion returns HTTP `401` with `classification=not_authenticated`. Use the
+  repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its
   prepare/postrun acceptance bundle enabled, including the secret-free
@@ -291,7 +291,8 @@ Current checkpoint:
   guards that prevent copied resume artifacts from being treated as current-run
   postrun evidence. For historical roots or schema drift, rebuild the
   report-only acceptance bundle with `scion/tools/rebuild_postrun_acceptance.py`
-  before delegating postrun analysis.
+  before delegating postrun analysis; future launcher postrun paths call this
+  rebuild tool directly.
   Current launch-prepared CVRP root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-lifecycle-1r-gpt55-20260618T130518Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not

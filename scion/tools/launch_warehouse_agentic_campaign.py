@@ -58,6 +58,7 @@ POSTRUN_ACCEPTANCE_FAMILIES = (
     "manifests",
     "analysis_brief",
     "inventory",
+    "rebuild",
 )
 PREPARED_HANDOFF_FAMILIES = (
     "analysis_brief",
@@ -93,60 +94,21 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
   REPORT_DIR="$RUN_ROOT/postrun_acceptance"
   REPORT_STEM="warehouse_${MEASUREMENT_GOVERNANCE//-/_}_${PROPOSAL_CONTEXT_ABLATION//-/_}"
   OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"
-  mkdir -p \
-    "$REPORT_DIR/summaries" \
-    "$REPORT_DIR/failures" \
-    "$REPORT_DIR/research_efficiency" \
-    "$REPORT_DIR/manifests" \
-    "$REPORT_DIR/analysis_brief" \
-    "$REPORT_DIR/inventory"
   echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
   {
     echo "POSTRUN_REPORTS_STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "POSTRUN_REPORT_DIR:$REPORT_DIR"
   } >> "$RUN_ROOT/run.log"
-  "$PY" -m scion.cli.main report summary \
-    --campaign-dir "$CAMPAIGN_DIR" \
-    --output "$REPORT_DIR/summaries/${REPORT_STEM}.summary.json" \
-    >> "$RUN_ROOT/run.log" 2>&1 || true
-  "$PY" -m scion.cli.main report failures \
-    --campaign-dir "$CAMPAIGN_DIR" \
-    --output "$REPORT_DIR/failures/${REPORT_STEM}.failures.json" \
-    >> "$RUN_ROOT/run.log" 2>&1 || true
-  "$PY" -m scion.cli.main report research-efficiency \
-    --campaign-dir "$CAMPAIGN_DIR" \
-    --output "$REPORT_DIR/research_efficiency/${REPORT_STEM}.research_efficiency.v1.json" \
-    >> "$RUN_ROOT/run.log" 2>&1 || true
-  manifest_args=(
-    --campaign-dir "$CAMPAIGN_DIR"
+  rebuild_args=(
+    "$RUN_ROOT"
+    --report-stem "$REPORT_STEM"
     --observed-control-arm "$OBSERVED_CONTROL_ARM"
-    --output "$REPORT_DIR/manifests/${REPORT_STEM}.proposal_trajectory_manifest.v1.json"
   )
   if [[ -n "${CONTROL_PAIR_KEY:-}" ]]; then
-    manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
+    rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
   fi
-  "$PY" -m scion.cli.main report proposal-trajectory-manifest \
-    "${manifest_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
-  "$PY" "$SCION_DIR/tools/postrun_analysis_brief.py" \
-    "$RUN_ROOT" \
-    --format json \
-    > "$REPORT_DIR/analysis_brief/${REPORT_STEM}.postrun_analysis_brief.v1.json" \
-    2>> "$RUN_ROOT/run.log" || true
-  "$PY" "$SCION_DIR/tools/postrun_analysis_brief.py" \
-    "$RUN_ROOT" \
-    --format markdown \
-    > "$REPORT_DIR/analysis_brief/${REPORT_STEM}.postrun_analysis_brief.md" \
-    2>> "$RUN_ROOT/run.log" || true
-  "$PY" "$SCION_DIR/tools/postrun_artifact_inventory.py" \
-    "$RUN_ROOT" \
-    --format json \
-    > "$REPORT_DIR/inventory/${REPORT_STEM}.postrun_artifact_inventory.v1.json" \
-    2>> "$RUN_ROOT/run.log" || true
-  "$PY" "$SCION_DIR/tools/postrun_artifact_inventory.py" \
-    "$RUN_ROOT" \
-    --format markdown \
-    > "$REPORT_DIR/inventory/${REPORT_STEM}.postrun_artifact_inventory.md" \
-    2>> "$RUN_ROOT/run.log" || true
+  "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" \
+    "${rebuild_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
   {
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"

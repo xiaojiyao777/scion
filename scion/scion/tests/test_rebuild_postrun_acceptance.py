@@ -134,6 +134,7 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
         ).read_text(encoding="utf-8")
     )
     assert inventory["postrun_reports"]["counts"]["analysis_brief"] == 1
+    assert inventory["postrun_reports"]["counts"]["rebuild"] == 1
     assert inventory["postrun_reports"]["counts"]["research_efficiency"] == 1
 
 

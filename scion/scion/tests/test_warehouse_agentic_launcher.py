@@ -108,6 +108,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "manifests",
         "analysis_brief",
         "inventory",
+        "rebuild",
     ]
     assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
         run_root / "prepared_handoff"
@@ -172,18 +173,11 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "tools/check_gpt55_proxy.py" in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
     assert "postrun_acceptance" in run_sh_text
-    assert "report summary" in run_sh_text
-    assert "report failures" in run_sh_text
-    assert "report research-efficiency" in run_sh_text
-    assert "report proposal-trajectory-manifest" in run_sh_text
-    assert "tools/postrun_analysis_brief.py" in run_sh_text
-    assert "postrun_analysis_brief.v1.json" in run_sh_text
-    assert "postrun_analysis_brief.md" in run_sh_text
-    assert "tools/postrun_artifact_inventory.py" in run_sh_text
-    assert "postrun_artifact_inventory.v1.json" in run_sh_text
-    assert "postrun_artifact_inventory.md" in run_sh_text
+    assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
+    assert '--report-stem "$REPORT_STEM"' in run_sh_text
+    assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
-    assert 'manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
+    assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt

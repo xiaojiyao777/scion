@@ -53,6 +53,7 @@ POSTRUN_REPORT_DIRS = (
     "manifests",
     "analysis_brief",
     "inventory",
+    "rebuild",
 )
 PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
