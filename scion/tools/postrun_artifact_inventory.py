@@ -80,12 +80,14 @@ CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
     "construction_seed_portfolio",
     "destroy_repair_selection",
     "bounded_local_search_variant",
+    "large_instance_intra_route_two_opt_seed",
     "acceptance_or_adaptive_weighting",
 )
 CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
     "broad vns removal",
     "pure alns",
     "initial-vns",
+    "unbounded large-instance two-opt fallback",
     "cadence-2",
     "share70",
     "route-merge",

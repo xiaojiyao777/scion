@@ -357,6 +357,12 @@ Current checkpoint:
   local-search mechanism, and lists the unbounded fallback as default-avoid.
   Report:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`.
+- Prepared contract/inventory coverage now requires both the
+  `large_instance_intra_route_two_opt_seed` opportunity token and the
+  unbounded large-instance two-opt fallback default-avoid token, so future
+  prepared roots fail static handoff coverage if the guidance is dropped.
+  Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
 - CVRP hypothesis proposal context now receives problem-owned
   measurement/opportunity diagnostics: MDE-vs-practical-delta, low-SNR
   interpretation, aggregate screening headroom, current default-avoid

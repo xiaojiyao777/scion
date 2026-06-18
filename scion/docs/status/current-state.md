@@ -69,6 +69,9 @@ Framework:
   provider prompts or changing runtime decisions. Launch readiness now requires
   this prompt/context artifact and independently rechecks the bridge source and
   launch markers plus artifact identity before reporting `static_ready=true`.
+- Prepared contract/inventory coverage now requires the CVRP large-instance
+  two-opt seed and its unbounded-fallback default-avoid line, so future prepared
+  roots fail static handoff coverage if that guidance is dropped.
 
 Warehouse:
 
@@ -184,6 +187,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.

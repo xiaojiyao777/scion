@@ -651,6 +651,22 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert (
         contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is True
     )
+    assert (
+        contract["checks"]["cvrp_measurable_opportunity_classes_present"]["passed"]
+        is True
+    )
+    assert (
+        "large_instance_intra_route_two_opt_seed"
+        not in contract["checks"]["cvrp_measurable_opportunity_classes_present"][
+            "detail"
+        ]["missing"]
+    )
+    assert (
+        "unbounded large-instance two-opt fallback"
+        not in contract["checks"]["cvrp_default_avoid_directions_present"]["detail"][
+            "missing"
+        ]
+    )
     assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is True
     problem_specific = data["phase4_evidence_coverage"][
         "problem_specific_requirements"
@@ -1141,12 +1157,14 @@ def _cvrp_research_focus() -> dict[str, object]:
             "construction_seed_portfolio",
             "destroy_repair_selection",
             "bounded_local_search_variant",
+            "large_instance_intra_route_two_opt_seed",
             "acceptance_or_adaptive_weighting",
         ],
         "default_avoid_directions": [
             "unchanged broad VNS removal",
             "pure ALNS/no-polish",
             "simple initial-VNS disablement",
+            "unbounded large-instance two-opt fallback without deadline or wall-clock evidence",
             "raw cadence-2",
             "tested share70 cap/rescue variants",
             "route-merge absorption",
