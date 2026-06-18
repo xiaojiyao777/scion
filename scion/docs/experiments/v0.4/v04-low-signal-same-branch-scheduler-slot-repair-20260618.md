@@ -55,6 +55,22 @@ Results:
 - `43 passed`
 - `128 passed`
 
+WSL at commit `7e12c62`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/unit/core/test_scheduler_runtime_evidence_pressure.py \
+  scion/scion/tests/unit/core/test_branch_step_runner_scheduler_metadata.py \
+  scion/scion/tests/test_scheduler.py \
+  scion/scion/tests/unit/core/test_branch_lifecycle_policy.py \
+  scion/scion/tests/unit/core/test_branch_hygiene_status.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline_hypothesis.py \
+  scion/scion/tests/unit/test_branch_prompt_projection.py
+```
+
+Result: `171 passed`.
+
 ## Acceptance
 
 Accepted as a narrow v0.4 research-loop semantics repair. It prevents
