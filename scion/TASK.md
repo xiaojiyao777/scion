@@ -253,7 +253,8 @@ Current checkpoint:
   warehouse production problem/protocol loading. Problem-owned practical
   deltas, runtime model, pairing validity, and reduced readiness feed
   deterministic `ProtocolConfig` fields; raw calibration diagnostics remain
-  outside `DecisionFeatures`. Report:
+  outside `DecisionFeatures`; warehouse specs no longer hard-code local
+  surrogate paths, so WSL checkouts resolve the same calibration asset. Report:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - CVRP live agentic checks now demonstrate useful research-loop behavior
   without yet demonstrating solver improvement. The framework can steer

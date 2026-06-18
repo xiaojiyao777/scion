@@ -19,8 +19,11 @@ configs, not only by synthetic fixtures.
   pairing validity, and reduced measurement readiness.
 - The tests also assert reduced readiness payloads do not expose calibration
   refs, pair evidence, or raw calibration rows.
+- Replaced warehouse `problem-v1.yaml` hard-coded local absolute paths with
+  relative `root_dir` and canary paths so the same assets resolve under both
+  the local checkout and the WSL synchronized checkout.
 
-No runtime behavior changed.
+No runtime decision behavior changed.
 
 ## Verification
 
@@ -32,7 +35,11 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_models.py
 ```
 
-Result: `57 passed in 0.82s`.
+Local result: `57 passed in 0.98s`.
+
+WSL focused verification uses the same command after fast-forwarding the WSL
+checkout. The initial WSL run caught the absolute-path defect; the accepted
+state requires the rerun to pass there as well.
 
 ## Acceptance
 

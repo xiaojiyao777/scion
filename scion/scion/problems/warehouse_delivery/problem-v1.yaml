@@ -2,7 +2,7 @@ spec_version: "problem-v1"
 
 id: warehouse_delivery
 display_name: "Warehouse Delivery Assignment"
-root_dir: /home/clawd/research/or-autoresearch-agent/surrogate
+root_dir: ../../../../surrogate
 description: >-
   Warehouse Delivery Assignment: assign B2B orders to a fleet of vehicle slots
   for last-mile logistics. Objective (lexicographic): minimise subcategory_splits
@@ -13,7 +13,7 @@ operators_dir: operators
 data_dir: data
 oracle_path: oracle.py
 solver_path: solver.py
-canary_case_path: /home/clawd/research/or-autoresearch-agent/surrogate/data/instance_small_1.json
+canary_case_path: data/instance_small_1.json
 unit_test_path: tests/test_operators.py
 regression_test_path: tests/test_solver.py
 

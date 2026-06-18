@@ -37,7 +37,8 @@ Framework:
 - Measurement integration is covered against real CVRP formal and warehouse
   production assets: problem-owned practical deltas, runtime model, pairing
   validity, and reduced readiness feed deterministic protocol config fields;
-  raw calibration diagnostics stay outside `DecisionFeatures`.
+  raw calibration diagnostics stay outside `DecisionFeatures`; warehouse
+  problem specs no longer hard-code local absolute surrogate paths.
 - CVRP and warehouse launch helpers now support prepared follow-up roots,
   completion preflight, secret-safe API-key env wiring, runtime-source guards,
   campaign copy/resume, and default postrun report generation.
