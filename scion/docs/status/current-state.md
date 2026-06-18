@@ -52,9 +52,9 @@ Framework:
   `DecisionFeatures`. Prepared-only roots now carry explicit launcher
   lifecycle/evidence-scope metadata, so copied resume snapshots are marked
   `prepared_only/not_started` with zero current-run effective rounds instead of
-  masquerading as completed postrun evidence. Postrun inventory now keeps
-  top-level branch/event/hypothesis/LLM-trace fields scoped to current-run
-  evidence and reports copied resume-campaign counts only under
+  masquerading as completed postrun evidence. Postrun inventory and analysis
+  briefs now keep top-level branch/event/hypothesis/LLM-trace fields scoped to
+  current-run evidence and report copied resume-campaign counts only under
   `resume_snapshot`.
 - If a prepared root is started while completion preflight fails, launcher
   reports now mark the root `invalid_infra_only` with zero current-run evidence
@@ -174,6 +174,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-preflight-failure-actionable-status-artifact-repair-20260618.md`.
 - Current launch-root resume snapshot isolation repair:
   `scion/docs/experiments/v0.4/v04-launch-root-resume-snapshot-current-run-isolation-repair-20260618.md`.
+- Current analysis-brief resume snapshot repair:
+  `scion/docs/experiments/v0.4/v04-postrun-analysis-brief-resume-snapshot-repair-20260618.md`.
 - Current launch readiness helper:
   `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
 - Current launch-readiness login actionability repair:

@@ -61,6 +61,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
             "count": len(inventory["branches"]),
             "ids": [branch["branch_id"] for branch in inventory["branches"]],
         },
+        "resume_snapshot": inventory.get("resume_snapshot", {"present": False}),
         "artifact_checklist": _artifact_checklist(run_root_path, campaign_dir),
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
@@ -104,6 +105,36 @@ def render_markdown(brief: dict[str, Any]) -> str:
         lines.extend(f"- {condition}" for condition in stop_conditions)
     else:
         lines.append("- None from the inventory. Continue with branch-centric analysis.")
+
+    resume_snapshot = brief.get("resume_snapshot")
+    if isinstance(resume_snapshot, dict) and resume_snapshot.get("present") is True:
+        lines.extend(
+            [
+                "",
+                "## Resume Snapshot",
+                "- Copied campaign artifacts are launch input, not current-run evidence.",
+                "- Current-run evidence: "
+                f"`{_display(resume_snapshot.get('current_run_evidence'))}`",
+                "- Evidence scope: "
+                f"`{_display(resume_snapshot.get('evidence_scope'))}`",
+                "- Source campaign: "
+                f"`{_display(resume_snapshot.get('resume_from_campaign'))}`",
+                f"- Branches: {_display(resume_snapshot.get('branch_count'))}",
+                f"- LLM traces: {_display(resume_snapshot.get('llm_trace_count'))}",
+                "- Indexed LLM traces/sessions: "
+                f"{_display(resume_snapshot.get('llm_index_trace_count'))} / "
+                f"{_display(resume_snapshot.get('llm_index_session_count'))}",
+                f"- LLM kinds: {_mapping_text(resume_snapshot.get('llm_by_kind'))}",
+                f"- LLM statuses: {_mapping_text(resume_snapshot.get('llm_by_status'))}",
+                f"- Events by kind: {_mapping_text(resume_snapshot.get('events_by_kind'))}",
+                "- Events by decision: "
+                f"{_mapping_text(resume_snapshot.get('events_by_decision'))}",
+                f"- Events by stage: {_mapping_text(resume_snapshot.get('events_by_stage'))}",
+                f"- Hypotheses: {_display(resume_snapshot.get('hypothesis_count'))}",
+                "- Hypotheses by status: "
+                f"{_mapping_text(resume_snapshot.get('hypotheses_by_status'))}",
+            ]
+        )
 
     lines.extend(
         [
