@@ -86,13 +86,13 @@ Framework observability:
   post-pivot artifacts are under
   `/home/clawd/research/scion-experiments/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-20260618T064210Z`.
 - The next warehouse `v2` follow-up is prepared but not launched at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-20260618T100151Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-20260618T100519Z-claw`
   and synced locally under `/home/clawd/research/scion-experiments/`. It has
   runtime-source, completion preflight, and default postrun report generation
   guards enabled; do not run it until the `gpt-5.5` chat-completion route
   returns HTTP `200`.
 - The next CVRP post-pivot follow-up is also prepared but not launched at
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-1r-gpt55-20260618T095657Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-1r-gpt55-20260618T100519Z-claw`
   and synced locally under `/home/clawd/research/scion-experiments/`. It copies
   the `acc21ba` post-pivot campaign, uses WSL's conda Python, and has
   runtime-source, completion preflight, and default postrun report generation
