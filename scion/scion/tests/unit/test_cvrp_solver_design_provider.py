@@ -278,6 +278,12 @@ def test_cvrp_hypothesis_guidance_exposes_route_merge_pivot_lessons() -> None:
     assert "`8/16/8`" in rendered
     assert "Do not repeat unchanged `cross_route_2opt_reconnect`" in rendered
     assert "Protocol rules, promotion gates, or broad budget changes" in rendered
+    assert "Current CVRP construction-pivot lesson" in rendered
+    assert "`route_limit_seed_diversification` in `construction.py`" in rendered
+    assert "`1/3/28` pair W/L/T" in rendered
+    assert "`4/32` candidate runs" in rendered
+    assert "Do not repeat unchanged `route_limit_seed_diversification`" in rendered
+    assert "direct objective-changing seed-selection effect with CMT2 protection" in rendered
 
 
 def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -> None:
@@ -305,6 +311,11 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "`destroy_repair.py` / `cluster_biased_worst_removal`" in rendered
     assert "`8/16/8`, median delta `-0.5`" in rendered
     assert "did not fix CMT2/CMT4" in rendered
+    assert "Current construction-pivot lesson" in rendered
+    assert "`construction.py` / `route_limit_seed_diversification`" in rendered
+    assert "screened as no-effect/negative (`1/3/28`)" in rendered
+    assert "only `4/32` candidate activations" in rendered
+    assert "broader formal-surface activation" in rendered
     assert "A non-scheduler target is now preferred" in rendered
 
 

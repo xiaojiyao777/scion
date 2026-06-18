@@ -278,6 +278,29 @@ class CvrpSolverDesignProvider:
                 "Protocol rules, promotion gates, or broad budget changes."
             ),
             (
+                "Current CVRP construction-pivot lesson, proposal-only and "
+                "excluded from DecisionFeatures/promotion gates: "
+                "`route_limit_seed_diversification` in `construction.py` "
+                "validated the post-pivot guidance path by choosing a new "
+                "owner and completing formal screening (`32/32` valid pairs, "
+                "`0` failures), but it screened as no-effect/negative solver "
+                "evidence (`1/3/28` pair W/L/T, median delta `0.0`). It "
+                "activated only when route-cap fallback construction was used "
+                "(`4/32` candidate runs), had missing direct effect attribution, "
+                "and CMT2 remained negative (`1/3/0`, median delta `-4.5`)."
+            ),
+            (
+                "Do not repeat unchanged `route_limit_seed_diversification` "
+                "or another narrow route-cap fallback seed portfolio as the "
+                "next default. A construction hypothesis must explain how it "
+                "will activate on more of the formal CVRP surface or provide a "
+                "direct objective-changing seed-selection effect with CMT2 "
+                "protection. Otherwise pivot to a different problem-owned "
+                "solver-design owner. Do not hardcode case ids, BKS values, "
+                "seeds, split membership, Decision rules, Protocol rules, "
+                "promotion gates, or broad budget changes."
+            ),
+            (
                 "Before selecting a `solver_design` hypothesis target, read "
                 "`context.read_active_solver_map.research_lever_digest` as "
                 "CVRP-owned proposal-only advisory context. Use it to compare "
@@ -342,6 +365,18 @@ class CvrpSolverDesignProvider:
                 "target-intent notes must name a materially different causal "
                 "path and explain CMT2/CMT4 protection; otherwise choose a "
                 "different solver-design owner."
+            ),
+            (
+                "Current construction-pivot lesson: `construction.py` / "
+                "`route_limit_seed_diversification` validated guidance delivery "
+                "but screened as no-effect/negative (`1/3/28`) with only "
+                "`4/32` candidate activations, missing direct effect "
+                "attribution, and CMT2 still negative. Do not select the "
+                "unchanged route-cap fallback seed-portfolio mechanism by "
+                "default. If target-intent chooses construction again, the "
+                "notes must explain broader formal-surface activation or a "
+                "direct objective-changing seed-selection effect with CMT2 "
+                "protection."
             ),
             (
                 "A non-scheduler target is now preferred when the selected "

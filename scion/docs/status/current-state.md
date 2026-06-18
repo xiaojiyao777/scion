@@ -77,12 +77,26 @@ CVRP/VRP:
   `cluster_biased_worst_removal` by default; any revisit must explain a
   materially different causal path and CMT2/CMT4 protection, otherwise pivot to
   another problem-owned solver-design owner.
+- The `acc21ba` WSL post-pivot guidance check completed validly with `1/1`
+  effective round. It field-accepts the post-demand-slack pivot lesson: live
+  target-intent/hypothesis prompts contained the new lesson and selected a new
+  construction owner, `route_limit_seed_diversification`, instead of the
+  rejected demand-slack/route-merge/cross-route/cluster-biased defaults. The
+  candidate is rejected as solver evidence: `32/32` valid screening pairs,
+  `0` failures, pair W/L/T `1/3/28`, median delta `0.0`, CMT2 negative
+  (`1/3/0`, median `-4.5`), activation only in `4/32` candidate runs, and
+  missing direct effect attribution.
+- CVRP provider guidance now also carries the construction-pivot lesson:
+  unchanged `route_limit_seed_diversification` should not be repeated by
+  default; a construction revisit must explain broader formal-surface
+  activation or direct objective-changing seed-selection effect with CMT2
+  protection.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, unchanged route-merge
   absorption/guarded variants, unchanged demand-slack regret insertion,
   unchanged cross-route 2-opt reconnect, and unchanged cluster-biased worst
-  removal.
+  removal, and unchanged route-limit seed diversification.
 - CVRP now shows useful framework behavior for proposal guidance, material code
   generation, telemetry, complete formal screening, and evidence-backed
   rejection. It still has not closed v0.4 CVRP effective-research acceptance,
@@ -94,8 +108,8 @@ CVRP/VRP:
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest CVRP demand-slack-pivot artifacts are synced back to:
-  `/home/clawd/research/scion-experiments/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-20260618T053726Z`.
+- Latest CVRP post-pivot guidance artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-20260618T064210Z`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -105,11 +119,12 @@ CVRP/VRP:
 ## Next Actions
 
 1. Run the next CVRP research slice from a clean synchronized commit after the
-   post-demand-slack pivot provider guidance is synced to WSL. Acceptance
+   construction-pivot provider guidance is synced to WSL. Acceptance
    should first inspect live target-intent/hypothesis traces for the new lesson.
 2. The next CVRP mechanism must not be unchanged demand-slack, unchanged
-   route-merge absorption, unchanged `cross_route_2opt_reconnect`, or unchanged
-   `cluster_biased_worst_removal`. It should choose a materially different
+   route-merge absorption, unchanged `cross_route_2opt_reconnect`, unchanged
+   `cluster_biased_worst_removal`, or unchanged
+   `route_limit_seed_diversification`. It should choose a materially different
    problem-owned owner or explain a new causal path with CMT2/CMT4 protection.
 3. Clean up status/projection polish separately: abandoned branch DB rows retain
    mechanism/evidence, but their history-card projection can still drop compact
@@ -143,6 +158,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-provider-guidance-repair-20260618.md`.
 - CVRP demand-slack pivot field check and postrun provider lesson:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-postrun-20260618.md`.
+- CVRP post-pivot guidance field check and construction-pivot lesson:
+  `scion/docs/experiments/v0.4/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

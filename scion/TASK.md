@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack and post-demand-slack CVRP pivots rejected; provider guidance updated*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -283,12 +283,21 @@ Current checkpoint:
   telemetry, and reject bad CVRP hypotheses, but it still has not produced a
   CVRP solver improvement or promotion.
 - The CVRP provider now also carries the post-demand-slack pivot lesson. Next
-  CVRP checkpoint: run from a clean synchronized commit and verify live
+- The `acc21ba` WSL post-pivot guidance check field-accepts that newer lesson:
+  live target-intent/hypothesis prompts contained it and selected a new
+  construction owner, `route_limit_seed_diversification`, instead of repeating
+  demand-slack/route-merge/cross-route/cluster-biased defaults. The candidate
+  is rejected as solver evidence: `32/32` valid pairs, `0` failures, pair W/L/T
+  `1/3/28`, median delta `0.0`, CMT2 negative, activation only in `4/32`
+  candidate runs, and missing direct effect attribution.
+- The CVRP provider now also carries the construction-pivot lesson. Next CVRP
+  checkpoint: run from a clean synchronized commit and verify live
   target-intent/hypothesis prompts contain this lesson before interpreting the
   candidate. Do not continue unchanged demand-slack, unchanged route-merge
-  absorption, unchanged `cross_route_2opt_reconnect`, or unchanged
-  `cluster_biased_worst_removal`. A revisit must explain a materially different
-  causal path and CMT2/CMT4 protection; otherwise pivot to another
+  absorption, unchanged `cross_route_2opt_reconnect`, unchanged
+  `cluster_biased_worst_removal`, or unchanged
+  `route_limit_seed_diversification`. A revisit must explain a materially
+  different causal path and CMT2/CMT4 protection; otherwise pivot to another
   problem-owned solver-design owner. Avoid broad budget/gate changes,
   VNS-removal sweeps, or case/BKS/seed/split hardcoding.
 - Future WSL campaign launches must set
