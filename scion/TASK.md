@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -256,6 +256,10 @@ Current checkpoint:
   outside `DecisionFeatures`; warehouse specs no longer hard-code local
   surrogate paths, so WSL checkouts resolve the same calibration asset. Report:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
+- A/A calibration artifacts now include explicit champion/candidate runtime
+  budget-hit ratios and flags per replay, so budget saturation is auditable
+  without feeding raw diagnostics into `DecisionFeatures`. Report:
+  `scion/docs/experiments/v0.4/v04-aa-calibration-runtime-budget-hit-evidence-20260618.md`.
 - CVRP live agentic checks now demonstrate useful research-loop behavior
   without yet demonstrating solver improvement. The framework can steer
   target-intent, carry branch lessons into prompts, generate material solver
@@ -273,10 +277,13 @@ Current checkpoint:
   only activation/design evidence.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
-  `/v1/chat/completions` check with non-empty output before launching. Use the
-  repaired launcher `--completion-preflight` and `--api-key-env` paths when
-  appropriate, use `--resume-from-campaign` for branch-continuation checks, and
-  keep its default postrun acceptance report bundle enabled.
+  `/v1/chat/completions` check with non-empty output before launching; the
+  current WSL proxy path reaches chat-completion but returns HTTP `401`
+  because the proxy account refresh token is invalidated
+  (`refresh_token_invalidated` / "session has ended"). Use the repaired
+  launcher `--completion-preflight` and `--api-key-env` paths when appropriate,
+  use `--resume-from-campaign` for branch-continuation checks, and keep its
+  default postrun acceptance report bundle enabled.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the

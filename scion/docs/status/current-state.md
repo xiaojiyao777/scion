@@ -78,9 +78,11 @@ Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The WSL
-  `gpt-5.5` chat-completion route most recently returned `401 Invalid proxy API
-  key`; do not launch prepared roots until `/v1/chat/completions` returns HTTP
-  `200` with non-empty output.
+  `gpt-5.5` chat-completion route currently reaches the proxy but returns
+  HTTP `401` because the proxy account refresh token is invalidated
+  (`refresh_token_invalidated` / "session has ended"); do not launch prepared
+  roots until `/v1/chat/completions` returns HTTP `200` with non-empty output
+  after re-login.
 - WSL runs must use the synchronized WSL checkout and set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`.
 
