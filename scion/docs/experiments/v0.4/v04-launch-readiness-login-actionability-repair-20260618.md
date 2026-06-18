@@ -79,6 +79,22 @@ Result: exit `64`, `static_ready=true`, `launch_ready=false`,
 present. The route remains blocked until re-login/token refresh and a passing
 real completion preflight.
 
+WSL target-root readiness check after syncing commit `dd50175`:
+
+```bash
+ssh -i /home/clawd/.ssh/id_ed25519_codex_wsl -p 2222 \
+  xjy-ubuntu@127.0.0.1 \
+  'cd /home/xjy-ubuntu/research/or-autoresearch-agent && \
+   PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+   /home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+   scion/tools/check_launch_readiness.py \
+   /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-focushandoff-1r-gpt55-20260618T141926Z-claw \
+   --completion-preflight --timeout-sec 20 --format json'
+```
+
+Result: exit `64`, `static_ready=true`, `launch_ready=false`,
+`classification=not_authenticated`, and `operator_action.login_url` present.
+
 ## Operator Rule
 
 Before launching a prepared root, rerun:
