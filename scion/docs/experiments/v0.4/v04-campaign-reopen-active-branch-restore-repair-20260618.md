@@ -23,6 +23,9 @@ evidence-backed continuation.
   in-memory `BranchController` when a campaign directory is reopened.
 - If an active branch uses `branch_workspace` and its workspace directory still
   exists, the reopened manager restores that workspace mapping.
+- For each restored active branch, campaign composition restores the latest
+  durable `status=active` hypothesis record and reconstructs the in-memory
+  hypothesis proposal view needed by evaluation and continuation steps.
 - If a current champion already exists in `ChampionStore`, the reopened manager
   installs that persisted champion instead of keeping a freshly constructed v1
   in memory.
@@ -33,6 +36,14 @@ evidence-backed continuation.
 
 This repair does not change Decision, Protocol, promotion policy, lifecycle
 gates, generic budgets, or problem semantics.
+
+## Field Smoke
+
+The first copied-campaign WSL resume smoke after branch/workspace restoration
+was invalid: the restored branch reached scheduling, but eval failed closed with
+`no hypothesis for eval step - abandoning`. That run produced no Protocol rows
+and is not CVRP evidence. It exposed the active-hypothesis restore gap covered
+by this repair.
 
 ## Acceptance
 

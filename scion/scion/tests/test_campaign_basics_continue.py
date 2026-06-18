@@ -3,6 +3,7 @@
 import shutil
 
 from .campaign_test_support import *  # noqa: F401,F403
+from scion.core.models import HypothesisRecord, MechanismChange
 from scion.proposal.llm_client import LLMTransientProviderError
 
 class TestCampaignBasics:
@@ -95,6 +96,26 @@ class TestCampaignBasics:
             "case_level_negative_cases": [{"case_id": "CMT4.vrp"}],
         }
         cm._branch_store.save(branch)
+        active_hypothesis = HypothesisRecord(
+            hypothesis_id="active-demand-slack",
+            branch_id=branch.branch_id,
+            change_locus="solver_design",
+            action="modify",
+            status="active",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            hypothesis_text="Follow demand slack regret insertion.",
+            predicted_direction="improve",
+            target_objectives=("quality",),
+            protected_objectives=("runtime",),
+            novelty_signature={"mechanism_id": "demand_slack_regret_insertion"},
+            mechanism_changes=(
+                MechanismChange(
+                    id="demand_slack_regret_insertion",
+                    change_type="modify",
+                ),
+            ),
+        )
+        cm._hyp_store.save(active_hypothesis)
 
         workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
         workspace.mkdir(parents=True)
@@ -120,6 +141,20 @@ class TestCampaignBasics:
         )
         assert restored.branch_evidence_summary["tier"] == "marginal"
         assert reopened._branch_workspaces[branch.branch_id] == str(workspace)
+        assert (
+            reopened._branch_current_hypothesis[branch.branch_id].hypothesis_id
+            == "active-demand-slack"
+        )
+        restored_hypothesis = reopened._branch_hypotheses[branch.branch_id]
+        assert restored_hypothesis.target_file == (
+            "policies/baseline_modules/destroy_repair.py"
+        )
+        assert restored_hypothesis.mechanism_changes == (
+            MechanismChange(
+                id="demand_slack_regret_insertion",
+                change_type="modify",
+            ),
+        )
         assert reopened.get_state()["n_active_branches"] == 1
 
     def test_reopened_copied_campaign_reanchors_current_champion_snapshot(

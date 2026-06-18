@@ -39,7 +39,12 @@ from scion.core.promotion_dossier import (
     write_promotion_dossier,
 )
 from scion.core.frozen_budget import FrozenBudgetLedger
-from scion.core.models import ChampionState, OperatorConfig
+from scion.core.models import (
+    ChampionState,
+    HypothesisProposal,
+    HypothesisRecord,
+    OperatorConfig,
+)
 from scion.core.plateau_controller import PlateauController
 from scion.core.production_boundary import (
     is_adapter_backed_production_campaign,
@@ -763,12 +768,48 @@ def _restore_persisted_active_branches(owner: Any) -> None:
     """Restore schedulable branch state when reopening an existing campaign."""
     for branch in owner._branch_store.load_all_active():
         owner._branch_ctrl.restore_branch(branch)
+        active_hypothesis = _latest_active_hypothesis_for_branch(
+            owner._hyp_store,
+            branch.branch_id,
+        )
+        if active_hypothesis is not None:
+            owner._branch_current_hypothesis[branch.branch_id] = active_hypothesis
+            owner._branch_hypotheses[branch.branch_id] = (
+                _hypothesis_proposal_from_record(active_hypothesis)
+            )
         workspace = os.path.join(owner._campaign_dir, "workspaces", branch.branch_id)
         if (
             owner._branch_ctrl.get_code_base(branch.branch_id) == "branch_workspace"
             and os.path.isdir(workspace)
         ):
             owner._branch_workspaces[branch.branch_id] = workspace
+
+
+def _latest_active_hypothesis_for_branch(
+    hypothesis_store: Any,
+    branch_id: str,
+) -> HypothesisRecord | None:
+    records = [
+        record
+        for record in hypothesis_store.get_by_branch(branch_id)
+        if record.status == "active"
+    ]
+    return records[-1] if records else None
+
+
+def _hypothesis_proposal_from_record(record: HypothesisRecord) -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text=record.hypothesis_text or "",
+        change_locus=record.change_locus,
+        action=record.action,  # type: ignore[arg-type]
+        target_file=record.target_file,
+        predicted_direction=record.predicted_direction,
+        suggested_weight=record.suggested_weight,
+        target_objectives=tuple(record.target_objectives or ()),
+        protected_objectives=tuple(record.protected_objectives or ()),
+        novelty_signature=dict(record.novelty_signature or {}),
+        mechanism_changes=tuple(record.mechanism_changes or ()),
+    )
 
 
 def _reanchor_current_champion_snapshot(
