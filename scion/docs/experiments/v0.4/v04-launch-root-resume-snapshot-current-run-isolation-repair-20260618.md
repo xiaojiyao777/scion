@@ -57,3 +57,35 @@ The new inventory test covers a preflight-failed launch root with copied
 campaign DB rows, copied formal candidate artifacts, and copied LLM traces. It
 asserts that the top-level current-run evidence fields are empty while
 `resume_snapshot` records the copied branch/event/hypothesis/trace counts.
+
+WSL verification after syncing commit `6899b43`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_completion_preflight_status.py \
+  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_analysis_brief.py
+```
+
+Result: `44 passed`.
+
+Real WSL shell smoke:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-preflight-artifact-smoke-1r-gpt55-20260618T145653Z-claw`
+
+This root was generated with the launcher, executed with `bash run.sh`, and
+stopped at completion preflight with wrapper exit `64`. Rebuilding its
+inventory after this repair showed:
+
+- top-level `branches=[]`,
+- top-level `events.by_kind={}`,
+- top-level `hypotheses.count=0`,
+- top-level `llm_traces.trace_count=0`,
+- `resume_snapshot.present=true`,
+- `resume_snapshot.current_run_evidence=false`,
+- copied snapshot counts retained under `resume_snapshot`.
