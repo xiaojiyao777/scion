@@ -118,7 +118,25 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
             "sessions": [
                 {
                     "trace_fingerprints": [
-                        {"visibility_ledger_digest": "visibility-ledger-1"},
+                        {
+                            "visibility_ledger_digest": "visibility-ledger-1",
+                            "block_family_summary": {
+                                "families": {
+                                    "research_signal": {
+                                        "char_count": 80,
+                                        "token_estimate": 20,
+                                    },
+                                    "source_code": {
+                                        "char_count": 60,
+                                        "token_estimate": 15,
+                                    },
+                                    "governance": {
+                                        "char_count": 40,
+                                        "token_estimate": 10,
+                                    },
+                                },
+                            },
+                        },
                         {
                             "source_visibility_summary": {
                                 "schema_version": (
@@ -314,6 +332,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "formal_candidate_artifact",
         "proposal_trajectory_manifest",
         "prompt_manifest_loaded",
+        "prompt_signal_density",
         "research_efficiency_report",
         "measurement_readiness",
         "protocol_effect_vs_mde",
@@ -333,6 +352,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert requirements["target_intent_trace"]["count"] == 1
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
+    assert requirements["prompt_signal_density"]["count"] == 1
     assert requirements["protocol_accounting"]["count"] == 1
     assert requirements["validation_frozen_stage_accounting"]["count"] == 1
     assert requirements["research_continuity"]["count"] == 1
@@ -356,6 +376,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert (
         "| research_continuity | True | 1 | "
         "research-efficiency research_continuity |"
+    ) in markdown
+    assert (
+        "| prompt_signal_density | True | 1 | "
+        "proposal trajectory prompt block-family accounting |"
     ) in markdown
     assert (
         "| same_mechanism_followup | True | 1 | "
@@ -439,6 +463,8 @@ def test_phase4_coverage_separates_generic_and_code_source_visibility(
     assert requirements["source_visibility"]["available"] is True
     assert requirements["source_visibility"]["count"] == 1
     assert requirements["code_trace"]["available"] is True
+    assert requirements["prompt_signal_density"]["available"] is False
+    assert requirements["prompt_signal_density"]["count"] == 0
     assert requirements["code_source_visibility_guarantees"]["available"] is False
     assert requirements["code_source_visibility_guarantees"]["count"] == 0
 

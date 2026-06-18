@@ -38,6 +38,9 @@ Framework:
   remain scheduler-visible as `refine_active`, prior no-effect lessons become
   advisory same-branch refinement requirements, and trajectory-divergent
   all-tie screening can expand as low-SNR evidence when non-regressive.
+- Phase 4 postrun inventories separately expose prompt signal-density coverage,
+  source visibility, and code-source visibility guarantees as report-only
+  evidence requirements.
 
 Warehouse:
 
@@ -107,6 +110,7 @@ Infrastructure:
 - Current launch/readiness reports:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`

@@ -350,6 +350,11 @@ Current checkpoint:
   proposal-only and remain outside `DecisionFeatures`, Protocol gates,
   lifecycle, scheduler, and promotion. Report:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
+- Phase 4 artifact inventories now expose prompt signal-density coverage as a
+  separate report-only requirement, so delegated postrun review can distinguish
+  missing prompt block-family accounting from generic source-visibility
+  evidence. Report:
+  `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the

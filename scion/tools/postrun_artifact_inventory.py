@@ -1285,6 +1285,7 @@ def _phase4_evidence_coverage(
         _nested_int(doc, ("prompt_manifest_loaded_count",)) or 0
         for doc in manifest_docs
     )
+    prompt_signal_density_count = _prompt_signal_density_summary_count(manifest_docs)
     prompt_manifest_refs = trace_coverage.get("prompt_manifest_ref_count", 0)
     measurement_readiness_count = sum(
         1
@@ -1391,6 +1392,10 @@ def _phase4_evidence_coverage(
             "prompt_manifest_loaded": _coverage_item(
                 prompt_manifest_loaded_count or prompt_manifest_refs,
                 "proposal_trajectory_manifest or trace_index prompt_manifest refs",
+            ),
+            "prompt_signal_density": _coverage_item(
+                prompt_signal_density_count,
+                "proposal trajectory prompt block-family accounting",
             ),
             "research_efficiency_report": _coverage_item(
                 len(research_docs),
@@ -1597,6 +1602,9 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         "prompt_manifest_loaded": (
             "proposal_trajectory_manifest or trace_index prompt_manifest refs"
         ),
+        "prompt_signal_density": (
+            "proposal trajectory prompt block-family accounting"
+        ),
         "research_efficiency_report": "postrun_acceptance/research_efficiency",
         "measurement_readiness": (
             "campaign summary/status or research-efficiency report"
@@ -1686,6 +1694,31 @@ def _research_continuity_field_count(docs: list[Any], field: str) -> int:
         if isinstance(value, dict) and value:
             count += 1
     return count
+
+
+def _prompt_signal_density_summary_count(docs: list[Any]) -> int:
+    return sum(_prompt_signal_density_summary_count_in_doc(doc) for doc in docs)
+
+
+def _prompt_signal_density_summary_count_in_doc(value: Any) -> int:
+    if isinstance(value, dict):
+        count = 1 if _has_prompt_signal_density_summary(value) else 0
+        return count + sum(
+            _prompt_signal_density_summary_count_in_doc(item)
+            for item in value.values()
+        )
+    if isinstance(value, list):
+        return sum(_prompt_signal_density_summary_count_in_doc(item) for item in value)
+    return 0
+
+
+def _has_prompt_signal_density_summary(value: dict[str, Any]) -> bool:
+    block_summary = _mapping_or_empty(value.get("block_family_summary"))
+    block_accounting = _mapping_or_empty(value.get("block_family_accounting"))
+    return bool(
+        _mapping_or_empty(block_summary.get("families"))
+        or _mapping_or_empty(block_accounting.get("families"))
+    )
 
 
 def _code_source_visibility_summary_count(docs: list[Any]) -> int:
