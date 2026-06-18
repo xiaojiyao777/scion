@@ -271,6 +271,13 @@ def test_cvrp_hypothesis_guidance_exposes_route_merge_pivot_lessons() -> None:
     assert "Do not continue unchanged `demand_slack_regret_insertion`" in rendered
     assert "explicitly addressing CMT2 and CMT4" in rendered
     assert "Follow-up coverage is handled by Protocol case selection" in rendered
+    assert "Current CVRP post-demand-slack pivot lesson" in rendered
+    assert "`cross_route_2opt_reconnect` in `local_search.py`" in rendered
+    assert "`cluster_biased_worst_removal` in `destroy_repair.py`" in rendered
+    assert "`5/10/17` pair W/L/T" in rendered
+    assert "`8/16/8`" in rendered
+    assert "Do not repeat unchanged `cross_route_2opt_reconnect`" in rendered
+    assert "Protocol rules, promotion gates, or broad budget changes" in rendered
 
 
 def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -> None:
@@ -293,6 +300,11 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "rejected the unchanged branch as quality regression" in rendered
     assert "Do not select another unchanged demand-slack/regret-insertion target" in rendered
     assert "explicit CMT2/CMT4 coverage" in rendered
+    assert "Current post-demand-slack pivot lesson" in rendered
+    assert "`local_search.py` / `cross_route_2opt_reconnect`" in rendered
+    assert "`destroy_repair.py` / `cluster_biased_worst_removal`" in rendered
+    assert "`8/16/8`, median delta `-0.5`" in rendered
+    assert "did not fix CMT2/CMT4" in rendered
     assert "A non-scheduler target is now preferred" in rendered
 
 

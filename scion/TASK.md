@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; `demand_slack_regret_insertion` rejected; follow-up targeting and provider guidance repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack and post-demand-slack CVRP pivots rejected; provider guidance updated*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -270,14 +270,27 @@ Current checkpoint:
   count.
 - The CVRP problem-owned solver-design provider now carries the demand-slack
   negative lesson in both target-intent and hypothesis guidance. A fresh live
-  prompt should not treat unchanged `demand_slack_regret_insertion` as an
+  prompt no longer treats unchanged `demand_slack_regret_insertion` as an
   acceptable default continuation.
-- Next CVRP checkpoint: do not continue the unchanged
-  `demand_slack_regret_insertion` patch. Use the repaired follow-up targeting
-  when expand screening is reached, or pivot to a materially different
-  problem-owned solver-design mechanism with explicit CMT2/CMT4 coverage. Avoid
-  broad budget/gate changes, VNS-removal sweeps, or unchanged route-merge
-  absorption variants.
+- The `28f3e5f` WSL demand-slack-pivot field check is accepted as
+  framework/research-loop evidence and rejected as solver-improvement evidence.
+  It completed validly with `2/2` effective rounds, generated two material
+  instrumented solver-design pivots, and abandoned both on quality evidence:
+  `cross_route_2opt_reconnect` (`32/32` valid pairs, `0` failures, `5/10/17`
+  pair W/L/T, CMT2 negative) and `cluster_biased_worst_removal` (`32/32`,
+  `8/16/8`, median delta `-0.5`, CMT2/CMT4 not fixed). This shows the current
+  framework can consume problem-owned lessons, produce different code, observe
+  telemetry, and reject bad CVRP hypotheses, but it still has not produced a
+  CVRP solver improvement or promotion.
+- The CVRP provider now also carries the post-demand-slack pivot lesson. Next
+  CVRP checkpoint: run from a clean synchronized commit and verify live
+  target-intent/hypothesis prompts contain this lesson before interpreting the
+  candidate. Do not continue unchanged demand-slack, unchanged route-merge
+  absorption, unchanged `cross_route_2opt_reconnect`, or unchanged
+  `cluster_biased_worst_removal`. A revisit must explain a materially different
+  causal path and CMT2/CMT4 protection; otherwise pivot to another
+  problem-owned solver-design owner. Avoid broad budget/gate changes,
+  VNS-removal sweeps, or case/BKS/seed/split hardcoding.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

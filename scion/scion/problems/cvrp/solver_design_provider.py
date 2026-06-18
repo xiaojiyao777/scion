@@ -249,6 +249,35 @@ class CvrpSolverDesignProvider:
                 "split membership, Decision rules, or generic budget gates."
             ),
             (
+                "Current CVRP post-demand-slack pivot lesson, proposal-only "
+                "and excluded from DecisionFeatures/promotion gates: the next "
+                "two materially different solver-design pivots both generated "
+                "real code, passed contract/verification, completed `32/32` "
+                "screening pairs with `0` failures, and produced direct "
+                "mechanism telemetry, but both were abandoned on quality "
+                "evidence. `cross_route_2opt_reconnect` in "
+                "`local_search.py` was active in all pairs but screened "
+                "`5/10/17` pair W/L/T with CMT2 negative (`1/3/0`, median "
+                "delta `-17.0`). `cluster_biased_worst_removal` in "
+                "`destroy_repair.py`/`scheduler.py` was active in `29/32` "
+                "pairs but screened `8/16/8`, median delta `-0.5`, with "
+                "CMT2 (`1/3/0`) and CMT4 (`2/2/0`, median `-7.0`) not fixed."
+            ),
+            (
+                "Do not repeat unchanged `cross_route_2opt_reconnect` or "
+                "unchanged `cluster_biased_worst_removal` as the next CVRP "
+                "default. If revisiting local_search.py or destroy_repair.py, "
+                "the hypothesis must explicitly explain why the CMT2/CMT4 "
+                "regressions above do not apply and what materially different "
+                "causal path it adds. Otherwise pivot to a different "
+                "problem-owned solver-design owner, such as construction "
+                "diversity, acceptance/temperature policy, adaptive operator "
+                "selection with direct effect attribution, or stable algorithm "
+                "entrypoint integration. Do not solve this by hardcoding case "
+                "ids, BKS values, seeds, split membership, Decision rules, "
+                "Protocol rules, promotion gates, or broad budget changes."
+            ),
+            (
                 "Before selecting a `solver_design` hypothesis target, read "
                 "`context.read_active_solver_map.research_lever_digest` as "
                 "CVRP-owned proposal-only advisory context. Use it to compare "
@@ -300,6 +329,19 @@ class CvrpSolverDesignProvider:
                 "destroy_repair.py again, the target-intent notes must explain "
                 "a materially different mechanism and explicit CMT2/CMT4 "
                 "coverage while preserving the earlier A/E positives."
+            ),
+            (
+                "Current post-demand-slack pivot lesson: two later pivots were "
+                "framework-valid and instrumented but quality-negative. "
+                "`local_search.py` / `cross_route_2opt_reconnect` screened "
+                "`5/10/17` and regressed CMT2; "
+                "`destroy_repair.py` / `cluster_biased_worst_removal` screened "
+                "`8/16/8`, median delta `-0.5`, and did not fix CMT2/CMT4. "
+                "Do not select either unchanged mechanism by default. If the "
+                "target is local_search.py or destroy_repair.py again, the "
+                "target-intent notes must name a materially different causal "
+                "path and explain CMT2/CMT4 protection; otherwise choose a "
+                "different solver-design owner."
             ),
             (
                 "A non-scheduler target is now preferred when the selected "

@@ -77,6 +77,13 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "prior-negative CMT2 must stay in follow-up coverage" in user_prompt
     assert "Do not continue unchanged `demand_slack_regret_insertion`" in user_prompt
     assert "Follow-up coverage is handled by Protocol case selection" in user_prompt
+    assert "Current CVRP post-demand-slack pivot lesson" in user_prompt
+    assert "`cross_route_2opt_reconnect`" in user_prompt
+    assert "`cluster_biased_worst_removal`" in user_prompt
+    assert "`5/10/17` pair W/L/T" in user_prompt
+    assert "`8/16/8`" in user_prompt
+    assert "Do not repeat unchanged `cross_route_2opt_reconnect`" in user_prompt
+    assert "broad budget changes" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
@@ -122,6 +129,12 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "rejected the unchanged branch as quality regression" in user_prompt
     assert "Do not select another unchanged demand-slack/regret-insertion target" in user_prompt
     assert "explicit CMT2/CMT4 coverage" in user_prompt
+    assert "Current post-demand-slack pivot lesson" in user_prompt
+    assert "`local_search.py` / `cross_route_2opt_reconnect`" in user_prompt
+    assert "`destroy_repair.py` / `cluster_biased_worst_removal`" in user_prompt
+    assert "`8/16/8`, median delta `-0.5`" in user_prompt
+    assert "do not fix CMT2/CMT4" not in user_prompt
+    assert "did not fix CMT2/CMT4" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_uses_research_surface_context() -> None:

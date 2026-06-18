@@ -61,25 +61,41 @@ CVRP/VRP:
   screening set without changing the configured case count.
 - The CVRP problem-owned solver-design provider now carries the demand-slack
   negative lesson in both target-intent and hypothesis guidance. Live prompts
-  should no longer treat unchanged `demand_slack_regret_insertion` as an
-  acceptable default continuation.
+  no longer treat unchanged `demand_slack_regret_insertion` as an acceptable
+  default continuation.
+- The `28f3e5f` WSL demand-slack-pivot field check completed validly with
+  `2/2` effective rounds. It is accepted as framework/research-loop evidence
+  and rejected as solver-improvement evidence. Live prompts carried the
+  demand-slack lesson, escaped unchanged demand-slack/route-merge twice, and
+  generated material instrumented solver changes:
+  `cross_route_2opt_reconnect` (`5/10/17` pair W/L/T, CMT2 negative) and
+  `cluster_biased_worst_removal` (`8/16/8`, median delta `-0.5`, CMT2/CMT4 not
+  fixed). Both candidates completed `32/32` valid screening pairs with `0`
+  failures and were correctly abandoned on quality evidence.
+- CVRP provider guidance now also carries this post-demand-slack pivot lesson:
+  do not repeat unchanged `cross_route_2opt_reconnect` or unchanged
+  `cluster_biased_worst_removal` by default; any revisit must explain a
+  materially different causal path and CMT2/CMT4 protection, otherwise pivot to
+  another problem-owned solver-design owner.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
-  fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
-  absorption/guarded variants.
-- Next CVRP work should not continue the unchanged
-  `demand_slack_regret_insertion` patch. It should use the repaired follow-up
-  targeting when expand screening is reached, and otherwise pivot to a
-  materially different problem-owned solver-design mechanism with explicit
-  CMT4/CMT2 acceptance coverage.
+  fixed early-8, tested share70 cap/rescue variants, unchanged route-merge
+  absorption/guarded variants, unchanged demand-slack regret insertion,
+  unchanged cross-route 2-opt reconnect, and unchanged cluster-biased worst
+  removal.
+- CVRP now shows useful framework behavior for proposal guidance, material code
+  generation, telemetry, complete formal screening, and evidence-backed
+  rejection. It still has not closed v0.4 CVRP effective-research acceptance,
+  because no current CVRP solver-design branch has produced continuous
+  improvement or promotion.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest CVRP demand-slack follow-up artifacts are synced back to:
-  `/home/clawd/research/scion-experiments/v04-cvrp-demand-slack-followup-agentic-resume1r-6e78a95-20260618T042015Z-claw`.
+- Latest CVRP demand-slack-pivot artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-20260618T053726Z`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -88,12 +104,13 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Do not rerun the unchanged `demand_slack_regret_insertion` candidate as the
-   next CVRP step; it is parked as quality regression.
-2. Run the next CVRP research slice from a clean synchronized worktree. It
-   should either use repaired follow-up targeting for a genuine same-branch
-   follow-up, or pivot to a materially different problem-owned solver-design
-   mechanism with explicit CMT2/CMT4 coverage.
+1. Run the next CVRP research slice from a clean synchronized commit after the
+   post-demand-slack pivot provider guidance is synced to WSL. Acceptance
+   should first inspect live target-intent/hypothesis traces for the new lesson.
+2. The next CVRP mechanism must not be unchanged demand-slack, unchanged
+   route-merge absorption, unchanged `cross_route_2opt_reconnect`, or unchanged
+   `cluster_biased_worst_removal`. It should choose a materially different
+   problem-owned owner or explain a new causal path with CMT2/CMT4 protection.
 3. Clean up status/projection polish separately: abandoned branch DB rows retain
    mechanism/evidence, but their history-card projection can still drop compact
    status fields; in-flight `run_status.json` also remains too coarse during
@@ -124,6 +141,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-followup-case-targeting-repair-20260618.md`.
 - CVRP demand-slack provider guidance repair:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-provider-guidance-repair-20260618.md`.
+- CVRP demand-slack pivot field check and postrun provider lesson:
+  `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
