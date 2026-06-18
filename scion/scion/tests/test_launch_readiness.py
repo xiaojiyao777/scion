@@ -145,6 +145,33 @@ def test_launch_readiness_rejects_stale_prompt_context_live_marker_gap(
     )
 
 
+def test_launch_readiness_rejects_prompt_context_artifact_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    artifact_path = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["prepared_manifest_path"] = str(run_root / "other_manifest.json")
+    artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "artifact_identity_mismatch"
+        and failure["field"] == "prepared_manifest_path"
+        for failure in prompt_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     tmp_path: Path,
     monkeypatch,
@@ -561,6 +588,12 @@ def _write_prompt_context_readiness(
             "promotion_state_mutated": False,
             "raw_provider_prompt_rendered": False,
             "run_root": str(run_root),
+            "prepared_manifest_path": str(
+                run_root / "prepared_run_manifest.v1.json"
+            ),
+            "prepared_manifest_commit": _git_head_short(),
+            "problem_family": "cvrp",
+            "model": "gpt-5.5",
             "readiness": {
                 "ready_for_launch_prompt_audit": ready,
                 "missing_required": missing_required,

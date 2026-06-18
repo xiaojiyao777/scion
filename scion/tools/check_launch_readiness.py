@@ -354,6 +354,9 @@ def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
 def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
     readiness_dir = root / "prepared_handoff" / "prompt_context_readiness"
     paths = sorted(readiness_dir.glob("*.json"))
+    manifest_path = root / "prepared_run_manifest.v1.json"
+    manifest = _read_json(manifest_path)
+    manifest_dict = manifest if isinstance(manifest, dict) else {}
     detail: dict[str, Any] = {
         "directory": str(readiness_dir),
         "artifacts": [path.name for path in paths],
@@ -367,7 +370,12 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
         payload = _read_json(path)
         failures.extend(
             {"artifact": path.name, **failure}
-            for failure in _prompt_context_artifact_failures(payload)
+            for failure in _prompt_context_artifact_failures(
+                payload,
+                root=root,
+                manifest_path=manifest_path,
+                manifest=manifest_dict,
+            )
         )
 
     live_markers = {
@@ -413,7 +421,13 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
     return ("ok" if not failures else "failed"), detail
 
 
-def _prompt_context_artifact_failures(payload: Any) -> list[dict[str, Any]]:
+def _prompt_context_artifact_failures(
+    payload: Any,
+    *,
+    root: Path,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return [{"reason": "invalid_json_payload"}]
 
@@ -425,6 +439,24 @@ def _prompt_context_artifact_failures(payload: Any) -> list[dict[str, Any]]:
                 "schema_version": payload.get("schema_version"),
             }
         )
+
+    expected_identity = {
+        "run_root": str(root),
+        "prepared_manifest_path": str(manifest_path),
+        "prepared_manifest_commit": _manifest_commit(manifest),
+        "problem_family": manifest.get("problem_family"),
+        "model": _manifest_model_name(manifest),
+    }
+    for field, expected in expected_identity.items():
+        if payload.get(field) != expected:
+            failures.append(
+                {
+                    "reason": "artifact_identity_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": payload.get(field),
+                }
+            )
 
     boundary_expectations = {
         "report_only": True,
@@ -514,6 +546,16 @@ def _read_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _manifest_commit(manifest: dict[str, Any]) -> Any:
+    git = manifest.get("git")
+    return git.get("commit") if isinstance(git, dict) else None
+
+
+def _manifest_model_name(manifest: dict[str, Any]) -> Any:
+    model = manifest.get("model")
+    return model.get("name") if isinstance(model, dict) else None
 
 
 def _repo_path_contains(relative_path: str, marker: str) -> bool:
