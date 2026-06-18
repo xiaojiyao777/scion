@@ -131,6 +131,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "analysis_brief",
         "inventory",
         "launch_readiness",
+        "rebuild",
     ]
     assert (
         prepared_manifest["report_metadata"]["control_pair_key"]
@@ -256,15 +257,20 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         / "launch_readiness"
         / "warehouse_on_full.prepared_launch_readiness.md"
     )
+    rebuild_json = (
+        prepared_handoff / "rebuild" / "prepared_handoff_rebuild.v1.json"
+    )
     assert brief_json.is_file()
     assert brief_md.is_file()
     assert inventory_json.is_file()
     assert inventory_md.is_file()
     assert readiness_json.is_file()
     assert readiness_md.is_file()
+    assert rebuild_json.is_file()
     prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
     prepared_readiness = json.loads(readiness_json.read_text(encoding="utf-8"))
+    prepared_rebuild = json.loads(rebuild_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
     assert prepared_brief["lifecycle"]["prepared_only"] is True
@@ -326,6 +332,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "status"
     ] == "failed"
     assert prepared_readiness["checks"]["completion_preflight"]["status"] == "skipped"
+    assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
+    assert prepared_rebuild["complete"] is True
+    assert prepared_rebuild["families"]["inventory"]["status"] == "ok"
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )

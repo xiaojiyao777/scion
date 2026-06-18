@@ -146,6 +146,7 @@ PREPARED_HANDOFF_FAMILIES = (
     "analysis_brief",
     "inventory",
     "launch_readiness",
+    "rebuild",
 )
 
 
@@ -707,61 +708,14 @@ def _write_prepared_handoff(run_root: Path, env: dict[str, object]) -> None:
     if str(tools_dir) not in sys.path:
         sys.path.insert(0, str(tools_dir))
 
-    from postrun_analysis_brief import (  # noqa: PLC0415
-        build_brief,
-        render_markdown as render_brief_markdown,
-    )
-    from postrun_artifact_inventory import (  # noqa: PLC0415
-        build_inventory,
-        render_markdown as render_inventory_markdown,
-    )
-    from check_launch_readiness import (  # noqa: PLC0415
-        build_readiness,
-        render_markdown as render_readiness_markdown,
-    )
+    from rebuild_prepared_handoff import rebuild_prepared_handoff  # noqa: PLC0415
 
     report_stem = (
         "cvrp_"
         f"{str(env['MEASUREMENT_GOVERNANCE']).replace('-', '_')}_"
         f"{str(env['PROPOSAL_CONTEXT_ABLATION']).replace('-', '_')}"
     )
-    handoff_dir = run_root / "prepared_handoff"
-    brief_dir = handoff_dir / "analysis_brief"
-    inventory_dir = handoff_dir / "inventory"
-    readiness_dir = handoff_dir / "launch_readiness"
-    brief_dir.mkdir(parents=True, exist_ok=True)
-    inventory_dir.mkdir(parents=True, exist_ok=True)
-    readiness_dir.mkdir(parents=True, exist_ok=True)
-
-    brief = build_brief(run_root)
-    (brief_dir / f"{report_stem}.prepared_analysis_brief.v1.json").write_text(
-        json.dumps(brief, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (brief_dir / f"{report_stem}.prepared_analysis_brief.md").write_text(
-        render_brief_markdown(brief),
-        encoding="utf-8",
-    )
-
-    inventory = build_inventory(run_root)
-    (inventory_dir / f"{report_stem}.prepared_artifact_inventory.v1.json").write_text(
-        json.dumps(inventory, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (inventory_dir / f"{report_stem}.prepared_artifact_inventory.md").write_text(
-        render_inventory_markdown(inventory),
-        encoding="utf-8",
-    )
-
-    readiness = build_readiness(run_root)
-    (readiness_dir / f"{report_stem}.prepared_launch_readiness.v1.json").write_text(
-        json.dumps(readiness, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (readiness_dir / f"{report_stem}.prepared_launch_readiness.md").write_text(
-        render_readiness_markdown(readiness),
-        encoding="utf-8",
-    )
+    rebuild_prepared_handoff(run_root, report_stem=report_stem, strict=True)
 
 
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
