@@ -94,6 +94,9 @@ CVRP/VRP:
   `two_opt_intra` has no deadline and can violate the nominal solver budget.
   Treat it as a problem-owned research-focus seed, not Scion evidence or a
   baseline solver update.
+- The current CVRP prepared root now exposes that seed as proposal-only
+  `research_focus`: agents must pursue it only as a deadline-aware bounded
+  local-search mechanism and must avoid the unbounded fallback diff.
 - Prepared `research_focus` now enters hypothesis prompt compact research
   signals as proposal-only launch focus. Prepared handoff readiness audits this
   bridge through `prepared_research_focus_prompt_bridge`; the signal remains
@@ -105,15 +108,17 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-identityguard-7f3028a-1r-gpt55-20260618T224522Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current CVRP and warehouse prepared roots were refreshed from runtime
-  checkout `7f3028a` after the launch readiness prompt/context identity guard
-  repair.
-  Strict WSL readiness confirms both roots are statically ready, not started,
+- The current CVRP prepared root was refreshed from checkout `ece0256` after
+  the large-instance two-opt launch-focus repair. The warehouse prepared root
+  remains the identity-guard root from checkout `7f3028a`; under the current
+  checkout it is still statically ready because runtime guard paths are
+  unchanged.
+  WSL readiness confirms both roots are statically ready, not started,
   runtime-guard valid, and `prompt_context_readiness_complete=ok`.
 - Both current prepared roots have regenerated `prompt_context_readiness`
   handoff artifacts with `ready_for_launch_prompt_audit=true` and
@@ -125,10 +130,10 @@ Infrastructure:
   `git_runtime_consistent=ok`; after documentation-only refreshes, a checkout
   mismatch is acceptable only when runtime guard paths are unchanged.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
-  readiness for both prepared roots returned `launch_ready=false`,
+  readiness for the new CVRP prepared root returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `expired=1` /
-  `refreshing=0` / `total=1`.
+  `not_authenticated`, auth pool `active=0` / `expired=0` /
+  `refreshing=1` / `total=1`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
@@ -177,6 +182,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.

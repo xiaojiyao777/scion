@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `7f3028a` and pass strict static launch, prompt/context identity, and launch-env readiness; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; the current CVRP prepared root was regenerated from checkout `ece0256` with the large-instance two-opt seed as proposal-only research focus, the warehouse prepared root remains statically ready from checkout `7f3028a`, and launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -351,6 +351,11 @@ Current checkpoint:
   hypothesis, not as Scion Protocol evidence or an accepted baseline update.
   Report:
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`.
+- The CVRP launcher now exposes this seed in the prepared `research_focus`,
+  requires the agent to pursue it only as a deadline-aware bounded
+  local-search mechanism, and lists the unbounded fallback as default-avoid.
+  Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`.
 - CVRP hypothesis proposal context now receives problem-owned
   measurement/opportunity diagnostics: MDE-vs-practical-delta, low-SNR
   interpretation, aggregate screening headroom, current default-avoid
@@ -433,15 +438,18 @@ Current checkpoint:
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
-  The previous prepared roots were invalidated by runtime guard path changes;
-  current prepared roots were refreshed from runtime checkout `7f3028a` and pass
-  strict static launch, prompt/context identity, and launch-env readiness with
+  The previous prepared roots were invalidated by runtime guard path changes.
+  The current CVRP root was refreshed from runtime checkout `ece0256` with the
+  large-instance two-opt seed as proposal-only research focus; the current
+  warehouse root remains the identity-guard root from checkout `7f3028a`. Both
+  pass static launch, prompt/context identity, and launch-env readiness with
   runtime-guard consistency.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated`
-  (`auth_status.pool.active=0`, `expired=1`, `refreshing=0`, `total=1`).
+  (`auth_status.pool.active=0`, `expired=0`, `refreshing=1`, `total=1` on the
+  latest CVRP check).
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
@@ -475,7 +483,7 @@ Current checkpoint:
   Current launch readiness prompt/context guard repair:
   `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-identityguard-7f3028a-1r-gpt55-20260618T224522Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
