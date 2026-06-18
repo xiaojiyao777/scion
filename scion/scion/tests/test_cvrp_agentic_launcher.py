@@ -293,14 +293,34 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_brief["prepared_run_contract"]["research_focus"][
         "measurement_opportunity_diagnostics"
     ]["screening_mde_at_power_80"] == 9.9
+    cvrp_checks = prepared_brief["prepared_run_contract"]["checks"]
+    assert cvrp_checks["cvrp_measurement_handoff_present"]["passed"] is True
+    assert cvrp_checks["cvrp_default_avoid_directions_present"]["passed"] is True
+    assert cvrp_checks["cvrp_direct_effect_rules_present"]["passed"] is True
+    assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
     )
+    problem_specific = prepared_brief["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    for key in (
+        "cvrp_measurement_mde_handoff",
+        "cvrp_low_snr_reason_handoff",
+        "cvrp_measurable_opportunity_handoff",
+        "cvrp_default_avoid_handoff",
+        "cvrp_direct_effect_rules_handoff",
+        "cvrp_decision_boundary_handoff",
+    ):
+        assert problem_specific[key]["available"] is True
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
     assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
         "control_pair_key_present"
+    ]["passed"] is True
+    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+        "cvrp_default_avoid_directions_present"
     ]["passed"] is True
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
@@ -318,6 +338,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "Current research focus" in brief_text
     assert "screening_mde_at_power_80: 9.9" in brief_text
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in brief_text
+    assert "### Problem-Specific Phase 4 Evidence Coverage" in brief_text
+    assert "cvrp_direct_effect_rules_handoff" in brief_text
     assert (
         "## Launcher Artifacts"
         in inventory_text
@@ -325,6 +347,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "### Prepared Research Focus" in inventory_text
     assert "construction_seed_portfolio" in inventory_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in inventory_text
+    assert "cvrp_default_avoid_handoff" in inventory_text
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )

@@ -622,10 +622,28 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert (
         contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is True
     )
+    assert (
+        contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is True
+    )
+    assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is True
+    problem_specific = data["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    for key in (
+        "cvrp_measurement_mde_handoff",
+        "cvrp_low_snr_reason_handoff",
+        "cvrp_measurable_opportunity_handoff",
+        "cvrp_default_avoid_handoff",
+        "cvrp_direct_effect_rules_handoff",
+        "cvrp_decision_boundary_handoff",
+    ):
+        assert problem_specific[key]["available"] is True
     assert all(item["passed"] for item in contract["checks"].values())
     assert contract["git"]["consistent"] is True
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
+    assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
+    assert "cvrp_default_avoid_handoff" in markdown
 
 
 def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
@@ -719,6 +737,15 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
     assert (
         contract["checks"]["cvrp_measurement_handoff_reason_codes"]["passed"] is False
     )
+    assert (
+        contract["checks"]["cvrp_default_avoid_directions_present"]["passed"] is False
+    )
+    assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is False
+    problem_specific = data["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    assert problem_specific["cvrp_measurement_mde_handoff"]["available"] is False
+    assert problem_specific["cvrp_default_avoid_handoff"]["available"] is False
 
 
 def test_prepared_manifest_contract_requires_warehouse_followup_handoff(
@@ -1090,6 +1117,30 @@ def _cvrp_research_focus() -> dict[str, object]:
             "bounded_local_search_variant",
             "acceptance_or_adaptive_weighting",
         ],
+        "default_avoid_directions": [
+            "unchanged broad VNS removal",
+            "pure ALNS/no-polish",
+            "simple initial-VNS disablement",
+            "raw cadence-2",
+            "tested share70 cap/rescue variants",
+            "route-merge absorption",
+            "demand-slack regret insertion",
+            "cross-route 2-opt reconnect",
+            "cluster-biased worst removal",
+            "route-limit seed diversification",
+        ],
+        "route_merge_exception_rule": (
+            "Only continue route_merge_repair when the proposal names a causal "
+            "path beyond tested variants and defines direct activation-to-objective-effect evidence."
+        ),
+        "construction_seed_rule": (
+            "Require same-run seed baseline or same-mechanism accepted delta "
+            "for construction seed objective-effect claims."
+        ),
+        "decision_boundary": (
+            "This focus must not enter DecisionFeatures, Protocol gates, "
+            "promotion input, or scheduler state."
+        ),
     }
 
 

@@ -82,6 +82,18 @@ CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
     "bounded_local_search_variant",
     "acceptance_or_adaptive_weighting",
 )
+CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
+    "broad vns removal",
+    "pure alns",
+    "initial-vns",
+    "cadence-2",
+    "share70",
+    "route-merge",
+    "demand-slack",
+    "cross-route 2-opt",
+    "cluster-biased",
+    "route-limit",
+)
 WAREHOUSE_REQUIRED_EVIDENCE_TOKENS = (
     ("promotion behavior",),
     ("branch transfer",),
@@ -915,6 +927,50 @@ def _add_cvrp_measurement_handoff_checks(
         },
     )
 
+    focus = research_focus if focus_is_dict else {}
+    default_avoid_items = _string_items(focus.get("default_avoid_directions"))
+    default_avoid_text = "\n".join(default_avoid_items).lower()
+    missing_avoid_tokens = [
+        token
+        for token in CVRP_REQUIRED_DEFAULT_AVOID_TOKENS
+        if token not in default_avoid_text
+    ]
+    add_check(
+        "cvrp_default_avoid_directions_present",
+        not missing_avoid_tokens,
+        {
+            "count": len(default_avoid_items),
+            "missing": missing_avoid_tokens,
+        },
+    )
+
+    route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
+    construction_rule = str(focus.get("construction_seed_rule") or "").lower()
+    add_check(
+        "cvrp_direct_effect_rules_present",
+        (
+            "direct" in route_rule
+            and "objective" in route_rule
+            and "same-run seed baseline" in construction_rule
+            and "same-mechanism" in construction_rule
+        ),
+        {
+            "route_merge_exception_rule": focus.get("route_merge_exception_rule"),
+            "construction_seed_rule": focus.get("construction_seed_rule"),
+        },
+    )
+    boundary = str(focus.get("decision_boundary") or "").lower()
+    add_check(
+        "cvrp_handoff_decision_boundary_present",
+        (
+            "decisionfeatures" in boundary
+            and "protocol" in boundary
+            and "promotion" in boundary
+            and "scheduler" in boundary
+        ),
+        focus.get("decision_boundary"),
+    )
+
 
 def _add_warehouse_followup_handoff_checks(
     manifest: dict[str, Any],
@@ -1401,9 +1457,82 @@ def _phase4_evidence_coverage(
 def _problem_specific_phase4_requirements(manifest: Any) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         return {}
+    if manifest.get("problem_family") == "cvrp":
+        return _cvrp_problem_specific_phase4_requirements(manifest)
     if manifest.get("problem_family") != "warehouse_delivery":
         return {}
 
+    return _warehouse_problem_specific_phase4_requirements(manifest)
+
+
+def _cvrp_problem_specific_phase4_requirements(
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    focus = _mapping_or_empty(manifest.get("research_focus"))
+    measurement = _mapping_or_empty(focus.get("measurement_opportunity_diagnostics"))
+    reason_codes = set(_string_items(measurement.get("reason_codes")))
+    opportunity_text = "\n".join(
+        _string_items(focus.get("measurable_opportunity_classes"))
+    ).lower()
+    avoid_text = "\n".join(_string_items(focus.get("default_avoid_directions"))).lower()
+    route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
+    construction_rule = str(focus.get("construction_seed_rule") or "").lower()
+    boundary = str(focus.get("decision_boundary") or "").lower()
+
+    return {
+        "cvrp_measurement_mde_handoff": _coverage_item(
+            int(
+                _positive_number(measurement.get("screening_mde_at_power_80"))
+                and _positive_number(measurement.get("practical_screen_delta"))
+            ),
+            "prepared_run_manifest cvrp measurement_opportunity_diagnostics MDE/practical delta",
+        ),
+        "cvrp_low_snr_reason_handoff": _coverage_item(
+            int(not (CVRP_REQUIRED_MEASUREMENT_REASON_CODES - reason_codes)),
+            "prepared_run_manifest cvrp measurement_opportunity_diagnostics reason_codes",
+        ),
+        "cvrp_measurable_opportunity_handoff": _coverage_item(
+            int(
+                all(
+                    token.lower() in opportunity_text
+                    for token in CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS
+                )
+            ),
+            "prepared_run_manifest cvrp research_focus measurable_opportunity_classes",
+        ),
+        "cvrp_default_avoid_handoff": _coverage_item(
+            int(
+                all(
+                    token.lower() in avoid_text
+                    for token in CVRP_REQUIRED_DEFAULT_AVOID_TOKENS
+                )
+            ),
+            "prepared_run_manifest cvrp research_focus default_avoid_directions",
+        ),
+        "cvrp_direct_effect_rules_handoff": _coverage_item(
+            int(
+                "direct" in route_rule
+                and "objective" in route_rule
+                and "same-run seed baseline" in construction_rule
+                and "same-mechanism" in construction_rule
+            ),
+            "prepared_run_manifest cvrp research_focus route/construction direct-effect rules",
+        ),
+        "cvrp_decision_boundary_handoff": _coverage_item(
+            int(
+                "decisionfeatures" in boundary
+                and "protocol" in boundary
+                and "promotion" in boundary
+                and "scheduler" in boundary
+            ),
+            "prepared_run_manifest cvrp research_focus decision_boundary",
+        ),
+    }
+
+
+def _warehouse_problem_specific_phase4_requirements(
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
     focus = _mapping_or_empty(manifest.get("research_focus"))
     checkpoint = str(focus.get("accepted_checkpoint") or "")
     question = str(focus.get("current_question") or "")

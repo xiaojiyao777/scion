@@ -370,6 +370,30 @@ def _cvrp_research_focus() -> dict[str, object]:
             "bounded_local_search_variant",
             "acceptance_or_adaptive_weighting",
         ],
+        "default_avoid_directions": [
+            "unchanged broad VNS removal",
+            "pure ALNS/no-polish",
+            "simple initial-VNS disablement",
+            "raw cadence-2",
+            "tested share70 cap/rescue variants",
+            "route-merge absorption",
+            "demand-slack regret insertion",
+            "cross-route 2-opt reconnect",
+            "cluster-biased worst removal",
+            "route-limit seed diversification",
+        ],
+        "route_merge_exception_rule": (
+            "Only continue route_merge_repair when the proposal names a causal "
+            "path beyond tested variants and defines direct activation-to-objective-effect evidence."
+        ),
+        "construction_seed_rule": (
+            "Require same-run seed baseline or same-mechanism accepted delta "
+            "for construction seed objective-effect claims."
+        ),
+        "decision_boundary": (
+            "This focus must not enter DecisionFeatures, Protocol gates, "
+            "promotion input, or scheduler state."
+        ),
     }
 
 

@@ -374,7 +374,12 @@ Current checkpoint:
   operator omits it, preventing prepare-only roots from failing the prepared
   contract because optional handoff metadata was blank. CVRP prepared contracts
   now also require the measurement/opportunity handoff diagnostics before
-  static readiness can pass. Inventory and
+  static readiness can pass, plus default-avoid coverage,
+  route-merge/construction-seed direct-effect rules, and explicit
+  decision-boundary coverage exposed as CVRP `problem_specific_requirements`.
+  Current CVRP handoff coverage repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-handoff-coverage-repair-20260618.md`.
+  Inventory and
   analysis-brief top-level branch/event/hypothesis/LLM-trace fields are
   current-run scoped; copied campaign counts live under `resume_snapshot`. For
   historical roots or schema drift, rebuild the report-only acceptance bundle
