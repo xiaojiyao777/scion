@@ -36,33 +36,34 @@ CVRP/VRP:
   slice. Target-intent/provider guidance injection is field-verified, formal
   screening is completing with complete evidence, and branch-card evidence
   retention is repaired for the tested paths.
-- The latest CVRP evidence is still negative as a solver result. Repeated
+- The older CVRP route-merge evidence remains negative as a solver result.
+  Repeated
   `route_merge_repair` absorption/guarded variants either produced zero
   objective effect or mixed/regressive evidence. Scion can now continue and
-  reject those branches with evidence, but it has not yet escaped the
-  low-effect route-merge loop.
-- CVRP provider guidance has therefore been changed to stop defaulting to
-  another route-merge absorption/guarded-v2 follow-up. A new route-merge branch
-  must name a new causal path beyond tested local absorption; otherwise the
-  proposal should pivot to another problem-owned solver-design lever such as
-  construction diversity, destroy selection, local-search move scheduling,
-  acceptance/temperature policy, or stable algorithm entrypoint integration.
+  reject those branches with evidence.
+- The provider-guidance pivot is now field-accepted. The `ff2e652` WSL
+  target-intent/proposal check escaped route-merge and generated
+  `demand_slack_regret_insertion` in `destroy_repair.py`, with complete formal
+  screening and direct mechanism telemetry.
+- The new CVRP candidate is not a solver improvement yet. Screening selected
+  `expand_screening` with pair W/L/T `13/11/8`, case W/L/T `3/2/3`, median
+  delta `0.0`, and losses on `CMT2`/`CMT4`. This is positive research-loop
+  behavior and an active marginal branch, not a promotion.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
   absorption/guarded variants.
-- Focused tests now cover the CVRP route-merge pivot guidance in both provider
-  text and live prompt payload assembly. The next proof must be a WSL
-  target-intent/proposal field check showing that the agent actually pivots or
-  explicitly justifies a genuinely new route-merge causal path.
+- Next CVRP work should continue the same
+  `demand_slack_regret_insertion` mechanism to reduce `CMT2`/`CMT4` losses
+  while preserving A/E/P gains and M/X neutrality.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest post-repair CVRP branch-card transfer artifacts are synced back to:
-  `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-branchcard-transfer-agentic-2r-9193d4e-20260618T021452Z`.
+- Latest CVRP route-merge pivot field-check artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-route-merge-pivot-guidance-agentic-1r-gpt55-20260618T031817Z-claw`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -71,13 +72,11 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Run a short WSL CVRP target-intent/proposal field check from the repaired
-   provider guidance. Acceptance: the live traces either pivot away from
-   route-merge absorption or explicitly justify a new route-merge causal path
-   that is not guarded-v2 / pressure-material-gain absorption.
-2. If a natural CVRP run hits `EXPAND_SCREENING`, inspect the field artifact for
-   populated branch-card evidence. Focused tests already cover the repaired
-   code path, but the `9193d4e` field run only exercised `CONTINUE_EXPLORE`.
+1. Run a same-mechanism CVRP follow-up on `demand_slack_regret_insertion`.
+   Acceptance: the live traces keep the mechanism lineage visible, target the
+   `CMT2`/`CMT4` regressions, and preserve A/E/P gains plus M/X neutrality.
+2. If this branch expands again, inspect the field artifact for branch-card
+   evidence transfer into the next target-intent/hypothesis prompts.
 3. Clean up status/projection polish separately: abandoned branch DB rows retain
    mechanism/evidence, but their history-card projection can still drop compact
    status fields; in-flight `run_status.json` also remains too coarse during
@@ -98,6 +97,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-branchcard-transfer-agentic-2r-9193d4e-postrun-20260618.md`.
 - CVRP provider pivot repair:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-pivot-guidance-repair-20260618.md`.
+- CVRP provider pivot field check:
+  `scion/docs/experiments/v0.4/v04-cvrp-route-merge-pivot-guidance-agentic-1r-ff2e652-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

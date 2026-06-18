@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair steering/branch-card plumbing repaired; provider guidance now pivots away from repeated low-effect route-merge absorption variants*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair steering/branch-card plumbing repaired; provider pivot field-accepted with active marginal `demand_slack_regret_insertion` branch*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -239,20 +239,21 @@ Current checkpoint:
   screening can complete with evidence. Branch-card evidence retention is
   repaired for the focused `EXPAND_SCREENING` path and field-verified for the
   normal `CONTINUE_EXPLORE` transfer path.
-- CVRP solver evidence remains negative at the current frontier. Repeated
+- Older CVRP route-merge solver evidence remains negative. Repeated
   `route_merge_repair` absorption/guarded variants produced zero objective
   effect, mixed quality, or regression. This is framework-valid rejection and
   transfer evidence, not an effective solver improvement.
-- CVRP provider guidance is now repaired so the next agent does not default to
-  another route-merge absorption/guarded-v2 follow-up. A new route-merge branch
-  must name a new causal path beyond tested local absorption; otherwise it
-  should pivot to another problem-owned solver-design lever such as construction
-  diversity, destroy selection, local-search move scheduling,
-  acceptance/temperature policy, or stable algorithm entrypoint integration.
-- Next CVRP acceptance checkpoint: a short WSL target-intent/proposal field
-  check must show live traces either pivoting away from route-merge absorption
-  or explicitly justifying a genuinely new route-merge causal path. Promotion
-  is not required for this checkpoint.
+- The provider-guidance pivot field check from commit `ff2e652` is accepted:
+  live target-intent selected `destroy_repair.py` /
+  `demand_slack_regret_insertion` instead of another route-merge absorption
+  follow-up; formal screening completed `32/32` valid pairs with `0` failures;
+  Decision selected `expand_screening`; pair W/L/T was `13/11/8`, case W/L/T
+  was `3/2/3`, and telemetry for the declared mechanism was observed. This is
+  positive CVRP research-loop behavior, not promotion.
+- Next CVRP acceptance checkpoint: same-mechanism follow-up on
+  `demand_slack_regret_insertion` should reduce `CMT2`/`CMT4` losses while
+  preserving A/E/P gains and M/X neutrality. Avoid broad budget/gate changes,
+  VNS-removal sweeps, or a return to unchanged route-merge absorption variants.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
