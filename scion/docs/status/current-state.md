@@ -35,8 +35,8 @@ Framework:
   explicit Phase 4 evidence-coverage requirement, and postrun analysis briefs
   summarize the current-run continuity metrics for delegated review. Postrun
   analysis briefs also summarize current-run prompt context/source visibility
-  from proposal trajectory manifests without exposing raw prompts, responses, or
-  patches.
+  and prompt signal density from proposal trajectory manifests without exposing
+  raw prompts, responses, or patches.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.

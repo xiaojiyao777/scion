@@ -14,10 +14,20 @@ coverage requirement, and proposal trajectory manifests already store
 sanitized prompt-manifest fingerprints. The postrun analysis brief, however,
 did not summarize those fingerprints. A delegated reviewer could see that source
 visibility evidence existed without seeing the prompt family balance,
-visibility-ledger presence, or omitted/truncated section counts.
+visibility-ledger presence, omitted/truncated section counts, or prompt signal
+density by family.
 
 This repair adds a report-only `prompt_context_visibility_summary` to
-`postrun_analysis_brief`.
+`postrun_analysis_brief`. The summary includes:
+
+- prompt manifest reference/load counts;
+- visibility-ledger digest counts;
+- block-family token and character totals;
+- omitted/truncated section trace counts;
+- prompt signal density for `research_signal`, `source_code`, `cross_branch`,
+  and `governance` families;
+- a report-only density interpretation such as whether governance token load
+  exceeds research/source signal.
 
 ## Boundary
 
@@ -52,7 +62,9 @@ python -m py_compile \
   scion/tools/rebuild_postrun_acceptance.py
 ```
 
-Result: `12 passed`; py-compile clean.
+Result: `12 passed`; py-compile clean. The test fixture checks that signal
+density is derived from sanitized family accounting and remains report-only and
+outside `DecisionFeatures`.
 
 WSL verification after fast-forwarding the synchronized checkout to
 `a2aa48bc`:

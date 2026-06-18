@@ -251,8 +251,9 @@ Current checkpoint:
   inventories now mark `research_continuity` as an explicit Phase 4
   evidence-coverage requirement, and postrun analysis briefs summarize the
   current-run continuity metrics for delegated review. Postrun analysis briefs
-  also summarize current-run prompt context/source visibility from proposal
-  trajectory manifests without exposing raw prompts, responses, or patches.
+  also summarize current-run prompt context/source visibility and prompt signal
+  density from proposal trajectory manifests without exposing raw prompts,
+  responses, or patches.
   Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   and

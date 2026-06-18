@@ -156,18 +156,23 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                             "call_kind": "hypothesis",
                             "visibility_ledger_digest": "visibility-ledger-1",
                             "block_family_summary": {
-                                "total_chars": 120,
-                                "total_token_estimate": 30,
+                                "total_chars": 140,
+                                "total_token_estimate": 35,
                                 "families": {
                                     "research_signal": {
                                         "char_count": 80,
                                         "token_estimate": 20,
-                                        "token_share": 0.666667,
+                                        "token_share": 0.571429,
                                     },
                                     "governance": {
                                         "char_count": 40,
                                         "token_estimate": 10,
-                                        "token_share": 0.333333,
+                                        "token_share": 0.285714,
+                                    },
+                                    "cross_branch_lesson": {
+                                        "char_count": 20,
+                                        "token_estimate": 5,
+                                        "token_share": 0.142857,
                                     },
                                 },
                             },
@@ -236,12 +241,33 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert aggregate["call_kind_counts"] == {"code": 1, "hypothesis": 1}
     assert aggregate["block_family_totals"] == {
         "governance": {"char_count": 60, "token_estimate": 15, "trace_count": 2},
+        "cross_branch_lesson": {
+            "char_count": 20,
+            "token_estimate": 5,
+            "trace_count": 1,
+        },
         "research_signal": {
             "char_count": 80,
             "token_estimate": 20,
             "trace_count": 1,
         },
         "source_code": {"char_count": 60, "token_estimate": 15, "trace_count": 1},
+    }
+    assert aggregate["signal_density"] == {
+        "schema_version": "scion.postrun_prompt_signal_density.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "total_token_estimate": 55,
+        "research_signal_tokens": 20,
+        "source_code_tokens": 15,
+        "cross_branch_tokens": 5,
+        "governance_tokens": 15,
+        "research_signal_share": 0.363636,
+        "source_code_share": 0.272727,
+        "cross_branch_share": 0.090909,
+        "governance_share": 0.272727,
+        "research_plus_source_to_governance_ratio": 2.333333,
+        "interpretation": "research_and_source_signal_at_least_governance",
     }
     continuity = brief["research_continuity_summary"]
     assert continuity["schema_version"] == (
@@ -279,6 +305,11 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "## Research Continuity Summary" in markdown
     assert "## Prompt Context Visibility Summary" in markdown
     assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
+    assert (
+        "- Signal density shares: 0.363636 / 0.272727 / 0.090909 / 0.272727"
+        in markdown
+    )
+    assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
         "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | 3 | 2 |"

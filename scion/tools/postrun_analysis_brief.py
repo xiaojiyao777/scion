@@ -304,6 +304,26 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"- Call kinds: {_mapping_text(aggregate.get('call_kind_counts'))}",
         ]
     )
+    density = _mapping_or_empty(aggregate.get("signal_density"))
+    if density:
+        lines.extend(
+            [
+                "- Signal density: "
+                f"research/source/cross-branch/governance tokens "
+                f"{_display(density.get('research_signal_tokens'))} / "
+                f"{_display(density.get('source_code_tokens'))} / "
+                f"{_display(density.get('cross_branch_tokens'))} / "
+                f"{_display(density.get('governance_tokens'))}",
+                "- Signal density shares: "
+                f"{_display(density.get('research_signal_share'))} / "
+                f"{_display(density.get('source_code_share'))} / "
+                f"{_display(density.get('cross_branch_share'))} / "
+                f"{_display(density.get('governance_share'))}",
+                "- Research+source/governance ratio: "
+                f"{_display(density.get('research_plus_source_to_governance_ratio'))}",
+                f"- Signal density interpretation: {_display(density.get('interpretation'))}",
+            ]
+        )
     families = aggregate.get("block_family_totals")
     if isinstance(families, dict) and families:
         lines.extend(
@@ -509,7 +529,7 @@ def _prompt_context_visibility_summary(
         ),
         "manifest_report_count": len(report_paths),
         "context_report_count": len(entries),
-        "aggregate": aggregate,
+        "aggregate": _with_prompt_signal_density(aggregate),
         "entries": entries,
     }
 
@@ -527,6 +547,7 @@ def _empty_prompt_context_aggregate() -> dict[str, Any]:
         "block_family_totals": {},
         "omitted_section_counts": {},
         "truncated_section_counts": {},
+        "signal_density": {},
     }
 
 
@@ -645,6 +666,85 @@ def _merge_prompt_context_aggregate(
         for family, raw in sorted(families.items()):
             if isinstance(raw, Mapping):
                 _add_block_family(aggregate["block_family_totals"], str(family), raw)
+
+
+def _with_prompt_signal_density(aggregate: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(aggregate)
+    enriched["signal_density"] = _prompt_signal_density(
+        _mapping_or_empty(enriched.get("block_family_totals"))
+    )
+    return enriched
+
+
+def _prompt_signal_density(families: Mapping[str, Any]) -> dict[str, Any]:
+    token_by_family: dict[str, int] = {
+        str(family): _int_or_zero(_mapping_or_empty(raw).get("token_estimate"))
+        for family, raw in families.items()
+    }
+    total_tokens = sum(token_by_family.values())
+    research_tokens = _family_token_sum(token_by_family, ("research", "problem"))
+    source_tokens = _family_token_sum(token_by_family, ("source", "code"))
+    cross_branch_tokens = _family_token_sum(
+        token_by_family,
+        ("cross_branch", "branch_lesson", "lesson"),
+    )
+    governance_tokens = _family_token_sum(
+        token_by_family,
+        ("governance", "contract", "decision", "protocol", "compliance"),
+    )
+    research_plus_source = research_tokens + source_tokens
+    return {
+        "schema_version": "scion.postrun_prompt_signal_density.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "total_token_estimate": total_tokens,
+        "research_signal_tokens": research_tokens,
+        "source_code_tokens": source_tokens,
+        "cross_branch_tokens": cross_branch_tokens,
+        "governance_tokens": governance_tokens,
+        "research_signal_share": _safe_ratio(research_tokens, total_tokens),
+        "source_code_share": _safe_ratio(source_tokens, total_tokens),
+        "cross_branch_share": _safe_ratio(cross_branch_tokens, total_tokens),
+        "governance_share": _safe_ratio(governance_tokens, total_tokens),
+        "research_plus_source_to_governance_ratio": _safe_ratio(
+            research_plus_source,
+            governance_tokens,
+        ),
+        "interpretation": _prompt_signal_density_interpretation(
+            research_plus_source=research_plus_source,
+            governance_tokens=governance_tokens,
+            total_tokens=total_tokens,
+        ),
+    }
+
+
+def _family_token_sum(
+    token_by_family: Mapping[str, int],
+    needles: tuple[str, ...],
+) -> int:
+    total = 0
+    for family, tokens in token_by_family.items():
+        normalized = family.lower().replace("-", "_")
+        if any(needle in normalized for needle in needles):
+            total += _int_or_zero(tokens)
+    return total
+
+
+def _prompt_signal_density_interpretation(
+    *,
+    research_plus_source: int,
+    governance_tokens: int,
+    total_tokens: int,
+) -> str:
+    if total_tokens <= 0:
+        return "no_prompt_family_token_accounting_available"
+    if research_plus_source <= 0:
+        return "research_and_source_signal_absent"
+    if governance_tokens > research_plus_source:
+        return "governance_tokens_exceed_research_and_source_signal"
+    if governance_tokens > 0:
+        return "research_and_source_signal_at_least_governance"
+    return "research_and_source_signal_without_governance_token_load"
 
 
 def _add_block_family(
@@ -810,6 +910,12 @@ def _mapping_text(value: Any) -> str:
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return round(numerator / denominator, 6)
 
 
 def _int_or_zero(value: Any) -> int:
