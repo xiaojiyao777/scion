@@ -526,7 +526,7 @@ def test_no_effect_branch_gets_one_same_branch_sample_before_clean_fork() -> Non
 
     assert action.action == "run_existing"
     assert action.branch is branch
-    assert action.slot == "repair_diagnostic"
+    assert action.slot == "refine_active"
     assert action.reason == "same_branch_low_signal_observation_sample"
     assert action.audit_metadata["same_branch_refinement_selected"] is True
     assert action.audit_metadata["same_branch_refinement_sampling"] is True

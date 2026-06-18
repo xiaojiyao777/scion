@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` instead of repair-diagnostic; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -255,6 +255,11 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-budget-exhausting-screening-feedback-runtime-tier-repair-20260618.md`
   and
   `scion/docs/experiments/v0.4/v04-budget-exhausting-finalizer-retain-head-repair-20260618.md`.
+- Low-signal same-branch observation samples now retain scheduler/result
+  semantics as `refine_active` instead of `repair_diagnostic`, so the one
+  allowed no-effect same-mechanism sample is not reported as repair work before
+  any subsequent clean fork. Report:
+  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-scheduler-slot-repair-20260618.md`.
 - Measurement integration now has real-asset coverage for CVRP formal and
   warehouse production problem/protocol loading. Problem-owned practical
   deltas, runtime model, pairing validity, and reduced readiness feed

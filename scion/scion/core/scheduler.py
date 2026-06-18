@@ -254,7 +254,7 @@ class Scheduler:
                         if _branch_plateau_gate_same_branch_candidate(selected)
                         else SAME_BRANCH_REFINEMENT_SAMPLE_REASON
                     ),
-                    slot=_slot_for_branch(selected),
+                    slot="refine_active",
                     audit_metadata=_same_branch_refinement_sampling_audit(
                         selected,
                         candidate_count=len(same_branch_sample_candidates),

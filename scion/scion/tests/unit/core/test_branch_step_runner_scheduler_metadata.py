@@ -1451,6 +1451,62 @@ def test_same_branch_repair_soft_abandon_metadata_and_reason_are_aligned() -> No
     assert recorded == [result]
 
 
+def test_same_branch_low_signal_sample_metadata_keeps_refine_slot() -> None:
+    branch = _branch("low-signal-sample")
+    recorded: list[StepResult] = []
+    runner = _runner(
+        scheduler_action=SchedulerAction(
+            action="run_existing",
+            branch=branch,
+            slot="refine_active",
+            reason="same_branch_low_signal_observation_sample",
+            audit_metadata={
+                "same_branch_refinement_sampling": True,
+                "same_branch_refinement_reason": "no_effect_observation",
+                "clean_fork_suppressed_for_same_branch_sample": True,
+            },
+        ),
+        branch=branch,
+        recorded_scheduler_results=recorded,
+        explore_result=StepResult(
+            action="explore",
+            branch_id="low-signal-sample",
+            reason=(
+                "CONTINUE_EXPLORE: low-signal observation sample; "
+                "improve the same branch"
+            ),
+        ),
+    )
+
+    result = runner.run_one_step()
+
+    assert result.action == "explore"
+    assert result.branch_id == "low-signal-sample"
+    assert result.scheduler_slot == "refine_active"
+    assert result.scheduler_reason == "same_branch_low_signal_observation_sample"
+    assert "refine the same branch" in result.reason
+    assert "repair/refine" not in result.reason
+    metadata = result.scheduler_audit_metadata
+    assert metadata["pre_finalizer_scheduler_slot"] == "refine_active"
+    assert metadata["same_branch_refinement_sampling"] is True
+    assert metadata["same_branch_refinement_selected"] is True
+    assert metadata["post_finalizer_next_proposal_policy"] == (
+        "same_branch_eligible"
+    )
+    assert metadata["same_mechanism_clean_fork_justification"] == {
+        "reason": "not_applicable",
+        "selected_policy": "same_branch_eligible",
+        "clean_fork_reason": "",
+        "same_branch_refinement_not_selected_reason": "",
+        "active_branch_cap_context": {
+            "scheduler_slot": "refine_active",
+            "scheduler_reason": "same_branch_low_signal_observation_sample",
+            "pre_finalizer_scheduler_action": "run_existing",
+        },
+    }
+    assert recorded == [result]
+
+
 def test_at_capacity_scheduler_metadata_reaches_result_and_callback() -> None:
     recorded: list[StepResult] = []
     runner = _runner(
