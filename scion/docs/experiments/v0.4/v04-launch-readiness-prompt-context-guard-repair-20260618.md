@@ -25,6 +25,9 @@ promotion gap.
 - The check also rechecks live source and launch markers instead of trusting a
   stale artifact. Launch markers require `prepared_run_manifest.v1.json`,
   `launch.env` assignment, and `run.sh` export of `PREPARED_RUN_MANIFEST`.
+- The check verifies artifact identity against the current prepared root and
+  manifest: `run_root`, `prepared_manifest_path`, manifest commit, problem
+  family, and model must match.
 
 ## Verification
 
@@ -41,7 +44,7 @@ PYTHONPATH=scion pytest -q \
 Observed:
 
 ```text
-38 passed in 2.73s
+39 passed in 2.92s
 ```
 
 WSL:
@@ -58,23 +61,23 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 Observed:
 
 ```text
-38 passed in 1.74s
+39 passed in 1.76s
 ```
 
 ## Prepared Roots
 
-Current prepare-only roots were refreshed from WSL checkout `38a1c23`.
+Current prepare-only roots were refreshed from WSL checkout `7f3028a`.
 
 CVRP:
 
 ```text
-/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-promptguard-38a1c23-1r-gpt55-20260618T223629Z-claw
+/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-identityguard-7f3028a-1r-gpt55-20260618T224522Z-claw
 ```
 
 Warehouse:
 
 ```text
-/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-promptguard-38a1c23-6r-gpt55-20260618T223629Z-claw
+/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw
 ```
 
 Static readiness for both roots:
@@ -92,7 +95,7 @@ Strict launch readiness for both roots:
 static_ready=true
 launch_ready=false
 HTTP 401, classification=not_authenticated
-auth pool active=0 / refreshing=1 / total=1
+auth pool active=0 / expired=1 / refreshing=0 / total=1
 ```
 
 No campaign was launched. Live launch remains blocked until the real

@@ -68,7 +68,7 @@ Framework:
   `research_shape_diagnostics` prompt path before launch without rendering raw
   provider prompts or changing runtime decisions. Launch readiness now requires
   this prompt/context artifact and independently rechecks the bridge source and
-  launch markers before reporting `static_ready=true`.
+  launch markers plus artifact identity before reporting `static_ready=true`.
 
 Warehouse:
 
@@ -78,7 +78,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-promptguard-38a1c23-6r-gpt55-20260618T223629Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`.
 
 CVRP/VRP:
 
@@ -99,13 +99,14 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-promptguard-38a1c23-1r-gpt55-20260618T223629Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-identityguard-7f3028a-1r-gpt55-20260618T224522Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The current CVRP and warehouse prepared roots were refreshed from runtime
-  checkout `38a1c23` after the launch readiness prompt/context guard repair.
+  checkout `7f3028a` after the launch readiness prompt/context identity guard
+  repair.
   Strict WSL readiness confirms both roots are statically ready, not started,
   runtime-guard valid, and `prompt_context_readiness_complete=ok`.
 - Both current prepared roots have regenerated `prompt_context_readiness`
@@ -120,7 +121,8 @@ Infrastructure:
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `refreshing=1` / `total=1`.
+  `not_authenticated`, auth pool `active=0` / `expired=1` /
+  `refreshing=0` / `total=1`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
