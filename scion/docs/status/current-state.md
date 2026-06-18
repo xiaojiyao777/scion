@@ -111,7 +111,9 @@ Infrastructure:
   `missing_required=[]`. They also report
   `prepared_research_focus_prompt_bridge.available=true`,
   `required=true`, and all bridge markers true. Strict WSL readiness reports
-  `git_runtime_consistent=ok` with detail `checkout matches manifest commit`.
+  `git_runtime_consistent=ok` with detail
+  `checkout differs, but runtime guard paths are unchanged` after the docs-only
+  status commit.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
