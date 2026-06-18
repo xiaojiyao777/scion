@@ -88,10 +88,10 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `2f620ee`. Current branch
-  head `d53571f` is docs-only relative to those roots; strict WSL readiness
-  confirms both roots are statically ready, not started, and runtime-guard
-  valid.
+- The current prepared roots were built from checkout `2f620ee`. Later
+  status/report commits are docs-only relative to those roots; strict WSL
+  readiness confirms both roots are statically ready, not started, and
+  runtime-guard valid.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification

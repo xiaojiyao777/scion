@@ -81,7 +81,7 @@ Strict launch readiness with `--require-launch-ready --format json`:
 - `static_ready=true` for both roots.
 - Initial check at commit `2f620ee`: `git_runtime_consistent=ok`, detail
   `checkout matches manifest commit`.
-- After the docs-only status commit `d53571f`: `git_runtime_consistent=ok`,
+- After later docs-only status commits: `git_runtime_consistent=ok`,
   detail `checkout differs, but runtime guard paths are unchanged`.
 - `prepared_contract_complete=ok`.
 - `prepared_only_not_started=ok`.
