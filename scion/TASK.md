@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; transfer run exposed branch-card evidence retention bug, now repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; branch-card evidence retention repaired; post-repair transfer check valid but route_merge remains low-effect*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -253,6 +253,19 @@ Current checkpoint:
   the branch card without direction, mechanism ids, or compact evidence. That
   evidence-retention path is now repaired in `DecisionFinalizer` with focused
   tests.
+- The post-repair copied-campaign WSL check from commit `9193d4e` completed
+  validly with `2/2` effective protocol rounds and all `27` LLM traces on
+  `gpt-5.5`. It verified that later target-intent/hypothesis traces can see
+  route-merge branch lesson material and that `CONTINUE_EXPLORE` branch cards
+  retain direction, mechanism id, compact evidence, telemetry outcome, and
+  not-promoted reason codes. It did not naturally hit `EXPAND_SCREENING`, so
+  that repaired path is covered by tests rather than field-hit by this run.
+- The same run is negative solver evidence: the first new route-merge
+  candidate was abandoned as quality-regressive (`10/15/7` pair W/L/T), and
+  the second remained `active_no_effect` (`0/0/32`, zero objective effect).
+  CVRP effective research is therefore still open; the framework can continue
+  and reject evidence-backed route-merge hypotheses, but Scion has not yet
+  escaped the repeated low-effect route-merge loop.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

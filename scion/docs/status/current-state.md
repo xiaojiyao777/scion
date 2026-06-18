@@ -58,6 +58,19 @@ CVRP/VRP:
 - That branch-card evidence-retention bug is now repaired in
   `scion/scion/core/decision_finalizer.py` with a focused regression test in
   `scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py`.
+- The `9193d4e` copied-campaign WSL field check after that repair completed
+  validly (`2/2` effective protocol rounds, all `27` LLM traces on
+  `gpt-5.5`). It did not naturally hit another `EXPAND_SCREENING` decision, so
+  it is not a direct field verification of that repaired path. It did verify
+  that later route-merge prompts can see prior branch lesson material and that
+  the normal `CONTINUE_EXPLORE` branch card retains direction, mechanism id,
+  evidence tier, telemetry-zero outcome, and not-promoted reason codes.
+- The same run is still negative solver evidence: the first new route-merge
+  candidate was abandoned as quality-regressive (`10/15/7` pair W/L/T), and the
+  second remained active only as `active_no_effect` (`0/0/32`, zero objective
+  effect). CVRP is therefore not closed; Scion can continue/reject
+  evidence-backed route-merge branches, but it has not escaped the low-effect
+  route-merge loop.
 - WSL execution caveat: Scion campaign runs in WSL must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -71,20 +84,26 @@ CVRP/VRP:
   `/home/clawd/research/scion-experiments/`.
 - Latest valid CVRP transfer artifacts are synced back to:
   `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-transfer-agentic-resume1r-af5b5a2-env-20260618T0130Z`.
+- Latest post-repair CVRP branch-card transfer artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-branchcard-transfer-agentic-2r-9193d4e-20260618T021452Z`.
 
 ## Next Actions
 
-1. Run one fresh short CVRP WSL agentic check after the branch-card
-   evidence-retention repair. Inspect whether prompts see the retained
-   `marginal` route-merge evidence, `route_merge_repair` mechanism id, and
-   direct effect telemetry before selecting the next target.
-2. Do not rerun the guarded `route_merge_repair` v2 unchanged. Any next
-   route-merge attempt must explain how it differs from both the no-effect
-   guarded v2 and the mixed absorption-pass variant.
-3. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
+1. Stop rerunning route-merge absorption variants unchanged. The next CVRP
+   branch should either pivot to a materially different problem-owned
+   solver-design opportunity or first improve proposal opportunity diagnostics
+   enough to justify spending another branch slot on `route_merge_repair`.
+2. If a natural CVRP run hits `EXPAND_SCREENING`, inspect the field artifact for
+   populated branch-card evidence; focused tests already cover the repaired
+   code path, but the `9193d4e` field run only exercised `CONTINUE_EXPLORE`.
+3. Clean up status/projection polish separately: abandoned branch DB rows retain
+   mechanism/evidence, but their history-card projection can still drop compact
+   status fields; in-flight `run_status.json` also remains too coarse during
+   long formal screening.
+4. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.
-4. Keep a later warehouse repeat available to test whether champion `v2`
+5. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Key Evidence
@@ -110,6 +129,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-f3d634c-postrun-20260618.md`.
 - CVRP route-merge transfer field check and branch-card repair:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-transfer-agentic-resume1r-af5b5a2-postrun-20260618.md`.
+- CVRP route-merge post-branch-card-repair field check:
+  `scion/docs/experiments/v0.4/v04-cvrp-routemerge-branchcard-transfer-agentic-2r-9193d4e-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
