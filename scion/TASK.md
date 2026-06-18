@@ -405,8 +405,15 @@ Current checkpoint:
   brief/inventory at prepare time, and writes the standard postrun acceptance
   report bundle by default after Scion exits, including delegated analysis
   brief and artifact/count inventory with report-only Phase 4 evidence coverage
-  flags, prepared contract checks, launch-readiness handoff snapshots,
-  prepared-only lifecycle guards, and preflight-failed launch-root guards.
+  flags, prepared contract checks, problem-specific warehouse follow-up handoff
+  coverage, launch-readiness handoff snapshots, prepared-only lifecycle guards,
+  and preflight-failed launch-root guards. Warehouse prepared contracts now
+  require the champion-v2 plateau-vs-continuous-improvement framing, promotion
+  preservation, branch transfer, quality-blocked-vs-protocol-evaluated
+  distinction, cost-vs-split telemetry, and fast-completion runtime explanation
+  needed for the next postrun review.
+  Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
   Current launch-prepared warehouse root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
 - Future WSL campaign launches must set

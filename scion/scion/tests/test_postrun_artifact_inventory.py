@@ -721,6 +721,118 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
     )
 
 
+def test_prepared_manifest_contract_requires_warehouse_followup_handoff(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "prepared-warehouse"
+    campaign_dir = run_root / "campaign"
+    config_dir = run_root / "config"
+    campaign_dir.mkdir(parents=True)
+    config_dir.mkdir()
+    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
+        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+
+    command = (
+        f"{sys.executable} -m scion.cli.main run "
+        f"--problem {config_dir / 'problem.yaml'} "
+        f"--protocol {config_dir / 'protocol.yaml'} "
+        f"--split {config_dir / 'split.yaml'} "
+        f"--seeds {config_dir / 'seeds.yaml'} "
+        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "problem_family": "warehouse_delivery",
+            "analysis_intent": "Prepared warehouse analysis intent.",
+            "acceptance_focus": ["Assess warehouse v2 follow-up."],
+            "research_focus": {
+                "scope": "report_only_prepared_handoff",
+                "accepted_checkpoint": "Champion v2 promoted.",
+                "current_question": "Check one more warehouse idea.",
+                "required_evidence": ["preserve promotion behavior"],
+                "default_avoid_directions": ["restart from baseline"],
+                "decision_boundary": "Keep this out of DecisionFeatures.",
+            },
+            "resume_from_campaign": "/tmp/source-campaign",
+            "command": command,
+            "model": {
+                "name": "gpt-5.5",
+                "base_url": "http://127.0.0.1:8080",
+                "completion_preflight": True,
+            },
+            "git": {
+                "commit": _git_head_short(),
+                "runtime_guard_paths": "scion/tools",
+            },
+            "config": {
+                "problem": str(config_dir / "problem.yaml"),
+                "protocol": str(config_dir / "protocol.yaml"),
+                "split": str(config_dir / "split.yaml"),
+                "seeds": str(config_dir / "seeds.yaml"),
+            },
+            "report_metadata": {
+                "control_pair_key": "warehouse.prepared:rep01",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "rebuild",
+                ],
+            },
+        },
+    )
+    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
+    (run_root / "command.txt").write_text(
+        "\n".join(
+            [
+                "report_metadata:",
+                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
+                "",
+                "command:",
+                command,
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    contract = data["launcher"]["prepared_run_contract"]
+    checks = contract["checks"]
+    assert contract["problem_family"] == "warehouse_delivery"
+    assert contract["contract_complete"] is False
+    assert checks["warehouse_followup_handoff_present"]["passed"] is True
+    assert checks["warehouse_followup_v2_checkpoint_present"]["passed"] is False
+    assert (
+        checks["warehouse_followup_required_evidence_complete"]["passed"] is False
+    )
+    assert checks["warehouse_followup_default_avoid_complete"]["passed"] is False
+    problem_specific = data["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    assert problem_specific["warehouse_v2_checkpoint_handoff"]["available"] is False
+    assert (
+        problem_specific["warehouse_required_evidence_handoff"]["available"] is False
+    )
+    assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
+    assert "warehouse_required_evidence_handoff" in markdown
+
+
 def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
     tmp_path: Path,
 ) -> None:

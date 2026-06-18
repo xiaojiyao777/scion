@@ -286,14 +286,38 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "Champion v2" in prepared_brief["prepared_run_contract"][
         "research_focus"
     ]["accepted_checkpoint"]
+    warehouse_checks = prepared_brief["prepared_run_contract"]["checks"]
+    assert warehouse_checks["warehouse_followup_handoff_present"]["passed"] is True
+    assert (
+        warehouse_checks["warehouse_followup_required_evidence_complete"]["passed"]
+        is True
+    )
+    assert (
+        warehouse_checks["warehouse_followup_default_avoid_complete"]["passed"]
+        is True
+    )
     assert any(
         "promotion behavior" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
     )
+    problem_specific = prepared_brief["phase4_evidence_coverage"][
+        "problem_specific_requirements"
+    ]
+    for key in (
+        "warehouse_v2_checkpoint_handoff",
+        "warehouse_continuous_plateau_question",
+        "warehouse_required_evidence_handoff",
+        "warehouse_default_avoid_handoff",
+        "warehouse_decision_boundary_handoff",
+    ):
+        assert problem_specific[key]["available"] is True
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
     assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
         "control_pair_key_present"
+    ]["passed"] is True
+    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+        "warehouse_followup_v2_checkpoint_present"
     ]["passed"] is True
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
@@ -305,10 +329,15 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )
-    assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
-    assert "Current research focus" in brief_md.read_text(encoding="utf-8")
+    brief_md_text = brief_md.read_text(encoding="utf-8")
+    assert "## Prepared Run Contract" in brief_md_text
+    assert "Current research focus" in brief_md_text
+    assert "### Problem-Specific Phase 4 Evidence Coverage" in brief_md_text
+    assert "warehouse_continuous_plateau_question" in brief_md_text
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")
-    assert "### Prepared Research Focus" in inventory_md.read_text(encoding="utf-8")
+    inventory_md_text = inventory_md.read_text(encoding="utf-8")
+    assert "### Prepared Research Focus" in inventory_md_text
+    assert "warehouse_required_evidence_handoff" in inventory_md_text
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 

@@ -329,6 +329,27 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     source=_display(item.get("source")),
                 )
             )
+    problem_specific = phase4.get("problem_specific_requirements")
+    if isinstance(problem_specific, dict) and problem_specific:
+        lines.extend(
+            [
+                "",
+                "### Problem-Specific Phase 4 Evidence Coverage",
+                "| Requirement | Available | Count | Source |",
+                "|---|---:|---:|---|",
+            ]
+        )
+        for key, item in sorted(problem_specific.items()):
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "| {key} | {available} | {count} | {source} |".format(
+                    key=key,
+                    available=_display(item.get("available")),
+                    count=_display(item.get("count")),
+                    source=_display(item.get("source")),
+                )
+            )
 
     branch_state = brief.get("branch_research_state_summary") or {}
     branch_aggregate = _mapping_or_empty(branch_state.get("aggregate"))

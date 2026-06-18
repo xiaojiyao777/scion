@@ -82,6 +82,20 @@ CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
     "bounded_local_search_variant",
     "acceptance_or_adaptive_weighting",
 )
+WAREHOUSE_REQUIRED_EVIDENCE_TOKENS = (
+    ("promotion behavior",),
+    ("branch transfer",),
+    ("quality-blocked", "protocol-evaluated"),
+    ("cost_delta", "split_delta"),
+    ("fast completion", "runtime"),
+)
+WAREHOUSE_DEFAULT_AVOID_TOKENS = (
+    "baseline",
+    "proposal-quality",
+    "fast completion",
+    "split_delta_sum==0",
+    "broad warehouse matrix",
+)
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -117,6 +131,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         session_index=session_index,
         llm_traces=llm_traces,
         lifecycle=lifecycle,
+        prepared_manifest=prepared_manifest,
     )
 
     branches = _merge_branch_counts(
@@ -383,6 +398,27 @@ def render_markdown(inventory: dict[str, Any]) -> str:
                 source=_display(item.get("source")),
             )
         )
+    problem_specific = _phase4_problem_specific_for_markdown(
+        inventory.get("phase4_evidence_coverage")
+    )
+    if problem_specific:
+        lines.extend(
+            [
+                "",
+                "### Problem-Specific Phase 4 Evidence Coverage",
+                "| Requirement | Available | Count | Source |",
+                "|---|---:|---:|---|",
+            ]
+        )
+        for key, item in problem_specific.items():
+            lines.append(
+                "| {key} | {available} | {count} | {source} |".format(
+                    key=key,
+                    available=_display(item.get("available")),
+                    count=_display(item.get("count")),
+                    source=_display(item.get("source")),
+                )
+            )
 
     lines.extend(
         [
@@ -774,6 +810,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         git_consistency.get("detail"),
     )
     _add_cvrp_measurement_handoff_checks(manifest, add_check)
+    _add_warehouse_followup_handoff_checks(manifest, add_check)
 
     return {
         "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
@@ -875,6 +912,78 @@ def _add_cvrp_measurement_handoff_checks(
         {
             "count": len(opportunity_items),
             "missing": missing_opportunity_tokens,
+        },
+    )
+
+
+def _add_warehouse_followup_handoff_checks(
+    manifest: dict[str, Any],
+    add_check: Any,
+) -> None:
+    if manifest.get("problem_family") != "warehouse_delivery":
+        return
+
+    research_focus = manifest.get("research_focus")
+    focus_is_dict = isinstance(research_focus, dict)
+    focus = research_focus if focus_is_dict else {}
+    add_check(
+        "warehouse_followup_handoff_present",
+        focus_is_dict,
+        "research_focus",
+    )
+    add_check(
+        "warehouse_followup_handoff_report_only",
+        focus.get("scope") == "report_only_prepared_handoff"
+        and "DecisionFeatures" in str(focus.get("decision_boundary") or "")
+        and manifest.get("decision_features_excluded") is True,
+        {
+            "scope": focus.get("scope"),
+            "decision_features_excluded": manifest.get(
+                "decision_features_excluded"
+            ),
+        },
+    )
+
+    checkpoint = str(focus.get("accepted_checkpoint") or "").lower()
+    question = str(focus.get("current_question") or "").lower()
+    add_check(
+        "warehouse_followup_v2_checkpoint_present",
+        "v2" in checkpoint and "v2" in question and "plateau" in question,
+        {
+            "accepted_checkpoint": focus.get("accepted_checkpoint"),
+            "current_question": focus.get("current_question"),
+        },
+    )
+
+    required_evidence = _string_items(focus.get("required_evidence"))
+    required_text = "\n".join(required_evidence).lower()
+    missing_required = [
+        "/".join(tokens)
+        for tokens in WAREHOUSE_REQUIRED_EVIDENCE_TOKENS
+        if not all(token.lower() in required_text for token in tokens)
+    ]
+    add_check(
+        "warehouse_followup_required_evidence_complete",
+        not missing_required,
+        {
+            "count": len(required_evidence),
+            "missing": missing_required,
+        },
+    )
+
+    default_avoid = _string_items(focus.get("default_avoid_directions"))
+    default_avoid_text = "\n".join(default_avoid).lower()
+    missing_avoid = [
+        token
+        for token in WAREHOUSE_DEFAULT_AVOID_TOKENS
+        if token.lower() not in default_avoid_text
+    ]
+    add_check(
+        "warehouse_followup_default_avoid_complete",
+        not missing_avoid,
+        {
+            "count": len(default_avoid),
+            "missing": missing_avoid,
         },
     )
 
@@ -1077,9 +1186,13 @@ def _phase4_evidence_coverage(
     session_index: Any,
     llm_traces: dict[str, Any],
     lifecycle: Mapping[str, Any],
+    prepared_manifest: Any = None,
 ) -> dict[str, Any]:
     """Return report-only coverage flags for Phase 4 postrun analysis inputs."""
 
+    problem_specific_requirements = _problem_specific_phase4_requirements(
+        prepared_manifest
+    )
     if _launch_root_without_current_run(lifecycle):
         return {
             "schema_version": "scion.postrun_phase4_evidence_coverage.v1",
@@ -1095,6 +1208,7 @@ def _phase4_evidence_coverage(
             "requirements": _empty_phase4_requirements(
                 "not current-run evidence"
             ),
+            "problem_specific_requirements": problem_specific_requirements,
             "analysis_handoff": HANDOFF_DOC,
         }
 
@@ -1279,7 +1393,68 @@ def _phase4_evidence_coverage(
                 "trajectory manifest code-phase source visibility guarantees",
             ),
         },
+        "problem_specific_requirements": problem_specific_requirements,
         "analysis_handoff": HANDOFF_DOC,
+    }
+
+
+def _problem_specific_phase4_requirements(manifest: Any) -> dict[str, Any]:
+    if not isinstance(manifest, dict):
+        return {}
+    if manifest.get("problem_family") != "warehouse_delivery":
+        return {}
+
+    focus = _mapping_or_empty(manifest.get("research_focus"))
+    checkpoint = str(focus.get("accepted_checkpoint") or "")
+    question = str(focus.get("current_question") or "")
+    required_evidence = _string_items(focus.get("required_evidence"))
+    default_avoid = _string_items(focus.get("default_avoid_directions"))
+    boundary = str(focus.get("decision_boundary") or "")
+
+    required_text = "\n".join(required_evidence)
+    avoid_text = "\n".join(default_avoid)
+    return {
+        "warehouse_v2_checkpoint_handoff": _coverage_item(
+            int("v2" in checkpoint.lower() and "v2" in question.lower()),
+            "prepared_run_manifest warehouse research_focus accepted_checkpoint/current_question",
+        ),
+        "warehouse_continuous_plateau_question": _coverage_item(
+            int(
+                (
+                    "continuous" in question.lower()
+                    or "additional useful research" in question.lower()
+                )
+                and "plateau" in question.lower()
+            ),
+            "prepared_run_manifest warehouse research_focus current_question",
+        ),
+        "warehouse_required_evidence_handoff": _coverage_item(
+            int(
+                all(
+                    all(token.lower() in required_text.lower() for token in tokens)
+                    for tokens in WAREHOUSE_REQUIRED_EVIDENCE_TOKENS
+                )
+            ),
+            "prepared_run_manifest warehouse research_focus required_evidence",
+        ),
+        "warehouse_default_avoid_handoff": _coverage_item(
+            int(
+                all(
+                    token.lower() in avoid_text.lower()
+                    for token in WAREHOUSE_DEFAULT_AVOID_TOKENS
+                )
+            ),
+            "prepared_run_manifest warehouse research_focus default_avoid_directions",
+        ),
+        "warehouse_decision_boundary_handoff": _coverage_item(
+            int(
+                "decisionfeatures" in boundary.lower()
+                and "protocol" in boundary.lower()
+                and "promotion" in boundary.lower()
+                and "scheduler" in boundary.lower()
+            ),
+            "prepared_run_manifest warehouse research_focus decision_boundary",
+        ),
     }
 
 
@@ -1448,6 +1623,19 @@ def _phase4_requirements_for_markdown(value: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(value, dict):
         return {}
     requirements = value.get("requirements")
+    if not isinstance(requirements, dict):
+        return {}
+    return {
+        str(key): item
+        for key, item in sorted(requirements.items())
+        if isinstance(item, dict)
+    }
+
+
+def _phase4_problem_specific_for_markdown(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    requirements = value.get("problem_specific_requirements")
     if not isinstance(requirements, dict):
         return {}
     return {

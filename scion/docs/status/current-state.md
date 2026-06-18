@@ -91,6 +91,12 @@ Framework:
   readiness checks remain report-only and outside `DecisionFeatures`.
   For CVRP, the prepared contract now requires those measurement/opportunity
   diagnostics before static launch readiness can pass.
+  For warehouse, the prepared contract now requires a problem-specific v2
+  follow-up handoff covering plateau-vs-continuous-improvement framing,
+  promotion preservation, branch transfer, quality-blocked-vs-protocol-evaluated
+  distinction, cost-vs-split telemetry, and fast-completion runtime explanation;
+  artifact inventories and analysis briefs expose these as
+  `problem_specific_requirements`.
   Prepared-only roots now carry explicit launcher
   lifecycle/evidence-scope metadata, so copied resume snapshots are marked
   `prepared_only/not_started` with zero current-run effective rounds instead of
@@ -231,6 +237,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
   Current CVRP prepared-contract diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
+  Current warehouse follow-up handoff coverage repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
