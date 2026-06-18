@@ -262,6 +262,15 @@ def test_cvrp_hypothesis_guidance_exposes_route_merge_pivot_lessons() -> None:
     assert "explicitly contrast against the tested guarded-v2" in rendered
     assert "pressure/material-gain absorption variants" in rendered
     assert "choose a different solver-design target" in rendered
+    assert "Current CVRP demand-slack lesson" in rendered
+    assert "`demand_slack_regret_insertion`" in rendered
+    assert "`16/28/4` pair W/L/T" in rendered
+    assert "median delta `-3.75`" in rendered
+    assert "CMT4 remained negative" in rendered
+    assert "prior-negative CMT2 must stay in follow-up coverage" in rendered
+    assert "Do not continue unchanged `demand_slack_regret_insertion`" in rendered
+    assert "explicitly addressing CMT2 and CMT4" in rendered
+    assert "Follow-up coverage is handled by Protocol case selection" in rendered
 
 
 def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -> None:
@@ -279,6 +288,11 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "Do not choose another route-merge absorption target by default" in rendered
     assert "new causal path beyond tested guarded-v2" in rendered
     assert "different provider-declared solver-design lever" in rendered
+    assert "Current demand-slack branch lesson" in rendered
+    assert "`demand_slack_regret_insertion`" in rendered
+    assert "rejected the unchanged branch as quality regression" in rendered
+    assert "Do not select another unchanged demand-slack/regret-insertion target" in rendered
+    assert "explicit CMT2/CMT4 coverage" in rendered
     assert "A non-scheduler target is now preferred" in rendered
 
 

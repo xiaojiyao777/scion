@@ -59,6 +59,10 @@ CVRP/VRP:
   `DecisionFeatures`, and records requested priority cases in raw metrics.
   Formal CVRP selection smoke confirms that CMT2 is restored to the expanded
   screening set without changing the configured case count.
+- The CVRP problem-owned solver-design provider now carries the demand-slack
+  negative lesson in both target-intent and hypothesis guidance. Live prompts
+  should no longer treat unchanged `demand_slack_regret_insertion` as an
+  acceptable default continuation.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
@@ -118,6 +122,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-followup-agentic-resume1r-6e78a95-postrun-20260618.md`.
 - CVRP follow-up case targeting repair:
   `scion/docs/experiments/v0.4/v04-cvrp-followup-case-targeting-repair-20260618.md`.
+- CVRP demand-slack provider guidance repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-provider-guidance-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

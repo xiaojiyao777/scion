@@ -71,6 +71,12 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "pivot to a materially different problem-owned solver-design lever" in user_prompt
     assert "explicitly contrast against the tested guarded-v2" in user_prompt
     assert "choose a different solver-design target" in user_prompt
+    assert "Current CVRP demand-slack lesson" in user_prompt
+    assert "`demand_slack_regret_insertion`" in user_prompt
+    assert "`16/28/4` pair W/L/T" in user_prompt
+    assert "prior-negative CMT2 must stay in follow-up coverage" in user_prompt
+    assert "Do not continue unchanged `demand_slack_regret_insertion`" in user_prompt
+    assert "Follow-up coverage is handled by Protocol case selection" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
@@ -111,6 +117,11 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "Do not choose another route-merge absorption target by default" in user_prompt
     assert "new causal path beyond tested guarded-v2" in user_prompt
     assert "different provider-declared solver-design lever" in user_prompt
+    assert "Current demand-slack branch lesson" in user_prompt
+    assert "`demand_slack_regret_insertion`" in user_prompt
+    assert "rejected the unchanged branch as quality regression" in user_prompt
+    assert "Do not select another unchanged demand-slack/regret-insertion target" in user_prompt
+    assert "explicit CMT2/CMT4 coverage" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_uses_research_surface_context() -> None:

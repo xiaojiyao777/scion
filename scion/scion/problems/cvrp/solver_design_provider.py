@@ -225,6 +225,30 @@ class CvrpSolverDesignProvider:
                 "local absorption idea."
             ),
             (
+                "Current CVRP demand-slack lesson, proposal-only and excluded "
+                "from DecisionFeatures/promotion gates: the route-merge pivot "
+                "escaped to `destroy_repair.py` / "
+                "`demand_slack_regret_insertion` and initially selected "
+                "`expand_screening` (`13/11/8` pair W/L/T, `3/2/3` case W/L/T), "
+                "but copied-campaign expanded screening rejected the unchanged "
+                "branch as quality regression (`16/28/4` pair W/L/T, `3/6/3` "
+                "case W/L/T, median delta `-3.75`). A/E positives survived on "
+                "selected cases, but CMT4 remained negative and prior-negative "
+                "CMT2 must stay in follow-up coverage."
+            ),
+            (
+                "Do not continue unchanged `demand_slack_regret_insertion` or "
+                "another demand-slack insertion/regret variant by default. A "
+                "new destroy/repair hypothesis must name how it will preserve "
+                "the A/E gains while explicitly addressing CMT2 and CMT4; "
+                "otherwise pivot to a materially different owner such as "
+                "construction diversity, local-search move scheduling, "
+                "acceptance/temperature policy, or stable algorithm entrypoint "
+                "integration. Follow-up coverage is handled by Protocol case "
+                "selection, not by hardcoding case ids, BKS values, seeds, "
+                "split membership, Decision rules, or generic budget gates."
+            ),
+            (
                 "Before selecting a `solver_design` hypothesis target, read "
                 "`context.read_active_solver_map.research_lever_digest` as "
                 "CVRP-owned proposal-only advisory context. Use it to compare "
@@ -263,6 +287,19 @@ class CvrpSolverDesignProvider:
                 "the notes can name a new causal path beyond tested guarded-v2 "
                 "or pressure/material-gain absorption; otherwise pivot to a "
                 "different provider-declared solver-design lever."
+            ),
+            (
+                "Current demand-slack branch lesson: "
+                "`demand_slack_regret_insertion` in "
+                "`policies/baseline_modules/destroy_repair.py` initially "
+                "escaped the route-merge plateau and reached `expand_screening` "
+                "(`13/11/8` pair W/L/T), but copied-campaign expanded screening "
+                "rejected the unchanged branch as quality regression (`16/28/4`, "
+                "median delta `-3.75`). Do not select another unchanged "
+                "demand-slack/regret-insertion target by default. If choosing "
+                "destroy_repair.py again, the target-intent notes must explain "
+                "a materially different mechanism and explicit CMT2/CMT4 "
+                "coverage while preserving the earlier A/E positives."
             ),
             (
                 "A non-scheduler target is now preferred when the selected "

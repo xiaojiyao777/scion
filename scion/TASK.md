@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; `demand_slack_regret_insertion` rejected; follow-up case targeting repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; `demand_slack_regret_insertion` rejected; follow-up targeting and provider guidance repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -268,6 +268,10 @@ Current checkpoint:
   `DecisionFeatures`. Formal CVRP selection smoke confirms that CMT2 is
   restored to the expanded screening set without changing the configured case
   count.
+- The CVRP problem-owned solver-design provider now carries the demand-slack
+  negative lesson in both target-intent and hypothesis guidance. A fresh live
+  prompt should not treat unchanged `demand_slack_regret_insertion` as an
+  acceptable default continuation.
 - Next CVRP checkpoint: do not continue the unchanged
   `demand_slack_regret_insertion` patch. Use the repaired follow-up targeting
   when expand screening is reached, or pivot to a materially different
