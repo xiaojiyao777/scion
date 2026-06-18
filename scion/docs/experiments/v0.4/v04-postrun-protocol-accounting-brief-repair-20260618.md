@@ -72,3 +72,38 @@ Observed `protocol_accounting_summary.available=true`,
 `requested_rounds=48`, `effective_rounds_completed=48`,
 `protocol_metric_results=48`, `formal_candidate_artifacts.row_count=33`, and
 `stage_rows.screening=48`.
+
+## WSL Verification
+
+After fast-forwarding the synchronized WSL checkout to `c8f83716`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/rebuild_postrun_acceptance.py
+```
+
+Result: `12 passed`; py-compile clean.
+
+WSL smoke check on an existing warehouse postrun root:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+  scion/tools/postrun_analysis_brief.py \
+  /home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z \
+  --format json
+```
+
+Observed `protocol_accounting_summary.available=true`,
+`current_run_evidence=true`, `accounting_report_count=1`,
+`requested_rounds=6`, `effective_rounds_completed=6`,
+`protocol_metric_results=8`, and
+`formal_candidate_artifacts.row_count=3`.
