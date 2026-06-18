@@ -51,6 +51,10 @@ Framework:
   now carry explicit launcher lifecycle/evidence-scope metadata, so copied
   resume snapshots are marked `prepared_only/not_started` with zero current-run
   effective rounds instead of masquerading as completed postrun evidence.
+- Historical and current run roots can be normalized for delegated analysis with
+  `scion/tools/rebuild_postrun_acceptance.py`. The rebuild manifest reports
+  per-family success/failure and preserves Phase 4 evidence gaps instead of
+  treating missing postrun artifacts as complete evidence.
 
 Warehouse:
 
@@ -141,6 +145,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-launcher-repair-20260618.md`.
 - Current prepared-only handoff lifecycle repair:
   `scion/docs/experiments/v0.4/v04-prepared-only-handoff-lifecycle-repair-20260618.md`.
+- Current postrun acceptance rebuild tool:
+  `scion/docs/experiments/v0.4/v04-postrun-acceptance-rebuild-tool-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
