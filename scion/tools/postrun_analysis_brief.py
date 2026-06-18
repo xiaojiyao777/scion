@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -30,6 +30,8 @@ REQUIRED_QUESTIONS = (
     "Were LLM tool calls relevant, non-looping, and useful?",
     "Did preview/smoke evidence and later prompts line up?",
     "Did sibling and historical lessons transfer without entering DecisionFeatures?",
+    "Did research_continuity show same-mechanism follow-up, "
+    "branch-lesson satisfaction or semantic gaps, and weak-positive transfer?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
@@ -66,6 +68,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
+        "research_continuity_summary": _research_continuity_summary(
+            run_root_path,
+            inventory,
+        ),
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": list(REQUIRED_QUESTIONS),
     }
@@ -268,6 +274,68 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 )
             )
 
+    continuity = brief.get("research_continuity_summary") or {}
+    lines.extend(
+        [
+            "",
+            "## Research Continuity Summary",
+            "- Source: current-run research-efficiency `research_continuity` reports.",
+            f"- Available: `{_display(continuity.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(continuity.get('current_run_evidence'))}`",
+            "- Reports with continuity: "
+            f"`{_display(continuity.get('continuity_report_count'))}`",
+        ]
+    )
+    entries = continuity.get("entries")
+    if isinstance(entries, list) and entries:
+        lines.extend(
+            [
+                "| Report | Same-mechanism selected/observed | "
+                "Branch lessons satisfied/required | Semantic gaps | "
+                "Weak-positive accepted/observed | Max depth | Families |",
+                "|---|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            same_mechanism = _mapping_or_empty(
+                entry.get("same_mechanism_followup")
+            )
+            lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
+            transfer = _mapping_or_empty(entry.get("weak_positive_transfer"))
+            shape = _mapping_or_empty(entry.get("research_shape_summary"))
+            lines.append(
+                "| {report} | {same_selected}/{same_observed} | "
+                "{lesson_satisfied}/{lesson_required} | {semantic_gap} | "
+                "{transfer_accepted}/{transfer_observed} | {max_depth} | "
+                "{families} |".format(
+                    report=_display(entry.get("report")),
+                    same_selected=_display(
+                        same_mechanism.get(
+                            "selected_same_branch_refinement_count"
+                        )
+                    ),
+                    same_observed=_display(
+                        same_mechanism.get("observed_opportunity_count")
+                    ),
+                    lesson_satisfied=_display(lessons.get("satisfied_count")),
+                    lesson_required=_display(lessons.get("requirement_count")),
+                    semantic_gap=_display(lessons.get("semantic_gap_count")),
+                    transfer_accepted=_display(transfer.get("accepted_count")),
+                    transfer_observed=_display(
+                        transfer.get("observed_opportunity_count")
+                    ),
+                    max_depth=_display(shape.get("max_branch_depth")),
+                    families=_display(shape.get("mechanism_family_count")),
+                )
+            )
+    else:
+        lines.append(
+            "- No current-run research_continuity block is available for delegated analysis."
+        )
+
     llm = brief["llm_traces"]
     branches = brief["branches"]
     lines.extend(
@@ -348,6 +416,96 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
     ]
 
 
+def _research_continuity_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_research_continuity_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "report_count": 0,
+        "continuity_report_count": 0,
+        "entries": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _research_efficiency_report_paths(run_root, inventory)
+    entries = []
+    for path in report_paths:
+        doc = _read_json_object(path)
+        continuity = doc.get("research_continuity")
+        if not isinstance(continuity, Mapping) or not continuity:
+            continue
+        entries.append(
+            {
+                "report": path.name,
+                "path": str(path),
+                "same_mechanism_followup": _mapping_or_empty(
+                    continuity.get("same_mechanism_followup")
+                ),
+                "branch_lesson_usage": _mapping_or_empty(
+                    continuity.get("branch_lesson_usage")
+                ),
+                "weak_positive_transfer": _mapping_or_empty(
+                    continuity.get("weak_positive_transfer")
+                ),
+                "lesson_action_counts": _mapping_or_empty(
+                    continuity.get("lesson_action_counts")
+                ),
+                "research_shape_summary": _mapping_or_empty(
+                    continuity.get("research_shape_summary")
+                ),
+            }
+        )
+
+    return {
+        **base,
+        "available": bool(entries),
+        "report_count": len(report_paths),
+        "continuity_report_count": len(entries),
+        "entries": entries,
+    }
+
+
+def _research_efficiency_report_paths(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> list[Path]:
+    reports = _mapping_or_empty(inventory.get("postrun_reports"))
+    files = reports.get("files")
+    if isinstance(files, Mapping):
+        research_files = files.get("research_efficiency")
+        if isinstance(research_files, list):
+            report_dir = run_root / "postrun_acceptance"
+            return sorted(
+                report_dir / str(path)
+                for path in research_files
+                if str(path).endswith(".json")
+            )
+    return sorted(
+        path
+        for path in (run_root / "postrun_acceptance" / "research_efficiency").glob(
+            "*.json"
+        )
+        if path.is_file()
+    )
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return dict(loaded) if isinstance(loaded, Mapping) else {}
+
+
 def _stop_conditions(inventory: dict[str, Any]) -> list[str]:
     lifecycle = inventory.get("lifecycle") or {}
     if lifecycle.get("prepared_only") is True:
@@ -387,6 +545,10 @@ def _mapping_text(value: Any) -> str:
     if not isinstance(value, dict) or not value:
         return "none"
     return ", ".join(f"{key}={value[key]}" for key in sorted(value))
+
+
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _int_or_zero(value: Any) -> int:

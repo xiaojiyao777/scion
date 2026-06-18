@@ -249,10 +249,13 @@ Current checkpoint:
   is postrun audit material only; it does not feed Decision, Protocol gates,
   scheduling, lifecycle, promotion, or proposal context. Postrun artifact
   inventories now mark `research_continuity` as an explicit Phase 4
-  evidence-coverage requirement. Reports:
+  evidence-coverage requirement, and postrun analysis briefs summarize the
+  current-run continuity metrics for delegated review. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
 - Budget-exhausting runtime semantics now avoid treating high aggregate
   `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
   soft-abandon signal, repeated-signal discriminator, screening feedback

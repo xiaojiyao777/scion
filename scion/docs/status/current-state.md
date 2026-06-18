@@ -32,7 +32,8 @@ Framework:
   shape. These are postrun audit fields only; they do not feed Decision,
   Protocol gates, scheduling, lifecycle, promotion, or proposal context.
   Postrun artifact inventories now also mark `research_continuity` as an
-  explicit Phase 4 evidence-coverage requirement.
+  explicit Phase 4 evidence-coverage requirement, and postrun analysis briefs
+  summarize the current-run continuity metrics for delegated review.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -178,6 +179,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
   Current Phase 4 continuity coverage repair:
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
+  Current continuity brief repair:
+  `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

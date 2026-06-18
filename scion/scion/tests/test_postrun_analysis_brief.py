@@ -102,6 +102,41 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "measurement_readiness": {"status": "ready"},
             "protocol_effects_vs_mde": {"mde_source": "readiness"},
             "fresh_runtime_replay_drain": {"attempts": 1},
+            "research_continuity": {
+                "same_mechanism_followup": {
+                    "selected_same_branch_refinement_count": 1,
+                    "not_selected_same_branch_refinement_count": 0,
+                    "observed_opportunity_count": 1,
+                    "selection_rate": 1.0,
+                    "interpretation": (
+                        "all_observed_same_mechanism_followups_selected"
+                    ),
+                },
+                "branch_lesson_usage": {
+                    "requirement_count": 2,
+                    "present_count": 2,
+                    "satisfied_count": 2,
+                    "missing_block_count": 0,
+                    "present_not_semantic_count": 0,
+                    "satisfaction_rate": 1.0,
+                    "present_rate": 1.0,
+                    "semantic_gap_count": 0,
+                    "semantic_gap_rate": 0.0,
+                },
+                "weak_positive_transfer": {
+                    "accepted_count": 1,
+                    "rejected_count": 0,
+                    "observed_opportunity_count": 1,
+                    "acceptance_rate": 1.0,
+                },
+                "lesson_action_counts": {
+                    "preserved_same_branch": 2,
+                },
+                "research_shape_summary": {
+                    "max_branch_depth": 3,
+                    "mechanism_family_count": 2,
+                },
+            },
         },
     )
     _write_json(
@@ -139,6 +174,21 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
     ] is True
+    continuity = brief["research_continuity_summary"]
+    assert continuity["schema_version"] == (
+        "scion.postrun_research_continuity_summary.v1"
+    )
+    assert continuity["report_only"] is True
+    assert continuity["decision_features_excluded"] is True
+    assert continuity["available"] is True
+    assert continuity["current_run_evidence"] is True
+    assert continuity["report_count"] == 1
+    assert continuity["continuity_report_count"] == 1
+    continuity_entry = continuity["entries"][0]
+    assert continuity_entry["report"] == "normal.research_efficiency.v1.json"
+    assert continuity_entry["same_mechanism_followup"]["selection_rate"] == 1.0
+    assert continuity_entry["branch_lesson_usage"]["semantic_gap_count"] == 0
+    assert continuity_entry["weak_positive_transfer"]["acceptance_rate"] == 1.0
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is False
@@ -157,6 +207,15 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert "## Research Continuity Summary" in markdown
+    assert (
+        "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | 3 | 2 |"
+        in markdown
+    )
+    assert any(
+        "research_continuity" in question
+        for question in brief["required_questions"]
+    )
 
     result = subprocess.run(
         [sys.executable, str(TOOL_PATH), str(run_root), "--format", "json"],
@@ -217,6 +276,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert brief["research_continuity_summary"]["current_run_evidence"] is False
+    assert brief["research_continuity_summary"]["available"] is False
     assert markdown.startswith("# Prepared Analysis Brief:")
     assert "do not analyze copied campaign artifacts as current-run research evidence" in (
         markdown
@@ -318,6 +379,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["branches"]["ids"] == []
     assert brief["llm_traces"]["trace_count"] == 0
     assert brief["resume_snapshot"]["present"] is True
+    assert brief["research_continuity_summary"]["current_run_evidence"] is False
+    assert brief["research_continuity_summary"]["available"] is False
     assert brief["resume_snapshot"]["current_run_evidence"] is False
     assert brief["resume_snapshot"]["resume_from_campaign"] == "/tmp/source-campaign"
     assert brief["resume_snapshot"]["branch_count"] == 1
