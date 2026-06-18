@@ -91,7 +91,34 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
             "sessions": [
                 {
                     "trace_fingerprints": [
-                        {"visibility_ledger_digest": "visibility-ledger-1"}
+                        {"visibility_ledger_digest": "visibility-ledger-1"},
+                        {
+                            "source_visibility_summary": {
+                                "schema_version": (
+                                    "scion.prompt_source_visibility_fingerprint.v1"
+                                ),
+                                "code_phase_guarantees": {
+                                    "schema_version": (
+                                        "code-phase-source-visibility-guarantees.v1"
+                                    ),
+                                    "target_source_visible": True,
+                                    "required_integration_source_visible": True,
+                                    "algorithm_file_read_source_visible": True,
+                                    "protected_source_visible": True,
+                                },
+                                "code_file_visibility": {
+                                    "schema_version": (
+                                        "code-file-visibility-ledger.v1"
+                                    ),
+                                    "target_source_status": (
+                                        "current_branch_source"
+                                    ),
+                                    "target_prompt_visibility_status": (
+                                        "full_current_source_visible"
+                                    ),
+                                },
+                            }
+                        },
                     ],
                 }
             ],
@@ -267,12 +294,14 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "research_continuity",
         "runtime_feedback",
         "source_visibility",
+        "code_source_visibility_guarantees",
     ):
         assert requirements[key]["available"] is True
     assert requirements["target_intent_trace"]["count"] == 1
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
     assert requirements["research_continuity"]["count"] == 1
+    assert requirements["code_source_visibility_guarantees"]["count"] == 1
     assert "## Phase 4 Evidence Coverage" in markdown
     assert "## Launcher Artifacts" in markdown
     assert "### Prepared Run Contract Checks" in markdown
@@ -280,6 +309,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert (
         "| research_continuity | True | 1 | "
         "research-efficiency research_continuity |"
+    ) in markdown
+    assert (
+        "| code_source_visibility_guarantees | True | 1 | "
+        "trajectory manifest code-phase source visibility guarantees |"
     ) in markdown
 
     assert len(data["branches"]) == 1
@@ -307,6 +340,52 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["hypotheses"]["by_status"] == {"active": 1, "rejected": 1}
     assert data["hypotheses"]["by_action"] == {"create_new": 1, "modify": 1}
     assert data["hypotheses"]["by_change_locus"] == {"solver_design": 2}
+
+
+def test_phase4_coverage_separates_generic_and_code_source_visibility(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run-source-coverage"
+    campaign_dir = run_root / "campaign"
+    traces_dir = campaign_dir / "llm_traces"
+    traces_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_name": "source-coverage-run",
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+        },
+    )
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "manifests"
+        / "source_coverage.proposal_trajectory_manifest.v1.json",
+        {
+            "counts": {"prompt_manifest_loaded_count": 1},
+            "sessions": [
+                {
+                    "trace_fingerprints": [
+                        {"visibility_ledger_digest": "visibility-ledger-only"}
+                    ]
+                }
+            ],
+        },
+    )
+    _write_json(
+        traces_dir / "20260606T000000_code_branch_1.json",
+        {"trace_kind": "code", "status": "ok", "branch_id": "branch-1"},
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+
+    requirements = data["phase4_evidence_coverage"]["requirements"]
+    assert requirements["source_visibility"]["available"] is True
+    assert requirements["source_visibility"]["count"] == 1
+    assert requirements["code_trace"]["available"] is True
+    assert requirements["code_source_visibility_guarantees"]["available"] is False
+    assert requirements["code_source_visibility_guarantees"]["count"] == 0
 
 
 def test_prepared_manifest_contract_accepts_mirrored_runner_paths(

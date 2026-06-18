@@ -39,7 +39,10 @@ Framework:
   context/source visibility, code/hypothesis source-visibility guarantees,
   prompt signal density, runtime feedback/drain behavior, and failure
   taxonomy/proposal quality without exposing raw prompts, responses, patches,
-  raw logs, source bodies, or mutating runtime semantics.
+  raw logs, source bodies, or mutating runtime semantics. Postrun artifact
+  inventories now distinguish broad source-visibility fingerprints from
+  code-phase source-visibility guarantee evidence, so delegated review can see
+  whether code-stage source visibility was actually evidenced.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -209,6 +212,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-branch-state-brief-repair-20260618.md`.
   Current source visibility brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-source-visibility-brief-repair-20260618.md`.
+  Current code source visibility coverage repair:
+  `scion/docs/experiments/v0.4/v04-phase4-code-source-visibility-coverage-repair-20260618.md`.
   Current CVRP measurement/opportunity diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
   Current CVRP prepared-handoff diagnostics repair:

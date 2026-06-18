@@ -1164,6 +1164,7 @@ def _phase4_evidence_coverage(
             ("source_visibility", "target_source_visibility", "visibility_ledger"),
         )
     )
+    code_source_visibility_count = _code_source_visibility_summary_count(manifest_docs)
 
     return {
         "schema_version": "scion.postrun_phase4_evidence_coverage.v1",
@@ -1229,6 +1230,10 @@ def _phase4_evidence_coverage(
                 source_visibility_count,
                 "prompt manifests or trajectory visibility fingerprints",
             ),
+            "code_source_visibility_guarantees": _coverage_item(
+                code_source_visibility_count,
+                "trajectory manifest code-phase source visibility guarantees",
+            ),
         },
         "analysis_handoff": HANDOFF_DOC,
     }
@@ -1255,11 +1260,37 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         "research_continuity": "research-efficiency research_continuity",
         "runtime_feedback": "summary/status or research-efficiency runtime fields",
         "source_visibility": "prompt manifests or trajectory visibility fingerprints",
+        "code_source_visibility_guarantees": (
+            "trajectory manifest code-phase source visibility guarantees"
+        ),
     }
     return {
         key: _coverage_item(0, f"{source}; {reason}")
         for key, source in sources.items()
     }
+
+
+def _code_source_visibility_summary_count(docs: list[Any]) -> int:
+    return sum(_code_source_visibility_summary_count_in_doc(doc) for doc in docs)
+
+
+def _code_source_visibility_summary_count_in_doc(value: Any) -> int:
+    if isinstance(value, dict):
+        count = 1 if _has_code_source_visibility_summary(value) else 0
+        return count + sum(
+            _code_source_visibility_summary_count_in_doc(item)
+            for item in value.values()
+        )
+    if isinstance(value, list):
+        return sum(_code_source_visibility_summary_count_in_doc(item) for item in value)
+    return 0
+
+
+def _has_code_source_visibility_summary(value: dict[str, Any]) -> bool:
+    return bool(
+        _mapping_or_empty(value.get("code_phase_guarantees"))
+        or _mapping_or_empty(value.get("code_file_visibility"))
+    )
 
 
 def _phase4_trace_coverage(
