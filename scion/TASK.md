@@ -278,10 +278,10 @@ Current checkpoint:
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
-  latest WSL preflight reaches the proxy and reports
-  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
-  completion still returns HTTP `401` with
-  `classification=auth_token_invalidated`. Use the repaired launcher
+  latest WSL preflight reaches the proxy but reports
+  `AUTH_STATUS authenticated=False active=0 refreshing=1`; the real chat
+  completion returns HTTP `401` with `classification=not_authenticated`. Use the
+  repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its
   prepare/postrun acceptance bundle enabled, including the secret-free
