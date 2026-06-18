@@ -152,7 +152,48 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "sessions": [
                 {
                     "trace_fingerprints": [
-                        {"visibility_ledger_digest": "visibility-ledger-1"}
+                        {
+                            "call_kind": "hypothesis",
+                            "visibility_ledger_digest": "visibility-ledger-1",
+                            "block_family_summary": {
+                                "total_chars": 120,
+                                "total_token_estimate": 30,
+                                "families": {
+                                    "research_signal": {
+                                        "char_count": 80,
+                                        "token_estimate": 20,
+                                        "token_share": 0.666667,
+                                    },
+                                    "governance": {
+                                        "char_count": 40,
+                                        "token_estimate": 10,
+                                        "token_share": 0.333333,
+                                    },
+                                },
+                            },
+                            "omitted_sections": ["hidden_validation"],
+                            "truncated_sections": ["long_feedback"],
+                        },
+                        {
+                            "call_kind": "code",
+                            "visibility_ledger_digest": "visibility-ledger-2",
+                            "block_family_summary": {
+                                "total_chars": 80,
+                                "total_token_estimate": 20,
+                                "families": {
+                                    "source_code": {
+                                        "char_count": 60,
+                                        "token_estimate": 15,
+                                        "token_share": 0.75,
+                                    },
+                                    "governance": {
+                                        "char_count": 20,
+                                        "token_estimate": 5,
+                                        "token_share": 0.25,
+                                    },
+                                },
+                            },
+                        },
                     ]
                 }
             ],
@@ -174,6 +215,34 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
     ] is True
+    context_summary = brief["prompt_context_visibility_summary"]
+    assert context_summary["schema_version"] == (
+        "scion.postrun_prompt_context_visibility_summary.v1"
+    )
+    assert context_summary["report_only"] is True
+    assert context_summary["decision_features_excluded"] is True
+    assert context_summary["raw_prompt_excluded"] is True
+    assert context_summary["raw_response_excluded"] is True
+    assert context_summary["patch_body_excluded"] is True
+    assert context_summary["available"] is True
+    assert context_summary["current_run_evidence"] is True
+    aggregate = context_summary["aggregate"]
+    assert aggregate["prompt_manifest_loaded_count"] == 1
+    assert aggregate["trace_count"] == 2
+    assert aggregate["visibility_digest_count"] == 2
+    assert aggregate["block_family_trace_count"] == 2
+    assert aggregate["omitted_section_trace_count"] == 1
+    assert aggregate["truncated_section_trace_count"] == 1
+    assert aggregate["call_kind_counts"] == {"code": 1, "hypothesis": 1}
+    assert aggregate["block_family_totals"] == {
+        "governance": {"char_count": 60, "token_estimate": 15, "trace_count": 2},
+        "research_signal": {
+            "char_count": 80,
+            "token_estimate": 20,
+            "trace_count": 1,
+        },
+        "source_code": {"char_count": 60, "token_estimate": 15, "trace_count": 1},
+    }
     continuity = brief["research_continuity_summary"]
     assert continuity["schema_version"] == (
         "scion.postrun_research_continuity_summary.v1"
@@ -208,6 +277,9 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
     assert "## Research Continuity Summary" in markdown
+    assert "## Prompt Context Visibility Summary" in markdown
+    assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
+    assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
         "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | 3 | 2 |"
         in markdown
@@ -276,6 +348,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
+    assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
     assert brief["research_continuity_summary"]["available"] is False
     assert markdown.startswith("# Prepared Analysis Brief:")
@@ -379,6 +453,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["branches"]["ids"] == []
     assert brief["llm_traces"]["trace_count"] == 0
     assert brief["resume_snapshot"]["present"] is True
+    assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
+    assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
     assert brief["research_continuity_summary"]["available"] is False
     assert brief["resume_snapshot"]["current_run_evidence"] is False

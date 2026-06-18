@@ -68,6 +68,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
+        "prompt_context_visibility_summary": _prompt_context_visibility_summary(
+            run_root_path,
+            inventory,
+        ),
         "research_continuity_summary": _research_continuity_summary(
             run_root_path,
             inventory,
@@ -274,6 +278,52 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 )
             )
 
+    context_summary = brief.get("prompt_context_visibility_summary") or {}
+    aggregate = _mapping_or_empty(context_summary.get("aggregate"))
+    lines.extend(
+        [
+            "",
+            "## Prompt Context Visibility Summary",
+            "- Source: current-run proposal trajectory manifests and "
+            "prompt-manifest fingerprints.",
+            f"- Available: `{_display(context_summary.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(context_summary.get('current_run_evidence'))}`",
+            "- Manifest reports with context: "
+            f"`{_display(context_summary.get('context_report_count'))}`",
+            "- Prompt manifests loaded/ref: "
+            f"{_display(aggregate.get('prompt_manifest_loaded_count'))} / "
+            f"{_display(aggregate.get('prompt_manifest_ref_count'))}",
+            "- Visibility digests: "
+            f"{_display(aggregate.get('visibility_digest_count'))}",
+            "- Traces with block-family accounting: "
+            f"{_display(aggregate.get('block_family_trace_count'))}",
+            "- Omitted/truncated traces: "
+            f"{_display(aggregate.get('omitted_section_trace_count'))} / "
+            f"{_display(aggregate.get('truncated_section_trace_count'))}",
+            f"- Call kinds: {_mapping_text(aggregate.get('call_kind_counts'))}",
+        ]
+    )
+    families = aggregate.get("block_family_totals")
+    if isinstance(families, dict) and families:
+        lines.extend(
+            [
+                "| Prompt family | Traces | Tokens | Chars |",
+                "|---|---:|---:|---:|",
+            ]
+        )
+        for family, item in sorted(families.items()):
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "| {family} | {traces} | {tokens} | {chars} |".format(
+                    family=family,
+                    traces=_display(item.get("trace_count")),
+                    tokens=_display(item.get("token_estimate")),
+                    chars=_display(item.get("char_count")),
+                )
+            )
+
     continuity = brief.get("research_continuity_summary") or {}
     lines.extend(
         [
@@ -416,6 +466,211 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
     ]
 
 
+def _prompt_context_visibility_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_prompt_context_visibility_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "raw_response_excluded": True,
+        "patch_body_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "manifest_report_count": 0,
+        "context_report_count": 0,
+        "aggregate": _empty_prompt_context_aggregate(),
+        "entries": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _proposal_trajectory_manifest_paths(run_root, inventory)
+    entries: list[dict[str, Any]] = []
+    aggregate = _empty_prompt_context_aggregate()
+    for path in report_paths:
+        entry = _proposal_trajectory_context_entry(path)
+        if not entry:
+            continue
+        entries.append(entry)
+        _merge_prompt_context_aggregate(aggregate, entry)
+
+    return {
+        **base,
+        "available": any(
+            _int_or_zero(entry.get("visibility_digest_count")) > 0
+            or _int_or_zero(entry.get("block_family_trace_count")) > 0
+            for entry in entries
+        ),
+        "manifest_report_count": len(report_paths),
+        "context_report_count": len(entries),
+        "aggregate": aggregate,
+        "entries": entries,
+    }
+
+
+def _empty_prompt_context_aggregate() -> dict[str, Any]:
+    return {
+        "prompt_manifest_ref_count": 0,
+        "prompt_manifest_loaded_count": 0,
+        "trace_count": 0,
+        "visibility_digest_count": 0,
+        "block_family_trace_count": 0,
+        "omitted_section_trace_count": 0,
+        "truncated_section_trace_count": 0,
+        "call_kind_counts": {},
+        "block_family_totals": {},
+        "omitted_section_counts": {},
+        "truncated_section_counts": {},
+    }
+
+
+def _proposal_trajectory_manifest_paths(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> list[Path]:
+    reports = _mapping_or_empty(inventory.get("postrun_reports"))
+    files = reports.get("files")
+    if isinstance(files, Mapping):
+        manifest_files = files.get("manifests")
+        if isinstance(manifest_files, list):
+            report_dir = run_root / "postrun_acceptance"
+            return sorted(
+                report_dir / str(path)
+                for path in manifest_files
+                if str(path).endswith(".json")
+            )
+    return sorted(
+        path
+        for path in (run_root / "postrun_acceptance" / "manifests").glob("*.json")
+        if path.is_file()
+    )
+
+
+def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
+    doc = _read_json_object(path)
+    sessions = doc.get("sessions")
+    if not isinstance(sessions, list):
+        return {}
+    counts = _mapping_or_empty(doc.get("counts"))
+    entry = {
+        "report": path.name,
+        "path": str(path),
+        "prompt_manifest_ref_count": _int_or_zero(
+            counts.get("prompt_manifest_ref_count")
+        ),
+        "prompt_manifest_loaded_count": _int_or_zero(
+            counts.get("prompt_manifest_loaded_count")
+        ),
+        "trace_count": 0,
+        "visibility_digest_count": 0,
+        "block_family_trace_count": 0,
+        "omitted_section_trace_count": 0,
+        "truncated_section_trace_count": 0,
+        "call_kind_counts": {},
+        "block_family_totals": {},
+        "omitted_section_counts": {},
+        "truncated_section_counts": {},
+    }
+    for session in sessions:
+        if not isinstance(session, Mapping):
+            continue
+        traces = session.get("trace_fingerprints")
+        if not isinstance(traces, list):
+            continue
+        for trace in traces:
+            if not isinstance(trace, Mapping):
+                continue
+            _add_prompt_trace_context(entry, trace)
+    return entry
+
+
+def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -> None:
+    entry["trace_count"] = _int_or_zero(entry.get("trace_count")) + 1
+    call_kind = str(trace.get("call_kind") or "unknown")
+    _increment_count(entry["call_kind_counts"], call_kind)
+    if trace.get("visibility_ledger_digest"):
+        entry["visibility_digest_count"] += 1
+
+    block_summary = _mapping_or_empty(trace.get("block_family_summary"))
+    families = _mapping_or_empty(block_summary.get("families"))
+    if families:
+        entry["block_family_trace_count"] += 1
+    for family, raw in sorted(families.items()):
+        if isinstance(raw, Mapping):
+            _add_block_family(entry["block_family_totals"], str(family), raw)
+
+    omitted = _string_items(trace.get("omitted_sections"))
+    if omitted:
+        entry["omitted_section_trace_count"] += 1
+        for section in omitted:
+            _increment_count(entry["omitted_section_counts"], section)
+    truncated = _string_items(trace.get("truncated_sections"))
+    if truncated:
+        entry["truncated_section_trace_count"] += 1
+        for section in truncated:
+            _increment_count(entry["truncated_section_counts"], section)
+
+
+def _merge_prompt_context_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    for key in (
+        "prompt_manifest_ref_count",
+        "prompt_manifest_loaded_count",
+        "trace_count",
+        "visibility_digest_count",
+        "block_family_trace_count",
+        "omitted_section_trace_count",
+        "truncated_section_trace_count",
+    ):
+        aggregate[key] = _int_or_zero(aggregate.get(key)) + _int_or_zero(
+            entry.get(key)
+        )
+    for key in ("call_kind_counts", "omitted_section_counts", "truncated_section_counts"):
+        target = aggregate[key]
+        source = entry.get(key)
+        if not isinstance(source, Mapping):
+            continue
+        for item_key, value in sorted(source.items()):
+            _increment_count(target, str(item_key), _int_or_zero(value))
+    families = entry.get("block_family_totals")
+    if isinstance(families, Mapping):
+        for family, raw in sorted(families.items()):
+            if isinstance(raw, Mapping):
+                _add_block_family(aggregate["block_family_totals"], str(family), raw)
+
+
+def _add_block_family(
+    totals: dict[str, dict[str, int]],
+    family: str,
+    raw: Mapping[str, Any],
+) -> None:
+    item = totals.setdefault(
+        family,
+        {"trace_count": 0, "char_count": 0, "token_estimate": 0},
+    )
+    item["trace_count"] += _int_or_zero(raw.get("trace_count")) or 1
+    item["char_count"] += _int_or_zero(raw.get("char_count"))
+    item["token_estimate"] += _int_or_zero(raw.get("token_estimate"))
+
+
+def _increment_count(
+    counts: dict[str, int],
+    key: str,
+    amount: int = 1,
+) -> None:
+    if not key:
+        return
+    counts[key] = counts.get(key, 0) + amount
+
+
 def _research_continuity_summary(
     run_root: Path,
     inventory: Mapping[str, Any],
@@ -539,6 +794,12 @@ def _display(value: Any) -> str:
 
 def _list_text(values: list[Any]) -> str:
     return ", ".join(str(value) for value in values) if values else "none"
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
 
 
 def _mapping_text(value: Any) -> str:

@@ -33,7 +33,10 @@ Framework:
   Protocol gates, scheduling, lifecycle, promotion, or proposal context.
   Postrun artifact inventories now also mark `research_continuity` as an
   explicit Phase 4 evidence-coverage requirement, and postrun analysis briefs
-  summarize the current-run continuity metrics for delegated review.
+  summarize the current-run continuity metrics for delegated review. Postrun
+  analysis briefs also summarize current-run prompt context/source visibility
+  from proposal trajectory manifests without exposing raw prompts, responses, or
+  patches.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -181,6 +184,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
   Current continuity brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
+  Current prompt context visibility brief repair:
+  `scion/docs/experiments/v0.4/v04-postrun-prompt-context-visibility-brief-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
