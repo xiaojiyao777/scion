@@ -45,7 +45,9 @@ Framework:
   whether code-stage source visibility was actually evidenced. They also
   separate research-continuity coverage into same-mechanism follow-up,
   branch-lesson usage, weak-positive transfer, and branch research shape, so
-  Phase 4 effective-research signals are individually auditable.
+  Phase 4 effective-research signals are individually auditable. Protocol row,
+  candidate, and validation/frozen stage accounting are also explicit Phase 4
+  coverage items.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -203,6 +205,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
   Current Phase 4 continuity subsignal coverage repair:
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-subsignal-coverage-repair-20260618.md`.
+  Current Phase 4 protocol stage coverage repair:
+  `scion/docs/experiments/v0.4/v04-phase4-protocol-stage-coverage-repair-20260618.md`.
   Current continuity brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
   Current prompt context visibility brief repair:

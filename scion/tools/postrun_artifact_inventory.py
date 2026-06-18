@@ -1126,6 +1126,10 @@ def _phase4_evidence_coverage(
         for doc in research_docs
         if _contains_key_fragment(doc, ("protocol_effects_vs_mde", "mde_source"))
     )
+    protocol_accounting_count = _protocol_accounting_summary_count(research_docs)
+    validation_frozen_stage_count = _validation_frozen_stage_accounting_count(
+        research_docs
+    )
     branch_lesson_count = sum(
         1
         for doc in source_docs
@@ -1230,6 +1234,14 @@ def _phase4_evidence_coverage(
                 effect_vs_mde_count,
                 "research-efficiency protocol_effects_vs_mde",
             ),
+            "protocol_accounting": _coverage_item(
+                protocol_accounting_count,
+                "research-efficiency protocol_rows/formal_candidates/stage_rows",
+            ),
+            "validation_frozen_stage_accounting": _coverage_item(
+                validation_frozen_stage_count,
+                "research-efficiency validation/frozen stage accounting",
+            ),
             "branch_lesson_transfer": _coverage_item(
                 branch_lesson_count,
                 "summary/status, research-efficiency, or trajectory manifest",
@@ -1286,6 +1298,12 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
             "campaign summary/status or research-efficiency report"
         ),
         "protocol_effect_vs_mde": "research-efficiency protocol_effects_vs_mde",
+        "protocol_accounting": (
+            "research-efficiency protocol_rows/formal_candidates/stage_rows"
+        ),
+        "validation_frozen_stage_accounting": (
+            "research-efficiency validation/frozen stage accounting"
+        ),
         "branch_lesson_transfer": (
             "summary/status, research-efficiency, or trajectory manifest"
         ),
@@ -1312,6 +1330,44 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         key: _coverage_item(0, f"{source}; {reason}")
         for key, source in sources.items()
     }
+
+
+def _protocol_accounting_summary_count(docs: list[Any]) -> int:
+    return sum(
+        1
+        for doc in docs
+        if isinstance(doc, dict) and _has_protocol_accounting_summary(doc)
+    )
+
+
+def _has_protocol_accounting_summary(doc: dict[str, Any]) -> bool:
+    return any(
+        isinstance(doc.get(key), dict) and bool(doc.get(key))
+        for key in (
+            "effective_budget",
+            "protocol_rows",
+            "formal_candidates",
+            "formal_candidate_artifacts",
+            "stage_rows",
+        )
+    )
+
+
+def _validation_frozen_stage_accounting_count(docs: list[Any]) -> int:
+    return sum(
+        1
+        for doc in docs
+        if isinstance(doc, dict) and _has_validation_frozen_stage_accounting(doc)
+    )
+
+
+def _has_validation_frozen_stage_accounting(doc: dict[str, Any]) -> bool:
+    stage_rows = _mapping_or_empty(doc.get("stage_rows"))
+    if "validation" in stage_rows or "frozen" in stage_rows:
+        return True
+    protocol_rows = _mapping_or_empty(doc.get("protocol_rows"))
+    stage_counts = _mapping_or_empty(protocol_rows.get("stage_counts"))
+    return "validation" in stage_counts or "frozen" in stage_counts
 
 
 def _research_continuity_field_count(docs: list[Any], field: str) -> int:

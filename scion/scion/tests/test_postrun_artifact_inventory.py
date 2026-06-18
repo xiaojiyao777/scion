@@ -72,6 +72,29 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
             "protocol_effects_vs_mde": {
                 "mde_source": "measurement_readiness.mde_at_power_80",
             },
+            "effective_budget": {
+                "requested_rounds": 2,
+                "effective_rounds_completed": 2,
+            },
+            "protocol_rows": {
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+                "stage_counts": {
+                    "screening": 2,
+                    "validation": 0,
+                    "frozen": 0,
+                },
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+            },
+            "stage_rows": {
+                "screening": 2,
+                "validation": 0,
+                "frozen": 0,
+                "fresh_runtime_replay": 0,
+            },
             "cross_branch_observability": {"branch_lesson_record_count": 1},
             "research_continuity": {
                 "same_mechanism_followup": {"selection_rate": 1.0},
@@ -294,6 +317,8 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "research_efficiency_report",
         "measurement_readiness",
         "protocol_effect_vs_mde",
+        "protocol_accounting",
+        "validation_frozen_stage_accounting",
         "branch_lesson_transfer",
         "research_continuity",
         "same_mechanism_followup",
@@ -308,6 +333,8 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert requirements["target_intent_trace"]["count"] == 1
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
+    assert requirements["protocol_accounting"]["count"] == 1
+    assert requirements["validation_frozen_stage_accounting"]["count"] == 1
     assert requirements["research_continuity"]["count"] == 1
     assert requirements["same_mechanism_followup"]["count"] == 1
     assert requirements["branch_lesson_usage"]["count"] == 1
@@ -318,6 +345,14 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert "## Launcher Artifacts" in markdown
     assert "### Prepared Run Contract Checks" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert (
+        "| protocol_accounting | True | 1 | "
+        "research-efficiency protocol_rows/formal_candidates/stage_rows |"
+    ) in markdown
+    assert (
+        "| validation_frozen_stage_accounting | True | 1 | "
+        "research-efficiency validation/frozen stage accounting |"
+    ) in markdown
     assert (
         "| research_continuity | True | 1 | "
         "research-efficiency research_continuity |"
@@ -441,6 +476,39 @@ def test_phase4_coverage_tracks_continuity_subsignals(
     assert requirements["branch_lesson_usage"]["available"] is True
     assert requirements["weak_positive_transfer"]["available"] is False
     assert requirements["branch_research_shape"]["available"] is False
+
+
+def test_phase4_coverage_requires_protocol_accounting_fields(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run-protocol-coverage"
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_name": "protocol-coverage-run",
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+        },
+    )
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "effect_only.research_efficiency.v1.json",
+        {
+            "measurement_readiness": {"status": "ready"},
+            "protocol_effects_vs_mde": {
+                "mde_source": "measurement_readiness.mde_at_power_80"
+            },
+        },
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+
+    requirements = data["phase4_evidence_coverage"]["requirements"]
+    assert requirements["protocol_effect_vs_mde"]["available"] is True
+    assert requirements["protocol_accounting"]["available"] is False
+    assert requirements["validation_frozen_stage_accounting"]["available"] is False
 
 
 def test_prepared_manifest_contract_accepts_mirrored_runner_paths(

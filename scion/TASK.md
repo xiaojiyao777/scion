@@ -260,13 +260,17 @@ Current checkpoint:
   inventories now distinguish broad source-visibility fingerprints from
   code-phase source-visibility guarantee evidence, and split
   research-continuity coverage into same-mechanism follow-up, branch-lesson
-  usage, weak-positive transfer, and branch research shape.
+  usage, weak-positive transfer, and branch research shape. Protocol row,
+  candidate, and validation/frozen stage accounting are also explicit Phase 4
+  coverage items.
   Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-subsignal-coverage-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-phase4-protocol-stage-coverage-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
   and
