@@ -637,6 +637,9 @@ def _compact_research_signals(
             "research_shape": _compact_structured_signal(
                 D.get("research_shape_diagnostics")
             ),
+            "launch_research_focus": _compact_structured_signal(
+                D.get("launch_research_focus")
+            ),
         }
     )
     if len(payload) <= 3:

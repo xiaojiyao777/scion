@@ -355,6 +355,7 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "measurement_diagnostics_standalone_section" not in decision_fields
     assert "measurement_noise_floor" not in decision_fields
     assert "objective_opportunity_profile" not in decision_fields
+    assert "launch_research_focus" not in decision_fields
 
 
 def test_no_measurement_diagnostics_ablation_keeps_protocol_mode_and_research_context():
@@ -767,6 +768,27 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
             "current_branch_depth": 2,
             "shape_label": "repeated_non_positive_family",
         },
+        "launch_research_focus": {
+            "schema_version": "scion.launch_research_focus_prompt.v1",
+            "taint": "prepared_launch_research_focus",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "decision_input_policy": "excluded_from_decision_features",
+            "problem_family": "cvrp",
+            "analysis_intent": "CVRP post-pivot branch-continuation check.",
+            "research_focus": {
+                "current_question": (
+                    "Select a materially different CVRP solver-design mechanism."
+                ),
+                "default_avoid_directions": [
+                    "route-merge absorption",
+                    "route-limit seed diversification",
+                ],
+                "measurable_opportunity_classes": [
+                    "bounded_local_search_variant",
+                ],
+            },
+        },
     }
 
     system_blocks, user_prompt = _split_hypothesis_context(context)
@@ -776,6 +798,9 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
     assert "## Compact Research Signals" in rendered_system
     assert "lesson:route-slack" in rendered_system
     assert "research_shape" in rendered_system
+    assert "launch_research_focus" in rendered_system
+    assert "route-merge absorption" in rendered_system
+    assert "bounded_local_search_variant" in rendered_system
     assert "current_branch_depth" in rendered_system
     assert "repeated_non_positive_family" in rendered_system
     assert "branch b1: route_merge_reinsertion lost" in rendered_system

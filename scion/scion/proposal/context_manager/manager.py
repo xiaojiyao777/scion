@@ -1,6 +1,7 @@
 """ContextManager orchestration for proposal prompt contexts."""
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -161,6 +162,119 @@ def _render_new_file_target_placeholder(target_file: str) -> str:
         "do not use exact_replace against this placeholder.\n"
         f"```python\n# new file placeholder for {target_file}\n```"
     )
+
+
+def _build_launch_research_focus() -> dict[str, Any]:
+    """Project prepared launch research focus into proposal-only context."""
+
+    manifest_path = (
+        os.environ.get("PREPARED_RUN_MANIFEST")
+        or os.environ.get("SCION_PREPARED_RUN_MANIFEST")
+        or ""
+    ).strip()
+    if not manifest_path:
+        return {}
+    try:
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(manifest, Mapping):
+        return {}
+    research_focus = manifest.get("research_focus")
+    if not isinstance(research_focus, Mapping):
+        return {}
+    projected_focus = _project_launch_research_focus(research_focus)
+    if not projected_focus:
+        return {}
+    return {
+        "schema_version": "scion.launch_research_focus_prompt.v1",
+        "taint": "prepared_launch_research_focus",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": "excluded_from_decision_features",
+        "source": "PREPARED_RUN_MANIFEST",
+        "manifest_path": manifest_path,
+        "problem_family": _string_or_empty(manifest.get("problem_family")),
+        "analysis_intent": _string_or_empty(manifest.get("analysis_intent")),
+        "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
+        "research_focus": projected_focus,
+    }
+
+
+def _project_launch_research_focus(value: Mapping[str, Any]) -> dict[str, Any]:
+    fields = (
+        "schema_version",
+        "scope",
+        "accepted_checkpoint",
+        "current_question",
+        "route_merge_exception_rule",
+        "construction_seed_rule",
+        "decision_boundary",
+    )
+    projected: dict[str, Any] = {
+        field: _string_or_empty(value.get(field))
+        for field in fields
+        if _string_or_empty(value.get(field))
+    }
+    list_fields = (
+        "default_avoid_directions",
+        "required_evidence",
+        "measurable_opportunity_classes",
+    )
+    for field in list_fields:
+        items = _string_items(value.get(field))
+        if items:
+            projected[field] = items
+    measurement = value.get("measurement_opportunity_diagnostics")
+    if isinstance(measurement, Mapping):
+        projected["measurement_opportunity_diagnostics"] = {
+            key: child
+            for key, child in {
+                "schema_version": _string_or_empty(
+                    measurement.get("schema_version")
+                ),
+                "metric": _string_or_empty(measurement.get("metric")),
+                "runtime_model": _string_or_empty(
+                    measurement.get("runtime_model")
+                ),
+                "pairing_validity": _string_or_empty(
+                    measurement.get("pairing_validity")
+                ),
+                "practical_screen_delta": measurement.get(
+                    "practical_screen_delta"
+                ),
+                "screening_mde_at_power_80": measurement.get(
+                    "screening_mde_at_power_80"
+                ),
+                "recommended_min_seeds": measurement.get("recommended_min_seeds"),
+                "reason_codes": _string_items(measurement.get("reason_codes")),
+                "summary": _string_or_empty(measurement.get("summary")),
+                "decision_features_excluded": measurement.get(
+                    "decision_features_excluded"
+                ),
+                "proposal_visibility_only": measurement.get(
+                    "proposal_visibility_only"
+                ),
+            }.items()
+            if child not in ("", [], {}, None)
+        }
+    return projected
+
+
+def _string_or_empty(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            items.append(text)
+    return items
 
 
 def _proposal_material_difference_requirement(branch: Branch) -> dict[str, Any]:
@@ -821,6 +935,7 @@ class ContextManager:
             if measurement_governance_mode == "on"
             else {}
         )
+        launch_research_focus = _build_launch_research_focus() or ""
 
         return {
             "problem_summary": problem_summary,
@@ -850,6 +965,7 @@ class ContextManager:
             "cross_branch_research": cross_branch_research,
             "cross_branch_research_payload": cross_branch_research_payload,
             "research_shape_diagnostics": research_shape_diagnostics,
+            "launch_research_focus": launch_research_focus,
             "cross_branch_research_audit_records": (
                 cross_branch_research_payload.get(
                     "material_difference_audit_records",

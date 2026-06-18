@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from scion.core.models import Branch, BranchState, ChampionState, HypothesisProposal
 from scion.problem.bridge import legacy_problem_spec_from_v1, load_problem_spec_v1_from_yaml
 from scion.problems.cvrp.adapter import CvrpAdapter
@@ -41,6 +43,7 @@ def test_cvrp_hypothesis_context_exposes_only_active_solver_design() -> None:
     assert "adaptive embedded-VNS share-70 line" in prompt_text
     assert "simple share70 cap/rescue variants are rejected" in prompt_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
+    assert "launch_research_focus" not in prompt_text
     assert "proposal-only" in prompt_text
     assert "Do not hardcode case ids, BKS values, seeds, or split membership" in prompt_text
     assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
@@ -53,6 +56,110 @@ def test_cvrp_hypothesis_context_exposes_only_active_solver_design() -> None:
     assert "algorithm_blueprint [config]" not in prompt_text
     assert "interface.required_functions: solve" in prompt_text
     assert "solver_algorithm_loaded" in prompt_text
+
+
+def test_cvrp_hypothesis_context_uses_prepared_launch_research_focus(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manifest_path = tmp_path / "prepared_run_manifest.v1.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "scion.launcher_prepared_run_manifest.v1",
+                "problem_family": "cvrp",
+                "analysis_intent": "Prepared CVRP post-pivot continuation.",
+                "acceptance_focus": [
+                    "Check the research_focus default-avoid list before launch."
+                ],
+                "research_focus": {
+                    "schema_version": "scion.cvrp_research_focus.v1",
+                    "scope": "report_only_prepared_handoff",
+                    "current_question": (
+                        "Select a materially different CVRP solver-design mechanism."
+                    ),
+                    "route_merge_exception_rule": (
+                        "Only continue route_merge_repair with a new causal path."
+                    ),
+                    "construction_seed_rule": (
+                        "Require same-run seed baseline for seed-pool claims."
+                    ),
+                    "default_avoid_directions": [
+                        "route-merge absorption",
+                        "route-limit seed diversification",
+                    ],
+                    "measurable_opportunity_classes": [
+                        "bounded_local_search_variant",
+                        "destroy_repair_selection",
+                    ],
+                    "measurement_opportunity_diagnostics": {
+                        "schema_version": (
+                            "cvrp_measurement_opportunity_handoff.v1"
+                        ),
+                        "metric": "total_distance",
+                        "runtime_model": "budget_exhausting",
+                        "pairing_validity": "trajectory_divergent",
+                        "practical_screen_delta": 2.0,
+                        "screening_mde_at_power_80": 9.9,
+                        "recommended_min_seeds": 8,
+                        "reason_codes": ["CVRP_MDE_EXCEEDS_PRACTICAL_DELTA"],
+                        "summary": (
+                            "Sub-MDE effects need direct objective-effect "
+                            "attribution."
+                        ),
+                        "decision_features_excluded": True,
+                        "proposal_visibility_only": True,
+                    },
+                    "decision_boundary": (
+                        "This focus is proposal guidance only and must not enter "
+                        "DecisionFeatures."
+                    ),
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PREPARED_RUN_MANIFEST", str(manifest_path))
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b-prepared-focus",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+
+    ctx = ContextManager(adapter=CvrpAdapter(spec_v1)).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+    )
+    focus = ctx["launch_research_focus"]
+    assert focus["decision_features_excluded"] is True
+    assert focus["problem_family"] == "cvrp"
+    assert (
+        focus["research_focus"]["current_question"]
+        == "Select a materially different CVRP solver-design mechanism."
+    )
+
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "launch_research_focus" in prompt_text
+    assert "route-merge absorption" in prompt_text
+    assert "bounded_local_search_variant" in prompt_text
+    assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
+    assert "DecisionFeatures" in prompt_text
 
 
 def test_cvrp_solver_design_hypothesis_keeps_active_file_guidance() -> None:
