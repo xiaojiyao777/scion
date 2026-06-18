@@ -146,7 +146,7 @@ Infrastructure:
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` launch-readiness preflight reaches the proxy and reports
-  `authenticated=false`, `active=0`, `expired=0`, `refreshing=1`; the real
+  `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`; the real
   chat completion returns HTTP `401` with `classification=not_authenticated`,
   and readiness includes `operator_action.login_url`. The current `4668e4c`
   prepared roots pass static readiness and remain unstarted.

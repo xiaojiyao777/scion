@@ -341,7 +341,7 @@ Current checkpoint:
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
   latest WSL launch-readiness preflight reaches the proxy and reports
-  `authenticated=false`, `active=0`, `expired=0`, `refreshing=1`, while the
+  `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`, while the
   real chat completion returns HTTP `401` with
   `classification=not_authenticated`.
   Readiness now includes `operator_action.login_url`. Use the repaired launcher

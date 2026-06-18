@@ -83,7 +83,7 @@ Completion preflight still fails for infrastructure/auth only:
 - classification: `not_authenticated`
 - code: `invalid_api_key`
 - `authenticated=false`
-- pool: `active=0`, `expired=0`, `refreshing=1`
+- pool: `active=0`, `expired=1`, `refreshing=0`
 - readiness includes `operator_action.login_url`
 
 Do not start either root until
