@@ -288,17 +288,18 @@ Current checkpoint:
   prepare/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, prepare-time delegated handoff brief/inventory,
   postrun analysis brief, and artifact/count inventory with report-only Phase 4
-  evidence coverage, prepared contract checks, and prepared-only lifecycle
-  guards plus preflight-failed launch-root guards that prevent copied resume
-  artifacts from being treated as current-run postrun evidence. For historical
-  roots or schema drift, rebuild the
-  report-only acceptance bundle with `scion/tools/rebuild_postrun_acceptance.py`
-  before delegating postrun analysis; current launcher postrun paths call this
-  rebuild tool directly. Before launch, require
+  evidence coverage, prepared contract checks, launch-readiness handoff
+  snapshots, and prepared-only lifecycle guards plus preflight-failed
+  launch-root guards that prevent copied resume artifacts from being treated as
+  current-run postrun evidence. For historical roots or schema drift, rebuild
+  the report-only acceptance bundle with
+  `scion/tools/rebuild_postrun_acceptance.py` before delegating postrun
+  analysis; current launcher postrun paths call this rebuild tool directly.
+  Before launch, require
   `scion/tools/check_launch_readiness.py <prepared-root> --completion-preflight`
   to report `launch_ready=true`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-preflightguard2-1r-gpt55-20260618T134635Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-readinesshandoff-1r-gpt55-20260618T140547Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -309,10 +310,10 @@ Current checkpoint:
   brief/inventory at prepare time, and writes the standard postrun acceptance
   report bundle by default after Scion exits, including delegated analysis
   brief and artifact/count inventory with report-only Phase 4 evidence coverage
-  flags, prepared contract checks, prepared-only lifecycle guards, and
-  preflight-failed launch-root guards.
+  flags, prepared contract checks, launch-readiness handoff snapshots,
+  prepared-only lifecycle guards, and preflight-failed launch-root guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-preflightguard2-6r-gpt55-20260618T134648Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-readinesshandoff-6r-gpt55-20260618T140602Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

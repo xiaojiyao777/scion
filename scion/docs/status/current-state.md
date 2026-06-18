@@ -44,12 +44,13 @@ Framework:
 - CVRP and warehouse launch helpers now support prepared follow-up roots with
   top-level `prepared` status, completion preflight, secret-safe API-key env
   wiring, runtime-source guards, campaign copy/resume, secret-free prepared-run
-  manifests, prepare-time delegated handoff briefs/inventories, and default
-  postrun report generation. The generated briefs carry the prepared manifest's
-  analysis intent, acceptance focus, and resume source; inventory/contract
-  checks remain report-only and outside `DecisionFeatures`. Prepared-only roots
-  now carry explicit launcher lifecycle/evidence-scope metadata, so copied
-  resume snapshots are marked `prepared_only/not_started` with zero current-run
+  manifests, prepare-time delegated handoff briefs/inventories,
+  launch-readiness snapshots, and default postrun report generation. The
+  generated briefs carry the prepared manifest's analysis intent, acceptance
+  focus, and resume source; inventory/contract/readiness checks remain
+  report-only and outside `DecisionFeatures`. Prepared-only roots now carry
+  explicit launcher lifecycle/evidence-scope metadata, so copied resume
+  snapshots are marked `prepared_only/not_started` with zero current-run
   effective rounds instead of masquerading as completed postrun evidence.
 - If a prepared root is started while completion preflight fails, launcher
   reports now mark the root `invalid_infra_only` with zero current-run evidence
@@ -74,7 +75,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-preflightguard2-6r-gpt55-20260618T134648Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-readinesshandoff-6r-gpt55-20260618T140602Z-claw`.
 
 CVRP/VRP:
 
@@ -92,7 +93,7 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-preflightguard2-1r-gpt55-20260618T134635Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-readinesshandoff-1r-gpt55-20260618T140547Z-claw`.
 
 Infrastructure:
 
