@@ -159,12 +159,19 @@ def build_readiness(
             required=False,
         )
 
-    ready = all(
+    static_ready = all(
         item["status"] == "ok"
-        for item in checks.values()
+        for name, item in checks.items()
         if item.get("required") is True
+        and name != "completion_preflight"
     )
-    launch_ready = bool(ready and completion_preflight)
+    completion_ready = (
+        checks["completion_preflight"]["status"] == "ok"
+        if completion_preflight
+        else True
+    )
+    ready = bool(static_ready and completion_ready)
+    launch_ready = bool(static_ready and completion_preflight and completion_ready)
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -174,7 +181,7 @@ def build_readiness(
         "scheduler_state_mutated": False,
         "promotion_state_mutated": False,
         "run_root": str(root),
-        "static_ready": ready,
+        "static_ready": static_ready,
         "launch_ready": launch_ready,
         "ready": ready,
         "completion_preflight_required": completion_preflight,

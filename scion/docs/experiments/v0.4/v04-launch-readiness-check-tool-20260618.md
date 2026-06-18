@@ -48,7 +48,7 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Result: `35 passed`.
+Result: `36 passed`.
 
 Compile check:
 

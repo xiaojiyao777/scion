@@ -69,6 +69,29 @@ def test_launch_readiness_rejects_preflight_failed_root(tmp_path: Path) -> None:
     assert report["checks"]["postrun_acceptance_not_present"]["status"] == "failed"
 
 
+def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    def fail_preflight(**_: object) -> tuple[str, object]:
+        return "failed", {"chat": {"classification": "not_authenticated"}}
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        fail_preflight,
+    )
+
+    report = readiness_tool.build_readiness(run_root, completion_preflight=True)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is True
+    assert report["launch_ready"] is False
+    assert report["checks"]["completion_preflight"]["status"] == "failed"
+
+
 def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
     run_root = _write_prepared_root(tmp_path)
     (run_root / "exit.txt").write_text("WRAPPER_EXIT_STATUS:64\n", encoding="utf-8")
