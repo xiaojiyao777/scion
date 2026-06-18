@@ -39,6 +39,9 @@ The launcher prepares a run root with:
   wrapper behavior. Runtime-path dirty changes or runtime-path commit drift
   fail before campaign startup; later docs-only status commits are allowed and
   logged.
+- pre-campaign wrapper failures for missing API-key environment variables and
+  missing warehouse data roots write valid `run_status.json` without relying on
+  the configured campaign Python executable.
 
 The default mode is prepare-only. Passing `--launch` starts `run.sh` with
 `nohup setsid`.
@@ -79,14 +82,15 @@ git diff --check
 
 Result:
 
-- `6 passed`
+- `8 passed`
 - `py_compile` passed
 - `git diff --check` passed
 
 The focused tests verify help output, prepare-only run-root generation,
 warehouse config rewriting, secret-safe `--api-key-env`, completion preflight
 wiring, resume-campaign copying, postrun report wiring, runtime-path git guard
-wiring, wrapper checks, and generated shell syntax.
+wiring, valid pre-campaign failure status JSON, wrapper checks, and generated
+shell syntax.
 
 Additional local real-artifact smoke:
 

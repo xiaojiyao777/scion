@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import stat
 import subprocess
 import sys
@@ -222,6 +223,107 @@ def test_warehouse_agentic_launcher_api_key_env_avoids_secret_file(
     assert "SCION_API_KEY_ENV=SCION_API_KEY" in launch_env
     assert "COMPLETION_PREFLIGHT=1" in launch_env
     assert "SCION_API_KEY=<from-env:SCION_API_KEY>" in command_txt
+
+
+def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(
+    tmp_path: Path,
+) -> None:
+    missing_python = tmp_path / "missing-python"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-warehouse-missing-key-env",
+            "--experiments-root",
+            str(tmp_path / "runs"),
+            "--warehouse-data-root",
+            str(tmp_path / "data"),
+            "--api-key-env",
+            "SCION_MISSING_TEST_KEY",
+            "--python",
+            str(missing_python),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    run_result = subprocess.run(
+        ["bash", str(run_root / "run.sh")],
+        text=True,
+        capture_output=True,
+    )
+
+    assert run_result.returncode == 64
+    assert not (run_root / "campaign" / "campaign_summary.json").exists()
+    assert "SCION_API_KEY_ENV_MISSING:SCION_MISSING_TEST_KEY" in (
+        run_root / "exit.txt"
+    ).read_text(encoding="utf-8")
+    status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
+    assert status["wrapper_exit_status"] == 64
+    assert status["api_key_env_missing"] == "SCION_MISSING_TEST_KEY"
+
+
+def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
+    tmp_path: Path,
+) -> None:
+    missing_python = tmp_path / "missing-python"
+    missing_data_root = tmp_path / "missing-data-root"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-warehouse-missing-data",
+            "--experiments-root",
+            str(tmp_path / "runs"),
+            "--warehouse-data-root",
+            str(missing_data_root),
+            "--python",
+            str(missing_python),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "GIT_RUNTIME_GUARD_PATHS="
+            "'scion/scion scion/problems/warehouse_delivery surrogate'",
+            "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
+        ),
+        encoding="utf-8",
+    )
+
+    run_result = subprocess.run(
+        ["bash", str(run_root / "run.sh")],
+        text=True,
+        capture_output=True,
+    )
+
+    assert run_result.returncode == 64
+    assert f"WAREHOUSE_DATA_ROOT_MISSING:{missing_data_root}" in (
+        run_root / "exit.txt"
+    ).read_text(encoding="utf-8")
+    status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
+    assert status["wrapper_exit_status"] == 64
+    assert status["warehouse_data_root_missing"] is True
 
 
 def test_warehouse_agentic_launcher_can_skip_postrun_reports(
