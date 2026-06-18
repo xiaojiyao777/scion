@@ -38,7 +38,9 @@ PYTHONPATH=scion pytest -q \
 
 Local result: `44 passed in 0.65s`.
 
+WSL result after fast-forwarding to the accepted runtime evidence commit:
+`44 passed in 0.33s`.
+
 ## Acceptance
 
-Accepted as Worker F residual-caveat closure once the same focused suite passes
-on the synchronized WSL checkout.
+Accepted as Worker F residual-caveat closure.
