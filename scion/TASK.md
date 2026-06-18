@@ -359,7 +359,9 @@ Current checkpoint:
   artifacts from being treated as current-run postrun evidence. Launchers now
   auto-fill deterministic report-only `control_pair_key` metadata when the
   operator omits it, preventing prepare-only roots from failing the prepared
-  contract because optional handoff metadata was blank. Inventory and
+  contract because optional handoff metadata was blank. CVRP prepared contracts
+  now also require the measurement/opportunity handoff diagnostics before
+  static readiness can pass. Inventory and
   analysis-brief top-level branch/event/hypothesis/LLM-trace fields are
   current-run scoped; copied campaign counts live under `resume_snapshot`. For
   historical roots or schema drift, rebuild the report-only acceptance bundle
@@ -371,13 +373,15 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
-  current `4668e4c` prepared roots were refreshed and pass static readiness.
+  current `317cacb` prepared roots were refreshed and pass static readiness.
   Report:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-4668e4c-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
   Current prepared handoff measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
+  Current prepared contract measurement-diagnostics repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-4668e4c-1r-gpt55-1r-gpt55-20260618T182001Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -391,7 +395,7 @@ Current checkpoint:
   flags, prepared contract checks, launch-readiness handoff snapshots,
   prepared-only lifecycle guards, and preflight-failed launch-root guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4668e4c-6r-gpt55-6r-gpt55-20260618T182001Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

@@ -81,6 +81,8 @@ Framework:
   focus, current problem-owned research-focus/default-avoid handoff, CVRP
   measurement/opportunity diagnostics, and resume source; inventory/contract/
   readiness checks remain report-only and outside `DecisionFeatures`.
+  For CVRP, the prepared contract now requires those measurement/opportunity
+  diagnostics before static launch readiness can pass.
   Prepared-only roots now carry explicit launcher
   lifecycle/evidence-scope metadata, so copied resume snapshots are marked
   `prepared_only/not_started` with zero current-run effective rounds instead of
@@ -116,7 +118,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4668e4c-6r-gpt55-6r-gpt55-20260618T182001Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
 
 CVRP/VRP:
 
@@ -139,7 +141,7 @@ CVRP/VRP:
   opportunity classes. These diagnostics are proposal-only and remain excluded
   from `DecisionFeatures`, Protocol gates, lifecycle, scheduler, and promotion.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-4668e4c-1r-gpt55-1r-gpt55-20260618T182001Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`.
 
 Infrastructure:
 
@@ -148,7 +150,7 @@ Infrastructure:
   `gpt-5.5` launch-readiness preflight reaches the proxy and reports
   `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`; the real
   chat completion returns HTTP `401` with `classification=not_authenticated`,
-  and readiness includes `operator_action.login_url`. The current `4668e4c`
+  and readiness includes `operator_action.login_url`. The current `317cacb`
   prepared roots pass static readiness and remain unstarted.
   Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty output after re-login/token refresh.
@@ -186,7 +188,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/`. Current report-only observability slice:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   Current prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-4668e4c-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
   Current launcher-default repair:
   `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
   Current Phase 4 continuity coverage repair:
@@ -211,6 +213,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
   Current CVRP prepared-handoff diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
+  Current CVRP prepared-contract diagnostics repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
