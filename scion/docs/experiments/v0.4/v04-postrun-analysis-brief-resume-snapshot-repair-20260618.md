@@ -67,6 +67,38 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 Result: `12 passed`.
 
+Real WSL preflight-failed smoke rebuild:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+  scion/tools/rebuild_postrun_acceptance.py \
+  /home/xjy-ubuntu/research/scion-experiments/v04-preflight-artifact-smoke-1r-gpt55-20260618T145653Z-claw \
+  --report-stem cvrp_on_full \
+  --observed-control-arm on \
+  --control-pair-key cvrp.preflight-artifact-smoke:rep01 \
+  --format json
+```
+
+Result:
+
+- rebuild `complete=false`,
+- current-run report families skipped with
+  `pre_campaign_completion_preflight_failed`,
+- analysis brief and inventory families written successfully.
+
+Generated brief/inventory spot check:
+
+- `brief.validity.run_validity_status=invalid_infra_only`,
+- `brief.counters.effective_rounds_completed=0`,
+- `brief.branches.count=0`,
+- `brief.llm_traces.trace_count=0`,
+- `brief.resume_snapshot.present=true`,
+- `brief.resume_snapshot.current_run_evidence=false`,
+- copied snapshot counts retained under `resume_snapshot`,
+- Markdown contains `## Resume Snapshot` and says copied artifacts are not
+  current-run evidence.
+
 The new analysis-brief test covers a pre-campaign-preflight-failed launch root
 with copied campaign DB rows and copied LLM traces. It asserts that current-run
 branch and LLM-trace counts remain zero while the copied counts are present only
