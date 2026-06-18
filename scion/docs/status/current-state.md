@@ -35,8 +35,9 @@ Framework:
   explicit Phase 4 evidence-coverage requirement, and postrun analysis briefs
   summarize the current-run continuity metrics for delegated review. Postrun
   analysis briefs also summarize current-run measurement effect-vs-MDE,
-  prompt context/source visibility, and prompt signal density without exposing
-  raw prompts, responses, or patches.
+  prompt context/source visibility, prompt signal density, and runtime
+  feedback/drain behavior without exposing raw prompts, responses, patches, or
+  mutating runtime semantics.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -188,6 +189,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-prompt-context-visibility-brief-repair-20260618.md`.
   Current measurement effect brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-measurement-effect-brief-repair-20260618.md`.
+  Current runtime feedback brief repair:
+  `scion/docs/experiments/v0.4/v04-postrun-runtime-feedback-brief-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

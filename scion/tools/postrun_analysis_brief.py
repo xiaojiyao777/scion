@@ -32,6 +32,8 @@ REQUIRED_QUESTIONS = (
     "Did sibling and historical lessons transfer without entering DecisionFeatures?",
     "Did research_continuity show same-mechanism follow-up, "
     "branch-lesson satisfaction or semantic gaps, and weak-positive transfer?",
+    "Did runtime_feedback_summary show fresh replay drain, stage-transition drain, "
+    "and budget diagnostics consistent with the declared runtime model?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
@@ -69,6 +71,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
         "measurement_effect_summary": _measurement_effect_summary(
+            run_root_path,
+            inventory,
+        ),
+        "runtime_feedback_summary": _runtime_feedback_summary(
             run_root_path,
             inventory,
         ),
@@ -331,6 +337,77 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     above=_display(effect.get("rows_at_or_above_mde")),
                     below=_display(effect.get("rows_with_ci_high_below_mde")),
                     ratio=_display(effect.get("max_effect_to_mde_ratio")),
+                )
+            )
+
+    runtime_feedback = brief.get("runtime_feedback_summary") or {}
+    runtime_aggregate = _mapping_or_empty(runtime_feedback.get("aggregate"))
+    fresh_runtime = _mapping_or_empty(
+        runtime_aggregate.get("fresh_runtime_replay_drain")
+    )
+    stage_drain = _mapping_or_empty(runtime_aggregate.get("stage_transition_drain"))
+    budget = _mapping_or_empty(runtime_aggregate.get("runtime_budget_diagnostics"))
+    lines.extend(
+        [
+            "",
+            "## Runtime Feedback Summary",
+            "- Source: current-run research-efficiency reports plus campaign "
+            "summary/status runtime budget diagnostics.",
+            f"- Available: `{_display(runtime_feedback.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(runtime_feedback.get('current_run_evidence'))}`",
+            "- Runtime reports / budget diagnostic sources: "
+            f"{_display(runtime_feedback.get('runtime_report_count'))} / "
+            f"{_display(runtime_feedback.get('budget_diagnostic_source_count'))}",
+            "- Fresh replay drain attempts/executed/skipped/blocked/protocol rows: "
+            f"{_display(fresh_runtime.get('attempts'))} / "
+            f"{_display(fresh_runtime.get('executed'))} / "
+            f"{_display(fresh_runtime.get('skipped'))} / "
+            f"{_display(fresh_runtime.get('blocked'))} / "
+            f"{_display(fresh_runtime.get('protocol_results'))}",
+            "- Fresh replay drain statuses: "
+            f"{_mapping_text(fresh_runtime.get('status_counts'))}",
+            "- Fresh replay drain stop reasons: "
+            f"{_mapping_text(fresh_runtime.get('stopped_reason_counts'))}",
+            "- Stage-transition drain attempts/executed/skipped: "
+            f"{_display(stage_drain.get('attempts'))} / "
+            f"{_display(stage_drain.get('executed'))} / "
+            f"{_display(stage_drain.get('skipped'))}",
+            "- Runtime budget diagnostics: "
+            f"{_display(budget.get('diagnostic_count'))}",
+            "- Runtime budget diagnostic codes: "
+            f"{_mapping_text(budget.get('code_counts'))}",
+            "- Runtime budget diagnostic severities: "
+            f"{_mapping_text(budget.get('severity_counts'))}",
+            "- Runtime budget diagnostic stages: "
+            f"{_mapping_text(budget.get('stage_counts'))}",
+        ]
+    )
+    runtime_entries = runtime_feedback.get("entries")
+    if isinstance(runtime_entries, list) and runtime_entries:
+        lines.extend(
+            [
+                "| Report | Fresh drain status | Attempts | Executed | Skipped | "
+                "Blocked | Protocol rows | Stage drain status |",
+                "|---|---|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for entry in runtime_entries:
+            if not isinstance(entry, dict):
+                continue
+            fresh = _mapping_or_empty(entry.get("fresh_runtime_replay_drain"))
+            stage = _mapping_or_empty(entry.get("stage_transition_drain"))
+            lines.append(
+                "| {report} | {status} | {attempts} | {executed} | {skipped} | "
+                "{blocked} | {protocol_rows} | {stage_status} |".format(
+                    report=_display(entry.get("report")),
+                    status=_display(fresh.get("status")),
+                    attempts=_display(fresh.get("attempts")),
+                    executed=_display(fresh.get("executed")),
+                    skipped=_display(fresh.get("skipped")),
+                    blocked=_display(fresh.get("blocked")),
+                    protocol_rows=_display(fresh.get("protocol_results")),
+                    stage_status=_display(stage.get("status")),
                 )
             )
 
@@ -705,6 +782,263 @@ def _merge_measurement_effect_aggregate(
     current = _float_or_none(aggregate.get("max_effect_to_mde_ratio"))
     if ratio is not None and (current is None or ratio > current):
         aggregate["max_effect_to_mde_ratio"] = ratio
+
+
+def _runtime_feedback_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_runtime_feedback_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "report_count": 0,
+        "runtime_report_count": 0,
+        "budget_diagnostic_source_count": 0,
+        "aggregate": _empty_runtime_feedback_aggregate(),
+        "entries": [],
+        "runtime_budget_diagnostics": {
+            "source_count": 0,
+            "diagnostic_count": 0,
+            "code_counts": {},
+            "severity_counts": {},
+            "stage_counts": {},
+            "runtime_model_counts": {},
+            "top_diagnostics": [],
+        },
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _research_efficiency_report_paths(run_root, inventory)
+    entries: list[dict[str, Any]] = []
+    aggregate = _empty_runtime_feedback_aggregate()
+    for path in report_paths:
+        entry = _runtime_feedback_entry(path)
+        if not entry:
+            continue
+        entries.append(entry)
+        _merge_runtime_feedback_aggregate(aggregate, entry)
+
+    budget_diagnostics = _runtime_budget_diagnostics_summary(
+        run_root,
+        inventory,
+    )
+    aggregate["runtime_budget_diagnostics"] = budget_diagnostics
+    available = bool(entries) or _int_or_zero(
+        budget_diagnostics.get("diagnostic_count")
+    ) > 0
+    return {
+        **base,
+        "available": available,
+        "report_count": len(report_paths),
+        "runtime_report_count": len(entries),
+        "budget_diagnostic_source_count": budget_diagnostics["source_count"],
+        "aggregate": aggregate,
+        "entries": entries,
+        "runtime_budget_diagnostics": budget_diagnostics,
+    }
+
+
+def _empty_runtime_feedback_aggregate() -> dict[str, Any]:
+    return {
+        "fresh_runtime_replay_drain": {
+            "status_counts": {},
+            "stopped_reason_counts": {},
+            "attempts": 0,
+            "executed": 0,
+            "skipped": 0,
+            "blocked": 0,
+            "protocol_results": 0,
+            "counts_toward_max_rounds_true": 0,
+            "counts_toward_max_rounds_false": 0,
+            "reports_with_unresolved_closures": 0,
+        },
+        "stage_transition_drain": {
+            "status_counts": {},
+            "stopped_reason_counts": {},
+            "attempts": 0,
+            "executed": 0,
+            "skipped": 0,
+            "counts_toward_max_rounds_true": 0,
+            "counts_toward_max_rounds_false": 0,
+            "generates_new_hypothesis_true": 0,
+            "generates_new_hypothesis_false": 0,
+        },
+        "runtime_budget_diagnostics": {
+            "source_count": 0,
+            "diagnostic_count": 0,
+            "code_counts": {},
+            "severity_counts": {},
+            "stage_counts": {},
+            "runtime_model_counts": {},
+            "top_diagnostics": [],
+        },
+    }
+
+
+def _runtime_feedback_entry(path: Path) -> dict[str, Any]:
+    doc = _read_json_object(path)
+    fresh = _compact_fresh_runtime_replay_drain(
+        _mapping_or_empty(doc.get("fresh_runtime_replay_drain"))
+    )
+    stage = _compact_stage_transition_drain(
+        _mapping_or_empty(doc.get("stage_transition_drain"))
+    )
+    if not fresh and not stage:
+        return {}
+    return {
+        "report": path.name,
+        "path": str(path),
+        "fresh_runtime_replay_drain": fresh,
+        "stage_transition_drain": stage,
+    }
+
+
+def _compact_fresh_runtime_replay_drain(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "status": raw.get("status"),
+            "attempts": raw.get("attempts"),
+            "executed": raw.get("executed"),
+            "skipped": raw.get("skipped"),
+            "blocked": raw.get("blocked"),
+            "protocol_results": raw.get("protocol_results"),
+            "stopped_reason": raw.get("stopped_reason"),
+            "counts_toward_max_rounds": raw.get("counts_toward_max_rounds"),
+        }
+    )
+
+
+def _compact_stage_transition_drain(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "status": raw.get("status"),
+            "attempts": raw.get("attempts"),
+            "executed": raw.get("executed"),
+            "skipped": raw.get("skipped"),
+            "limit": raw.get("limit"),
+            "stopped_reason": raw.get("stopped_reason"),
+            "counts_toward_max_rounds": raw.get("counts_toward_max_rounds"),
+            "generates_new_hypothesis": raw.get("generates_new_hypothesis"),
+        }
+    )
+
+
+def _merge_runtime_feedback_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    fresh = _mapping_or_empty(entry.get("fresh_runtime_replay_drain"))
+    stage = _mapping_or_empty(entry.get("stage_transition_drain"))
+    if fresh:
+        target = aggregate["fresh_runtime_replay_drain"]
+        _increment_count(
+            target["status_counts"],
+            str(fresh.get("status") or "unknown"),
+        )
+        _increment_count(
+            target["stopped_reason_counts"],
+            str(fresh.get("stopped_reason") or "none"),
+        )
+        for key in (
+            "attempts",
+            "executed",
+            "skipped",
+            "blocked",
+            "protocol_results",
+        ):
+            target[key] = _int_or_zero(target.get(key)) + _int_or_zero(fresh.get(key))
+        if fresh.get("counts_toward_max_rounds") is True:
+            target["counts_toward_max_rounds_true"] += 1
+        elif fresh.get("counts_toward_max_rounds") is False:
+            target["counts_toward_max_rounds_false"] += 1
+    if stage:
+        target = aggregate["stage_transition_drain"]
+        _increment_count(
+            target["status_counts"],
+            str(stage.get("status") or "unknown"),
+        )
+        _increment_count(
+            target["stopped_reason_counts"],
+            str(stage.get("stopped_reason") or "none"),
+        )
+        for key in ("attempts", "executed", "skipped"):
+            target[key] = _int_or_zero(target.get(key)) + _int_or_zero(stage.get(key))
+        if stage.get("counts_toward_max_rounds") is True:
+            target["counts_toward_max_rounds_true"] += 1
+        elif stage.get("counts_toward_max_rounds") is False:
+            target["counts_toward_max_rounds_false"] += 1
+        if stage.get("generates_new_hypothesis") is True:
+            target["generates_new_hypothesis_true"] += 1
+        elif stage.get("generates_new_hypothesis") is False:
+            target["generates_new_hypothesis_false"] += 1
+
+
+def _runtime_budget_diagnostics_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    campaign_dir = Path(str(inventory.get("campaign_dir") or run_root / "campaign"))
+    source_docs = (
+        _read_json_object(campaign_dir / "campaign_summary.json"),
+        _read_json_object(campaign_dir / "status.json"),
+    )
+    summary: dict[str, Any] = {
+        "source_count": 0,
+        "diagnostic_count": 0,
+        "code_counts": {},
+        "severity_counts": {},
+        "stage_counts": {},
+        "runtime_model_counts": {},
+        "top_diagnostics": [],
+    }
+    for doc in source_docs:
+        diagnostics = doc.get("runtime_budget_diagnostics")
+        if not isinstance(diagnostics, list):
+            continue
+        summary["source_count"] += 1
+        for raw in diagnostics:
+            if not isinstance(raw, Mapping):
+                continue
+            summary["diagnostic_count"] += 1
+            _increment_count(summary["code_counts"], str(raw.get("code") or "unknown"))
+            _increment_count(
+                summary["severity_counts"],
+                str(raw.get("severity") or "unknown"),
+            )
+            _increment_count(
+                summary["stage_counts"],
+                str(raw.get("stage") or "unknown"),
+            )
+            runtime_model = raw.get("runtime_model")
+            if runtime_model:
+                _increment_count(summary["runtime_model_counts"], str(runtime_model))
+            if len(summary["top_diagnostics"]) < 3:
+                summary["top_diagnostics"].append(
+                    _compact_runtime_budget_diagnostic(raw)
+                )
+    return summary
+
+
+def _compact_runtime_budget_diagnostic(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "branch_id": raw.get("branch_id"),
+            "stage": raw.get("stage"),
+            "code": raw.get("code"),
+            "severity": raw.get("severity"),
+            "runtime_model": raw.get("runtime_model"),
+            "saturation_ratio": raw.get("saturation_ratio"),
+            "threshold_ratio": raw.get("threshold_ratio"),
+            "total_pairs": raw.get("total_pairs"),
+        }
+    )
 
 
 def _prompt_context_visibility_summary(

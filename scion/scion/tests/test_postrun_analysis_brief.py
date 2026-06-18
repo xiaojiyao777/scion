@@ -47,6 +47,17 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         {
             "formal_screened_candidates": 1,
             "protocol_evaluated_candidates": 1,
+            "runtime_budget_diagnostics": [
+                {
+                    "branch_id": "branch-1",
+                    "stage": "screening",
+                    "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+                    "severity": "info",
+                    "saturation_ratio": 0.99,
+                    "threshold_ratio": 0.9,
+                    "total_pairs": 32,
+                }
+            ],
         },
     )
     _write_json(
@@ -143,7 +154,26 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     }
                 ],
             },
-            "fresh_runtime_replay_drain": {"attempts": 1},
+            "fresh_runtime_replay_drain": {
+                "status": "not_selected_no_pending",
+                "attempts": 1,
+                "executed": 0,
+                "skipped": 1,
+                "blocked": 0,
+                "protocol_results": 0,
+                "stopped_reason": "no_fresh_runtime_replay_pending",
+                "counts_toward_max_rounds": False,
+            },
+            "stage_transition_drain": {
+                "status": "not_started",
+                "attempts": 0,
+                "executed": 0,
+                "skipped": 0,
+                "limit": 0,
+                "stopped_reason": "",
+                "counts_toward_max_rounds": False,
+                "generates_new_hypothesis": False,
+            },
             "research_continuity": {
                 "same_mechanism_followup": {
                     "selected_same_branch_refinement_count": 1,
@@ -306,6 +336,59 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "reason_codes": ["SCREENING_SIGNAL"],
         }
     ]
+    runtime_summary = brief["runtime_feedback_summary"]
+    assert runtime_summary["schema_version"] == (
+        "scion.postrun_runtime_feedback_summary.v1"
+    )
+    assert runtime_summary["report_only"] is True
+    assert runtime_summary["decision_features_excluded"] is True
+    assert runtime_summary["available"] is True
+    assert runtime_summary["current_run_evidence"] is True
+    assert runtime_summary["runtime_report_count"] == 1
+    assert runtime_summary["budget_diagnostic_source_count"] == 1
+    runtime_aggregate = runtime_summary["aggregate"]
+    assert runtime_aggregate["fresh_runtime_replay_drain"] == {
+        "status_counts": {"not_selected_no_pending": 1},
+        "stopped_reason_counts": {"no_fresh_runtime_replay_pending": 1},
+        "attempts": 1,
+        "executed": 0,
+        "skipped": 1,
+        "blocked": 0,
+        "protocol_results": 0,
+        "counts_toward_max_rounds_true": 0,
+        "counts_toward_max_rounds_false": 1,
+        "reports_with_unresolved_closures": 0,
+    }
+    assert runtime_aggregate["stage_transition_drain"] == {
+        "status_counts": {"not_started": 1},
+        "stopped_reason_counts": {"none": 1},
+        "attempts": 0,
+        "executed": 0,
+        "skipped": 0,
+        "counts_toward_max_rounds_true": 0,
+        "counts_toward_max_rounds_false": 1,
+        "generates_new_hypothesis_true": 0,
+        "generates_new_hypothesis_false": 1,
+    }
+    assert runtime_aggregate["runtime_budget_diagnostics"] == {
+        "source_count": 1,
+        "diagnostic_count": 1,
+        "code_counts": {"SCREENING_RUNTIME_BUDGET_SATURATION": 1},
+        "severity_counts": {"info": 1},
+        "stage_counts": {"screening": 1},
+        "runtime_model_counts": {},
+        "top_diagnostics": [
+            {
+                "branch_id": "branch-1",
+                "stage": "screening",
+                "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+                "severity": "info",
+                "saturation_ratio": 0.99,
+                "threshold_ratio": 0.9,
+                "total_pairs": 32,
+            }
+        ],
+    }
     context_summary = brief["prompt_context_visibility_summary"]
     assert context_summary["schema_version"] == (
         "scion.postrun_prompt_context_visibility_summary.v1"
@@ -395,6 +478,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         in markdown
     )
     assert "## Research Continuity Summary" in markdown
+    assert "## Runtime Feedback Summary" in markdown
+    assert "- Runtime budget diagnostics: 1" in markdown
+    assert (
+        "| normal.research_efficiency.v1.json | not_selected_no_pending | "
+        "1 | 0 | 1 | 0 | 0 | not_started |"
+        in markdown
+    )
     assert "## Prompt Context Visibility Summary" in markdown
     assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
     assert (
@@ -409,6 +499,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     assert any(
         "research_continuity" in question
+        for question in brief["required_questions"]
+    )
+    assert any(
+        "runtime_feedback_summary" in question
         for question in brief["required_questions"]
     )
 
@@ -473,6 +567,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
     assert brief["measurement_effect_summary"]["available"] is False
+    assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
+    assert brief["runtime_feedback_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
@@ -580,6 +676,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["resume_snapshot"]["present"] is True
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
     assert brief["measurement_effect_summary"]["available"] is False
+    assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
+    assert brief["runtime_feedback_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
