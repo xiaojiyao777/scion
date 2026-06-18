@@ -59,6 +59,10 @@ POSTRUN_ACCEPTANCE_FAMILIES = (
     "analysis_brief",
     "inventory",
 )
+PREPARED_HANDOFF_FAMILIES = (
+    "analysis_brief",
+    "inventory",
+)
 
 
 COMPLETION_PREFLIGHT_SNIPPET = r'''
@@ -579,6 +583,8 @@ def _write_prepared_run_manifest(
             "postrun_reports": bool(int(env["POSTRUN_REPORTS"])),
             "postrun_report_dir": str(run_root / "postrun_acceptance"),
             "postrun_acceptance_families": list(POSTRUN_ACCEPTANCE_FAMILIES),
+            "prepared_handoff_dir": str(run_root / "prepared_handoff"),
+            "prepared_handoff_families": list(PREPARED_HANDOFF_FAMILIES),
         },
         "acceptance_focus": [
             "Check that existing warehouse promotion behavior does not regress.",
@@ -651,6 +657,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
             f"- Report dir: `{reports['postrun_report_dir']}`",
             f"- Families: `{', '.join(reports['postrun_acceptance_families'])}`",
             f"- Control pair key: `{reports['control_pair_key']}`",
+            f"- Prepared handoff dir: `{reports['prepared_handoff_dir']}`",
+            f"- Prepared handoff families: `{', '.join(reports['prepared_handoff_families'])}`",
             "",
             "## Acceptance Focus",
         ]
@@ -658,6 +666,52 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
     for item in manifest["acceptance_focus"]:
         lines.append(f"- {item}")
     return "\n".join(lines) + "\n"
+
+
+def _write_prepared_handoff(run_root: Path, env: dict[str, object]) -> None:
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+
+    from postrun_analysis_brief import (  # noqa: PLC0415
+        build_brief,
+        render_markdown as render_brief_markdown,
+    )
+    from postrun_artifact_inventory import (  # noqa: PLC0415
+        build_inventory,
+        render_markdown as render_inventory_markdown,
+    )
+
+    report_stem = (
+        "warehouse_"
+        f"{str(env['MEASUREMENT_GOVERNANCE']).replace('-', '_')}_"
+        f"{str(env['PROPOSAL_CONTEXT_ABLATION']).replace('-', '_')}"
+    )
+    handoff_dir = run_root / "prepared_handoff"
+    brief_dir = handoff_dir / "analysis_brief"
+    inventory_dir = handoff_dir / "inventory"
+    brief_dir.mkdir(parents=True, exist_ok=True)
+    inventory_dir.mkdir(parents=True, exist_ok=True)
+
+    brief = build_brief(run_root)
+    (brief_dir / f"{report_stem}.prepared_analysis_brief.v1.json").write_text(
+        json.dumps(brief, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (brief_dir / f"{report_stem}.prepared_analysis_brief.md").write_text(
+        render_brief_markdown(brief),
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(run_root)
+    (inventory_dir / f"{report_stem}.prepared_artifact_inventory.v1.json").write_text(
+        json.dumps(inventory, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (inventory_dir / f"{report_stem}.prepared_artifact_inventory.md").write_text(
+        render_inventory_markdown(inventory),
+        encoding="utf-8",
+    )
 
 
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
@@ -763,6 +817,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"POSTRUN_REPORTS={env['POSTRUN_REPORTS']}\n"
             f"POSTRUN_REPORT_DIR={env['RUN_ROOT'] / 'postrun_acceptance'}\n\n"
             f"PREPARED_RUN_MANIFEST={env['RUN_ROOT'] / 'prepared_run_manifest.v1.json'}\n\n"
+            f"PREPARED_HANDOFF_DIR={env['RUN_ROOT'] / 'prepared_handoff'}\n\n"
             "config:\n"
             f"PROBLEM={env['PROBLEM']}\n"
             f"PROBLEM_V1={env['PROBLEM_V1']}\n"
@@ -778,9 +833,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         encoding="utf-8",
     )
     _write_prepared_run_manifest(run_root, env, command=command)
+    _write_prepare_status(run_root, env)
+    _write_prepared_handoff(run_root, env)
 
-    if not args.launch:
-        _write_prepare_status(run_root, env)
     pid = _launch(run_root) if args.launch else None
     return run_root, pid
 

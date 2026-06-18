@@ -19,6 +19,7 @@ LAUNCHER_ARTIFACTS = (
     "command.txt",
     "prepared_run_manifest.v1.json",
     "prepared_run_manifest.md",
+    "prepared_handoff",
     "run.log",
     "exit.txt",
 )
@@ -122,6 +123,11 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
             "index_session_count": llm_traces["index_session_count"],
         },
         "launcher": _launcher_inventory(run_root, run_status),
+        "database": {
+            "path": str(db_path),
+            "present": db_path.exists(),
+            "read_error": db_inventory.get("read_error"),
+        },
         "postrun_reports": postrun_reports,
         "phase4_evidence_coverage": phase4_coverage,
         "branches": branches,
@@ -1151,14 +1157,21 @@ def _session_index_entries(index_doc: Any) -> list[Any]:
 
 
 def _read_db_inventory(db_path: Path) -> dict[str, Any]:
-    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
-        conn.row_factory = sqlite3.Row
-        tables = _tables(conn)
-        branches = _branches(conn) if "branches" in tables else []
-        events = _events(conn) if "experiment_events" in tables else _empty_events()
-        hypotheses = (
-            _hypotheses(conn) if "hypotheses" in tables else _empty_hypotheses()
-        )
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            tables = _tables(conn)
+            branches = _branches(conn) if "branches" in tables else []
+            events = (
+                _events(conn) if "experiment_events" in tables else _empty_events()
+            )
+            hypotheses = (
+                _hypotheses(conn) if "hypotheses" in tables else _empty_hypotheses()
+            )
+    except sqlite3.DatabaseError as exc:
+        empty = _empty_db_inventory()
+        empty["read_error"] = f"{type(exc).__name__}: {exc}"
+        return empty
     return {"branches": branches, "events": events, "hypotheses": hypotheses}
 
 
@@ -1167,6 +1180,7 @@ def _empty_db_inventory() -> dict[str, Any]:
         "branches": [],
         "events": _empty_events(),
         "hypotheses": _empty_hypotheses(),
+        "read_error": None,
     }
 
 

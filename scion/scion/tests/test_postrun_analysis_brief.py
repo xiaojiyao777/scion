@@ -141,6 +141,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is False
     assert checklist["prepared_run_manifest_json"] is False
+    assert checklist["prepared_handoff"] is False
     assert brief["prepared_run_contract"]["schema_version"] == (
         "scion.prepared_run_contract_inventory.v1"
     )

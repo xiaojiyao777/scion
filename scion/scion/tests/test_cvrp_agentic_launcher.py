@@ -112,6 +112,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "analysis_brief",
         "inventory",
     ]
+    assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
+        run_root / "prepared_handoff"
+    )
+    assert prepared_manifest["report_metadata"]["prepared_handoff_families"] == [
+        "analysis_brief",
+        "inventory",
+    ]
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "CVRP post-pivot" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
@@ -183,6 +190,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
         in command_txt
     )
+    assert f"PREPARED_HANDOFF_DIR={run_root / 'prepared_handoff'}" in command_txt
     assert "RESUME_FROM_CAMPAIGN=" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
@@ -190,6 +198,53 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert '--measurement-governance "$MEASUREMENT_GOVERNANCE"' in run_sh_text
     assert '--proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION"' in run_sh_text
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
+
+    prepared_handoff = run_root / "prepared_handoff"
+    brief_json = (
+        prepared_handoff
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.v1.json"
+    )
+    brief_md = (
+        prepared_handoff
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.md"
+    )
+    inventory_json = (
+        prepared_handoff
+        / "inventory"
+        / "cvrp_on_full.prepared_artifact_inventory.v1.json"
+    )
+    inventory_md = (
+        prepared_handoff
+        / "inventory"
+        / "cvrp_on_full.prepared_artifact_inventory.md"
+    )
+    assert brief_json.is_file()
+    assert brief_md.is_file()
+    assert inventory_json.is_file()
+    assert inventory_md.is_file()
+    prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
+    prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
+    assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
+    assert prepared_brief["report_only"] is True
+    assert prepared_brief["prepared_run_contract"]["problem_family"] == "cvrp"
+    assert "CVRP post-pivot" in prepared_brief["prepared_run_contract"][
+        "analysis_intent"
+    ]
+    assert any(
+        "Decision input" in item
+        for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
+    )
+    assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
+    assert (
+        "## Prepared Run Contract"
+        in brief_md.read_text(encoding="utf-8")
+    )
+    assert (
+        "## Launcher Artifacts"
+        in inventory_md.read_text(encoding="utf-8")
+    )
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 

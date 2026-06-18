@@ -109,6 +109,13 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "analysis_brief",
         "inventory",
     ]
+    assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
+        run_root / "prepared_handoff"
+    )
+    assert prepared_manifest["report_metadata"]["prepared_handoff_families"] == [
+        "analysis_brief",
+        "inventory",
+    ]
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "Warehouse champion-v2" in prepared_manifest_md
     assert stat.S_IMODE(launch_env_path.stat().st_mode) == 0o600
@@ -192,6 +199,51 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
         in command_txt
     )
+    assert f"PREPARED_HANDOFF_DIR={run_root / 'prepared_handoff'}" in command_txt
+
+    prepared_handoff = run_root / "prepared_handoff"
+    brief_json = (
+        prepared_handoff
+        / "analysis_brief"
+        / "warehouse_on_full.prepared_analysis_brief.v1.json"
+    )
+    brief_md = (
+        prepared_handoff
+        / "analysis_brief"
+        / "warehouse_on_full.prepared_analysis_brief.md"
+    )
+    inventory_json = (
+        prepared_handoff
+        / "inventory"
+        / "warehouse_on_full.prepared_artifact_inventory.v1.json"
+    )
+    inventory_md = (
+        prepared_handoff
+        / "inventory"
+        / "warehouse_on_full.prepared_artifact_inventory.md"
+    )
+    assert brief_json.is_file()
+    assert brief_md.is_file()
+    assert inventory_json.is_file()
+    assert inventory_md.is_file()
+    prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
+    prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
+    assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
+    assert prepared_brief["report_only"] is True
+    assert prepared_brief["prepared_run_contract"][
+        "problem_family"
+    ] == "warehouse_delivery"
+    assert "Warehouse champion-v2" in prepared_brief["prepared_run_contract"][
+        "analysis_intent"
+    ]
+    assert any(
+        "promotion behavior" in item
+        for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
+    )
+    assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
+    assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
+    assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")
+
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 
 
