@@ -53,6 +53,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "handoff_doc": HANDOFF_DOC,
         "architecture_doc": ARCHITECTURE_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
+        "lifecycle": inventory["lifecycle"],
         "validity": inventory["validity"],
         "counters": inventory["counters"],
         "llm_traces": inventory["llm_traces"],
@@ -72,8 +73,11 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
 def render_markdown(brief: dict[str, Any]) -> str:
     validity = brief["validity"]
     counters = brief["counters"]
+    lifecycle = brief.get("lifecycle") or {}
+    prepared_only = lifecycle.get("prepared_only") is True
+    title = "Prepared Analysis Brief" if prepared_only else "Post-Run Analysis Brief"
     lines = [
-        f"# Post-Run Analysis Brief: {Path(brief['run_root']).name}",
+        f"# {title}: {Path(brief['run_root']).name}",
         "",
         "- Schema: `scion.postrun_analysis_brief.v1`",
         "- Scope: report-only delegated analysis input.",
@@ -86,6 +90,12 @@ def render_markdown(brief: dict[str, Any]) -> str:
         "## Inputs",
         f"- RUN_ROOT: `{brief['run_root']}`",
         f"- CAMPAIGN_DIR: `{brief['campaign_dir']}`",
+        "",
+        "## Lifecycle",
+        f"- Prepared only: `{_display(lifecycle.get('prepared_only'))}`",
+        f"- Evidence scope: `{_display(lifecycle.get('evidence_scope'))}`",
+        "- Resume from campaign: "
+        f"`{_display(lifecycle.get('resume_from_campaign'))}`",
         "",
         "## Stop Conditions",
     ]
@@ -173,6 +183,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
         [
             "",
             "## Phase 4 Evidence Coverage",
+            f"- Evidence scope: `{_display(phase4.get('evidence_scope'))}`",
+            f"- Prepared only: `{_display(phase4.get('prepared_only'))}`",
             "| Requirement | Available | Count | Source |",
             "|---|---:|---:|---|",
         ]
@@ -207,6 +219,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
             "",
             "## Minimum Delegated Analysis",
             "- Start branch-centric, then round/LLM-call centric.",
+            "- For prepared-only roots, stop at launcher contract/readiness review; do not make research-quality conclusions until the root has been launched and postrun reports exist.",
             "- Cite artifact paths, branch ids, trace ids, SQL rows, or JSON fields for every conclusion.",
             "- For invalid infra-only runs, stop after proving the infra status.",
             "- For valid runs, inspect target intent, hypothesis, code, tool calls, formal candidates, Protocol/Decision, branch lessons, runtime feedback, and source visibility.",
@@ -271,6 +284,12 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
 
 
 def _stop_conditions(inventory: dict[str, Any]) -> list[str]:
+    lifecycle = inventory.get("lifecycle") or {}
+    if lifecycle.get("prepared_only") is True:
+        return [
+            "PREPARED-ONLY ROOT: do not analyze copied campaign artifacts as current-run research evidence.",
+            "Launch only after completion preflight succeeds, then regenerate/read postrun_acceptance reports before research-quality conclusions.",
+        ]
     validity = inventory.get("validity") or {}
     counters = inventory.get("counters") or {}
     conditions: list[str] = []

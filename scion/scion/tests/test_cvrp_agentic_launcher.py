@@ -228,6 +228,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
+    assert prepared_brief["lifecycle"]["prepared_only"] is True
+    assert prepared_brief["validity"]["run_validity_status"] == "prepared_only"
+    assert prepared_brief["counters"]["effective_rounds_completed"] == 0
+    assert any(
+        "PREPARED-ONLY ROOT" in item
+        for item in prepared_brief["stop_conditions"]
+    )
     assert prepared_brief["prepared_run_contract"]["problem_family"] == "cvrp"
     assert "CVRP post-pivot" in prepared_brief["prepared_run_contract"][
         "analysis_intent"
@@ -236,6 +243,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "Decision input" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
     )
+    assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
     assert (
         "## Prepared Run Contract"

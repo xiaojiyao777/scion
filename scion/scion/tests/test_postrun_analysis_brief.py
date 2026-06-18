@@ -133,6 +133,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["campaign_state_mutated"] is False
     assert brief["scheduler_state_mutated"] is False
     assert brief["promotion_state_mutated"] is False
+    assert brief["lifecycle"]["prepared_only"] is False
     assert brief["branches"]["ids"] == ["branch-1"]
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
@@ -164,6 +165,61 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     cli_brief = json.loads(result.stdout)
     assert cli_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
+
+
+def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
+    run_root = tmp_path / "prepared-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "scion.launcher_prepare.v1",
+            "status": "prepared",
+            "prepared_only": True,
+            "resume_from_campaign": "/tmp/source-campaign",
+            "copied_campaign_status_present": True,
+            "copied_campaign_summary_present": True,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 2},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "effective_rounds_completed": 9,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 9,
+            "protocol_evaluated_candidates": 9,
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    assert brief["lifecycle"]["prepared_only"] is True
+    assert brief["validity"]["run_validity_status"] == "prepared_only"
+    assert brief["validity"]["run_completeness_status"] == "not_started"
+    assert brief["counters"]["requested_rounds"] == 2
+    assert brief["counters"]["effective_rounds_completed"] == 0
+    assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
+    assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert markdown.startswith("# Prepared Analysis Brief:")
+    assert "do not analyze copied campaign artifacts as current-run research evidence" in (
+        markdown
+    )
 
 
 def test_brief_stop_conditions_for_invalid_infra_run(tmp_path: Path) -> None:

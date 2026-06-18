@@ -230,6 +230,13 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
+    assert prepared_brief["lifecycle"]["prepared_only"] is True
+    assert prepared_brief["validity"]["run_validity_status"] == "prepared_only"
+    assert prepared_brief["counters"]["effective_rounds_completed"] == 0
+    assert any(
+        "PREPARED-ONLY ROOT" in item
+        for item in prepared_brief["stop_conditions"]
+    )
     assert prepared_brief["prepared_run_contract"][
         "problem_family"
     ] == "warehouse_delivery"
@@ -240,6 +247,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "promotion behavior" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
     )
+    assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
     assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")

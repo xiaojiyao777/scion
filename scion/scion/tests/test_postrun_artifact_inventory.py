@@ -181,6 +181,8 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["run_root"] == str(run_root)
     assert data["campaign_dir"] == str(campaign_dir)
     assert data["run_name"] == "normal-run"
+    assert data["lifecycle"]["prepared_only"] is False
+    assert data["lifecycle"]["evidence_scope"] == "postrun_campaign"
     assert data["validity"]["invalid_infra_only"] is False
     assert data["counters"]["requested_rounds"] == 2
     assert data["counters"]["effective_rounds_completed"] == 2
@@ -398,6 +400,70 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert contract["git"]["consistent"] is True
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
+
+
+def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "prepared-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "scion.launcher_prepare.v1",
+            "status": "prepared",
+            "prepared_only": True,
+            "resume_from_campaign": "/tmp/source-campaign",
+            "copied_campaign_status_present": True,
+            "copied_campaign_summary_present": True,
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 3},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "effective_rounds_completed": 7,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 7,
+            "protocol_evaluated_candidates": 7,
+        },
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    assert data["lifecycle"]["prepared_only"] is True
+    assert data["lifecycle"]["evidence_scope"] == (
+        "prepared_launch_root_with_resume_snapshot"
+    )
+    assert data["validity"]["run_validity_status"] == "prepared_only"
+    assert data["validity"]["run_completeness_status"] == "not_started"
+    assert data["validity"]["last_stop_reason"] == "prepared_only_not_launched"
+    assert data["counters"] == {
+        "requested_rounds": 3,
+        "effective_rounds_completed": 0,
+        "formal_screened_candidates": 0,
+        "protocol_evaluated_candidates": 0,
+        "screened_experiments": 0,
+        "proposal_attempts_total": 0,
+    }
+    assert data["phase4_evidence_coverage"]["prepared_only"] is True
+    assert "PREPARED-ONLY ROOT" in markdown
+    assert "not current-run postrun evidence" in markdown
 
 
 def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:

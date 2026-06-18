@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
@@ -64,6 +64,8 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
     run_root = Path(run_root)
     campaign_dir = run_root / "campaign"
     run_status = _read_json(run_root / "run_status.json")
+    prepared_manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
+    lifecycle = _lifecycle_inventory(run_status, prepared_manifest)
     campaign_run_status = _read_json(campaign_dir / "run_status.json")
     campaign_status = _read_json(campaign_dir / "status.json")
     summary = _read_json(campaign_dir / "campaign_summary.json")
@@ -90,6 +92,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         trace_index=trace_index,
         session_index=session_index,
         llm_traces=llm_traces,
+        lifecycle=lifecycle,
     )
 
     branches = _merge_branch_counts(
@@ -109,12 +112,13 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
             keys=("run_name", "name", "campaign_id"),
         )
         or run_root.name,
-        "validity": _validity(
-            run_status, campaign_run_status, campaign_status, summary
-        ),
-        "counters": _counters(
-            run_status, campaign_run_status, campaign_status, summary
-        ),
+        "lifecycle": lifecycle,
+        "validity": _prepared_only_validity(lifecycle)
+        if lifecycle["prepared_only"]
+        else _validity(run_status, campaign_run_status, campaign_status, summary),
+        "counters": _prepared_only_counters(prepared_manifest)
+        if lifecycle["prepared_only"]
+        else _counters(run_status, campaign_run_status, campaign_status, summary),
         "llm_traces": {
             "trace_count": llm_traces["trace_count"],
             "by_kind": dict(sorted(llm_traces["by_kind"].items())),
@@ -140,6 +144,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
 def render_markdown(inventory: dict[str, Any]) -> str:
     validity = inventory["validity"]
     counters = inventory["counters"]
+    lifecycle = inventory.get("lifecycle") or {}
     llm = inventory["llm_traces"]
     events = inventory["events"]
 
@@ -151,7 +156,13 @@ def render_markdown(inventory: dict[str, Any]) -> str:
         f"- Validity: `{validity['run_validity_status'] or 'unknown'}`",
         f"- Completeness: `{validity['run_completeness_status'] or 'unknown'}`",
         f"- Last stop reason: `{validity['last_stop_reason'] or 'unknown'}`",
+        f"- Evidence scope: `{lifecycle.get('evidence_scope') or 'postrun'}`",
     ]
+    if lifecycle.get("prepared_only") is True:
+        lines.append(
+            "- PREPARED-ONLY ROOT: copied campaign artifacts are launch input, "
+            "not current-run postrun evidence."
+        )
     if validity["invalid_infra_only"]:
         lines.append("- INVALID INFRA-ONLY RUN: stop after proving infra-only status.")
 
@@ -378,6 +389,63 @@ def _counters(*docs: Any) -> dict[str, int | None]:
     return {
         name: _first_int(*docs, keys=keys)
         for name, keys in fields.items()
+    }
+
+
+def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, Any]:
+    status_doc = run_status if isinstance(run_status, dict) else {}
+    manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
+    prepared_only = (
+        status_doc.get("prepared_only") is True
+        or (
+            status_doc.get("schema") == "scion.launcher_prepare.v1"
+            and status_doc.get("status") == "prepared"
+        )
+    )
+    resume_from = status_doc.get("resume_from_campaign")
+    if resume_from is None:
+        resume_from = manifest.get("resume_from_campaign")
+    return {
+        "schema_version": "scion.launcher_lifecycle.v1",
+        "prepared_only": bool(prepared_only),
+        "status": _string_or_none(status_doc.get("status")),
+        "prepared_status_schema": _string_or_none(status_doc.get("schema")),
+        "resume_from_campaign": _string_or_none(resume_from),
+        "copied_campaign_status_present": status_doc.get(
+            "copied_campaign_status_present"
+        ),
+        "copied_campaign_summary_present": status_doc.get(
+            "copied_campaign_summary_present"
+        ),
+        "evidence_scope": (
+            "prepared_launch_root_with_resume_snapshot"
+            if prepared_only
+            else "postrun_campaign"
+        ),
+    }
+
+
+def _prepared_only_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "run_validity_status": "prepared_only",
+        "run_completeness_status": "not_started",
+        "last_stop_reason": "prepared_only_not_launched",
+        "invalid_infra_only": False,
+    }
+
+
+def _prepared_only_counters(prepared_manifest: Any) -> dict[str, int | None]:
+    manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
+    execution = manifest.get("execution")
+    if not isinstance(execution, dict):
+        execution = {}
+    return {
+        "requested_rounds": _first_int(execution, keys=("rounds",)),
+        "effective_rounds_completed": 0,
+        "formal_screened_candidates": 0,
+        "protocol_evaluated_candidates": 0,
+        "screened_experiments": 0,
+        "proposal_attempts_total": 0,
     }
 
 
@@ -763,6 +831,7 @@ def _phase4_evidence_coverage(
     trace_index: Any,
     session_index: Any,
     llm_traces: dict[str, Any],
+    lifecycle: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Return report-only coverage flags for Phase 4 postrun analysis inputs."""
 
@@ -826,6 +895,8 @@ def _phase4_evidence_coverage(
         "report_only": True,
         "quality_judgment": False,
         "decision_features_excluded": True,
+        "evidence_scope": lifecycle.get("evidence_scope") or "postrun_campaign",
+        "prepared_only": lifecycle.get("prepared_only") is True,
         "requirements": {
             "target_intent_trace": _coverage_item(
                 trace_coverage.get("target_intent_trace_count", 0),
