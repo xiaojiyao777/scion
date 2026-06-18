@@ -285,7 +285,7 @@ Current checkpoint:
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
   latest WSL launch-readiness preflight reaches the proxy and reports
-  `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`, while the
+  `authenticated=false`, `active=0`, `refreshing=1`, while the
   real chat completion returns HTTP `401` with
   `classification=not_authenticated`.
   Readiness now includes `operator_action.login_url`. Use the repaired launcher
@@ -310,8 +310,12 @@ Current checkpoint:
   `scion/tools/check_launch_readiness.py <prepared-root> --completion-preflight`
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
+  The previous action-preflight roots were invalidated by runtime guard path
+  changes after `ec1e88f5`; current prepared roots were refreshed and pass
+  static readiness. Report:
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-actionpreflight-1r-gpt55-1r-gpt55-20260618T145045Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-ec1e88f-1r-gpt55-1r-gpt55-20260618T153718Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -325,7 +329,7 @@ Current checkpoint:
   flags, prepared contract checks, launch-readiness handoff snapshots,
   prepared-only lifecycle guards, and preflight-failed launch-root guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-actionpreflight-6r-gpt55-6r-gpt55-20260618T145046Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-ec1e88f-6r-gpt55-6r-gpt55-20260618T153719Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
