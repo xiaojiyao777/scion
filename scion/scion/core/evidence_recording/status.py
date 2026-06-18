@@ -26,6 +26,7 @@ from .accounting import (
     proposal_accounting_fields,
 )
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
+from .common import reduced_measurement_readiness_payload
 from .cross_branch_observability import build_cross_branch_research_observability
 from .lineage import apply_lineage_integrity_to_run_validity
 
@@ -788,6 +789,13 @@ class StatusWriterMixin:
             )
         state_current_progress = payload.pop("current_progress", None)
         state_in_flight_protocol = payload.pop("in_flight_protocol", None)
+        readiness_payload = reduced_measurement_readiness_payload(
+            payload.get("measurement_readiness")
+        )
+        if readiness_payload is None:
+            payload.pop("measurement_readiness", None)
+        else:
+            payload["measurement_readiness"] = readiness_payload
         payload = normalize_status_payload(payload)
         terminal_stopped = payload.get("stopped") is True
         terminal_stopped_reason = payload.get("stopped_reason")

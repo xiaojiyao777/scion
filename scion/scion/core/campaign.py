@@ -34,6 +34,7 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.evidence_recording.accounting import proposal_accounting_fields
+from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.scheduler import (
     active_slot_inventory,
     reconcile_active_slot_overflow,
@@ -525,6 +526,10 @@ class CampaignManager:
             checkpoint_inventory = _workspace_service_for(self).checkpoint_summary()
         except Exception as exc:  # pragma: no cover - status is best-effort
             logger.debug("checkpoint summary failed: %s", exc)
+        protocol_config = getattr(self, "_protocol_config", None)
+        measurement_readiness = reduced_measurement_readiness_payload(
+            getattr(protocol_config, "measurement_readiness", None)
+        )
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
@@ -541,7 +546,7 @@ class CampaignManager:
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
             "measurement_governance": getattr(
-                getattr(self, "_protocol_config", None),
+                protocol_config,
                 "measurement_governance",
                 "on",
             ),
@@ -559,6 +564,8 @@ class CampaignManager:
             "branch_history_cards": branch_history_cards,
             "checkpoint_inventory": checkpoint_inventory,
         }
+        if measurement_readiness is not None:
+            state["measurement_readiness"] = measurement_readiness
         accounting = proposal_accounting_fields(
             campaign_dir=self._campaign_dir,
             steps=self._step_history,
@@ -1178,6 +1185,13 @@ class CampaignManager:
                 getattr(self, "_protocol_config", None),
                 "measurement_governance",
                 "on",
+            ),
+            measurement_readiness=reduced_measurement_readiness_payload(
+                getattr(
+                    getattr(self, "_protocol_config", None),
+                    "measurement_readiness",
+                    None,
+                )
             ),
         )
 

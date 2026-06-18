@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status projection repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness projection repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -631,8 +631,12 @@ Exit criteria:
   problem-owned measurement schema now includes optional reduced readiness
   summary fields, `measurement_readiness_status()` resolves `calibration_ref`
   and reports missing, unreadable, incompatible, incomplete, stale, and ready
-  states, and `ProtocolConfig.measurement_readiness` carries only deterministic
-  enum/numeric status. Compact Phase 1 A/A artifacts are installed at
+  states, `ProtocolConfig.measurement_readiness` carries only deterministic
+  enum/numeric status, and `status.json` / `campaign_summary.json` now project
+  that reduced readiness payload without `calibration_ref` or raw A/A evidence.
+  Report:
+  `scion/docs/experiments/v0.4/v04-measurement-readiness-status-projection-repair-20260618.md`.
+  Compact Phase 1 A/A artifacts are installed at
   `scion/scion/problems/cvrp/formal/calibration/aa_noise_floor.json` and
   `surrogate/calibration/aa_noise_floor.json`; warehouse package and legacy
   specs point to the latter through `calibration/aa_noise_floor.json`.

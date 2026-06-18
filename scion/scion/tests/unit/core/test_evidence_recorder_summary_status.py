@@ -125,6 +125,19 @@ def test_summary_and_status_expose_measurement_governance_consistently(
     tmp_path: Path,
     measurement_governance: str,
 ) -> None:
+    measurement_readiness = {
+        "status": "degraded",
+        "reason_code": "calibration_stale",
+        "calibration_age_days": 161,
+        "calibration_max_age_days": 90,
+        "n_pairs": 48,
+        "mde_at_power_80": 4.0,
+        "noise_band_p90_abs": 7.5,
+        "effect_to_mde_ratio": 0.5,
+        "signal_to_noise_tier": "marginal",
+        "decision_features_excluded": True,
+        "calibration_ref": "/tmp/internal-aa-noise-floor.json",
+    }
     recorder = EvidenceRecorder(
         campaign_id="camp-measurement-governance",
         campaign_dir=tmp_path,
@@ -139,6 +152,7 @@ def test_summary_and_status_expose_measurement_governance_consistently(
             "n_active_branches": 0,
             "champion_version": 7,
             "measurement_governance": measurement_governance,
+            "measurement_readiness": measurement_readiness,
             "budget_remaining": 1.0,
             "branches": [],
             "branch_cards": [],
@@ -151,10 +165,17 @@ def test_summary_and_status_expose_measurement_governance_consistently(
         round_num=0,
         champion=_champion(),
         measurement_governance=measurement_governance,
+        measurement_readiness=measurement_readiness,
     )
 
     assert status["measurement_governance"] == measurement_governance
     assert summary["measurement_governance"] == measurement_governance
+    assert status["measurement_readiness"] == summary["measurement_readiness"]
+    assert status["measurement_readiness"]["status"] == "degraded"
+    assert status["measurement_readiness"]["reason_code"] == "calibration_stale"
+    assert status["measurement_readiness"]["mde_at_power_80"] == 4.0
+    assert "calibration_ref" not in status["measurement_readiness"]
+    assert "calibration_ref" not in summary["measurement_readiness"]
 
 
 def test_campaign_summary_exposes_structured_step_reason_provenance(

@@ -142,6 +142,10 @@ CVRP/VRP:
   `current_progress` and `in_flight_protocol` now expose compact branch
   lifecycle/status fields at top level during long formal protocol work when a
   matching branch row exists.
+- Measurement readiness status projection is repaired: `status.json` and
+  `campaign_summary.json` now expose the same reduced
+  `measurement_readiness` payload, including missing/stale/low-power readiness
+  states, without leaking `calibration_ref` or raw A/A evidence.
 - Warehouse split-preserving cost-compression telemetry interpretation is
   repaired as a generic diagnostic interpretation fix. This changes neither
   protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.
@@ -211,6 +215,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
 - Run-status branch progress projection repair:
   `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
+- Measurement readiness status projection repair:
+  `scion/docs/experiments/v0.4/v04-measurement-readiness-status-projection-repair-20260618.md`.
 - Warehouse cost-compression telemetry interpretation repair:
   `scion/docs/experiments/v0.4/v04-warehouse-cost-compression-telemetry-interpretation-repair-20260618.md`.
 - WSL reference docs:

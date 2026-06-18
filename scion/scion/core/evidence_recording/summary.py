@@ -54,7 +54,7 @@ from .accounting import (
     accounting_reconciliation_fields,
     proposal_accounting_fields,
 )
-from .common import _stage_value
+from .common import _stage_value, reduced_measurement_readiness_payload
 from .cross_branch_observability import build_cross_branch_research_observability
 from .failure_summary import (
     _contract_not_run_reason,
@@ -204,6 +204,7 @@ class CampaignSummaryMixin:
         final_evidence_refs: Mapping[str, Any] | None = None,
         frozen_budget: Mapping[str, Any] | None = None,
         measurement_governance: str = "on",
+        measurement_readiness: Mapping[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Write ``campaign_summary.json`` with the current backward-compatible schema."""
         steps = list(step_history)
@@ -367,6 +368,17 @@ class CampaignSummaryMixin:
                         if isinstance(value, (int, float))
                     )
         failure_categories = step_failure_categories(steps)
+        readiness_payload = reduced_measurement_readiness_payload(
+            measurement_readiness
+        )
+        if readiness_payload is None and self.state_provider is not None:
+            try:
+                state_for_readiness = dict(self.state_provider())
+                readiness_payload = reduced_measurement_readiness_payload(
+                    state_for_readiness.get("measurement_readiness")
+                )
+            except Exception as exc:  # pragma: no cover - summary is best-effort
+                logger.debug("state snapshot for measurement readiness failed: %s", exc)
         if isinstance(loop_status, Mapping):
             loop_failure_categories = loop_status.get("failure_categories")
             if isinstance(loop_failure_categories, Mapping):
@@ -444,6 +456,11 @@ class CampaignSummaryMixin:
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "measurement_governance": measurement_governance,
+            **(
+                {"measurement_readiness": readiness_payload}
+                if readiness_payload is not None
+                else {}
+            ),
             "promotion_dossier_ref": getattr(
                 champion,
                 "promotion_dossier_ref",

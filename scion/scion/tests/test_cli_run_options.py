@@ -117,6 +117,9 @@ def test_run_measurement_governance_visible_in_summary_and_status(
             payload = {
                 "campaign_id": "fake-campaign",
                 "measurement_governance": self.protocol_config.measurement_governance,
+                "measurement_readiness": (
+                    self.protocol_config.measurement_readiness.model_dump()
+                ),
             }
             (self.campaign_dir / "campaign_summary.json").write_text(
                 json.dumps(payload),
@@ -161,6 +164,10 @@ def test_run_measurement_governance_visible_in_summary_and_status(
     status = json.loads((campaign_dir / "status.json").read_text(encoding="utf-8"))
     assert summary["measurement_governance"] == expected_value
     assert status["measurement_governance"] == expected_value
+    assert summary["measurement_readiness"]["status"] == "not_ready"
+    assert status["measurement_readiness"]["reason_code"] == "missing_measurement"
+    assert "calibration_ref" not in summary["measurement_readiness"]
+    assert "calibration_ref" not in status["measurement_readiness"]
 
 
 def test_run_agentic_proposal_threads_config_to_campaign_manager(
