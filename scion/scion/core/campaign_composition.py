@@ -6,11 +6,13 @@ new runtime boundaries do not keep growing campaign.py.
 """
 from __future__ import annotations
 
+import json
 import os
 import threading
 import uuid
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from scion.contract.gate import ContractGate
@@ -44,6 +46,8 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     OperatorConfig,
+    PatchFileChange,
+    PatchProposal,
 )
 from scion.core.plateau_controller import PlateauController
 from scion.core.production_boundary import (
@@ -777,6 +781,13 @@ def _restore_persisted_active_branches(owner: Any) -> None:
             owner._branch_hypotheses[branch.branch_id] = (
                 _hypothesis_proposal_from_record(active_hypothesis)
             )
+            patch = _patch_proposal_from_candidate_artifact(
+                owner._campaign_dir,
+                branch,
+                active_hypothesis,
+            )
+            if patch is not None:
+                owner._branch_patches[branch.branch_id] = patch
         workspace = os.path.join(owner._campaign_dir, "workspaces", branch.branch_id)
         if (
             owner._branch_ctrl.get_code_base(branch.branch_id) == "branch_workspace"
@@ -810,6 +821,105 @@ def _hypothesis_proposal_from_record(record: HypothesisRecord) -> HypothesisProp
         novelty_signature=dict(record.novelty_signature or {}),
         mechanism_changes=tuple(record.mechanism_changes or ()),
     )
+
+
+def _patch_proposal_from_candidate_artifact(
+    campaign_dir: str | os.PathLike[str],
+    branch: Any,
+    h_record: HypothesisRecord,
+) -> PatchProposal | None:
+    artifact_path = _candidate_patch_artifact_path(campaign_dir, branch, h_record)
+    if artifact_path is None:
+        return None
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    patch_payload = payload.get("patch")
+    if not isinstance(patch_payload, dict):
+        return None
+    files = patch_payload.get("files")
+    if not isinstance(files, list) or not files:
+        return None
+    changes: list[PatchFileChange] = []
+    for item in files:
+        if not isinstance(item, dict):
+            return None
+        file_path = str(item.get("file_path") or "").strip()
+        action = str(item.get("action") or "").strip()
+        code_content = item.get("code_content")
+        if not file_path or action not in {"modify", "create", "delete"}:
+            return None
+        changes.append(
+            PatchFileChange(
+                file_path=file_path,
+                action=action,  # type: ignore[arg-type]
+                code_content=str(code_content or ""),
+                test_hint=item.get("test_hint"),
+            )
+        )
+    primary, *additional = changes
+    return PatchProposal(
+        file_path=primary.file_path,
+        action=primary.action,
+        code_content=primary.code_content,
+        test_hint=primary.test_hint,
+        additional_changes=tuple(additional),
+        mechanism_changes=tuple(h_record.mechanism_changes or ()),
+    )
+
+
+def _candidate_patch_artifact_path(
+    campaign_dir: str | os.PathLike[str],
+    branch: Any,
+    h_record: HypothesisRecord,
+) -> Path | None:
+    root = Path(campaign_dir)
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if isinstance(summary, dict):
+        path = _resolve_campaign_artifact_ref(
+            root,
+            summary.get("formal_candidate_patch_artifact_ref"),
+        )
+        if path is not None and path.is_file():
+            return path
+    index_path = root / "artifacts" / "formal_candidates" / "index.jsonl"
+    if not index_path.is_file():
+        return None
+    matches: list[Path] = []
+    try:
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("branch_id") != getattr(branch, "branch_id", None):
+            continue
+        if row.get("hypothesis_id") != h_record.hypothesis_id:
+            continue
+        if row.get("stage") != "screening":
+            continue
+        if row.get("artifact_status") != "recorded":
+            continue
+        path = _resolve_campaign_artifact_ref(root, row.get("artifact_ref"))
+        if path is not None and path.is_file():
+            matches.append(path)
+    return matches[-1] if matches else None
+
+
+def _resolve_campaign_artifact_ref(root: Path, ref: Any) -> Path | None:
+    text = str(ref or "").strip()
+    if not text:
+        return None
+    path = Path(text)
+    if path.is_absolute():
+        return path
+    return root / path
 
 
 def _reanchor_current_champion_snapshot(

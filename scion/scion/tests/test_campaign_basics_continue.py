@@ -1,9 +1,10 @@
 """Focused tests split from test_campaign.py."""
 
+import json
 import shutil
 
 from .campaign_test_support import *  # noqa: F401,F403
-from scion.core.models import HypothesisRecord, MechanismChange
+from scion.core.models import HypothesisRecord, MechanismChange, PatchFileChange
 from scion.proposal.llm_client import LLMTransientProviderError
 
 class TestCampaignBasics:
@@ -94,6 +95,10 @@ class TestCampaignBasics:
             "stage": "screening",
             "tier": "marginal",
             "case_level_negative_cases": [{"case_id": "CMT4.vrp"}],
+            "formal_candidate_patch_artifact_ref": (
+                "artifacts/formal_candidates/8b1621af/"
+                "screening-active-demand-slack-candidate/candidate.patch.json"
+            ),
         }
         cm._branch_store.save(branch)
         active_hypothesis = HypothesisRecord(
@@ -116,6 +121,56 @@ class TestCampaignBasics:
             ),
         )
         cm._hyp_store.save(active_hypothesis)
+        artifact_dir = (
+            tmp_path
+            / "campaign"
+            / "artifacts"
+            / "formal_candidates"
+            / "8b1621af"
+            / "screening-active-demand-slack-candidate"
+        )
+        artifact_dir.mkdir(parents=True)
+        artifact_ref = (
+            "artifacts/formal_candidates/8b1621af/"
+            "screening-active-demand-slack-candidate/candidate.patch.json"
+        )
+        (artifact_dir / "candidate.patch.json").write_text(
+            json.dumps(
+                {
+                    "patch": {
+                        "files": [
+                            {
+                                "file_path": (
+                                    "policies/baseline_modules/destroy_repair.py"
+                                ),
+                                "action": "modify",
+                                "code_content": "# restored destroy repair\n",
+                            },
+                            {
+                                "file_path": "policies/baseline_algorithm.py",
+                                "action": "modify",
+                                "code_content": "# restored support file\n",
+                            },
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        index_dir = tmp_path / "campaign" / "artifacts" / "formal_candidates"
+        (index_dir / "index.jsonl").write_text(
+            json.dumps(
+                {
+                    "artifact_status": "recorded",
+                    "artifact_ref": artifact_ref,
+                    "branch_id": branch.branch_id,
+                    "hypothesis_id": "active-demand-slack",
+                    "stage": "screening",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
         workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
         workspace.mkdir(parents=True)
@@ -153,6 +208,18 @@ class TestCampaignBasics:
             MechanismChange(
                 id="demand_slack_regret_insertion",
                 change_type="modify",
+            ),
+        )
+        restored_patch = reopened._branch_patches[branch.branch_id]
+        assert restored_patch.file_path == (
+            "policies/baseline_modules/destroy_repair.py"
+        )
+        assert restored_patch.code_content == "# restored destroy repair\n"
+        assert restored_patch.additional_changes == (
+            PatchFileChange(
+                file_path="policies/baseline_algorithm.py",
+                action="modify",
+                code_content="# restored support file\n",
             ),
         )
         assert reopened.get_state()["n_active_branches"] == 1

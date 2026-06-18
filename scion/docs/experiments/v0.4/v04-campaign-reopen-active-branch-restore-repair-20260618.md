@@ -26,6 +26,10 @@ evidence-backed continuation.
 - For each restored active branch, campaign composition restores the latest
   durable `status=active` hypothesis record and reconstructs the in-memory
   hypothesis proposal view needed by evaluation and continuation steps.
+- When a prior screening artifact exists, campaign composition restores the
+  in-memory patch proposal from `candidate.patch.json` so resumed evaluation
+  can preserve formal candidate replay identity instead of emitting a
+  `missing_patch` artifact omission.
 - If a current champion already exists in `ChampionStore`, the reopened manager
   installs that persisted champion instead of keeping a freshly constructed v1
   in memory.
@@ -44,6 +48,12 @@ was invalid: the restored branch reached scheduling, but eval failed closed with
 `no hypothesis for eval step - abandoning`. That run produced no Protocol rows
 and is not CVRP evidence. It exposed the active-hypothesis restore gap covered
 by this repair.
+
+The next valid copied-campaign WSL resume completed formal screening, but its
+reconciled candidate artifact was omitted with `missing_patch` /
+`missing_replay_identity`, because the patch object had not been restored into
+memory. That run remains valid screening evidence, but it exposed the
+patch-recovery gap covered by this repair.
 
 ## Acceptance
 
