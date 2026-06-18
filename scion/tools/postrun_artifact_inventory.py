@@ -1003,6 +1003,18 @@ def _phase4_evidence_coverage(
         for doc in source_docs
         if _contains_key_fragment(doc, ("branch_lesson", "cross_branch"))
     )
+    research_continuity_count = sum(
+        1
+        for doc in research_docs
+        if _contains_key_fragment(
+            doc,
+            (
+                "research_continuity",
+                "same_mechanism_followup",
+                "weak_positive_transfer",
+            ),
+        )
+    )
     runtime_feedback_count = sum(
         1
         for doc in source_docs
@@ -1077,6 +1089,10 @@ def _phase4_evidence_coverage(
                 branch_lesson_count,
                 "summary/status, research-efficiency, or trajectory manifest",
             ),
+            "research_continuity": _coverage_item(
+                research_continuity_count,
+                "research-efficiency research_continuity",
+            ),
             "runtime_feedback": _coverage_item(
                 runtime_feedback_count,
                 "summary/status or research-efficiency runtime fields",
@@ -1108,6 +1124,7 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         "branch_lesson_transfer": (
             "summary/status, research-efficiency, or trajectory manifest"
         ),
+        "research_continuity": "research-efficiency research_continuity",
         "runtime_feedback": "summary/status or research-efficiency runtime fields",
         "source_visibility": "prompt manifests or trajectory visibility fingerprints",
     }

@@ -247,8 +247,12 @@ Current checkpoint:
   selection rate, branch-lesson satisfaction/semantic-gap rates, weak-positive
   transfer acceptance rate, lesson action counts, and branch-shape summary. This
   is postrun audit material only; it does not feed Decision, Protocol gates,
-  scheduling, lifecycle, promotion, or proposal context. Report:
+  scheduling, lifecycle, promotion, or proposal context. Postrun artifact
+  inventories now mark `research_continuity` as an explicit Phase 4
+  evidence-coverage requirement. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
 - Budget-exhausting runtime semantics now avoid treating high aggregate
   `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
   soft-abandon signal, repeated-signal discriminator, screening feedback

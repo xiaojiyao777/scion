@@ -72,6 +72,11 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                 "mde_source": "measurement_readiness.mde_at_power_80",
             },
             "cross_branch_observability": {"branch_lesson_record_count": 1},
+            "research_continuity": {
+                "same_mechanism_followup": {"selection_rate": 1.0},
+                "branch_lesson_usage": {"satisfaction_rate": 1.0},
+                "weak_positive_transfer": {"acceptance_rate": 1.0},
+            },
             "fresh_runtime_replay_drain": {"attempts": 1},
         },
         (
@@ -258,6 +263,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "measurement_readiness",
         "protocol_effect_vs_mde",
         "branch_lesson_transfer",
+        "research_continuity",
         "runtime_feedback",
         "source_visibility",
     ):
@@ -265,10 +271,15 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert requirements["target_intent_trace"]["count"] == 1
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
+    assert requirements["research_continuity"]["count"] == 1
     assert "## Phase 4 Evidence Coverage" in markdown
     assert "## Launcher Artifacts" in markdown
     assert "### Prepared Run Contract Checks" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert (
+        "| research_continuity | True | 1 | "
+        "research-efficiency research_continuity |"
+    ) in markdown
 
     assert len(data["branches"]) == 1
     branch = data["branches"][0]
@@ -605,6 +616,7 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert phase4["pre_campaign_completion_preflight_failed"] is True
     assert phase4["requirements"]["formal_candidate_artifact"]["available"] is False
     assert phase4["requirements"]["measurement_readiness"]["available"] is False
+    assert phase4["requirements"]["research_continuity"]["available"] is False
     assert "PRE-CAMPAIGN PREFLIGHT FAILED" in markdown
     assert "## Resume Snapshot" in markdown
     assert "not current-run evidence" in markdown
