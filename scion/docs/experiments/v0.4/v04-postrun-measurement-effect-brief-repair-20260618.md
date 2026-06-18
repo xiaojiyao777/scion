@@ -57,3 +57,21 @@ python -m py_compile \
 ```
 
 Result: `12 passed`; py-compile clean.
+
+WSL verification after fast-forwarding the synchronized checkout to
+`54dc48d2`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/rebuild_postrun_acceptance.py
+```
+
+Result: `12 passed`; py-compile clean.
