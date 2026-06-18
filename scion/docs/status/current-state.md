@@ -80,14 +80,15 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `b9836a6`. Strict
-  readiness on WSL confirms both roots remain statically ready and aligned to
-  guarded source.
+- The current prepared roots were built from checkout `b9836a6`. After WSL
+  fast-forwarded to docs-only checkout `b7fa9ed2`, strict readiness confirms
+  both roots remain statically ready and runtime-guard valid because guarded
+  source paths are unchanged.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `refreshing=1`, and an
-  `operator_action.login_url`.
+  `not_authenticated`, auth pool `active=0` / `expired=1` / `refreshing=0`,
+  and an `operator_action.login_url`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.

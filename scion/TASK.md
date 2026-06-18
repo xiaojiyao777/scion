@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots are aligned to checkout `b9836a6`; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `b9836a6` and remain runtime-guard valid after docs-only checkout `b7fa9ed2`; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -410,11 +410,14 @@ Current checkpoint:
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
   current `b9836a6` prepared roots were refreshed and pass static readiness.
+  After WSL fast-forwarded to docs-only checkout `b7fa9ed2`, strict readiness
+  reports `git_runtime_consistent=ok` with detail
+  `checkout differs, but runtime guard paths are unchanged`.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated`
-  (`auth_status.pool.active=0`, `refreshing=1`).
+  (`auth_status.pool.active=0`, `expired=1`, `refreshing=0`).
   Current prepared-handoff rebuild report:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
   Current strict launch-readiness report:

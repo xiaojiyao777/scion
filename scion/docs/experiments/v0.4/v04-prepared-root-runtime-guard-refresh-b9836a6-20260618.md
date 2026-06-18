@@ -16,7 +16,8 @@ therefore became statically stale even though they had not been launched.
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lessondiag-b9836a6-6r-gpt55-20260618T203741Z-claw`
 
 Both were generated prepare-only from the synchronized WSL checkout at
-`b9836a6`; neither root has been launched.
+`b9836a6`; neither root has been launched. After WSL fast-forwarded to
+docs-only checkout `b7fa9ed2`, both roots still pass runtime guard checks.
 
 ## Readiness
 
@@ -24,13 +25,14 @@ Strict launch readiness was rerun on WSL with
 `--require-launch-ready --format json`.
 
 - `static_ready=true` for both roots.
-- `git_runtime_consistent=ok` with detail `checkout matches manifest commit`.
+- `git_runtime_consistent=ok` with detail
+  `checkout differs, but runtime guard paths are unchanged`.
 - `prepared_contract_complete=ok`.
 - `not_already_started=ok`.
 - `launch_ready=false` only because completion preflight still fails.
 - Completion preflight: HTTP `401`, classification `not_authenticated`,
-  auth pool `active=0`, `refreshing=1`, and `operator_action.login_url`
-  present.
+  auth pool `active=0`, `expired=1`, `refreshing=0`, and
+  `operator_action.login_url` present.
 
 ## Acceptance
 
