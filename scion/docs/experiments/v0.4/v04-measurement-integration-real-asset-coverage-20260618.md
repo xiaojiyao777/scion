@@ -68,6 +68,9 @@ PYTHONPATH=scion pytest -q \
 
 Local result: `45 passed in 1.30s`.
 
+WSL synchronized checkout result after fast-forwarding to commit `b79445f`:
+`45 passed in 0.89s`.
+
 ## Acceptance
 
 Accepted as Worker A closure evidence. Formal CVRP and warehouse production
