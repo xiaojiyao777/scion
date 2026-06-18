@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent guidance injection repaired; rerun required*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; guarded route-merge candidate rejected as no-effect*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -230,6 +230,25 @@ Status docs to update:
 - `scion/docs/status/v0.4-history.md`
 - `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 - `scion/TASK.md`
+
+Current checkpoint:
+
+- Warehouse recovery remains accepted as the v0.4 positive research-path
+  checkpoint.
+- CVRP target-intent steering is now field-verified after the
+  `research_surfaces` prompt-injection repair. The `f3d634c` WSL rerun kept
+  target-intent, hypothesis, and code on `destroy_repair.py` /
+  `route_merge_repair`, used `gpt-5.5` for all LLM traces, completed `32/32`
+  valid screening pairs with `0` failures, and produced a complete formal
+  candidate artifact.
+- The candidate is rejected as a solver improvement: W/L/T was `0/0/32`, all
+  objective deltas were `0.0`, and route-merge telemetry showed activation but
+  zero observed improvement effect. This is framework-valid rejection evidence,
+  not a promotion.
+- Future WSL campaign launches must set
+  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
+  it, WSL may import stale Scion core modules from
+  `/home/xjy-ubuntu/projects/scion/scion`.
 
 ## Phase 1 - A/A Calibration and Measurement Power
 

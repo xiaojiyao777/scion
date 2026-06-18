@@ -79,21 +79,37 @@ CVRP/VRP:
   did not treat `research_surfaces` as solver-design context. That injection
   path is now repaired in the generic proposal prompt layer while the
   route-merge semantics remain CVRP-owned.
+- The post-repair WSL rerun from commit `f3d634c` field-verifies the injection
+  repair when launched with the synchronized worktree on `PYTHONPATH`.
+  Target-intent, hypothesis, and code stayed on
+  `policies/baseline_modules/destroy_repair.py` / `route_merge_repair`; all
+  seven LLM traces used `gpt-5.5`; code retry failures were `0`; formal
+  screening completed `32/32` valid pairs with `0` failures. The candidate is
+  rejected as a solver improvement: pair W/L/T was `0/0/32`, every objective
+  delta was `0.0`, branch status is `active_no_effect`, and telemetry shows
+  route-merge activation in `30/32` candidate runs with zero observed
+  improvement effects.
+- WSL execution caveat: Scion campaign runs in WSL must set
+  `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
+  it, Python may import stale Scion core modules from
+  `/home/xjy-ubuntu/projects/scion/scion` while reading problem files from the
+  synchronized repo, invalidating prompt/runtime conclusions.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest CVRP share70 cap/tail diagnostic artifacts are synced back to the
-  server experiment root.
+- Latest CVRP route-merge postrun artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-guarded-agentic-1r-f3d634c-pypath-20260618T004101Z`.
 
 ## Next Actions
 
-1. Rerun the short CVRP agentic field check after committing the target-intent
-   guidance-injection repair. Acceptance first requires target-intent,
-   hypothesis, and code to stay on `destroy_repair.py` / `route_merge_repair`;
-   only then should screening quality be interpreted.
+1. Do not rerun the guarded `route_merge_repair` v2 unchanged. The next CVRP
+   field check should test transfer from `active_no_effect`: either a
+   materially different problem-owned solver-design clean fork, or a
+   route-merge variant with explicit preconditions for nonzero absorption
+   effects before formal screening.
 2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.
@@ -119,6 +135,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-71666ae-field-failure-20260618.md`.
 - CVRP route-merge target-intent guidance injection repair:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-target-intent-guidance-injection-repair-20260618.md`.
+- CVRP route-merge guarded post-repair field check:
+  `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-f3d634c-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
