@@ -97,6 +97,22 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         },
     )
     (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
+    (run_root / "launch.env").write_text(
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}\n",
+        encoding="utf-8",
+    )
+    (run_root / "run.sh").write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "source launch.env",
+                "export PYTHONPATH SCION_MODEL PREPARED_RUN_MANIFEST",
+                "python -m scion.cli.main run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (run_root / "command.txt").write_text(
         "\n".join(
             [
@@ -218,6 +234,19 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ]
         is True
     )
+    bridge_detail = prompt_context["signals"][
+        "prepared_research_focus_prompt_bridge"
+    ]["detail"]
+    assert bridge_detail["source_markers"] == {
+        "context_payload": True,
+        "manifest_env_reader": True,
+        "prompt_renderer": True,
+    }
+    assert bridge_detail["launch_markers"] == {
+        "launch_env_assignment": True,
+        "prepared_manifest_exists": True,
+        "run_sh_exports_manifest": True,
+    }
     assert (
         prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
             "available"

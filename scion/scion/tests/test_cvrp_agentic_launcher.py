@@ -170,6 +170,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in launch_env
     )
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
+    assert (
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
+        in launch_env
+    )
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert "ROUNDS=4" in launch_env
     assert "PROBLEM=scion/problems/cvrp/problem.yaml" in launch_env
@@ -185,6 +189,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert 'cd "$SCION_DIR"' in run_sh_text
     assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY" in run_sh_text
+    assert "PREPARED_RUN_MANIFEST" in run_sh_text
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT" in run_sh_text
     assert "OMP_NUM_THREADS=1" in run_sh_text
     assert "GIT_RUNTIME_DIRTY" in run_sh_text

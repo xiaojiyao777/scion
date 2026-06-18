@@ -349,6 +349,7 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     _add_research_shape_prompt_signal(signals)
     _add_launch_research_focus_prompt_signal(
         signals,
+        root=root,
         required=bool(research_focus),
     )
 
@@ -651,24 +652,44 @@ def _add_research_shape_prompt_signal(signals: dict[str, dict[str, Any]]) -> Non
 def _add_launch_research_focus_prompt_signal(
     signals: dict[str, dict[str, Any]],
     *,
+    root: Path,
     required: bool,
 ) -> None:
-    marker_results = {
+    source_marker_results = {
         name: _source_contains(relative_path, marker)
         for name, (relative_path, marker) in (
             LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS.items()
         )
     }
+    launch_marker_results = {
+        "prepared_manifest_exists": (root / "prepared_run_manifest.v1.json").is_file(),
+        "launch_env_assignment": _path_contains(
+            root / "launch.env",
+            "PREPARED_RUN_MANIFEST=",
+        ),
+        "run_sh_exports_manifest": _path_contains(
+            root / "run.sh",
+            "PREPARED_RUN_MANIFEST",
+        )
+        and _path_contains(root / "run.sh", "export ")
+        and _path_contains(root / "run.sh", "scion.cli.main run"),
+    }
     _add_signal(
         signals,
         "prepared_research_focus_prompt_bridge",
-        available=all(marker_results.values()),
+        available=(
+            all(source_marker_results.values())
+            and all(launch_marker_results.values())
+        ),
         required=required,
         source=(
-            "current checkout prepared-run manifest reader and hypothesis "
-            "prompt renderer"
+            "prepared root launch environment plus current checkout "
+            "prepared-run manifest reader and hypothesis prompt renderer"
         ),
-        detail={"markers": marker_results},
+        detail={
+            "source_markers": source_marker_results,
+            "launch_markers": launch_marker_results,
+        },
     )
 
 
@@ -739,6 +760,10 @@ def _count_prompt_manifest_refs(value: Any) -> int:
 
 def _source_contains(relative_path: str, marker: str) -> bool:
     path = REPO_DIR / relative_path
+    return _path_contains(path, marker)
+
+
+def _path_contains(path: Path, marker: str) -> bool:
     try:
         return marker in path.read_text(encoding="utf-8")
     except OSError:

@@ -372,6 +372,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "RUN_ROOT",
         "CAMPAIGN_DIR",
         "RESUME_FROM_CAMPAIGN",
+        "PREPARED_RUN_MANIFEST",
         "CONFIG_DIR",
         "REPO_ROOT",
         "SCION_DIR",
@@ -434,7 +435,7 @@ if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
 fi
 unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
 cd "$SCION_DIR" || exit 1
-export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT PREPARED_RUN_MANIFEST
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
@@ -778,6 +779,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "RUN_ROOT": run_root,
         "CAMPAIGN_DIR": campaign_dir,
         "RESUME_FROM_CAMPAIGN": resume_from_campaign,
+        "PREPARED_RUN_MANIFEST": run_root / "prepared_run_manifest.v1.json",
         "CONFIG_DIR": config_dir,
         "REPO_ROOT": repo_root,
         "SCION_DIR": scion_dir,
