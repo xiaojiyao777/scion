@@ -49,6 +49,20 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
 
 Result: `164 passed`.
 
+WSL:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_protocol_stats_gates.py \
+  scion/scion/tests/test_decision_screening.py \
+  scion/scion/tests/unit/core/test_branch_lifecycle_policy.py \
+  scion/scion/tests/unit/core/test_scheduler_runtime_evidence_pressure.py \
+  scion/scion/tests/unit/core/test_branch_step_runner_scheduler_metadata.py
+```
+
+Result: `164 passed`.
+
 ## Acceptance
 
 Accepted as a narrow v0.4 measurement-semantics repair. It prevents pure
