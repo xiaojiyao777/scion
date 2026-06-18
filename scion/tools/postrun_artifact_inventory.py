@@ -47,6 +47,7 @@ POSTRUN_REPORT_DIRS = (
     "failures",
     "research_efficiency",
     "manifests",
+    "inventory",
 )
 
 

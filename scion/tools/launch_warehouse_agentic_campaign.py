@@ -74,7 +74,8 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
     "$REPORT_DIR/summaries" \
     "$REPORT_DIR/failures" \
     "$REPORT_DIR/research_efficiency" \
-    "$REPORT_DIR/manifests"
+    "$REPORT_DIR/manifests" \
+    "$REPORT_DIR/inventory"
   echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
   {
     echo "POSTRUN_REPORTS_STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -102,6 +103,16 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
   fi
   "$PY" -m scion.cli.main report proposal-trajectory-manifest \
     "${manifest_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
+  "$PY" "$SCION_DIR/tools/postrun_artifact_inventory.py" \
+    "$RUN_ROOT" \
+    --format json \
+    > "$REPORT_DIR/inventory/${REPORT_STEM}.postrun_artifact_inventory.v1.json" \
+    2>> "$RUN_ROOT/run.log" || true
+  "$PY" "$SCION_DIR/tools/postrun_artifact_inventory.py" \
+    "$RUN_ROOT" \
+    --format markdown \
+    > "$REPORT_DIR/inventory/${REPORT_STEM}.postrun_artifact_inventory.md" \
+    2>> "$RUN_ROOT/run.log" || true
   {
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"
@@ -672,7 +683,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Do not generate postrun acceptance report artifacts after Scion "
             "exits. The default is to write summary, failures, "
-            "research-efficiency, and proposal-trajectory manifest reports."
+            "research-efficiency, proposal-trajectory manifest, and artifact "
+            "inventory reports."
         ),
     )
     parser.add_argument(

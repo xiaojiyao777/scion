@@ -282,7 +282,7 @@ Current checkpoint:
   with `classification=auth_token_invalidated`. Use the repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its default
-  postrun acceptance report bundle enabled.
+  postrun acceptance report bundle enabled, including artifact/count inventory.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -290,7 +290,7 @@ Current checkpoint:
   copy the accepted warehouse `v2` campaign as the new run root so the next
   check continues from the promoted champion rather than restarting baseline,
   and it writes the standard postrun acceptance report bundle by default after
-  Scion exits.
+  Scion exits, including artifact/count inventory.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

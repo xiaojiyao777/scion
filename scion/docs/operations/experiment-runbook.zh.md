@@ -1012,7 +1012,9 @@ EXIT_CODE:0
 无效轮次处理：记录原因、修复外部条件，然后用同一个 round count 重跑。不要把这类
 结果解释成 proposal、branch governance 或算法质量行为。
 
-跑后先生成 artifact/count inventory，再开始人工或子 agent 分析：
+跑后先确认 artifact/count inventory，再开始人工或子 agent 分析。新版 CVRP /
+warehouse agentic launcher 会默认写入
+`$RUN_ROOT/postrun_acceptance/inventory/`；如果是历史 run 或手工启动的 run，可手动生成：
 
 ```bash
 cd /home/clawd/research/or-autoresearch-agent

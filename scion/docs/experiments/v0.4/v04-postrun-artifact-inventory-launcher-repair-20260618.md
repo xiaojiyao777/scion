@@ -1,0 +1,56 @@
+# V0.4 Postrun Artifact Inventory Launcher Repair
+
+Date: 2026-06-18
+
+## Purpose
+
+The next CVRP and warehouse runs are launch-prepared but blocked on the
+`gpt-5.5` completion route. Once the route is healthy, the postrun handoff
+should immediately expose artifact/count coverage before main-thread or
+subagent analysis begins.
+
+`scion/tools/postrun_artifact_inventory.py` already provides that report-only
+inventory, but the CVRP and warehouse launchers did not include it in the
+default postrun acceptance bundle. This repair makes the default launcher bundle
+write both JSON and Markdown inventory artifacts under
+`postrun_acceptance/inventory/`.
+
+## Boundary Check
+
+- This is report-only postrun bookkeeping.
+- It does not change Proposal, Contract, Verification, Protocol, Decision,
+  `DecisionFeatures`, lifecycle, scheduling, promotion, or problem semantics.
+- The inventory lists artifacts, counters, validity, branches, events,
+  hypotheses, and LLM trace counts only. It does not judge research quality.
+
+## Changed Behavior
+
+The CVRP and warehouse launchers now generate, when `POSTRUN_REPORTS=1`:
+
+- `postrun_acceptance/inventory/*.postrun_artifact_inventory.v1.json`
+- `postrun_acceptance/inventory/*.postrun_artifact_inventory.md`
+
+The inventory tool also counts the `inventory` report family when summarizing
+the postrun acceptance bundle.
+
+## Verification
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py
+python -m py_compile \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/launch_cvrp_agentic_campaign.py \
+  scion/tools/launch_warehouse_agentic_campaign.py
+```
+
+Result:
+
+- `25 passed`
+- `py_compile` passed
+
+Launcher smoke generated prepared CVRP and warehouse roots in temporary
+directories, `bash -n` passed for both `run.sh` files, and each generated script
+contained the guarded inventory JSON/Markdown commands.

@@ -61,6 +61,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         ("failures", "normal.failures.json"),
         ("research_efficiency", "normal.research_efficiency.v1.json"),
         ("manifests", "normal.proposal_trajectory_manifest.v1.json"),
+        ("inventory", "normal.postrun_artifact_inventory.v1.json"),
     ):
         _write_json(run_root / "postrun_acceptance" / subdir / filename, {})
     _write_json(
@@ -153,6 +154,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["postrun_reports"]["exists"] is True
     assert data["postrun_reports"]["counts"] == {
         "failures": 1,
+        "inventory": 1,
         "manifests": 1,
         "research_efficiency": 1,
         "summaries": 1,

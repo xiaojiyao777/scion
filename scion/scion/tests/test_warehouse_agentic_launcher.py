@@ -142,6 +142,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "report failures" in run_sh_text
     assert "report research-efficiency" in run_sh_text
     assert "report proposal-trajectory-manifest" in run_sh_text
+    assert "tools/postrun_artifact_inventory.py" in run_sh_text
+    assert "postrun_artifact_inventory.v1.json" in run_sh_text
+    assert "postrun_artifact_inventory.md" in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
     assert 'manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "--agentic-proposal" in command_txt
