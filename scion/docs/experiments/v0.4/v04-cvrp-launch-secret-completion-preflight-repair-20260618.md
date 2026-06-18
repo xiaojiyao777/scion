@@ -62,7 +62,7 @@ Coverage added:
 - `launch.env` records `SCION_API_KEY=''` and `SCION_API_KEY_ENV=...`, while
   `command.txt` records only `<from-env:...>`.
 - Missing API-key environment variable exits before campaign startup and writes
-  `run_status.json`.
+  valid `run_status.json` without depending on the campaign Python path.
 - An inherited `SCION_API_KEY` survives `launch.env` sourcing when
   `--api-key-env SCION_API_KEY` is used.
 - `--completion-preflight` writes a real completion preflight block to

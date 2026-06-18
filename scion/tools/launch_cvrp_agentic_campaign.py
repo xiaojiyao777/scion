@@ -343,7 +343,7 @@ if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
       echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "SCION_API_KEY_ENV_MISSING:$SCION_API_KEY_ENV"
     }} > "$RUN_ROOT/exit.txt"
-    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":%s}}\n' "$(printf '%s' "$SCION_API_KEY_ENV" | "$PY" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" > "$RUN_ROOT/run_status.json"
+    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":"%s"}}\n' "$SCION_API_KEY_ENV" > "$RUN_ROOT/run_status.json"
     exit {PREFLIGHT_FAILURE_EXIT_CODE}
   fi
   SCION_API_KEY="$_RESOLVED_SCION_API_KEY"
