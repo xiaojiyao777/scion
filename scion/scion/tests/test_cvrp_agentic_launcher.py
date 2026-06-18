@@ -89,7 +89,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
     assert (
-        "GIT_RUNTIME_GUARD_PATHS='scion/scion scion/problems/cvrp vrp'"
+        "GIT_RUNTIME_GUARD_PATHS="
+        "'scion/scion :(exclude)scion/scion/tests scion/problems/cvrp vrp'"
         in launch_env
     )
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
@@ -127,7 +128,11 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     assert "COMPLETION_PREFLIGHT=0" in command_txt
-    assert "GIT_RUNTIME_GUARD_PATHS=scion/scion scion/problems/cvrp vrp" in command_txt
+    assert (
+        "GIT_RUNTIME_GUARD_PATHS="
+        "scion/scion :(exclude)scion/scion/tests scion/problems/cvrp vrp"
+        in command_txt
+    )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     assert "RESUME_FROM_CAMPAIGN=" in command_txt
@@ -506,7 +511,8 @@ def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(
     launch_env = run_root / "launch.env"
     launch_env.write_text(
         launch_env.read_text(encoding="utf-8").replace(
-            "GIT_RUNTIME_GUARD_PATHS='scion/scion scion/problems/cvrp vrp'",
+            "GIT_RUNTIME_GUARD_PATHS="
+            "'scion/scion :(exclude)scion/scion/tests scion/problems/cvrp vrp'",
             "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
         ),
         encoding="utf-8",

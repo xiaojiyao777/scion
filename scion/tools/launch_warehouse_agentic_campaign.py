@@ -585,7 +585,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
         "GIT_COMMIT": _git_commit(repo_root),
         "GIT_RUNTIME_GUARD_PATHS": (
-            "scion/scion scion/problems/warehouse_delivery surrogate"
+            "scion/scion :(exclude)scion/scion/tests "
+            "scion/problems/warehouse_delivery surrogate"
         ),
         "STARTED_UTC": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

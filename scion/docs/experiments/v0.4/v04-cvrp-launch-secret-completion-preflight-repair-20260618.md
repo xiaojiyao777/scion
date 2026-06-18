@@ -92,7 +92,9 @@ Coverage added:
 - Generated `run.sh` records `GIT_RUNTIME_DIRTY` or runtime-path
   `GIT_COMMIT_MISMATCH` as pre-campaign wrapper failures, allows
   docs-only commit drift with `GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED`, and
-  exports deterministic one-thread numeric-library caps.
+  exports deterministic one-thread numeric-library caps. The runtime pathspec
+  excludes `scion/scion/tests`, so test-only commits do not invalidate prepared
+  run roots.
 - `--api-key` and `--api-key-env` are mutually exclusive.
 - Invalid environment variable names are rejected.
 

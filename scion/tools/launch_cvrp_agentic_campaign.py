@@ -497,7 +497,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "DISABLE_EARLY_STOP": 1,
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
         "GIT_COMMIT": _git_commit(repo_root),
-        "GIT_RUNTIME_GUARD_PATHS": "scion/scion scion/problems/cvrp vrp",
+        "GIT_RUNTIME_GUARD_PATHS": (
+            "scion/scion :(exclude)scion/scion/tests scion/problems/cvrp vrp"
+        ),
         "STARTED_UTC": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 

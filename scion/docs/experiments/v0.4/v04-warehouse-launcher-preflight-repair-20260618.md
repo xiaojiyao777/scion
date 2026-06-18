@@ -38,7 +38,8 @@ The launcher prepares a run root with:
   directory checks, and copied top-level `run_status.json` / `exit.txt`
   wrapper behavior. Runtime-path dirty changes or runtime-path commit drift
   fail before campaign startup; later docs-only status commits are allowed and
-  logged.
+  logged. The runtime pathspec excludes `scion/scion/tests`, so test-only
+  commits do not invalidate prepared run roots.
 - pre-campaign wrapper failures for missing API-key environment variables and
   missing warehouse data roots write valid `run_status.json` without relying on
   the configured campaign Python executable.

@@ -87,7 +87,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "POSTRUN_REPORTS=1" in launch_env
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
-        "'scion/scion scion/problems/warehouse_delivery surrogate'" in launch_env
+        "'scion/scion :(exclude)scion/scion/tests "
+        "scion/problems/warehouse_delivery surrogate'" in launch_env
     )
     assert "ROUNDS=6" in launch_env
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
@@ -137,7 +138,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY=<set>" in command_txt
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
-        "scion/scion scion/problems/warehouse_delivery surrogate" in command_txt
+        "scion/scion :(exclude)scion/scion/tests "
+        "scion/problems/warehouse_delivery surrogate" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
@@ -305,7 +307,8 @@ def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
     launch_env.write_text(
         launch_env.read_text(encoding="utf-8").replace(
             "GIT_RUNTIME_GUARD_PATHS="
-            "'scion/scion scion/problems/warehouse_delivery surrogate'",
+            "'scion/scion :(exclude)scion/scion/tests "
+            "scion/problems/warehouse_delivery surrogate'",
             "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
         ),
         encoding="utf-8",
