@@ -31,8 +31,9 @@ Framework:
   policy, or problem semantics.
 - Runtime semantics for budget-exhausting solvers are repaired in the narrow
   v0.4 sense: high aggregate `runtime_regression_rate` no longer blocks
-  low-SNR trajectory-divergent screening expansion or drives strong prompt
-  actionability when the problem declares `runtime_model=budget_exhausting`.
+  low-SNR trajectory-divergent screening expansion, drives lifecycle
+  soft-abandon/repeated-signal noise, or creates strong prompt actionability
+  when the problem declares `runtime_model=budget_exhausting`.
 - CVRP and warehouse launch helpers now support prepared follow-up roots,
   completion preflight, secret-safe API-key env wiring, runtime-source guards,
   campaign copy/resume, and default postrun report generation.
@@ -46,7 +47,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-runtimefix-6r-gpt55-20260618T102543Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-lifecyclefix-6r-gpt55-20260618T103718Z-claw`.
 
 CVRP/VRP:
 
@@ -64,7 +65,7 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-1r-gpt55-runtimefix-1r-gpt55-20260618T102543Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-1r-gpt55-lifecyclefix-1r-gpt55-20260618T103717Z-claw`.
 
 Infrastructure:
 
@@ -98,7 +99,9 @@ Infrastructure:
   `scion/design/scion-architecture-v3.md`.
 - Current milestone index: `scion/docs/status/v0.4-history.md`.
 - Current runtime-semantics repair:
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
+  and
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

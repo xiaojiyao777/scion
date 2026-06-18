@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -101,7 +101,7 @@ For warehouse, effective research requires:
 
 ## Experiment Defaults
 
-- Use the local `gpt5.5` model for Scion runs that involve LLM proposal,
+- Use the local `gpt-5.5` model for Scion runs that involve LLM proposal,
   diagnosis, or code-generation calls.
 - Treat copied configs, protocol/split/seed hashes, champion versions,
   workspace commits, and run directories as required evidence.
@@ -243,10 +243,12 @@ Current checkpoint:
   hypothesis, candidate patch, branch evidence, follow-up case targeting, compact
   status/progress, measurement readiness, and research-efficiency reporting.
 - Budget-exhausting runtime semantics now avoid treating high aggregate
-  `runtime_regression_rate` as a hard low-SNR expansion blocker or strong prompt
-  action signal when the problem declares `runtime_model=budget_exhausting`.
-  Report:
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`.
+  `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
+  soft-abandon signal, repeated-signal discriminator, or strong prompt action
+  signal when the problem declares `runtime_model=budget_exhausting`. Reports:
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
+  and
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`.
 - CVRP live agentic checks now demonstrate useful research-loop behavior
   without yet demonstrating solver improvement. The framework can steer
   target-intent, carry branch lessons into prompts, generate material solver
@@ -560,7 +562,7 @@ Exit criteria:
   tier `low_power`. Raw A/A pair evidence remains outside
   `DecisionFeatures`.
 - Completed through first-rung Phase 4 focused validation. Short CVRP and
-  warehouse campaigns have been run and audited with local `gpt5.5`; evidence
+  warehouse campaigns have been run and audited with local `gpt-5.5`; evidence
   is now interpreted against A/A MDE/readiness rather than only promotion or
   aggregate win rate.
 - Warehouse research-loop repair check completed and failed quality acceptance.
