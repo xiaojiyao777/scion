@@ -33,8 +33,9 @@ Framework:
   v0.4 sense: high aggregate `runtime_regression_rate` no longer blocks
   low-SNR trajectory-divergent screening expansion, drives lifecycle
   soft-abandon/repeated-signal noise, assigns a proposal feedback
-  `runtime_regression` tier, or creates strong prompt actionability when the
-  problem declares `runtime_model=budget_exhausting`.
+  `runtime_regression` tier, vetoes low-signal `retain_head` workspace
+  preservation, or creates strong prompt actionability when the problem declares
+  `runtime_model=budget_exhausting`.
 - Measurement integration is covered against real CVRP formal and warehouse
   production assets: problem-owned practical deltas, runtime model, pairing
   validity, and reduced readiness feed deterministic protocol config fields;
@@ -148,7 +149,9 @@ Infrastructure:
   and
   `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`
   and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-screening-feedback-runtime-tier-repair-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-screening-feedback-runtime-tier-repair-20260618.md`
+  and
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-finalizer-retain-head-repair-20260618.md`.
 - Current measurement-integration repair:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - Current calibration evidence repair:

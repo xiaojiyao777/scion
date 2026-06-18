@@ -1186,14 +1186,19 @@ def _preserve_low_signal_screening_workspace(
     if stats.candidate_failed_pairs > 0:
         return False
     runtime_confident = _screening_runtime_evidence_confident(stats)
+    budget_exhausting = (
+        _protocol_runtime_model(protocol_result) == "budget_exhausting"
+    )
     if (
-        runtime_confident
+        not budget_exhausting
+        and runtime_confident
         and stats.runtime_ratio_median is not None
         and stats.runtime_ratio_median > 1.10
     ):
         return False
     if (
-        runtime_confident
+        not budget_exhausting
+        and runtime_confident
         and stats.runtime_regression_rate is not None
         and stats.runtime_regression_rate >= 0.90
     ):
@@ -1209,6 +1214,20 @@ def _preserve_low_signal_screening_workspace(
     if lifecycle_codes & reason_set:
         return True
     return False
+
+
+def _protocol_runtime_model(protocol_result: ProtocolResult) -> str:
+    summary = getattr(protocol_result, "candidate_surface_runtime_summary", None)
+    if isinstance(summary, dict):
+        diagnostic = summary.get("runtime_budget_diagnostic")
+        if isinstance(diagnostic, dict):
+            text = str(diagnostic.get("runtime_model") or "").strip()
+            if text in {"comparative", "budget_exhausting"}:
+                return text
+        text = str(summary.get("runtime_model") or "").strip()
+        if text in {"comparative", "budget_exhausting"}:
+            return text
+    return ""
 
 
 def _fresh_runtime_replay_required(

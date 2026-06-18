@@ -174,6 +174,125 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert hyp_store.statuses == [("h-1", "screening_no_effect")]
 
 
+def test_budget_exhausting_runtime_does_not_discard_retained_low_signal_workspace() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Refine a bounded budget-exhausting CVRP mechanism.",
+        change_locus="solver_design",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="budget_exhausting_refinement", change_type="modify"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-budget",
+        branch_id=branch.branch_id,
+        change_locus="solver_design",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# budget-exhausting candidate\n",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    patches = {branch.branch_id: patch}
+    discarded: list[str] = []
+    hyp_store = _HypothesisStore()
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches=patches,
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: discarded.append(branch_id),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=8,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            runtime_ratio_median=1.18,
+            runtime_delta_median_ms=29.0,
+            runtime_regression_rate=1.0,
+            runtime_pairs=8,
+            valid_pairs=8,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="all ties with saturated anytime runtime",
+        raw_metrics_ref="/tmp/metrics.json",
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "schema": "scion.runtime_budget_diagnostic.v1",
+                "code": SCREENING_RUNTIME_BUDGET_SATURATION,
+                "stage": "screening",
+                "severity": "info",
+                "runtime_model": "budget_exhausting",
+            },
+        },
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=(
+            "SCREENING_FAIL_WIN_RATE",
+            SCREENING_RUNTIME_BUDGET_SATURATION,
+            SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        ),
+        lifecycle_action="retain_head",
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert "neutral no-effect screening signal" in result.reason
+    assert discarded == []
+    assert workspaces[branch.branch_id] == "/tmp/workspace"
+    assert patches[branch.branch_id] is patch
+    assert stored.branch_code_status == "active_no_effect"
+    assert stored.last_screening_feedback_tier == "no_effect"
+    assert hyp_store.statuses == [("h-budget", "screening_no_effect")]
+
+
 def test_no_effect_after_weak_checkpoint_parks_current_head_and_opens_slot() -> None:
     controller = BranchController()
     branch = controller.create_branch(
