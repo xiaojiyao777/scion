@@ -99,8 +99,50 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         / "research_efficiency"
         / "normal.research_efficiency.v1.json",
         {
-            "measurement_readiness": {"status": "ready"},
-            "protocol_effects_vs_mde": {"mde_source": "readiness"},
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "mde_at_power_80": 9.9,
+                "signal_to_noise_tier": "low_power",
+            },
+            "measurement_readiness_source": "summary_status",
+            "protocol_effects_vs_mde": {
+                "schema_version": "scion.research_efficiency_effect_vs_mde.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "measurement_readiness_status": "ready",
+                "mde_at_power_80": 9.9,
+                "mde_source": "measurement_readiness.mde_at_power_80",
+                "interpretation": "has_positive_protocol_effect_at_or_above_mde",
+                "protocol_row_count": 2,
+                "rows_at_or_above_mde": 1,
+                "rows_with_ci_high_below_mde": 1,
+                "positive_rows": 1,
+                "nonpositive_rows": 1,
+                "max_effect_to_mde_ratio": 1.212121,
+                "by_stage": {
+                    "screening": {
+                        "protocol_row_count": 2,
+                        "rows_at_or_above_mde": 1,
+                    }
+                },
+                "top_rows_by_effect_to_mde": [
+                    {
+                        "round": 1,
+                        "branch_id": "branch-1",
+                        "stage": "screening",
+                        "decision": "continue_explore",
+                        "gate_outcome": "pass",
+                        "median_delta": 12.0,
+                        "ci_high": 14.0,
+                        "win_rate": 0.6,
+                        "effect_to_mde_ratio": 1.212121,
+                        "positive_effect_at_or_above_mde": True,
+                        "ci_high_below_mde": False,
+                        "reason_codes": ["SCREENING_SIGNAL"],
+                    }
+                ],
+            },
             "fresh_runtime_replay_drain": {"attempts": 1},
             "research_continuity": {
                 "same_mechanism_followup": {
@@ -220,6 +262,50 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
     ] is True
+    effect_summary = brief["measurement_effect_summary"]
+    assert effect_summary["schema_version"] == (
+        "scion.postrun_measurement_effect_summary.v1"
+    )
+    assert effect_summary["report_only"] is True
+    assert effect_summary["decision_features_excluded"] is True
+    assert effect_summary["available"] is True
+    assert effect_summary["current_run_evidence"] is True
+    assert effect_summary["aggregate"] == {
+        "measurement_readiness_status_counts": {"ready": 1},
+        "interpretation_counts": {
+            "has_positive_protocol_effect_at_or_above_mde": 1
+        },
+        "protocol_row_count": 2,
+        "rows_at_or_above_mde": 1,
+        "rows_with_ci_high_below_mde": 1,
+        "positive_rows": 1,
+        "nonpositive_rows": 1,
+        "max_effect_to_mde_ratio": 1.212121,
+    }
+    effect_entry = effect_summary["entries"][0]
+    assert effect_entry["measurement_readiness"] == {
+        "status": "ready",
+        "reason_code": "ok",
+        "mde_at_power_80": 9.9,
+        "signal_to_noise_tier": "low_power",
+    }
+    assert effect_entry["protocol_effects_vs_mde"]["mde_at_power_80"] == 9.9
+    assert effect_entry["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"] == [
+        {
+            "round": 1,
+            "branch_id": "branch-1",
+            "stage": "screening",
+            "decision": "continue_explore",
+            "gate_outcome": "pass",
+            "median_delta": 12.0,
+            "ci_high": 14.0,
+            "win_rate": 0.6,
+            "effect_to_mde_ratio": 1.212121,
+            "positive_effect_at_or_above_mde": True,
+            "ci_high_below_mde": False,
+            "reason_codes": ["SCREENING_SIGNAL"],
+        }
+    ]
     context_summary = brief["prompt_context_visibility_summary"]
     assert context_summary["schema_version"] == (
         "scion.postrun_prompt_context_visibility_summary.v1"
@@ -302,6 +388,12 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert "## Measurement Effect Summary" in markdown
+    assert (
+        "| normal.research_efficiency.v1.json | ready | 9.9 | "
+        "has_positive_protocol_effect_at_or_above_mde | 2 | 1 | 1 | 1.212121 |"
+        in markdown
+    )
     assert "## Research Continuity Summary" in markdown
     assert "## Prompt Context Visibility Summary" in markdown
     assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
@@ -379,6 +471,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert brief["measurement_effect_summary"]["current_run_evidence"] is False
+    assert brief["measurement_effect_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
@@ -484,6 +578,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["branches"]["ids"] == []
     assert brief["llm_traces"]["trace_count"] == 0
     assert brief["resume_snapshot"]["present"] is True
+    assert brief["measurement_effect_summary"]["current_run_evidence"] is False
+    assert brief["measurement_effect_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False

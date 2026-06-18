@@ -34,8 +34,8 @@ Framework:
   Postrun artifact inventories now also mark `research_continuity` as an
   explicit Phase 4 evidence-coverage requirement, and postrun analysis briefs
   summarize the current-run continuity metrics for delegated review. Postrun
-  analysis briefs also summarize current-run prompt context/source visibility
-  and prompt signal density from proposal trajectory manifests without exposing
+  analysis briefs also summarize current-run measurement effect-vs-MDE,
+  prompt context/source visibility, and prompt signal density without exposing
   raw prompts, responses, or patches.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
@@ -186,6 +186,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
   Current prompt context visibility brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-prompt-context-visibility-brief-repair-20260618.md`.
+  Current measurement effect brief repair:
+  `scion/docs/experiments/v0.4/v04-postrun-measurement-effect-brief-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

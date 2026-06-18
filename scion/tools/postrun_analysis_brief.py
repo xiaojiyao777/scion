@@ -68,6 +68,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
+        "measurement_effect_summary": _measurement_effect_summary(
+            run_root_path,
+            inventory,
+        ),
         "prompt_context_visibility_summary": _prompt_context_visibility_summary(
             run_root_path,
             inventory,
@@ -278,6 +282,58 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 )
             )
 
+    effect_summary = brief.get("measurement_effect_summary") or {}
+    effect_aggregate = _mapping_or_empty(effect_summary.get("aggregate"))
+    lines.extend(
+        [
+            "",
+            "## Measurement Effect Summary",
+            "- Source: current-run research-efficiency `measurement_readiness` "
+            "and `protocol_effects_vs_mde` reports.",
+            f"- Available: `{_display(effect_summary.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(effect_summary.get('current_run_evidence'))}`",
+            "- Reports with effect-vs-MDE: "
+            f"`{_display(effect_summary.get('effect_report_count'))}`",
+            "- Readiness statuses: "
+            f"{_mapping_text(effect_aggregate.get('measurement_readiness_status_counts'))}",
+            "- Effect interpretations: "
+            f"{_mapping_text(effect_aggregate.get('interpretation_counts'))}",
+            "- Protocol rows / rows at-or-above MDE / ci-high below MDE: "
+            f"{_display(effect_aggregate.get('protocol_row_count'))} / "
+            f"{_display(effect_aggregate.get('rows_at_or_above_mde'))} / "
+            f"{_display(effect_aggregate.get('rows_with_ci_high_below_mde'))}",
+            "- Max effect/MDE ratio: "
+            f"{_display(effect_aggregate.get('max_effect_to_mde_ratio'))}",
+        ]
+    )
+    effect_entries = effect_summary.get("entries")
+    if isinstance(effect_entries, list) and effect_entries:
+        lines.extend(
+            [
+                "| Report | Readiness | MDE | Interpretation | Rows | At/Above MDE | CI High Below MDE | Max Effect/MDE |",
+                "|---|---|---:|---|---:|---:|---:|---:|",
+            ]
+        )
+        for entry in effect_entries:
+            if not isinstance(entry, dict):
+                continue
+            readiness = _mapping_or_empty(entry.get("measurement_readiness"))
+            effect = _mapping_or_empty(entry.get("protocol_effects_vs_mde"))
+            lines.append(
+                "| {report} | {status} | {mde} | {interpretation} | "
+                "{rows} | {above} | {below} | {ratio} |".format(
+                    report=_display(entry.get("report")),
+                    status=_display(readiness.get("status")),
+                    mde=_display(effect.get("mde_at_power_80")),
+                    interpretation=_display(effect.get("interpretation")),
+                    rows=_display(effect.get("protocol_row_count")),
+                    above=_display(effect.get("rows_at_or_above_mde")),
+                    below=_display(effect.get("rows_with_ci_high_below_mde")),
+                    ratio=_display(effect.get("max_effect_to_mde_ratio")),
+                )
+            )
+
     context_summary = brief.get("prompt_context_visibility_summary") or {}
     aggregate = _mapping_or_empty(context_summary.get("aggregate"))
     lines.extend(
@@ -484,6 +540,171 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
         {"name": name, "path": str(path), "present": path.exists()}
         for name, path in paths.items()
     ]
+
+
+def _measurement_effect_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_measurement_effect_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "report_count": 0,
+        "effect_report_count": 0,
+        "aggregate": _empty_measurement_effect_aggregate(),
+        "entries": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _research_efficiency_report_paths(run_root, inventory)
+    entries: list[dict[str, Any]] = []
+    aggregate = _empty_measurement_effect_aggregate()
+    for path in report_paths:
+        entry = _measurement_effect_entry(path)
+        if not entry:
+            continue
+        entries.append(entry)
+        _merge_measurement_effect_aggregate(aggregate, entry)
+
+    return {
+        **base,
+        "available": bool(entries),
+        "report_count": len(report_paths),
+        "effect_report_count": len(entries),
+        "aggregate": aggregate,
+        "entries": entries,
+    }
+
+
+def _empty_measurement_effect_aggregate() -> dict[str, Any]:
+    return {
+        "measurement_readiness_status_counts": {},
+        "interpretation_counts": {},
+        "protocol_row_count": 0,
+        "rows_at_or_above_mde": 0,
+        "rows_with_ci_high_below_mde": 0,
+        "positive_rows": 0,
+        "nonpositive_rows": 0,
+        "max_effect_to_mde_ratio": None,
+    }
+
+
+def _measurement_effect_entry(path: Path) -> dict[str, Any]:
+    doc = _read_json_object(path)
+    readiness = _mapping_or_empty(doc.get("measurement_readiness"))
+    effect = _mapping_or_empty(doc.get("protocol_effects_vs_mde"))
+    if not readiness and not effect:
+        return {}
+    compact_effect = _compact_protocol_effect(effect)
+    return {
+        "report": path.name,
+        "path": str(path),
+        "measurement_readiness": _drop_empty(
+            {
+                "status": readiness.get("status"),
+                "reason_code": readiness.get("reason_code"),
+                "mde_at_power_80": readiness.get("mde_at_power_80"),
+                "signal_to_noise_tier": readiness.get("signal_to_noise_tier"),
+                "effect_to_mde_ratio": readiness.get("effect_to_mde_ratio"),
+            }
+        ),
+        "measurement_readiness_source": doc.get("measurement_readiness_source"),
+        "protocol_effects_vs_mde": compact_effect,
+    }
+
+
+def _compact_protocol_effect(effect: Mapping[str, Any]) -> dict[str, Any]:
+    compact = _drop_empty(
+        {
+            "schema_version": effect.get("schema_version"),
+            "report_only": effect.get("report_only"),
+            "decision_features_excluded": effect.get(
+                "decision_features_excluded"
+            ),
+            "measurement_readiness_status": effect.get(
+                "measurement_readiness_status"
+            ),
+            "measurement_readiness_reason_code": effect.get(
+                "measurement_readiness_reason_code"
+            ),
+            "mde_at_power_80": effect.get("mde_at_power_80"),
+            "mde_source": effect.get("mde_source"),
+            "interpretation": effect.get("interpretation"),
+            "protocol_row_count": effect.get("protocol_row_count"),
+            "rows_at_or_above_mde": effect.get("rows_at_or_above_mde"),
+            "rows_with_ci_high_below_mde": effect.get(
+                "rows_with_ci_high_below_mde"
+            ),
+            "positive_rows": effect.get("positive_rows"),
+            "nonpositive_rows": effect.get("nonpositive_rows"),
+            "max_effect_to_mde_ratio": effect.get("max_effect_to_mde_ratio"),
+            "by_stage": _mapping_or_empty(effect.get("by_stage")),
+        }
+    )
+    top_rows = effect.get("top_rows_by_effect_to_mde")
+    if isinstance(top_rows, list):
+        compact["top_rows_by_effect_to_mde"] = [
+            _compact_effect_row(row) for row in top_rows if isinstance(row, Mapping)
+        ][:3]
+    return compact
+
+
+def _compact_effect_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "round": row.get("round"),
+            "branch_id": row.get("branch_id"),
+            "stage": row.get("stage"),
+            "decision": row.get("decision"),
+            "gate_outcome": row.get("gate_outcome"),
+            "median_delta": row.get("median_delta"),
+            "ci_high": row.get("ci_high"),
+            "win_rate": row.get("win_rate"),
+            "effect_to_mde_ratio": row.get("effect_to_mde_ratio"),
+            "positive_effect_at_or_above_mde": row.get(
+                "positive_effect_at_or_above_mde"
+            ),
+            "ci_high_below_mde": row.get("ci_high_below_mde"),
+            "reason_codes": row.get("reason_codes"),
+        }
+    )
+
+
+def _merge_measurement_effect_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    readiness = _mapping_or_empty(entry.get("measurement_readiness"))
+    effect = _mapping_or_empty(entry.get("protocol_effects_vs_mde"))
+    _increment_count(
+        aggregate["measurement_readiness_status_counts"],
+        str(readiness.get("status") or "unknown"),
+    )
+    _increment_count(
+        aggregate["interpretation_counts"],
+        str(effect.get("interpretation") or "unknown"),
+    )
+    for key in (
+        "protocol_row_count",
+        "rows_at_or_above_mde",
+        "rows_with_ci_high_below_mde",
+        "positive_rows",
+        "nonpositive_rows",
+    ):
+        aggregate[key] = _int_or_zero(aggregate.get(key)) + _int_or_zero(
+            effect.get(key)
+        )
+    ratio = _float_or_none(effect.get("max_effect_to_mde_ratio"))
+    current = _float_or_none(aggregate.get("max_effect_to_mde_ratio"))
+    if ratio is not None and (current is None or ratio > current):
+        aggregate["max_effect_to_mde_ratio"] = ratio
 
 
 def _prompt_context_visibility_summary(
@@ -771,6 +992,14 @@ def _increment_count(
     counts[key] = counts.get(key, 0) + amount
 
 
+def _drop_empty(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): item
+        for key, item in value.items()
+        if item not in (None, "", [], {})
+    }
+
+
 def _research_continuity_summary(
     run_root: Path,
     inventory: Mapping[str, Any],
@@ -916,6 +1145,13 @@ def _safe_ratio(numerator: int, denominator: int) -> float | None:
     if denominator <= 0:
         return None
     return round(numerator / denominator, 6)
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _int_or_zero(value: Any) -> int:
