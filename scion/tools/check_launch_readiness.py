@@ -218,6 +218,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                     detail=_display(item.get("detail")),
                 )
             )
+    action_lines = _completion_preflight_action_lines(report)
+    if action_lines:
+        lines.extend(["", "## Completion Preflight Action", *action_lines])
     lines.extend(
         [
             "",
@@ -342,6 +345,7 @@ def _completion_preflight_check(
         model,
         "--timeout-sec",
         str(timeout_sec),
+        "--login-url-on-failure",
         "--json",
     ]
     if api_key_env:
@@ -361,7 +365,91 @@ def _completion_preflight_check(
             "stdout": result.stdout[-2000:],
             "stderr": result.stderr[-2000:],
         }
+    payload = _with_completion_preflight_action(
+        payload,
+        model=model,
+        base_url=base_url,
+    )
     return ("ok" if result.returncode == 0 else "failed"), payload
+
+
+def _with_completion_preflight_action(
+    payload: Any,
+    *,
+    model: str,
+    base_url: str,
+) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    detail = dict(payload)
+    chat = detail.get("chat")
+    chat_detail = chat if isinstance(chat, dict) else {}
+    classification = str(chat_detail.get("classification") or "")
+    if detail.get("ok") is True or not classification:
+        return detail
+
+    login_url = str(detail.get("login_url") or "")
+    action: dict[str, Any] = {
+        "classification": classification,
+        "summary": "Resolve the GPT-5.5 proxy preflight before starting this prepared campaign.",
+        "rerun_command": (
+            "python scion/tools/check_launch_readiness.py <run_root> "
+            "--completion-preflight --format json"
+        ),
+        "model": model,
+        "base_url": base_url,
+    }
+    if classification in {"auth_token_invalidated", "not_authenticated", "unauthorized"}:
+        action["next_step"] = (
+            "Refresh the local proxy login, then rerun launch readiness until "
+            "launch_ready=true."
+        )
+        if login_url:
+            action["login_url"] = login_url
+    elif classification == "no_available_accounts":
+        action["next_step"] = (
+            "Wait for an active GPT-5.5 account or refresh the proxy account pool, "
+            "then rerun launch readiness."
+        )
+    elif classification == "rate_limited":
+        action["next_step"] = (
+            "Wait for the rate limit window to clear, then rerun launch readiness."
+        )
+    elif classification == "transport_error":
+        action["next_step"] = (
+            "Start or repair the local GPT-5.5 proxy endpoint, then rerun launch readiness."
+        )
+    else:
+        action["next_step"] = (
+            "Inspect the chat preflight detail, repair the proxy or model route, "
+            "then rerun launch readiness."
+        )
+    detail["operator_action"] = action
+    return detail
+
+
+def _completion_preflight_action_lines(report: dict[str, Any]) -> list[str]:
+    checks = report.get("checks")
+    if not isinstance(checks, dict):
+        return []
+    item = checks.get("completion_preflight")
+    if not isinstance(item, dict) or item.get("status") == "ok":
+        return []
+    detail = item.get("detail")
+    if not isinstance(detail, dict):
+        return []
+    action = detail.get("operator_action")
+    if not isinstance(action, dict):
+        return []
+    lines = [
+        f"- Classification: `{_display(action.get('classification'))}`",
+        f"- Next step: {_display(action.get('next_step'))}",
+    ]
+    login_url = action.get("login_url")
+    if login_url:
+        lines.append(f"- Login URL: `{_display(login_url)}`")
+    lines.append(f"- Rerun: `{_display(action.get('rerun_command'))}`")
+    return lines
 
 
 def _int_or_zero(value: Any) -> int:

@@ -61,6 +61,8 @@ Framework:
   static readiness covers prepared contracts, runtime guard consistency,
   `run.sh` syntax, report-family expectations, and unstarted root state; launch
   readiness is true only when the optional real completion preflight succeeds.
+  Completion-preflight failures now carry an `operator_action` and, when the
+  proxy exposes it, a login URL.
 - Historical and current run roots can be normalized for delegated analysis with
   `scion/tools/rebuild_postrun_acceptance.py`. The rebuild manifest reports
   per-family success/failure and preserves Phase 4 evidence gaps instead of
@@ -113,9 +115,9 @@ Infrastructure:
 1. Restore and verify the live `gpt-5.5` route with a real chat-completion
    preflight. `/v1/models` is not enough; on WSL run
    `scion/tools/check_launch_readiness.py <prepared-root>
-   --completion-preflight --format json` and require `launch_ready=true`. Use
-   `scion/tools/check_gpt55_proxy.py --login-url-on-failure` when a login URL is
-   needed.
+   --completion-preflight --format json` and require `launch_ready=true`. If it
+   fails, follow the reported `operator_action`; the readiness tool now requests
+   a proxy login URL on failure.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
    effect-vs-MDE, budget-exhausting runtime feedback, source visibility, and
@@ -163,6 +165,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-preflight-failed-launch-root-evidence-guard-20260618.md`.
 - Current launch readiness helper:
   `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
+- Current launch-readiness login actionability repair:
+  `scion/docs/experiments/v0.4/v04-launch-readiness-login-actionability-repair-20260618.md`.
 - Current CVRP prepared research-focus handoff:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-research-focus-handoff-repair-20260618.md`.
 - Current warehouse prepared research-focus handoff:

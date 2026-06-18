@@ -95,6 +95,89 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     assert report["checks"]["completion_preflight"]["status"] == "failed"
 
 
+def test_completion_preflight_fetches_login_url_and_operator_action(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    captured: dict[str, object] = {}
+
+    class Result:
+        returncode = 64
+        stdout = json.dumps(
+            {
+                "ok": False,
+                "chat": {
+                    "http_status": 401,
+                    "classification": "auth_token_invalidated",
+                    "message": "token has been invalidated",
+                },
+                "login_url": "http://127.0.0.1:8080/auth/login",
+            }
+        )
+        stderr = ""
+
+    def fake_run(command: list[str], **_: object) -> Result:
+        captured["command"] = command
+        return Result()
+
+    monkeypatch.setattr(readiness_tool.subprocess, "run", fake_run)
+
+    status, detail = readiness_tool._completion_preflight_check(
+        prepared_contract={
+            "manifest_path": str(run_root / "prepared_run_manifest.v1.json")
+        },
+        api_key=None,
+        api_key_env=None,
+        timeout_sec=20,
+    )
+
+    assert status == "failed"
+    assert "--login-url-on-failure" in captured["command"]
+    assert isinstance(detail, dict)
+    assert detail["login_url"] == "http://127.0.0.1:8080/auth/login"
+    assert detail["operator_action"]["classification"] == "auth_token_invalidated"
+    assert detail["operator_action"]["login_url"] == (
+        "http://127.0.0.1:8080/auth/login"
+    )
+    assert "launch_ready=true" in detail["operator_action"]["next_step"]
+
+
+def test_launch_readiness_markdown_renders_completion_action(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    def fail_preflight(**_: object) -> tuple[str, object]:
+        return "failed", {
+            "chat": {"classification": "not_authenticated"},
+            "operator_action": {
+                "classification": "not_authenticated",
+                "next_step": "Refresh the local proxy login.",
+                "login_url": "http://127.0.0.1:8080/auth/login",
+                "rerun_command": (
+                    "python scion/tools/check_launch_readiness.py <run_root> "
+                    "--completion-preflight --format json"
+                ),
+            },
+        }
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        fail_preflight,
+    )
+
+    report = readiness_tool.build_readiness(run_root, completion_preflight=True)
+    markdown = readiness_tool.render_markdown(report)
+
+    assert "## Completion Preflight Action" in markdown
+    assert "Classification: `not_authenticated`" in markdown
+    assert "http://127.0.0.1:8080/auth/login" in markdown
+    assert "--completion-preflight --format json" in markdown
+
+
 def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
     run_root = _write_prepared_root(tmp_path)
     (run_root / "exit.txt").write_text("WRAPPER_EXIT_STATUS:64\n", encoding="utf-8")
