@@ -59,7 +59,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-shape-724c465-6r-gpt55-20260618T201253Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-familyeffect-fa804e0-6r-gpt55-20260618T202627Z-claw`.
 
 CVRP/VRP:
 
@@ -73,18 +73,18 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-shape-724c465-1r-gpt55-20260618T201253Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-familyeffect-fa804e0-1r-gpt55-20260618T202615Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `724c465`. Strict
+- The current prepared roots were built from checkout `fa804e0`. Strict
   readiness on WSL confirms both roots remain statically ready and aligned to
   guarded source.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `refreshing=0`, and an
+  `not_authenticated`, auth pool `active=0` / `refreshing=1`, and an
   `operator_action.login_url`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
@@ -124,7 +124,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-724c465-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-fa804e0-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`

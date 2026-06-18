@@ -49,6 +49,35 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile
 # clean
 ```
 
+WSL verification after fast-forwarding the synchronized checkout to
+`fa804e0`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_cli_report_research_efficiency.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+# 23 passed in 1.54s
+
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py \
+  -k 'research_shape or cross_branch or summary_status'
+# 53 passed in 1.15s
+
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/scion/core/research_efficiency_report.py \
+  scion/scion/core/evidence_recording/research_shape_diagnostics.py \
+  scion/tools/postrun_analysis_brief.py \
+  scion/scion/tests/test_cli_report_research_efficiency.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py
+# clean
+```
+
 ## Acceptance
 
 Accepted as an R3/R4 delegated-analysis repair. Future postrun briefs can show
