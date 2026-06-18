@@ -28,6 +28,10 @@ def test_cvrp_active_solver_map_exposes_entrypoint_scheduler_and_registries(
     assert "_ALNSVNSSolver.solve" in rendered
     assert "ALNS" in rendered
     assert "VNS" in rendered
+    assert "_run_size70_two_opt_polish" in rendered
+    assert "_should_run_size70_two_opt(instance)" in rendered
+    assert "size70_two_opt_initial" in rendered
+    assert "size70_two_opt_embedded" in rendered
 
     registry_ids = {item["registry_id"] for item in payload["operator_registries"]}
     assert {
@@ -87,6 +91,7 @@ def test_cvrp_active_solver_map_exposes_proposal_only_research_lever_digest(
     assert "route compaction" in rendered
     assert "slack-preservation" in rendered
     assert "construction seed diversity" in rendered
+    assert "thresholded size70 two-opt fallback" in rendered
     assert "branch_" not in rendered
     assert "BKS" not in rendered
     assert "gap" not in rendered.lower()
@@ -182,6 +187,33 @@ def test_cvrp_algorithm_slice_reads_target_function_with_bounded_content(
     assert len(payload["content"]) == 160
     assert "def _default_vns_operators" in payload["content"]
     assert payload["content_digest"]
+    assert payload["source_policy_receipt"]["allowed"] is True
+
+
+def test_cvrp_algorithm_slice_reads_size70_two_opt_fallback_integration(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call(
+        "context.read_algorithm_slice",
+        {
+            "surface": "solver_design",
+            "slice_id": "cvrp.slice.scheduler.size70_two_opt_polish",
+            "max_chars": 12000,
+        },
+        context,
+    )
+
+    assert observation.is_error is False
+    payload = observation.structured_payload
+    assert payload["available"] is True
+    assert payload["file_path"] == "policies/baseline_modules/scheduler.py"
+    assert payload["slice_kind"] == "integration_block"
+    assert "_run_size70_two_opt_polish" in payload["content"]
+    assert "_two_opt_intra_polish" in payload["content"]
+    assert "record_best_update" in payload["content"]
     assert payload["source_policy_receipt"]["allowed"] is True
 
 

@@ -352,9 +352,17 @@ def _operator_registries() -> tuple[dict[str, Any], ...]:
                     "policies/baseline_modules/local_search.py",
                     0,
                     "local_search",
-                    "Intra-route 2-opt reversal neighborhood.",
-                    ("vns", "local_search", "two_opt"),
-                    ("solver_algorithm_phase_runtime_ms.vns_embedded",),
+                    (
+                        "Intra-route 2-opt reversal neighborhood; the scheduler "
+                        "also invokes the paired _two_opt_intra_polish helper as "
+                        "a size70 fallback when full VNS is skipped."
+                    ),
+                    ("vns", "local_search", "two_opt", "size70_fallback"),
+                    (
+                        "solver_algorithm_phase_runtime_ms.vns_embedded",
+                        "solver_algorithm_phase_runtime_ms.size70_two_opt_initial",
+                        "solver_algorithm_phase_runtime_ms.size70_two_opt_embedded",
+                    ),
                 ),
                 _operator(
                     "cvrp.local_search.relocate",
@@ -491,7 +499,8 @@ def _scheduler_integrations() -> tuple[dict[str, Any], ...]:
             "summary": (
                 "Initializes construction, destroy/repair registries, adaptive "
                 "weights, acceptance, and the bounded ALNS loop with optional "
-                "embedded VNS after repair."
+                "embedded VNS after repair or size70 two-opt fallback polish "
+                "when full VNS is skipped."
             ),
             "calls": (
                 "cvrp.registry.construction",
@@ -499,12 +508,14 @@ def _scheduler_integrations() -> tuple[dict[str, Any], ...]:
                 "cvrp.registry.repair",
                 "cvrp.registry.local_search_vns",
                 "cvrp.registry.acceptance",
+                "_run_size70_two_opt_polish",
             ),
             "guard_conditions": (
                 "_within_budget(start_ms, reserve)",
                 "candidate.is_feasible()",
                 "max_routes route-count guard",
                 "instance.customer_count <= vns_threshold",
+                "_should_run_size70_two_opt(instance)",
             ),
             "state_variables": (
                 "current",
@@ -519,6 +530,7 @@ def _scheduler_integrations() -> tuple[dict[str, Any], ...]:
                 "solver_algorithm_move_attempts",
                 "solver_algorithm_accepted_moves",
                 "solver_algorithm_phase_runtime_ms.vns_embedded",
+                "solver_algorithm_phase_runtime_ms.size70_two_opt_embedded",
                 "solver_algorithm_phase_best_delta.alns",
             ),
         },
@@ -529,7 +541,8 @@ def _scheduler_integrations() -> tuple[dict[str, Any], ...]:
             "phase": "construction",
             "summary": (
                 "Selects the seed construction path, applies route-limit "
-                "guarding, and optionally runs initial VNS before search."
+                "guarding, and optionally runs initial VNS or size70 two-opt "
+                "fallback polish before search."
             ),
             "calls": (
                 "_sweep_construction",
@@ -537,17 +550,20 @@ def _scheduler_integrations() -> tuple[dict[str, Any], ...]:
                 "_capacity_balanced_construction",
                 "_nearest_neighbor",
                 "_vns",
+                "_run_size70_two_opt_polish",
             ),
             "guard_conditions": (
                 "customer_count > cw_threshold",
                 "max_routes route-count guard",
                 "solution.is_feasible()",
                 "customer_count <= vns_threshold",
+                "_should_run_size70_two_opt(instance)",
             ),
             "state_variables": ("solution", "max_routes", "reserve"),
             "telemetry_events": (
                 "solver_algorithm_phase_runtime_ms.construction",
                 "solver_algorithm_phase_runtime_ms.vns_initial",
+                "solver_algorithm_phase_runtime_ms.size70_two_opt_initial",
             ),
         },
     )
@@ -718,7 +734,8 @@ def _research_lever_digest() -> dict[str, Any]:
                 "owner_files": ("policies/baseline_modules/scheduler.py",),
                 "causal_lever": (
                     "phase ordering, budget allocation, trigger policy, and narrow "
-                    "integration wiring for module-owned mechanisms"
+                    "integration wiring for module-owned mechanisms, including "
+                    "thresholded size70 two-opt fallback when full VNS is skipped"
                 ),
             },
         ),
@@ -828,16 +845,19 @@ def _symbol_slice(
         context,
         spec.file_path,
         str(spec.symbol),
-        max_chars=max_chars,
+        max_chars=_MAX_BODY_CHARS,
     )
     if not artifact.get("readable"):
         return None
     content = str(artifact.get("content_preview") or "")
+    truncated = bool(artifact.get("truncated")) or len(content) > max_chars
+    if len(content) > max_chars:
+        content = content[:max_chars]
     return {
         "content": content,
         "line_start": artifact.get("line_start"),
         "line_end": artifact.get("line_end"),
-        "truncated": bool(artifact.get("truncated")),
+        "truncated": truncated,
     }
 
 
@@ -1074,10 +1094,19 @@ _SLICE_SPECS: tuple[_SliceSpec, ...] = (
         "cvrp.slice.scheduler.initial_solution",
         "policies/baseline_modules/scheduler.py",
         ("_ALNSVNSSolver._initial_solution",),
-        "Show the construction selection and initial VNS integration.",
+        "Show the construction selection, initial VNS, and size70 fallback integration.",
         "body",
         "integration_block",
         symbol="_ALNSVNSSolver._initial_solution",
+    ),
+    _SliceSpec(
+        "cvrp.slice.scheduler.size70_two_opt_polish",
+        "policies/baseline_modules/scheduler.py",
+        ("_ALNSVNSSolver._run_size70_two_opt_polish",),
+        "Show the scheduler-owned size70 two-opt fallback polish integration.",
+        "body",
+        "integration_block",
+        symbol="_ALNSVNSSolver._run_size70_two_opt_polish",
     ),
     _SliceSpec(
         "cvrp.slice.scheduler.destroy_ops",

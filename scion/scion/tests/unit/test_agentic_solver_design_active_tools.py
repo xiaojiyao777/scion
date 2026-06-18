@@ -54,6 +54,7 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     assert "cvrp.destroy_repair.shaw_related_removal" in fact_ids
     assert "cvrp.destroy_repair.random_removal_destroy" in fact_ids
     assert "cvrp.local_search.cross_route_or_opt_2_3" in fact_ids
+    assert "cvrp.local_search.size70_two_opt_fallback" in fact_ids
     assert all(fact["used_by_prompt"] and fact["used_by_gate"] for fact in fact_packet["facts"])
     assert random_fact["fact_digest"]
     assert random_fact["provenance"]["source"] == "active_algorithm_facts_provider"
@@ -73,6 +74,9 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     assert "_or_opt_2" in rendered
     assert "_or_opt_3" in rendered
     assert "vns_embedded" in rendered
+    assert "size70_two_opt_initial" in rendered
+    assert "size70_two_opt_embedded" in rendered
+    assert "_two_opt_intra_polish" in rendered
     assert "legacy_inactive_surface_exclusion" in payload
     assert "excluded_surface_policy" in rendered
     assert "as active evidence" in rendered
@@ -99,6 +103,8 @@ def test_solver_call_graph_marks_initial_solution_alns_vns_and_acceptance(
     assert "distance + demand + original-route relatedness" in rendered
     assert "local_search._vns" in rendered
     assert "_default_vns_operators" in rendered
+    assert "_run_size70_two_opt_polish" in rendered
+    assert "_two_opt_intra_polish" in rendered
     assert "_SimulatedAnnealing.accept" in rendered
     assert "_AdaptiveWeights" in rendered
     assert "legacy_inactive_surface_exclusion" in payload
@@ -124,7 +130,7 @@ def test_active_solver_algorithm_file_tools_are_allowlisted_with_provenance(
         {
             "file_path": "policies/baseline_modules/scheduler.py",
             "symbol": "_ALNSVNSSolver._initial_solution",
-            "max_chars": 12000,
+            "max_chars": 24000,
         },
         context,
     )

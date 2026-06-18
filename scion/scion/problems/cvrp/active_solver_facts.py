@@ -128,6 +128,32 @@ class CvrpActiveSolverDesignProvider:
                 "evidence": ["_vns", "_default_vns_operators", "vns_embedded"],
             },
             {
+                "from": "scheduler._ALNSVNSSolver.solve",
+                "to": "scheduler._ALNSVNSSolver._run_size70_two_opt_polish",
+                "mechanism": (
+                    "size70 two-opt fallback polish when full embedded VNS is "
+                    "skipped by threshold or disabled"
+                ),
+                "evidence": [
+                    "_should_run_size70_two_opt(instance)",
+                    "size70_two_opt_embedded",
+                    "_two_opt_intra_polish",
+                ],
+            },
+            {
+                "from": "scheduler._ALNSVNSSolver._initial_solution",
+                "to": "scheduler._ALNSVNSSolver._run_size70_two_opt_polish",
+                "mechanism": (
+                    "initial size70 two-opt fallback polish when initial VNS is "
+                    "not run"
+                ),
+                "evidence": [
+                    "_should_run_size70_two_opt(instance)",
+                    "size70_two_opt_initial",
+                    "_two_opt_intra_polish",
+                ],
+            },
+            {
                 "from": "local_search._default_vns_operators",
                 "to": "local_search operators",
                 "mechanism": "VNS neighborhoods include intra and cross-route moves",
@@ -139,6 +165,7 @@ class CvrpActiveSolverDesignProvider:
                     "_or_opt_3",
                     "_swap",
                     "_two_opt_star",
+                    "_two_opt_intra_polish",
                 ],
             },
             {
@@ -175,7 +202,8 @@ class CvrpActiveSolverDesignProvider:
                     "_initial_solution chooses sweep construction above cw_threshold, "
                     "Clarke-Wright otherwise, capacity-balanced construction if the "
                     "route cap is exceeded, nearest-neighbor only as feasibility "
-                    "fallback, then optional vns_initial."
+                    "fallback, then optional vns_initial or size70 two-opt "
+                    "fallback when VNS is skipped."
                 ),
                 "evidence_symbols": [
                     "_initial_solution",
@@ -184,6 +212,8 @@ class CvrpActiveSolverDesignProvider:
                     "_capacity_balanced_construction",
                     "_nearest_neighbor",
                     "vns_initial",
+                    "_should_run_size70_two_opt",
+                    "size70_two_opt_initial",
                 ],
             },
             "alns_loop": {
@@ -192,16 +222,18 @@ class CvrpActiveSolverDesignProvider:
                     "The main ALNS loop starts from a feasible construction, "
                     "records iterations, samples destroy/repair operators through "
                     "adaptive weights, applies destroy/repair, optionally embeds "
-                    "VNS, rejects infeasible or route-cap-violating candidates, "
-                    "scores best/better/accepted moves, and updates weights per "
-                    "segment. Capacity infeasibility is not a normal accepted "
-                    "search state."
+                    "VNS or size70 two-opt fallback polish, rejects infeasible or "
+                    "route-cap-violating candidates, scores best/better/accepted "
+                    "moves, and updates weights per segment. Capacity infeasibility "
+                    "is not a normal accepted search state."
                 ),
                 "evidence_symbols": [
                     "record_iteration('alns')",
                     "_AdaptiveWeights.choose",
                     "destroy_op",
                     "repair_op",
+                    "_should_run_size70_two_opt",
+                    "size70_two_opt_embedded",
                     "record_move('alns')",
                     "segment_length",
                 ],
@@ -247,9 +279,10 @@ class CvrpActiveSolverDesignProvider:
                 "active": "_default_vns_operators" in local_search,
                 "summary": (
                     "VNS uses _two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
-                    "and _two_opt_star. _or_opt skips same-route destinations, so "
-                    "single-customer, length-2, and length-3 cross-route Or-opt "
-                    "already exist. "
+                    "and _two_opt_star. _two_opt_intra_polish is also used by the "
+                    "scheduler's size70 fallback phases. _or_opt skips same-route "
+                    "destinations, so single-customer, length-2, and length-3 "
+                    "cross-route Or-opt already exist. "
                     "_two_opt_star exchanges cross-route suffix/tail segments."
                 ),
                 "evidence_symbols": [
@@ -262,6 +295,7 @@ class CvrpActiveSolverDesignProvider:
                     "_or_opt_3",
                     "_swap",
                     "_two_opt_star",
+                    "_two_opt_intra_polish",
                 ],
             },
             "acceptance": {
@@ -469,6 +503,43 @@ class CvrpActiveSolverDesignProvider:
                     "policies/baseline_modules/local_search.py::_two_opt_intra",
                     "policies/baseline_modules/local_search.py::_default_vns_operators",
                 ],
+            ),
+            _fact(
+                "cvrp.local_search.size70_two_opt_fallback",
+                (
+                    "The scheduler already invokes _two_opt_intra_polish as "
+                    "size70_two_opt_initial and size70_two_opt_embedded fallback "
+                    "polish when full VNS is skipped or disabled for instances at "
+                    "or above SIZE70_TWO_OPT_MIN_CUSTOMERS."
+                ),
+                [
+                    mechanism_summary.get("construction"),
+                    mechanism_summary.get("alns_loop"),
+                    mechanism_summary.get("local_search"),
+                ],
+                [
+                    (
+                        "policies/baseline_modules/scheduler.py::"
+                        "_should_run_size70_two_opt"
+                    ),
+                    (
+                        "policies/baseline_modules/scheduler.py::"
+                        "_run_size70_two_opt_polish"
+                    ),
+                    (
+                        "policies/baseline_modules/local_search.py::"
+                        "_two_opt_intra_polish"
+                    ),
+                    "policies/baseline_modules/config.py::SIZE70_TWO_OPT_MIN_CUSTOMERS",
+                ],
+                mechanism="size70_two_opt_fallback",
+                allowed_variant_guidance=(
+                    "Allowed variant: change the fallback trigger, threshold, "
+                    "budget behavior, or intra-route polish implementation while "
+                    "explicitly acknowledging the existing size70 two-opt fallback; "
+                    "do not claim that large or thresholded instances have no "
+                    "two-opt polish path."
+                ),
             ),
             _fact(
                 "cvrp.local_search.relocate_and_swap",
