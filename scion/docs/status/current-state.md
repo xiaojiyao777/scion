@@ -60,6 +60,11 @@ Framework:
   `research_shape_diagnostics` signal derived from the cross-branch research
   map, so branch depth, shallow scatter, and repeated non-positive family shape
   are visible before broader rules without entering `DecisionFeatures`.
+- Prepared handoff bundles now include a report-only
+  `prompt_context_readiness` family. It audits prepared research focus, copied
+  campaign summary/status, problem-specific handoff fields, and the
+  `research_shape_diagnostics` prompt path before launch without rendering raw
+  provider prompts or changing runtime decisions.
 
 Warehouse:
 
@@ -92,6 +97,10 @@ Infrastructure:
   status/report commits are docs-only relative to those roots; strict WSL
   readiness confirms both roots are statically ready, not started, and
   runtime-guard valid.
+- Both current prepared roots have regenerated `prompt_context_readiness`
+  handoff artifacts with `ready_for_launch_prompt_audit=true` and
+  `missing_required=[]`. Static readiness still reports
+  `git_runtime_consistent=ok` because the runtime guard paths are unchanged.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
@@ -107,13 +116,16 @@ Infrastructure:
 1. Refresh the WSL/local proxy login, then rerun:
    `scion/tools/check_launch_readiness.py <prepared-root>
    --require-launch-ready --format json`. `/v1/models` is not enough.
-2. When launch readiness is true, run the prepared CVRP post-pivot follow-up
+2. Before starting a prepared root, confirm its
+   `prepared_handoff/prompt_context_readiness/*.json` still reports
+   `ready_for_launch_prompt_audit=true`.
+3. When launch readiness is true, run the prepared CVRP post-pivot follow-up
    first from the clean WSL checkout. Inspect target intent, hypothesis, branch
    lesson transfer, protocol effect-vs-MDE, budget-exhausting runtime feedback,
    source visibility, and postrun research-efficiency reports.
-3. Keep the prepared warehouse `v2` follow-up available as the simpler
+4. Keep the prepared warehouse `v2` follow-up available as the simpler
    continuous-improvement check once LLM access is stable.
-4. Keep this file short. Update it only when the operating truth or next action
+5. Keep this file short. Update it only when the operating truth or next action
    changes.
 
 ## Evidence Pointers
@@ -138,6 +150,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`

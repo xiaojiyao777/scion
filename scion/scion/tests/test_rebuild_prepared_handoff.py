@@ -109,6 +109,42 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ),
         encoding="utf-8",
     )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "agentic_session_trace_index": {
+                "sessions": [
+                    {
+                        "call_kind": "hypothesis",
+                        "prompt_manifest": "traces/branch-a/prompt_manifest.json",
+                    }
+                ]
+            },
+            "branches": [{"id": "branch-a"}],
+            "proposal_accounting": {
+                "last_prompt_manifest": "traces/branch-a/prompt_manifest.json",
+            },
+        },
+    )
+    _write_json(
+        campaign_dir / "status.json",
+        {
+            "agentic_session_trace_index": {
+                "sessions": [
+                    {
+                        "call_kind": "code",
+                        "prompt_manifest_path": "traces/branch-a/code_prompt_manifest.json",
+                    }
+                ]
+            },
+            "branches": [{"id": "branch-a"}],
+            "proposal_accounting": {
+                "last_code_prompt_manifest": (
+                    "traces/branch-a/code_prompt_manifest.json"
+                ),
+            },
+        },
+    )
     stale = run_root / "prepared_handoff" / "analysis_brief" / (
         "cvrp_on_full.prepared_analysis_brief.v1.json"
     )
@@ -132,6 +168,13 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
             / "cvrp_on_full.prepared_artifact_inventory.v1.json"
         ).read_text(encoding="utf-8")
     )
+    prompt_context = json.loads(
+        (
+            handoff_dir
+            / "prompt_context_readiness"
+            / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+        ).read_text(encoding="utf-8")
+    )
     rebuild_manifest = json.loads(
         (
             handoff_dir / "rebuild" / "prepared_handoff_rebuild.v1.json"
@@ -147,6 +190,31 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert inventory["phase4_evidence_coverage"]["problem_specific_requirements"][
         "cvrp_direct_effect_rules_handoff"
     ]["available"] is True
+    assert prompt_context["schema_version"] == (
+        "scion.prepared_prompt_context_readiness.v1"
+    )
+    assert prompt_context["report_only"] is True
+    assert prompt_context["raw_provider_prompt_rendered"] is False
+    assert prompt_context["readiness"]["ready_for_launch_prompt_audit"] is True
+    assert (
+        prompt_context["signals"]["prepared_research_focus"]["available"] is True
+    )
+    assert (
+        prompt_context["signals"]["copied_campaign_summary"]["available"] is True
+    )
+    assert prompt_context["signals"]["prompt_manifest_history"]["available"] is True
+    assert (
+        prompt_context["signals"]["research_shape_prompt_signal"]["available"] is True
+    )
+    assert (
+        prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
+            "available"
+        ]
+        is True
+    )
+    assert (
+        manifest["families"]["prompt_context_readiness"]["status"] == "ok"
+    )
 
 
 def _cvrp_research_focus() -> dict[str, object]:

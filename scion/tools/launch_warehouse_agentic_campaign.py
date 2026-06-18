@@ -98,6 +98,7 @@ POSTRUN_ACCEPTANCE_FAMILIES = (
 PREPARED_HANDOFF_FAMILIES = (
     "analysis_brief",
     "inventory",
+    "prompt_context_readiness",
     "launch_readiness",
     "rebuild",
 )

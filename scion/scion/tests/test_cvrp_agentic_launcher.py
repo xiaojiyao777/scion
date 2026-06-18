@@ -140,6 +140,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_manifest["report_metadata"]["prepared_handoff_families"] == [
         "analysis_brief",
         "inventory",
+        "prompt_context_readiness",
         "launch_readiness",
         "rebuild",
     ]
@@ -263,6 +264,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         / "launch_readiness"
         / "cvrp_on_full.prepared_launch_readiness.md"
     )
+    prompt_context_json = (
+        prepared_handoff
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    prompt_context_md = (
+        prepared_handoff
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.md"
+    )
     rebuild_json = (
         prepared_handoff / "rebuild" / "prepared_handoff_rebuild.v1.json"
     )
@@ -272,10 +283,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert inventory_md.is_file()
     assert readiness_json.is_file()
     assert readiness_md.is_file()
+    assert prompt_context_json.is_file()
+    assert prompt_context_md.is_file()
     assert rebuild_json.is_file()
     prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
     prepared_readiness = json.loads(readiness_json.read_text(encoding="utf-8"))
+    prepared_prompt_context = json.loads(
+        prompt_context_json.read_text(encoding="utf-8")
+    )
     prepared_rebuild = json.loads(rebuild_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
@@ -335,9 +351,35 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "status"
     ] == "failed"
     assert prepared_readiness["checks"]["completion_preflight"]["status"] == "skipped"
+    assert prepared_prompt_context["schema_version"] == (
+        "scion.prepared_prompt_context_readiness.v1"
+    )
+    assert prepared_prompt_context["report_only"] is True
+    assert (
+        prepared_prompt_context["readiness"]["ready_for_launch_prompt_audit"]
+        is False
+    )
+    assert "copied_campaign_summary" in prepared_prompt_context["readiness"][
+        "missing_required"
+    ]
+    assert (
+        prepared_prompt_context["signals"]["research_shape_prompt_signal"][
+            "available"
+        ]
+        is True
+    )
+    assert (
+        prepared_prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
+            "available"
+        ]
+        is True
+    )
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["analysis_brief"]["status"] == "ok"
+    assert (
+        prepared_rebuild["families"]["prompt_context_readiness"]["status"] == "ok"
+    )
     assert (
         "## Prepared Run Contract"
         in brief_md.read_text(encoding="utf-8")
@@ -357,6 +399,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "construction_seed_portfolio" in inventory_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in inventory_text
     assert "cvrp_default_avoid_handoff" in inventory_text
+    assert "copied_campaign_summary" in prompt_context_md.read_text(
+        encoding="utf-8"
+    )
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )

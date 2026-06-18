@@ -130,6 +130,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["report_metadata"]["prepared_handoff_families"] == [
         "analysis_brief",
         "inventory",
+        "prompt_context_readiness",
         "launch_readiness",
         "rebuild",
     ]
@@ -257,6 +258,16 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         / "launch_readiness"
         / "warehouse_on_full.prepared_launch_readiness.md"
     )
+    prompt_context_json = (
+        prepared_handoff
+        / "prompt_context_readiness"
+        / "warehouse_on_full.prepared_prompt_context_readiness.v1.json"
+    )
+    prompt_context_md = (
+        prepared_handoff
+        / "prompt_context_readiness"
+        / "warehouse_on_full.prepared_prompt_context_readiness.md"
+    )
     rebuild_json = (
         prepared_handoff / "rebuild" / "prepared_handoff_rebuild.v1.json"
     )
@@ -266,10 +277,15 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert inventory_md.is_file()
     assert readiness_json.is_file()
     assert readiness_md.is_file()
+    assert prompt_context_json.is_file()
+    assert prompt_context_md.is_file()
     assert rebuild_json.is_file()
     prepared_brief = json.loads(brief_json.read_text(encoding="utf-8"))
     prepared_inventory = json.loads(inventory_json.read_text(encoding="utf-8"))
     prepared_readiness = json.loads(readiness_json.read_text(encoding="utf-8"))
+    prepared_prompt_context = json.loads(
+        prompt_context_json.read_text(encoding="utf-8")
+    )
     prepared_rebuild = json.loads(rebuild_json.read_text(encoding="utf-8"))
     assert prepared_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
     assert prepared_brief["report_only"] is True
@@ -332,9 +348,35 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "status"
     ] == "failed"
     assert prepared_readiness["checks"]["completion_preflight"]["status"] == "skipped"
+    assert prepared_prompt_context["schema_version"] == (
+        "scion.prepared_prompt_context_readiness.v1"
+    )
+    assert prepared_prompt_context["report_only"] is True
+    assert (
+        prepared_prompt_context["readiness"]["ready_for_launch_prompt_audit"]
+        is False
+    )
+    assert "copied_campaign_status" in prepared_prompt_context["readiness"][
+        "missing_required"
+    ]
+    assert (
+        prepared_prompt_context["signals"]["research_shape_prompt_signal"][
+            "available"
+        ]
+        is True
+    )
+    assert (
+        prepared_prompt_context["signals"]["warehouse_required_evidence"][
+            "available"
+        ]
+        is True
+    )
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["inventory"]["status"] == "ok"
+    assert (
+        prepared_rebuild["families"]["prompt_context_readiness"]["status"] == "ok"
+    )
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )
@@ -347,6 +389,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     inventory_md_text = inventory_md.read_text(encoding="utf-8")
     assert "### Prepared Research Focus" in inventory_md_text
     assert "warehouse_required_evidence_handoff" in inventory_md_text
+    assert "warehouse_required_evidence" in prompt_context_md.read_text(
+        encoding="utf-8"
+    )
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 

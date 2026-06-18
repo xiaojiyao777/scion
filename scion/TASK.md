@@ -431,8 +431,17 @@ Current checkpoint:
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated`
   (`auth_status.pool.active=0`, `expired=1`, `refreshing=0`).
+  Prepared handoff rebuilds now also emit report-only
+  `prompt_context_readiness` artifacts. The current CVRP and warehouse
+  prepared roots both report `ready_for_launch_prompt_audit=true` with no
+  missing required sources, proving prepared research focus, copied
+  campaign summary/status, problem-specific handoff fields, and the live
+  `research_shape_diagnostics` prompt path are visible before launch without
+  rendering raw provider prompts or changing runtime decisions.
   Current prepared-handoff rebuild report:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
+  Current prepared prompt/context readiness report:
+  `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
   Current strict launch-readiness report:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`.
   Current prepared-root refresh:
