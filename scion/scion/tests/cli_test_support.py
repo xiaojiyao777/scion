@@ -55,6 +55,7 @@ def _write_minimal_problem_v1_package(
     tmp_path: Path,
     *,
     required_python_modules: list[str] | None = None,
+    measurement_block: str = "",
     research_surfaces_block: str = "",
 ) -> Path:
     root_dir = tmp_path / "workspace"
@@ -120,6 +121,7 @@ def _write_minimal_problem_v1_package(
                 "  - name: cost",
                 "    direction: minimize",
                 "    priority: 1",
+                measurement_block,
                 "adapter:",
                 '  import_path: "scion.problems.fakecli.adapter:FakeAdapter"',
                 '  api_version: "v1"',

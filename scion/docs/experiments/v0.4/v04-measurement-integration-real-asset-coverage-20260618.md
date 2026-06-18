@@ -19,6 +19,10 @@ configs, not only by synthetic fixtures.
   pairing validity, and reduced measurement readiness.
 - The tests also assert reduced readiness payloads do not expose calibration
   refs, pair evidence, or raw calibration rows.
+- Added a CLI ingress regression test proving `scion run` with a problem-v1
+  package passes the resolved measurement-governed `ProtocolConfig` into
+  `CampaignManager`; `--measurement-governance record-only` keeps readiness
+  status visible while leaving behavior fields on protocol defaults.
 - Replaced warehouse `problem-v1.yaml` hard-coded local absolute paths with
   relative `root_dir` and canary paths so the same assets resolve under both
   the local checkout and the WSL synchronized checkout.
@@ -42,9 +46,32 @@ WSL result after fast-forwarding to the accepted path-fix commit:
 rerun verifies the warehouse production/package specs now resolve the
 repository-local `surrogate` calibration asset in the synchronized checkout.
 
+CLI ingress follow-up:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_cli_run_options.py::test_run_problem_v1_measurement_declaration_governs_protocol_config \
+  scion/scion/tests/test_config.py::test_cvrp_formal_protocol_consumes_problem_measurement_declaration \
+  scion/scion/tests/test_config.py::test_warehouse_prod_protocol_consumes_problem_measurement_declaration
+```
+
+Local result: `4 passed in 0.62s`.
+
+Adjacent regression sweep:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_cli_run_options.py \
+  scion/scion/tests/test_config.py \
+  scion/scion/tests/test_problem_bridge.py
+```
+
+Local result: `45 passed in 1.30s`.
+
 ## Acceptance
 
 Accepted as Worker A closure evidence. Formal CVRP and warehouse production
-assets now have regression coverage proving problem-owned measurement
-declarations feed deterministic protocol/runtime/pairing/readiness fields while
-raw calibration diagnostics remain outside `DecisionFeatures`.
+assets, plus the `scion run` problem-v1 ingress path, now have regression
+coverage proving problem-owned measurement declarations feed deterministic
+protocol/runtime/pairing/readiness fields while raw calibration diagnostics
+remain outside `DecisionFeatures`.

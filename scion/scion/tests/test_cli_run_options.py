@@ -95,6 +95,120 @@ def test_run_threads_measurement_governance_into_protocol_config(
 
 
 @pytest.mark.parametrize(
+    (
+        "extra_args",
+        "expected_governance",
+        "expected_screen_delta",
+        "expected_validate_delta",
+        "expected_runtime_model",
+        "expected_pairing_validity",
+    ),
+    [
+        ([], "on", 7.5, 3.25, "budget_exhausting", "trajectory_divergent"),
+        (
+            ["--measurement-governance", "record-only"],
+            "record_only",
+            0.001,
+            0.001,
+            "comparative",
+            "trajectory_stable",
+        ),
+    ],
+)
+def test_run_problem_v1_measurement_declaration_governs_protocol_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    extra_args: list[str],
+    expected_governance: str,
+    expected_screen_delta: float,
+    expected_validate_delta: float,
+    expected_runtime_model: str,
+    expected_pairing_validity: str,
+) -> None:
+    problem_yaml = _write_minimal_problem_v1_package(
+        tmp_path,
+        measurement_block="\n".join(
+            [
+                "measurement:",
+                "  runtime_model: budget_exhausting",
+                "  pairing_validity: trajectory_divergent",
+                "  effect_scale:",
+                "    metric: cost",
+                "    unit: raw_delta",
+                "    practical_delta_screen: 7.5",
+                "    practical_delta_validate: 3.25",
+            ]
+        ),
+    )
+    captured: list[dict[str, object]] = []
+    fake_adapter = object()
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+        def run(self, max_rounds: int = 1000) -> None:
+            captured[-1]["max_rounds"] = max_rounds
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+    import scion.problem.loader as loader_module
+    import scion.problem.preflight as preflight_module
+
+    monkeypatch.setattr(
+        loader_module,
+        "load_problem_adapter",
+        lambda spec: fake_adapter,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "run_runtime_preflight",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--allow-skeleton",
+            *extra_args,
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    protocol_config = captured[0]["protocol_config"]
+    assert protocol_config.measurement_governance == expected_governance
+    assert protocol_config.screening_min_practical_delta == pytest.approx(
+        expected_screen_delta
+    )
+    assert protocol_config.validation_min_practical_delta == pytest.approx(
+        expected_validate_delta
+    )
+    assert protocol_config.runtime.runtime_model == expected_runtime_model
+    assert protocol_config.pairing_validity == expected_pairing_validity
+    assert protocol_config.measurement_readiness.status == "not_ready"
+    assert (
+        protocol_config.measurement_readiness.reason_code
+        == "missing_calibration_ref"
+    )
+    assert captured[0]["max_rounds"] == 1
+
+
+@pytest.mark.parametrize(
     ("cli_value", "expected_value"),
     [("record-only", "record_only"), ("on", "on")],
 )

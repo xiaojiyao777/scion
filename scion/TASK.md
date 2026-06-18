@@ -317,11 +317,12 @@ Current checkpoint:
   runtime/candidate-failure veto is present. Report:
   `scion/docs/experiments/v0.4/v04-trajectory-divergent-all-tie-low-snr-expand-repair-20260618.md`.
 - Measurement integration now has real-asset coverage for CVRP formal and
-  warehouse production problem/protocol loading. Problem-owned practical
-  deltas, runtime model, pairing validity, and reduced readiness feed
-  deterministic `ProtocolConfig` fields; raw calibration diagnostics remain
-  outside `DecisionFeatures`; warehouse specs no longer hard-code local
-  surrogate paths, so WSL checkouts resolve the same calibration asset. Report:
+  warehouse production problem/protocol loading plus the `scion run` problem-v1
+  ingress path. Problem-owned practical deltas, runtime model, pairing
+  validity, and reduced readiness feed deterministic `ProtocolConfig` fields;
+  raw calibration diagnostics remain outside `DecisionFeatures`; warehouse
+  specs no longer hard-code local surrogate paths, so WSL checkouts resolve the
+  same calibration asset. Report:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - A/A calibration artifacts now include explicit champion/candidate runtime
   budget-hit ratios and flags per replay, so budget saturation is auditable

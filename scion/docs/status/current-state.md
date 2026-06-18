@@ -71,10 +71,11 @@ Framework:
   delta, loss-heavy evidence, candidate failures, and runtime vetoes still fail
   closed.
 - Measurement integration is covered against real CVRP formal and warehouse
-  production assets: problem-owned practical deltas, runtime model, pairing
-  validity, and reduced readiness feed deterministic protocol config fields;
-  raw calibration diagnostics stay outside `DecisionFeatures`; warehouse
-  problem specs no longer hard-code local absolute surrogate paths.
+  production assets and the `scion run` problem-v1 ingress path: problem-owned
+  practical deltas, runtime model, pairing validity, and reduced readiness feed
+  deterministic protocol config fields; raw calibration diagnostics stay
+  outside `DecisionFeatures`; warehouse problem specs no longer hard-code local
+  absolute surrogate paths.
 - A/A calibration pair evidence now records explicit champion/candidate runtime
   budget-hit ratios and flags so budget saturation can be audited per replay.
 - CVRP and warehouse launch helpers now support prepared follow-up roots with
