@@ -17,7 +17,8 @@ therefore became statically stale even though they had not been launched.
 
 Both were generated prepare-only from the synchronized WSL checkout at
 `b9836a6`; neither root has been launched. After WSL fast-forwarded through
-later docs-only checkouts, both roots still pass runtime guard checks.
+later checkouts whose guarded paths are unchanged, both roots still pass
+runtime guard checks.
 
 ## Readiness
 
