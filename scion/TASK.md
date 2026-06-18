@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `68280ad` and pass strict static readiness; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `a0eb89b` and pass strict static prompt/launch-env readiness; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -426,8 +426,8 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
-  current prepared roots were refreshed from runtime checkout `68280ad` and pass
-  strict static readiness with `git_runtime_consistent=ok`.
+  current prepared roots were refreshed from runtime checkout `a0eb89b` and pass
+  strict static prompt/launch-env readiness with runtime-guard consistency.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
@@ -437,10 +437,13 @@ Current checkpoint:
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
   missing required sources, proving prepared research focus, copied
-  campaign summary/status, problem-specific handoff fields, and the live
-  `research_shape_diagnostics` and `prepared_research_focus_prompt_bridge`
-  prompt paths are visible before launch without rendering raw provider prompts
-  or changing runtime decisions.
+  campaign summary/status, problem-specific handoff fields, the live
+  `research_shape_diagnostics` prompt path, and the
+  `prepared_research_focus_prompt_bridge` source and launch-environment markers
+  are visible before launch without rendering raw provider prompts or changing
+  runtime decisions. The launchers now export `PREPARED_RUN_MANIFEST` in the
+  generated `run.sh`; readiness audits require the manifest file,
+  `launch.env` assignment, and `run.sh` export marker.
   Current prepared-handoff rebuild report:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
   Current prepared prompt/context readiness report:
@@ -458,7 +461,7 @@ Current checkpoint:
   Current prepared research-focus prompt bridge repair:
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-focusbridge-68280ad-1r-gpt55-20260618T221343Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifestenv-a0eb89b-1r-gpt55-20260618T222314Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -485,7 +488,7 @@ Current checkpoint:
   Current warehouse follow-up analysis-brief repair:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focusbridge-68280ad-6r-gpt55-20260618T221354Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifestenv-a0eb89b-6r-gpt55-20260618T222325Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

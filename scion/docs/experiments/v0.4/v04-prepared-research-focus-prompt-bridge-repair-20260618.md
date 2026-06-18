@@ -25,6 +25,21 @@ This was a proposal-context gap, not a Decision or Protocol gap.
   `prepared_research_focus_prompt_bridge`, checking both the manifest reader and
   prompt renderer markers.
 
+## Launch Environment Export Repair
+
+A follow-up audit of real WSL prepared roots found that `command.txt` included a
+`PREPARED_RUN_MANIFEST` assignment, but the generated `run.sh` did not export
+that variable. That made the bridge pass source-level tests while risking loss
+of prepared focus in the real launched environment.
+
+The CVRP and warehouse launchers now write `PREPARED_RUN_MANIFEST` into
+`launch.env` and export it from generated `run.sh`. The prepared handoff audit
+now requires both source markers and launch markers:
+
+- source markers: manifest env reader, context payload, prompt renderer
+- launch markers: prepared manifest exists, `launch.env` assignment, `run.sh`
+  export
+
 ## Verification
 
 Local:
@@ -72,20 +87,43 @@ Observed on WSL:
 54 passed
 ```
 
+Focused launch-env export verification after the repair:
+
+```text
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py \
+  scion/scion/tests/test_rebuild_prepared_handoff.py \
+  scion/scion/tests/test_launch_readiness.py
+```
+
+Observed locally:
+
+```text
+35 passed in 2.75s
+```
+
+Observed on WSL:
+
+```text
+35 passed in 1.76s
+```
+
 ## Prepared Roots
 
-Refreshed prepare-only from WSL checkout `68280ad`.
+Current prepare-only roots were refreshed from WSL checkout `a0eb89b` after the
+launch-env export repair.
 
 CVRP:
 
 ```text
-/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-focusbridge-68280ad-1r-gpt55-20260618T221343Z-claw
+/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifestenv-a0eb89b-1r-gpt55-20260618T222314Z-claw
 ```
 
 Warehouse:
 
 ```text
-/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focusbridge-68280ad-6r-gpt55-20260618T221354Z-claw
+/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifestenv-a0eb89b-6r-gpt55-20260618T222325Z-claw
 ```
 
 WSL strict readiness for both roots:
@@ -93,7 +131,7 @@ WSL strict readiness for both roots:
 ```text
 static_ready=true
 launch_ready=false
-git_runtime_consistent=ok, checkout matches manifest commit
+git_runtime_consistent=ok, checkout matches manifest commit at preparation time
 HTTP 401, classification=not_authenticated
 auth pool active=0 / expired=1 / refreshing=0 / total=1
 ```
@@ -109,6 +147,9 @@ bridge markers:
   manifest_env_reader=true
   context_payload=true
   prompt_renderer=true
+  prepared_manifest_exists=true
+  launch_env_assignment=true
+  run_sh_exports_manifest=true
 ```
 
 No campaign was launched. Live launch remains blocked until the real

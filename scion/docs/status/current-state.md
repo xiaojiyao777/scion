@@ -76,7 +76,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focusbridge-68280ad-6r-gpt55-20260618T221354Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifestenv-a0eb89b-6r-gpt55-20260618T222325Z-claw`.
 
 CVRP/VRP:
 
@@ -97,23 +97,24 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-focusbridge-68280ad-1r-gpt55-20260618T221343Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifestenv-a0eb89b-1r-gpt55-20260618T222314Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The current CVRP and warehouse prepared roots were refreshed from runtime
-  checkout `68280ad` after the prepared research-focus prompt bridge repair.
-  Strict WSL readiness confirms both roots are statically ready, not started,
-  and runtime-guard valid.
+  checkout `a0eb89b` after the prepared research-focus prompt bridge repair and
+  real launch-environment export repair. Strict WSL readiness confirms both
+  roots are statically ready, not started, and runtime-guard valid.
 - Both current prepared roots have regenerated `prompt_context_readiness`
   handoff artifacts with `ready_for_launch_prompt_audit=true` and
   `missing_required=[]`. They also report
   `prepared_research_focus_prompt_bridge.available=true`,
-  `required=true`, and all bridge markers true. Strict WSL readiness reports
-  `git_runtime_consistent=ok` with detail
-  `checkout differs, but runtime guard paths are unchanged` after the docs-only
-  status commit.
+  `required=true`, source markers true, and launch markers true. Launch markers
+  require the prepared manifest file, `launch.env` assignment, and `run.sh`
+  export of `PREPARED_RUN_MANIFEST`. Strict WSL readiness reports
+  `git_runtime_consistent=ok`; after documentation-only refreshes, a checkout
+  mismatch is acceptable only when runtime guard paths are unchanged.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
@@ -131,7 +132,8 @@ Infrastructure:
    --require-launch-ready --format json`. `/v1/models` is not enough.
 2. Before starting a prepared root, confirm its
    `prepared_handoff/prompt_context_readiness/*.json` still reports
-   `ready_for_launch_prompt_audit=true`.
+   `ready_for_launch_prompt_audit=true` and launch markers true for
+   `PREPARED_RUN_MANIFEST`.
 3. When launch readiness is true, run the prepared CVRP post-pivot follow-up
    first from the clean WSL checkout. Inspect target intent, hypothesis, branch
    lesson transfer, protocol effect-vs-MDE, budget-exhausting runtime feedback,
