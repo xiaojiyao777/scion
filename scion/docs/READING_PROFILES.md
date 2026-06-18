@@ -13,14 +13,15 @@ Read these for every session:
 2. [v0.4 current state](status/current-state.md)
 
 Do not read `status/v0.4-history.md`, old experiment docs, full engineering
-references, raw run directories, or source trees unless the selected profile
-requires them.
+references, raw run directories, or source trees unless the selected profile or
+current task requires them.
 
 ## Document Roles
 
-- `status/current-state.md`: short current operating truth. Keep it small.
-- `status/v0.4-history.md`: archived historical status log. Read only for
-  chronology questions.
+- `status/current-state.md`: short current operating truth. Keep it small and
+  replace stale conclusions instead of appending event history.
+- `status/v0.4-history.md`: curated milestone index. Read only for provenance
+  questions or when the current state points to a specific milestone.
 - `../design/`: design-source documents and accepted architecture contracts.
 - `engineering/`: code ownership maps and implementation references.
 - `experiments/`: bounded post-run analysis. Prefer these over raw run
@@ -186,8 +187,8 @@ Read:
 Rules:
 
 - Keep `AGENT_ONBOARDING.md` short.
-- Keep `status/current-state.md` under roughly a few hundred lines.
-- Move historical status chronology to `status/v0.4-history.md`.
+- Keep `status/current-state.md` short enough to be a resume point.
+- Keep `status/v0.4-history.md` as a sparse milestone index, not a chronology.
 - Put experiment detail in `experiments/v0.4/`, not current-state.
 - Put engineering implementation maps in `engineering/`, not design docs.
 - Add index links when adding docs.

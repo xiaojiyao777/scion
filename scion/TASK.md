@@ -3525,20 +3525,21 @@ Field gate:
 
 ## Status Cadence
 
-The main thread updates status after each material event:
+The main thread updates status when the active operating truth changes:
 
-- Experiment launch, completion, failure, or rerun.
-- Subagent brief creation, completion, rejection, or acceptance.
 - Phase gate pass/fail decision.
+- Experiment result that changes current interpretation or the next action.
+- Accepted or rejected subagent work that changes current interpretation or the
+  next action.
 - Commit that changes task scope, protocol behavior, measurement behavior,
   context composition, runtime governance, or lifecycle policy.
 
-Status updates must identify the current phase, artifact path, commit/branch,
-tests or commands used for acceptance, known caveats, next gate, and whether the
-next action belongs to the main thread or a subagent. Keep detailed run facts in
-launch/postrun reports. `current-state.md` should stay a short operational
-snapshot, and `v0.4-history.md` should stay a curated milestone index rather
-than an append-only event stream.
+Do not record every launch, rerun, intermediate failure, or subagent exchange in
+status docs. Detailed run facts, counters, commands, wrapper status, and
+artifact-level caveats belong in launch/postrun reports. `current-state.md`
+should stay a short operational snapshot that replaces stale conclusions, and
+`v0.4-history.md` should stay a sparse milestone index rather than an
+append-only event stream.
 
 Status docs to keep aligned:
 
