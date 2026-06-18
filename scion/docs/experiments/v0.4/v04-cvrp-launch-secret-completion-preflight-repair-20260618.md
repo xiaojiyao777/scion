@@ -20,7 +20,9 @@ launcher gaps:
 
 - `--api-key-env NAME`: writes only the environment variable name to
   `launch.env`; `run.sh` resolves the real value at runtime and fails before
-  campaign startup if the variable is unset.
+  campaign startup if the variable is unset. The `SCION_API_KEY` self-reference
+  case is handled explicitly so sourcing `launch.env` does not clear the
+  inherited secret before resolution.
 - `--completion-preflight`: before invoking `scion.cli.main run`, `run.sh`
   performs a real OpenAI-compatible chat completion with
   `SCION_MODEL`/`SCION_BASE_URL`/`SCION_API_KEY`, requires non-empty
@@ -44,6 +46,7 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scio
 Result:
 
 - `12 passed`
+- Updated after the inherited-`SCION_API_KEY` self-reference fix: `13 passed`
 
 Coverage added:
 
@@ -52,6 +55,8 @@ Coverage added:
   `command.txt` records only `<from-env:...>`.
 - Missing API-key environment variable exits before campaign startup and writes
   `run_status.json`.
+- An inherited `SCION_API_KEY` survives `launch.env` sourcing when
+  `--api-key-env SCION_API_KEY` is used.
 - `--completion-preflight` writes a real completion preflight block to
   `run.sh`.
 - `--api-key` and `--api-key-env` are mutually exclusive.

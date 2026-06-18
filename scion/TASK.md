@@ -318,7 +318,8 @@ Current checkpoint:
   non-local keys are read by `run.sh` at runtime instead of written to
   `launch.env`; `launch.env` is mode `0600`; and `--completion-preflight`
   performs a real chat-completion readiness check before campaign startup.
-  Local acceptance: launcher suite `12 passed`; launcher py_compile passed.
+  Local acceptance after fixing the inherited-`SCION_API_KEY` self-reference
+  path: launcher suite `13 passed`; launcher py_compile passed.
   The next restored-channel CVRP rerun should use `--completion-preflight` and
   `--api-key-env SCION_API_KEY` when the key is not the local 8080 proxy key.
 - Future WSL campaign launches must set

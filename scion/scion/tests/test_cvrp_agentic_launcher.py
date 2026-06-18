@@ -310,7 +310,8 @@ def test_cvrp_agentic_launcher_prepare_accepts_api_key_env_without_secret(
     assert "SCION_API_KEY=''" in launch_env
     assert "SCION_API_KEY_ENV=SCION_API_KEY" in launch_env
     assert "SCION_API_KEY=<from-env:SCION_API_KEY>" in command_txt
-    assert "${!SCION_API_KEY_ENV}" in run_sh_text
+    assert '_INHERITED_SCION_API_KEY="${SCION_API_KEY:-}"' in run_sh_text
+    assert '_RESOLVED_SCION_API_KEY="${!SCION_API_KEY_ENV:-}"' in run_sh_text
     assert "SCION_API_KEY_ENV_MISSING" in run_sh_text
     assert oct(launch_env_path.stat().st_mode & 0o777) == "0o600"
 
@@ -357,6 +358,57 @@ def test_cvrp_agentic_launcher_api_key_env_missing_fails_before_campaign(
     status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
     assert status["wrapper_exit_status"] == 64
     assert status["api_key_env_missing"] == "SCION_MISSING_TEST_KEY"
+
+
+def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(
+    tmp_path: Path,
+) -> None:
+    fake_python = tmp_path / "fake-python"
+    seen_env = tmp_path / "seen-env.txt"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n"
+        f"printf '%s\\n' \"$SCION_API_KEY\" > {seen_env}\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-cvrp-inherited-key-env",
+            "--api-key-env",
+            "SCION_API_KEY",
+            "--python",
+            str(fake_python),
+            "--experiments-root",
+            str(tmp_path / "runs"),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    run_result = subprocess.run(
+        ["bash", str(run_root / "run.sh")],
+        env={"SCION_API_KEY": "fake-inherited-secret"},
+        text=True,
+        capture_output=True,
+    )
+
+    assert run_result.returncode == 0
+    assert seen_env.read_text(encoding="utf-8").strip() == "fake-inherited-secret"
+    assert "SCION_API_KEY_ENV_MISSING" not in (
+        run_root / "exit.txt"
+    ).read_text(encoding="utf-8")
 
 
 def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(

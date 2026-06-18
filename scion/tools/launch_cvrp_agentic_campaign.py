@@ -284,9 +284,15 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
 def _write_run_sh(run_root: Path, command: str) -> None:
     content = f"""#!/usr/bin/env bash
 set -uo pipefail
+_INHERITED_SCION_API_KEY="${{SCION_API_KEY:-}}"
 source "$(dirname "$0")/launch.env"
 if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
-  if [[ -z "${{!SCION_API_KEY_ENV:-}}" ]]; then
+  if [[ "$SCION_API_KEY_ENV" == "SCION_API_KEY" ]]; then
+    _RESOLVED_SCION_API_KEY="$_INHERITED_SCION_API_KEY"
+  else
+    _RESOLVED_SCION_API_KEY="${{!SCION_API_KEY_ENV:-}}"
+  fi
+  if [[ -z "$_RESOLVED_SCION_API_KEY" ]]; then
     {{
       echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
       echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -295,8 +301,9 @@ if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
     printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":%s}}\n' "$(printf '%s' "$SCION_API_KEY_ENV" | "$PY" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" > "$RUN_ROOT/run_status.json"
     exit {PREFLIGHT_FAILURE_EXIT_CODE}
   fi
-  SCION_API_KEY="${{!SCION_API_KEY_ENV}}"
+  SCION_API_KEY="$_RESOLVED_SCION_API_KEY"
 fi
+unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
 cd "$SCION_DIR" || exit 1
 export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_PROBLEM_DATA_ROOT
 {{
