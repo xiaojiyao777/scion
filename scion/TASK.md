@@ -278,15 +278,16 @@ Current checkpoint:
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
-  latest WSL preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1`; the real chat
-  completion returns HTTP `401` with `classification=not_authenticated`.
+  latest WSL preflight reaches the proxy and reports
+  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
+  completion returns HTTP `401` with `classification=auth_token_invalidated`.
   Use the
   repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its
   prepare/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, prepare-time delegated handoff brief/inventory,
+  CVRP research-focus/default-avoid handoff,
   postrun analysis brief, and artifact/count inventory with report-only Phase 4
   evidence coverage, prepared contract checks, launch-readiness handoff
   snapshots, and prepared-only lifecycle guards plus preflight-failed
@@ -299,7 +300,7 @@ Current checkpoint:
   `scion/tools/check_launch_readiness.py <prepared-root> --completion-preflight`
   to report `launch_ready=true`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-readinesshandoff-1r-gpt55-20260618T140547Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-focushandoff-1r-gpt55-20260618T141926Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -313,7 +314,7 @@ Current checkpoint:
   flags, prepared contract checks, launch-readiness handoff snapshots,
   prepared-only lifecycle guards, and preflight-failed launch-root guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-readinesshandoff-6r-gpt55-20260618T140602Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focushandoff-6r-gpt55-20260618T141927Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
