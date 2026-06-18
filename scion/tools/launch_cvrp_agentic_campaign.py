@@ -77,7 +77,46 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "a new causal path with direct objective-effect evidence before spending "
         "another route-merge or construction-seed branch slot."
     ),
+    "measurement_opportunity_diagnostics": {
+        "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "metric": "total_distance",
+        "runtime_model": "budget_exhausting",
+        "pairing_validity": "trajectory_divergent",
+        "practical_screen_delta": 2.0,
+        "screening_mde_at_power_80": 9.9,
+        "recommended_min_seeds": 8,
+        "summary": (
+            "Formal screening is low-power for small raw total_distance "
+            "deltas; sub-MDE effects need direct objective-effect attribution "
+            "or same-mechanism follow-up."
+        ),
+        "reason_codes": [
+            "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
+            "TRAJECTORY_DIVERGENT_LOW_SNR",
+            "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
+        ],
+    },
     "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
+    "measurable_opportunity_classes": [
+        (
+            "construction_seed_portfolio: require same-run seed baseline or "
+            "same-mechanism accepted objective delta"
+        ),
+        (
+            "destroy_repair_selection: require per-case total_distance deltas "
+            "tied to the changed repair/removal choice"
+        ),
+        (
+            "bounded_local_search_variant: require feasible route-level "
+            "objective deltas with bounded search effort"
+        ),
+        (
+            "acceptance_or_adaptive_weighting: require direct move acceptance "
+            "and downstream objective-effect telemetry"
+        ),
+    ],
     "route_merge_exception_rule": (
         "Only continue route_merge_repair when the proposal names a causal path "
         "beyond tested local absorption/guarded variants and defines direct "
@@ -597,8 +636,36 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         f"- Route-merge exception: {research_focus['route_merge_exception_rule']}",
         f"- Construction-seed rule: {research_focus['construction_seed_rule']}",
         f"- Decision boundary: {research_focus['decision_boundary']}",
-        "- Default-avoid directions:",
+        "- Measurement/opportunity diagnostics:",
     ]
+    measurement = research_focus.get("measurement_opportunity_diagnostics")
+    if isinstance(measurement, dict):
+        for key in (
+            "metric",
+            "runtime_model",
+            "pairing_validity",
+            "practical_screen_delta",
+            "screening_mde_at_power_80",
+            "recommended_min_seeds",
+            "summary",
+        ):
+            if key in measurement:
+                lines.append(f"  - {key}: {measurement[key]}")
+        reason_codes = measurement.get("reason_codes")
+        if isinstance(reason_codes, list) and reason_codes:
+            lines.append("  - reason_codes: " + ", ".join(map(str, reason_codes)))
+    else:
+        lines.append("  - None recorded in the prepared manifest.")
+    lines.append("- Measurable opportunity classes:")
+    opportunity_classes = research_focus.get("measurable_opportunity_classes")
+    if isinstance(opportunity_classes, list) and opportunity_classes:
+        for item in opportunity_classes:
+            lines.append(f"  - {item}")
+    else:
+        lines.append("  - None recorded in the prepared manifest.")
+    lines.extend([
+        "- Default-avoid directions:",
+    ])
     for item in research_focus["default_avoid_directions"]:
         lines.append(f"  - {item}")
     lines.extend(["", "## Config"])

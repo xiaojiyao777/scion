@@ -107,6 +107,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_manifest["research_focus"][
         "default_avoid_directions"
     ]
+    measurement = prepared_manifest["research_focus"][
+        "measurement_opportunity_diagnostics"
+    ]
+    assert measurement["screening_mde_at_power_80"] == 9.9
+    assert measurement["practical_screen_delta"] == 2.0
+    assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
+    assert any(
+        "construction_seed_portfolio" in item
+        for item in prepared_manifest["research_focus"][
+            "measurable_opportunity_classes"
+        ]
+    )
     assert "DecisionFeatures" in prepared_manifest["research_focus"][
         "decision_boundary"
     ]
@@ -137,6 +149,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "CVRP post-pivot" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
+    assert "screening_mde_at_power_80: 9.9" in prepared_manifest_md
+    assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
     assert f"PY={sys.executable}" in launch_env
@@ -276,6 +290,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_brief["prepared_run_contract"][
         "research_focus"
     ]["default_avoid_directions"]
+    assert prepared_brief["prepared_run_contract"]["research_focus"][
+        "measurement_opportunity_diagnostics"
+    ]["screening_mde_at_power_80"] == 9.9
     assert any(
         "Decision input" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
@@ -296,12 +313,18 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "## Prepared Run Contract"
         in brief_md.read_text(encoding="utf-8")
     )
-    assert "Current research focus" in brief_md.read_text(encoding="utf-8")
+    brief_text = brief_md.read_text(encoding="utf-8")
+    inventory_text = inventory_md.read_text(encoding="utf-8")
+    assert "Current research focus" in brief_text
+    assert "screening_mde_at_power_80: 9.9" in brief_text
+    assert "TRAJECTORY_DIVERGENT_LOW_SNR" in brief_text
     assert (
         "## Launcher Artifacts"
-        in inventory_md.read_text(encoding="utf-8")
+        in inventory_text
     )
-    assert "### Prepared Research Focus" in inventory_md.read_text(encoding="utf-8")
+    assert "### Prepared Research Focus" in inventory_text
+    assert "construction_seed_portfolio" in inventory_text
+    assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in inventory_text
     assert "Launch only after rerunning this tool" in readiness_md.read_text(
         encoding="utf-8"
     )

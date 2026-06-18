@@ -78,9 +78,10 @@ Framework:
   the operator omits one, so prepare-only roots do not fail the prepared
   contract solely because optional metadata was blank. The
   generated briefs carry the prepared manifest's analysis intent, acceptance
-  focus, current problem-owned research-focus/default-avoid handoff, and resume
-  source; inventory/contract/readiness checks remain report-only and outside
-  `DecisionFeatures`. Prepared-only roots now carry explicit launcher
+  focus, current problem-owned research-focus/default-avoid handoff, CVRP
+  measurement/opportunity diagnostics, and resume source; inventory/contract/
+  readiness checks remain report-only and outside `DecisionFeatures`.
+  Prepared-only roots now carry explicit launcher
   lifecycle/evidence-scope metadata, so copied resume snapshots are marked
   `prepared_only/not_started` with zero current-run effective rounds instead of
   masquerading as completed postrun evidence. Postrun inventory and analysis
@@ -208,6 +209,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-source-visibility-brief-repair-20260618.md`.
   Current CVRP measurement/opportunity diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
+  Current CVRP prepared-handoff diagnostics repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

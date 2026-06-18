@@ -302,6 +302,35 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             lines.extend(f"  - {_display(item)}" for item in avoid)
         else:
             lines.append("  - None recorded in the prepared manifest.")
+        measurement = research_focus.get("measurement_opportunity_diagnostics")
+        lines.append("- Measurement/opportunity diagnostics:")
+        if isinstance(measurement, dict) and measurement:
+            for key in (
+                "metric",
+                "runtime_model",
+                "pairing_validity",
+                "practical_screen_delta",
+                "screening_mde_at_power_80",
+                "recommended_min_seeds",
+                "summary",
+            ):
+                value = measurement.get(key)
+                if value not in (None, "", [], {}, ()):
+                    lines.append(f"  - {key}: {_display(value)}")
+            reason_codes = measurement.get("reason_codes")
+            if isinstance(reason_codes, list) and reason_codes:
+                lines.append(
+                    "  - reason_codes: "
+                    + ", ".join(_display(item) for item in reason_codes)
+                )
+        else:
+            lines.append("  - None recorded in the prepared manifest.")
+        opportunity_classes = research_focus.get("measurable_opportunity_classes")
+        lines.append("- Measurable opportunity classes:")
+        if isinstance(opportunity_classes, list) and opportunity_classes:
+            lines.extend(f"  - {_display(item)}" for item in opportunity_classes)
+        else:
+            lines.append("  - None recorded in the prepared manifest.")
         for key, label in (
             ("route_merge_exception_rule", "Route-merge exception"),
             ("construction_seed_rule", "Construction-seed rule"),

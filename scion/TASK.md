@@ -349,7 +349,8 @@ Current checkpoint:
   `--resume-from-campaign` for branch-continuation checks, and keep its
   prepare/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, prepare-time delegated handoff brief/inventory,
-  CVRP research-focus/default-avoid handoff,
+  CVRP research-focus/default-avoid handoff and CVRP
+  measurement/opportunity handoff diagnostics,
   postrun analysis brief, and artifact/count inventory with report-only Phase 4
   evidence coverage, prepared contract checks, launch-readiness handoff
   snapshots, and prepared-only lifecycle guards plus structured
@@ -373,6 +374,8 @@ Current checkpoint:
   current `0078cac` prepared roots were refreshed and pass static readiness.
   Report:
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-0078cac-20260618.md`.
+  Current prepared handoff measurement-diagnostics repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
   Current launch-prepared CVRP root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-0078cac-1r-gpt55-1r-gpt55-20260618T180851Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
