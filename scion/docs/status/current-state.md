@@ -76,7 +76,8 @@ Framework observability:
   WSL proxy returned `401`; server fallbacks returned quota errors.
 - The launcher resume path is repaired: use `--completion-preflight` before
   campaign startup, use `--api-key-env` for non-local keys, and keep generated
-  `launch.env` secret-safe.
+  `launch.env` secret-safe. CVRP and warehouse now both have prepare-only
+  launch helpers for their next focused agentic checks.
 - Latest WSL artifacts are synced back under
   `/home/clawd/research/scion-experiments/`; the latest accepted CVRP
   post-pivot artifacts are under
@@ -103,7 +104,9 @@ Framework observability:
    If it revisits construction, direct seed effect must come from a same-run
    seed baseline or same-mechanism accepted delta, not fallback activation.
 3. Keep a later warehouse repeat available to test whether champion `v2`
-   enables continuous follow-on improvement.
+   enables continuous follow-on improvement. Use the warehouse launcher to
+   prepare copied/rebased production configs and run completion preflight before
+   launch.
 
 ## Key Evidence
 
@@ -130,7 +133,8 @@ Framework observability:
   `scion/docs/experiments/v0.4/v04-research-efficiency-observability-projection-repair-20260618.md`.
 - Current LLM/launcher blocker:
   `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-launcher-preflight-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

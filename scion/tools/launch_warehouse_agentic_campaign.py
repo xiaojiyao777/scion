@@ -1,0 +1,678 @@
+#!/usr/bin/env python3
+"""Prepare or launch a warehouse agentic Scion campaign run directory."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shlex
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+DEFAULT_EXPERIMENTS_ROOT = Path.home() / "research" / "scion-experiments"
+DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_BASE_URL = "http://127.0.0.1:8080"
+DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
+DEFAULT_TIME_LIMIT_SEC = 30
+DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
+DEFAULT_PYTHON = Path(sys.executable)
+DEFAULT_USER_SUFFIX = "claw"
+PREFLIGHT_FAILURE_EXIT_CODE = 64
+
+PROBLEM = "scion/problems/warehouse_delivery/problem.yaml"
+PROBLEM_V1 = "scion/problems/warehouse_delivery/problem-v1.yaml"
+PROTOCOL = "scion/problems/warehouse_delivery/protocol_prod.yaml"
+SPLIT = "scion/problems/warehouse_delivery/split_manifest_prod.yaml"
+SEEDS = "scion/problems/warehouse_delivery/seed_ledger.yaml"
+MEASUREMENT_GOVERNANCE_CHOICES = ("on", "record-only")
+PROPOSAL_CONTEXT_ABLATION_CHOICES = (
+    "full",
+    "compact-measurement-diagnostics",
+    "no-measurement-diagnostics",
+    "minimal-research-context",
+)
+ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+COMPLETION_PREFLIGHT_SNIPPET = r'''
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
+  "$PY" - <<'PY' >> "$RUN_ROOT/run.log" 2>&1
+import os
+import sys
+
+model = os.environ.get("SCION_MODEL", "").strip()
+base_url = os.environ.get("SCION_BASE_URL", "").strip().rstrip("/")
+api_key = os.environ.get("SCION_API_KEY", "")
+
+def fail(message: str) -> None:
+    print("COMPLETION_PREFLIGHT_FAILED: " + message[:800])
+    raise SystemExit(64)
+
+if not model:
+    fail("SCION_MODEL is empty")
+if not base_url:
+    fail("SCION_BASE_URL is empty")
+if not api_key:
+    fail("SCION_API_KEY is empty")
+
+try:
+    import openai
+except Exception as exc:
+    fail("openai import failed: " + str(exc))
+
+if "api.deepseek.com" not in base_url and not base_url.endswith("/v1"):
+    base_url += "/v1"
+
+try:
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        max_retries=0,
+        timeout=60,
+    )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": "Reply exactly with the two letters OK and nothing else.",
+            }
+        ],
+        max_tokens=256,
+    )
+    choice = response.choices[0]
+    message = choice.message
+    content = (message.content or "").strip()
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if not content and not tool_calls:
+        fail(
+            "empty completion; finish_reason="
+            + str(getattr(choice, "finish_reason", None))
+        )
+    print(
+        "COMPLETION_PREFLIGHT_OK: model="
+        + model
+        + " finish_reason="
+        + str(getattr(choice, "finish_reason", None))
+        + " content_len="
+        + str(len(content))
+    )
+except SystemExit:
+    raise
+except Exception as exc:
+    message = str(exc).replace(api_key, "<redacted>")
+    fail(type(exc).__name__ + ": " + message)
+PY
+  PREFLIGHT_STATUS=$?
+  if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
+    {
+      echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_STATUS"
+      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED:1"
+    } > "$RUN_ROOT/exit.txt"
+    printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
+    exit "$PREFLIGHT_STATUS"
+  fi
+fi
+'''
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _git_commit(repo_root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"failed to resolve git commit: {exc.stderr.strip()}") from exc
+    return result.stdout.strip()
+
+
+def _model_slug(model: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "", model).lower()
+    return slug or "model"
+
+
+def _safe_label(label: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", label.strip())
+    normalized = normalized.strip(".-_")
+    if not normalized:
+        raise SystemExit("--label must contain at least one filename-safe character")
+    return normalized
+
+
+def _shell_assign(name: str, value: object) -> str:
+    return f"{name}={shlex.quote(str(value))}"
+
+
+def _validate_env_var_name(name: str) -> None:
+    if not ENV_VAR_RE.fullmatch(name):
+        raise SystemExit(
+            "--api-key-env must be a valid shell environment variable name"
+        )
+
+
+def _default_api_key_for_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized in {
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8080/v1",
+        "http://localhost:8080",
+        "http://localhost:8080/v1",
+    }:
+        return DEFAULT_LOCAL_PROXY_API_KEY
+    return ""
+
+
+def _resolve_api_key(args: argparse.Namespace) -> tuple[str, str]:
+    api_key_env = args.api_key_env or ""
+    if api_key_env:
+        return "", api_key_env
+    if args.api_key is not None:
+        return args.api_key, ""
+    return _default_api_key_for_base_url(args.base_url), ""
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_yaml(path: Path, data: dict[str, Any]) -> None:
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
+def _rewrite_case_path(value: Any, *, data_root: Path) -> Any:
+    if not isinstance(value, str):
+        return value
+    path = Path(value)
+    if path.is_absolute():
+        parts = path.parts
+        if "production" in parts:
+            production_index = parts.index("production")
+            return str(data_root.joinpath(*parts[production_index:]))
+        return value.replace("/home/clawd/research/scion-data", str(data_root))
+    return value
+
+
+def _rewrite_warehouse_configs(
+    *,
+    repo_root: Path,
+    config_dir: Path,
+    warehouse_data_root: Path,
+    problem: str,
+    problem_v1: str,
+    protocol: str,
+    split: str,
+    seeds: str,
+) -> dict[str, Path]:
+    source_paths = {
+        "problem": _resolve_source_path(repo_root, problem),
+        "problem_v1": _resolve_source_path(repo_root, problem_v1),
+        "protocol": _resolve_source_path(repo_root, protocol),
+        "split": _resolve_source_path(repo_root, split),
+        "seeds": _resolve_source_path(repo_root, seeds),
+    }
+    for name, path in source_paths.items():
+        if not path.exists():
+            raise SystemExit(f"{name} source not found: {path}")
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    problem_out = config_dir / "problem.yaml"
+    problem_v1_out = config_dir / "problem-v1.yaml"
+    protocol_out = config_dir / "protocol_prod.yaml"
+    split_out = config_dir / "split_manifest_prod.yaml"
+    seeds_out = config_dir / "seed_ledger.yaml"
+
+    surrogate_root = repo_root / "surrogate"
+    canary_case = surrogate_root / "data" / "instance_small_1.json"
+
+    for source, destination in (
+        (source_paths["problem"], problem_out),
+        (source_paths["problem_v1"], problem_v1_out),
+    ):
+        payload = _load_yaml(source)
+        payload["root_dir"] = str(surrogate_root)
+        if "canary_case_path" in payload:
+            payload["canary_case_path"] = str(canary_case)
+        _write_yaml(destination, payload)
+
+    split_payload = _load_yaml(source_paths["split"])
+    split_payload["safe_data_roots"] = [str(warehouse_data_root)]
+    for section in ("canary", "screening", "validation", "frozen"):
+        values = split_payload.get(section)
+        if isinstance(values, list):
+            split_payload[section] = [
+                _rewrite_case_path(value, data_root=warehouse_data_root)
+                for value in values
+            ]
+    _write_yaml(split_out, split_payload)
+
+    protocol_out.write_text(
+        source_paths["protocol"].read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    seeds_out.write_text(
+        source_paths["seeds"].read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    return {
+        "problem": problem_out,
+        "problem_v1": problem_v1_out,
+        "protocol": protocol_out,
+        "split": split_out,
+        "seeds": seeds_out,
+    }
+
+
+def _resolve_source_path(repo_root: Path, spec_path: str) -> Path:
+    path = Path(spec_path).expanduser()
+    if path.is_absolute():
+        return path
+    return repo_root / path
+
+
+def _build_command(env: dict[str, object]) -> str:
+    return (
+        f"{env['PY']} -m scion.cli.main run "
+        f"--problem {env['PROBLEM']} "
+        f"--protocol {env['PROTOCOL']} "
+        f"--split {env['SPLIT']} "
+        f"--seeds {env['SEEDS']} "
+        f"--campaign-dir {env['CAMPAIGN_DIR']} "
+        f"--rounds {env['ROUNDS']} "
+        f"--time-limit-sec {env['TIME_LIMIT_SEC']} "
+        f"--agentic-session-timeout-sec {env['AGENTIC_SESSION_TIMEOUT_SEC']} "
+        f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
+        f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
+        "--disable-early-stop "
+        "--agentic-proposal"
+    )
+
+
+def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
+    ordered_keys = [
+        "RUN_ROOT",
+        "CAMPAIGN_DIR",
+        "CONFIG_DIR",
+        "REPO_ROOT",
+        "SCION_DIR",
+        "PY",
+        "PYTHONPATH",
+        "SCION_MODEL",
+        "SCION_BASE_URL",
+        "SCION_API_KEY",
+        "SCION_API_KEY_ENV",
+        "SCION_SDK_MAX_RETRIES",
+        "SCION_LLM_MAX_RETRIES",
+        "SCION_WAREHOUSE_DATA_ROOT",
+        "SCION_PROBLEM_DATA_ROOT",
+        "COMPLETION_PREFLIGHT",
+        "PROBLEM",
+        "PROBLEM_V1",
+        "PROTOCOL",
+        "SPLIT",
+        "SEEDS",
+        "ROUNDS",
+        "TIME_LIMIT_SEC",
+        "MEASUREMENT_GOVERNANCE",
+        "PROPOSAL_CONTEXT_ABLATION",
+        "CONTROL_PAIR_KEY",
+        "AGENTIC_PROPOSAL",
+        "DISABLE_EARLY_STOP",
+        "AGENTIC_SESSION_TIMEOUT_SEC",
+        "GIT_COMMIT",
+        "STARTED_UTC",
+    ]
+    content = "\n".join(_shell_assign(key, env[key]) for key in ordered_keys) + "\n"
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(content, encoding="utf-8")
+    launch_env.chmod(0o600)
+
+
+def _write_run_sh(run_root: Path, command: str) -> None:
+    content = f"""#!/usr/bin/env bash
+set -uo pipefail
+_INHERITED_SCION_API_KEY="${{SCION_API_KEY:-}}"
+source "$(dirname "$0")/launch.env"
+if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
+  if [[ "$SCION_API_KEY_ENV" == "SCION_API_KEY" ]]; then
+    _RESOLVED_SCION_API_KEY="$_INHERITED_SCION_API_KEY"
+  else
+    _RESOLVED_SCION_API_KEY="${{!SCION_API_KEY_ENV:-}}"
+  fi
+  if [[ -z "$_RESOLVED_SCION_API_KEY" ]]; then
+    {{
+      echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+      echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "SCION_API_KEY_ENV_MISSING:$SCION_API_KEY_ENV"
+    }} > "$RUN_ROOT/exit.txt"
+    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"api_key_env_missing":%s}}\\n' "$(printf '%s' "$SCION_API_KEY_ENV" | "$PY" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" > "$RUN_ROOT/run_status.json"
+    exit {PREFLIGHT_FAILURE_EXIT_CODE}
+  fi
+  SCION_API_KEY="$_RESOLVED_SCION_API_KEY"
+fi
+unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
+cd "$SCION_DIR" || exit 1
+export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+if [[ "$(git -C "$REPO_ROOT" rev-parse --short HEAD)" != "$GIT_COMMIT" ]]; then
+  {{
+    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_commit_mismatch":true}}\\n' > "$RUN_ROOT/run_status.json"
+  exit {PREFLIGHT_FAILURE_EXIT_CODE}
+fi
+{{
+  echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "GIT_COMMIT:$GIT_COMMIT"
+  echo "CWD:$PWD"
+  echo "COMMAND:{command}"
+}} >> "$RUN_ROOT/run.log"
+if [[ ! -d "$SCION_WAREHOUSE_DATA_ROOT/production/generated" || ! -d "$SCION_WAREHOUSE_DATA_ROOT/production/converted" ]]; then
+  {{
+    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "WAREHOUSE_DATA_ROOT_MISSING:$SCION_WAREHOUSE_DATA_ROOT"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"warehouse_data_root_missing":%s}}\\n' "$(printf '%s' "$SCION_WAREHOUSE_DATA_ROOT" | "$PY" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" > "$RUN_ROOT/run_status.json"
+  exit {PREFLIGHT_FAILURE_EXIT_CODE}
+fi
+{COMPLETION_PREFLIGHT_SNIPPET}
+"$PY" -m scion.cli.main run \\
+  --problem "$PROBLEM" \\
+  --protocol "$PROTOCOL" \\
+  --split "$SPLIT" \\
+  --seeds "$SEEDS" \\
+  --campaign-dir "$CAMPAIGN_DIR" \\
+  --rounds "$ROUNDS" \\
+  --time-limit-sec "$TIME_LIMIT_SEC" \\
+  --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
+  --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
+  --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
+  --disable-early-stop \\
+  --agentic-proposal \\
+  >> "$RUN_ROOT/run.log" 2>&1
+STATUS=$?
+{{
+  echo "WRAPPER_EXIT_STATUS:$STATUS"
+  echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
+    echo "CAMPAIGN_RUN_STATUS:$CAMPAIGN_DIR/run_status.json"
+  fi
+  if [[ -f "$CAMPAIGN_DIR/campaign_summary.json" ]]; then
+    echo "CAMPAIGN_SUMMARY:$CAMPAIGN_DIR/campaign_summary.json"
+  fi
+}} > "$RUN_ROOT/exit.txt"
+if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
+  cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"
+else
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s}}\\n' "$STATUS" > "$RUN_ROOT/run_status.json"
+fi
+exit "$STATUS"
+"""
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(content, encoding="utf-8")
+    run_sh.chmod(0o755)
+
+
+def _launch(run_root: Path) -> str:
+    result = subprocess.run(
+        ["bash", "-lc", "nohup setsid bash run.sh > nohup.log 2>&1 & echo $!"],
+        cwd=run_root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    pid = result.stdout.strip()
+    (run_root / "pid").write_text(pid + "\n", encoding="utf-8")
+    return pid
+
+
+def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
+    repo_root = _repo_root()
+    scion_dir = repo_root / "scion"
+    started_at = datetime.now(timezone.utc)
+    timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
+    label = _safe_label(args.label)
+    run_name = (
+        f"{label}-{args.rounds}r-{_model_slug(args.model)}-"
+        f"{timestamp}-{DEFAULT_USER_SUFFIX}"
+    )
+    run_root = args.experiments_root.expanduser().resolve() / run_name
+    campaign_dir = run_root / "campaign"
+    config_dir = run_root / "config"
+    campaign_dir.mkdir(parents=True, exist_ok=False)
+    warehouse_data_root = args.warehouse_data_root.expanduser().resolve()
+    config_paths = _rewrite_warehouse_configs(
+        repo_root=repo_root,
+        config_dir=config_dir,
+        warehouse_data_root=warehouse_data_root,
+        problem=args.problem,
+        problem_v1=args.problem_v1,
+        protocol=args.protocol,
+        split=args.split,
+        seeds=args.seeds,
+    )
+    api_key, api_key_env = _resolve_api_key(args)
+
+    env: dict[str, object] = {
+        "RUN_ROOT": run_root,
+        "CAMPAIGN_DIR": campaign_dir,
+        "CONFIG_DIR": config_dir,
+        "REPO_ROOT": repo_root,
+        "SCION_DIR": scion_dir,
+        "PY": args.python,
+        "PYTHONPATH": scion_dir,
+        "SCION_MODEL": args.model,
+        "SCION_BASE_URL": args.base_url,
+        "SCION_API_KEY": api_key,
+        "SCION_API_KEY_ENV": api_key_env,
+        "SCION_SDK_MAX_RETRIES": 0,
+        "SCION_LLM_MAX_RETRIES": 2,
+        "SCION_WAREHOUSE_DATA_ROOT": warehouse_data_root,
+        "SCION_PROBLEM_DATA_ROOT": warehouse_data_root,
+        "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
+        "PROBLEM": config_paths["problem"],
+        "PROBLEM_V1": config_paths["problem_v1"],
+        "PROTOCOL": config_paths["protocol"],
+        "SPLIT": config_paths["split"],
+        "SEEDS": config_paths["seeds"],
+        "ROUNDS": args.rounds,
+        "TIME_LIMIT_SEC": args.time_limit_sec,
+        "MEASUREMENT_GOVERNANCE": args.measurement_governance,
+        "PROPOSAL_CONTEXT_ABLATION": args.proposal_context_ablation,
+        "CONTROL_PAIR_KEY": args.control_pair_key or "",
+        "AGENTIC_PROPOSAL": 1,
+        "DISABLE_EARLY_STOP": 1,
+        "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
+        "GIT_COMMIT": _git_commit(repo_root),
+        "STARTED_UTC": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    command = _build_command(env)
+    _write_launch_env(run_root, env)
+    _write_run_sh(run_root, command)
+    api_key_display = (
+        f"<from-env:{env['SCION_API_KEY_ENV']}>"
+        if str(env["SCION_API_KEY_ENV"])
+        else "<set>"
+        if str(env["SCION_API_KEY"])
+        else "<unset>"
+    )
+    (run_root / "command.txt").write_text(
+        (
+            "environment:\n"
+            f"SCION_MODEL={env['SCION_MODEL']}\n"
+            f"SCION_BASE_URL={env['SCION_BASE_URL']}\n"
+            f"SCION_WAREHOUSE_DATA_ROOT={env['SCION_WAREHOUSE_DATA_ROOT']}\n\n"
+            f"COMPLETION_PREFLIGHT={env['COMPLETION_PREFLIGHT']}\n\n"
+            "SCION_API_KEY="
+            f"{api_key_display}\n\n"
+            "report_metadata:\n"
+            f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n\n"
+            "config:\n"
+            f"PROBLEM={env['PROBLEM']}\n"
+            f"PROBLEM_V1={env['PROBLEM_V1']}\n"
+            f"PROTOCOL={env['PROTOCOL']}\n"
+            f"SPLIT={env['SPLIT']}\n"
+            f"SEEDS={env['SEEDS']}\n\n"
+            "command:\n"
+            f"{command}\n\n"
+            "launch:\n"
+            "nohup setsid bash run.sh > nohup.log 2>&1 &\n"
+        ),
+        encoding="utf-8",
+    )
+
+    pid = _launch(run_root) if args.launch else None
+    return run_root, pid
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Prepare a warehouse agentic Scion campaign run root. "
+            "By default this only writes launch files and does not start Scion."
+        )
+    )
+    parser.add_argument("--rounds", type=int, required=True)
+    parser.add_argument("--label", required=True)
+    parser.add_argument("--problem", default=PROBLEM)
+    parser.add_argument("--problem-v1", default=PROBLEM_V1)
+    parser.add_argument("--protocol", default=PROTOCOL)
+    parser.add_argument("--split", default=SPLIT)
+    parser.add_argument("--seeds", default=SEEDS)
+    parser.add_argument(
+        "--measurement-governance",
+        choices=MEASUREMENT_GOVERNANCE_CHOICES,
+        default="on",
+    )
+    parser.add_argument(
+        "--proposal-context-ablation",
+        choices=PROPOSAL_CONTEXT_ABLATION_CHOICES,
+        default="full",
+    )
+    parser.add_argument(
+        "--control-pair-key",
+        default=None,
+        help=(
+            "Report-only metadata for matched-control launches. Written to "
+            "launch.env and command.txt; not passed to scion run."
+        ),
+    )
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help=(
+            "API key for the configured OpenAI-compatible proxy. "
+            "Defaults to the local gpt-5.5 proxy key for 127.0.0.1:8080; "
+            "use an explicit value for other proxies."
+        ),
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help=(
+            "Read the API key from this environment variable when run.sh starts. "
+            "Use this for non-local or shared runners so secrets are not written "
+            "to launch.env or command.txt."
+        ),
+    )
+    parser.add_argument(
+        "--completion-preflight",
+        action="store_true",
+        help=(
+            "Before starting Scion, require a real chat completion with "
+            "SCION_MODEL/SCION_BASE_URL/SCION_API_KEY. This catches broken "
+            "proxy sessions that still pass /v1/models."
+        ),
+    )
+    parser.add_argument(
+        "--python",
+        type=Path,
+        default=DEFAULT_PYTHON,
+        help="Python executable to write into launch.env and run.sh.",
+    )
+    parser.add_argument(
+        "--warehouse-data-root",
+        type=Path,
+        default=Path.home() / "research" / "scion-data",
+        help=(
+            "Warehouse production data root for generated/converted cases. "
+            "The launcher rewrites copied production split paths to this root."
+        ),
+    )
+    parser.add_argument(
+        "--time-limit-sec",
+        type=int,
+        default=DEFAULT_TIME_LIMIT_SEC,
+    )
+    parser.add_argument(
+        "--agentic-session-timeout-sec",
+        type=int,
+        default=DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC,
+    )
+    parser.add_argument(
+        "--experiments-root",
+        type=Path,
+        default=DEFAULT_EXPERIMENTS_ROOT,
+    )
+    parser.add_argument(
+        "--launch",
+        action="store_true",
+        help="Start run.sh with nohup setsid and write pid. Default is prepare only.",
+    )
+    args = parser.parse_args()
+    if args.rounds < 1:
+        raise SystemExit("--rounds must be >= 1")
+    if args.time_limit_sec < 1:
+        raise SystemExit("--time-limit-sec must be >= 1")
+    if args.agentic_session_timeout_sec < 1:
+        raise SystemExit("--agentic-session-timeout-sec must be >= 1")
+    if args.api_key is not None and args.api_key_env:
+        raise SystemExit("--api-key and --api-key-env are mutually exclusive")
+    if args.api_key_env:
+        _validate_env_var_name(args.api_key_env)
+    if not str(args.python).strip():
+        raise SystemExit("--python must not be empty")
+    if not args.base_url.strip():
+        raise SystemExit("--base-url must not be empty")
+    for option_name in ("problem", "problem_v1", "protocol", "split", "seeds"):
+        if not str(getattr(args, option_name)).strip():
+            raise SystemExit(f"--{option_name.replace('_', '-')} must not be empty")
+    return args
+
+
+def main() -> None:
+    run_root, pid = prepare(parse_args())
+    print(f"RUN_ROOT={run_root}")
+    if pid is None:
+        print("PREPARED_ONLY=1")
+    else:
+        print(f"PID={pid}")
+
+
+if __name__ == "__main__":
+    main()

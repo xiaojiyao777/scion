@@ -262,6 +262,10 @@ Current checkpoint:
   `/v1/chat/completions` check with non-empty output before launching. Use the
   repaired launcher `--completion-preflight` and `--api-key-env` paths when
   appropriate.
+- Warehouse continuous-improvement follow-up is now launch-prepared but not
+  launched. `launch_warehouse_agentic_campaign.py` writes copied production
+  configs with repo/data-root path rewrites, secret-safe env handling, and the
+  same real completion preflight requirement before campaign startup.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
