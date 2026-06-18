@@ -90,10 +90,11 @@ CVRP/VRP:
   propose it as a missing mechanism.
 - A direct WSL external-control replay found a strong large-instance
   intra-route two-opt signal above the VNS threshold (`8/8` feasible wins on
-  four XL cases x two seeds), but the current diff is not accepted because
-  `two_opt_intra` has no deadline and can violate the nominal solver budget.
-  Treat it as a problem-owned research-focus seed, not Scion evidence or a
-  baseline solver update.
+  four XL cases x two seeds), but the tested unbounded fallback is not accepted
+  and is not present in the clean checkout because `two_opt_intra` has no
+  deadline and can violate the nominal solver budget. Treat it as a
+  problem-owned research-focus seed, not Scion evidence or a baseline solver
+  update.
 - The current CVRP prepared root now exposes that seed as proposal-only
   `research_focus`: agents must pursue it only as a deadline-aware bounded
   local-search mechanism and must avoid the unbounded fallback diff.

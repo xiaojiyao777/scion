@@ -6,10 +6,10 @@ Move the new large-instance intra-route two-opt evidence from a passive report
 into the next CVRP prepared-run research focus, while keeping it proposal-only
 and outside Scion decision machinery.
 
-The unbounded `vrp/src/solver.py` diff remains unaccepted. The prepared focus
-asks the agent to pursue the seed only as a deadline-aware bounded local-search
-mechanism with pair-level objective, feasibility, route-count, and wall-clock
-evidence.
+The unbounded `vrp/src/solver.py` diff remains unaccepted and is not present in
+the clean checkout. The prepared focus asks the agent to pursue the seed only as
+a deadline-aware bounded local-search mechanism with pair-level objective,
+feasibility, route-count, and wall-clock evidence.
 
 ## Code Change
 
