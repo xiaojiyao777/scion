@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifest, postrun analysis brief, artifact inventory, and prepared contract checks cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs, artifact inventories, and prepared contract checks cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -278,28 +278,31 @@ Current checkpoint:
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
-  latest WSL preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
-  `401` with `classification=not_authenticated`. Use the repaired launcher
+  latest WSL preflight reaches the proxy and reports
+  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
+  completion still returns HTTP `401` with
+  `classification=auth_token_invalidated`. Use the repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
-  `--resume-from-campaign` for branch-continuation checks, and keep its default
-  launch/postrun acceptance bundle enabled, including the secret-free
-  prepared-run manifest, delegated analysis brief, and artifact/count inventory
-  with report-only Phase 4 evidence coverage and prepared contract checks.
+  `--resume-from-campaign` for branch-continuation checks, and keep its
+  prepare/postrun acceptance bundle enabled, including the secret-free
+  prepared-run manifest, prepare-time delegated handoff brief/inventory,
+  postrun analysis brief, and artifact/count inventory with report-only Phase 4
+  evidence coverage and prepared contract checks.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-contract-1r-gpt55-20260618T123117Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-handoff-1r-gpt55-20260618T125046Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
   same real completion preflight requirement before campaign startup. It can
   copy the accepted warehouse `v2` campaign as the new run root so the next
   check continues from the promoted champion rather than restarting baseline,
-  writes a secret-free prepared-run manifest at prepare time, and writes the
-  standard postrun acceptance report bundle by default after Scion exits,
-  including delegated analysis brief and artifact/count inventory with
-  report-only Phase 4 evidence coverage and prepared contract checks.
+  writes a secret-free prepared-run manifest and delegated handoff
+  brief/inventory at prepare time, and writes the standard postrun acceptance
+  report bundle by default after Scion exits, including delegated analysis
+  brief and artifact/count inventory with report-only Phase 4 evidence coverage
+  and prepared contract checks.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-contract-6r-gpt55-20260618T123117Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-handoff-6r-gpt55-20260618T125046Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

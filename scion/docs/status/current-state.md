@@ -43,12 +43,11 @@ Framework:
   budget-hit ratios and flags so budget saturation can be audited per replay.
 - CVRP and warehouse launch helpers now support prepared follow-up roots with
   top-level `prepared` status, completion preflight, secret-safe API-key env
-  wiring, runtime-source guards, campaign copy/resume, and default postrun
-  report generation, including a secret-free prepared-run manifest, delegated
-  analysis brief, artifact/count inventory, report-only Phase 4 evidence
-  coverage flags, and prepared-run contract/runtime-guard consistency checks.
-  The generated analysis brief now also carries the prepared manifest's
-  analysis intent, acceptance focus, and resume source for delegated review.
+  wiring, runtime-source guards, campaign copy/resume, secret-free prepared-run
+  manifests, prepare-time delegated handoff briefs/inventories, and default
+  postrun report generation. The generated briefs carry the prepared manifest's
+  analysis intent, acceptance focus, and resume source; inventory/contract
+  checks remain report-only and outside `DecisionFeatures`.
 
 Warehouse:
 
@@ -59,7 +58,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-contract-6r-gpt55-20260618T123117Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-handoff-6r-gpt55-20260618T125046Z-claw`.
 
 CVRP/VRP:
 
@@ -77,17 +76,18 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-contract-1r-gpt55-20260618T123117Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-handoff-1r-gpt55-20260618T125046Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
-  `gpt-5.5` chat-completion preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
-  `401` with `classification=not_authenticated`; do not launch prepared
-  roots until `/v1/chat/completions` returns HTTP `200` with non-empty output
-  after re-login.
+  `gpt-5.5` chat-completion preflight reaches the proxy and reports
+  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
+  completion still returns HTTP `401` with
+  `classification=auth_token_invalidated`; do not launch prepared roots until
+  `/v1/chat/completions` returns HTTP `200` with non-empty output after
+  re-login.
 - WSL runs must use the synchronized WSL checkout and set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`.
 
@@ -135,6 +135,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-run-manifest-launcher-repair-20260618.md`.
 - Current prepared-run contract inventory repair:
   `scion/docs/experiments/v0.4/v04-prepared-run-contract-inventory-repair-20260618.md`.
+- Current prepared-handoff launcher repair:
+  `scion/docs/experiments/v0.4/v04-prepared-handoff-launcher-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
