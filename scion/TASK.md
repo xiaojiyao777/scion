@@ -433,7 +433,7 @@ Current checkpoint:
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated`
-  (`auth_status.pool.active=0`, `refreshing=1`, `total=1`).
+  (`auth_status.pool.active=0`, `expired=1`, `refreshing=0`, `total=1`).
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no

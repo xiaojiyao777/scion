@@ -118,7 +118,7 @@ WSL readiness summary for both roots:
 ```text
 static_ready=true
 ready_without_preflight=true
-git_runtime_consistent=ok, checkout matches manifest commit
+git_runtime_consistent=ok, checkout differs, but runtime guard paths are unchanged
 prepared_handoff/prompt_context_readiness/*.json:
   ready_for_launch_prompt_audit=true
   missing_required=[]
@@ -127,7 +127,7 @@ strict launch readiness:
   launch_ready=false
   HTTP 401
   classification=not_authenticated
-  auth pool active=0 / refreshing=1 / total=1
+  auth pool active=0 / expired=1 / refreshing=0 / total=1
 ```
 
 No campaign was launched. Live launch remains blocked until the real
