@@ -279,15 +279,15 @@ Current checkpoint:
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
   latest WSL preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=True active=1 refreshing=0` and returns HTTP
-  `401` with `classification=auth_token_invalidated`. Use the repaired launcher
+  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
+  `401` with `classification=not_authenticated`. Use the repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its default
   launch/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, delegated analysis brief, and artifact/count inventory
   with report-only Phase 4 evidence coverage and prepared contract checks.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-contract-1r-gpt55-20260618T123117Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -299,7 +299,7 @@ Current checkpoint:
   including delegated analysis brief and artifact/count inventory with
   report-only Phase 4 evidence coverage and prepared contract checks.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-contract-6r-gpt55-20260618T123117Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

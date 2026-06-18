@@ -57,8 +57,22 @@ Result:
 - `py_compile` passed
 - `git diff --check` passed
 
-Smoke checks against the current local mirrors showed `contract_complete=True`
-for both prepared roots:
+Smoke checks against the local mirrors showed `contract_complete=True` for the
+first prepared roots that used this repair:
 
 - `/home/clawd/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`
 - `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`
+
+The current launch roots were refreshed again on WSL at commit `1baab1b` so the
+prepared-run manifest and runner checkout agree:
+
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-contract-1r-gpt55-20260618T123117Z-claw`
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-contract-6r-gpt55-20260618T123117Z-claw`
+
+Both roots are mirrored locally under `/home/clawd/research/scion-experiments/`.
+Validation confirmed top-level `prepared` status, completion preflight,
+`GIT_COMMIT=1baab1b`, `bash -n` clean `run.sh`, secret-free manifest JSON,
+`PREPARED_RUN_MANIFEST=` in `command.txt`, and `contract_complete=True` through
+the WSL artifact inventory tool.

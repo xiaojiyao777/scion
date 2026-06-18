@@ -57,7 +57,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-contract-6r-gpt55-20260618T123117Z-claw`.
 
 CVRP/VRP:
 
@@ -75,15 +75,15 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-contract-1r-gpt55-20260618T123117Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` chat-completion preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=True active=1 refreshing=0` and returns HTTP
-  `401` with `classification=auth_token_invalidated`; do not launch prepared
+  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
+  `401` with `classification=not_authenticated`; do not launch prepared
   roots until `/v1/chat/completions` returns HTTP `200` with non-empty output
   after re-login.
 - WSL runs must use the synchronized WSL checkout and set
