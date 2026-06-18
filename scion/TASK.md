@@ -294,7 +294,9 @@ Current checkpoint:
   roots or schema drift, rebuild the
   report-only acceptance bundle with `scion/tools/rebuild_postrun_acceptance.py`
   before delegating postrun analysis; current launcher postrun paths call this
-  rebuild tool directly.
+  rebuild tool directly. Before launch, require
+  `scion/tools/check_launch_readiness.py <prepared-root> --completion-preflight`
+  to report `launch_ready=true`.
   Current launch-prepared CVRP root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-preflightguard2-1r-gpt55-20260618T134635Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not

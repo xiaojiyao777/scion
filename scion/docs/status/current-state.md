@@ -55,6 +55,10 @@ Framework:
   reports now mark the root `invalid_infra_only` with zero current-run evidence
   and skip current-run report families while preserving analysis brief,
   inventory, and rebuild manifest artifacts.
+- `scion/tools/check_launch_readiness.py` is the current pre-launch verifier:
+  static readiness covers prepared contracts, runtime guard consistency,
+  `run.sh` syntax, report-family expectations, and unstarted root state; launch
+  readiness is true only when the optional real completion preflight succeeds.
 - Historical and current run roots can be normalized for delegated analysis with
   `scion/tools/rebuild_postrun_acceptance.py`. The rebuild manifest reports
   per-family success/failure and preserves Phase 4 evidence gaps instead of
@@ -107,9 +111,10 @@ Infrastructure:
 
 1. Restore and verify the live `gpt-5.5` route with a real chat-completion
    preflight. `/v1/models` is not enough; on WSL run
-   `scion/tools/check_gpt55_proxy.py --login-url-on-failure` and require
-   `CHAT_COMPLETION_OK`; use the printed login URL when the helper reports an
-   authentication failure.
+   `scion/tools/check_launch_readiness.py <prepared-root>
+   --completion-preflight --format json` and require `launch_ready=true`. Use
+   `scion/tools/check_gpt55_proxy.py --login-url-on-failure` when a login URL is
+   needed.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
    effect-vs-MDE, budget-exhausting runtime feedback, source visibility, and
@@ -155,6 +160,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-rebuild-tool-20260618.md`.
 - Current preflight-failed launch-root evidence guard:
   `scion/docs/experiments/v0.4/v04-preflight-failed-launch-root-evidence-guard-20260618.md`.
+- Current launch readiness helper:
+  `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
