@@ -44,8 +44,8 @@ Framework:
 - CVRP and warehouse launch helpers now support prepared follow-up roots with
   top-level `prepared` status, completion preflight, secret-safe API-key env
   wiring, runtime-source guards, campaign copy/resume, and default postrun
-  report generation, including artifact/count inventory with report-only
-  Phase 4 evidence coverage flags.
+  report generation, including a delegated analysis brief and artifact/count
+  inventory with report-only Phase 4 evidence coverage flags.
 
 Warehouse:
 
@@ -126,6 +126,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-gpt55-proxy-healthcheck-tool-20260618.md`.
 - Current postrun inventory launcher repair:
   `scion/docs/experiments/v0.4/v04-postrun-artifact-inventory-launcher-repair-20260618.md`.
+- Current postrun analysis-brief launcher repair:
+  `scion/docs/experiments/v0.4/v04-postrun-analysis-brief-launcher-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

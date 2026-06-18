@@ -75,6 +75,7 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
     "$REPORT_DIR/failures" \
     "$REPORT_DIR/research_efficiency" \
     "$REPORT_DIR/manifests" \
+    "$REPORT_DIR/analysis_brief" \
     "$REPORT_DIR/inventory"
   echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
   {
@@ -103,6 +104,16 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
   fi
   "$PY" -m scion.cli.main report proposal-trajectory-manifest \
     "${manifest_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
+  "$PY" "$SCION_DIR/tools/postrun_analysis_brief.py" \
+    "$RUN_ROOT" \
+    --format json \
+    > "$REPORT_DIR/analysis_brief/${REPORT_STEM}.postrun_analysis_brief.v1.json" \
+    2>> "$RUN_ROOT/run.log" || true
+  "$PY" "$SCION_DIR/tools/postrun_analysis_brief.py" \
+    "$RUN_ROOT" \
+    --format markdown \
+    > "$REPORT_DIR/analysis_brief/${REPORT_STEM}.postrun_analysis_brief.md" \
+    2>> "$RUN_ROOT/run.log" || true
   "$PY" "$SCION_DIR/tools/postrun_artifact_inventory.py" \
     "$RUN_ROOT" \
     --format json \

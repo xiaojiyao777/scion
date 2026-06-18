@@ -1,6 +1,6 @@
 # Post-Run Analysis Handoff
 
-*Last updated: 2026-06-07*
+*Last updated: 2026-06-18*
 
 Use this handoff after every real-cost v0.4 agentic campaign. The main session
 should delegate raw-artifact inspection to a subagent and keep the main thread
@@ -17,11 +17,19 @@ Give the analysis subagent exactly these paths and constraints:
 - `RUN_ROOT`: the outer experiment directory under
   `/home/clawd/research/scion-experiments/`.
 - `CAMPAIGN_DIR`: usually `$RUN_ROOT/campaign`.
+- Preferred generated brief, when present:
+  `$RUN_ROOT/postrun_acceptance/analysis_brief/*.postrun_analysis_brief.md`.
+- Preferred generated inventory, when present:
+  `$RUN_ROOT/postrun_acceptance/inventory/*.postrun_artifact_inventory.md`.
 - Design anchors:
   - `scion/design/scion-architecture-v3.md`
   - `scion/docs/AGENT_ONBOARDING.md`
 - Current task: analyze the experiment, do not modify source code, do not start
   another experiment, and do not call external LLM providers.
+
+The generated brief is a report-only delegation aid. It summarizes validity,
+required artifacts, Phase 4 evidence coverage, and the required questions below.
+It is not a quality judgment and must not be used as a gate by itself.
 
 ## Required Artifact Pass
 
@@ -35,6 +43,10 @@ The subagent must inspect these artifacts when present:
 - `$CAMPAIGN_DIR/agentic_sessions/agentic_session_trace_index.json`.
 - `$CAMPAIGN_DIR/llm_traces/*.json`.
 - `$CAMPAIGN_DIR/metrics/*.json`.
+- `$RUN_ROOT/postrun_acceptance/analysis_brief/*` and
+  `$RUN_ROOT/postrun_acceptance/inventory/*` when present.
+- `$RUN_ROOT/postrun_acceptance/research_efficiency/*` and
+  `$RUN_ROOT/postrun_acceptance/manifests/*` when present.
 - `$CAMPAIGN_DIR/archive/**`, `$CAMPAIGN_DIR/workspaces/**`,
   `$CAMPAIGN_DIR/champions/**` only as needed to verify patch identity,
   checkpoint behavior, or promoted snapshots.

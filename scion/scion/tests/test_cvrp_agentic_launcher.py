@@ -135,6 +135,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "report failures" in run_sh_text
     assert "report research-efficiency" in run_sh_text
     assert "report proposal-trajectory-manifest" in run_sh_text
+    assert "tools/postrun_analysis_brief.py" in run_sh_text
+    assert "postrun_analysis_brief.v1.json" in run_sh_text
+    assert "postrun_analysis_brief.md" in run_sh_text
     assert "tools/postrun_artifact_inventory.py" in run_sh_text
     assert "postrun_artifact_inventory.v1.json" in run_sh_text
     assert "postrun_artifact_inventory.md" in run_sh_text

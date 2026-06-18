@@ -89,6 +89,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                 }
             ],
         },
+        (
+            "analysis_brief",
+            "normal.postrun_analysis_brief.v1.json",
+        ): {},
         ("inventory", "normal.postrun_artifact_inventory.v1.json"): {},
     }
     for (subdir, filename), payload in postrun_payloads.items():
@@ -210,6 +214,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     }
     assert data["postrun_reports"]["exists"] is True
     assert data["postrun_reports"]["counts"] == {
+        "analysis_brief": 1,
         "failures": 1,
         "inventory": 1,
         "manifests": 1,

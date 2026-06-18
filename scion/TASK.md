@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; postrun artifact inventory covers Phase 4 evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; postrun analysis brief and artifact inventory cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -283,8 +283,9 @@ Current checkpoint:
   `401` with `classification=not_authenticated`. Use the repaired launcher
   `--completion-preflight` and `--api-key-env` paths when appropriate, use
   `--resume-from-campaign` for branch-continuation checks, and keep its default
-  postrun acceptance report bundle enabled, including artifact/count inventory
-  with report-only Phase 4 evidence coverage flags.
+  postrun acceptance report bundle enabled, including the delegated analysis
+  brief and artifact/count inventory with report-only Phase 4 evidence coverage
+  flags.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -292,8 +293,8 @@ Current checkpoint:
   copy the accepted warehouse `v2` campaign as the new run root so the next
   check continues from the promoted champion rather than restarting baseline,
   and it writes the standard postrun acceptance report bundle by default after
-  Scion exits, including artifact/count inventory with report-only Phase 4
-  evidence coverage flags.
+  Scion exits, including the delegated analysis brief and artifact/count
+  inventory with report-only Phase 4 evidence coverage flags.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
