@@ -91,6 +91,10 @@ class BranchController:
         self._branches[branch_id] = branch
         return branch
 
+    def restore_branch(self, branch: Branch) -> None:
+        """Install a persisted branch into the in-memory scheduling set."""
+        self._branches[branch.branch_id] = branch
+
     def apply_decision(self, branch_id: str, decision: Decision) -> None:
         """Apply a Decision to a branch, performing the appropriate state transition."""
         branch = self._get(branch_id)

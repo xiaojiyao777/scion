@@ -292,6 +292,7 @@ def compose_campaign_services(
     owner._pending_hypotheses = {}
     owner._step_history = []
     owner._round_num = 0
+    _restore_persisted_active_branches(owner)
 
     owner._term_checker = TerminationChecker(termination_config or TerminationConfig())
     owner._budget = budget or BudgetState(total=1000, used=0)
@@ -724,7 +725,9 @@ def required_service_names() -> tuple[str, ...]:
 
 def _persist_initial_champion(owner: Any) -> None:
     """Persist the base champion so campaign evidence has a real v1 anchor."""
-    if owner._champion_store.get_current() is not None:
+    current = owner._champion_store.get_current()
+    if current is not None:
+        owner._champion = current
         return
 
     champion = owner._champion
@@ -753,6 +756,18 @@ def _persist_initial_champion(owner: Any) -> None:
     )
     owner._champion_store.promote(persisted)
     owner._champion = persisted
+
+
+def _restore_persisted_active_branches(owner: Any) -> None:
+    """Restore schedulable branch state when reopening an existing campaign."""
+    for branch in owner._branch_store.load_all_active():
+        owner._branch_ctrl.restore_branch(branch)
+        workspace = os.path.join(owner._campaign_dir, "workspaces", branch.branch_id)
+        if (
+            owner._branch_ctrl.get_code_base(branch.branch_id) == "branch_workspace"
+            and os.path.isdir(workspace)
+        ):
+            owner._branch_workspaces[branch.branch_id] = workspace
 
 
 def _normalize_operator_pool(operator_pool: dict[str, Any]) -> dict[str, OperatorConfig]:

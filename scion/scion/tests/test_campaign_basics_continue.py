@@ -1,5 +1,7 @@
 """Focused tests split from test_campaign.py."""
 
+import shutil
+
 from .campaign_test_support import *  # noqa: F401,F403
 from scion.proposal.llm_client import LLMTransientProviderError
 
@@ -77,6 +79,48 @@ class TestCampaignBasics:
             "status": FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
             "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
         }
+
+    def test_reopened_campaign_restores_champion_active_branch_and_workspace(
+        self, tmp_path
+    ):
+        cm = _campaign(tmp_path)
+        branch = cm._branch_ctrl.create_branch(cm._champion)
+        branch.state = BranchState.EXPLORE_EXPAND
+        branch.current_code_hash = "candidate-hash"
+        branch.last_clean_code_hash = "candidate-hash"
+        branch.branch_mechanism_ids = ("demand_slack_regret_insertion",)
+        branch.branch_evidence_summary = {
+            "stage": "screening",
+            "tier": "marginal",
+            "case_level_negative_cases": [{"case_id": "CMT4.vrp"}],
+        }
+        cm._branch_store.save(branch)
+
+        workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
+        workspace.mkdir(parents=True)
+        (workspace / "solver.py").write_text("# retained branch workspace\n")
+        cm._champion_store.promote(
+            ChampionState(
+                version=2,
+                operator_pool={},
+                solver_config_hash="promoted",
+                code_snapshot_path=cm._champion.code_snapshot_path,
+                code_snapshot_hash="promoted-hash",
+            )
+        )
+        shutil.rmtree(tmp_path / "champion_code")
+
+        reopened = _campaign(tmp_path)
+
+        assert reopened._champion.version == 2
+        restored = reopened._branch_ctrl.get_branch(branch.branch_id)
+        assert restored.state == BranchState.EXPLORE_EXPAND
+        assert restored.branch_mechanism_ids == (
+            "demand_slack_regret_insertion",
+        )
+        assert restored.branch_evidence_summary["tier"] == "marginal"
+        assert reopened._branch_workspaces[branch.branch_id] == str(workspace)
+        assert reopened.get_state()["n_active_branches"] == 1
 
     def test_final_round_queue_validate_drains_validation_without_new_proposal(self, tmp_path):
         cm = _campaign(

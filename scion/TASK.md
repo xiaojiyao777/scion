@@ -250,6 +250,10 @@ Current checkpoint:
   Decision selected `expand_screening`; pair W/L/T was `13/11/8`, case W/L/T
   was `3/2/3`, and telemetry for the declared mechanism was observed. This is
   positive CVRP research-loop behavior, not promotion.
+- Campaign reopen/continuation is repaired for the next same-mechanism field
+  check: reopening an existing campaign now restores the persisted current
+  champion, active branch state, mechanism/evidence summaries, and existing
+  branch workspace mapping.
 - Next CVRP acceptance checkpoint: same-mechanism follow-up on
   `demand_slack_regret_insertion` should reduce `CMT2`/`CMT4` losses while
   preserving A/E/P gains and M/X neutrality. Avoid broad budget/gate changes,

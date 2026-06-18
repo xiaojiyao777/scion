@@ -49,6 +49,10 @@ CVRP/VRP:
   `expand_screening` with pair W/L/T `13/11/8`, case W/L/T `3/2/3`, median
   delta `0.0`, and losses on `CMT2`/`CMT4`. This is positive research-loop
   behavior and an active marginal branch, not a promotion.
+- Campaign reopen/continuation state has been repaired for the next field
+  check: reopening a campaign now restores the persisted current champion,
+  active branches, mechanism/evidence summaries, and existing branch workspace
+  mapping needed for same-mechanism continuation.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
@@ -99,6 +103,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-pivot-guidance-repair-20260618.md`.
 - CVRP provider pivot field check:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-pivot-guidance-agentic-1r-ff2e652-postrun-20260618.md`.
+- Campaign reopen continuation repair:
+  `scion/docs/experiments/v0.4/v04-campaign-reopen-active-branch-restore-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
