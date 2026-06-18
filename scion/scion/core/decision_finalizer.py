@@ -196,6 +196,20 @@ class DecisionFinalizer:
                 decision_reason_codes=effective_reason_codes,
             )
 
+        if decision not in (
+            Decision.ABANDON,
+            Decision.CONTINUE_EXPLORE,
+            Decision.VALIDATION_REPAIR_REQUIRED,
+            Decision.PROMOTE,
+        ):
+            _sync_retained_protocol_branch_evidence(
+                branch,
+                hypothesis=hypothesis,
+                patch=patch,
+                protocol_result=protocol_result,
+                decision_reason_codes=effective_reason_codes,
+            )
+
         if decision in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED):
             result = self._continue_explore(
                 branch=branch,
@@ -1404,6 +1418,73 @@ def _sync_terminal_branch_evidence(
     )
     branch.last_branch_lifecycle_policy_block = block
     _attach_lifecycle_policy_evidence(branch, lifecycle_policy_evidence)
+
+
+def _sync_retained_protocol_branch_evidence(
+    branch: Branch,
+    *,
+    hypothesis: HypothesisProposal,
+    patch: PatchProposal | None,
+    protocol_result: Optional[ProtocolResult],
+    decision_reason_codes: Iterable[str] | None,
+) -> None:
+    """Persist compact evidence for non-terminal evaluated branch heads."""
+
+    if protocol_result is None or getattr(protocol_result, "stats", None) is None:
+        return
+    reason_codes = tuple(
+        dict.fromkeys(
+            str(code).strip()
+            for code in (decision_reason_codes or ())
+            if str(code).strip()
+        )
+    )
+    branch.branch_mechanism_ids = _merge_mechanism_ids(
+        getattr(branch, "branch_mechanism_ids", ()) or (),
+        _proposal_mechanism_ids(hypothesis, patch),
+    )
+    if branch.direction is None:
+        branch.direction = (
+            f"{hypothesis.change_locus}: "
+            f"{(hypothesis.hypothesis_text or '')[:100]}"
+        )
+    if _stage_value(protocol_result) == "screening":
+        feedback = screening_feedback_summary(
+            protocol_result,
+            decision_reason_codes=reason_codes,
+        )
+        _update_branch_screening_evidence_summary(
+            branch,
+            protocol_result=protocol_result,
+            screening_feedback=feedback,
+            decision_reason_codes=reason_codes,
+        )
+        _update_branch_lifecycle_signal_state(
+            branch,
+            protocol_result=protocol_result,
+            screening_feedback=feedback,
+            telemetry_effect_zero=telemetry_effect_zero_reason_present(
+                reason_codes
+                + tuple(getattr(protocol_result, "reason_codes", ()) or ())
+            ),
+        )
+        branch.last_screening_feedback_tier = feedback.tier
+        branch.last_telemetry_outcome = (
+            getattr(branch, "last_telemetry_outcome", None)
+            or feedback.effect_status
+            or feedback.activation_status
+        )
+        return
+
+    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
+    _merge_protocol_evidence_summary(summary, protocol_result)
+    if reason_codes:
+        summary["decision_reason_codes"] = list(reason_codes)
+        summary["reason_codes"] = list(reason_codes)
+        summary["why_not_promoted_reason_codes"] = list(reason_codes)
+    summary["evidence_retention_status"] = "retained"
+    summary["mechanism_ids"] = list(getattr(branch, "branch_mechanism_ids", ()) or ())
+    branch.branch_evidence_summary = summary
 
 
 def _attach_lifecycle_policy_evidence(

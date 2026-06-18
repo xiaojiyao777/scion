@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from scion.core.branch import BranchController
+from scion.core.branch_cards import branch_hygiene_context
 from scion.core.branch_lifecycle_policy import (
     SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
     SCREENING_WEAK_SIGNAL_CONTINUE,
@@ -131,6 +132,133 @@ def test_reconcile_continue_is_not_rewritten_to_abandon() -> None:
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert stored.state == BranchState.EXPLORE
     assert hard_abandons == []
+
+
+def test_expand_screening_retains_branch_card_evidence() -> None:
+    controller = BranchController()
+    branch = controller.create_branch(
+        ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver",
+            code_snapshot_path="/tmp/champion",
+            code_snapshot_hash="champion",
+        )
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add guarded route absorption after repair when sparse routes can be "
+            "removed without worsening total distance."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        mechanism_changes=(
+            MechanismChange(id="route_merge_repair", change_type="modify"),
+        ),
+    )
+    h_record = HypothesisRecord(
+        hypothesis_id="h-expand-screening",
+        branch_id=branch.branch_id,
+        change_locus="solver_design",
+        action="modify",
+        status="running",
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_repair.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
+    workspaces = {branch.branch_id: "/tmp/workspace"}
+    hyp_store = _HypothesisStore()
+
+    finalizer = DecisionFinalizer(
+        branch_controller=controller,
+        branch_store=None,
+        hypothesis_store=hyp_store,
+        branch_workspaces=workspaces,
+        branch_hypotheses={branch.branch_id: hypothesis},
+        branch_patches={branch.branch_id: patch},
+        branch_current_hypothesis={branch.branch_id: h_record},
+        branch_zero_win_streaks={},
+        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
+        require_promotable_branch=lambda _branch: None,
+        commit_promote_plan=lambda _plan: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        record_hard_abandon=lambda *_args: None,
+        record_step_lineage=lambda *_args, **_kwargs: None,
+        decision_reason_codes_for=lambda *_args: None,
+        discard_branch_workspace=lambda branch_id: workspaces.pop(branch_id, None),
+        archive_workspace=lambda *_args: None,
+        cleanup_workspace=lambda *_args: None,
+        persist_branch_state=lambda _branch_id: None,
+        reset_recent_abandoned_count=lambda: None,
+    )
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=32,
+            wins=7,
+            losses=7,
+            ties=18,
+            win_rate=7 / 32,
+            median_delta=0.0,
+            ci_low=-3.0,
+            ci_high=3.0,
+            runtime_pairs=32,
+            runtime_ratio_median=1.001,
+            runtime_delta_median_ms=32.0,
+            runtime_regression_rate=0.625,
+        ),
+        gate_outcome="expand",
+        reason_codes=("SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",),
+        exposed_summary="mixed route merge screening",
+        raw_metrics_ref="/tmp/metrics.json",
+        candidate_phase_telemetry_summary={
+            "solver_algorithm_phase_improvement_counts": {
+                "route_merge_repair": {"positive": 19, "zero": 13}
+            }
+        },
+        mechanism_evidence={
+            "activation_evidence_status": "activation_observed",
+            "objective_effect_status": "mixed_objective_effect",
+        },
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.EXPAND_SCREENING,
+        hypothesis=hypothesis,
+        h_record=h_record,
+        protocol_result=protocol,
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="screening",
+        decision_reason_codes=("SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",),
+    )
+
+    stored = controller.get_branch(branch.branch_id)
+    card = branch_hygiene_context(stored)
+
+    assert result.decision == Decision.EXPAND_SCREENING
+    assert stored.state == BranchState.EXPLORE_EXPAND
+    assert stored.branch_code_status == "clean"
+    assert stored.direction is not None
+    assert stored.branch_mechanism_ids == ("route_merge_repair",)
+    assert stored.last_screening_feedback_tier == "marginal"
+    assert stored.branch_evidence_summary["wins"] == 7
+    assert stored.branch_evidence_summary["losses"] == 7
+    assert stored.branch_evidence_summary["ties"] == 18
+    assert stored.branch_evidence_summary["phase_activation_summary"]["stage"] == (
+        "screening"
+    )
+    assert stored.branch_evidence_summary["why_not_promoted_reason_codes"] == [
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT"
+    ]
+    assert card["mechanism_ids"] == ["route_merge_repair"]
+    assert card["generic_evidence_summary"]["wins"] == 7
+    assert card["generic_evidence_summary"]["tier"] == "marginal"
+    assert card["phase_activation_summary"]["stage"] == "screening"
 
 
 def test_win_skewed_weak_positive_screening_workspace_reason_is_positive() -> None:

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; guarded route-merge candidate rejected as no-effect*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; transfer run exposed branch-card evidence retention bug, now repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -245,6 +245,14 @@ Current checkpoint:
   objective deltas were `0.0`, and route-merge telemetry showed activation but
   zero observed improvement effect. This is framework-valid rejection evidence,
   not a promotion.
+- A copied-campaign transfer run from commit `af5b5a2` produced a materially
+  different route-merge variant with direct mechanism effect in `19/32` pairs,
+  but mixed aggregate quality (`7/7/18`, median total-distance delta `0.0`,
+  mean `-0.28125`) and no promotion. It also exposed a framework continuity
+  bug: `EXPAND_SCREENING` persisted metric/formal-candidate evidence but left
+  the branch card without direction, mechanism ids, or compact evidence. That
+  evidence-retention path is now repaired in `DecisionFinalizer` with focused
+  tests.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

@@ -33,62 +33,31 @@ Warehouse:
 CVRP/VRP:
 
 - The framework can now steer CVRP agents to problem-owned solver-design
-  opportunities and carry candidates through repaired formal screening without
-  infrastructure failures.
-- Rejected default directions remain: broad VNS removal, pure ALNS/no-polish,
-  simple initial-VNS disablement, raw cadence-2, recent-best/stall gating, and
-  fixed early-8 as a production default.
-- Accepted current lesson: scheduler-owned adaptive embedded-VNS share70
-  refinement was useful for steering and diagnostics, but the tested variants
-  are not production solver improvements.
-- Latest agentic field check from commit `7e312a7` is positive research-loop
-  evidence: target-intent, hypothesis, tool-selection, and code all stayed on
-  `policies/baseline_modules/scheduler.py` /
-  `adaptive_embedded_vns_share70_trigger`; formal screening completed `32/32`
-  valid pairs with `0` failures; Decision chose `expand_screening` for
-  `SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT`.
-- The generated hard share70 cap is not accepted as a production solver
-  improvement. It produced pair W/L/T `16/11/5`, median candidate-minus-champion
-  delta `-0.5`, mean `+2.0`, CMT4 case-level win, M-n200 neutrality, and an
-  X-n110 tail loss (`+116`) that prevents promotion.
-- Follow-up no-LLM diagnostics added direct mechanism effect telemetry and
-  rejected share70 floor/hardcap/softrescue/tail6 as X-n110 fixes. X-n110 30s
-  seed 43 keeps the `+116` tail loss across those variants.
-- Post-share70 target-selection field check from commit `7557a15` accepted the
-  guidance repair in the field. Target-intent selected
-  `policies/baseline_modules/destroy_repair.py` / `route_merge_repair`, not
-  another scheduler/share70 variant. Formal screening was valid (`32/32`, `0`
-  failed pairs) and Decision chose `expand_screening` for low-SNR divergent
-  evidence: pair W/L/T `10/3/19`, median delta `0.0`, favorable mean delta
-  `+1.406`, no case-level losses, and X-n110/CMT4/M-n200 neutral.
-- `route_merge_repair` is not promoted, but it is now the active CVRP branch
-  lesson to continue. The provider guidance now preserves the pair/effect
-  evidence and points the next agent toward guarded same-mechanism refinement in
-  `destroy_repair.py` before opening another unrelated target.
-- A first provider-guided rerun from commit `71666ae` failed the
-  same-mechanism field check and is not solver evidence. The first proposal
-  stayed in `destroy_repair.py` but renamed the mechanism to
-  `route_limit_aware_repair`; fallback proposals drifted to `local_search.py`
-  and `scheduler.py`; code retries invented unstable telemetry helpers such as
-  `record_objective_probe` and `record_best_update`. The framework failed the
-  bad candidates, and CVRP provider guidance has been tightened to keep
-  `mechanism_changes` on `route_merge_repair` and restrict candidate telemetry
-  to stable `record_phase`/`record_iteration`/`record_move` helpers.
-- The immediate `ce2fa45` rerun showed the target-intent prompt still omitted
-  the new provider guidance in the real WSL path, because the prompt detector
-  did not treat `research_surfaces` as solver-design context. That injection
-  path is now repaired in the generic proposal prompt layer while the
-  route-merge semantics remain CVRP-owned.
-- The post-repair WSL rerun from commit `f3d634c` field-verifies the injection
-  repair when launched with the synchronized worktree on `PYTHONPATH`.
-  Target-intent, hypothesis, and code stayed on
-  `policies/baseline_modules/destroy_repair.py` / `route_merge_repair`; all
-  seven LLM traces used `gpt-5.5`; code retry failures were `0`; formal
-  screening completed `32/32` valid pairs with `0` failures. The candidate is
-  rejected as a solver improvement: pair W/L/T was `0/0/32`, every objective
-  delta was `0.0`, branch status is `active_no_effect`, and telemetry shows
-  route-merge activation in `30/32` candidate runs with zero observed
-  improvement effects.
+  opportunities and carry candidates through complete formal screening. This is
+  not yet enough: v0.4 still needs one fresh proof that repaired branch evidence
+  supports continuous CVRP follow-up.
+- Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
+  simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
+  fixed early-8, and tested share70 cap/rescue variants.
+- The `f3d634c` WSL rerun field-verified route-merge target-intent guidance
+  injection: target-intent, hypothesis, and code stayed on
+  `policies/baseline_modules/destroy_repair.py` / `route_merge_repair`, all LLM
+  traces used `gpt-5.5`, screening completed `32/32` valid pairs with `0`
+  failures, and the candidate was correctly rejected as no-effect (`0/0/32`,
+  zero objective deltas).
+- The `af5b5a2` transfer run from copied campaign state is valid and useful but
+  not a solver improvement. It produced a materially different
+  `route_merge_repair` variant with direct mechanism effect in `19/32` pairs,
+  but screening remained mixed (`7/7/18`, median total-distance delta `0.0`,
+  mean `-0.28125`) and Decision stayed at `expand_screening`.
+- The same transfer run exposed a framework continuity bug: non-terminal
+  decisions such as `EXPAND_SCREENING` recorded metric/formal-candidate
+  evidence but did not persist `direction`, `branch_mechanism_ids`, or compact
+  `branch_evidence_summary` onto the branch card. This made an evaluated branch
+  appear as an empty clean branch to later prompts.
+- That branch-card evidence-retention bug is now repaired in
+  `scion/scion/core/decision_finalizer.py` with a focused regression test in
+  `scion/scion/tests/unit/core/test_decision_finalizer_lifecycle.py`.
 - WSL execution caveat: Scion campaign runs in WSL must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -100,20 +69,22 @@ CVRP/VRP:
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest CVRP route-merge postrun artifacts are synced back to:
-  `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-guarded-agentic-1r-f3d634c-pypath-20260618T004101Z`.
+- Latest valid CVRP transfer artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-routemerge-transfer-agentic-resume1r-af5b5a2-env-20260618T0130Z`.
 
 ## Next Actions
 
-1. Do not rerun the guarded `route_merge_repair` v2 unchanged. The next CVRP
-   field check should test transfer from `active_no_effect`: either a
-   materially different problem-owned solver-design clean fork, or a
-   route-merge variant with explicit preconditions for nonzero absorption
-   effects before formal screening.
-2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
+1. Run one fresh short CVRP WSL agentic check after the branch-card
+   evidence-retention repair. Inspect whether prompts see the retained
+   `marginal` route-merge evidence, `route_merge_repair` mechanism id, and
+   direct effect telemetry before selecting the next target.
+2. Do not rerun the guarded `route_merge_repair` v2 unchanged. Any next
+   route-merge attempt must explain how it differs from both the no-effect
+   guarded v2 and the mixed absorption-pass variant.
+3. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.
-3. Keep a later warehouse repeat available to test whether champion `v2`
+4. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Key Evidence
@@ -137,6 +108,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-target-intent-guidance-injection-repair-20260618.md`.
 - CVRP route-merge guarded post-repair field check:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-f3d634c-postrun-20260618.md`.
+- CVRP route-merge transfer field check and branch-card repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-routemerge-transfer-agentic-resume1r-af5b5a2-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
