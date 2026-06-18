@@ -35,11 +35,12 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_models.py
 ```
 
-Local result: `57 passed in 0.98s`.
+Local result: `57 passed in 0.79s`.
 
-WSL focused verification uses the same command after fast-forwarding the WSL
-checkout. The initial WSL run caught the absolute-path defect; the accepted
-state requires the rerun to pass there as well.
+WSL result after fast-forwarding to the accepted path-fix commit:
+`57 passed in 0.40s`. The initial WSL run caught the absolute-path defect; the
+rerun verifies the warehouse production/package specs now resolve the
+repository-local `surrogate` calibration asset in the synchronized checkout.
 
 ## Acceptance
 
