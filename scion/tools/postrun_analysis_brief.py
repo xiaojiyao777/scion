@@ -36,9 +36,27 @@ REQUIRED_QUESTIONS = (
     "and budget diagnostics consistent with the declared runtime model?",
     "Did failure_taxonomy_summary distinguish provider/infra, framework/control, "
     "proposal/codegen/tool, and algorithm-quality failures?",
+    "For warehouse follow-up, did warehouse_followup_summary distinguish "
+    "prepared-only, quality-blocked, protocol-evaluated, and plateau-review-ready evidence?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
+)
+
+WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS = (
+    "warehouse_v2_checkpoint_handoff",
+    "warehouse_continuous_plateau_question",
+    "warehouse_required_evidence_handoff",
+    "warehouse_default_avoid_handoff",
+    "warehouse_decision_boundary_handoff",
+)
+
+WAREHOUSE_FOLLOWUP_REVIEW_AXES = (
+    "preserve_or_improve_champion_v2_promotion_behavior",
+    "separate_quality_blocked_proposals_from_protocol_evaluated_no_effect",
+    "compare_cost_delta_and_improving_move_telemetry_before_split_delta_only_claims",
+    "explain_fast_completion_against_warehouse_runtime_model",
+    "judge_continuous_improvement_vs_real_plateau_only_after_current_run_postrun_evidence",
 )
 
 
@@ -46,6 +64,39 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
     inventory = build_inventory(run_root)
     run_root_path = Path(inventory["run_root"])
     campaign_dir = Path(inventory["campaign_dir"])
+    branch_research_state_summary = _branch_research_state_summary(inventory)
+    protocol_accounting_summary = _protocol_accounting_summary(
+        run_root_path,
+        inventory,
+    )
+    measurement_effect_summary = _measurement_effect_summary(
+        run_root_path,
+        inventory,
+    )
+    runtime_feedback_summary = _runtime_feedback_summary(
+        run_root_path,
+        inventory,
+    )
+    failure_taxonomy_summary = _failure_taxonomy_summary(
+        run_root_path,
+        inventory,
+    )
+    prompt_context_visibility_summary = _prompt_context_visibility_summary(
+        run_root_path,
+        inventory,
+    )
+    research_continuity_summary = _research_continuity_summary(
+        run_root_path,
+        inventory,
+    )
+    warehouse_followup_summary = _warehouse_followup_summary(
+        inventory,
+        protocol_accounting_summary=protocol_accounting_summary,
+        measurement_effect_summary=measurement_effect_summary,
+        runtime_feedback_summary=runtime_feedback_summary,
+        failure_taxonomy_summary=failure_taxonomy_summary,
+        research_continuity_summary=research_continuity_summary,
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -72,33 +123,14 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
-        "branch_research_state_summary": _branch_research_state_summary(
-            inventory,
-        ),
-        "protocol_accounting_summary": _protocol_accounting_summary(
-            run_root_path,
-            inventory,
-        ),
-        "measurement_effect_summary": _measurement_effect_summary(
-            run_root_path,
-            inventory,
-        ),
-        "runtime_feedback_summary": _runtime_feedback_summary(
-            run_root_path,
-            inventory,
-        ),
-        "failure_taxonomy_summary": _failure_taxonomy_summary(
-            run_root_path,
-            inventory,
-        ),
-        "prompt_context_visibility_summary": _prompt_context_visibility_summary(
-            run_root_path,
-            inventory,
-        ),
-        "research_continuity_summary": _research_continuity_summary(
-            run_root_path,
-            inventory,
-        ),
+        "branch_research_state_summary": branch_research_state_summary,
+        "protocol_accounting_summary": protocol_accounting_summary,
+        "measurement_effect_summary": measurement_effect_summary,
+        "runtime_feedback_summary": runtime_feedback_summary,
+        "failure_taxonomy_summary": failure_taxonomy_summary,
+        "prompt_context_visibility_summary": prompt_context_visibility_summary,
+        "research_continuity_summary": research_continuity_summary,
+        "warehouse_followup_summary": warehouse_followup_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": list(REQUIRED_QUESTIONS),
     }
@@ -832,6 +864,93 @@ def render_markdown(brief: dict[str, Any]) -> str:
         lines.append(
             "- No current-run research_continuity block is available for delegated analysis."
         )
+
+    warehouse = brief.get("warehouse_followup_summary") or {}
+    if (
+        warehouse.get("available") is True
+        or warehouse.get("problem_family") == "warehouse_delivery"
+    ):
+        evidence = _mapping_or_empty(warehouse.get("evidence"))
+        protocol = _mapping_or_empty(evidence.get("protocol"))
+        measurement = _mapping_or_empty(evidence.get("measurement_effect"))
+        quality = _mapping_or_empty(evidence.get("quality_blocks"))
+        runtime = _mapping_or_empty(evidence.get("runtime"))
+        continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
+        lines.extend(
+            [
+                "",
+                "## Warehouse Follow-up Summary",
+                "- Source: prepared warehouse research_focus plus current-run "
+                "protocol, measurement, runtime, failure, and continuity summaries.",
+                f"- Available: `{_display(warehouse.get('available'))}`",
+                "- Current-run evidence: "
+                f"`{_display(warehouse.get('current_run_evidence'))}`",
+                "- Launch required before plateau conclusion: "
+                f"`{_display(warehouse.get('launch_required_before_plateau_conclusion'))}`",
+                f"- Interpretation: {_display(warehouse.get('interpretation'))}",
+                "- Handoff complete: "
+                f"`{_display(warehouse.get('handoff_complete'))}`",
+                "- Protocol formal-screened / protocol-evaluated / metric rows: "
+                f"{_display(protocol.get('formal_screened_candidates'))} / "
+                f"{_display(protocol.get('protocol_evaluated_candidates'))} / "
+                f"{_display(protocol.get('protocol_metric_results'))}",
+                "- Formal candidate artifact rows: "
+                f"{_display(protocol.get('formal_candidate_artifact_rows'))}",
+                "- Measurement rows at/above MDE / ci-high below MDE / max effect-MDE: "
+                f"{_display(measurement.get('rows_at_or_above_mde'))} / "
+                f"{_display(measurement.get('rows_with_ci_high_below_mde'))} / "
+                f"{_display(measurement.get('max_effect_to_mde_ratio'))}",
+                "- Quality-block signal: "
+                f"{_display(quality.get('proposal_quality_blocks'))} / "
+                f"{_display(quality.get('quality_blocks'))} / "
+                f"{_display(quality.get('quality_block_ledger_count'))}",
+                "- Quality-block reasons: "
+                f"{_mapping_text(quality.get('reason_counts'))}",
+                "- Fresh-runtime attempts/executed/protocol results: "
+                f"{_display(runtime.get('fresh_runtime_attempts'))} / "
+                f"{_display(runtime.get('fresh_runtime_executed'))} / "
+                f"{_display(runtime.get('fresh_runtime_protocol_results'))}",
+                "- Fresh-runtime statuses: "
+                f"{_mapping_text(runtime.get('fresh_runtime_status_counts'))}",
+                "- Runtime models / diagnostics: "
+                f"{_mapping_text(runtime.get('runtime_model_counts'))} / "
+                f"{_display(runtime.get('runtime_budget_diagnostic_count'))}",
+                "- Research continuity available/reports: "
+                f"`{_display(continuity_evidence.get('available'))}` / "
+                f"{_display(continuity_evidence.get('continuity_report_count'))}",
+            ]
+        )
+        requirements = warehouse.get("handoff_requirements")
+        if isinstance(requirements, dict) and requirements:
+            lines.extend(
+                [
+                    "| Handoff requirement | Available | Count | Source |",
+                    "|---|---:|---:|---|",
+                ]
+            )
+            for key, item in sorted(requirements.items()):
+                if not isinstance(item, dict):
+                    continue
+                lines.append(
+                    "| {key} | {available} | {count} | {source} |".format(
+                        key=key,
+                        available=_display(item.get("available")),
+                        count=_display(item.get("count")),
+                        source=_display(item.get("source")),
+                    )
+                )
+        gaps = warehouse.get("evidence_gaps")
+        lines.append("- Evidence gaps:")
+        if isinstance(gaps, list) and gaps:
+            lines.extend(f"  - {_display(item)}" for item in gaps)
+        else:
+            lines.append("  - none")
+        axes = warehouse.get("required_review_axes")
+        lines.append("- Required warehouse review axes:")
+        if isinstance(axes, list) and axes:
+            lines.extend(f"  - {_display(item)}" for item in axes)
+        else:
+            lines.append("  - none")
 
     llm = brief["llm_traces"]
     branches = brief["branches"]
@@ -2514,6 +2633,243 @@ def _research_continuity_summary(
         "continuity_report_count": len(entries),
         "entries": entries,
     }
+
+
+def _warehouse_followup_summary(
+    inventory: Mapping[str, Any],
+    *,
+    protocol_accounting_summary: Mapping[str, Any],
+    measurement_effect_summary: Mapping[str, Any],
+    runtime_feedback_summary: Mapping[str, Any],
+    failure_taxonomy_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    problem_family = contract.get("problem_family")
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "problem_family": problem_family,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "handoff_complete": False,
+        "handoff_requirements": {},
+        "launch_required_before_plateau_conclusion": False,
+        "interpretation": "not_warehouse_delivery",
+        "evidence": {},
+        "evidence_gaps": [],
+        "required_review_axes": list(WAREHOUSE_FOLLOWUP_REVIEW_AXES),
+    }
+    if problem_family != "warehouse_delivery":
+        return base
+
+    handoff_requirements = _warehouse_handoff_requirements(
+        phase4=phase4,
+        contract=contract,
+    )
+    handoff_complete = bool(handoff_requirements) and all(
+        item.get("available") is True for item in handoff_requirements.values()
+    )
+    counters = _mapping_or_empty(inventory.get("counters"))
+    accounting = _mapping_or_empty(protocol_accounting_summary.get("aggregate"))
+    protocol_rows = _mapping_or_empty(accounting.get("protocol_rows"))
+    formal_artifacts = _mapping_or_empty(
+        accounting.get("formal_candidate_artifacts")
+    )
+    formal_screened_candidates = max(
+        _int_or_zero(accounting.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("formal_screened_candidates")),
+        _int_or_zero(counters.get("screened_experiments")),
+    )
+    protocol_evaluated_candidates = max(
+        _int_or_zero(protocol_rows.get("protocol_evaluated_candidates")),
+        _int_or_zero(accounting.get("formal_protocol_evaluated_candidates")),
+        _int_or_zero(counters.get("protocol_evaluated_candidates")),
+    )
+    measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
+    runtime = _mapping_or_empty(runtime_feedback_summary.get("aggregate"))
+    fresh_runtime = _mapping_or_empty(runtime.get("fresh_runtime_replay_drain"))
+    stage_drain = _mapping_or_empty(runtime.get("stage_transition_drain"))
+    runtime_budget = _mapping_or_empty(runtime.get("runtime_budget_diagnostics"))
+    failure = _mapping_or_empty(failure_taxonomy_summary.get("aggregate"))
+    proposal_quality = _mapping_or_empty(failure.get("proposal_quality"))
+    quality_block_signal = max(
+        _int_or_zero(proposal_quality.get("proposal_quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_block_ledger_count")),
+    )
+    evidence = {
+        "protocol": {
+            "formal_screened_candidates": formal_screened_candidates,
+            "protocol_evaluated_candidates": protocol_evaluated_candidates,
+            "protocol_metric_results": _int_or_zero(
+                protocol_rows.get("protocol_metric_results")
+            ),
+            "formal_candidate_artifact_rows": _int_or_zero(
+                formal_artifacts.get("row_count")
+            ),
+            "stage_rows": _mapping_or_empty(accounting.get("stage_rows")),
+        },
+        "measurement_effect": {
+            "available": measurement_effect_summary.get("available") is True,
+            "protocol_row_count": _int_or_zero(
+                measurement.get("protocol_row_count")
+            ),
+            "rows_at_or_above_mde": _int_or_zero(
+                measurement.get("rows_at_or_above_mde")
+            ),
+            "rows_with_ci_high_below_mde": _int_or_zero(
+                measurement.get("rows_with_ci_high_below_mde")
+            ),
+            "max_effect_to_mde_ratio": measurement.get("max_effect_to_mde_ratio"),
+            "interpretation_counts": _int_mapping(
+                measurement.get("interpretation_counts")
+            ),
+        },
+        "quality_blocks": {
+            "proposal_quality_blocks": _int_or_zero(
+                proposal_quality.get("proposal_quality_blocks")
+            ),
+            "quality_blocks": _int_or_zero(proposal_quality.get("quality_blocks")),
+            "quality_block_ledger_count": _int_or_zero(
+                proposal_quality.get("quality_block_ledger_count")
+            ),
+            "reports_with_quality_blocks": _int_or_zero(
+                proposal_quality.get("reports_with_quality_blocks")
+            ),
+            "reason_counts": _int_mapping(
+                proposal_quality.get("quality_block_reason_counts")
+            ),
+        },
+        "runtime": {
+            "available": runtime_feedback_summary.get("available") is True,
+            "fresh_runtime_status_counts": _int_mapping(
+                fresh_runtime.get("status_counts")
+            ),
+            "fresh_runtime_attempts": _int_or_zero(fresh_runtime.get("attempts")),
+            "fresh_runtime_executed": _int_or_zero(fresh_runtime.get("executed")),
+            "fresh_runtime_protocol_results": _int_or_zero(
+                fresh_runtime.get("protocol_results")
+            ),
+            "stage_transition_status_counts": _int_mapping(
+                stage_drain.get("status_counts")
+            ),
+            "runtime_model_counts": _int_mapping(
+                runtime_budget.get("runtime_model_counts")
+            ),
+            "runtime_budget_diagnostic_count": _int_or_zero(
+                runtime_budget.get("diagnostic_count")
+            ),
+        },
+        "research_continuity": {
+            "available": research_continuity_summary.get("available") is True,
+            "continuity_report_count": _int_or_zero(
+                research_continuity_summary.get("continuity_report_count")
+            ),
+        },
+    }
+    interpretation = _warehouse_followup_interpretation(
+        current_run_evidence=current_run_evidence,
+        protocol_evaluated_candidates=protocol_evaluated_candidates,
+        formal_screened_candidates=formal_screened_candidates,
+        quality_block_signal=quality_block_signal,
+    )
+    return {
+        **base,
+        "available": True,
+        "handoff_complete": handoff_complete,
+        "handoff_requirements": handoff_requirements,
+        "launch_required_before_plateau_conclusion": not current_run_evidence,
+        "interpretation": interpretation,
+        "evidence": evidence,
+        "evidence_gaps": _warehouse_followup_evidence_gaps(
+            current_run_evidence=current_run_evidence,
+            handoff_complete=handoff_complete,
+            protocol_evaluated_candidates=protocol_evaluated_candidates,
+            quality_block_signal=quality_block_signal,
+            measurement_available=measurement_effect_summary.get("available") is True,
+            runtime_available=runtime_feedback_summary.get("available") is True,
+            continuity_available=research_continuity_summary.get("available") is True,
+        ),
+    }
+
+
+def _warehouse_handoff_requirements(
+    *,
+    phase4: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    problem_specific = _mapping_or_empty(phase4.get("problem_specific_requirements"))
+    checks = _mapping_or_empty(contract.get("checks"))
+    requirements: dict[str, Any] = {}
+    for key in WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS:
+        coverage = _mapping_or_empty(problem_specific.get(key))
+        check = _mapping_or_empty(checks.get(key))
+        requirements[key] = {
+            "available": coverage.get("available") is True
+            or check.get("passed") is True,
+            "count": _int_or_zero(coverage.get("count")),
+            "source": coverage.get("source") or check.get("detail") or "",
+            "contract_check_passed": check.get("passed"),
+            "contract_detail": check.get("detail"),
+        }
+    return requirements
+
+
+def _warehouse_followup_interpretation(
+    *,
+    current_run_evidence: bool,
+    protocol_evaluated_candidates: int,
+    formal_screened_candidates: int,
+    quality_block_signal: int,
+) -> str:
+    if not current_run_evidence:
+        return "prepared_only_launch_required"
+    if protocol_evaluated_candidates > 0:
+        return "protocol_evaluated_plateau_review_ready"
+    if quality_block_signal > 0:
+        return "quality_blocked_no_protocol_plateau_conclusion"
+    if formal_screened_candidates > 0:
+        return "screened_without_protocol_evaluation"
+    return "insufficient_current_run_evidence"
+
+
+def _warehouse_followup_evidence_gaps(
+    *,
+    current_run_evidence: bool,
+    handoff_complete: bool,
+    protocol_evaluated_candidates: int,
+    quality_block_signal: int,
+    measurement_available: bool,
+    runtime_available: bool,
+    continuity_available: bool,
+) -> list[str]:
+    gaps: list[str] = []
+    if not handoff_complete:
+        gaps.append("warehouse_handoff_requirements_incomplete")
+    if not current_run_evidence:
+        gaps.append("launch_required_before_plateau_conclusion")
+        return gaps
+    if protocol_evaluated_candidates <= 0:
+        if quality_block_signal > 0:
+            gaps.append("quality_blocked_before_protocol_evaluation")
+        else:
+            gaps.append("no_protocol_evaluated_candidates")
+    if not measurement_available:
+        gaps.append("missing_measurement_effect_summary")
+    if not runtime_available:
+        gaps.append("missing_runtime_feedback_summary")
+    if not continuity_available:
+        gaps.append("missing_research_continuity_summary")
+    return gaps
 
 
 def _research_efficiency_report_paths(

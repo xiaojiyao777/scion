@@ -929,6 +929,121 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     )
 
 
+def test_warehouse_followup_summary_prepared_only_requires_launch(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-prepared"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "scion.launcher_prepare.v1",
+            "status": "prepared",
+            "prepared_only": True,
+            "resume_from_campaign": "/tmp/warehouse-source",
+        },
+    )
+    _write_warehouse_manifest(run_root, campaign_dir, rounds=6)
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["warehouse_followup_summary"]
+    assert summary["schema_version"] == (
+        "scion.postrun_warehouse_followup_summary.v1"
+    )
+    assert summary["report_only"] is True
+    assert summary["quality_judgment"] is False
+    assert summary["decision_features_excluded"] is True
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is False
+    assert summary["launch_required_before_plateau_conclusion"] is True
+    assert summary["interpretation"] == "prepared_only_launch_required"
+    assert summary["handoff_complete"] is True
+    assert all(
+        item["available"] is True
+        for item in summary["handoff_requirements"].values()
+    )
+    assert summary["evidence_gaps"] == [
+        "launch_required_before_plateau_conclusion"
+    ]
+    assert "## Warehouse Follow-up Summary" in markdown
+    assert "- Interpretation: prepared_only_launch_required" in markdown
+    assert (
+        "| warehouse_required_evidence_handoff | True | 1 | "
+        "prepared_run_manifest warehouse research_focus required_evidence |"
+        in markdown
+    )
+    assert any(
+        "warehouse_followup_summary" in question
+        for question in brief["required_questions"]
+    )
+
+
+def test_warehouse_followup_summary_distinguishes_quality_blocked_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "warehouse-quality-blocked"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "requested_rounds": 1,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 0,
+            "protocol_evaluated_candidates": 0,
+        },
+    )
+    _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "warehouse.research_efficiency.v1.json",
+        {
+            "proposal_quality": {
+                "proposal_attempts_total": 3,
+                "proposal_attempts_consumed": 3,
+                "proposal_quality_blocks": 2,
+                "quality_blocks": 2,
+                "quality_block_ledger_count": 2,
+                "quality_block_reasons": ["missing_direct_effect"],
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "stopped_reason": "proposal_quality_blocked",
+                "run_complete": True,
+            },
+        },
+    )
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    summary = brief["warehouse_followup_summary"]
+    assert summary["available"] is True
+    assert summary["current_run_evidence"] is True
+    assert summary["interpretation"] == (
+        "quality_blocked_no_protocol_plateau_conclusion"
+    )
+    assert summary["launch_required_before_plateau_conclusion"] is False
+    assert "quality_blocked_before_protocol_evaluation" in summary["evidence_gaps"]
+    assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 0
+    assert summary["evidence"]["quality_blocks"]["proposal_quality_blocks"] == 2
+    assert "- Interpretation: quality_blocked_no_protocol_plateau_conclusion" in (
+        markdown
+    )
+    assert "- Quality-block reasons: missing_direct_effect=1" in markdown
+
+
 def test_brief_stop_conditions_for_invalid_infra_run(tmp_path: Path) -> None:
     run_root = tmp_path / "infra-run"
     campaign_dir = run_root / "campaign"
@@ -1059,6 +1174,79 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_warehouse_manifest(
+    run_root: Path,
+    campaign_dir: Path,
+    *,
+    rounds: int,
+) -> None:
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "problem_family": "warehouse_delivery",
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "research_focus": {
+                "accepted_checkpoint": (
+                    "Champion v2 promoted from validation-transfer acceptance."
+                ),
+                "current_question": (
+                    "Starting from champion v2, determine whether continuous "
+                    "additional useful research remains or whether this is a "
+                    "real plateau."
+                ),
+                "required_evidence": [
+                    "preserve or improve promotion behavior",
+                    "inspect branch transfer before judging plateau",
+                    (
+                        "distinguish quality-blocked proposals from "
+                        "protocol-evaluated no-effect candidates"
+                    ),
+                    "compare cost_delta and split_delta before split-only claims",
+                    "explain fast completion through the runtime model",
+                ],
+                "default_avoid_directions": [
+                    "baseline",
+                    "proposal-quality",
+                    "fast completion",
+                    "split_delta_sum==0",
+                    "broad warehouse matrix",
+                ],
+                "decision_boundary": (
+                    "Proposal/delegated-analysis guidance only; never enter "
+                    "DecisionFeatures, Protocol gates, promotion input, or "
+                    "scheduler state."
+                ),
+            },
+            "model": {"name": "gpt-5.5", "completion_preflight": True},
+            "report_metadata": {
+                "control_pair_key": "warehouse-v2-followup",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "rebuild",
+                ],
+            },
+            "execution": {"rounds": rounds},
+            "acceptance_focus": [
+                "Distinguish real plateau from missed continuous-promotion opportunities."
+            ],
+        },
+    )
 
 
 def _write_db(path: Path) -> None:
