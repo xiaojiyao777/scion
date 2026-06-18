@@ -105,6 +105,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert 'cd "$SCION_DIR"' in run_sh_text
     assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY" in run_sh_text
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT" in run_sh_text
+    assert "OMP_NUM_THREADS=1" in run_sh_text
+    assert "GIT_COMMIT_MISMATCH" in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
         run_sh_text
     )

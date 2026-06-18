@@ -354,6 +354,16 @@ fi
 unset _INHERITED_SCION_API_KEY _RESOLVED_SCION_API_KEY
 cd "$SCION_DIR" || exit 1
 export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_STAGE_TRANSITION_DRAIN_LIMIT SCION_PROBLEM_DATA_ROOT
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+if [[ "$(git -C "$REPO_ROOT" rev-parse --short HEAD)" != "$GIT_COMMIT" ]]; then
+  {{
+    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_commit_mismatch":true}}\n' > "$RUN_ROOT/run_status.json"
+  exit {PREFLIGHT_FAILURE_EXIT_CODE}
+fi
 {{
   echo "STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "GIT_COMMIT:$GIT_COMMIT"
