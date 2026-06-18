@@ -27,8 +27,12 @@ Framework:
   hypothesis, candidate patch, branch evidence, compact status/progress, reduced
   measurement readiness, and research-efficiency projections.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
-  not change Decision, `DecisionFeatures`, Protocol, scheduling, gates, budgets,
-  lifecycle policy, proposal context semantics, or problem semantics.
+  not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
+  policy, or problem semantics.
+- Runtime semantics for budget-exhausting solvers are repaired in the narrow
+  v0.4 sense: high aggregate `runtime_regression_rate` no longer blocks
+  low-SNR trajectory-divergent screening expansion or drives strong prompt
+  actionability when the problem declares `runtime_model=budget_exhausting`.
 - CVRP and warehouse launch helpers now support prepared follow-up roots,
   completion preflight, secret-safe API-key env wiring, runtime-source guards,
   campaign copy/resume, and default postrun report generation.
@@ -78,8 +82,8 @@ Infrastructure:
    preflight. `/v1/models` is not enough.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
-   effect-vs-MDE, and postrun research-efficiency reports before accepting any
-   conclusion.
+   effect-vs-MDE, budget-exhausting runtime feedback, and postrun
+   research-efficiency reports before accepting any conclusion.
 3. Keep the prepared warehouse `v2` follow-up available as the simpler
    continuous-improvement check once LLM access is stable.
 4. Keep status updates short: change this file only when the current operating
@@ -93,6 +97,8 @@ Infrastructure:
   `scion/design/v0.5-evidence-uplift-roadmap.md`, and
   `scion/design/scion-architecture-v3.md`.
 - Current milestone index: `scion/docs/status/v0.4-history.md`.
+- Current runtime-semantics repair:
+  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

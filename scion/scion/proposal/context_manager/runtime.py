@@ -90,14 +90,26 @@ def _build_runtime_feedback(
                 strong_runtime_actionable = True
             if step.protocol_result.stats.runtime_pairs > 0 and len(summaries) < max_items:
                 st = step.protocol_result.stats
+                runtime_model = _protocol_runtime_model(step.protocol_result)
+                regression_rate = (
+                    "not_applicable_budget_exhausting"
+                    if runtime_model == "budget_exhausting"
+                    else _fmt_runtime(st.runtime_regression_rate)
+                )
+                runtime_model_note = (
+                    " runtime_model=budget_exhausting"
+                    if runtime_model == "budget_exhausting"
+                    else ""
+                )
                 summaries.append(
                     f"- R{step.round_num} target={target}: "
                     f"median_ratio={_fmt_runtime(st.runtime_ratio_median)}x "
-                    f"median_delta_ms={_fmt_runtime(st.runtime_delta_median_ms)} "
-                    f"regression_rate={_fmt_runtime(st.runtime_regression_rate)} "
+                    f"median_delta_ms={_fmt_runtime(st.runtime_delta_median_ms)}"
+                    f"{runtime_model_note} "
+                    f"regression_rate={regression_rate} "
                     f"pairs={st.runtime_pairs}"
                 )
-                if not low_confidence_runtime:
+                if not low_confidence_runtime and runtime_model != "budget_exhausting":
                     strong_runtime_actionable = True
             (
                 raw_failures,
@@ -255,6 +267,21 @@ def _low_confidence_runtime_advisory_line(
         "Treat runtime saturation/pressure as low-confidence advisory only; "
         "need fresh champion runtime before runtime-based conclusions."
     )
+
+
+def _protocol_runtime_model(protocol: Any) -> str:
+    summary = getattr(protocol, "candidate_surface_runtime_summary", None)
+    if isinstance(summary, dict):
+        diagnostic = summary.get("runtime_budget_diagnostic")
+        if isinstance(diagnostic, dict):
+            text = str(diagnostic.get("runtime_model") or "").strip()
+            if text in {"comparative", "budget_exhausting"}:
+                return text
+        text = str(summary.get("runtime_model") or "").strip()
+        if text in {"comparative", "budget_exhausting"}:
+            return text
+    return ""
+
 
 def _build_runtime_failure_guidance(
     steps: List[StepRecord],

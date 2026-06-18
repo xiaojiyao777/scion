@@ -181,7 +181,14 @@ def _trajectory_divergent_low_snr_expand(
         and stats.runtime_ratio_median > config.max_runtime_ratio
     ):
         return False
-    if stats.runtime_regression_rate is not None and stats.runtime_regression_rate >= 0.90:
+    budget_exhausting = (
+        getattr(config.runtime, "runtime_model", "comparative") == "budget_exhausting"
+    )
+    if (
+        not budget_exhausting
+        and stats.runtime_regression_rate is not None
+        and stats.runtime_regression_rate >= 0.90
+    ):
         return False
     if stats.statistical_status == "negative":
         return False

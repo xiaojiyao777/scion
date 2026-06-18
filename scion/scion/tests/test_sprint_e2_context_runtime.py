@@ -345,6 +345,41 @@ def test_runtime_feedback_uses_configurable_slow_case_threshold(tmp_path):
     assert "secret-threshold-metrics" not in lenient
 
 
+def test_budget_exhausting_runtime_summary_marks_regression_not_applicable(tmp_path):
+    step = _make_step(
+        round_num=7,
+        hypothesis_text="budget exhausting runtime feedback",
+        win_rate=0.7,
+        runtime_ratio_median=1.0,
+        runtime_delta_median_ms=0.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=8,
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="pass",
+        reason_codes=("TEST",),
+        exposed_summary="test",
+        raw_metrics_ref="/tmp/secret-budget-exhausting-metrics.json",
+        candidate_surface_runtime_summary={
+            "runtime_budget_diagnostic": {
+                "runtime_model": "budget_exhausting",
+                "severity": "info",
+            }
+        },
+    )
+
+    rendered = _build_runtime_feedback([step])
+
+    assert "Recent screening runtime summary" in rendered
+    assert "runtime_model=budget_exhausting" in rendered
+    assert "regression_rate=not_applicable_budget_exhausting" in rendered
+    assert "regression_rate=1.00" not in rendered
+    assert "Prefer bounded neighborhoods" not in rendered
+    assert "secret-budget-exhausting-metrics" not in rendered
+
+
 def test_runtime_feedback_distinguishes_noop_tie_dominated_operator(tmp_path):
     step = _make_step(round_num=8, hypothesis_text="no accepted moves", win_rate=0.0)
     stats = EvalStats(
