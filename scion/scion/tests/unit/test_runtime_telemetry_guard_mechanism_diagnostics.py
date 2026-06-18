@@ -10,6 +10,7 @@ from scion.core.models import (
 )
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
+    telemetry_effect_zero_detected,
     telemetry_decision_details,
 )
 from scion.runtime.telemetry_guard import build_telemetry_guard_summary
@@ -193,7 +194,7 @@ def test_explicit_mechanism_effect_claim_is_no_effect_when_activation_observed()
     assert summary["mechanism_diagnostics"][0]["telemetry_outcome"] == "no_effect"
 
 
-def test_declared_field_zero_with_activation_is_visible_as_no_effect_warning() -> None:
+def test_declared_field_zero_with_alternate_positive_effect_is_not_effect_zero() -> None:
     spec = SimpleNamespace(
         research_surfaces=[
             SimpleNamespace(
@@ -233,13 +234,19 @@ def test_declared_field_zero_with_activation_is_visible_as_no_effect_warning() -
     )
 
     assert summary["passed"] is True
+    assert [warning["code"] for warning in summary["warnings"]] == [
+        "TELEMETRY_EFFECT_NOT_OBSERVED"
+    ]
     diagnostic = summary["mechanism_diagnostics"][0]
-    assert diagnostic["effect_status"] == "declared_field_warning"
+    assert diagnostic["effect_status"] == "positive"
     assert diagnostic["passed"] is True
-    assert diagnostic["diagnostic_type"] == "mechanism_executed_no_improvement"
-    assert diagnostic["telemetry_outcome"] == "no_effect"
-    assert diagnostic["effect_observed"] is False
-    assert diagnostic["effect"]["aggregate_status"] == "positive"
+    assert diagnostic["diagnostic_type"] is None
+    assert diagnostic["telemetry_outcome"] is None
+    assert diagnostic["effect_observed"] is True
+    assert diagnostic["effect"]["status"] == "positive"
+    assert diagnostic["effect"]["declared_field_warning_status"] == (
+        "declared_field_warning"
+    )
     assert diagnostic["declared_field_warnings"] == [
         {
             "category": "effect",
@@ -248,11 +255,25 @@ def test_declared_field_zero_with_activation_is_visible_as_no_effect_warning() -
             "severity": "warn",
         }
     ]
-    assert "Activation and runtime telemetry are observed" in (
-        diagnostic["repair_guidance"][0]
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=1,
+            wins=0,
+            losses=0,
+            ties=1,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=(),
+        exposed_summary="screening telemetry",
+        raw_metrics_ref="/tmp/metrics.json",
+        candidate_surface_runtime_summary={"telemetry_guard": summary},
     )
-    assert "not activation missing" in diagnostic["repair_guidance"][0]
-    assert "mechanism_best_delta.target_probe" in diagnostic["repair_guidance"][0]
+    assert telemetry_effect_zero_detected(protocol) is False
 
 
 def test_algorithm_smoke_can_treat_missing_effect_as_advisory() -> None:

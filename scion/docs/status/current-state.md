@@ -24,11 +24,13 @@ Warehouse:
 - Warehouse recovery checkpoint is accepted. The short validation-transfer
   acceptance-contract WSL gate from commit `ce5d884` completed validly, reached
   screening/validation/frozen holdout, and promoted champion `v2`.
+- Split-preserving cost-compression telemetry interpretation is repaired. A
+  mechanism with zero `split_delta_sum` but positive cost/improving-move effect
+  remains mechanism-effect-positive; the zero split field stays visible as a
+  field-level warning and no longer becomes an effect-zero diagnostic by
+  itself.
 - This restores a useful warehouse research path, but it is not yet a long-run
   continuous-promotion proof.
-- Remaining caveat: split-preserving cost-compression effects still need cleaner
-  measurement interpretation, because diagnostics can over-read zero
-  `split_delta_sum` even when the declared useful effect is cost compression.
 
 CVRP/VRP:
 
@@ -135,6 +137,9 @@ CVRP/VRP:
   `current_progress` and `in_flight_protocol` now expose compact branch
   lifecycle/status fields at top level during long formal protocol work when a
   matching branch row exists.
+- Warehouse split-preserving cost-compression telemetry interpretation is
+  repaired as a generic diagnostic interpretation fix. This changes neither
+  protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -194,6 +199,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
 - Run-status branch progress projection repair:
   `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
+- Warehouse cost-compression telemetry interpretation repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-cost-compression-telemetry-interpretation-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

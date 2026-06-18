@@ -187,6 +187,8 @@ def telemetry_effect_zero_diagnostics(
             continue
         if counters.get("candidate_positive", 0) != 0:
             continue
+        if _effect_issue_has_positive_mechanism_effect(guard, item):
+            continue
         diagnostic_type = _clean_optional_str(item.get("diagnostic_type"))
         telemetry_outcome = _clean_optional_str(item.get("telemetry_outcome"))
         if diagnostic_type not in {
@@ -241,6 +243,8 @@ def telemetry_effect_zero_diagnostics(
             if not isinstance(diagnostic, Mapping):
                 continue
             effect_status = str(diagnostic.get("effect_status") or "").strip()
+            if _diagnostic_has_positive_effect(diagnostic):
+                continue
             if effect_status not in {"zero", "declared_field_warning"}:
                 continue
             if not (
@@ -517,6 +521,46 @@ def _effect_issue_has_observed_activation(
         if str(diagnostic.get("activation_status") or "") == "observed":
             return True
     return False
+
+
+def _effect_issue_has_positive_mechanism_effect(
+    guard: Mapping[str, Any] | None,
+    item: Mapping[str, Any],
+) -> bool:
+    if guard is None:
+        return False
+    mechanism = _issue_mechanism_id(guard, item)
+    diagnostics = guard.get("mechanism_diagnostics")
+    if not isinstance(diagnostics, Sequence) or isinstance(
+        diagnostics,
+        (str, bytes, bytearray),
+    ):
+        return False
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, Mapping):
+            continue
+        diagnostic_mechanism = _clean_optional_str(diagnostic.get("mechanism"))
+        if mechanism and diagnostic_mechanism != mechanism:
+            continue
+        if _diagnostic_has_positive_effect(diagnostic):
+            return True
+    return False
+
+
+def _diagnostic_has_positive_effect(diagnostic: Mapping[str, Any]) -> bool:
+    if bool(diagnostic.get("effect_observed")):
+        return True
+    if str(diagnostic.get("effect_status") or "").strip() in {"positive", "observed"}:
+        return True
+    effect = diagnostic.get("effect")
+    if not isinstance(effect, Mapping):
+        return False
+    if str(effect.get("status") or "").strip() in {"positive", "observed"}:
+        return True
+    if str(effect.get("aggregate_status") or "").strip() in {"positive", "observed"}:
+        return True
+    counters = _issue_counters(effect)
+    return counters.get("candidate_positive", 0) > 0
 
 
 def _stage_value(stage: Any) -> str:

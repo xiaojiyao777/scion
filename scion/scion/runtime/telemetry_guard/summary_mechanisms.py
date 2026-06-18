@@ -204,8 +204,7 @@ def _mechanism_diagnostics(
         elif effect_declared_warnings and effect["status"] == "positive":
             effect = {
                 **effect,
-                "aggregate_status": effect["status"],
-                "status": "declared_field_warning",
+                "declared_field_warning_status": "declared_field_warning",
                 "declared_field_warnings": effect_declared_warnings,
             }
         diagnostic_type = _mechanism_diagnostic_type(

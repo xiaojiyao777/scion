@@ -8,9 +8,12 @@ from scion.core.models import (
     Branch,
     BranchState,
     ChampionState,
+    EvalStats,
+    ExperimentStage,
     HypothesisProposal,
     MechanismChange,
     PatchProposal,
+    ProtocolResult,
 )
 from scion.core.proposal_pipeline.agentic_validation import AgenticValidationMixin
 from scion.core.proposal_pipeline.problem_quality import (
@@ -35,6 +38,7 @@ from scion.proposal.agentic_session import (
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
 from scion.runtime.surface_telemetry import declared_surface_telemetry_fields
 from scion.runtime.telemetry_guard import build_telemetry_guard_summary
+from scion.core.telemetry_validation import telemetry_effect_zero_detected
 from scion.proposal.tools import (
     ContextExposurePolicy,
     ProposalToolContext,
@@ -262,6 +266,74 @@ def test_warehouse_problem_spec_declares_operator_diagnostics_telemetry() -> Non
             assert diagnostic["mechanism"] == "fill_and_downsize"
             assert diagnostic["activation_status"] == "observed"
             assert diagnostic["effect_status"] == "positive"
+
+
+def test_warehouse_split_preserving_cost_compression_is_positive_effect() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_WAREHOUSE_PROBLEM_V1)
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "operator_diagnostics": {
+                    "pack_compatible_vehicles": {
+                        "operator_invocations": 4,
+                        "eligible_vehicle_or_order_groups_seen": 2,
+                        "accepted_moves": 1,
+                        "split_delta_sum": 0,
+                        "cost_delta_sum": 575,
+                        "improving_move_count": 1,
+                    }
+                }
+            }
+        ],
+        problem_spec=spec_v1,
+        selected_surface="vehicle_level",
+        expected_telemetry={
+            "effect": [
+                "operator_diagnostics.pack_compatible_vehicles.split_delta_sum",
+                "operator_diagnostics.pack_compatible_vehicles.cost_delta_sum",
+            ]
+        },
+        declared_mechanisms=(
+            MechanismChange(id="pack_compatible_vehicles", change_type="add"),
+        ),
+    )
+
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert summary["passed"] is True
+    assert [warning["code"] for warning in summary["warnings"]] == [
+        "TELEMETRY_EFFECT_NOT_OBSERVED"
+    ]
+    assert summary["warnings"][0]["field"] == (
+        "operator_diagnostics.pack_compatible_vehicles.split_delta_sum"
+    )
+    assert diagnostic["mechanism"] == "pack_compatible_vehicles"
+    assert diagnostic["activation_status"] == "observed"
+    assert diagnostic["effect_status"] == "positive"
+    assert diagnostic["effect_observed"] is True
+    assert diagnostic["effect"]["candidate_positive"] == 2
+    assert diagnostic["effect"]["declared_field_warning_status"] == (
+        "declared_field_warning"
+    )
+
+    protocol = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=1,
+            wins=0,
+            losses=0,
+            ties=1,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=(),
+        exposed_summary="warehouse screening telemetry",
+        raw_metrics_ref="/tmp/warehouse-metrics.json",
+        candidate_surface_runtime_summary={"telemetry_guard": summary},
+    )
+    assert telemetry_effect_zero_detected(protocol) is False
 
 
 def test_warehouse_preview_rejects_existing_operator_module_delete() -> None:

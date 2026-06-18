@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status projection repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status projection repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -235,6 +235,14 @@ Current checkpoint:
 
 - Warehouse recovery remains accepted as the v0.4 positive research-path
   checkpoint.
+- Warehouse split-preserving cost-compression telemetry interpretation is
+  repaired. Report:
+  `scion/docs/experiments/v0.4/v04-warehouse-cost-compression-telemetry-interpretation-repair-20260618.md`.
+  Zero `split_delta_sum` can remain a field-level warning while positive
+  `cost_delta_sum`/improving-move evidence keeps the mechanism effect-positive;
+  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` is not raised for that shape. This is a
+  generic telemetry interpretation repair, not a gate, budget, lifecycle, or
+  problem-semantic change.
 - CVRP target-intent/provider guidance injection is field-verified and formal
   screening can complete with evidence. Branch-card evidence retention is
   repaired for the focused `EXPAND_SCREENING` path and field-verified for the
