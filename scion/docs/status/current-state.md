@@ -48,8 +48,10 @@ Framework:
   behavior a real plateau.
 - Research-continuity and measurement-effect briefs now project branch-depth
   distribution, active shape, mechanism-family breadth, and mechanism-family
-  effect summaries so delegated review can distinguish deep follow-up from
-  shallow branch scattering and family-level sub-MDE/no-effect patterns.
+  effect summaries plus branch-lesson semantic failure/block counts, so
+  delegated review can distinguish deep follow-up from shallow branch
+  scattering, family-level sub-MDE/no-effect patterns, and follow-up hypotheses
+  that only mention prior evidence without semantically using it.
 
 Warehouse:
 
@@ -124,6 +126,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-fa804e0-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:

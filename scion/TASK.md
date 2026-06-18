@@ -357,12 +357,16 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`.
 - Research-continuity and measurement-effect analysis briefs now expose
   branch-depth distribution, active shape, mechanism-family breadth, and
-  mechanism-family effect summaries, so delegated postrun review can
-  distinguish deep follow-up from shallow branch scattering and family-level
-  sub-MDE/no-effect patterns. Reports:
+  mechanism-family effect summaries. They also aggregate branch-lesson semantic
+  failure/block counts, so delegated postrun review can distinguish deep
+  follow-up from shallow branch scattering, family-level sub-MDE/no-effect
+  patterns, and follow-up hypotheses that mention prior evidence without
+  semantically using it. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the

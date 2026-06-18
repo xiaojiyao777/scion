@@ -297,15 +297,23 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                     ),
                 },
                 "branch_lesson_usage": {
-                    "requirement_count": 2,
-                    "present_count": 2,
+                    "requirement_count": 3,
+                    "present_count": 3,
                     "satisfied_count": 2,
                     "missing_block_count": 0,
-                    "present_not_semantic_count": 0,
-                    "satisfaction_rate": 1.0,
+                    "present_not_semantic_count": 1,
+                    "metadata_only_count": 0,
+                    "metadata_only_block_count": 0,
+                    "linkage_unrecognized_count": 0,
+                    "linkage_unrecognized_block_count": 0,
+                    "semantic_mismatch_count": 1,
+                    "semantic_mismatch_block_count": 1,
+                    "semantic_failure_counts": {"semantic_mismatch": 1},
+                    "semantic_block_counts": {"semantic_mismatch": 1},
+                    "satisfaction_rate": 0.666667,
                     "present_rate": 1.0,
-                    "semantic_gap_count": 0,
-                    "semantic_gap_rate": 0.0,
+                    "semantic_gap_count": 1,
+                    "semantic_gap_rate": 0.333333,
                 },
                 "weak_positive_transfer": {
                     "accepted_count": 1,
@@ -837,7 +845,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     continuity_entry = continuity["entries"][0]
     assert continuity_entry["report"] == "normal.research_efficiency.v1.json"
     assert continuity_entry["same_mechanism_followup"]["selection_rate"] == 1.0
-    assert continuity_entry["branch_lesson_usage"]["semantic_gap_count"] == 0
+    assert continuity_entry["branch_lesson_usage"]["semantic_gap_count"] == 1
+    assert continuity_entry["branch_lesson_usage"]["semantic_failure_counts"] == {
+        "semantic_mismatch": 1
+    }
     assert continuity_entry["weak_positive_transfer"]["acceptance_rate"] == 1.0
     assert continuity["aggregate"] == {
         "max_branch_depth": 3,
@@ -850,6 +861,11 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "mechanism_family_counts": {
             "regret_insertion": 3,
             "route_merge": 1,
+        },
+        "branch_lesson_semantic_failure_counts": {"semantic_mismatch": 1},
+        "branch_lesson_semantic_block_counts": {"semantic_mismatch": 1},
+        "lesson_action_counts": {
+            "preserved_same_branch": 2,
         },
     }
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
@@ -925,10 +941,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
-        "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | "
+        "| normal.research_efficiency.v1.json | 1/1 | 2/3 | 1 | 1/1 | "
         "3 | 1=1, 3=1 | deep_focused | 2 |"
         in markdown
     )
+    assert "- Branch lesson semantic failures: semantic_mismatch=1" in markdown
+    assert "- Branch lesson semantic blocks: semantic_mismatch=1" in markdown
+    assert "- Branch lesson actions: preserved_same_branch=2" in markdown
     assert any(
         "research_continuity" in question
         for question in brief["required_questions"]

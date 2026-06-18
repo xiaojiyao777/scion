@@ -88,10 +88,16 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
         "selection_rate": 1.0,
         "interpretation": "all_observed_same_mechanism_followups_selected",
     }
-    assert continuity["branch_lesson_usage"]["requirement_count"] == 2
+    assert continuity["branch_lesson_usage"]["requirement_count"] == 3
     assert continuity["branch_lesson_usage"]["satisfied_count"] == 2
-    assert continuity["branch_lesson_usage"]["satisfaction_rate"] == 1.0
-    assert continuity["branch_lesson_usage"]["semantic_gap_count"] == 0
+    assert continuity["branch_lesson_usage"]["satisfaction_rate"] == 0.666667
+    assert continuity["branch_lesson_usage"]["semantic_gap_count"] == 1
+    assert continuity["branch_lesson_usage"]["semantic_failure_counts"] == {
+        "semantic_mismatch": 1
+    }
+    assert continuity["branch_lesson_usage"]["semantic_block_counts"] == {
+        "semantic_mismatch": 1
+    }
     assert continuity["weak_positive_transfer"]["acceptance_rate"] == 1.0
     assert continuity["lesson_action_counts"]["preserved_same_branch"] == 2
     assert continuity["research_shape_summary"]["max_branch_depth"] == 3
@@ -308,10 +314,13 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
             "saturated_signature_count": 0,
             "material_difference_requirement_count": 1,
             "branch_lesson_record_count": 3,
-            "branch_lesson_usage_requirement_count": 2,
-            "branch_lesson_usage_present_count": 2,
+            "branch_lesson_usage_requirement_count": 3,
+            "branch_lesson_usage_present_count": 3,
             "branch_lesson_usage_satisfied_count": 2,
             "branch_lesson_usage_missing_block_count": 0,
+            "branch_lesson_usage_present_not_semantic_count": 1,
+            "branch_lesson_usage_semantic_mismatch_count": 1,
+            "branch_lesson_usage_semantic_mismatch_block_count": 1,
             "borrowed_lesson_count": 1,
             "avoided_lesson_count": 1,
             "contrasted_lesson_count": 1,

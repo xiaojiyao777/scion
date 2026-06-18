@@ -883,6 +883,24 @@ def _research_continuity_metrics(
     missing_blocks = _int_or_zero(
         observability.get("branch_lesson_usage_missing_block_count")
     )
+    metadata_only = _int_or_zero(
+        observability.get("branch_lesson_usage_metadata_only_count")
+    )
+    metadata_only_blocks = _int_or_zero(
+        observability.get("branch_lesson_usage_metadata_only_block_count")
+    )
+    linkage_unrecognized = _int_or_zero(
+        observability.get("branch_lesson_usage_linkage_unrecognized_count")
+    )
+    linkage_unrecognized_blocks = _int_or_zero(
+        observability.get("branch_lesson_usage_linkage_unrecognized_block_count")
+    )
+    semantic_mismatch = _int_or_zero(
+        observability.get("branch_lesson_usage_semantic_mismatch_count")
+    )
+    semantic_mismatch_blocks = _int_or_zero(
+        observability.get("branch_lesson_usage_semantic_mismatch_block_count")
+    )
     weak_positive_accepts = _int_or_zero(
         observability.get("weak_positive_transfer_count")
     )
@@ -921,6 +939,28 @@ def _research_continuity_metrics(
             "satisfied_count": lessons_satisfied,
             "missing_block_count": missing_blocks,
             "present_not_semantic_count": present_not_semantic,
+            "metadata_only_count": metadata_only,
+            "metadata_only_block_count": metadata_only_blocks,
+            "linkage_unrecognized_count": linkage_unrecognized,
+            "linkage_unrecognized_block_count": linkage_unrecognized_blocks,
+            "semantic_mismatch_count": semantic_mismatch,
+            "semantic_mismatch_block_count": semantic_mismatch_blocks,
+            "semantic_failure_counts": _nonzero_counts(
+                {
+                    "missing": missing_blocks,
+                    "metadata_only": metadata_only,
+                    "linkage_unrecognized": linkage_unrecognized,
+                    "semantic_mismatch": semantic_mismatch,
+                }
+            ),
+            "semantic_block_counts": _nonzero_counts(
+                {
+                    "missing": missing_blocks,
+                    "metadata_only": metadata_only_blocks,
+                    "linkage_unrecognized": linkage_unrecognized_blocks,
+                    "semantic_mismatch": semantic_mismatch_blocks,
+                }
+            ),
             "satisfaction_rate": _safe_ratio(
                 lessons_satisfied,
                 lesson_requirements,
@@ -982,6 +1022,14 @@ def _same_branch_followup_interpretation(
     if selected_count > 0:
         return "some_same_mechanism_followups_selected"
     return "same_mechanism_followup_opportunities_not_selected"
+
+
+def _nonzero_counts(counts: Mapping[str, int]) -> dict[str, int]:
+    return {
+        str(key): _int_or_zero(value)
+        for key, value in sorted(counts.items())
+        if _int_or_zero(value) > 0
+    }
 
 
 def _protocol_effects_vs_mde(

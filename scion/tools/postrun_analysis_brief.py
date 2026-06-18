@@ -831,6 +831,12 @@ def render_markdown(brief: dict[str, Any]) -> str:
 
     continuity = brief.get("research_continuity_summary") or {}
     continuity_aggregate = _mapping_or_empty(continuity.get("aggregate"))
+    branch_lesson_failures = _mapping_text(
+        continuity_aggregate.get("branch_lesson_semantic_failure_counts")
+    )
+    branch_lesson_blocks = _mapping_text(
+        continuity_aggregate.get("branch_lesson_semantic_block_counts")
+    )
     lines.extend(
         [
             "",
@@ -855,6 +861,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_display(continuity_aggregate.get('mechanism_family_count_max'))}",
             "- Mechanism family observations: "
             f"{_mapping_text(continuity_aggregate.get('mechanism_family_counts'))}",
+            f"- Branch lesson semantic failures: {branch_lesson_failures}",
+            f"- Branch lesson semantic blocks: {branch_lesson_blocks}",
+            "- Branch lesson actions: "
+            f"{_mapping_text(continuity_aggregate.get('lesson_action_counts'))}",
         ]
     )
     entries = continuity.get("entries")
@@ -2808,6 +2818,9 @@ def _empty_research_continuity_aggregate() -> dict[str, Any]:
         "active_mechanism_family_count_max": 0,
         "mechanism_family_count_max": 0,
         "mechanism_family_counts": {},
+        "branch_lesson_semantic_failure_counts": {},
+        "branch_lesson_semantic_block_counts": {},
+        "lesson_action_counts": {},
     }
 
 
@@ -2874,6 +2887,30 @@ def _merge_research_continuity_aggregate(
         _increment_count(
             aggregate["mechanism_family_counts"],
             str(family),
+            _int_or_zero(count),
+        )
+    lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
+    for key, count in sorted(
+        _mapping_or_empty(lessons.get("semantic_failure_counts")).items()
+    ):
+        _increment_count(
+            aggregate["branch_lesson_semantic_failure_counts"],
+            str(key),
+            _int_or_zero(count),
+        )
+    for key, count in sorted(
+        _mapping_or_empty(lessons.get("semantic_block_counts")).items()
+    ):
+        _increment_count(
+            aggregate["branch_lesson_semantic_block_counts"],
+            str(key),
+            _int_or_zero(count),
+        )
+    actions = _mapping_or_empty(entry.get("lesson_action_counts"))
+    for key, count in sorted(actions.items()):
+        _increment_count(
+            aggregate["lesson_action_counts"],
+            str(key),
             _int_or_zero(count),
         )
 
