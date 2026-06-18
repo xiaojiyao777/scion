@@ -131,6 +131,10 @@ CVRP/VRP:
   active-slot, and final-classification fields even when the live branch row is
   gone. This is summary/report-only and does not change Decision, Protocol,
   scheduling, gates, budgets, or problem semantics.
+- In-flight `run_status.json` branch progress projection is repaired:
+  `current_progress` and `in_flight_protocol` now expose compact branch
+  lifecycle/status fields at top level during long formal protocol work when a
+  matching branch row exists.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -152,10 +156,7 @@ CVRP/VRP:
    `cluster_biased_worst_removal`, or unchanged
    `route_limit_seed_diversification`. It should choose a materially different
    problem-owned owner or explain a new causal path with CMT2/CMT4 protection.
-3. Clean up the remaining status-progress projection polish separately:
-   in-flight `run_status.json` remains too coarse during long formal screening.
-   The campaign-summary branch-history compact-status gap is already repaired.
-4. Keep a later warehouse repeat available to test whether champion `v2`
+3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
 ## Key Evidence
@@ -191,6 +192,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
 - Branch-history compact status projection repair:
   `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
+- Run-status branch progress projection repair:
+  `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

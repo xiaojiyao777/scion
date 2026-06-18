@@ -670,6 +670,7 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
         "branch_id": "branch-1",
         "lineage_id": "lineage-1",
         "lineage_status": "restored_checkpoint",
+        "branch_code_status": "active_marginal",
         "current_head_status": "active_marginal",
         "best_checkpoint_status": "best_quality_retained",
         "best_quality_checkpoint_id": "checkpoint-best",
@@ -681,6 +682,17 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
         "forbidden_next_actions": [],
         "active_slot_status": "active_slot",
         "counts_toward_active_slots": True,
+        "branch_next_action": "normal_scheduler_policy",
+        "branch_classification_reason": "active_branch",
+        "final_branch_classification": {
+            "schema_version": "scion.branch_final_classification.v1",
+            "classification": "active",
+            "next_action": "normal_scheduler_policy",
+            "reason": "active_branch",
+            "branch_state": "explore",
+            "branch_code_status": "active_marginal",
+            "decision_features_excluded": True,
+        },
     }
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
@@ -716,10 +728,26 @@ def test_status_syncs_current_progress_checkpoint_fields_from_branch_card(
     progress = status["current_progress"]
     assert progress["best_quality_checkpoint_id"] == "checkpoint-best"
     assert progress["last_valid_checkpoint_id"] == "checkpoint-last"
+    assert progress["branch_code_status"] == "active_marginal"
+    assert progress["active_slot_status"] == "active_slot"
+    assert progress["counts_toward_active_slots"] is True
+    assert progress["branch_next_action"] == "normal_scheduler_policy"
+    assert progress["branch_classification_reason"] == "active_branch"
+    assert progress["final_branch_classification"]["classification"] == "active"
     assert progress["branch_card"]["best_quality_checkpoint_id"] == "checkpoint-best"
+    assert progress["branch_card"]["branch_code_status"] == "active_marginal"
     assert status["in_flight_protocol"]["best_quality_checkpoint_id"] == (
         "checkpoint-best"
     )
+    assert status["in_flight_protocol"]["branch_code_status"] == "active_marginal"
+    assert status["in_flight_protocol"]["active_slot_status"] == "active_slot"
+    assert status["in_flight_protocol"]["counts_toward_active_slots"] is True
+    assert status["in_flight_protocol"]["branch_next_action"] == (
+        "normal_scheduler_policy"
+    )
+    assert status["in_flight_protocol"]["final_branch_classification"][
+        "classification"
+    ] == "active"
     assert status["n_active_branches"] == 1
     assert status["active_slots"]["used"] == 1
     assert status["active_slots"]["branch_ids"] == ["branch-1"]

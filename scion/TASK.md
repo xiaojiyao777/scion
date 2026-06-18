@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; branch-history status projection repaired*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status projection repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -335,8 +335,19 @@ Current checkpoint:
   when the branch is no longer present in live branch rows. Existing live-card
   values remain authoritative. Acceptance: branch-history focused summary tests
   `2 passed`, full summary/status file `53 passed`, py_compile passed, and
-  `git diff --check` passed. In-flight `run_status.json` formal-screening
-  projection remains a separate status-progress polish item.
+  `git diff --check` passed.
+- Repaired in-flight run-status branch progress projection. Report:
+  `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
+  During long formal protocol work, `current_progress` and
+  `in_flight_protocol` now project compact branch-card lifecycle/status fields
+  at top level when a matching branch row is available:
+  `branch_code_status`, `active_slot_status`, `counts_toward_active_slots`,
+  `final_branch_classification`, and related branch classification fields.
+  This is status/report projection only and does not change Decision,
+  `DecisionFeatures`, Protocol, scheduling, gates, budgets, or problem
+  semantics. Acceptance: focused status sync test `1 passed`, full
+  summary/status file `53 passed`, py_compile passed, and `git diff --check`
+  passed.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

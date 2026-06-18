@@ -1273,12 +1273,23 @@ def _sync_branch_progress_from_rows(
         merged["branch_card"] = card
         for key in (
             "lineage_status",
+            "branch_code_status",
             "current_head_status",
+            "active_slot_status",
+            "counts_toward_active_slots",
+            "current_head_active_slot_release_reason",
             "best_checkpoint_status",
             "best_quality_checkpoint_id",
             "last_valid_checkpoint_id",
             "rollback_count",
             "lineage_retained_checkpoint",
+            "latest_head_failed",
+            "allowed_next_actions",
+            "forbidden_next_actions",
+            "final_branch_classification",
+            "branch_final_classification",
+            "branch_next_action",
+            "branch_classification_reason",
         ):
             if key in card:
                 merged[key] = card[key]

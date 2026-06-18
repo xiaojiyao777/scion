@@ -28,8 +28,8 @@ changing Decision, Protocol, scheduling, gates, budgets, or problem semantics.
 - `python -m py_compile scion/scion/core/evidence_recording/summary_branch_history.py scion/scion/tests/unit/core/test_evidence_recorder_summary_status.py`
 - `git diff --check`
 
-## Residual Caveat
+## Follow-Up Status
 
-This repair covers campaign-summary branch history cards. Long-running
-in-flight `run_status.json` snapshots can still be too coarse during formal
-screening and should be handled as a separate status-progress projection task.
+This repair covered campaign-summary branch history cards. The related
+long-running in-flight `run_status.json` progress projection caveat was handled
+by `v04-run-status-branch-progress-projection-repair-20260618.md`.

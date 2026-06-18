@@ -631,7 +631,11 @@ def _canary_result_payload(
 
 _BRANCH_PROGRESS_FIELDS = (
     "lineage_status",
+    "branch_code_status",
     "current_head_status",
+    "active_slot_status",
+    "counts_toward_active_slots",
+    "current_head_active_slot_release_reason",
     "best_checkpoint_status",
     "best_quality_checkpoint_id",
     "last_valid_checkpoint_id",
@@ -640,6 +644,10 @@ _BRANCH_PROGRESS_FIELDS = (
     "latest_head_failed",
     "allowed_next_actions",
     "forbidden_next_actions",
+    "final_branch_classification",
+    "branch_final_classification",
+    "branch_next_action",
+    "branch_classification_reason",
 )
 
 
