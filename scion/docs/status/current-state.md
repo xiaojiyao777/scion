@@ -110,6 +110,14 @@ CVRP/VRP:
   `/home/clawd/research/scion-experiments/`.
 - Latest CVRP post-pivot guidance artifacts are synced back to:
   `/home/clawd/research/scion-experiments/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-20260618T064210Z`.
+- The next construction-pivot guidance check is temporarily blocked by LLM
+  infrastructure, not by Scion code or prompt construction. A clean WSL rerun
+  from `867f5de` reached prompt construction but produced `0` effective rounds
+  because the WSL `127.0.0.1:8080` proxy returned `401` after its upstream
+  OAuth session was invalidated. A server fallback through `https://aihubmix.com`
+  also produced `0` effective rounds because the account returned
+  `insufficient_user_quota`; the official OpenAI key also returned
+  `insufficient_quota`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -118,9 +126,11 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Run the next CVRP research slice from a clean synchronized commit after the
-   construction-pivot provider guidance is synced to WSL. Acceptance
-   should first inspect live target-intent/hypothesis traces for the new lesson.
+1. Restore a live `gpt-5.5` completion path before launching another campaign.
+   For WSL, `/v1/chat/completions` must return HTTP `200` and non-empty
+   text/tool output; `/v1/models` is not enough. Then rerun the next CVRP
+   research slice from a clean synchronized commit and first inspect live
+   target-intent/hypothesis traces for the construction-pivot lesson.
 2. The next CVRP mechanism must not be unchanged demand-slack, unchanged
    route-merge absorption, unchanged `cross_route_2opt_reconnect`, unchanged
    `cluster_biased_worst_removal`, or unchanged
@@ -160,6 +170,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-postrun-20260618.md`.
 - CVRP post-pivot guidance field check and construction-pivot lesson:
   `scion/docs/experiments/v0.4/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-postrun-20260618.md`.
+- Current CVRP construction-pivot infra failures:
+  `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

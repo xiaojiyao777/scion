@@ -282,8 +282,8 @@ Current checkpoint:
   framework can consume problem-owned lessons, produce different code, observe
   telemetry, and reject bad CVRP hypotheses, but it still has not produced a
   CVRP solver improvement or promotion.
-- The CVRP provider now also carries the post-demand-slack pivot lesson. Next
-- The `acc21ba` WSL post-pivot guidance check field-accepts that newer lesson:
+- The CVRP provider now also carries the post-demand-slack pivot lesson. The
+  `acc21ba` WSL post-pivot guidance check field-accepts that newer lesson:
   live target-intent/hypothesis prompts contained it and selected a new
   construction owner, `route_limit_seed_diversification`, instead of repeating
   demand-slack/route-merge/cross-route/cluster-biased defaults. The candidate
@@ -300,6 +300,18 @@ Current checkpoint:
   different causal path and CMT2/CMT4 protection; otherwise pivot to another
   problem-owned solver-design owner. Avoid broad budget/gate changes,
   VNS-removal sweeps, or case/BKS/seed/split hardcoding.
+- Current infra checkpoint: the first construction-pivot follow-up attempts
+  from `867f5de` produced no research evidence. The WSL `1R` rerun reached
+  prompt construction but had `0` effective rounds because the local
+  `127.0.0.1:8080` proxy returned `401` after upstream OAuth invalidation; the
+  server fallback through `https://aihubmix.com` also had `0` effective rounds
+  because the account returned `insufficient_user_quota`, and the official
+  OpenAI key returned `insufficient_quota`. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
+  Next action is to restore a `gpt-5.5` completion path that returns HTTP `200`
+  and non-empty output from `/v1/chat/completions`; `/v1/models` is not an
+  adequate preflight. Then rerun the same one-round construction-pivot guidance
+  check from a clean synchronized commit.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
