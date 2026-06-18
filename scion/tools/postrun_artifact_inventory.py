@@ -1143,6 +1143,22 @@ def _phase4_evidence_coverage(
             ),
         )
     )
+    same_mechanism_followup_count = _research_continuity_field_count(
+        research_docs,
+        "same_mechanism_followup",
+    )
+    branch_lesson_usage_count = _research_continuity_field_count(
+        research_docs,
+        "branch_lesson_usage",
+    )
+    weak_positive_transfer_count = _research_continuity_field_count(
+        research_docs,
+        "weak_positive_transfer",
+    )
+    branch_research_shape_count = _research_continuity_field_count(
+        research_docs,
+        "research_shape_summary",
+    )
     runtime_feedback_count = sum(
         1
         for doc in source_docs
@@ -1222,6 +1238,22 @@ def _phase4_evidence_coverage(
                 research_continuity_count,
                 "research-efficiency research_continuity",
             ),
+            "same_mechanism_followup": _coverage_item(
+                same_mechanism_followup_count,
+                "research-efficiency research_continuity.same_mechanism_followup",
+            ),
+            "branch_lesson_usage": _coverage_item(
+                branch_lesson_usage_count,
+                "research-efficiency research_continuity.branch_lesson_usage",
+            ),
+            "weak_positive_transfer": _coverage_item(
+                weak_positive_transfer_count,
+                "research-efficiency research_continuity.weak_positive_transfer",
+            ),
+            "branch_research_shape": _coverage_item(
+                branch_research_shape_count,
+                "research-efficiency research_continuity.research_shape_summary",
+            ),
             "runtime_feedback": _coverage_item(
                 runtime_feedback_count,
                 "summary/status or research-efficiency runtime fields",
@@ -1258,6 +1290,18 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
             "summary/status, research-efficiency, or trajectory manifest"
         ),
         "research_continuity": "research-efficiency research_continuity",
+        "same_mechanism_followup": (
+            "research-efficiency research_continuity.same_mechanism_followup"
+        ),
+        "branch_lesson_usage": (
+            "research-efficiency research_continuity.branch_lesson_usage"
+        ),
+        "weak_positive_transfer": (
+            "research-efficiency research_continuity.weak_positive_transfer"
+        ),
+        "branch_research_shape": (
+            "research-efficiency research_continuity.research_shape_summary"
+        ),
         "runtime_feedback": "summary/status or research-efficiency runtime fields",
         "source_visibility": "prompt manifests or trajectory visibility fingerprints",
         "code_source_visibility_guarantees": (
@@ -1268,6 +1312,20 @@ def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
         key: _coverage_item(0, f"{source}; {reason}")
         for key, source in sources.items()
     }
+
+
+def _research_continuity_field_count(docs: list[Any], field: str) -> int:
+    count = 0
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        continuity = doc.get("research_continuity")
+        if not isinstance(continuity, dict):
+            continue
+        value = continuity.get(field)
+        if isinstance(value, dict) and value:
+            count += 1
+    return count
 
 
 def _code_source_visibility_summary_count(docs: list[Any]) -> int:

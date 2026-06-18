@@ -258,11 +258,15 @@ Current checkpoint:
   taxonomy/proposal quality without exposing raw prompts, responses, patches,
   raw logs, source bodies, or mutating runtime semantics. Postrun artifact
   inventories now distinguish broad source-visibility fingerprints from
-  code-phase source-visibility guarantee evidence.
+  code-phase source-visibility guarantee evidence, and split
+  research-continuity coverage into same-mechanism follow-up, branch-lesson
+  usage, weak-positive transfer, and branch research shape.
   Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-phase4-research-continuity-subsignal-coverage-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
   and

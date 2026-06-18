@@ -77,6 +77,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                 "same_mechanism_followup": {"selection_rate": 1.0},
                 "branch_lesson_usage": {"satisfaction_rate": 1.0},
                 "weak_positive_transfer": {"acceptance_rate": 1.0},
+                "research_shape_summary": {
+                    "max_branch_depth": 2,
+                    "mechanism_family_count": 1,
+                },
             },
             "fresh_runtime_replay_drain": {"attempts": 1},
         },
@@ -292,6 +296,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "protocol_effect_vs_mde",
         "branch_lesson_transfer",
         "research_continuity",
+        "same_mechanism_followup",
+        "branch_lesson_usage",
+        "weak_positive_transfer",
+        "branch_research_shape",
         "runtime_feedback",
         "source_visibility",
         "code_source_visibility_guarantees",
@@ -301,6 +309,10 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
     assert requirements["research_continuity"]["count"] == 1
+    assert requirements["same_mechanism_followup"]["count"] == 1
+    assert requirements["branch_lesson_usage"]["count"] == 1
+    assert requirements["weak_positive_transfer"]["count"] == 1
+    assert requirements["branch_research_shape"]["count"] == 1
     assert requirements["code_source_visibility_guarantees"]["count"] == 1
     assert "## Phase 4 Evidence Coverage" in markdown
     assert "## Launcher Artifacts" in markdown
@@ -309,6 +321,14 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert (
         "| research_continuity | True | 1 | "
         "research-efficiency research_continuity |"
+    ) in markdown
+    assert (
+        "| same_mechanism_followup | True | 1 | "
+        "research-efficiency research_continuity.same_mechanism_followup |"
+    ) in markdown
+    assert (
+        "| branch_research_shape | True | 1 | "
+        "research-efficiency research_continuity.research_shape_summary |"
     ) in markdown
     assert (
         "| code_source_visibility_guarantees | True | 1 | "
@@ -386,6 +406,41 @@ def test_phase4_coverage_separates_generic_and_code_source_visibility(
     assert requirements["code_trace"]["available"] is True
     assert requirements["code_source_visibility_guarantees"]["available"] is False
     assert requirements["code_source_visibility_guarantees"]["count"] == 0
+
+
+def test_phase4_coverage_tracks_continuity_subsignals(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run-continuity-coverage"
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "run_name": "continuity-coverage-run",
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+        },
+    )
+    _write_json(
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "continuity.research_efficiency.v1.json",
+        {
+            "research_continuity": {
+                "same_mechanism_followup": {"selection_rate": 1.0},
+                "branch_lesson_usage": {"satisfaction_rate": 1.0},
+            }
+        },
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+
+    requirements = data["phase4_evidence_coverage"]["requirements"]
+    assert requirements["research_continuity"]["available"] is True
+    assert requirements["same_mechanism_followup"]["available"] is True
+    assert requirements["branch_lesson_usage"]["available"] is True
+    assert requirements["weak_positive_transfer"]["available"] is False
+    assert requirements["branch_research_shape"]["available"] is False
 
 
 def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
