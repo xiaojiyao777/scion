@@ -71,7 +71,9 @@ Framework:
   launch markers plus artifact identity before reporting `static_ready=true`.
 - Prepared contract/inventory coverage now requires the CVRP large-instance
   two-opt seed and its unbounded-fallback default-avoid line, so future prepared
-  roots fail static handoff coverage if that guidance is dropped.
+  roots fail static handoff coverage if that guidance is dropped. These also
+  appear as named problem-specific coverage items in prepared briefs and
+  inventories.
 
 Warehouse:
 

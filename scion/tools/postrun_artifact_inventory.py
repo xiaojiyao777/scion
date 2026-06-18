@@ -70,6 +70,10 @@ PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
 PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
 SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = Path(__file__).resolve().parents[2]
+CVRP_LARGE_TWOOPT_OPPORTUNITY_TOKEN = "large_instance_intra_route_two_opt_seed"
+CVRP_UNBOUNDED_LARGE_TWOOPT_DEFAULT_AVOID_TOKEN = (
+    "unbounded large-instance two-opt fallback"
+)
 CVRP_REQUIRED_MEASUREMENT_REASON_CODES = frozenset(
     (
         "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
@@ -80,14 +84,14 @@ CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS = (
     "construction_seed_portfolio",
     "destroy_repair_selection",
     "bounded_local_search_variant",
-    "large_instance_intra_route_two_opt_seed",
+    CVRP_LARGE_TWOOPT_OPPORTUNITY_TOKEN,
     "acceptance_or_adaptive_weighting",
 )
 CVRP_REQUIRED_DEFAULT_AVOID_TOKENS = (
     "broad vns removal",
     "pure alns",
     "initial-vns",
-    "unbounded large-instance two-opt fallback",
+    CVRP_UNBOUNDED_LARGE_TWOOPT_DEFAULT_AVOID_TOKEN,
     "cadence-2",
     "share70",
     "route-merge",
@@ -1515,6 +1519,14 @@ def _cvrp_problem_specific_phase4_requirements(
                 )
             ),
             "prepared_run_manifest cvrp research_focus default_avoid_directions",
+        ),
+        "cvrp_large_twoopt_seed_handoff": _coverage_item(
+            int(CVRP_LARGE_TWOOPT_OPPORTUNITY_TOKEN in opportunity_text),
+            "prepared_run_manifest cvrp research_focus measurable_opportunity_classes large-instance two-opt seed",
+        ),
+        "cvrp_large_twoopt_unbounded_default_avoid_handoff": _coverage_item(
+            int(CVRP_UNBOUNDED_LARGE_TWOOPT_DEFAULT_AVOID_TOKEN in avoid_text),
+            "prepared_run_manifest cvrp research_focus default_avoid_directions unbounded large-instance two-opt fallback",
         ),
         "cvrp_direct_effect_rules_handoff": _coverage_item(
             int(

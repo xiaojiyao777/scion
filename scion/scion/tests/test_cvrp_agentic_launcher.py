@@ -364,6 +364,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "cvrp_low_snr_reason_handoff",
         "cvrp_measurable_opportunity_handoff",
         "cvrp_default_avoid_handoff",
+        "cvrp_large_twoopt_seed_handoff",
+        "cvrp_large_twoopt_unbounded_default_avoid_handoff",
         "cvrp_direct_effect_rules_handoff",
         "cvrp_decision_boundary_handoff",
     ):
@@ -423,6 +425,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "TRAJECTORY_DIVERGENT_LOW_SNR" in brief_text
     assert "### Problem-Specific Phase 4 Evidence Coverage" in brief_text
     assert "cvrp_direct_effect_rules_handoff" in brief_text
+    assert "cvrp_large_twoopt_seed_handoff" in brief_text
+    assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in brief_text
     assert (
         "## Launcher Artifacts"
         in inventory_text
@@ -431,6 +435,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "construction_seed_portfolio" in inventory_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in inventory_text
     assert "cvrp_default_avoid_handoff" in inventory_text
+    assert "cvrp_large_twoopt_seed_handoff" in inventory_text
+    assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in inventory_text
     assert "copied_campaign_summary" in prompt_context_md.read_text(
         encoding="utf-8"
     )

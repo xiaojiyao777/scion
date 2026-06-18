@@ -676,6 +676,8 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "cvrp_low_snr_reason_handoff",
         "cvrp_measurable_opportunity_handoff",
         "cvrp_default_avoid_handoff",
+        "cvrp_large_twoopt_seed_handoff",
+        "cvrp_large_twoopt_unbounded_default_avoid_handoff",
         "cvrp_direct_effect_rules_handoff",
         "cvrp_decision_boundary_handoff",
     ):
@@ -686,6 +688,8 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert "| config_paths_resolvable | True |  |" in markdown
     assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
     assert "cvrp_default_avoid_handoff" in markdown
+    assert "cvrp_large_twoopt_seed_handoff" in markdown
+    assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in markdown
 
 
 def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
@@ -788,6 +792,13 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
     ]
     assert problem_specific["cvrp_measurement_mde_handoff"]["available"] is False
     assert problem_specific["cvrp_default_avoid_handoff"]["available"] is False
+    assert problem_specific["cvrp_large_twoopt_seed_handoff"]["available"] is False
+    assert (
+        problem_specific["cvrp_large_twoopt_unbounded_default_avoid_handoff"][
+            "available"
+        ]
+        is False
+    )
 
 
 def test_prepared_manifest_contract_requires_warehouse_followup_handoff(

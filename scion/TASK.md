@@ -360,7 +360,9 @@ Current checkpoint:
 - Prepared contract/inventory coverage now requires both the
   `large_instance_intra_route_two_opt_seed` opportunity token and the
   unbounded large-instance two-opt fallback default-avoid token, so future
-  prepared roots fail static handoff coverage if the guidance is dropped.
+  prepared roots fail static handoff coverage if the guidance is dropped. The
+  coverage is also exposed as named problem-specific prepared-brief/inventory
+  items for delegated review.
   Report:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
 - CVRP hypothesis proposal context now receives problem-owned

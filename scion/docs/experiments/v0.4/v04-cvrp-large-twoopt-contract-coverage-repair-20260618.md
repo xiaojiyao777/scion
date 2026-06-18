@@ -19,6 +19,9 @@ solver.
     `CVRP_REQUIRED_MEASURABLE_OPPORTUNITY_TOKENS`.
   - Adds `unbounded large-instance two-opt fallback` to
     `CVRP_REQUIRED_DEFAULT_AVOID_TOKENS`.
+  - Exposes separate problem-specific coverage items:
+    `cvrp_large_twoopt_seed_handoff` and
+    `cvrp_large_twoopt_unbounded_default_avoid_handoff`.
 - `scion/scion/tests/test_postrun_artifact_inventory.py`
   - Updates the CVRP prepared manifest fixture and asserts the new tokens are
     not missing from prepared contract checks.
@@ -48,3 +51,7 @@ The next CVRP prepared roots must carry both sides of the large-twoopt seed:
 
 This makes delegated postrun analysis and launch readiness fail closed if the
 seed guidance is silently dropped before the next agentic run.
+
+The named coverage items make this visible directly in prepared analysis brief
+and artifact inventory outputs, rather than hiding the signal inside generic
+opportunity/default-avoid counts.
