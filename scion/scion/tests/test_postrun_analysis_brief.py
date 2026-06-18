@@ -890,7 +890,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "branch_lessons_required": 3,
             "branch_lesson_semantic_gap_count": 1,
             "branch_lesson_semantic_failure_count": 1,
+            "branch_lesson_semantic_failure_counts": {
+                "semantic_mismatch": 1,
+            },
             "branch_lesson_semantic_block_count": 1,
+            "branch_lesson_semantic_block_counts": {
+                "semantic_mismatch": 1,
+            },
             "weak_positive_accepted": 1,
             "weak_positive_observed": 1,
             "weak_positive_missed": 0,
@@ -909,6 +915,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "recommendations": [
             "inspect branch_lesson_usage records for semantic mismatch causes",
             "inspect omitted_sections and truncated_sections in prompt manifests",
+            "inspect lesson ids, changed dimensions, and borrow/contrast/reject semantics",
         ],
     }
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
@@ -995,6 +1002,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Guidance status: context_actionability_review_required" in markdown
     assert "- Continuity selected/observed same-mechanism follow-up: 1 / 1" in markdown
     assert "- Branch lessons satisfied/required/semantic gap: 2 / 3 / 1" in markdown
+    assert "- Branch lesson semantic failure mix: semantic_mismatch=1" in markdown
+    assert "- Branch lesson semantic block mix: semantic_mismatch=1" in markdown
     assert (
         "- Prompt research/source/cross-branch/governance tokens: 20 / 15 / 5 / 15"
         in markdown
@@ -1028,6 +1037,59 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     cli_brief = json.loads(result.stdout)
     assert cli_brief["schema_version"] == "scion.postrun_analysis_brief.v1"
+
+
+def test_research_context_actionability_projects_branch_lesson_reason_mix() -> None:
+    summary = brief_tool._research_context_actionability_summary(
+        prompt_context_visibility_summary={
+            "current_run_evidence": True,
+            "available": True,
+            "aggregate": {
+                "signal_density": {
+                    "research_signal_tokens": 12,
+                    "source_code_tokens": 5,
+                    "cross_branch_tokens": 4,
+                    "governance_tokens": 7,
+                }
+            },
+        },
+        research_continuity_summary={
+            "current_run_evidence": True,
+            "available": True,
+            "aggregate": {
+                "branch_lesson_semantic_failure_counts": {
+                    "metadata_only": 2,
+                    "linkage_unrecognized": 1,
+                },
+                "branch_lesson_semantic_block_counts": {
+                    "linkage_unrecognized": 1,
+                },
+            },
+            "entries": [],
+        },
+    )
+
+    indicators = summary["indicators"]
+    assert indicators["branch_lesson_semantic_failure_count"] == 3
+    assert indicators["branch_lesson_semantic_failure_counts"] == {
+        "linkage_unrecognized": 1,
+        "metadata_only": 2,
+    }
+    assert indicators["branch_lesson_semantic_block_count"] == 1
+    assert indicators["branch_lesson_semantic_block_counts"] == {
+        "linkage_unrecognized": 1,
+    }
+    assert summary["actionability_gaps"] == [
+        "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal"
+    ]
+    assert (
+        "inspect hypotheses that filled branch_lesson_usage with metadata-only payloads"
+        in summary["recommendations"]
+    )
+    assert (
+        "normalize branch_lesson_usage target/action/mechanism linkage aliases"
+        in summary["recommendations"]
+    )
 
 
 def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:

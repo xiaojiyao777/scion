@@ -366,11 +366,13 @@ Current checkpoint:
   with research-continuity gaps, so delegated review can tell whether semantic
   branch-lesson gaps or missed follow-up opportunities align with missing
   research/cross-branch context, omitted/truncated sections, or governance-heavy
-  prompts. Live hypothesis prompts now also receive a compact proposal-only
-  `research_shape_diagnostics` signal from the cross-branch research map, so
-  branch depth, shallow scatter, and repeated non-positive family shape are
-  available during proposal planning while remaining excluded from
-  `DecisionFeatures`. Reports:
+  prompts. That actionability summary now also carries branch-lesson semantic
+  failure/block reason mixes, so reviewers can separate metadata-only payloads,
+  unrecognized linkage aliases, and true semantic mismatches. Live hypothesis
+  prompts now also receive a compact proposal-only `research_shape_diagnostics`
+  signal from the cross-branch research map, so branch depth, shallow scatter,
+  and repeated non-positive family shape are available during proposal planning
+  while remaining excluded from `DecisionFeatures`. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`.
@@ -378,6 +380,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-branch-lesson-actionability-reason-mix-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by

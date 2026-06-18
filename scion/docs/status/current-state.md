@@ -55,7 +55,9 @@ Framework:
   also include a report-only `research_context_actionability_summary` joining
   prompt block-family signal with continuity gaps, so reviewers can audit
   whether failed prior-evidence transfer lines up with missing research or
-  cross-branch context.
+  cross-branch context. That actionability summary now carries branch-lesson
+  semantic failure/block reason mixes, so reviewers can separate metadata-only
+  payloads, unrecognized linkage aliases, and true semantic mismatches.
 - Live hypothesis prompts now receive a compact proposal-only
   `research_shape_diagnostics` signal derived from the cross-branch research
   map, so branch depth, shallow scatter, and repeated non-positive family shape
@@ -149,6 +151,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-branch-lesson-actionability-reason-mix-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.

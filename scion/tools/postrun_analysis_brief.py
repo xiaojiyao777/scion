@@ -939,6 +939,12 @@ def render_markdown(brief: dict[str, Any]) -> str:
 
     actionability = brief.get("research_context_actionability_summary") or {}
     actionability_indicators = _mapping_or_empty(actionability.get("indicators"))
+    branch_lesson_failure_mix = _mapping_text(
+        actionability_indicators.get("branch_lesson_semantic_failure_counts")
+    )
+    branch_lesson_block_mix = _mapping_text(
+        actionability_indicators.get("branch_lesson_semantic_block_counts")
+    )
     lines.extend(
         [
             "",
@@ -956,6 +962,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_display(actionability_indicators.get('branch_lessons_satisfied'))} / "
             f"{_display(actionability_indicators.get('branch_lessons_required'))} / "
             f"{_display(actionability_indicators.get('branch_lesson_semantic_gap_count'))}",
+            "- Branch lesson semantic failure mix: "
+            f"{branch_lesson_failure_mix}",
+            "- Branch lesson semantic block mix: "
+            f"{branch_lesson_block_mix}",
             "- Prompt research/source/cross-branch/governance tokens: "
             f"{_display(actionability_indicators.get('research_signal_tokens'))} / "
             f"{_display(actionability_indicators.get('source_code_tokens'))} / "
@@ -2975,6 +2985,12 @@ def _research_context_actionability_summary(
     continuity_counts = _research_continuity_action_counts(
         research_continuity_summary.get("entries")
     )
+    semantic_failure_counts = _int_mapping(
+        continuity_aggregate.get("branch_lesson_semantic_failure_counts")
+    )
+    semantic_block_counts = _int_mapping(
+        continuity_aggregate.get("branch_lesson_semantic_block_counts")
+    )
     density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
     indicators = {
         "schema_version": "scion.research_context_actionability_indicators.v1",
@@ -2991,11 +3007,11 @@ def _research_context_actionability_summary(
             "branch_lesson_semantic_gap_count"
         ],
         "branch_lesson_semantic_failure_count": _sum_counts(
-            continuity_aggregate.get("branch_lesson_semantic_failure_counts")
+            semantic_failure_counts
         ),
-        "branch_lesson_semantic_block_count": _sum_counts(
-            continuity_aggregate.get("branch_lesson_semantic_block_counts")
-        ),
+        "branch_lesson_semantic_failure_counts": semantic_failure_counts,
+        "branch_lesson_semantic_block_count": _sum_counts(semantic_block_counts),
+        "branch_lesson_semantic_block_counts": semantic_block_counts,
         "weak_positive_accepted": continuity_counts["weak_positive_accepted"],
         "weak_positive_observed": continuity_counts["weak_positive_observed"],
         "weak_positive_missed": max(
@@ -3044,7 +3060,8 @@ def _research_context_actionability_summary(
         "indicators": indicators,
         "actionability_gaps": actionability_gaps,
         "recommendations": _research_context_actionability_recommendations(
-            actionability_gaps
+            actionability_gaps,
+            indicators=indicators,
         ),
     }
 
@@ -3172,7 +3189,11 @@ def _research_context_guidance_status(
     return "no_continuity_opportunities_observed"
 
 
-def _research_context_actionability_recommendations(gaps: list[str]) -> list[str]:
+def _research_context_actionability_recommendations(
+    gaps: list[str],
+    *,
+    indicators: Mapping[str, Any],
+) -> list[str]:
     recommendations: list[str] = []
     for gap in gaps:
         if "without_cross_branch_prompt_signal" in gap:
@@ -3211,6 +3232,25 @@ def _research_context_actionability_recommendations(gaps: list[str]) -> list[str
             recommendations.append(
                 "launch or rebuild current-run evidence before research-quality conclusions"
             )
+    semantic_reasons = _int_mapping(
+        indicators.get("branch_lesson_semantic_failure_counts")
+    )
+    semantic_blocks = _int_mapping(
+        indicators.get("branch_lesson_semantic_block_counts")
+    )
+    reason_keys = set(semantic_reasons) | set(semantic_blocks)
+    if "metadata_only" in reason_keys:
+        recommendations.append(
+            "inspect hypotheses that filled branch_lesson_usage with metadata-only payloads"
+        )
+    if "linkage_unrecognized" in reason_keys:
+        recommendations.append(
+            "normalize branch_lesson_usage target/action/mechanism linkage aliases"
+        )
+    if "semantic_mismatch" in reason_keys:
+        recommendations.append(
+            "inspect lesson ids, changed dimensions, and borrow/contrast/reject semantics"
+        )
     return list(dict.fromkeys(recommendations))
 
 
