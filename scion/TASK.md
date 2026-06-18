@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired, including report-only research-continuity metrics for same-mechanism follow-up, branch lesson usage, and weak-positive transfer; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, strict launch-ready CLI mode, prepared contract checks, prepared-handoff rebuild tooling, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots are aligned to checkout `f93e55d`; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -393,29 +393,28 @@ Current checkpoint:
   `scion/tools/rebuild_postrun_acceptance.py` before delegating postrun
   analysis; current launcher postrun paths call this rebuild tool directly.
   Before launch, require
-  `scion/tools/check_launch_readiness.py <prepared-root> --completion-preflight`
+  `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
-  current `8d89fd9` prepared roots were refreshed and pass static readiness.
+  current `f93e55d` prepared roots were refreshed and pass static readiness.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
-  completion preflight returns HTTP `401` / `not_authenticated`.
-  Report:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
+  completion preflight returns HTTP `401` / `not_authenticated`
+  (`auth_status.pool.refreshing=1`, `active=0`).
   Current prepared-handoff rebuild report:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
   Current strict launch-readiness report:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`.
-  Current prompt signal-density prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-8d89fd9-20260618.md`.
+  Current prepared-root refresh:
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-f93e55d-20260618.md`.
   Current prepared handoff measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
   Current prepared contract measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-signaldensity-8d89fd9-1r-gpt55-20260618T194900Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-whbrief-f93e55d-1r-gpt55-20260618T200236Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -432,11 +431,17 @@ Current checkpoint:
   require the champion-v2 plateau-vs-continuous-improvement framing, promotion
   preservation, branch transfer, quality-blocked-vs-protocol-evaluated
   distinction, cost-vs-split telemetry, and fast-completion runtime explanation
-  needed for the next postrun review.
+  needed for the next postrun review. Warehouse postrun analysis briefs now
+  also include `warehouse_followup_summary`, so delegated review can separate
+  prepared-only launch roots, quality-blocked proposal behavior,
+  protocol-evaluated evidence, and plateau-review-ready evidence before making
+  any stagnation conclusion.
   Report:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
+  Current warehouse follow-up analysis-brief repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-signaldensity-8d89fd9-6r-gpt55-20260618T194900Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-whbrief-f93e55d-6r-gpt55-20260618T200236Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

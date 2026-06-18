@@ -41,6 +41,11 @@ Framework:
 - Phase 4 postrun inventories separately expose prompt signal-density coverage,
   source visibility, and code-source visibility guarantees as report-only
   evidence requirements.
+- Warehouse postrun analysis briefs now expose a report-only
+  `warehouse_followup_summary` that separates prepared-only roots,
+  quality-blocked proposal behavior, protocol-evaluated evidence, and
+  plateau-review readiness before any delegated analysis calls the post-v2
+  behavior a real plateau.
 
 Warehouse:
 
@@ -50,7 +55,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-signaldensity-8d89fd9-6r-gpt55-20260618T194900Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-whbrief-f93e55d-6r-gpt55-20260618T200236Z-claw`.
 
 CVRP/VRP:
 
@@ -64,18 +69,19 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-signaldensity-8d89fd9-1r-gpt55-20260618T194900Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-whbrief-f93e55d-1r-gpt55-20260618T200236Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `8d89fd9`. Strict
-  readiness on the current branch confirms runtime guard paths are unchanged
-  and both roots remain statically ready.
+- The current prepared roots were built from checkout `f93e55d`. Strict
+  readiness on WSL confirms both roots remain statically ready and aligned to
+  guarded source.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, and an `operator_action.login_url`.
+  `not_authenticated`, auth pool `refreshing=1`, and an
+  `operator_action.login_url`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
@@ -111,6 +117,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-f93e55d-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
