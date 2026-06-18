@@ -77,7 +77,9 @@ Framework observability:
 - The launcher resume path is repaired: use `--completion-preflight` before
   campaign startup, use `--api-key-env` for non-local keys, and keep generated
   `launch.env` secret-safe. CVRP and warehouse now both have prepare-only
-  launch helpers for their next focused agentic checks.
+  launch helpers for their next focused agentic checks; the warehouse helper
+  also resumes from the accepted `v2` campaign and writes postrun acceptance
+  reports by default after Scion exits.
 - Latest WSL artifacts are synced back under
   `/home/clawd/research/scion-experiments/`; the latest accepted CVRP
   post-pivot artifacts are under
@@ -106,7 +108,8 @@ Framework observability:
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement. Use the warehouse launcher to
    copy the accepted `v2` campaign, prepare rebased production configs, and run
-   completion preflight before launch.
+   completion preflight before launch. Keep the default postrun report bundle
+   enabled unless the run is only a shell/config smoke.
 
 ## Key Evidence
 

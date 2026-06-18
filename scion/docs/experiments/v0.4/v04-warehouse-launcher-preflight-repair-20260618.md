@@ -28,6 +28,12 @@ The launcher prepares a run root with:
 - `--resume-from-campaign` support that copies an existing campaign into the
   new run root before launch, so a follow-up can continue from a promoted
   champion such as warehouse `v2` instead of starting from the baseline;
+- default postrun acceptance report generation under `postrun_acceptance/`
+  after Scion exits, covering summary, failures, research-efficiency, and
+  proposal-trajectory manifest artifacts while preserving the campaign's true
+  wrapper exit code;
+- `--skip-postrun-reports` for unusual smoke cases that should not generate
+  postrun report artifacts;
 - a run-time git commit check, warehouse data-root directory check, and copied
   top-level `run_status.json` / `exit.txt` wrapper behavior.
 
@@ -48,6 +54,10 @@ its champion database rows and local `champions/champion_v*` snapshots. When
 the campaign manager starts, the current champion is restored from the champion
 store and re-anchored to the copied local snapshot if the hash matches.
 
+The postrun reports are report-only artifacts. They read existing campaign
+outputs after `scion run` exits and are allowed to fail closed into `run.log`
+without changing the campaign exit status or mutating campaign state.
+
 ## Current LLM Route Probe
 
 No warehouse campaign was launched. A local and WSL probe of
@@ -66,13 +76,14 @@ git diff --check
 
 Result:
 
-- `4 passed`
+- `6 passed`
 - `py_compile` passed
 - `git diff --check` passed
 
 The focused tests verify help output, prepare-only run-root generation,
 warehouse config rewriting, secret-safe `--api-key-env`, completion preflight
-wiring, resume-campaign copying, wrapper checks, and generated shell syntax.
+wiring, resume-campaign copying, postrun report wiring, wrapper checks, and
+generated shell syntax.
 
 Additional local real-artifact smoke:
 

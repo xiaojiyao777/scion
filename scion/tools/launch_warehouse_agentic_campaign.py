@@ -124,6 +124,50 @@ fi
 '''
 
 
+POSTRUN_REPORT_SNIPPET = r'''
+if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
+  REPORT_DIR="$RUN_ROOT/postrun_acceptance"
+  REPORT_STEM="warehouse_${MEASUREMENT_GOVERNANCE//-/_}_${PROPOSAL_CONTEXT_ABLATION//-/_}"
+  OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"
+  mkdir -p \
+    "$REPORT_DIR/summaries" \
+    "$REPORT_DIR/failures" \
+    "$REPORT_DIR/research_efficiency" \
+    "$REPORT_DIR/manifests"
+  echo "POSTRUN_ACCEPTANCE_DIR:$REPORT_DIR" >> "$RUN_ROOT/exit.txt"
+  {
+    echo "POSTRUN_REPORTS_STARTED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "POSTRUN_REPORT_DIR:$REPORT_DIR"
+  } >> "$RUN_ROOT/run.log"
+  "$PY" -m scion.cli.main report summary \
+    --campaign-dir "$CAMPAIGN_DIR" \
+    --output "$REPORT_DIR/summaries/${REPORT_STEM}.summary.json" \
+    >> "$RUN_ROOT/run.log" 2>&1 || true
+  "$PY" -m scion.cli.main report failures \
+    --campaign-dir "$CAMPAIGN_DIR" \
+    --output "$REPORT_DIR/failures/${REPORT_STEM}.failures.json" \
+    >> "$RUN_ROOT/run.log" 2>&1 || true
+  "$PY" -m scion.cli.main report research-efficiency \
+    --campaign-dir "$CAMPAIGN_DIR" \
+    --output "$REPORT_DIR/research_efficiency/${REPORT_STEM}.research_efficiency.v1.json" \
+    >> "$RUN_ROOT/run.log" 2>&1 || true
+  manifest_args=(
+    --campaign-dir "$CAMPAIGN_DIR"
+    --observed-control-arm "$OBSERVED_CONTROL_ARM"
+    --output "$REPORT_DIR/manifests/${REPORT_STEM}.proposal_trajectory_manifest.v1.json"
+  )
+  if [[ -n "${CONTROL_PAIR_KEY:-}" ]]; then
+    manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")
+  fi
+  "$PY" -m scion.cli.main report proposal-trajectory-manifest \
+    "${manifest_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || true
+  {
+    echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } >> "$RUN_ROOT/run.log"
+fi
+'''
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -327,6 +371,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SCION_WAREHOUSE_DATA_ROOT",
         "SCION_PROBLEM_DATA_ROOT",
         "COMPLETION_PREFLIGHT",
+        "POSTRUN_REPORTS",
         "PROBLEM",
         "PROBLEM_V1",
         "PROTOCOL",
@@ -430,6 +475,7 @@ if [[ -f "$CAMPAIGN_DIR/run_status.json" ]]; then
 else
   printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s}}\\n' "$STATUS" > "$RUN_ROOT/run_status.json"
 fi
+{POSTRUN_REPORT_SNIPPET}
 exit "$STATUS"
 """
     run_sh = run_root / "run.sh"
@@ -506,6 +552,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SCION_WAREHOUSE_DATA_ROOT": warehouse_data_root,
         "SCION_PROBLEM_DATA_ROOT": warehouse_data_root,
         "COMPLETION_PREFLIGHT": 1 if args.completion_preflight else 0,
+        "POSTRUN_REPORTS": 0 if args.skip_postrun_reports else 1,
         "PROBLEM": config_paths["problem"],
         "PROBLEM_V1": config_paths["problem_v1"],
         "PROTOCOL": config_paths["protocol"],
@@ -543,7 +590,9 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             "SCION_API_KEY="
             f"{api_key_display}\n\n"
             "report_metadata:\n"
-            f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n\n"
+            f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n"
+            f"POSTRUN_REPORTS={env['POSTRUN_REPORTS']}\n"
+            f"POSTRUN_REPORT_DIR={env['RUN_ROOT'] / 'postrun_acceptance'}\n\n"
             "config:\n"
             f"PROBLEM={env['PROBLEM']}\n"
             f"PROBLEM_V1={env['PROBLEM_V1']}\n"
@@ -622,6 +671,15 @@ def parse_args() -> argparse.Namespace:
             "Before starting Scion, require a real chat completion with "
             "SCION_MODEL/SCION_BASE_URL/SCION_API_KEY. This catches broken "
             "proxy sessions that still pass /v1/models."
+        ),
+    )
+    parser.add_argument(
+        "--skip-postrun-reports",
+        action="store_true",
+        help=(
+            "Do not generate postrun acceptance report artifacts after Scion "
+            "exits. The default is to write summary, failures, "
+            "research-efficiency, and proposal-trajectory manifest reports."
         ),
     )
     parser.add_argument(

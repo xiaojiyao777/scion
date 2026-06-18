@@ -27,6 +27,7 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--api-key" in result.stdout
     assert "--api-key-env" in result.stdout
     assert "--completion-preflight" in result.stdout
+    assert "--skip-postrun-reports" in result.stdout
     assert "--warehouse-data-root" in result.stdout
     assert "--resume-from-campaign" in result.stdout
     assert "--problem-v1" in result.stdout
@@ -82,6 +83,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY=pwd" in launch_env
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "COMPLETION_PREFLIGHT=0" in launch_env
+    assert "POSTRUN_REPORTS=1" in launch_env
     assert "ROUNDS=6" in launch_env
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert f"PROBLEM={run_root / 'config' / 'problem.yaml'}" in launch_env
@@ -115,10 +117,19 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
     assert "WAREHOUSE_DATA_ROOT_MISSING" in run_sh_text
     assert "COMPLETION_PREFLIGHT_FAILED" in run_sh_text
+    assert "postrun_acceptance" in run_sh_text
+    assert "report summary" in run_sh_text
+    assert "report failures" in run_sh_text
+    assert "report research-efficiency" in run_sh_text
+    assert "report proposal-trajectory-manifest" in run_sh_text
+    assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
+    assert 'manifest_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
+    assert "POSTRUN_REPORTS=1" in command_txt
+    assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 
 
@@ -201,6 +212,39 @@ def test_warehouse_agentic_launcher_api_key_env_avoids_secret_file(
     assert "SCION_API_KEY_ENV=SCION_API_KEY" in launch_env
     assert "COMPLETION_PREFLIGHT=1" in launch_env
     assert "SCION_API_KEY=<from-env:SCION_API_KEY>" in command_txt
+
+
+def test_warehouse_agentic_launcher_can_skip_postrun_reports(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "1",
+            "--label",
+            "unit-warehouse-no-reports",
+            "--experiments-root",
+            str(tmp_path),
+            "--warehouse-data-root",
+            str(tmp_path / "data"),
+            "--skip-postrun-reports",
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+    assert "POSTRUN_REPORTS=0" in launch_env
+    assert "POSTRUN_REPORTS=0" in command_txt
 
 
 def test_warehouse_agentic_launcher_rejects_invalid_api_key_env() -> None:

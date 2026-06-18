@@ -267,7 +267,9 @@ Current checkpoint:
   configs with repo/data-root path rewrites, secret-safe env handling, and the
   same real completion preflight requirement before campaign startup. It can
   copy the accepted warehouse `v2` campaign as the new run root so the next
-  check continues from the promoted champion rather than restarting baseline.
+  check continues from the promoted champion rather than restarting baseline,
+  and it writes the standard postrun acceptance report bundle by default after
+  Scion exits.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
