@@ -55,10 +55,15 @@ CVRP_ANALYSIS_INTENT = (
     "solver mechanism is materially different from rejected/default-avoid "
     "directions before accepting any conclusion."
 )
+CVRP_LARGE_INSTANCE_TWO_OPT_SEED_REPORT = (
+    "scion/docs/experiments/v0.4/"
+    "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
+)
 CVRP_DEFAULT_AVOID_DIRECTIONS = (
     "unchanged broad VNS removal",
     "pure ALNS/no-polish",
     "simple initial-VNS disablement",
+    "unbounded large-instance two-opt fallback without deadline or wall-clock evidence",
     "raw cadence-2",
     "recent-best/stall gating",
     "fixed early-8",
@@ -73,9 +78,11 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.cvrp_research_focus.v1",
     "scope": "report_only_prepared_handoff",
     "current_question": (
-        "Select a materially different CVRP solver-design mechanism, or justify "
-        "a new causal path with direct objective-effect evidence before spending "
-        "another route-merge or construction-seed branch slot."
+        "Test the large-instance intra-route two-opt seed only as a "
+        "deadline-aware bounded local-search mechanism, or select another "
+        "materially different CVRP solver-design mechanism with direct "
+        "objective-effect evidence before spending another route-merge or "
+        "construction-seed branch slot."
     ),
     "measurement_opportunity_diagnostics": {
         "schema_version": "cvrp_measurement_opportunity_handoff.v1",
@@ -111,6 +118,13 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         (
             "bounded_local_search_variant: require feasible route-level "
             "objective deltas with bounded search effort"
+        ),
+        (
+            "large_instance_intra_route_two_opt_seed: direct WSL external-control "
+            "replay showed 8/8 feasible XL wins, but the unbounded diff is not "
+            "accepted; require deadline-aware bounded search effort, pair-level "
+            "objective/feasibility/route-count/wall-clock evidence, and see "
+            f"{CVRP_LARGE_INSTANCE_TWO_OPT_SEED_REPORT}"
         ),
         (
             "acceptance_or_adaptive_weighting: require direct move acceptance "
@@ -596,6 +610,8 @@ def _write_prepared_run_manifest(
             "Check the research_focus default-avoid list before accepting "
             "route-merge, construction-seed, cadence, or VNS follow-up as "
             "materially new.",
+            "If pursuing the large-instance two-opt seed, require a deadline-aware "
+            "bounded local-search implementation and wall-clock evidence.",
             "Treat this manifest as launch/handoff evidence only, not as Decision input.",
         ],
         "started_utc": str(env["STARTED_UTC"]),

@@ -107,6 +107,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_manifest["research_focus"][
         "default_avoid_directions"
     ]
+    assert any(
+        "unbounded large-instance two-opt fallback" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
     measurement = prepared_manifest["research_focus"][
         "measurement_opportunity_diagnostics"
     ]
@@ -115,6 +119,17 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert any(
         "construction_seed_portfolio" in item
+        for item in prepared_manifest["research_focus"][
+            "measurable_opportunity_classes"
+        ]
+    )
+    assert "large-instance intra-route two-opt seed" in prepared_manifest[
+        "research_focus"
+    ]["current_question"]
+    assert any(
+        "large_instance_intra_route_two_opt_seed" in item
+        and "deadline-aware bounded search effort" in item
+        and "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md" in item
         for item in prepared_manifest["research_focus"][
             "measurable_opportunity_classes"
         ]
@@ -154,6 +169,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "screening_mde_at_power_80: 9.9" in prepared_manifest_md
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prepared_manifest_md
     assert "route-merge absorption" in prepared_manifest_md
+    assert "large_instance_intra_route_two_opt_seed" in prepared_manifest_md
+    assert "unbounded large-instance two-opt fallback" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
     assert f"PY={sys.executable}" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
@@ -317,6 +334,12 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "route-merge absorption" in prepared_brief["prepared_run_contract"][
         "research_focus"
     ]["default_avoid_directions"]
+    assert any(
+        "large_instance_intra_route_two_opt_seed" in item
+        for item in prepared_brief["prepared_run_contract"]["research_focus"][
+            "measurable_opportunity_classes"
+        ]
+    )
     assert prepared_brief["prepared_run_contract"]["research_focus"][
         "measurement_opportunity_diagnostics"
     ]["screening_mde_at_power_80"] == 9.9
@@ -327,6 +350,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert cvrp_checks["cvrp_handoff_decision_boundary_present"]["passed"] is True
     assert any(
         "Decision input" in item
+        for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
+    )
+    assert any(
+        "large-instance two-opt seed" in item and "deadline-aware" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
     )
     problem_specific = prepared_brief["phase4_evidence_coverage"][
