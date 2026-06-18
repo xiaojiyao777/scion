@@ -20,6 +20,41 @@ from scion.core.models import (
 )
 from scion.proposal.engine import _parse_hypothesis
 
+DECISION_FEATURES_REPORT_METADATA_DENYLIST = {
+    "api_key_env",
+    "branch_lesson_usage",
+    "calibration_explanation",
+    "calibration_ref",
+    "completion_preflight",
+    "control_pair_key",
+    "effect_to_mde_ratio",
+    "free_form_notes",
+    "gap",
+    "launcher",
+    "llm_rationale",
+    "llm_text",
+    "measurement_readiness",
+    "measurement_readiness_source",
+    "mde",
+    "mde_at_power_80",
+    "notes",
+    "pair_evidence",
+    "postrun",
+    "postrun_report",
+    "problem_measurement_diagnostics",
+    "prompt_hash",
+    "prompt_manifest",
+    "prompt_manifest_artifact_ref",
+    "prompt_ratio",
+    "prompt_ratios",
+    "proposal_trajectory",
+    "proposal_trajectory_manifest",
+    "raw_calibration_pair_rows",
+    "research_efficiency",
+    "run_status",
+    "signal_to_noise_tier",
+}
+
 def test_decision_features_immutability():
     """验证 DecisionFeatures 是 frozen 的。"""
     features = DecisionFeatures(
@@ -106,26 +141,15 @@ def test_decision_features_serialization_excludes_measurement_diagnostics():
 
     payload = decision_features_to_payload(features)
     serialized_keys = set(_walk_mapping_keys(payload))
-    denied_keys = {
-        "measurement_readiness",
-        "calibration_ref",
-        "mde",
-        "mde_at_power_80",
-        "BKS",
-        "bks",
-        "gap",
-        "problem_measurement_diagnostics",
-        "prompt_ratio",
-        "prompt_ratios",
-        "llm_text",
-        "llm_rationale",
-        "free_form_notes",
-        "notes",
-        "effect_to_mde_ratio",
-        "signal_to_noise_tier",
-    }
+    denied_keys = DECISION_FEATURES_REPORT_METADATA_DENYLIST | {"BKS", "bks"}
 
     assert denied_keys.isdisjoint(serialized_keys)
+
+
+def test_decision_features_schema_excludes_report_and_launcher_metadata():
+    field_names = {field.name for field in dataclasses.fields(DecisionFeatures)}
+
+    assert DECISION_FEATURES_REPORT_METADATA_DENYLIST.isdisjoint(field_names)
 
 
 def _walk_mapping_keys(value):
