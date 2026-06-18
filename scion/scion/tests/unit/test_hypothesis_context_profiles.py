@@ -342,6 +342,7 @@ def test_context_profile_metadata_does_not_enter_decision_features():
     assert "proposal_context_ablation" not in decision_fields
     assert "compact_research_signals" not in decision_fields
     assert "research_signal_ratio" not in decision_fields
+    assert "research_shape_diagnostics" not in decision_fields
     assert "branch_lesson_records" not in decision_fields
     assert "branch_lesson_usage" not in decision_fields
     assert "branch_lesson_usage_requirement" not in decision_fields
@@ -680,6 +681,10 @@ def test_minimal_research_context_ablation_keeps_source_and_measurement_context(
         "saturation_signal": "hidden saturation signal",
         "search_memory": "hidden search memory",
         "research_log": "hidden research log",
+        "research_shape_diagnostics": (
+            '{"schema_version":"proposal_research_shape_prompt_summary.v1",'
+            '"hidden":"shape"}'
+        ),
         "weight_opt_feedback": "hidden weight feedback",
     }
 
@@ -708,6 +713,7 @@ def test_minimal_research_context_ablation_keeps_source_and_measurement_context(
     assert "search_control_guidance" not in filtered
     assert "search_memory" not in filtered
     assert "research_log" not in filtered
+    assert "research_shape_diagnostics" not in filtered
 
     system_blocks, user_prompt = _split_hypothesis_context(filtered)
     rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
@@ -718,6 +724,7 @@ def test_minimal_research_context_ablation_keeps_source_and_measurement_context(
     assert "MEASUREMENT_POWER_LOW" in rendered_prompt
     assert "## Cross-Branch Research Map" not in rendered_prompt
     assert "## Runtime Feedback" not in rendered_prompt
+    assert "proposal_research_shape_prompt_summary.v1" not in rendered_prompt
     assert "## Objective Opportunity Profile" not in rendered_prompt
     assert "## Experiment History" not in rendered_prompt
     assert "hidden sibling branch" not in rendered_prompt
@@ -753,6 +760,13 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
         ],
         "objective_opportunity_profile": "large-case gap remains on E-n101.",
         "runtime_feedback": "runtime saturated; treat as auxiliary signal.",
+        "research_shape_diagnostics": {
+            "schema_version": "proposal_research_shape_prompt_summary.v1",
+            "decision_input_policy": "excluded_from_decision_features",
+            "branch_count": 3,
+            "current_branch_depth": 2,
+            "shape_label": "repeated_non_positive_family",
+        },
     }
 
     system_blocks, user_prompt = _split_hypothesis_context(context)
@@ -761,6 +775,9 @@ def test_hypothesis_prompt_surfaces_research_signal_and_manifest_ratio():
 
     assert "## Compact Research Signals" in rendered_system
     assert "lesson:route-slack" in rendered_system
+    assert "research_shape" in rendered_system
+    assert "current_branch_depth" in rendered_system
+    assert "repeated_non_positive_family" in rendered_system
     assert "branch b1: route_merge_reinsertion lost" in rendered_system
     assert "## Compact Safety and Output Invariants" in user_prompt
     assert "Telemetry contract:" in user_prompt

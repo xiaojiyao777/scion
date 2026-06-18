@@ -50,6 +50,9 @@ from scion.proposal.context.cross_branch_research import (
     build_cross_branch_research_map,
     render_cross_branch_research_map,
 )
+from scion.proposal.context.research_shape import (
+    build_proposal_research_shape_diagnostics,
+)
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -772,6 +775,9 @@ class ContextManager:
         cross_branch_research = render_cross_branch_research_map(
             cross_branch_research_payload
         )
+        research_shape_diagnostics = build_proposal_research_shape_diagnostics(
+            cross_branch_research_payload
+        )
         branch_followup_policy_payload = build_branch_followup_policy(
             branch,
             safe_hypothesis_steps,
@@ -843,6 +849,7 @@ class ContextManager:
             "branch_dossier_payload": branch_dossier_payload,
             "cross_branch_research": cross_branch_research,
             "cross_branch_research_payload": cross_branch_research_payload,
+            "research_shape_diagnostics": research_shape_diagnostics,
             "cross_branch_research_audit_records": (
                 cross_branch_research_payload.get(
                     "material_difference_audit_records",

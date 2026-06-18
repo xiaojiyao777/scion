@@ -48,6 +48,7 @@ _MINIMAL_RESEARCH_CONTEXT_KEYS = frozenset(
         "objective_opportunity_profile",
         "objective_guidance",
         "research_log",
+        "research_shape_diagnostics",
         "runtime_feedback",
         "saturation_signal",
         "search_control_guidance",

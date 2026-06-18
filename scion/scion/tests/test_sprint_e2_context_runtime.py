@@ -1,6 +1,11 @@
 """Focused tests split from test_sprint_e2.py."""
 
+import json
+
 from .sprint_e2_test_support import *  # noqa: F401,F403
+from scion.proposal.engine.hypothesis_context_profiles import (
+    filter_hypothesis_context_for_prompt,
+)
 
 def test_build_hypothesis_context_includes_strategy_guidance(tmp_path):
     """T07/T08: build_hypothesis_context returns strategy_guidance key."""
@@ -22,6 +27,96 @@ def test_build_hypothesis_context_includes_strategy_guidance(tmp_path):
     ctx = cm.build_hypothesis_context(branch, champion, spec, [], [], step_history=[])
     assert "strategy_guidance" in ctx
     assert "exploration_coverage" in ctx
+
+
+def test_build_hypothesis_context_includes_prompt_research_shape_diagnostics(
+    tmp_path,
+):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="abc",
+        code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="x",
+    )
+    sibling = Branch(
+        branch_id="b2",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="x",
+    )
+    spec = ProblemSpec(
+        name="test",
+        root_dir=str(code_dir),
+        operator_categories=["route_pair", "route_local"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=[],
+            import_whitelist=[],
+        ),
+    )
+    steps = [
+        _make_step(
+            branch_id="b1",
+            round_num=1,
+            hypothesis_text="Try route-pair exchange on large cases",
+            locus="route_pair",
+            win_rate=0.0,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=2,
+            hypothesis_text="Refine route-pair exchange with a guard",
+            locus="route_pair",
+            win_rate=0.0,
+        ),
+        _make_step(
+            branch_id="b2",
+            round_num=1,
+            hypothesis_text="Try another route-pair exchange variant",
+            locus="route_pair",
+            win_rate=0.0,
+        ),
+    ]
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch,
+        champion,
+        spec,
+        [],
+        [],
+        sibling_branches=[sibling],
+        step_history=steps,
+    )
+
+    shape = json.loads(ctx["research_shape_diagnostics"])
+    assert shape["schema_version"] == "proposal_research_shape_prompt_summary.v1"
+    assert shape["decision_features_excluded"] is True
+    assert shape["branch_count"] == 2
+    assert shape["current_branch_depth"] == 2
+    assert shape["max_observed_branch_depth"] == 2
+    assert shape["repeated_non_positive_families"]
+
+    prompt_ctx = filter_hypothesis_context_for_prompt(ctx)
+    assert "cross_branch_research_payload" not in prompt_ctx
+    assert "research_shape_diagnostics" in prompt_ctx
+    system_blocks, user_prompt = _split_hypothesis_context(prompt_ctx)
+    rendered_prompt = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "## Compact Research Signals" in rendered_prompt
+    assert "research_shape" in rendered_prompt
+    assert "proposal_research_shape_prompt_summary.v1" in rendered_prompt
+    assert "current_branch_depth" in rendered_prompt
+    assert "repeated_non_positive_family" in rendered_prompt
+    assert "cross_branch_research_payload" not in rendered_prompt
 
 
 def test_build_hypothesis_context_uses_cvrp_family_taxonomy(tmp_path):

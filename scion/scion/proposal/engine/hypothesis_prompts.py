@@ -634,7 +634,9 @@ def _compact_research_signals(
             "runtime_feedback": _compact_text_signal(D["runtime_feedback"]),
             "cross_branch_index": _compact_cross_branch_signal_index(context, D),
             "branch_lesson_ids": _lesson_ids_from_context(context),
-            "research_shape": _compact_text_signal(D.get("research_shape_diagnostics")),
+            "research_shape": _compact_structured_signal(
+                D.get("research_shape_diagnostics")
+            ),
         }
     )
     if len(payload) <= 3:
@@ -666,6 +668,12 @@ def _compact_text_signal(
     if not text or text in {"(none)", "none", "null"}:
         return ""
     return text
+
+
+def _compact_structured_signal(value: Any) -> str:
+    if isinstance(value, (Mapping, list, tuple)):
+        return _compact_json(value)
+    return _compact_text_signal(value)
 
 
 def _compact_cross_branch_signal_index(
