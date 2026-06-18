@@ -82,3 +82,53 @@ Observed:
 ```text
 18 passed
 ```
+
+Focused broader local and WSL validation:
+
+```text
+pytest -q scion/scion/tests/unit/test_cvrp_active_solver_map_provider.py scion/scion/tests/unit/test_agentic_solver_design_active_tools.py scion/scion/tests/unit/test_cvrp_solver_design_provider.py scion/scion/tests/test_cvrp_solver_algorithm_runtime.py scion/scion/tests/unit/test_research_surfaces_cvrp_context.py scion/scion/tests/unit/test_agentic_solver_design_prompt_payloads.py
+```
+
+Observed locally and on WSL:
+
+```text
+79 passed
+```
+
+## Prepared Root Refresh
+
+Because this repair changes a `scion/scion` provider path that participates in
+runtime guard checks, both current launch-prepared roots were refreshed
+prepare-only from synchronized WSL checkout `8130c09`.
+
+CVRP:
+
+```text
+/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-size70ctx-8130c09-1r-gpt55-1r-gpt55-20260618T215237Z-claw
+```
+
+Warehouse:
+
+```text
+/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-size70ctx-8130c09-6r-gpt55-6r-gpt55-20260618T215433Z-claw
+```
+
+WSL readiness summary for both roots:
+
+```text
+static_ready=true
+ready_without_preflight=true
+git_runtime_consistent=ok, checkout matches manifest commit
+prepared_handoff/prompt_context_readiness/*.json:
+  ready_for_launch_prompt_audit=true
+  missing_required=[]
+strict launch readiness:
+  exit=64
+  launch_ready=false
+  HTTP 401
+  classification=not_authenticated
+  auth pool active=0 / refreshing=1 / total=1
+```
+
+No campaign was launched. Live launch remains blocked until the real
+`gpt-5.5` chat completion preflight returns HTTP 200 with non-empty output.

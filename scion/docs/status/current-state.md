@@ -76,13 +76,16 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-shapesignal-2f620ee-6r-gpt55-20260618T210606Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-size70ctx-8130c09-6r-gpt55-6r-gpt55-20260618T215433Z-claw`.
 
 CVRP/VRP:
 
 - CVRP can now steer target intent, carry branch lessons into prompts, generate
   material solver code, complete formal screening, preserve mechanism telemetry,
   and reject weak or negative hypotheses with evidence.
+- CVRP active solver context now marks the existing size70 two-opt fallback as
+  an active fact and readable scheduler slice, so follow-up agents should not
+  propose it as a missing mechanism.
 - CVRP still has not met v0.4 effective-research acceptance: no current
   solver-design branch has produced continuous improvement or promotion.
 - Do not repeat the rejected/default-avoid directions listed in `scion/TASK.md`
@@ -90,24 +93,23 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-shapesignal-2f620ee-1r-gpt55-20260618T210606Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-size70ctx-8130c09-1r-gpt55-1r-gpt55-20260618T215237Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `2f620ee`. Later
-  status/report commits are docs-only relative to those roots; strict WSL
+- The current CVRP and warehouse prepared roots were refreshed from runtime
+  checkout `8130c09` after the CVRP active solver context repair. Strict WSL
   readiness confirms both roots are statically ready, not started, and
   runtime-guard valid.
 - Both current prepared roots have regenerated `prompt_context_readiness`
   handoff artifacts with `ready_for_launch_prompt_audit=true` and
-  `missing_required=[]`. Static readiness still reports
-  `git_runtime_consistent=ok` because the runtime guard paths are unchanged.
+  `missing_required=[]`. Later docs-only status commits must still leave static
+  readiness at `git_runtime_consistent=ok` with unchanged runtime guard paths.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `expired=1` / `refreshing=0`,
-  and an `operator_action.login_url`.
+  `not_authenticated`, auth pool `active=0` / `refreshing=1` / `total=1`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
@@ -154,6 +156,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-branch-lesson-actionability-reason-mix-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`

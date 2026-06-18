@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `2f620ee` and pass strict static readiness; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `8130c09` and pass strict static readiness; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -426,15 +426,14 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
-  current `2f620ee` prepared roots were refreshed and pass static readiness.
-  After later docs-only status commits, strict readiness reports
-  `git_runtime_consistent=ok` with detail
-  `checkout differs, but runtime guard paths are unchanged`.
+  current prepared roots were refreshed from runtime checkout `8130c09` and pass
+  static readiness. Later docs-only status commits must keep strict readiness at
+  `git_runtime_consistent=ok` with unchanged runtime guard paths.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated`
-  (`auth_status.pool.active=0`, `expired=1`, `refreshing=0`).
+  (`auth_status.pool.active=0`, `refreshing=1`, `total=1`).
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
@@ -454,8 +453,10 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
   Current prepared contract measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
+  Current CVRP active solver context repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-shapesignal-2f620ee-1r-gpt55-20260618T210606Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-size70ctx-8130c09-1r-gpt55-1r-gpt55-20260618T215237Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -482,7 +483,7 @@ Current checkpoint:
   Current warehouse follow-up analysis-brief repair:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-shapesignal-2f620ee-6r-gpt55-20260618T210606Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-size70ctx-8130c09-6r-gpt55-6r-gpt55-20260618T215433Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
