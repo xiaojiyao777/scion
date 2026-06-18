@@ -250,14 +250,23 @@ Current checkpoint:
   Decision selected `expand_screening`; pair W/L/T was `13/11/8`, case W/L/T
   was `3/2/3`, and telemetry for the declared mechanism was observed. This is
   positive CVRP research-loop behavior, not promotion.
-- Campaign reopen/continuation is repaired for the next same-mechanism field
-  check: reopening an existing campaign now restores the persisted current
-  champion, active branch state, mechanism/evidence summaries, and existing
-  branch workspace mapping.
-- Next CVRP acceptance checkpoint: same-mechanism follow-up on
-  `demand_slack_regret_insertion` should reduce `CMT2`/`CMT4` losses while
-  preserving A/E/P gains and M/X neutrality. Avoid broad budget/gate changes,
-  VNS-removal sweeps, or a return to unchanged route-merge absorption variants.
+- Campaign reopen/continuation is repaired for copied-campaign follow-up:
+  reopening an existing campaign now restores the persisted current champion,
+  active branch state, mechanism/evidence summaries, branch workspace mapping,
+  active hypothesis, and candidate patch from recorded formal artifacts.
+- The same-mechanism `demand_slack_regret_insertion` follow-up from commit
+  `6e78a95` completed valid expanded screening and rejected the unchanged
+  branch as `quality_regression`: `48/48` valid pairs, pair W/L/T `16/28/4`,
+  case W/L/T `3/6/3`, median delta `-3.75`, CI `[-7.0, 1.75]`, final branch
+  state `parked_lineage`. CMT4 was retested and remained negative; prior
+  negative CMT2 was not included in the expanded set, so follow-up case
+  targeting remains a caveat.
+- Next CVRP checkpoint: do not continue the unchanged
+  `demand_slack_regret_insertion` patch. Either repair branch-specific
+  follow-up case targeting so prior negative cases such as CMT2 remain in
+  scope, or pivot to a materially different problem-owned solver-design
+  mechanism with explicit CMT2/CMT4 coverage. Avoid broad budget/gate changes,
+  VNS-removal sweeps, or unchanged route-merge absorption variants.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

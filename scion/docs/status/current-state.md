@@ -32,10 +32,11 @@ Warehouse:
 
 CVRP/VRP:
 
-- Framework plumbing is no longer the main known CVRP blocker for the current
-  slice. Target-intent/provider guidance injection is field-verified, formal
-  screening is completing with complete evidence, and branch-card evidence
-  retention is repaired for the tested paths.
+- Framework plumbing for copied-campaign continuation has now been repaired
+  through current champion, active branch, branch workspace, active hypothesis,
+  and candidate patch restoration. The remaining CVRP issue is research
+  targeting and solver mechanism quality, not basic inability to resume a
+  branch.
 - The older CVRP route-merge evidence remains negative as a solver result.
   Repeated
   `route_merge_repair` absorption/guarded variants either produced zero
@@ -45,29 +46,30 @@ CVRP/VRP:
   target-intent/proposal check escaped route-merge and generated
   `demand_slack_regret_insertion` in `destroy_repair.py`, with complete formal
   screening and direct mechanism telemetry.
-- The new CVRP candidate is not a solver improvement yet. Screening selected
-  `expand_screening` with pair W/L/T `13/11/8`, case W/L/T `3/2/3`, median
-  delta `0.0`, and losses on `CMT2`/`CMT4`. This is positive research-loop
-  behavior and an active marginal branch, not a promotion.
-- Campaign reopen/continuation state has been repaired for the next field
-  check: reopening a campaign now restores the persisted current champion,
-  active branches, mechanism/evidence summaries, and existing branch workspace
-  mapping needed for same-mechanism continuation.
+- The CVRP `demand_slack_regret_insertion` branch is now negative. A copied
+  WSL continuation from commit `6e78a95` completed valid expanded screening
+  with `48/48` valid pairs and `0` failures, then parked the lineage as
+  `quality_regression`: pair W/L/T `16/28/4`, case W/L/T `3/6/3`, median
+  delta `-3.75`, CI `[-7.0, 1.75]`. A/E gains survived only on selected cases;
+  CMT4 remained negative, and the expanded set did not retest prior-negative
+  CMT2.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
   absorption/guarded variants.
-- Next CVRP work should continue the same
-  `demand_slack_regret_insertion` mechanism to reduce `CMT2`/`CMT4` losses
-  while preserving A/E/P gains and M/X neutrality.
+- Next CVRP work should not continue the unchanged
+  `demand_slack_regret_insertion` patch. Either repair branch-specific
+  follow-up case targeting so prior negative cases such as `CMT2` stay in
+  scope, or pivot to a materially different problem-owned solver-design
+  mechanism with explicit CMT4/CMT2 acceptance coverage.
 
 ## Active Work
 
 - No LLM campaign is currently running.
 - Latest WSL artifacts are synced back to the server under
   `/home/clawd/research/scion-experiments/`.
-- Latest CVRP route-merge pivot field-check artifacts are synced back to:
-  `/home/clawd/research/scion-experiments/v04-cvrp-route-merge-pivot-guidance-agentic-1r-gpt55-20260618T031817Z-claw`.
+- Latest CVRP demand-slack follow-up artifacts are synced back to:
+  `/home/clawd/research/scion-experiments/v04-cvrp-demand-slack-followup-agentic-resume1r-6e78a95-20260618T042015Z-claw`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -76,11 +78,11 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Run a same-mechanism CVRP follow-up on `demand_slack_regret_insertion`.
-   Acceptance: the live traces keep the mechanism lineage visible, target the
-   `CMT2`/`CMT4` regressions, and preserve A/E/P gains plus M/X neutrality.
-2. If this branch expands again, inspect the field artifact for branch-card
-   evidence transfer into the next target-intent/hypothesis prompts.
+1. Do not rerun the unchanged `demand_slack_regret_insertion` candidate as the
+   next CVRP step; it is parked as quality regression.
+2. Decide the next CVRP slice: branch-specific follow-up case targeting
+   repair, or a materially different problem-owned solver-design mechanism with
+   explicit CMT2/CMT4 coverage.
 3. Clean up status/projection polish separately: abandoned branch DB rows retain
    mechanism/evidence, but their history-card projection can still drop compact
    status fields; in-flight `run_status.json` also remains too coarse during
@@ -105,6 +107,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-route-merge-pivot-guidance-agentic-1r-ff2e652-postrun-20260618.md`.
 - Campaign reopen continuation repair:
   `scion/docs/experiments/v0.4/v04-campaign-reopen-active-branch-restore-repair-20260618.md`.
+- CVRP demand-slack follow-up:
+  `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-followup-agentic-resume1r-6e78a95-postrun-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
