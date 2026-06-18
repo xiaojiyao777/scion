@@ -90,7 +90,9 @@ Infrastructure:
 ## Next Actions
 
 1. Restore and verify the live `gpt-5.5` route with a real chat-completion
-   preflight. `/v1/models` is not enough.
+   preflight. `/v1/models` is not enough; on WSL run
+   `scion/tools/check_gpt55_proxy.py --login-url-on-failure` and require
+   `CHAT_COMPLETION_OK`.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
    effect-vs-MDE, budget-exhausting runtime feedback, and postrun
