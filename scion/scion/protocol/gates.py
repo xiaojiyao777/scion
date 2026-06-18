@@ -203,11 +203,10 @@ def _trajectory_divergent_low_snr_expand(
         return False
     if _loss_heavy(wins=wins, losses=losses, observed=observed):
         return False
-    non_tie = wins + losses
-    non_tie_nonnegative = non_tie > 0 and wins >= losses
     high_tie = ties / observed >= 0.50
+    tie_dominant_nonnegative = high_tie and wins >= losses
     weak_nonnegative = wins > 0 and wins >= losses
-    return (high_tie and non_tie_nonnegative) or weak_nonnegative
+    return tie_dominant_nonnegative or weak_nonnegative
 
 
 def _screening_signal_counts(stats: EvalStats) -> tuple[int, int, int]:

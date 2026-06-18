@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -265,6 +265,10 @@ Current checkpoint:
   hypothesis must contrast the prior no-effect evidence rather than repeat the
   same activation/effect path. Report:
   `scion/docs/experiments/v0.4/v04-low-signal-same-branch-lesson-usage-repair-20260618.md`.
+- Trajectory-divergent all-tie screening now counts as low-SNR expand/continue
+  evidence instead of a win-rate failure when quality is non-regressive and no
+  runtime/candidate-failure veto is present. Report:
+  `scion/docs/experiments/v0.4/v04-trajectory-divergent-all-tie-low-snr-expand-repair-20260618.md`.
 - Measurement integration now has real-asset coverage for CVRP formal and
   warehouse production problem/protocol loading. Problem-owned practical
   deltas, runtime model, pairing validity, and reduced readiness feed

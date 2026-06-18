@@ -44,6 +44,10 @@ Framework:
   `same_branch_refinement` proposal requirements, so the next same-mechanism
   hypothesis must contrast the prior no-effect evidence instead of merely being
   allowed to continue.
+- Trajectory-divergent screening now treats all-tie, non-regressive evidence as
+  low-SNR expand/continue evidence rather than a win-rate failure. Negative
+  delta, loss-heavy evidence, candidate failures, and runtime vetoes still fail
+  closed.
 - Measurement integration is covered against real CVRP formal and warehouse
   production assets: problem-owned practical deltas, runtime model, pairing
   validity, and reduced readiness feed deterministic protocol config fields;
@@ -165,6 +169,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-low-signal-same-branch-scheduler-slot-repair-20260618.md`.
 - Current low-signal lesson-usage repair:
   `scion/docs/experiments/v0.4/v04-low-signal-same-branch-lesson-usage-repair-20260618.md`.
+- Current all-tie low-SNR expand repair:
+  `scion/docs/experiments/v0.4/v04-trajectory-divergent-all-tie-low-snr-expand-repair-20260618.md`.
 - Current measurement-integration repair:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - Current calibration evidence repair:

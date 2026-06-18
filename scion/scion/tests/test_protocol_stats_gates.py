@@ -291,6 +291,32 @@ def test_trajectory_divergent_tie_heavy_screening_expands_below_half_win_rate():
     )
 
 
+def test_trajectory_divergent_all_tie_screening_expands_as_low_snr():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=16,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        pair_wins=0,
+        pair_losses=0,
+        pair_ties=64,
+        valid_pairs=64,
+    )
+    config = ProtocolConfig.model_validate(
+        {"pairing_validity": "trajectory_divergent"}
+    )
+
+    result = screening_gate(stats, config)
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
 def test_trajectory_stable_tie_heavy_screening_still_fails_below_half_win_rate():
     stats = _make_stats(
         wins=3,

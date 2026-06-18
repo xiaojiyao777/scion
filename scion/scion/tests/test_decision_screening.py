@@ -330,6 +330,30 @@ def test_decision_trajectory_divergent_loss_heavy_does_not_expand():
     assert "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT" not in out.reason_codes
 
 
+def test_decision_trajectory_divergent_all_tie_screening_expands_as_low_snr():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=0,
+        losses=0,
+        ties=16,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        pair_wins=0,
+        pair_losses=0,
+        pair_ties=64,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.EXPAND_SCREENING
+    assert out.reason_codes == ("SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",)
+
+
 def test_decision_low_snr_expand_exhausted_continues_with_relaxed_lifecycle():
     engine = DecisionEngine(
         ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
