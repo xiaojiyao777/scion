@@ -96,6 +96,19 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["report_only"] is True
     assert prepared_manifest["decision_features_excluded"] is True
     assert prepared_manifest["problem_family"] == "warehouse_delivery"
+    assert prepared_manifest["research_focus"]["scope"] == (
+        "report_only_prepared_handoff"
+    )
+    assert "Champion v2" in prepared_manifest["research_focus"][
+        "accepted_checkpoint"
+    ]
+    assert any(
+        "split_delta_sum==0" in item
+        for item in prepared_manifest["research_focus"]["default_avoid_directions"]
+    )
+    assert "DecisionFeatures" in prepared_manifest["research_focus"][
+        "decision_boundary"
+    ]
     assert prepared_manifest["execution"]["rounds"] == 6
     assert prepared_manifest["config"]["warehouse_data_root"] == str(data_root)
     assert prepared_manifest["config"]["problem_v1"] == str(
@@ -120,6 +133,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     ]
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "Warehouse champion-v2" in prepared_manifest_md
+    assert "## Current Research Focus" in prepared_manifest_md
+    assert "split_delta_sum==0" in prepared_manifest_md
     assert stat.S_IMODE(launch_env_path.stat().st_mode) == 0o600
     assert f"REPO_ROOT={PROJECT_ROOT}" in launch_env
     assert f"SCION_DIR={SCION_DIR}" in launch_env
@@ -256,6 +271,12 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "Warehouse champion-v2" in prepared_brief["prepared_run_contract"][
         "analysis_intent"
     ]
+    assert prepared_brief["prepared_run_contract"]["research_focus"][
+        "scope"
+    ] == "report_only_prepared_handoff"
+    assert "Champion v2" in prepared_brief["prepared_run_contract"][
+        "research_focus"
+    ]["accepted_checkpoint"]
     assert any(
         "promotion behavior" in item
         for item in prepared_brief["prepared_run_contract"]["acceptance_focus"]
@@ -273,7 +294,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         encoding="utf-8"
     )
     assert "## Prepared Run Contract" in brief_md.read_text(encoding="utf-8")
+    assert "Current research focus" in brief_md.read_text(encoding="utf-8")
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")
+    assert "### Prepared Research Focus" in inventory_md.read_text(encoding="utf-8")
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 

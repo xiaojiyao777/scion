@@ -51,6 +51,40 @@ WAREHOUSE_ANALYSIS_INTENT = (
     "prompt context, runtime/model explanation, and whether any plateau is real "
     "or a missed continuous-promotion opportunity."
 )
+WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
+    "restart from baseline instead of champion v2",
+    "treat proposal-quality blocks as plateau evidence",
+    "treat fast completion as incidental noise rather than runtime-model evidence",
+    "treat split_delta_sum==0 as no effect when cost_delta_sum is positive",
+    "repeat unbounded merge_vehicles or swap_orders variants without validation-transfer risk controls",
+    "launch a broad warehouse matrix before the focused v2 follow-up is analyzed",
+)
+WAREHOUSE_CURRENT_RESEARCH_FOCUS = {
+    "schema_version": "scion.warehouse_research_focus.v1",
+    "scope": "report_only_prepared_handoff",
+    "accepted_checkpoint": (
+        "Champion v2 promoted from the validation-transfer acceptance-contract "
+        "run via split-preserving cost compression in pack_compatible_vehicles."
+    ),
+    "current_question": (
+        "Starting from champion v2, determine whether warehouse can produce "
+        "additional useful research or whether the observed behavior is a real "
+        "post-v2 plateau."
+    ),
+    "required_evidence": [
+        "preserve or improve promotion behavior relative to the v2 checkpoint",
+        "inspect branch transfer from the v2 source campaign before judging plateau",
+        "distinguish quality-blocked proposals from protocol-evaluated no-effect candidates",
+        "interpret split-preserving cost-compression with cost_delta and improving-move telemetry, not split_delta alone",
+        "explain fast completion through the declared warehouse runtime/problem model",
+    ],
+    "default_avoid_directions": list(WAREHOUSE_DEFAULT_AVOID_DIRECTIONS),
+    "decision_boundary": (
+        "This focus is proposal/delegated-analysis guidance only and must not "
+        "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
+        "state."
+    ),
+}
 POSTRUN_ACCEPTANCE_FAMILIES = (
     "summaries",
     "failures",
@@ -516,6 +550,7 @@ def _write_prepared_run_manifest(
         "promotion_state_mutated": False,
         "problem_family": "warehouse_delivery",
         "analysis_intent": WAREHOUSE_ANALYSIS_INTENT,
+        "research_focus": WAREHOUSE_CURRENT_RESEARCH_FOCUS,
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,
@@ -563,6 +598,9 @@ def _write_prepared_run_manifest(
             "Check that existing warehouse promotion behavior does not regress.",
             "Distinguish real plateau from missed continuous-promotion opportunities.",
             "Explain observed fast completion through the declared runtime/problem model.",
+            "Use research_focus to separate champion-v2 follow-up evidence from "
+            "quality-block, fast-completion, or split-delta-only false plateau "
+            "signals.",
             "Treat this manifest as launch/handoff evidence only, not as Decision input.",
         ],
         "started_utc": str(env["STARTED_UTC"]),
@@ -581,9 +619,11 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
     config = manifest["config"]
     execution = manifest["execution"]
     reports = manifest["report_metadata"]
+    research_focus = manifest["research_focus"]
     assert isinstance(config, dict)
     assert isinstance(execution, dict)
     assert isinstance(reports, dict)
+    assert isinstance(research_focus, dict)
     lines = [
         "# Prepared Run Manifest",
         "",
@@ -599,8 +639,21 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "## Analysis Intent",
         str(manifest["analysis_intent"]),
         "",
-        "## Config",
+        "## Current Research Focus",
+        f"- Accepted checkpoint: {research_focus['accepted_checkpoint']}",
+        f"- Question: {research_focus['current_question']}",
+        f"- Decision boundary: {research_focus['decision_boundary']}",
+        "- Required evidence:",
     ]
+    for item in research_focus["required_evidence"]:
+        lines.append(f"  - {item}")
+    lines.append("- Default-avoid directions:")
+    for item in research_focus["default_avoid_directions"]:
+        lines.append(f"  - {item}")
+    lines.extend([
+        "",
+        "## Config",
+    ])
     for key in (
         "problem",
         "problem_v1",

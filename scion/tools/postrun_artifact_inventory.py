@@ -245,7 +245,18 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             [
                 "",
                 "### Prepared Research Focus",
+                f"- Accepted checkpoint: {_display(research_focus.get('accepted_checkpoint'))}",
                 f"- Question: {_display(research_focus.get('current_question'))}",
+                "- Required evidence:",
+            ]
+        )
+        required = research_focus.get("required_evidence")
+        if isinstance(required, list) and required:
+            lines.extend(f"  - {_display(item)}" for item in required)
+        else:
+            lines.append("  - None recorded in the prepared manifest.")
+        lines.extend(
+            [
                 "- Default-avoid directions:",
             ]
         )
