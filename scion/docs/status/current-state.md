@@ -74,6 +74,11 @@ CVRP/VRP:
   bad candidates, and CVRP provider guidance has been tightened to keep
   `mechanism_changes` on `route_merge_repair` and restrict candidate telemetry
   to stable `record_phase`/`record_iteration`/`record_move` helpers.
+- The immediate `ce2fa45` rerun showed the target-intent prompt still omitted
+  the new provider guidance in the real WSL path, because the prompt detector
+  did not treat `research_surfaces` as solver-design context. That injection
+  path is now repaired in the generic proposal prompt layer while the
+  route-merge semantics remain CVRP-owned.
 
 ## Active Work
 
@@ -85,10 +90,10 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Rerun the short CVRP agentic field check after committing the tightened
-   provider guidance. Acceptance first requires target-intent, hypothesis, and
-   code to stay on `destroy_repair.py` / `route_merge_repair`; only then should
-   screening quality be interpreted.
+1. Rerun the short CVRP agentic field check after committing the target-intent
+   guidance-injection repair. Acceptance first requires target-intent,
+   hypothesis, and code to stay on `destroy_repair.py` / `route_merge_repair`;
+   only then should screening quality be interpreted.
 2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.
@@ -112,6 +117,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-post-share70-targetselect-agentic-1r-7557a15-postrun-20260617.md`.
 - CVRP route-merge guarded field failure:
   `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-71666ae-field-failure-20260618.md`.
+- CVRP route-merge target-intent guidance injection repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-route-merge-target-intent-guidance-injection-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

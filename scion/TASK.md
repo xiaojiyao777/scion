@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair same-mechanism guidance tightened after field failure; rerun required*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent guidance injection repaired; rerun required*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled

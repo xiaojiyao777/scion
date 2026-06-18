@@ -113,6 +113,32 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "local-search operator, or scheduler policy is a different branch" in user_prompt
 
 
+def test_solver_design_target_intent_prompt_uses_research_surface_context() -> None:
+    _system_blocks, user_prompt = _split_hypothesis_target_intent_context(
+        {
+            "problem_summary": "CVRP.",
+            "research_surfaces": "solver_design [solver_design]",
+            "objective_policy_guidance": "",
+            "solver_mechanics": "",
+            "champion_operators_code": "",
+            "champion_stats": "{}",
+            "operator_categories": "",
+            "available_actions": "modify",
+            "targetable_files": "policies/baseline_modules/destroy_repair.py",
+            "active_problem_boundary_surfaces": "",
+            "solver_design_prompt_provider": {"sanitized": True},
+            "solver_design_prompt_provider_ref": (
+                "scion.problems.cvrp.solver_design_provider."
+                "CvrpSolverDesignProvider"
+            ),
+        }
+    )
+
+    assert "Solver-design target-selection guidance" in user_prompt
+    assert "Current active non-scheduler branch" in user_prompt
+    assert "proposed `mechanism_changes` id remains `route_merge_repair`" in user_prompt
+
+
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
     client = CapturingToolClient()
     creative = CreativeLayer(client)

@@ -406,6 +406,8 @@ def _split_hypothesis_target_intent_context(
         forced_surface=forced_surface,
         active_boundary=active_boundary,
         operator_categories=str(D["operator_categories"]),
+        research_surfaces=str(D["research_surfaces"]),
+        targetable_files=targetable_files,
     ):
         task_lines.append("Solver-design target-selection guidance:")
         task_lines.extend(_solver_design_target_intent_guidance(context))
@@ -430,8 +432,16 @@ def _target_intent_solver_design_context(
     forced_surface: str,
     active_boundary: str,
     operator_categories: str,
+    research_surfaces: str = "",
+    targetable_files: str = "",
 ) -> bool:
-    for value in (forced_surface, active_boundary, operator_categories):
+    for value in (
+        forced_surface,
+        active_boundary,
+        operator_categories,
+        research_surfaces,
+        targetable_files,
+    ):
         if "solver_design" in str(value or ""):
             return True
     return False
