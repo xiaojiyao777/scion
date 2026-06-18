@@ -558,6 +558,9 @@ def _trace_fingerprints(
                     "block_family_summary": _prompt_block_family_summary(
                         prompt_manifest
                     ),
+                    "source_visibility_summary": _prompt_source_visibility_summary(
+                        prompt_manifest
+                    ),
                     "omitted_sections": _string_list(
                         prompt_manifest.get("omitted_sections")
                     ),
@@ -603,6 +606,150 @@ def _prompt_block_family_summary(prompt_manifest: Mapping[str, Any]) -> dict[str
                 or token_accounting.get("provider_visible_token_estimate")
             ),
             "families": compact_families,
+        }
+    )
+
+
+def _prompt_source_visibility_summary(
+    prompt_manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not prompt_manifest:
+        return {}
+    code_guarantees = _mapping(
+        prompt_manifest.get("code_phase_source_guarantees")
+    )
+    if not code_guarantees:
+        code_guarantees = _mapping(
+            _mapping(prompt_manifest.get("code_file_visibility_ledger")).get(
+                "source_visibility_guarantees"
+            )
+        )
+    code_ledger = _mapping(prompt_manifest.get("code_file_visibility_ledger"))
+    hypothesis_ledger = _mapping(
+        prompt_manifest.get("hypothesis_target_source_visibility_ledger")
+    )
+    return _drop_empty(
+        {
+            "schema_version": "scion.prompt_source_visibility_fingerprint.v1",
+            "code_phase_guarantees": _compact_code_phase_guarantees(
+                code_guarantees
+            ),
+            "code_file_visibility": _compact_code_file_visibility(code_ledger),
+            "hypothesis_target_source_visibility": (
+                _compact_hypothesis_target_source_visibility(hypothesis_ledger)
+            ),
+        }
+    )
+
+
+def _compact_code_phase_guarantees(
+    guarantees: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not guarantees:
+        return {}
+    return _drop_empty(
+        {
+            "schema_version": guarantees.get("schema_version"),
+            "target_source_visible": _bool_or_none(
+                guarantees.get("target_source_visible")
+            ),
+            "required_integration_source_visible": _bool_or_none(
+                guarantees.get("required_integration_source_visible")
+            ),
+            "algorithm_file_read_source_visible": _bool_or_none(
+                guarantees.get("algorithm_file_read_source_visible")
+            ),
+            "protected_source_visible": _bool_or_none(
+                guarantees.get("protected_source_visible")
+            ),
+            "target_file_create_mode": _bool_or_none(
+                guarantees.get("target_file_create_mode")
+            ),
+            "required_integration_source_count": _int_or_none(
+                guarantees.get("required_integration_source_count")
+            ),
+            "algorithm_file_read_source_count": _int_or_none(
+                guarantees.get("algorithm_file_read_source_count")
+            ),
+            "missing_required_source_paths": _string_list(
+                guarantees.get("missing_required_source_paths")
+            ),
+            "duplicate_target_paths_satisfied_by_target_source": _string_list(
+                guarantees.get("duplicate_target_paths_satisfied_by_target_source")
+            ),
+        }
+    )
+
+
+def _compact_code_file_visibility(
+    ledger: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not ledger:
+        return {}
+    target = _mapping(ledger.get("target_file"))
+    integration_files = [
+        item
+        for item in ledger.get("integration_files") or []
+        if isinstance(item, Mapping)
+    ]
+    algorithm_reads = [
+        item
+        for item in ledger.get("algorithm_file_reads") or []
+        if isinstance(item, Mapping)
+    ]
+    visible_integration = sum(
+        1
+        for item in integration_files
+        if item.get("full_content_visible_in_rendered_prompt") is True
+    )
+    visible_algorithm_reads = sum(
+        1
+        for item in algorithm_reads
+        if item.get("full_content_visible_in_rendered_prompt") is True
+    )
+    return _drop_empty(
+        {
+            "schema_version": ledger.get("schema_version"),
+            "target_visibility_status": target.get("visibility_status"),
+            "target_prompt_visibility_status": target.get(
+                "prompt_visibility_status"
+            ),
+            "target_source_status": target.get("source_status"),
+            "target_source_provenance": target.get("source_provenance"),
+            "target_full_content_visible": _bool_or_none(
+                target.get("full_content_visible_in_rendered_prompt")
+            ),
+            "integration_file_count": len(integration_files),
+            "integration_files_full_content_visible_count": visible_integration,
+            "algorithm_file_read_count": len(algorithm_reads),
+            "algorithm_file_reads_full_content_visible_count": (
+                visible_algorithm_reads
+            ),
+        }
+    )
+
+
+def _compact_hypothesis_target_source_visibility(
+    ledger: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not ledger:
+        return {}
+    owner_source = _mapping(ledger.get("owner_source"))
+    placeholder = _mapping(ledger.get("placeholder"))
+    return _drop_empty(
+        {
+            "schema_version": ledger.get("schema_version"),
+            "target_source_required": _bool_or_none(
+                ledger.get("target_source_required")
+            ),
+            "visibility_status": ledger.get("visibility_status"),
+            "preflight_section_status": ledger.get("preflight_section_status"),
+            "owner_source_visible": _bool_or_none(
+                owner_source.get("full_content_visible_in_dedicated_source_section")
+                or owner_source.get("content_preview_visible_in_rendered_prompt")
+                or owner_source.get("full_content_visible_in_rendered_prompt")
+            ),
+            "placeholder_visible": _bool_or_none(placeholder.get("visible")),
         }
     )
 
@@ -1316,6 +1463,12 @@ def _int_or_none(value: Any) -> int | None:
 def _int_or_zero(value: Any) -> int:
     result = _int_or_none(value)
     return result if result is not None else 0
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
 
 
 def _float_or_none(value: Any) -> float | None:

@@ -107,6 +107,16 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
     trace = session["trace_fingerprints"][0]
     assert trace["prompt_hash"] == "prompt-hash-hypothesis"
     assert trace["visibility_ledger_digest"] == "ledger-hypothesis"
+    hypothesis_source_visibility = trace["source_visibility_summary"][
+        "hypothesis_target_source_visibility"
+    ]
+    assert hypothesis_source_visibility == {
+        "schema_version": "hypothesis-target-source-visibility-ledger.v1",
+        "target_source_required": True,
+        "visibility_status": "full_dedicated_source_visible",
+        "preflight_section_status": "included",
+        "owner_source_visible": True,
+    }
     assert trace["block_family_summary"]["families"]["research_signal"] == {
         "char_count": 40,
         "token_estimate": 10,
@@ -120,6 +130,29 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
         "long_feedback",
         "branch_lesson_usage_context",
     ]
+    code_trace = session["trace_fingerprints"][1]
+    code_source_visibility = code_trace["source_visibility_summary"]
+    assert code_source_visibility["code_phase_guarantees"] == {
+        "schema_version": "code-phase-source-visibility-guarantees.v1",
+        "target_source_visible": True,
+        "required_integration_source_visible": True,
+        "algorithm_file_read_source_visible": True,
+        "protected_source_visible": True,
+        "target_file_create_mode": False,
+        "required_integration_source_count": 1,
+        "algorithm_file_read_source_count": 1,
+    }
+    assert code_source_visibility["code_file_visibility"] == {
+        "schema_version": "code-file-visibility-ledger.v1",
+        "target_prompt_visibility_status": "full_current_source_visible",
+        "target_source_status": "current_branch_source",
+        "target_source_provenance": "branch_workspace",
+        "target_full_content_visible": True,
+        "integration_file_count": 1,
+        "integration_files_full_content_visible_count": 1,
+        "algorithm_file_read_count": 1,
+        "algorithm_file_reads_full_content_visible_count": 1,
+    }
 
 
 def test_manifest_stores_sanitized_control_pair_key_only_at_top_level(
@@ -1023,4 +1056,48 @@ def _write_prompt_manifest(
         "user_prompt": "RAW PROMPT SHOULD NOT LEAK",
         "system_blocks": [{"text": "RAW PROMPT SHOULD NOT LEAK"}],
     }
+    if call_kind == "code":
+        payload["code_phase_source_guarantees"] = {
+            "schema_version": "code-phase-source-visibility-guarantees.v1",
+            "target_source_visible": True,
+            "required_integration_source_visible": True,
+            "algorithm_file_read_source_visible": True,
+            "protected_source_visible": True,
+            "target_file_create_mode": False,
+            "required_integration_source_count": 1,
+            "algorithm_file_read_source_count": 1,
+            "missing_required_source_paths": [],
+        }
+        payload["code_file_visibility_ledger"] = {
+            "schema_version": "code-file-visibility-ledger.v1",
+            "target_file": {
+                "file_path": "solver.py",
+                "source_status": "current_branch_source",
+                "source_provenance": "branch_workspace",
+                "prompt_visibility_status": "full_current_source_visible",
+                "full_content_visible_in_rendered_prompt": True,
+            },
+            "integration_files": [
+                {
+                    "file_path": "policies/baseline_algorithm.py",
+                    "full_content_visible_in_rendered_prompt": True,
+                }
+            ],
+            "algorithm_file_reads": [
+                {
+                    "file_path": "policies/baseline_modules/scheduler.py",
+                    "full_content_visible_in_rendered_prompt": True,
+                }
+            ],
+        }
+    if call_kind.startswith("hypothesis"):
+        payload["hypothesis_target_source_visibility_ledger"] = {
+            "schema_version": "hypothesis-target-source-visibility-ledger.v1",
+            "target_source_required": True,
+            "visibility_status": "full_dedicated_source_visible",
+            "preflight_section_status": "included",
+            "owner_source": {
+                "full_content_visible_in_dedicated_source_section": True,
+            },
+        }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

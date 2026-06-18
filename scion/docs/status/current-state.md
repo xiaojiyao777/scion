@@ -36,9 +36,10 @@ Framework:
   summarize the current-run continuity metrics for delegated review. Postrun
   analysis briefs also summarize current-run branch/event/hypothesis state,
   protocol/formal-candidate accounting, measurement effect-vs-MDE, prompt
-  context/source visibility, prompt signal density, runtime feedback/drain
-  behavior, and failure taxonomy/proposal quality without exposing raw prompts,
-  responses, patches, raw logs, or mutating runtime semantics.
+  context/source visibility, code/hypothesis source-visibility guarantees,
+  prompt signal density, runtime feedback/drain behavior, and failure
+  taxonomy/proposal quality without exposing raw prompts, responses, patches,
+  raw logs, source bodies, or mutating runtime semantics.
 - These accepted repairs are continuation/reporting/launcher repairs. They do
   not change Decision, `DecisionFeatures`, scheduling, budgets, lifecycle
   policy, or problem semantics.
@@ -198,6 +199,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-protocol-accounting-brief-repair-20260618.md`.
   Current branch state brief repair:
   `scion/docs/experiments/v0.4/v04-postrun-branch-state-brief-repair-20260618.md`.
+  Current source visibility brief repair:
+  `scion/docs/experiments/v0.4/v04-postrun-source-visibility-brief-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

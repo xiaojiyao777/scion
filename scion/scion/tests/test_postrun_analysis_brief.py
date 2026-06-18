@@ -316,6 +316,22 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                         {
                             "call_kind": "hypothesis",
                             "visibility_ledger_digest": "visibility-ledger-1",
+                            "source_visibility_summary": {
+                                "schema_version": (
+                                    "scion.prompt_source_visibility_fingerprint.v1"
+                                ),
+                                "hypothesis_target_source_visibility": {
+                                    "schema_version": (
+                                        "hypothesis-target-source-visibility-ledger.v1"
+                                    ),
+                                    "target_source_required": True,
+                                    "visibility_status": (
+                                        "full_dedicated_source_visible"
+                                    ),
+                                    "preflight_section_status": "included",
+                                    "owner_source_visible": True,
+                                },
+                            },
                             "block_family_summary": {
                                 "total_chars": 140,
                                 "total_token_estimate": 35,
@@ -343,6 +359,37 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                         {
                             "call_kind": "code",
                             "visibility_ledger_digest": "visibility-ledger-2",
+                            "source_visibility_summary": {
+                                "schema_version": (
+                                    "scion.prompt_source_visibility_fingerprint.v1"
+                                ),
+                                "code_phase_guarantees": {
+                                    "schema_version": (
+                                        "code-phase-source-visibility-guarantees.v1"
+                                    ),
+                                    "target_source_visible": True,
+                                    "required_integration_source_visible": True,
+                                    "algorithm_file_read_source_visible": True,
+                                    "protected_source_visible": True,
+                                    "target_file_create_mode": False,
+                                    "required_integration_source_count": 1,
+                                    "algorithm_file_read_source_count": 1,
+                                    "missing_required_source_paths": [],
+                                },
+                                "code_file_visibility": {
+                                    "schema_version": "code-file-visibility-ledger.v1",
+                                    "target_source_status": "current_branch_source",
+                                    "target_source_provenance": "branch_workspace",
+                                    "target_prompt_visibility_status": (
+                                        "full_current_source_visible"
+                                    ),
+                                    "target_full_content_visible": True,
+                                    "integration_file_count": 1,
+                                    "integration_files_full_content_visible_count": 1,
+                                    "algorithm_file_read_count": 1,
+                                    "algorithm_file_reads_full_content_visible_count": 1,
+                                },
+                            },
                             "block_family_summary": {
                                 "total_chars": 80,
                                 "total_token_estimate": 20,
@@ -662,6 +709,32 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         },
         "source_code": {"char_count": 60, "token_estimate": 15, "trace_count": 1},
     }
+    assert aggregate["source_visibility"] == {
+        "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "trace_count": 2,
+        "code_trace_count": 1,
+        "code_target_source_visible_count": 1,
+        "code_target_source_missing_count": 0,
+        "code_protected_source_visible_count": 1,
+        "code_protected_source_missing_count": 0,
+        "code_required_integration_source_visible_count": 1,
+        "code_algorithm_file_read_source_visible_count": 1,
+        "code_missing_required_source_trace_count": 0,
+        "code_missing_required_source_path_counts": {},
+        "code_target_source_status_counts": {"current_branch_source": 1},
+        "code_target_visibility_status_counts": {
+            "full_current_source_visible": 1
+        },
+        "hypothesis_target_source_trace_count": 1,
+        "hypothesis_target_source_required_count": 1,
+        "hypothesis_target_source_visible_count": 1,
+        "hypothesis_target_source_not_visible_count": 0,
+        "hypothesis_target_visibility_status_counts": {
+            "full_dedicated_source_visible": 1
+        },
+    }
     assert aggregate["signal_density"] == {
         "schema_version": "scion.postrun_prompt_signal_density.v1",
         "report_only": True,
@@ -748,6 +821,12 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     assert "## Prompt Context Visibility Summary" in markdown
     assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
+    assert "- Code source visibility traces: 1" in markdown
+    assert (
+        "- Hypothesis target source traces/required/visible/not-visible: "
+        "1 / 1 / 1 / 0"
+        in markdown
+    )
     assert (
         "- Signal density shares: 0.363636 / 0.272727 / 0.090909 / 0.272727"
         in markdown

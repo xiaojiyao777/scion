@@ -654,6 +654,33 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"- Call kinds: {_mapping_text(aggregate.get('call_kind_counts'))}",
         ]
     )
+    source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
+    if source_visibility:
+        lines.extend(
+            [
+                "- Code source visibility traces: "
+                f"{_display(source_visibility.get('code_trace_count'))}",
+                "- Code target/protected/required-integration/algorithm visible: "
+                f"{_display(source_visibility.get('code_target_source_visible_count'))} / "
+                f"{_display(source_visibility.get('code_protected_source_visible_count'))} / "
+                f"{_display(source_visibility.get('code_required_integration_source_visible_count'))} / "
+                f"{_display(source_visibility.get('code_algorithm_file_read_source_visible_count'))}",
+                "- Code missing target/protected/required-source traces: "
+                f"{_display(source_visibility.get('code_target_source_missing_count'))} / "
+                f"{_display(source_visibility.get('code_protected_source_missing_count'))} / "
+                f"{_display(source_visibility.get('code_missing_required_source_trace_count'))}",
+                "- Code target source/status: "
+                f"{_mapping_text(source_visibility.get('code_target_source_status_counts'))} / "
+                f"{_mapping_text(source_visibility.get('code_target_visibility_status_counts'))}",
+                "- Hypothesis target source traces/required/visible/not-visible: "
+                f"{_display(source_visibility.get('hypothesis_target_source_trace_count'))} / "
+                f"{_display(source_visibility.get('hypothesis_target_source_required_count'))} / "
+                f"{_display(source_visibility.get('hypothesis_target_source_visible_count'))} / "
+                f"{_display(source_visibility.get('hypothesis_target_source_not_visible_count'))}",
+                "- Hypothesis target visibility statuses: "
+                f"{_mapping_text(source_visibility.get('hypothesis_target_visibility_status_counts'))}",
+            ]
+        )
     density = _mapping_or_empty(aggregate.get("signal_density"))
     if density:
         lines.extend(
@@ -2006,6 +2033,7 @@ def _empty_prompt_context_aggregate() -> dict[str, Any]:
         "block_family_totals": {},
         "omitted_section_counts": {},
         "truncated_section_counts": {},
+        "source_visibility": _empty_prompt_source_visibility_aggregate(),
         "signal_density": {},
     }
 
@@ -2056,6 +2084,7 @@ def _proposal_trajectory_context_entry(path: Path) -> dict[str, Any]:
         "block_family_totals": {},
         "omitted_section_counts": {},
         "truncated_section_counts": {},
+        "source_visibility": _empty_prompt_source_visibility_aggregate(),
     }
     for session in sessions:
         if not isinstance(session, Mapping):
@@ -2076,6 +2105,10 @@ def _add_prompt_trace_context(entry: dict[str, Any], trace: Mapping[str, Any]) -
     _increment_count(entry["call_kind_counts"], call_kind)
     if trace.get("visibility_ledger_digest"):
         entry["visibility_digest_count"] += 1
+    _add_prompt_source_visibility(
+        entry["source_visibility"],
+        trace.get("source_visibility_summary"),
+    )
 
     block_summary = _mapping_or_empty(trace.get("block_family_summary"))
     families = _mapping_or_empty(block_summary.get("families"))
@@ -2120,6 +2153,10 @@ def _merge_prompt_context_aggregate(
             continue
         for item_key, value in sorted(source.items()):
             _increment_count(target, str(item_key), _int_or_zero(value))
+    _merge_prompt_source_visibility(
+        aggregate["source_visibility"],
+        _mapping_or_empty(entry.get("source_visibility")),
+    )
     families = entry.get("block_family_totals")
     if isinstance(families, Mapping):
         for family, raw in sorted(families.items()):
@@ -2129,10 +2166,143 @@ def _merge_prompt_context_aggregate(
 
 def _with_prompt_signal_density(aggregate: dict[str, Any]) -> dict[str, Any]:
     enriched = dict(aggregate)
+    if not _prompt_source_visibility_has_counts(
+        _mapping_or_empty(enriched.get("source_visibility"))
+    ):
+        enriched["source_visibility"] = {}
     enriched["signal_density"] = _prompt_signal_density(
         _mapping_or_empty(enriched.get("block_family_totals"))
     )
     return enriched
+
+
+def _empty_prompt_source_visibility_aggregate() -> dict[str, Any]:
+    return {
+        "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "trace_count": 0,
+        "code_trace_count": 0,
+        "code_target_source_visible_count": 0,
+        "code_target_source_missing_count": 0,
+        "code_protected_source_visible_count": 0,
+        "code_protected_source_missing_count": 0,
+        "code_required_integration_source_visible_count": 0,
+        "code_algorithm_file_read_source_visible_count": 0,
+        "code_missing_required_source_trace_count": 0,
+        "code_missing_required_source_path_counts": {},
+        "code_target_source_status_counts": {},
+        "code_target_visibility_status_counts": {},
+        "hypothesis_target_source_trace_count": 0,
+        "hypothesis_target_source_required_count": 0,
+        "hypothesis_target_source_visible_count": 0,
+        "hypothesis_target_source_not_visible_count": 0,
+        "hypothesis_target_visibility_status_counts": {},
+    }
+
+
+def _add_prompt_source_visibility(
+    target: dict[str, Any],
+    raw_summary: Any,
+) -> None:
+    summary = _mapping_or_empty(raw_summary)
+    if not summary:
+        return
+    target["trace_count"] += 1
+
+    code_guarantees = _mapping_or_empty(summary.get("code_phase_guarantees"))
+    code_visibility = _mapping_or_empty(summary.get("code_file_visibility"))
+    if code_guarantees or code_visibility:
+        target["code_trace_count"] += 1
+        if code_guarantees.get("target_source_visible") is True:
+            target["code_target_source_visible_count"] += 1
+        elif code_guarantees.get("target_source_visible") is False:
+            target["code_target_source_missing_count"] += 1
+        if code_guarantees.get("protected_source_visible") is True:
+            target["code_protected_source_visible_count"] += 1
+        elif code_guarantees.get("protected_source_visible") is False:
+            target["code_protected_source_missing_count"] += 1
+        if code_guarantees.get("required_integration_source_visible") is True:
+            target["code_required_integration_source_visible_count"] += 1
+        if code_guarantees.get("algorithm_file_read_source_visible") is True:
+            target["code_algorithm_file_read_source_visible_count"] += 1
+        missing_paths = _string_items(
+            code_guarantees.get("missing_required_source_paths")
+        )
+        if missing_paths:
+            target["code_missing_required_source_trace_count"] += 1
+        for path in missing_paths:
+            _increment_count(target["code_missing_required_source_path_counts"], path)
+        _increment_count(
+            target["code_target_source_status_counts"],
+            str(code_visibility.get("target_source_status") or "unknown"),
+        )
+        _increment_count(
+            target["code_target_visibility_status_counts"],
+            str(code_visibility.get("target_prompt_visibility_status") or "unknown"),
+        )
+
+    hypothesis_visibility = _mapping_or_empty(
+        summary.get("hypothesis_target_source_visibility")
+    )
+    if hypothesis_visibility:
+        target["hypothesis_target_source_trace_count"] += 1
+        if hypothesis_visibility.get("target_source_required") is True:
+            target["hypothesis_target_source_required_count"] += 1
+        status = str(hypothesis_visibility.get("visibility_status") or "unknown")
+        _increment_count(
+            target["hypothesis_target_visibility_status_counts"],
+            status,
+        )
+        visible = (
+            hypothesis_visibility.get("owner_source_visible") is True
+            or hypothesis_visibility.get("placeholder_visible") is True
+            or status not in {"not_visible", "unknown"}
+        )
+        if visible:
+            target["hypothesis_target_source_visible_count"] += 1
+        else:
+            target["hypothesis_target_source_not_visible_count"] += 1
+
+
+def _merge_prompt_source_visibility(
+    target: dict[str, Any],
+    source: Mapping[str, Any],
+) -> None:
+    if not source:
+        return
+    for key in (
+        "trace_count",
+        "code_trace_count",
+        "code_target_source_visible_count",
+        "code_target_source_missing_count",
+        "code_protected_source_visible_count",
+        "code_protected_source_missing_count",
+        "code_required_integration_source_visible_count",
+        "code_algorithm_file_read_source_visible_count",
+        "code_missing_required_source_trace_count",
+        "hypothesis_target_source_trace_count",
+        "hypothesis_target_source_required_count",
+        "hypothesis_target_source_visible_count",
+        "hypothesis_target_source_not_visible_count",
+    ):
+        target[key] = _int_or_zero(target.get(key)) + _int_or_zero(source.get(key))
+    for key in (
+        "code_missing_required_source_path_counts",
+        "code_target_source_status_counts",
+        "code_target_visibility_status_counts",
+        "hypothesis_target_visibility_status_counts",
+    ):
+        target_counts = target[key]
+        source_counts = source.get(key)
+        if not isinstance(source_counts, Mapping):
+            continue
+        for item_key, value in sorted(source_counts.items()):
+            _increment_count(target_counts, str(item_key), _int_or_zero(value))
+
+
+def _prompt_source_visibility_has_counts(source_visibility: Mapping[str, Any]) -> bool:
+    return _int_or_zero(source_visibility.get("trace_count")) > 0
 
 
 def _prompt_signal_density(families: Mapping[str, Any]) -> dict[str, Any]:
