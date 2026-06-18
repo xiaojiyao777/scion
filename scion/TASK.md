@@ -423,8 +423,9 @@ Current checkpoint:
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
   current `2f620ee` prepared roots were refreshed and pass static readiness.
-  Strict readiness reports `git_runtime_consistent=ok` with detail
-  `checkout matches manifest commit`.
+  After the docs-only `d53571f` status commit, strict readiness reports
+  `git_runtime_consistent=ok` with detail
+  `checkout differs, but runtime guard paths are unchanged`.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
