@@ -58,6 +58,8 @@ def rebuild_postrun_acceptance(
     campaign_dir = resolved["campaign_dir"]
     prepared_manifest = _read_json(root / "prepared_run_manifest.v1.json")
     prepared_only = _is_prepared_only_root(root)
+    preflight_failed = _is_pre_campaign_preflight_failed_root(root)
+    skip_current_run_reports = prepared_only or preflight_failed
     stem = _resolve_report_stem(
         explicit=report_stem,
         run_root=root,
@@ -77,10 +79,10 @@ def rebuild_postrun_acceptance(
         (report_dir / family).mkdir(parents=True, exist_ok=True)
 
     family_results: dict[str, dict[str, Any]] = {}
-    if prepared_only:
-        skip_reason = (
-            "prepared_only_not_launched: copied campaign artifacts are launch "
-            "input, not current-run postrun evidence"
+    if skip_current_run_reports:
+        skip_reason = _current_run_skip_reason(
+            prepared_only=prepared_only,
+            preflight_failed=preflight_failed,
         )
         family_results["summaries"] = _skipped_family("summary", skip_reason)
         family_results["failures"] = _skipped_family("failures", skip_reason)
@@ -181,6 +183,16 @@ def rebuild_postrun_acceptance(
         "observed_control_arm": arm,
         "control_pair_key": pair_key,
         "prepared_only": prepared_only,
+        "pre_campaign_completion_preflight_failed": preflight_failed,
+        "current_run_reports_skipped": skip_current_run_reports,
+        "current_run_skip_reason": (
+            _current_run_skip_reason(
+                prepared_only=prepared_only,
+                preflight_failed=preflight_failed,
+            )
+            if skip_current_run_reports
+            else ""
+        ),
         "complete": complete,
         "families": family_results,
     }
@@ -289,6 +301,35 @@ def _is_prepared_only_root(run_root: Path) -> bool:
             and status.get("status") == "prepared"
         )
     )
+
+
+def _is_pre_campaign_preflight_failed_root(run_root: Path) -> bool:
+    status = _read_json(run_root / "run_status.json")
+    manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
+    if not isinstance(status, dict) or not isinstance(manifest, dict):
+        return False
+    return (
+        status.get("pre_campaign_completion_preflight") == "failed"
+        and manifest.get("schema_version") == "scion.launcher_prepared_run_manifest.v1"
+    )
+
+
+def _current_run_skip_reason(
+    *,
+    prepared_only: bool,
+    preflight_failed: bool,
+) -> str:
+    if preflight_failed:
+        return (
+            "pre_campaign_completion_preflight_failed: copied campaign artifacts "
+            "are resume input, not current-run postrun evidence"
+        )
+    if prepared_only:
+        return (
+            "prepared_only_not_launched: copied campaign artifacts are launch "
+            "input, not current-run postrun evidence"
+        )
+    return ""
 
 
 def _resolve_report_stem(

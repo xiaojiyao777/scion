@@ -201,6 +201,85 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_for_prepared_only(
     assert brief["counters"]["effective_rounds_completed"] == 0
 
 
+def test_rebuild_postrun_acceptance_skips_current_run_reports_after_preflight_failure(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "preflight-failed-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "pre_campaign_completion_preflight": "failed",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "warehouse_delivery",
+            "execution": {
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "rounds": 6,
+            },
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 9,
+            "formal_screened_candidates": 9,
+            "measurement_readiness": {"status": "ready"},
+        },
+    )
+    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text('{"candidate_id":"old-candidate"}\n', encoding="utf-8")
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="preflight_failed",
+    )
+
+    report_dir = run_root / "postrun_acceptance"
+    assert manifest["prepared_only"] is False
+    assert manifest["pre_campaign_completion_preflight_failed"] is True
+    assert manifest["current_run_reports_skipped"] is True
+    assert manifest["complete"] is False
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert manifest["families"]["research_efficiency"]["status"] == "skipped"
+    assert manifest["families"]["manifests"]["status"] == "skipped"
+    assert not (
+        report_dir
+        / "research_efficiency"
+        / "preflight_failed.research_efficiency.v1.json"
+    ).exists()
+    assert not (
+        report_dir
+        / "manifests"
+        / "preflight_failed.proposal_trajectory_manifest.v1.json"
+    ).exists()
+    brief = json.loads(
+        (
+            report_dir
+            / "analysis_brief"
+            / "preflight_failed.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["run_validity_status"] == "invalid_infra_only"
+    assert brief["validity"]["last_stop_reason"] == (
+        "pre_campaign_completion_preflight_failed"
+    )
+    assert brief["counters"]["effective_rounds_completed"] == 0
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+    assert any("INVALID INFRA-ONLY RUN" in item for item in brief["stop_conditions"])
+
+
 def _write_campaign_db(campaign_dir: Path) -> None:
     registry = LineageRegistry(str(campaign_dir / "scion.db"))
     branch_store = BranchStore(registry)

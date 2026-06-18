@@ -86,14 +86,18 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
       echo "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED:1"
     } > "$RUN_ROOT/exit.txt"
     printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
+    write_postrun_acceptance_reports
     exit "$PREFLIGHT_STATUS"
   fi
 fi
 '''
 
 
-POSTRUN_REPORT_SNIPPET = r'''
-if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
+POSTRUN_REPORT_FUNCTION_SNIPPET = r'''
+write_postrun_acceptance_reports() {
+  if [[ "${POSTRUN_REPORTS:-1}" != "1" ]]; then
+    return 0
+  fi
   REPORT_DIR="$RUN_ROOT/postrun_acceptance"
   REPORT_STEM="cvrp_${MEASUREMENT_GOVERNANCE//-/_}_${PROPOSAL_CONTEXT_ABLATION//-/_}"
   OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"
@@ -115,7 +119,12 @@ if [[ "${POSTRUN_REPORTS:-1}" == "1" ]]; then
   {
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"
-fi
+}
+'''
+
+
+POSTRUN_REPORT_SNIPPET = r'''
+write_postrun_acceptance_reports
 '''
 
 
@@ -335,6 +344,7 @@ unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
   echo "CWD:$PWD"
   echo "COMMAND:{command}"
 }} >> "$RUN_ROOT/run.log"
+{POSTRUN_REPORT_FUNCTION_SNIPPET}
 {COMPLETION_PREFLIGHT_SNIPPET}
 "$PY" -m scion.cli.main run \\
   --problem "$PROBLEM" \\

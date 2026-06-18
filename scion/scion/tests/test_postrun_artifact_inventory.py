@@ -469,6 +469,80 @@ def test_inventory_marks_prepared_only_resume_snapshot_not_current_run(
     assert "not current-run postrun evidence" in markdown
 
 
+def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "preflight-failed-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "pre_campaign_completion_preflight": "failed",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 5},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "run_status.json",
+        {
+            "run_validity_status": "valid",
+            "run_completeness_status": "complete",
+            "effective_rounds_completed": 7,
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 7,
+            "measurement_readiness": {"status": "ready"},
+        },
+    )
+    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text('{"candidate_id":"old-candidate"}\n', encoding="utf-8")
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    assert data["lifecycle"]["prepared_only"] is False
+    assert data["lifecycle"]["pre_campaign_completion_preflight_failed"] is True
+    assert data["lifecycle"]["current_run_evidence"] is False
+    assert data["lifecycle"]["evidence_scope"] == (
+        "pre_campaign_preflight_failed_with_resume_snapshot"
+    )
+    assert data["validity"] == {
+        "run_validity_status": "invalid_infra_only",
+        "run_completeness_status": "incomplete",
+        "last_stop_reason": "pre_campaign_completion_preflight_failed",
+        "invalid_infra_only": True,
+    }
+    assert data["counters"] == {
+        "requested_rounds": 5,
+        "effective_rounds_completed": 0,
+        "formal_screened_candidates": 0,
+        "protocol_evaluated_candidates": 0,
+        "screened_experiments": 0,
+        "proposal_attempts_total": 0,
+    }
+    phase4 = data["phase4_evidence_coverage"]
+    assert phase4["current_run_evidence"] is False
+    assert phase4["pre_campaign_completion_preflight_failed"] is True
+    assert phase4["requirements"]["formal_candidate_artifact"]["available"] is False
+    assert phase4["requirements"]["measurement_readiness"]["available"] is False
+    assert "PRE-CAMPAIGN PREFLIGHT FAILED" in markdown
+    assert "not current-run evidence" in markdown
+
+
 def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:
     run_root = tmp_path / "infra-run"
     campaign_dir = run_root / "campaign"

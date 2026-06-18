@@ -172,6 +172,11 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "WAREHOUSE_DATA_ROOT_MISSING" in run_sh_text
     assert "tools/check_gpt55_proxy.py" in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
+    assert "write_postrun_acceptance_reports() {" in run_sh_text
+    assert (
+        'printf \'{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\\n\' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"\n    write_postrun_acceptance_reports'
+        in run_sh_text
+    )
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
     assert '--report-stem "$REPORT_STEM"' in run_sh_text

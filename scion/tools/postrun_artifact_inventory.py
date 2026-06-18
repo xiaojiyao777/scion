@@ -116,9 +116,11 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         "lifecycle": lifecycle,
         "validity": _prepared_only_validity(lifecycle)
         if lifecycle["prepared_only"]
+        else _pre_campaign_failure_validity(lifecycle)
+        if lifecycle["pre_campaign_completion_preflight_failed"]
         else _validity(run_status, campaign_run_status, campaign_status, summary),
         "counters": _prepared_only_counters(prepared_manifest)
-        if lifecycle["prepared_only"]
+        if _launch_root_without_current_run(lifecycle)
         else _counters(run_status, campaign_run_status, campaign_status, summary),
         "llm_traces": {
             "trace_count": llm_traces["trace_count"],
@@ -163,6 +165,11 @@ def render_markdown(inventory: dict[str, Any]) -> str:
         lines.append(
             "- PREPARED-ONLY ROOT: copied campaign artifacts are launch input, "
             "not current-run postrun evidence."
+        )
+    if lifecycle.get("pre_campaign_completion_preflight_failed") is True:
+        lines.append(
+            "- PRE-CAMPAIGN PREFLIGHT FAILED: no current Scion campaign ran; "
+            "copied campaign artifacts are resume input, not current-run evidence."
         )
     if validity["invalid_infra_only"]:
         lines.append("- INVALID INFRA-ONLY RUN: stop after proving infra-only status.")
@@ -336,6 +343,8 @@ def _doc_says_invalid_infra_only(doc: Any) -> bool:
         return False
     if doc.get("invalid_infra_only") is True:
         return True
+    if doc.get("pre_campaign_completion_preflight") == "failed":
+        return True
     values: list[str] = []
     for key in (
         "run_validity_status",
@@ -396,6 +405,7 @@ def _counters(*docs: Any) -> dict[str, int | None]:
 def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, Any]:
     status_doc = run_status if isinstance(run_status, dict) else {}
     manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
+    manifest_is_prepared = manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
     prepared_only = (
         status_doc.get("prepared_only") is True
         or (
@@ -403,12 +413,24 @@ def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, A
             and status_doc.get("status") == "prepared"
         )
     )
+    preflight_failed = (
+        status_doc.get("pre_campaign_completion_preflight") == "failed"
+        and manifest_is_prepared
+    )
     resume_from = status_doc.get("resume_from_campaign")
     if resume_from is None:
         resume_from = manifest.get("resume_from_campaign")
+    if prepared_only:
+        evidence_scope = "prepared_launch_root_with_resume_snapshot"
+    elif preflight_failed:
+        evidence_scope = "pre_campaign_preflight_failed_with_resume_snapshot"
+    else:
+        evidence_scope = "postrun_campaign"
     return {
         "schema_version": "scion.launcher_lifecycle.v1",
         "prepared_only": bool(prepared_only),
+        "pre_campaign_completion_preflight_failed": bool(preflight_failed),
+        "current_run_evidence": not prepared_only and not preflight_failed,
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
@@ -418,12 +440,15 @@ def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, A
         "copied_campaign_summary_present": status_doc.get(
             "copied_campaign_summary_present"
         ),
-        "evidence_scope": (
-            "prepared_launch_root_with_resume_snapshot"
-            if prepared_only
-            else "postrun_campaign"
-        ),
+        "evidence_scope": evidence_scope,
     }
+
+
+def _launch_root_without_current_run(lifecycle: Mapping[str, Any]) -> bool:
+    return (
+        lifecycle.get("prepared_only") is True
+        or lifecycle.get("pre_campaign_completion_preflight_failed") is True
+    )
 
 
 def _prepared_only_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
@@ -432,6 +457,15 @@ def _prepared_only_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
         "run_completeness_status": "not_started",
         "last_stop_reason": "prepared_only_not_launched",
         "invalid_infra_only": False,
+    }
+
+
+def _pre_campaign_failure_validity(lifecycle: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "run_validity_status": "invalid_infra_only",
+        "run_completeness_status": "incomplete",
+        "last_stop_reason": "pre_campaign_completion_preflight_failed",
+        "invalid_infra_only": True,
     }
 
 
@@ -836,6 +870,24 @@ def _phase4_evidence_coverage(
 ) -> dict[str, Any]:
     """Return report-only coverage flags for Phase 4 postrun analysis inputs."""
 
+    if _launch_root_without_current_run(lifecycle):
+        return {
+            "schema_version": "scion.postrun_phase4_evidence_coverage.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "evidence_scope": lifecycle.get("evidence_scope") or "launch_root",
+            "prepared_only": lifecycle.get("prepared_only") is True,
+            "pre_campaign_completion_preflight_failed": (
+                lifecycle.get("pre_campaign_completion_preflight_failed") is True
+            ),
+            "current_run_evidence": False,
+            "requirements": _empty_phase4_requirements(
+                "not current-run evidence"
+            ),
+            "analysis_handoff": HANDOFF_DOC,
+        }
+
     trace_coverage = _phase4_trace_coverage(
         campaign_dir=campaign_dir,
         trace_index=trace_index,
@@ -898,6 +950,10 @@ def _phase4_evidence_coverage(
         "decision_features_excluded": True,
         "evidence_scope": lifecycle.get("evidence_scope") or "postrun_campaign",
         "prepared_only": lifecycle.get("prepared_only") is True,
+        "pre_campaign_completion_preflight_failed": (
+            lifecycle.get("pre_campaign_completion_preflight_failed") is True
+        ),
+        "current_run_evidence": True,
         "requirements": {
             "target_intent_trace": _coverage_item(
                 trace_coverage.get("target_intent_trace_count", 0),
@@ -949,6 +1005,33 @@ def _phase4_evidence_coverage(
             ),
         },
         "analysis_handoff": HANDOFF_DOC,
+    }
+
+
+def _empty_phase4_requirements(reason: str) -> dict[str, dict[str, Any]]:
+    sources = {
+        "target_intent_trace": "llm_traces or trace_index",
+        "hypothesis_trace": "llm_traces",
+        "code_trace": "llm_traces",
+        "formal_candidate_artifact": "campaign/artifacts/formal_candidates/index.jsonl",
+        "proposal_trajectory_manifest": "postrun_acceptance/manifests",
+        "prompt_manifest_loaded": (
+            "proposal_trajectory_manifest or trace_index prompt_manifest refs"
+        ),
+        "research_efficiency_report": "postrun_acceptance/research_efficiency",
+        "measurement_readiness": (
+            "campaign summary/status or research-efficiency report"
+        ),
+        "protocol_effect_vs_mde": "research-efficiency protocol_effects_vs_mde",
+        "branch_lesson_transfer": (
+            "summary/status, research-efficiency, or trajectory manifest"
+        ),
+        "runtime_feedback": "summary/status or research-efficiency runtime fields",
+        "source_visibility": "prompt manifests or trajectory visibility fingerprints",
+    }
+    return {
+        key: _coverage_item(0, f"{source}; {reason}")
+        for key, source in sources.items()
     }
 
 
