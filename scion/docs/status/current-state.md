@@ -47,8 +47,8 @@ Framework:
   manifests, prepare-time delegated handoff briefs/inventories,
   launch-readiness snapshots, and default postrun report generation. The
   generated briefs carry the prepared manifest's analysis intent, acceptance
-  focus, current CVRP research-focus/default-avoid handoff, and resume source;
-  inventory/contract/readiness checks remain report-only and outside
+  focus, current problem-owned research-focus/default-avoid handoff, and resume
+  source; inventory/contract/readiness checks remain report-only and outside
   `DecisionFeatures`. Prepared-only roots now carry explicit launcher
   lifecycle/evidence-scope metadata, so copied resume snapshots are marked
   `prepared_only/not_started` with zero current-run effective rounds instead of
@@ -76,7 +76,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focushandoff-6r-gpt55-20260618T141927Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-warehousefocus-6r-gpt55-20260618T142809Z-claw`.
 
 CVRP/VRP:
 
@@ -165,6 +165,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
 - Current CVRP prepared research-focus handoff:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-research-focus-handoff-repair-20260618.md`.
+- Current warehouse prepared research-focus handoff:
+  `scion/docs/experiments/v0.4/v04-warehouse-prepared-research-focus-handoff-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

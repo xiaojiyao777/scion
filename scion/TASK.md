@@ -314,7 +314,7 @@ Current checkpoint:
   flags, prepared contract checks, launch-readiness handoff snapshots,
   prepared-only lifecycle guards, and preflight-failed launch-root guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-focushandoff-6r-gpt55-20260618T141927Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-warehousefocus-6r-gpt55-20260618T142809Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
