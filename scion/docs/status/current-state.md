@@ -66,7 +66,9 @@ Framework:
   `prompt_context_readiness` family. It audits prepared research focus, copied
   campaign summary/status, problem-specific handoff fields, and the
   `research_shape_diagnostics` prompt path before launch without rendering raw
-  provider prompts or changing runtime decisions.
+  provider prompts or changing runtime decisions. Launch readiness now requires
+  this prompt/context artifact and independently rechecks the bridge source and
+  launch markers before reporting `static_ready=true`.
 
 Warehouse:
 
@@ -76,7 +78,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifestenv-a0eb89b-6r-gpt55-20260618T222325Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-promptguard-38a1c23-6r-gpt55-20260618T223629Z-claw`.
 
 CVRP/VRP:
 
@@ -97,15 +99,15 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifestenv-a0eb89b-1r-gpt55-20260618T222314Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-promptguard-38a1c23-1r-gpt55-20260618T223629Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The current CVRP and warehouse prepared roots were refreshed from runtime
-  checkout `a0eb89b` after the prepared research-focus prompt bridge repair and
-  real launch-environment export repair. Strict WSL readiness confirms both
-  roots are statically ready, not started, and runtime-guard valid.
+  checkout `38a1c23` after the launch readiness prompt/context guard repair.
+  Strict WSL readiness confirms both roots are statically ready, not started,
+  runtime-guard valid, and `prompt_context_readiness_complete=ok`.
 - Both current prepared roots have regenerated `prompt_context_readiness`
   handoff artifacts with `ready_for_launch_prompt_audit=true` and
   `missing_required=[]`. They also report
@@ -118,8 +120,7 @@ Infrastructure:
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
   `static_ready=true`, exit `64`, HTTP `401`, classification
-  `not_authenticated`, auth pool `active=0` / `expired=1` /
-  `refreshing=0` / `total=1`.
+  `not_authenticated`, auth pool `active=0` / `refreshing=1` / `total=1`.
 - Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty `gpt-5.5` output.
 - Keep the WSL checkout synchronized with the branch before tests or launches.
@@ -130,10 +131,9 @@ Infrastructure:
 1. Refresh the WSL/local proxy login, then rerun:
    `scion/tools/check_launch_readiness.py <prepared-root>
    --require-launch-ready --format json`. `/v1/models` is not enough.
-2. Before starting a prepared root, confirm its
-   `prepared_handoff/prompt_context_readiness/*.json` still reports
-   `ready_for_launch_prompt_audit=true` and launch markers true for
-   `PREPARED_RUN_MANIFEST`.
+2. Before starting a prepared root, require the same launch-readiness report to
+   include `launch_ready=true` and
+   `checks.prompt_context_readiness_complete.status=ok`.
 3. When launch readiness is true, run the prepared CVRP post-pivot follow-up
    first from the clean WSL checkout. Inspect target intent, hypothesis, branch
    lesson transfer, protocol effect-vs-MDE, budget-exhausting runtime feedback,
@@ -169,6 +169,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
