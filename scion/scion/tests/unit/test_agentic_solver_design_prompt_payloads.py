@@ -63,13 +63,14 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "materially different from floor, hard-cap, repair-rescue" in user_prompt
     assert "record direct effect telemetry with `context.record_move`" in user_prompt
     assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
-    assert "post-share70 target-selection run selected `destroy_repair.py`" in user_prompt
-    assert "`route_merge_repair`, completed `32/32` valid screening pairs" in user_prompt
+    assert "Current CVRP route-merge lesson" in user_prompt
+    assert "post-share70 target-selection run first selected `destroy_repair.py`" in user_prompt
     assert "pair W/L/T `10/3/19`" in user_prompt
-    assert "Direct `route_merge_repair` effect telemetry was positive in `19/32` pairs" in user_prompt
-    assert "continue the `route_merge_repair` mechanism" in user_prompt
-    assert "`route_merge_repair_guarded_v2`" in user_prompt
-    assert "Do not rename the branch to `route_limit_aware_repair`" in user_prompt
+    assert "`route_merge_repair` effect telemetry positive in `19/32`" in user_prompt
+    assert "Do not default to another `route_merge_repair` absorption" in user_prompt
+    assert "pivot to a materially different problem-owned solver-design lever" in user_prompt
+    assert "explicitly contrast against the tested guarded-v2" in user_prompt
+    assert "choose a different solver-design target" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
@@ -103,14 +104,13 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "non-scheduler solver-design owner" in user_prompt
     assert "explicitly contrast against the rejected floor" in user_prompt
     assert "activation/runtime counters alone leave effect attribution missing" in user_prompt
-    assert "Current active non-scheduler branch" in user_prompt
-    assert "continue the `route_merge_repair` follow-up" in user_prompt
+    assert "Current route-merge branch lesson" in user_prompt
     assert "`policies/baseline_modules/destroy_repair.py`" in user_prompt
-    assert "`32/32` valid pairs" in user_prompt
-    assert "W/L/T `10/3/19`" in user_prompt
-    assert "A/B/E positive, CMT2/P mixed" in user_prompt
-    assert "proposed `mechanism_changes` id remains `route_merge_repair`" in user_prompt
-    assert "local-search operator, or scheduler policy is a different branch" in user_prompt
+    assert "`expand_screening` evidence (`10/3/19`" in user_prompt
+    assert "later guarded/absorption follow-ups were no-effect or regressive" in user_prompt
+    assert "Do not choose another route-merge absorption target by default" in user_prompt
+    assert "new causal path beyond tested guarded-v2" in user_prompt
+    assert "different provider-declared solver-design lever" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_uses_research_surface_context() -> None:
@@ -135,8 +135,9 @@ def test_solver_design_target_intent_prompt_uses_research_surface_context() -> N
     )
 
     assert "Solver-design target-selection guidance" in user_prompt
-    assert "Current active non-scheduler branch" in user_prompt
-    assert "proposed `mechanism_changes` id remains `route_merge_repair`" in user_prompt
+    assert "Current route-merge branch lesson" in user_prompt
+    assert "Do not choose another route-merge absorption target by default" in user_prompt
+    assert "different provider-declared solver-design lever" in user_prompt
 
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:

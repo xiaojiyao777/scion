@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair target-intent injection field-verified; branch-card evidence retention repaired; post-repair transfer check valid but route_merge remains low-effect*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair steering/branch-card plumbing repaired; provider guidance now pivots away from repeated low-effect route-merge absorption variants*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -235,37 +235,24 @@ Current checkpoint:
 
 - Warehouse recovery remains accepted as the v0.4 positive research-path
   checkpoint.
-- CVRP target-intent steering is now field-verified after the
-  `research_surfaces` prompt-injection repair. The `f3d634c` WSL rerun kept
-  target-intent, hypothesis, and code on `destroy_repair.py` /
-  `route_merge_repair`, used `gpt-5.5` for all LLM traces, completed `32/32`
-  valid screening pairs with `0` failures, and produced a complete formal
-  candidate artifact.
-- The candidate is rejected as a solver improvement: W/L/T was `0/0/32`, all
-  objective deltas were `0.0`, and route-merge telemetry showed activation but
-  zero observed improvement effect. This is framework-valid rejection evidence,
-  not a promotion.
-- A copied-campaign transfer run from commit `af5b5a2` produced a materially
-  different route-merge variant with direct mechanism effect in `19/32` pairs,
-  but mixed aggregate quality (`7/7/18`, median total-distance delta `0.0`,
-  mean `-0.28125`) and no promotion. It also exposed a framework continuity
-  bug: `EXPAND_SCREENING` persisted metric/formal-candidate evidence but left
-  the branch card without direction, mechanism ids, or compact evidence. That
-  evidence-retention path is now repaired in `DecisionFinalizer` with focused
-  tests.
-- The post-repair copied-campaign WSL check from commit `9193d4e` completed
-  validly with `2/2` effective protocol rounds and all `27` LLM traces on
-  `gpt-5.5`. It verified that later target-intent/hypothesis traces can see
-  route-merge branch lesson material and that `CONTINUE_EXPLORE` branch cards
-  retain direction, mechanism id, compact evidence, telemetry outcome, and
-  not-promoted reason codes. It did not naturally hit `EXPAND_SCREENING`, so
-  that repaired path is covered by tests rather than field-hit by this run.
-- The same run is negative solver evidence: the first new route-merge
-  candidate was abandoned as quality-regressive (`10/15/7` pair W/L/T), and
-  the second remained `active_no_effect` (`0/0/32`, zero objective effect).
-  CVRP effective research is therefore still open; the framework can continue
-  and reject evidence-backed route-merge hypotheses, but Scion has not yet
-  escaped the repeated low-effect route-merge loop.
+- CVRP target-intent/provider guidance injection is field-verified and formal
+  screening can complete with evidence. Branch-card evidence retention is
+  repaired for the focused `EXPAND_SCREENING` path and field-verified for the
+  normal `CONTINUE_EXPLORE` transfer path.
+- CVRP solver evidence remains negative at the current frontier. Repeated
+  `route_merge_repair` absorption/guarded variants produced zero objective
+  effect, mixed quality, or regression. This is framework-valid rejection and
+  transfer evidence, not an effective solver improvement.
+- CVRP provider guidance is now repaired so the next agent does not default to
+  another route-merge absorption/guarded-v2 follow-up. A new route-merge branch
+  must name a new causal path beyond tested local absorption; otherwise it
+  should pivot to another problem-owned solver-design lever such as construction
+  diversity, destroy selection, local-search move scheduling,
+  acceptance/temperature policy, or stable algorithm entrypoint integration.
+- Next CVRP acceptance checkpoint: a short WSL target-intent/proposal field
+  check must show live traces either pivoting away from route-merge absorption
+  or explicitly justifying a genuinely new route-merge causal path. Promotion
+  is not required for this checkpoint.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
