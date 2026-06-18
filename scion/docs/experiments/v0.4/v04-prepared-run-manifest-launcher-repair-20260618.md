@@ -61,3 +61,16 @@ Result:
 
 - `27 passed`
 - `py_compile` passed
+
+WSL prepared-root refresh on commit `ee43fa1` produced the current launch roots:
+
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`
+
+Both roots are mirrored locally under `/home/clawd/research/scion-experiments/`.
+Validation confirmed top-level `prepared` status, completion preflight,
+expected `control_pair_key`, `GIT_COMMIT=ee43fa1`, `bash -n` clean `run.sh`,
+`PREPARED_RUN_MANIFEST=` in `command.txt`, secret-free manifest JSON, and
+manifest visibility through both postrun analysis brief and artifact inventory.

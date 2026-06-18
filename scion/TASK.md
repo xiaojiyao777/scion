@@ -286,6 +286,8 @@ Current checkpoint:
   launch/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, delegated analysis brief, and artifact/count inventory
   with report-only Phase 4 evidence coverage flags.
+  Current launch-prepared CVRP root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -296,6 +298,8 @@ Current checkpoint:
   standard postrun acceptance report bundle by default after Scion exits,
   including delegated analysis brief and artifact/count inventory with
   report-only Phase 4 evidence coverage flags.
+  Current launch-prepared warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

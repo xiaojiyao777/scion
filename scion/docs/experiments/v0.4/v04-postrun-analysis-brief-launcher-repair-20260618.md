@@ -61,7 +61,7 @@ Result:
 - `27 passed`
 - `py_compile` passed
 
-WSL prepared-root refresh on commit `3c21ab9` produced:
+WSL prepared-root refresh on commit `3c21ab9` produced now-superseded roots:
 
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-brief-1r-gpt55-20260618T120026Z-claw`
@@ -72,3 +72,8 @@ Both roots have top-level `prepared` status, completion preflight, expected
 `control_pair_key`, `GIT_COMMIT=3c21ab9`, `bash -n` clean `run.sh`, guarded
 analysis-brief JSON/Markdown commands, and direct brief JSON smoke coverage for
 the `scion.postrun_analysis_brief.v1` schema.
+
+The current launch-prepared roots were refreshed again after the prepared-run
+manifest repair. See
+`scion/docs/experiments/v0.4/v04-prepared-run-manifest-launcher-repair-20260618.md`
+for the authoritative prepared root paths.

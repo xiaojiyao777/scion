@@ -70,7 +70,7 @@ Launcher smoke generated prepared CVRP and warehouse roots in temporary
 directories, `bash -n` passed for both `run.sh` files, and each generated script
 contained the guarded inventory JSON/Markdown commands.
 
-The current launch-prepared roots were refreshed again after the analysis-brief
-repair. See
-`scion/docs/experiments/v0.4/v04-postrun-analysis-brief-launcher-repair-20260618.md`
+The current launch-prepared roots were refreshed again after the prepared-run
+manifest repair. See
+`scion/docs/experiments/v0.4/v04-prepared-run-manifest-launcher-repair-20260618.md`
 for the authoritative prepared root paths.

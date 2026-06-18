@@ -57,7 +57,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-brief-6r-gpt55-20260618T120027Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-manifest-6r-gpt55-20260618T121407Z-claw`.
 
 CVRP/VRP:
 
@@ -75,7 +75,7 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-brief-1r-gpt55-20260618T120026Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-manifest-1r-gpt55-20260618T121407Z-claw`.
 
 Infrastructure:
 
