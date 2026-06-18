@@ -122,6 +122,29 @@ class TestCampaignBasics:
         assert reopened._branch_workspaces[branch.branch_id] == str(workspace)
         assert reopened.get_state()["n_active_branches"] == 1
 
+    def test_reopened_copied_campaign_reanchors_current_champion_snapshot(
+        self, tmp_path
+    ):
+        cm = _campaign(tmp_path)
+        current = cm._champion_store.get_current()
+        assert current is not None
+
+        source_root = tmp_path / "source_root"
+        stale_snapshot = source_root / "champions" / "champion_v1"
+        stale_snapshot.mkdir(parents=True)
+        cm._champion_store._conn.execute(
+            "UPDATE champions SET code_snapshot_path = ? WHERE version = 1",
+            (str(stale_snapshot),),
+        )
+        cm._champion_store._conn.commit()
+        shutil.rmtree(tmp_path / "champion_code")
+
+        reopened = _campaign(tmp_path)
+
+        assert reopened._champion.code_snapshot_path == str(
+            tmp_path / "campaign" / "champions" / "champion_v1"
+        )
+
     def test_final_round_queue_validate_drains_validation_without_new_proposal(self, tmp_path):
         cm = _campaign(
             tmp_path,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -727,7 +728,7 @@ def _persist_initial_champion(owner: Any) -> None:
     """Persist the base champion so campaign evidence has a real v1 anchor."""
     current = owner._champion_store.get_current()
     if current is not None:
-        owner._champion = current
+        owner._champion = _reanchor_current_champion_snapshot(owner, current)
         return
 
     champion = owner._champion
@@ -768,6 +769,28 @@ def _restore_persisted_active_branches(owner: Any) -> None:
             and os.path.isdir(workspace)
         ):
             owner._branch_workspaces[branch.branch_id] = workspace
+
+
+def _reanchor_current_champion_snapshot(
+    owner: Any, current: ChampionState
+) -> ChampionState:
+    """Prefer the copied campaign's local champion snapshot when hashes match."""
+    current_path = os.path.abspath(current.code_snapshot_path)
+    campaign_dir = os.path.abspath(owner._campaign_dir)
+    if os.path.commonpath([current_path, campaign_dir]) == campaign_dir:
+        return current
+
+    local_path = os.path.join(
+        campaign_dir,
+        "champions",
+        f"champion_v{current.version}",
+    )
+    if not os.path.isdir(local_path):
+        return current
+    local_hash = owner._materializer.compute_snapshot_hash(local_path)
+    if local_hash != current.code_snapshot_hash:
+        return current
+    return replace(current, code_snapshot_path=local_path)
 
 
 def _normalize_operator_pool(operator_pool: dict[str, Any]) -> dict[str, OperatorConfig]:

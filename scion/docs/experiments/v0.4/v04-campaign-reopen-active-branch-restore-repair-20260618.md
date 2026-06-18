@@ -26,6 +26,10 @@ evidence-backed continuation.
 - If a current champion already exists in `ChampionStore`, the reopened manager
   installs that persisted champion instead of keeping a freshly constructed v1
   in memory.
+- When a campaign directory has been copied, the reopened manager re-anchors
+  the in-memory current champion path to the copied local
+  `champions/champion_vN` snapshot only when the local snapshot exists and its
+  hash matches the persisted champion hash.
 
 This repair does not change Decision, Protocol, promotion policy, lifecycle
 gates, generic budgets, or problem semantics.
@@ -35,7 +39,7 @@ gates, generic budgets, or problem semantics.
 - `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_campaign_basics_continue.py::TestCampaignBasics::test_reopened_campaign_restores_champion_active_branch_and_workspace`
   - Result: `1 passed`.
 - `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q scion/scion/tests/test_campaign_basics_continue.py scion/scion/tests/test_lineage_sprint3.py scion/scion/tests/test_campaign_control_boundaries.py`
-  - Result: `52 passed`.
+  - Result: `53 passed`.
 - `PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile scion/scion/core/branch.py scion/scion/core/campaign_composition.py scion/scion/tests/test_campaign_basics_continue.py`
   - Result: passed.
 - `git diff --check`
