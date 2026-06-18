@@ -868,6 +868,49 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             "preserved_same_branch": 2,
         },
     }
+    actionability = brief["research_context_actionability_summary"]
+    assert actionability == {
+        "schema_version": (
+            "scion.postrun_research_context_actionability_summary.v1"
+        ),
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "prompt_context_available": True,
+        "research_continuity_available": True,
+        "guidance_status": "context_actionability_review_required",
+        "indicators": {
+            "schema_version": "scion.research_context_actionability_indicators.v1",
+            "same_mechanism_selected": 1,
+            "same_mechanism_observed": 1,
+            "same_mechanism_missed": 0,
+            "branch_lessons_satisfied": 2,
+            "branch_lessons_required": 3,
+            "branch_lesson_semantic_gap_count": 1,
+            "branch_lesson_semantic_failure_count": 1,
+            "branch_lesson_semantic_block_count": 1,
+            "weak_positive_accepted": 1,
+            "weak_positive_observed": 1,
+            "weak_positive_missed": 0,
+            "research_signal_tokens": 20,
+            "source_code_tokens": 15,
+            "cross_branch_tokens": 5,
+            "governance_tokens": 15,
+            "research_plus_source_to_governance_ratio": 2.333333,
+            "omitted_section_trace_count": 1,
+            "truncated_section_trace_count": 1,
+        },
+        "actionability_gaps": [
+            "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal",
+            "research_signal_sections_omitted_or_truncated_during_semantic_gap",
+        ],
+        "recommendations": [
+            "inspect branch_lesson_usage records for semantic mismatch causes",
+            "inspect omitted_sections and truncated_sections in prompt manifests",
+        ],
+    }
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is True
@@ -948,8 +991,24 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Branch lesson semantic failures: semantic_mismatch=1" in markdown
     assert "- Branch lesson semantic blocks: semantic_mismatch=1" in markdown
     assert "- Branch lesson actions: preserved_same_branch=2" in markdown
+    assert "## Research Context Actionability Summary" in markdown
+    assert "- Guidance status: context_actionability_review_required" in markdown
+    assert "- Continuity selected/observed same-mechanism follow-up: 1 / 1" in markdown
+    assert "- Branch lessons satisfied/required/semantic gap: 2 / 3 / 1" in markdown
+    assert (
+        "- Prompt research/source/cross-branch/governance tokens: 20 / 15 / 5 / 15"
+        in markdown
+    )
+    assert (
+        "branch_lesson_semantic_gap_despite_cross_branch_prompt_signal"
+        in markdown
+    )
     assert any(
         "research_continuity" in question
+        for question in brief["required_questions"]
+    )
+    assert any(
+        "research_context_actionability_summary" in question
         for question in brief["required_questions"]
     )
     assert any(

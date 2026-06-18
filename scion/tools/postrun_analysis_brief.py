@@ -32,6 +32,8 @@ REQUIRED_QUESTIONS = (
     "Did sibling and historical lessons transfer without entering DecisionFeatures?",
     "Did research_continuity show same-mechanism follow-up, "
     "branch-lesson satisfaction or semantic gaps, and weak-positive transfer?",
+    "Did research_context_actionability_summary connect continuity gaps to "
+    "prompt-visible research, source, and cross-branch signal?",
     "Did runtime_feedback_summary show fresh replay drain, stage-transition drain, "
     "and budget diagnostics consistent with the declared runtime model?",
     "Did failure_taxonomy_summary distinguish provider/infra, framework/control, "
@@ -89,6 +91,12 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         run_root_path,
         inventory,
     )
+    research_context_actionability_summary = (
+        _research_context_actionability_summary(
+            prompt_context_visibility_summary=prompt_context_visibility_summary,
+            research_continuity_summary=research_continuity_summary,
+        )
+    )
     warehouse_followup_summary = _warehouse_followup_summary(
         inventory,
         protocol_accounting_summary=protocol_accounting_summary,
@@ -130,6 +138,9 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "failure_taxonomy_summary": failure_taxonomy_summary,
         "prompt_context_visibility_summary": prompt_context_visibility_summary,
         "research_continuity_summary": research_continuity_summary,
+        "research_context_actionability_summary": (
+            research_context_actionability_summary
+        ),
         "warehouse_followup_summary": warehouse_followup_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": list(REQUIRED_QUESTIONS),
@@ -925,6 +936,37 @@ def render_markdown(brief: dict[str, Any]) -> str:
         lines.append(
             "- No current-run research_continuity block is available for delegated analysis."
         )
+
+    actionability = brief.get("research_context_actionability_summary") or {}
+    actionability_indicators = _mapping_or_empty(actionability.get("indicators"))
+    lines.extend(
+        [
+            "",
+            "## Research Context Actionability Summary",
+            "- Source: report-only join of prompt context visibility and "
+            "research_continuity diagnostics.",
+            f"- Available: `{_display(actionability.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(actionability.get('current_run_evidence'))}`",
+            f"- Guidance status: {_display(actionability.get('guidance_status'))}",
+            "- Continuity selected/observed same-mechanism follow-up: "
+            f"{_display(actionability_indicators.get('same_mechanism_selected'))} / "
+            f"{_display(actionability_indicators.get('same_mechanism_observed'))}",
+            "- Branch lessons satisfied/required/semantic gap: "
+            f"{_display(actionability_indicators.get('branch_lessons_satisfied'))} / "
+            f"{_display(actionability_indicators.get('branch_lessons_required'))} / "
+            f"{_display(actionability_indicators.get('branch_lesson_semantic_gap_count'))}",
+            "- Prompt research/source/cross-branch/governance tokens: "
+            f"{_display(actionability_indicators.get('research_signal_tokens'))} / "
+            f"{_display(actionability_indicators.get('source_code_tokens'))} / "
+            f"{_display(actionability_indicators.get('cross_branch_tokens'))} / "
+            f"{_display(actionability_indicators.get('governance_tokens'))}",
+            "- Context actionability gaps: "
+            f"{_list_text(actionability.get('actionability_gaps') or [])}",
+            "- Context actionability recommendations: "
+            f"{_list_text(actionability.get('recommendations') or [])}",
+        ]
+    )
 
     warehouse = brief.get("warehouse_followup_summary") or {}
     if (
@@ -2915,6 +2957,263 @@ def _merge_research_continuity_aggregate(
         )
 
 
+def _research_context_actionability_summary(
+    *,
+    prompt_context_visibility_summary: Mapping[str, Any],
+    research_continuity_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    prompt_current = prompt_context_visibility_summary.get("current_run_evidence") is True
+    continuity_current = research_continuity_summary.get("current_run_evidence") is True
+    prompt_available = prompt_context_visibility_summary.get("available") is True
+    continuity_available = research_continuity_summary.get("available") is True
+    prompt_aggregate = _mapping_or_empty(
+        prompt_context_visibility_summary.get("aggregate")
+    )
+    continuity_aggregate = _mapping_or_empty(
+        research_continuity_summary.get("aggregate")
+    )
+    continuity_counts = _research_continuity_action_counts(
+        research_continuity_summary.get("entries")
+    )
+    density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
+    indicators = {
+        "schema_version": "scion.research_context_actionability_indicators.v1",
+        "same_mechanism_selected": continuity_counts["same_mechanism_selected"],
+        "same_mechanism_observed": continuity_counts["same_mechanism_observed"],
+        "same_mechanism_missed": max(
+            0,
+            continuity_counts["same_mechanism_observed"]
+            - continuity_counts["same_mechanism_selected"],
+        ),
+        "branch_lessons_satisfied": continuity_counts["branch_lessons_satisfied"],
+        "branch_lessons_required": continuity_counts["branch_lessons_required"],
+        "branch_lesson_semantic_gap_count": continuity_counts[
+            "branch_lesson_semantic_gap_count"
+        ],
+        "branch_lesson_semantic_failure_count": _sum_counts(
+            continuity_aggregate.get("branch_lesson_semantic_failure_counts")
+        ),
+        "branch_lesson_semantic_block_count": _sum_counts(
+            continuity_aggregate.get("branch_lesson_semantic_block_counts")
+        ),
+        "weak_positive_accepted": continuity_counts["weak_positive_accepted"],
+        "weak_positive_observed": continuity_counts["weak_positive_observed"],
+        "weak_positive_missed": max(
+            0,
+            continuity_counts["weak_positive_observed"]
+            - continuity_counts["weak_positive_accepted"],
+        ),
+        "research_signal_tokens": _int_or_zero(
+            density.get("research_signal_tokens")
+        ),
+        "source_code_tokens": _int_or_zero(density.get("source_code_tokens")),
+        "cross_branch_tokens": _int_or_zero(density.get("cross_branch_tokens")),
+        "governance_tokens": _int_or_zero(density.get("governance_tokens")),
+        "research_plus_source_to_governance_ratio": density.get(
+            "research_plus_source_to_governance_ratio"
+        ),
+        "omitted_section_trace_count": _int_or_zero(
+            prompt_aggregate.get("omitted_section_trace_count")
+        ),
+        "truncated_section_trace_count": _int_or_zero(
+            prompt_aggregate.get("truncated_section_trace_count")
+        ),
+    }
+    actionability_gaps = _research_context_actionability_gaps(
+        indicators=indicators,
+        prompt_current=prompt_current,
+        prompt_available=prompt_available,
+        continuity_current=continuity_current,
+        continuity_available=continuity_available,
+    )
+    return {
+        "schema_version": "scion.postrun_research_context_actionability_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": prompt_current and continuity_current,
+        "available": prompt_available or continuity_available,
+        "prompt_context_available": prompt_available,
+        "research_continuity_available": continuity_available,
+        "guidance_status": _research_context_guidance_status(
+            actionability_gaps,
+            indicators=indicators,
+            prompt_available=prompt_available,
+            continuity_available=continuity_available,
+        ),
+        "indicators": indicators,
+        "actionability_gaps": actionability_gaps,
+        "recommendations": _research_context_actionability_recommendations(
+            actionability_gaps
+        ),
+    }
+
+
+def _research_continuity_action_counts(entries: Any) -> dict[str, int]:
+    counts = {
+        "same_mechanism_selected": 0,
+        "same_mechanism_observed": 0,
+        "branch_lessons_satisfied": 0,
+        "branch_lessons_required": 0,
+        "branch_lesson_semantic_gap_count": 0,
+        "weak_positive_accepted": 0,
+        "weak_positive_observed": 0,
+    }
+    if not isinstance(entries, list):
+        return counts
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        same_mechanism = _mapping_or_empty(entry.get("same_mechanism_followup"))
+        lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
+        transfer = _mapping_or_empty(entry.get("weak_positive_transfer"))
+        counts["same_mechanism_selected"] += _int_or_zero(
+            same_mechanism.get("selected_same_branch_refinement_count")
+        )
+        counts["same_mechanism_observed"] += _int_or_zero(
+            same_mechanism.get("observed_opportunity_count")
+        )
+        counts["branch_lessons_satisfied"] += _int_or_zero(
+            lessons.get("satisfied_count")
+        )
+        counts["branch_lessons_required"] += _int_or_zero(
+            lessons.get("requirement_count")
+        )
+        counts["branch_lesson_semantic_gap_count"] += _int_or_zero(
+            lessons.get("semantic_gap_count")
+        )
+        counts["weak_positive_accepted"] += _int_or_zero(
+            transfer.get("accepted_count")
+        )
+        counts["weak_positive_observed"] += _int_or_zero(
+            transfer.get("observed_opportunity_count")
+        )
+    return counts
+
+
+def _research_context_actionability_gaps(
+    *,
+    indicators: Mapping[str, Any],
+    prompt_current: bool,
+    prompt_available: bool,
+    continuity_current: bool,
+    continuity_available: bool,
+) -> list[str]:
+    gaps: list[str] = []
+    if not (prompt_current or continuity_current):
+        return ["no_current_run_prompt_or_continuity_evidence"]
+    if continuity_current and continuity_available and not prompt_available:
+        gaps.append("research_continuity_available_without_prompt_context_evidence")
+    if prompt_current and prompt_available and not continuity_available:
+        gaps.append("prompt_context_available_without_research_continuity_evidence")
+
+    semantic_gap = _int_or_zero(indicators.get("branch_lesson_semantic_gap_count"))
+    semantic_failures = _int_or_zero(
+        indicators.get("branch_lesson_semantic_failure_count")
+    )
+    semantic_blocks = _int_or_zero(
+        indicators.get("branch_lesson_semantic_block_count")
+    )
+    cross_branch_tokens = _int_or_zero(indicators.get("cross_branch_tokens"))
+    research_tokens = _int_or_zero(indicators.get("research_signal_tokens"))
+    source_tokens = _int_or_zero(indicators.get("source_code_tokens"))
+    governance_tokens = _int_or_zero(indicators.get("governance_tokens"))
+    research_plus_source = research_tokens + source_tokens
+
+    if semantic_gap > 0 and cross_branch_tokens <= 0:
+        gaps.append("branch_lesson_semantic_gap_without_cross_branch_prompt_signal")
+    elif semantic_failures > 0 or semantic_blocks > 0:
+        gaps.append("branch_lesson_semantic_gap_despite_cross_branch_prompt_signal")
+
+    if (
+        _int_or_zero(indicators.get("same_mechanism_missed")) > 0
+        and research_tokens <= 0
+    ):
+        gaps.append("same_mechanism_opportunities_without_research_signal_prompt")
+    if (
+        _int_or_zero(indicators.get("weak_positive_missed")) > 0
+        and research_tokens + cross_branch_tokens <= 0
+    ):
+        gaps.append("weak_positive_transfer_without_research_or_lesson_signal")
+    if (
+        semantic_gap > 0
+        and (
+            _int_or_zero(indicators.get("omitted_section_trace_count")) > 0
+            or _int_or_zero(indicators.get("truncated_section_trace_count")) > 0
+        )
+    ):
+        gaps.append("research_signal_sections_omitted_or_truncated_during_semantic_gap")
+    if governance_tokens > research_plus_source and (
+        semantic_gap > 0
+        or _int_or_zero(indicators.get("same_mechanism_missed")) > 0
+        or _int_or_zero(indicators.get("weak_positive_missed")) > 0
+    ):
+        gaps.append("governance_tokens_dominate_during_research_continuity_gap")
+    return list(dict.fromkeys(gaps))
+
+
+def _research_context_guidance_status(
+    gaps: list[str],
+    *,
+    indicators: Mapping[str, Any],
+    prompt_available: bool,
+    continuity_available: bool,
+) -> str:
+    if not prompt_available and not continuity_available:
+        return "no_prompt_or_continuity_actionability_evidence"
+    if gaps:
+        return "context_actionability_review_required"
+    if (
+        _int_or_zero(indicators.get("same_mechanism_observed")) > 0
+        or _int_or_zero(indicators.get("branch_lessons_required")) > 0
+        or _int_or_zero(indicators.get("weak_positive_observed")) > 0
+    ):
+        return "continuity_signals_context_actionable"
+    return "no_continuity_opportunities_observed"
+
+
+def _research_context_actionability_recommendations(gaps: list[str]) -> list[str]:
+    recommendations: list[str] = []
+    for gap in gaps:
+        if "without_cross_branch_prompt_signal" in gap:
+            recommendations.append(
+                "inspect prompt manifests for missing cross_branch_lesson blocks"
+            )
+        elif "despite_cross_branch_prompt_signal" in gap:
+            recommendations.append(
+                "inspect branch_lesson_usage records for semantic mismatch causes"
+            )
+        elif "same_mechanism" in gap:
+            recommendations.append(
+                "inspect branch-local research_signal blocks before judging churn"
+            )
+        elif "weak_positive" in gap:
+            recommendations.append(
+                "inspect research_signal and cross_branch_lesson blocks before judging transfer"
+            )
+        elif "omitted_or_truncated" in gap:
+            recommendations.append(
+                "inspect omitted_sections and truncated_sections in prompt manifests"
+            )
+        elif "governance_tokens_dominate" in gap:
+            recommendations.append(
+                "inspect signal density before adding more governance text"
+            )
+        elif "without_prompt_context" in gap:
+            recommendations.append(
+                "rebuild postrun proposal trajectory manifests before delegated review"
+            )
+        elif "without_research_continuity" in gap:
+            recommendations.append(
+                "rebuild research-efficiency reports before delegated review"
+            )
+        elif "no_current_run" in gap:
+            recommendations.append(
+                "launch or rebuild current-run evidence before research-quality conclusions"
+            )
+    return list(dict.fromkeys(recommendations))
+
+
 def _warehouse_followup_summary(
     inventory: Mapping[str, Any],
     *,
@@ -3239,6 +3538,12 @@ def _int_mapping(value: Any) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): _int_or_zero(item) for key, item in sorted(value.items())}
+
+
+def _sum_counts(value: Any) -> int:
+    if not isinstance(value, Mapping):
+        return 0
+    return sum(_int_or_zero(item) for item in value.values())
 
 
 def _safe_ratio(numerator: int, denominator: int) -> float | None:

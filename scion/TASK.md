@@ -361,12 +361,19 @@ Current checkpoint:
   failure/block counts, so delegated postrun review can distinguish deep
   follow-up from shallow branch scattering, family-level sub-MDE/no-effect
   patterns, and follow-up hypotheses that mention prior evidence without
-  semantically using it. Reports:
+  semantically using it. Postrun briefs now also include a report-only
+  `research_context_actionability_summary` joining prompt block-family signal
+  with research-continuity gaps, so delegated review can tell whether semantic
+  branch-lesson gaps or missed follow-up opportunities align with missing
+  research/cross-branch context, omitted/truncated sections, or governance-heavy
+  prompts. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
