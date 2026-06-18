@@ -69,6 +69,7 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "Direct `route_merge_repair` effect telemetry was positive in `19/32` pairs" in user_prompt
     assert "continue the `route_merge_repair` mechanism" in user_prompt
     assert "`route_merge_repair_guarded_v2`" in user_prompt
+    assert "Do not rename the branch to `route_limit_aware_repair`" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
@@ -108,6 +109,8 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "`32/32` valid pairs" in user_prompt
     assert "W/L/T `10/3/19`" in user_prompt
     assert "A/B/E positive, CMT2/P mixed" in user_prompt
+    assert "proposed `mechanism_changes` id remains `route_merge_repair`" in user_prompt
+    assert "local-search operator, or scheduler policy is a different branch" in user_prompt
 
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
@@ -229,6 +232,8 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "Branch-Current Integration Files" in rendered_system
     assert "branch_workspace" in rendered_system
     assert "smallest necessary wiring edits" in rendered_system
+    assert "Do not add new calls to `context.record_best_update`" in rendered_system
+    assert "keep the approved mechanism id `route_merge_repair`" in rendered_system
     assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
     assert "_ALNSVNSSolver.__init__(self, *" in rendered_system

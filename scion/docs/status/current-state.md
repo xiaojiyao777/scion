@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-17
+Last updated: 2026-06-18
 
 This is the short operational resume point. It is not an append-only run log.
 Detailed evidence belongs in `scion/docs/experiments/v0.4/`; curated milestone
@@ -65,6 +65,15 @@ CVRP/VRP:
   lesson to continue. The provider guidance now preserves the pair/effect
   evidence and points the next agent toward guarded same-mechanism refinement in
   `destroy_repair.py` before opening another unrelated target.
+- A first provider-guided rerun from commit `71666ae` failed the
+  same-mechanism field check and is not solver evidence. The first proposal
+  stayed in `destroy_repair.py` but renamed the mechanism to
+  `route_limit_aware_repair`; fallback proposals drifted to `local_search.py`
+  and `scheduler.py`; code retries invented unstable telemetry helpers such as
+  `record_objective_probe` and `record_best_update`. The framework failed the
+  bad candidates, and CVRP provider guidance has been tightened to keep
+  `mechanism_changes` on `route_merge_repair` and restrict candidate telemetry
+  to stable `record_phase`/`record_iteration`/`record_move` helpers.
 
 ## Active Work
 
@@ -76,11 +85,10 @@ CVRP/VRP:
 
 ## Next Actions
 
-1. Run the next CVRP agentic field check on the provider-guided
-   `route_merge_repair` continuation. The intended refinement is a guarded
-   route-absorption variant that preserves A/B/E gains, reduces mixed CMT2/P
-   trajectory harm, keeps X-n110/CMT4/M-n200 neutral, and does not touch generic
-   gates.
+1. Rerun the short CVRP agentic field check after committing the tightened
+   provider guidance. Acceptance first requires target-intent, hypothesis, and
+   code to stay on `destroy_repair.py` / `route_merge_repair`; only then should
+   screening quality be interpreted.
 2. Keep share70 as a rejected scheduler lesson. Do not repeat floor, hardcap,
    softrescue, or tail6 unless a future scheduler hypothesis is materially
    different and explains the X-tail mechanism.
@@ -102,6 +110,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-share70-cap-tail-diagnostics-20260617.md`.
 - CVRP post-share70 target-selection field check:
   `scion/docs/experiments/v0.4/v04-cvrp-post-share70-targetselect-agentic-1r-7557a15-postrun-20260617.md`.
+- CVRP route-merge guarded field failure:
+  `scion/docs/experiments/v0.4/v04-cvrp-routemerge-guarded-agentic-1r-71666ae-field-failure-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

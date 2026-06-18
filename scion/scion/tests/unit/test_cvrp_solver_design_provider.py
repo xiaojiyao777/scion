@@ -139,6 +139,7 @@ def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:
     assert "context.record_iteration" in rendered
     assert "context.record_context('<mechanism>" not in rendered
     assert "no `context.record_context` API" in rendered
+    assert "Do not add new calls to `context.record_best_update`" in rendered
 
 
 def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
@@ -154,6 +155,7 @@ def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
     assert payload["surface"] == "solver_design"
     assert "ObjectiveValue" in rendered_payload
     assert "context.objective_key" in rendered_payload
+    assert "context.record_best_update" in rendered_payload
     assert "_Solution" in rendered_payload
     assert "__slots__" in rendered_payload
     system_blocks, user_prompt = _split_code_context(
@@ -258,6 +260,8 @@ def test_cvrp_hypothesis_guidance_exposes_route_merge_followup_lessons() -> None
     assert "Do not add case-id, BKS, seed, split-membership" in rendered
     assert "`route_merge_repair_guarded_v2`" in rendered
     assert "plain non-worsening absorption" in rendered
+    assert "Do not rename the branch to `route_limit_aware_repair`" in rendered
+    assert "`node_shift_local_search`, or a scheduler policy" in rendered
 
 
 def test_cvrp_target_intent_guidance_prefers_route_merge_followup() -> None:
@@ -275,6 +279,8 @@ def test_cvrp_target_intent_guidance_prefers_route_merge_followup() -> None:
     assert "direct effect positive in `19/32` pairs" in rendered
     assert "A/B/E positive, CMT2/P mixed" in rendered
     assert "X-n110/CMT4/M-n200 neutral" in rendered
+    assert "proposed `mechanism_changes` id remains `route_merge_repair`" in rendered
+    assert "local-search operator, or scheduler policy is a different branch" in rendered
 
 
 def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(

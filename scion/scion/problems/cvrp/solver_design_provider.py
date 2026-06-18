@@ -214,9 +214,13 @@ class CvrpSolverDesignProvider:
                 "when repair created a new route or route pressure is present, "
                 "and require material non-pressure improvement rather than "
                 "plain non-worsening absorption. Keep "
-                "`route_merge_repair` activation/runtime/effect telemetry under "
-                "the same mechanism id so the follow-up can distinguish A/B/E "
-                "retention from unresolved CMT2/P trajectory harm."
+                "`route_merge_repair` activation/runtime/effect telemetry and "
+                "`mechanism_changes` under the same mechanism id so the "
+                "follow-up can distinguish A/B/E retention from unresolved "
+                "CMT2/P trajectory harm. Do not rename the branch to "
+                "`route_limit_aware_repair`, `route_compaction`, "
+                "`node_shift_local_search`, or a scheduler policy; those are "
+                "new branches, not same-mechanism continuation."
             ),
             (
                 "Before selecting a `solver_design` hypothesis target, read "
@@ -253,7 +257,11 @@ class CvrpSolverDesignProvider:
                 "post-share70 evidence no longer applies. The evidence is "
                 "`32/32` valid pairs, W/L/T `10/3/19`, direct effect positive "
                 "in `19/32` pairs, A/B/E positive, CMT2/P mixed, and "
-                "X-n110/CMT4/M-n200 neutral."
+                "X-n110/CMT4/M-n200 neutral. Same-mechanism continuation means "
+                "the proposed `mechanism_changes` id remains `route_merge_repair`; "
+                "a renamed route-limit repair, local-search operator, or "
+                "scheduler policy is a different branch and should not be the "
+                "fallback target for this field check."
             ),
             (
                 "A non-scheduler target is now acceptable when the selected "
@@ -489,7 +497,12 @@ class CvrpSolverDesignProvider:
                         "`solver_algorithm_context_records.<phase>_iterations`. "
                         "`context.record_move(phase, attempted=..., accepted=..., "
                         "delta=..., best_improved=...)` is for direct move/effect "
-                        "evidence."
+                        "evidence. Candidate patches should not add new calls to "
+                        "`context.record_best_update`, `context.record_context`, "
+                        "`context.record_objective_probe`, "
+                        "`context.record_alns_iteration`, or "
+                        "`context.record_solution_progress`; use the stable "
+                        "phase/iteration/move helper trio instead."
                     ),
                 },
             ),
@@ -498,6 +511,7 @@ class CvrpSolverDesignProvider:
                 "dynamic attributes on `_Solution` or `_Route` slotted objects",
                 "invented `_Solution.from_routes`/`from_public`/`to_public` bridge methods",
                 "raw cumulative `context.elapsed_ms()` passed as a phase duration",
+                "new candidate calls to `context.record_best_update` or other non-stable telemetry helpers",
             ),
         }
 
@@ -593,6 +607,14 @@ class CvrpSolverDesignProvider:
                 "construction.py and defines that exact symbol."
             ),
             (
+                "For the current CVRP `route_merge_repair` continuation, a "
+                "guarded-v2 implementation must keep the approved mechanism id "
+                "`route_merge_repair` in code and telemetry. Implement route "
+                "absorption trigger/acceptance guards inside destroy_repair.py; "
+                "do not rename the mechanism to route-limit-aware repair, "
+                "route compaction, local-search node shift, or scheduler policy."
+            ),
+            (
                 "If `additional_changes` touches `policies/baseline_algorithm.py`, "
                 "keep the stable entrypoint shape: import `_ALNSVNSSolver` from "
                 "`.baseline_modules.scheduler`, instantiate it, and call "
@@ -657,6 +679,17 @@ class CvrpSolverDesignProvider:
                 "when that mechanism directly caused an accepted or improving "
                 "candidate; ordinary scheduler best-improvement bookkeeping is "
                 "not causal acceptance effect evidence."
+            ),
+            (
+                "Candidate-facing CVRP telemetry helpers are "
+                "`context.record_phase`, `context.record_iteration`, and "
+                "`context.record_move`. Do not add new calls to "
+                "`context.record_best_update`, `context.record_objective_probe`, "
+                "`context.record_alns_iteration`, or "
+                "`context.record_solution_progress`, even if existing champion "
+                "scheduler code contains internal diagnostics with similar "
+                "names. Use `record_move(..., delta=..., best_improved=...)` "
+                "for direct effect attribution."
             ),
             (
                 "For ALNS/VNS phase modifications, instrument the declared "
