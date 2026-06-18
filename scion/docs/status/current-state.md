@@ -89,11 +89,11 @@ Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
-  `gpt-5.5` chat-completion preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1`; the real chat
-  completion returns HTTP `401` with `classification=not_authenticated`. Do not
-  launch prepared roots until `/v1/chat/completions` returns HTTP `200` with
-  non-empty output after re-login.
+  `gpt-5.5` chat-completion preflight reaches the proxy and reports
+  `AUTH_STATUS authenticated=True active=1 refreshing=0`, but the real chat
+  completion returns HTTP `401` with `classification=auth_token_invalidated`.
+  Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
+  with non-empty output after re-login.
 - WSL runs must use the synchronized WSL checkout and set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`.
 
