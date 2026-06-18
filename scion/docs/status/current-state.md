@@ -84,6 +84,11 @@ Framework observability:
   `/home/clawd/research/scion-experiments/`; the latest accepted CVRP
   post-pivot artifacts are under
   `/home/clawd/research/scion-experiments/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-20260618T064210Z`.
+- The next warehouse `v2` follow-up is prepared but not launched at
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-6r-gpt55-20260618T093411Z-claw`
+  and synced locally under `/home/clawd/research/scion-experiments/`. It has
+  completion preflight and default postrun report generation enabled; do not
+  run it until the `gpt-5.5` chat-completion route returns HTTP `200`.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion` to avoid
   stale Scion core imports from `/home/xjy-ubuntu/projects/scion/scion`.
