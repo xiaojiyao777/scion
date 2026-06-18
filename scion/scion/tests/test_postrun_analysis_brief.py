@@ -295,7 +295,34 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 },
                 "research_shape_summary": {
                     "max_branch_depth": 3,
+                    "mean_branch_depth": 2.0,
+                    "branch_depth_distribution": {"1": 1, "3": 1},
+                    "active_shape": "deep_focused",
+                    "active_branch_count": 1,
+                    "active_mechanism_family_count": 1,
                     "mechanism_family_count": 2,
+                },
+            },
+            "research_shape": {
+                "schema_version": "campaign_research_shape_diagnostics.v1",
+                "decision_features_excluded": True,
+                "branch_depth_distribution": {"1": 1, "3": 1},
+                "branch_depth_by_branch": {"branch-1": 3},
+                "max_branch_depth": 3,
+                "mean_branch_depth": 2.0,
+                "active_research_shape_signal": {
+                    "active_branch_count": 1,
+                    "active_branch_ids": ["branch-1"],
+                    "active_mechanism_family_count": 1,
+                    "active_mechanism_families": ["regret_insertion"],
+                    "shape": "deep_focused",
+                },
+                "mechanism_family_breadth": {
+                    "family_count": 2,
+                    "families": {
+                        "regret_insertion": 3,
+                        "route_merge": 1,
+                    },
                 },
             },
         },
@@ -766,6 +793,19 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert continuity_entry["same_mechanism_followup"]["selection_rate"] == 1.0
     assert continuity_entry["branch_lesson_usage"]["semantic_gap_count"] == 0
     assert continuity_entry["weak_positive_transfer"]["acceptance_rate"] == 1.0
+    assert continuity["aggregate"] == {
+        "max_branch_depth": 3,
+        "mean_branch_depth_max": 2.0,
+        "branch_depth_distribution": {"1": 1, "3": 1},
+        "active_shape_counts": {"deep_focused": 1},
+        "active_branch_count_max": 1,
+        "active_mechanism_family_count_max": 1,
+        "mechanism_family_count_max": 2,
+        "mechanism_family_counts": {
+            "regret_insertion": 3,
+            "route_merge": 1,
+        },
+    }
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is True
@@ -805,6 +845,9 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         in markdown
     )
     assert "## Research Continuity Summary" in markdown
+    assert "- Branch depth distribution: 1=1, 3=1" in markdown
+    assert "- Active shapes: deep_focused=1" in markdown
+    assert "- Mechanism family observations: regret_insertion=3, route_merge=1" in markdown
     assert "## Runtime Feedback Summary" in markdown
     assert "- Runtime budget diagnostics: 1" in markdown
     assert (
@@ -834,7 +877,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Research+source/governance ratio: 2.333333" in markdown
     assert "| source_code | 1 | 15 | 60 |" in markdown
     assert (
-        "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | 3 | 2 |"
+        "| normal.research_efficiency.v1.json | 1/1 | 2/2 | 0 | 1/1 | "
+        "3 | 1=1, 3=1 | deep_focused | 2 |"
         in markdown
     )
     assert any(

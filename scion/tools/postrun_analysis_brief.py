@@ -804,6 +804,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
             )
 
     continuity = brief.get("research_continuity_summary") or {}
+    continuity_aggregate = _mapping_or_empty(continuity.get("aggregate"))
     lines.extend(
         [
             "",
@@ -814,6 +815,20 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"`{_display(continuity.get('current_run_evidence'))}`",
             "- Reports with continuity: "
             f"`{_display(continuity.get('continuity_report_count'))}`",
+            "- Branch depth distribution: "
+            f"{_mapping_text(continuity_aggregate.get('branch_depth_distribution'))}",
+            "- Max/mean branch depth: "
+            f"{_display(continuity_aggregate.get('max_branch_depth'))} / "
+            f"{_display(continuity_aggregate.get('mean_branch_depth_max'))}",
+            "- Active shapes: "
+            f"{_mapping_text(continuity_aggregate.get('active_shape_counts'))}",
+            "- Active branches/families max: "
+            f"{_display(continuity_aggregate.get('active_branch_count_max'))} / "
+            f"{_display(continuity_aggregate.get('active_mechanism_family_count_max'))}",
+            "- Mechanism family breadth max: "
+            f"{_display(continuity_aggregate.get('mechanism_family_count_max'))}",
+            "- Mechanism family observations: "
+            f"{_mapping_text(continuity_aggregate.get('mechanism_family_counts'))}",
         ]
     )
     entries = continuity.get("entries")
@@ -822,8 +837,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
             [
                 "| Report | Same-mechanism selected/observed | "
                 "Branch lessons satisfied/required | Semantic gaps | "
-                "Weak-positive accepted/observed | Max depth | Families |",
-                "|---|---:|---:|---:|---:|---:|---:|",
+                "Weak-positive accepted/observed | Max depth | Depth distribution | "
+                "Active shape | Families |",
+                "|---|---:|---:|---:|---:|---:|---|---|---:|",
             ]
         )
         for entry in entries:
@@ -835,11 +851,18 @@ def render_markdown(brief: dict[str, Any]) -> str:
             lessons = _mapping_or_empty(entry.get("branch_lesson_usage"))
             transfer = _mapping_or_empty(entry.get("weak_positive_transfer"))
             shape = _mapping_or_empty(entry.get("research_shape_summary"))
+            full_shape = _mapping_or_empty(entry.get("research_shape"))
+            active_shape = shape.get("active_shape") or _mapping_or_empty(
+                full_shape.get("active_research_shape_signal")
+            ).get("shape")
+            depth_distribution = shape.get(
+                "branch_depth_distribution"
+            ) or full_shape.get("branch_depth_distribution")
             lines.append(
                 "| {report} | {same_selected}/{same_observed} | "
                 "{lesson_satisfied}/{lesson_required} | {semantic_gap} | "
                 "{transfer_accepted}/{transfer_observed} | {max_depth} | "
-                "{families} |".format(
+                "{depth_distribution} | {active_shape} | {families} |".format(
                     report=_display(entry.get("report")),
                     same_selected=_display(
                         same_mechanism.get(
@@ -857,6 +880,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
                         transfer.get("observed_opportunity_count")
                     ),
                     max_depth=_display(shape.get("max_branch_depth")),
+                    depth_distribution=_mapping_text(depth_distribution),
+                    active_shape=_display(active_shape),
                     families=_display(shape.get("mechanism_family_count")),
                 )
             )
@@ -2592,6 +2617,7 @@ def _research_continuity_summary(
         "available": False,
         "report_count": 0,
         "continuity_report_count": 0,
+        "aggregate": _empty_research_continuity_aggregate(),
         "entries": [],
     }
     if not current_run_evidence:
@@ -2608,6 +2634,7 @@ def _research_continuity_summary(
             {
                 "report": path.name,
                 "path": str(path),
+                "research_shape": _mapping_or_empty(doc.get("research_shape")),
                 "same_mechanism_followup": _mapping_or_empty(
                     continuity.get("same_mechanism_followup")
                 ),
@@ -2626,13 +2653,97 @@ def _research_continuity_summary(
             }
         )
 
+    aggregate = _empty_research_continuity_aggregate()
+    for entry in entries:
+        _merge_research_continuity_aggregate(aggregate, entry)
     return {
         **base,
         "available": bool(entries),
         "report_count": len(report_paths),
         "continuity_report_count": len(entries),
+        "aggregate": aggregate,
         "entries": entries,
     }
+
+
+def _empty_research_continuity_aggregate() -> dict[str, Any]:
+    return {
+        "max_branch_depth": 0,
+        "mean_branch_depth_max": None,
+        "branch_depth_distribution": {},
+        "active_shape_counts": {},
+        "active_branch_count_max": 0,
+        "active_mechanism_family_count_max": 0,
+        "mechanism_family_count_max": 0,
+        "mechanism_family_counts": {},
+    }
+
+
+def _merge_research_continuity_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    shape = _mapping_or_empty(entry.get("research_shape_summary"))
+    full_shape = _mapping_or_empty(entry.get("research_shape"))
+    aggregate["max_branch_depth"] = max(
+        _int_or_zero(aggregate.get("max_branch_depth")),
+        _int_or_zero(shape.get("max_branch_depth")),
+        _int_or_zero(full_shape.get("max_branch_depth")),
+    )
+    mean_depth = _float_or_none(
+        shape.get("mean_branch_depth") or full_shape.get("mean_branch_depth")
+    )
+    current_mean = _float_or_none(aggregate.get("mean_branch_depth_max"))
+    if mean_depth is not None and (current_mean is None or mean_depth > current_mean):
+        aggregate["mean_branch_depth_max"] = mean_depth
+
+    depth_distribution = (
+        _mapping_or_empty(shape.get("branch_depth_distribution"))
+        or _mapping_or_empty(full_shape.get("branch_depth_distribution"))
+    )
+    for depth, count in sorted(depth_distribution.items()):
+        _increment_count(
+            aggregate["branch_depth_distribution"],
+            str(depth),
+            _int_or_zero(count),
+        )
+
+    active_shape = str(
+        shape.get("active_shape")
+        or _mapping_or_empty(full_shape.get("active_research_shape_signal")).get(
+            "shape"
+        )
+        or ""
+    )
+    if active_shape:
+        _increment_count(aggregate["active_shape_counts"], active_shape)
+    active_shape_summary = _mapping_or_empty(
+        full_shape.get("active_research_shape_signal")
+    )
+    aggregate["active_branch_count_max"] = max(
+        _int_or_zero(aggregate.get("active_branch_count_max")),
+        _int_or_zero(shape.get("active_branch_count")),
+        _int_or_zero(active_shape_summary.get("active_branch_count")),
+    )
+    aggregate["active_mechanism_family_count_max"] = max(
+        _int_or_zero(aggregate.get("active_mechanism_family_count_max")),
+        _int_or_zero(shape.get("active_mechanism_family_count")),
+        _int_or_zero(active_shape_summary.get("active_mechanism_family_count")),
+    )
+
+    mechanism_breadth = _mapping_or_empty(full_shape.get("mechanism_family_breadth"))
+    aggregate["mechanism_family_count_max"] = max(
+        _int_or_zero(aggregate.get("mechanism_family_count_max")),
+        _int_or_zero(shape.get("mechanism_family_count")),
+        _int_or_zero(mechanism_breadth.get("family_count")),
+    )
+    families = _mapping_or_empty(mechanism_breadth.get("families"))
+    for family, count in sorted(families.items()):
+        _increment_count(
+            aggregate["mechanism_family_counts"],
+            str(family),
+            _int_or_zero(count),
+        )
 
 
 def _warehouse_followup_summary(
