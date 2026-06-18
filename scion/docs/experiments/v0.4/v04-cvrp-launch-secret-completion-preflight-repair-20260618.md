@@ -75,4 +75,6 @@ should launch with:
 For WSL, keep the established synchronized runner worktree and
 `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. The
 completion preflight should be treated as the launch readiness proof; do not
-use `/v1/models` alone.
+use `/v1/models` alone. The preflight proves authentication and non-empty
+response shape for a small request; it does not prove sufficient account
+balance for Scion's larger agentic proposal prompts.

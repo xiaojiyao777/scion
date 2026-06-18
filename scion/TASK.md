@@ -306,12 +306,17 @@ Current checkpoint:
   `127.0.0.1:8080` proxy returned `401` after upstream OAuth invalidation; the
   server fallback through `https://aihubmix.com` also had `0` effective rounds
   because the account returned `insufficient_user_quota`, and the official
-  OpenAI key returned `insufficient_quota`. Report:
+  OpenAI key returned `insufficient_quota`. A clean `f462133` rerun accepted
+  the new launcher preflight path and confirmed live target-intent/hypothesis
+  prompts include the construction-pivot lesson, but the real agentic proposal
+  requests still failed with `403 insufficient_user_quota`, so there is still
+  no target, hypothesis, patch, screening row, or solver evidence. Report:
   `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
-  Next action is to restore a `gpt-5.5` completion path that returns HTTP `200`
-  and non-empty output from `/v1/chat/completions`; `/v1/models` is not an
-  adequate preflight. Then rerun the same one-round construction-pivot guidance
-  check from a clean synchronized commit.
+  Next action is to restore a `gpt-5.5` route with enough balance/quota for
+  full Scion agentic proposal prompts; `/v1/models` is not an adequate
+  preflight, and a tiny non-empty completion only proves auth/response shape.
+  Then rerun the same one-round construction-pivot guidance check from a clean
+  synchronized commit.
 - Implemented the CVRP launcher repair needed for that resume path. Report:
   `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
   `launch_cvrp_agentic_campaign.py` now supports `--api-key-env` so real

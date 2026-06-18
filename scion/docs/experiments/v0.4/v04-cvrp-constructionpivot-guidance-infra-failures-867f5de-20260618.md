@@ -62,17 +62,50 @@ Failure:
 - A separate official OpenAI endpoint probe using `OPENAI_API_KEY` failed with
   `429 insufficient_quota`.
 
+## Clean Launcher Rerun
+
+Run root:
+`/home/clawd/research/scion-experiments/v04-cvrp-constructionpivot-guidance-f462133-local-agentic-1r-gpt55-20260618T075218Z-claw`
+
+Status:
+
+- Commit: `f462133`
+- Launcher completion preflight: passed
+  (`COMPLETION_PREFLIGHT_OK`, `gpt-5.5`, non-empty output)
+- `run_status.json`: `run_validity_status=invalid_infra_only`
+- `campaign_exit_status=incomplete_infra_stop`
+- `last_stop_reason=api_balance_exhausted`
+- `wrapper_exit_status=20`
+- `0` effective rounds
+- `0` formal candidates
+
+Failure:
+
+- The run used `--api-key-env SCION_API_KEY` and `--completion-preflight`; the
+  launch artifacts did not contain the secret, and `launch.env` was mode
+  `0600`.
+- The live `hypothesis_target_intent` and `hypothesis` trace prompts both
+  contained the construction-pivot lesson, including the
+  `route_limit_seed_diversification` warning.
+- Both LLM requests failed with `403 insufficient_user_quota`, so no target,
+  hypothesis, patch, screening row, or solver evidence was produced.
+- This shows the small completion preflight is useful for authentication and
+  response-shape readiness, but it does not prove sufficient account balance
+  for Scion's larger agentic proposal prompts.
+
 ## Resume Criteria
 
 Before relaunching the construction-pivot guidance check:
 
-1. Restore a `gpt-5.5` completion path that returns HTTP `200` and non-empty
-   output from `/v1/chat/completions`.
+1. Restore a `gpt-5.5` route with enough balance/quota for full Scion agentic
+   proposal prompts. A tiny non-empty `/v1/chat/completions` preflight is
+   necessary but no longer sufficient by itself.
 2. For WSL, prefer the synchronized runner worktree at
    `/home/xjy-ubuntu/research/or-autoresearch-agent` and keep
    `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`.
 3. Rerun the same one-round construction-pivot guidance check from a clean
-   synced commit.
+   synced commit using `--completion-preflight` and, for non-local keys,
+   `--api-key-env SCION_API_KEY`.
 4. Interpret candidate evidence only after live `hypothesis_target_intent` and
    `hypothesis` traces show the construction-pivot lesson and the run completes
    at least one effective round.
