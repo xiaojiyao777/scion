@@ -53,6 +53,20 @@ RESEARCH_SHAPE_PROMPT_MARKERS = {
         "research_shape",
     ),
 }
+LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
+    "manifest_env_reader": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "PREPARED_RUN_MANIFEST",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "launch_research_focus",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "launch_research_focus",
+    ),
+}
 
 
 def rebuild_prepared_handoff(
@@ -333,6 +347,10 @@ def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, A
     _add_focus_signals(signals, manifest_dict, research_focus)
     _add_campaign_state_signals(signals, summary_dict, status_dict)
     _add_research_shape_prompt_signal(signals)
+    _add_launch_research_focus_prompt_signal(
+        signals,
+        required=bool(research_focus),
+    )
 
     missing_required = [
         name
@@ -626,6 +644,30 @@ def _add_research_shape_prompt_signal(signals: dict[str, dict[str, Any]]) -> Non
         available=all(marker_results.values()),
         required=True,
         source="current checkout proposal context and hypothesis prompt code",
+        detail={"markers": marker_results},
+    )
+
+
+def _add_launch_research_focus_prompt_signal(
+    signals: dict[str, dict[str, Any]],
+    *,
+    required: bool,
+) -> None:
+    marker_results = {
+        name: _source_contains(relative_path, marker)
+        for name, (relative_path, marker) in (
+            LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS.items()
+        )
+    }
+    _add_signal(
+        signals,
+        "prepared_research_focus_prompt_bridge",
+        available=all(marker_results.values()),
+        required=required,
+        source=(
+            "current checkout prepared-run manifest reader and hypothesis "
+            "prompt renderer"
+        ),
         detail={"markers": marker_results},
     )
 

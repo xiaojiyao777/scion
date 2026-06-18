@@ -207,6 +207,18 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         prompt_context["signals"]["research_shape_prompt_signal"]["available"] is True
     )
     assert (
+        prompt_context["signals"]["prepared_research_focus_prompt_bridge"][
+            "available"
+        ]
+        is True
+    )
+    assert (
+        prompt_context["signals"]["prepared_research_focus_prompt_bridge"][
+            "required"
+        ]
+        is True
+    )
+    assert (
         prompt_context["signals"]["cvrp_measurement_opportunity_handoff"][
             "available"
         ]
