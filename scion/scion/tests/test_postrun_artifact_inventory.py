@@ -203,6 +203,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "exit.txt": True,
         "launch.env": True,
         "prepared_handoff": False,
+        "pre_campaign_completion_preflight.v1.json": False,
         "prepared_run_manifest.md": False,
         "prepared_run_manifest.v1.json": False,
         "run.log": True,
@@ -482,6 +483,25 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
             "status": "finished",
             "wrapper_exit_status": 64,
             "pre_campaign_completion_preflight": "failed",
+            "pre_campaign_completion_preflight_classification": (
+                "not_authenticated"
+            ),
+            "pre_campaign_completion_preflight_detail_file": (
+                "pre_campaign_completion_preflight.v1.json"
+            ),
+            "pre_campaign_completion_preflight_login_url_present": True,
+            "pre_campaign_completion_preflight_operator_action": (
+                "Refresh the local proxy login, then rerun launch readiness until "
+                "launch_ready=true."
+            ),
+        },
+    )
+    _write_json(
+        run_root / "pre_campaign_completion_preflight.v1.json",
+        {
+            "ok": False,
+            "chat": {"classification": "not_authenticated"},
+            "login_url": "https://auth.example.test/login",
         },
     )
     _write_json(
@@ -520,6 +540,18 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert data["lifecycle"]["evidence_scope"] == (
         "pre_campaign_preflight_failed_with_resume_snapshot"
     )
+    assert data["launcher"]["artifacts"][
+        "pre_campaign_completion_preflight.v1.json"
+    ] is True
+    assert data["launcher"]["status_fields"][
+        "pre_campaign_completion_preflight_classification"
+    ] == "not_authenticated"
+    assert data["launcher"]["status_fields"][
+        "pre_campaign_completion_preflight_login_url_present"
+    ] is True
+    assert "Refresh the local proxy login" in data["launcher"]["status_fields"][
+        "pre_campaign_completion_preflight_operator_action"
+    ]
     assert data["validity"] == {
         "run_validity_status": "invalid_infra_only",
         "run_completeness_status": "incomplete",

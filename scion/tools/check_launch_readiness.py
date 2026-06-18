@@ -304,14 +304,21 @@ def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
         text = run_sh.read_text(encoding="utf-8")
     except OSError:
         return False
-    marker = '"pre_campaign_completion_preflight":"failed"'
+    old_marker = '"pre_campaign_completion_preflight":"failed"'
+    helper_marker = "tools/write_completion_preflight_status.py"
+    marker_positions = [
+        pos for pos in (text.find(old_marker), text.find(helper_marker)) if pos >= 0
+    ]
+    if not marker_positions:
+        return False
+    marker_pos = min(marker_positions)
+    exit_pos = text.find('exit "$PREFLIGHT_STATUS"')
+    if exit_pos < 0:
+        return False
     return (
         "write_postrun_acceptance_reports() {" in text
-        and marker in text
-        and text.find(marker) < text.find('exit "$PREFLIGHT_STATUS"')
-        and "write_postrun_acceptance_reports" in text[
-            text.find(marker) : text.find('exit "$PREFLIGHT_STATUS"')
-        ]
+        and marker_pos < exit_pos
+        and "write_postrun_acceptance_reports" in text[marker_pos:exit_pos]
     )
 
 

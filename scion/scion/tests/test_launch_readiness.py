@@ -95,6 +95,30 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     assert report["checks"]["completion_preflight"]["status"] == "failed"
 
 
+def test_launch_readiness_accepts_helper_preflight_failure_report_path(
+    tmp_path: Path,
+) -> None:
+    run_sh = tmp_path / "run.sh"
+    run_sh.write_text(
+        """#!/usr/bin/env bash
+write_postrun_acceptance_reports() {
+  return 0
+}
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
+  "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
+    --output "$RUN_ROOT/run_status.json" \
+    --exit-code "$PREFLIGHT_STATUS" \
+    --detail "$PREFLIGHT_DETAIL"
+  write_postrun_acceptance_reports
+  exit "$PREFLIGHT_STATUS"
+fi
+""",
+        encoding="utf-8",
+    )
+
+    assert readiness_tool._run_sh_contains_preflight_failure_report_path(run_sh)
+
+
 def test_completion_preflight_fetches_login_url_and_operator_action(
     tmp_path: Path,
     monkeypatch,

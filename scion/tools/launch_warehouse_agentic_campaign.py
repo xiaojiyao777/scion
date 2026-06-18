@@ -103,21 +103,27 @@ PREPARED_HANDOFF_FAMILIES = (
 
 COMPLETION_PREFLIGHT_SNIPPET = r'''
 if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
+  PREFLIGHT_DETAIL="$RUN_ROOT/pre_campaign_completion_preflight.v1.json"
   "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" \
     --base-url "$SCION_BASE_URL" \
     --model "$SCION_MODEL" \
     --api-key "$SCION_API_KEY" \
     --timeout-sec 60 \
     --login-url-on-failure \
-    >> "$RUN_ROOT/run.log" 2>&1
+    --json \
+    > "$PREFLIGHT_DETAIL" 2>> "$RUN_ROOT/run.log"
   PREFLIGHT_STATUS=$?
+  echo "COMPLETION_PREFLIGHT_DETAIL:$PREFLIGHT_DETAIL" >> "$RUN_ROOT/run.log"
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     {
       echo "WRAPPER_EXIT_STATUS:$PREFLIGHT_STATUS"
       echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED:1"
     } > "$RUN_ROOT/exit.txt"
-    printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
+    "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
+      --output "$RUN_ROOT/run_status.json" \
+      --exit-code "$PREFLIGHT_STATUS" \
+      --detail "$PREFLIGHT_DETAIL"
     write_postrun_acceptance_reports
     exit "$PREFLIGHT_STATUS"
   fi

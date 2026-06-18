@@ -56,7 +56,10 @@ Framework:
 - If a prepared root is started while completion preflight fails, launcher
   reports now mark the root `invalid_infra_only` with zero current-run evidence
   and skip current-run report families while preserving analysis brief,
-  inventory, and rebuild manifest artifacts.
+  inventory, and rebuild manifest artifacts. The launcher also preserves
+  `pre_campaign_completion_preflight.v1.json` plus structured status fields for
+  failure classification, sanitized auth/account state, login-url presence, and
+  operator action.
 - `scion/tools/check_launch_readiness.py` is the current pre-launch verifier:
   static readiness covers prepared contracts, runtime guard consistency,
   `run.sh` syntax, report-family expectations, and unstarted root state; launch
@@ -164,6 +167,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-rebuild-tool-20260618.md`.
 - Current preflight-failed launch-root evidence guard:
   `scion/docs/experiments/v0.4/v04-preflight-failed-launch-root-evidence-guard-20260618.md`.
+- Current actionable preflight-failure status artifact repair:
+  `scion/docs/experiments/v0.4/v04-preflight-failure-actionable-status-artifact-repair-20260618.md`.
 - Current launch readiness helper:
   `scion/docs/experiments/v0.4/v04-launch-readiness-check-tool-20260618.md`.
 - Current launch-readiness login actionability repair:

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs, artifact inventories, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness failures, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs, artifact inventories, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -289,9 +289,11 @@ Current checkpoint:
   CVRP research-focus/default-avoid handoff,
   postrun analysis brief, and artifact/count inventory with report-only Phase 4
   evidence coverage, prepared contract checks, launch-readiness handoff
-  snapshots, and prepared-only lifecycle guards plus preflight-failed
-  launch-root guards that prevent copied resume artifacts from being treated as
-  current-run postrun evidence. For historical roots or schema drift, rebuild
+  snapshots, and prepared-only lifecycle guards plus structured
+  preflight-failed launch-root guards that preserve failure classification,
+  login-url presence, and operator action while preventing copied resume
+  artifacts from being treated as current-run postrun evidence. For historical
+  roots or schema drift, rebuild
   the report-only acceptance bundle with
   `scion/tools/rebuild_postrun_acceptance.py` before delegating postrun
   analysis; current launcher postrun paths call this rebuild tool directly.

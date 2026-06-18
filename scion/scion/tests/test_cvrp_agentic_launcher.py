@@ -172,11 +172,13 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED" in run_sh_text
     assert "tools/check_gpt55_proxy.py" in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
+    assert "--json" in run_sh_text
+    assert "pre_campaign_completion_preflight.v1.json" in run_sh_text
+    assert "tools/write_completion_preflight_status.py" in run_sh_text
     assert "write_postrun_acceptance_reports() {" in run_sh_text
-    assert (
-        'printf \'{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\\n\' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"\n    write_postrun_acceptance_reports'
-        in run_sh_text
-    )
+    assert "--output \"$RUN_ROOT/run_status.json\"" in run_sh_text
+    assert "--exit-code \"$PREFLIGHT_STATUS\"" in run_sh_text
+    assert "--detail \"$PREFLIGHT_DETAIL\"" in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
         run_sh_text
     )
@@ -737,6 +739,9 @@ def test_cvrp_agentic_launcher_prepare_writes_completion_preflight(
     assert "--model \"$SCION_MODEL\"" in run_sh_text
     assert "--api-key \"$SCION_API_KEY\"" in run_sh_text
     assert "--login-url-on-failure" in run_sh_text
+    assert "--json" in run_sh_text
+    assert "pre_campaign_completion_preflight.v1.json" in run_sh_text
+    assert "tools/write_completion_preflight_status.py" in run_sh_text
     assert "pre_campaign_completion_preflight" in run_sh_text
     assert "/v1/models" not in run_sh_text
     assert "openai.OpenAI" not in run_sh_text
