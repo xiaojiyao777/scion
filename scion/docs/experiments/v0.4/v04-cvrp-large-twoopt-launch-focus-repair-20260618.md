@@ -117,8 +117,8 @@ Strict launch readiness still fails only at the real completion preflight:
   },
   "auth_pool": {
     "active": 0,
-    "expired": 0,
-    "refreshing": 1,
+    "expired": 1,
+    "refreshing": 0,
     "total": 1
   }
 }
