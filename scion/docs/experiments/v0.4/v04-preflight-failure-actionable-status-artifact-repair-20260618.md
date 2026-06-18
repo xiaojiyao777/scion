@@ -57,3 +57,32 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
 ```
 
 Result: `41 passed`.
+
+WSL verification after syncing commit `35de1b5`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_completion_preflight_status.py \
+  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
+  scion/scion/tests/test_warehouse_agentic_launcher.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+```
+
+Result: `41 passed`.
+
+Prepared roots refreshed from commit `35de1b5`:
+
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-actionpreflight-1r-gpt55-1r-gpt55-20260618T145045Z-claw`
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-actionpreflight-6r-gpt55-6r-gpt55-20260618T145046Z-claw`
+
+Both refreshed roots have `static_ready=true`, `git_runtime_consistent=ok`, and
+generated `run.sh` files containing the structured preflight-failure helper and
+`pre_campaign_completion_preflight.v1.json` detail artifact path. Real
+completion preflight still returns HTTP `401` with
+`classification=not_authenticated`; do not launch until readiness reports
+`launch_ready=true`.
