@@ -241,6 +241,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require a real gpt-5.5 chat completion before reporting ready.",
     )
+    parser.add_argument(
+        "--require-launch-ready",
+        action="store_true",
+        help=(
+            "Imply --completion-preflight and exit zero only when launch_ready=true."
+        ),
+    )
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--api-key-env", default=None)
     parser.add_argument("--timeout-sec", type=float, default=60.0)
@@ -258,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_readiness(
         args.run_root,
-        completion_preflight=args.completion_preflight,
+        completion_preflight=args.completion_preflight or args.require_launch_ready,
         api_key=args.api_key,
         api_key_env=args.api_key_env,
         timeout_sec=args.timeout_sec,
@@ -267,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(render_markdown(report), end="")
+    if args.require_launch_ready:
+        return 0 if report["launch_ready"] else UNREADY_EXIT
     return 0 if report["ready"] else UNREADY_EXIT
 
 
@@ -401,7 +410,7 @@ def _with_completion_preflight_action(
         "summary": "Resolve the GPT-5.5 proxy preflight before starting this prepared campaign.",
         "rerun_command": (
             "python scion/tools/check_launch_readiness.py <run_root> "
-            "--completion-preflight --format json"
+            "--require-launch-ready --format json"
         ),
         "model": model,
         "base_url": base_url,

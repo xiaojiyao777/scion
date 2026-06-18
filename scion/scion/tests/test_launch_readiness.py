@@ -198,7 +198,7 @@ def test_launch_readiness_markdown_renders_completion_action(
                 "login_url": "http://127.0.0.1:8080/auth/login",
                 "rerun_command": (
                     "python scion/tools/check_launch_readiness.py <run_root> "
-                    "--completion-preflight --format json"
+                    "--require-launch-ready --format json"
                 ),
             },
         }
@@ -215,7 +215,7 @@ def test_launch_readiness_markdown_renders_completion_action(
     assert "## Completion Preflight Action" in markdown
     assert "Classification: `not_authenticated`" in markdown
     assert "http://127.0.0.1:8080/auth/login" in markdown
-    assert "--completion-preflight --format json" in markdown
+    assert "--require-launch-ready --format json" in markdown
 
 
 def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
@@ -233,6 +233,64 @@ def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
     assert result.returncode == 64
     assert payload["ready"] is False
     assert payload["checks"]["not_already_started"]["status"] == "failed"
+
+
+def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    def fail_preflight(**_: object) -> tuple[str, object]:
+        return "failed", {"chat": {"classification": "not_authenticated"}}
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        fail_preflight,
+    )
+
+    exit_code = readiness_tool.main(
+        [str(run_root), "--require-launch-ready", "--format", "json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 64
+    assert payload["completion_preflight_required"] is True
+    assert payload["static_ready"] is True
+    assert payload["launch_ready"] is False
+    assert payload["ready"] is False
+    assert payload["checks"]["completion_preflight"]["status"] == "failed"
+
+
+def test_launch_readiness_cli_require_launch_ready_accepts_real_preflight_success(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+
+    def pass_preflight(**_: object) -> tuple[str, object]:
+        return "ok", {"chat": {"classification": "", "http_status": 200}}
+
+    monkeypatch.setattr(
+        readiness_tool,
+        "_completion_preflight_check",
+        pass_preflight,
+    )
+
+    exit_code = readiness_tool.main(
+        [str(run_root), "--require-launch-ready", "--format", "json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["completion_preflight_required"] is True
+    assert payload["static_ready"] is True
+    assert payload["launch_ready"] is True
+    assert payload["ready"] is True
+    assert payload["checks"]["completion_preflight"]["status"] == "ok"
 
 
 def _write_prepared_root(
