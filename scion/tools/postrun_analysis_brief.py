@@ -72,6 +72,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
+        "protocol_accounting_summary": _protocol_accounting_summary(
+            run_root_path,
+            inventory,
+        ),
         "measurement_effect_summary": _measurement_effect_summary(
             run_root_path,
             inventory,
@@ -291,6 +295,90 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     available=_display(item.get("available")),
                     count=_display(item.get("count")),
                     source=_display(item.get("source")),
+                )
+            )
+
+    accounting = brief.get("protocol_accounting_summary") or {}
+    accounting_aggregate = _mapping_or_empty(accounting.get("aggregate"))
+    effective_budget = _mapping_or_empty(
+        accounting_aggregate.get("effective_budget")
+    )
+    protocol_rows = _mapping_or_empty(accounting_aggregate.get("protocol_rows"))
+    formal_artifacts = _mapping_or_empty(
+        accounting_aggregate.get("formal_candidate_artifacts")
+    )
+    stage_rows = _mapping_or_empty(accounting_aggregate.get("stage_rows"))
+    lines.extend(
+        [
+            "",
+            "## Protocol Accounting Summary",
+            "- Source: current-run research-efficiency `effective_budget`, "
+            "`protocol_rows`, formal candidate, stage-row, and reconciliation fields.",
+            f"- Available: `{_display(accounting.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(accounting.get('current_run_evidence'))}`",
+            "- Reports with accounting: "
+            f"`{_display(accounting.get('accounting_report_count'))}`",
+            "- Requested/effective rounds: "
+            f"{_display(effective_budget.get('requested_rounds'))} / "
+            f"{_display(effective_budget.get('effective_rounds_completed'))}",
+            "- Completed requested rounds reports: "
+            f"{_display(effective_budget.get('completed_requested_rounds_true'))}",
+            "- Stop reasons: "
+            f"{_mapping_text(effective_budget.get('stopped_reason_counts'))}",
+            "- Protocol rows metric/evaluated/effective: "
+            f"{_display(protocol_rows.get('protocol_metric_results'))} / "
+            f"{_display(protocol_rows.get('protocol_evaluated_candidates'))} / "
+            f"{_display(protocol_rows.get('effective_protocol_rounds'))}",
+            "- Stage rows screening/validation/frozen/fresh-runtime: "
+            f"{_display(stage_rows.get('screening'))} / "
+            f"{_display(stage_rows.get('validation'))} / "
+            f"{_display(stage_rows.get('frozen'))} / "
+            f"{_display(stage_rows.get('fresh_runtime_replay'))}",
+            "- Formal candidates screened/evaluated/artifact rows: "
+            f"{_display(accounting_aggregate.get('formal_screened_candidates'))} / "
+            f"{_display(accounting_aggregate.get('formal_protocol_evaluated_candidates'))}"
+            " / "
+            f"{_display(formal_artifacts.get('row_count'))}",
+            "- Formal candidate index statuses: "
+            f"{_mapping_text(formal_artifacts.get('index_status_counts'))}",
+        ]
+    )
+    accounting_entries = accounting.get("entries")
+    if isinstance(accounting_entries, list) and accounting_entries:
+        lines.extend(
+            [
+                "| Report | Requested | Effective | Protocol rows | "
+                "Formal artifacts | Stages s/v/f/fr | Stop reason |",
+                "|---|---:|---:|---:|---:|---|---|",
+            ]
+        )
+        for entry in accounting_entries:
+            if not isinstance(entry, dict):
+                continue
+            budget_entry = _mapping_or_empty(entry.get("effective_budget"))
+            rows_entry = _mapping_or_empty(entry.get("protocol_rows"))
+            artifact_entry = _mapping_or_empty(
+                entry.get("formal_candidate_artifacts")
+            )
+            stage_entry = _mapping_or_empty(entry.get("stage_rows"))
+            lines.append(
+                "| {report} | {requested} | {effective} | {protocol_rows} | "
+                "{formal_artifacts} | {stages} | {stop_reason} |".format(
+                    report=_display(entry.get("report")),
+                    requested=_display(budget_entry.get("requested_rounds")),
+                    effective=_display(
+                        budget_entry.get("effective_rounds_completed")
+                    ),
+                    protocol_rows=_display(rows_entry.get("protocol_metric_results")),
+                    formal_artifacts=_display(artifact_entry.get("row_count")),
+                    stages=(
+                        f"{_display(stage_entry.get('screening'))}/"
+                        f"{_display(stage_entry.get('validation'))}/"
+                        f"{_display(stage_entry.get('frozen'))}/"
+                        f"{_display(stage_entry.get('fresh_runtime_replay'))}"
+                    ),
+                    stop_reason=_display(budget_entry.get("stopped_reason")),
                 )
             )
 
@@ -681,6 +769,305 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
         {"name": name, "path": str(path), "present": path.exists()}
         for name, path in paths.items()
     ]
+
+
+def _protocol_accounting_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_protocol_accounting_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "report_count": 0,
+        "accounting_report_count": 0,
+        "aggregate": _empty_protocol_accounting_aggregate(),
+        "entries": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _research_efficiency_report_paths(run_root, inventory)
+    entries: list[dict[str, Any]] = []
+    aggregate = _empty_protocol_accounting_aggregate()
+    for path in report_paths:
+        entry = _protocol_accounting_entry(path)
+        if not entry:
+            continue
+        entries.append(entry)
+        _merge_protocol_accounting_aggregate(aggregate, entry)
+
+    return {
+        **base,
+        "available": bool(entries),
+        "report_count": len(report_paths),
+        "accounting_report_count": len(entries),
+        "aggregate": aggregate,
+        "entries": entries,
+    }
+
+
+def _empty_protocol_accounting_aggregate() -> dict[str, Any]:
+    return {
+        "effective_budget": {
+            "counter_counts": {},
+            "requested_rounds": 0,
+            "effective_rounds_completed": 0,
+            "completed_requested_rounds_true": 0,
+            "completed_requested_rounds_false": 0,
+            "stopped_reason_counts": {},
+        },
+        "attempts": {
+            "proposal_attempts_total": 0,
+            "proposal_attempts_consumed": 0,
+            "verification_consumed_candidates": 0,
+            "verification_failure_consumed_candidates": 0,
+        },
+        "protocol_rows": {
+            "effective_protocol_rounds": 0,
+            "protocol_metric_results": 0,
+            "protocol_evaluated_candidates": 0,
+            "stage_counts": {},
+        },
+        "formal_screened_candidates": 0,
+        "formal_protocol_evaluated_candidates": 0,
+        "formal_candidate_artifacts": {
+            "row_count": 0,
+            "unreadable_rows": 0,
+            "index_status_counts": {},
+        },
+        "stage_rows": {
+            "screening": 0,
+            "validation": 0,
+            "frozen": 0,
+            "fresh_runtime_replay": 0,
+        },
+        "reconciliation_status_counts": {},
+    }
+
+
+def _protocol_accounting_entry(path: Path) -> dict[str, Any]:
+    doc = _read_json_object(path)
+    effective_budget = _compact_effective_budget(
+        _mapping_or_empty(doc.get("effective_budget"))
+    )
+    attempts = _compact_attempts(_mapping_or_empty(doc.get("attempts")))
+    protocol_rows = _compact_protocol_rows(
+        _mapping_or_empty(doc.get("protocol_rows"))
+    )
+    formal_candidates = _compact_formal_candidates(
+        _mapping_or_empty(doc.get("formal_candidates"))
+    )
+    formal_artifacts = _compact_formal_candidate_artifacts(
+        _mapping_or_empty(doc.get("formal_candidate_artifacts"))
+    )
+    stage_rows = _compact_stage_rows(_mapping_or_empty(doc.get("stage_rows")))
+    reconciliation = _compact_reconciliation(
+        _mapping_or_empty(doc.get("reconciliation"))
+    )
+    if not any(
+        (
+            effective_budget,
+            attempts,
+            protocol_rows,
+            formal_candidates,
+            formal_artifacts,
+            stage_rows,
+            reconciliation,
+        )
+    ):
+        return {}
+    return {
+        "report": path.name,
+        "path": str(path),
+        "effective_budget": effective_budget,
+        "attempts": attempts,
+        "protocol_rows": protocol_rows,
+        "formal_candidates": formal_candidates,
+        "formal_candidate_artifacts": formal_artifacts,
+        "stage_rows": stage_rows,
+        "reconciliation": reconciliation,
+    }
+
+
+def _compact_effective_budget(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "counter": raw.get("counter"),
+            "requested_rounds": raw.get("requested_rounds"),
+            "effective_rounds_completed": raw.get("effective_rounds_completed"),
+            "completed_requested_rounds": raw.get("completed_requested_rounds"),
+            "stopped_reason": raw.get("stopped_reason"),
+            "semantics": raw.get("semantics"),
+        }
+    )
+
+
+def _compact_attempts(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "proposal_attempts_total": raw.get("proposal_attempts_total"),
+            "proposal_attempts_consumed": raw.get("proposal_attempts_consumed"),
+            "verification_consumed_candidates": raw.get(
+                "verification_consumed_candidates"
+            ),
+            "verification_failure_consumed_candidates": raw.get(
+                "verification_failure_consumed_candidates"
+            ),
+        }
+    )
+
+
+def _compact_protocol_rows(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "effective_protocol_rounds": raw.get("effective_protocol_rounds"),
+            "protocol_metric_results": raw.get("protocol_metric_results"),
+            "protocol_evaluated_candidates": raw.get(
+                "protocol_evaluated_candidates"
+            ),
+            "stage_counts": _mapping_or_empty(raw.get("stage_counts")),
+            "semantics": raw.get("semantics"),
+        }
+    )
+
+
+def _compact_formal_candidates(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "formal_screened_candidates": raw.get("formal_screened_candidates"),
+            "protocol_evaluated_candidates": raw.get(
+                "protocol_evaluated_candidates"
+            ),
+            "semantics": raw.get("semantics"),
+        }
+    )
+
+
+def _compact_formal_candidate_artifacts(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "row_count": raw.get("row_count"),
+            "index_status": raw.get("index_status"),
+            "index_ref": raw.get("index_ref"),
+            "unreadable_rows": raw.get("unreadable_rows"),
+            "semantics": raw.get("semantics"),
+        }
+    )
+
+
+def _compact_stage_rows(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "screening": raw.get("screening"),
+            "validation": raw.get("validation"),
+            "frozen": raw.get("frozen"),
+            "fresh_runtime_replay": raw.get("fresh_runtime_replay"),
+        }
+    )
+
+
+def _compact_reconciliation(raw: Mapping[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in (
+        "formal_candidate_count_reconciliation",
+        "candidate_count_reconciliation",
+        "accounting_reconciliation",
+    ):
+        value = raw.get(key)
+        if isinstance(value, Mapping):
+            compact[key] = _mapping_or_empty(value)
+    return compact
+
+
+def _merge_protocol_accounting_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    effective_budget = _mapping_or_empty(entry.get("effective_budget"))
+    effective_target = aggregate["effective_budget"]
+    _increment_count(
+        effective_target["counter_counts"],
+        str(effective_budget.get("counter") or "unknown"),
+    )
+    effective_target["requested_rounds"] += _int_or_zero(
+        effective_budget.get("requested_rounds")
+    )
+    effective_target["effective_rounds_completed"] += _int_or_zero(
+        effective_budget.get("effective_rounds_completed")
+    )
+    if effective_budget.get("completed_requested_rounds") is True:
+        effective_target["completed_requested_rounds_true"] += 1
+    elif effective_budget.get("completed_requested_rounds") is False:
+        effective_target["completed_requested_rounds_false"] += 1
+    _increment_count(
+        effective_target["stopped_reason_counts"],
+        str(effective_budget.get("stopped_reason") or "unknown"),
+    )
+
+    attempts = _mapping_or_empty(entry.get("attempts"))
+    for key in aggregate["attempts"]:
+        aggregate["attempts"][key] += _int_or_zero(attempts.get(key))
+
+    protocol_rows = _mapping_or_empty(entry.get("protocol_rows"))
+    for key in (
+        "effective_protocol_rounds",
+        "protocol_metric_results",
+        "protocol_evaluated_candidates",
+    ):
+        aggregate["protocol_rows"][key] += _int_or_zero(protocol_rows.get(key))
+    stage_counts = protocol_rows.get("stage_counts")
+    if isinstance(stage_counts, Mapping):
+        for stage, count in sorted(stage_counts.items()):
+            _increment_count(
+                aggregate["protocol_rows"]["stage_counts"],
+                str(stage),
+                _int_or_zero(count),
+            )
+
+    formal_candidates = _mapping_or_empty(entry.get("formal_candidates"))
+    aggregate["formal_screened_candidates"] += _int_or_zero(
+        formal_candidates.get("formal_screened_candidates")
+    )
+    aggregate["formal_protocol_evaluated_candidates"] += _int_or_zero(
+        formal_candidates.get("protocol_evaluated_candidates")
+    )
+
+    formal_artifacts = _mapping_or_empty(entry.get("formal_candidate_artifacts"))
+    artifact_target = aggregate["formal_candidate_artifacts"]
+    artifact_target["row_count"] += _int_or_zero(formal_artifacts.get("row_count"))
+    artifact_target["unreadable_rows"] += _int_or_zero(
+        formal_artifacts.get("unreadable_rows")
+    )
+    _increment_count(
+        artifact_target["index_status_counts"],
+        str(formal_artifacts.get("index_status") or "unknown"),
+    )
+
+    stage_rows = _mapping_or_empty(entry.get("stage_rows"))
+    for key in aggregate["stage_rows"]:
+        aggregate["stage_rows"][key] += _int_or_zero(stage_rows.get(key))
+
+    reconciliation = _mapping_or_empty(entry.get("reconciliation"))
+    for status in _reconciliation_statuses(reconciliation):
+        _increment_count(aggregate["reconciliation_status_counts"], status)
+
+
+def _reconciliation_statuses(reconciliation: Mapping[str, Any]) -> list[str]:
+    statuses: list[str] = []
+    for value in reconciliation.values():
+        if not isinstance(value, Mapping):
+            continue
+        for key, item in value.items():
+            normalized = str(key).lower()
+            if "status" in normalized and item not in (None, "", [], {}):
+                statuses.append(str(item))
+    return statuses
 
 
 def _measurement_effect_summary(

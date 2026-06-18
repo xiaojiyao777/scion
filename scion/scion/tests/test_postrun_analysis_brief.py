@@ -110,6 +110,56 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         / "research_efficiency"
         / "normal.research_efficiency.v1.json",
         {
+            "effective_budget": {
+                "counter": "effective_rounds_completed",
+                "requested_rounds": 1,
+                "effective_rounds_completed": 1,
+                "completed_requested_rounds": True,
+                "stopped_reason": "requested_rounds_complete",
+                "semantics": "effective rounds, not proposal attempts",
+            },
+            "attempts": {
+                "proposal_attempts_total": 3,
+                "proposal_attempts_consumed": 2,
+                "verification_consumed_candidates": 1,
+                "verification_failure_consumed_candidates": 0,
+            },
+            "protocol_rows": {
+                "effective_protocol_rounds": 1,
+                "protocol_metric_results": 2,
+                "protocol_evaluated_candidates": 1,
+                "stage_counts": {"screening": 2, "validation": 0, "frozen": 0},
+                "semantics": "completed protocol metric rows",
+            },
+            "formal_candidates": {
+                "formal_screened_candidates": 1,
+                "protocol_evaluated_candidates": 1,
+                "semantics": "legacy formal screened counter",
+            },
+            "formal_candidate_artifacts": {
+                "row_count": 1,
+                "index_status": "available",
+                "index_ref": "artifacts/formal_candidates/index.jsonl",
+                "unreadable_rows": 0,
+                "semantics": "formal candidate artifact rows",
+            },
+            "stage_rows": {
+                "screening": 2,
+                "validation": 0,
+                "frozen": 0,
+                "fresh_runtime_replay": 0,
+            },
+            "reconciliation": {
+                "formal_candidate_count_reconciliation": {
+                    "formal_candidates_index_status": "available"
+                },
+                "candidate_count_reconciliation": {
+                    "candidate_count_status": "matched"
+                },
+                "accounting_reconciliation": {
+                    "accounting_status": "consistent"
+                },
+            },
             "measurement_readiness": {
                 "status": "ready",
                 "reason_code": "ok",
@@ -331,6 +381,61 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
     ] is True
+    accounting_summary = brief["protocol_accounting_summary"]
+    assert accounting_summary["schema_version"] == (
+        "scion.postrun_protocol_accounting_summary.v1"
+    )
+    assert accounting_summary["report_only"] is True
+    assert accounting_summary["decision_features_excluded"] is True
+    assert accounting_summary["available"] is True
+    assert accounting_summary["current_run_evidence"] is True
+    assert accounting_summary["accounting_report_count"] == 1
+    assert accounting_summary["aggregate"] == {
+        "effective_budget": {
+            "counter_counts": {"effective_rounds_completed": 1},
+            "requested_rounds": 1,
+            "effective_rounds_completed": 1,
+            "completed_requested_rounds_true": 1,
+            "completed_requested_rounds_false": 0,
+            "stopped_reason_counts": {"requested_rounds_complete": 1},
+        },
+        "attempts": {
+            "proposal_attempts_total": 3,
+            "proposal_attempts_consumed": 2,
+            "verification_consumed_candidates": 1,
+            "verification_failure_consumed_candidates": 0,
+        },
+        "protocol_rows": {
+            "effective_protocol_rounds": 1,
+            "protocol_metric_results": 2,
+            "protocol_evaluated_candidates": 1,
+            "stage_counts": {"frozen": 0, "screening": 2, "validation": 0},
+        },
+        "formal_screened_candidates": 1,
+        "formal_protocol_evaluated_candidates": 1,
+        "formal_candidate_artifacts": {
+            "row_count": 1,
+            "unreadable_rows": 0,
+            "index_status_counts": {"available": 1},
+        },
+        "stage_rows": {
+            "screening": 2,
+            "validation": 0,
+            "frozen": 0,
+            "fresh_runtime_replay": 0,
+        },
+        "reconciliation_status_counts": {
+            "available": 1,
+            "consistent": 1,
+            "matched": 1,
+        },
+    }
+    accounting_entry = accounting_summary["entries"][0]
+    assert accounting_entry["report"] == "normal.research_efficiency.v1.json"
+    assert accounting_entry["effective_budget"]["completed_requested_rounds"] is True
+    assert accounting_entry["formal_candidate_artifacts"]["index_status"] == (
+        "available"
+    )
     effect_summary = brief["measurement_effect_summary"]
     assert effect_summary["schema_version"] == (
         "scion.postrun_measurement_effect_summary.v1"
@@ -562,6 +667,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert "## Protocol Accounting Summary" in markdown
+    assert "- Requested/effective rounds: 1 / 1" in markdown
+    assert (
+        "| normal.research_efficiency.v1.json | 1 | 1 | 2 | "
+        "1 | 2/0/0/0 | requested_rounds_complete |"
+        in markdown
+    )
     assert "## Measurement Effect Summary" in markdown
     assert (
         "| normal.research_efficiency.v1.json | ready | 9.9 | "
@@ -667,6 +779,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert brief["protocol_accounting_summary"]["current_run_evidence"] is False
+    assert brief["protocol_accounting_summary"]["available"] is False
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
     assert brief["measurement_effect_summary"]["available"] is False
     assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
@@ -778,6 +892,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["branches"]["ids"] == []
     assert brief["llm_traces"]["trace_count"] == 0
     assert brief["resume_snapshot"]["present"] is True
+    assert brief["protocol_accounting_summary"]["current_run_evidence"] is False
+    assert brief["protocol_accounting_summary"]["available"] is False
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
     assert brief["measurement_effect_summary"]["available"] is False
     assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
