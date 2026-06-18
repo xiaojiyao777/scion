@@ -81,7 +81,7 @@ Infrastructure:
 
 - No LLM campaign is currently running.
 - The current prepared roots were built from checkout `b9836a6`. After WSL
-  fast-forwarded to docs-only checkout `b7fa9ed2`, strict readiness confirms
+  fast-forwarded through later docs-only checkouts, strict readiness confirms
   both roots remain statically ready and runtime-guard valid because guarded
   source paths are unchanged.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict

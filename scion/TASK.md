@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `b9836a6` and remain runtime-guard valid after docs-only checkout `b7fa9ed2`; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current prepared roots were generated from checkout `b9836a6` and remain runtime-guard valid after later docs-only checkouts; launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -410,7 +410,7 @@ Current checkpoint:
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
   current `b9836a6` prepared roots were refreshed and pass static readiness.
-  After WSL fast-forwarded to docs-only checkout `b7fa9ed2`, strict readiness
+  After WSL fast-forwarded through later docs-only checkouts, strict readiness
   reports `git_runtime_consistent=ok` with detail
   `checkout differs, but runtime guard paths are unchanged`.
   Their prepared handoff artifacts carry current CVRP/warehouse

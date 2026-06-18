@@ -16,8 +16,8 @@ therefore became statically stale even though they had not been launched.
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lessondiag-b9836a6-6r-gpt55-20260618T203741Z-claw`
 
 Both were generated prepare-only from the synchronized WSL checkout at
-`b9836a6`; neither root has been launched. After WSL fast-forwarded to
-docs-only checkout `b7fa9ed2`, both roots still pass runtime guard checks.
+`b9836a6`; neither root has been launched. After WSL fast-forwarded through
+later docs-only checkouts, both roots still pass runtime guard checks.
 
 ## Readiness
 
