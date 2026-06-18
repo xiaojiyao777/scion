@@ -81,10 +81,10 @@ Infrastructure:
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` chat-completion preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
-  `401` with `code=invalid_api_key`, `classification=not_authenticated`; do
-  not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
-  with non-empty output after re-login.
+  `AUTH_STATUS authenticated=True active=1 refreshing=0` and returns HTTP
+  `401` with `classification=auth_token_invalidated`; do not launch prepared
+  roots until `/v1/chat/completions` returns HTTP `200` with non-empty output
+  after re-login.
 - WSL runs must use the synchronized WSL checkout and set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`.
 
@@ -93,8 +93,8 @@ Infrastructure:
 1. Restore and verify the live `gpt-5.5` route with a real chat-completion
    preflight. `/v1/models` is not enough; on WSL run
    `scion/tools/check_gpt55_proxy.py --login-url-on-failure` and require
-   `CHAT_COMPLETION_OK`; use the printed login URL when the helper reports
-   `not_authenticated`.
+   `CHAT_COMPLETION_OK`; use the printed login URL when the helper reports an
+   authentication failure.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
    effect-vs-MDE, budget-exhausting runtime feedback, source visibility, and
