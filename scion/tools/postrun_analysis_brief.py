@@ -34,6 +34,8 @@ REQUIRED_QUESTIONS = (
     "branch-lesson satisfaction or semantic gaps, and weak-positive transfer?",
     "Did runtime_feedback_summary show fresh replay drain, stage-transition drain, "
     "and budget diagnostics consistent with the declared runtime model?",
+    "Did failure_taxonomy_summary distinguish provider/infra, framework/control, "
+    "proposal/codegen/tool, and algorithm-quality failures?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
@@ -75,6 +77,10 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
             inventory,
         ),
         "runtime_feedback_summary": _runtime_feedback_summary(
+            run_root_path,
+            inventory,
+        ),
+        "failure_taxonomy_summary": _failure_taxonomy_summary(
             run_root_path,
             inventory,
         ),
@@ -408,6 +414,64 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     blocked=_display(fresh.get("blocked")),
                     protocol_rows=_display(fresh.get("protocol_results")),
                     stage_status=_display(stage.get("status")),
+                )
+            )
+
+    failure_summary = brief.get("failure_taxonomy_summary") or {}
+    failure_aggregate = _mapping_or_empty(failure_summary.get("aggregate"))
+    failure_proposal = _mapping_or_empty(failure_aggregate.get("proposal_quality"))
+    lines.extend(
+        [
+            "",
+            "## Failure Taxonomy Summary",
+            "- Source: current-run research-efficiency `proposal_quality`, "
+            "`failure_taxonomy`, and run-status fields.",
+            f"- Available: `{_display(failure_summary.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(failure_summary.get('current_run_evidence'))}`",
+            "- Reports with failure taxonomy: "
+            f"`{_display(failure_summary.get('failure_report_count'))}`",
+            "- Proposal attempts total/consumed: "
+            f"{_display(failure_proposal.get('proposal_attempts_total'))} / "
+            f"{_display(failure_proposal.get('proposal_attempts_consumed'))}",
+            "- Proposal quality blocks / ledger entries / reports with blocks: "
+            f"{_display(failure_proposal.get('proposal_quality_blocks'))} / "
+            f"{_display(failure_proposal.get('quality_block_ledger_count'))} / "
+            f"{_display(failure_proposal.get('reports_with_quality_blocks'))}",
+            "- Quality block reasons: "
+            f"{_mapping_text(failure_proposal.get('quality_block_reason_counts'))}",
+            "- Failure observations: "
+            f"{_mapping_text(failure_aggregate.get('failure_observation_counts'))}",
+            "- Failure source counts: "
+            f"{_mapping_text(failure_aggregate.get('failure_source_counts'))}",
+            "- Run validity statuses: "
+            f"{_mapping_text(failure_aggregate.get('run_validity_status_counts'))}",
+            "- Stop reasons: "
+            f"{_mapping_text(failure_aggregate.get('stopped_reason_counts'))}",
+        ]
+    )
+    failure_entries = failure_summary.get("entries")
+    if isinstance(failure_entries, list) and failure_entries:
+        lines.extend(
+            [
+                "| Report | Quality blocks | Failure observations | Top failure keys | Run validity | Stop reason |",
+                "|---|---:|---:|---|---|---|",
+            ]
+        )
+        for entry in failure_entries:
+            if not isinstance(entry, dict):
+                continue
+            proposal = _mapping_or_empty(entry.get("proposal_quality"))
+            run_status = _mapping_or_empty(entry.get("run_status"))
+            lines.append(
+                "| {report} | {quality_blocks} | {observations} | {top_keys} | "
+                "{validity} | {stop_reason} |".format(
+                    report=_display(entry.get("report")),
+                    quality_blocks=_display(proposal.get("proposal_quality_blocks")),
+                    observations=_display(entry.get("failure_observations_total")),
+                    top_keys=_list_text(entry.get("top_failure_keys") or []),
+                    validity=_display(run_status.get("run_validity_status")),
+                    stop_reason=_display(run_status.get("stopped_reason")),
                 )
             )
 
@@ -1039,6 +1103,239 @@ def _compact_runtime_budget_diagnostic(raw: Mapping[str, Any]) -> dict[str, Any]
             "total_pairs": raw.get("total_pairs"),
         }
     )
+
+
+def _failure_taxonomy_summary(
+    run_root: Path,
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    base = {
+        "schema_version": "scion.postrun_failure_taxonomy_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_logs_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "report_count": 0,
+        "failure_report_count": 0,
+        "aggregate": _empty_failure_taxonomy_aggregate(),
+        "entries": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    report_paths = _research_efficiency_report_paths(run_root, inventory)
+    entries: list[dict[str, Any]] = []
+    aggregate = _empty_failure_taxonomy_aggregate()
+    for path in report_paths:
+        entry = _failure_taxonomy_entry(path)
+        if not entry:
+            continue
+        entries.append(entry)
+        _merge_failure_taxonomy_aggregate(aggregate, entry)
+
+    return {
+        **base,
+        "available": bool(entries),
+        "report_count": len(report_paths),
+        "failure_report_count": len(entries),
+        "aggregate": aggregate,
+        "entries": entries,
+    }
+
+
+def _empty_failure_taxonomy_aggregate() -> dict[str, Any]:
+    return {
+        "failure_count_maxima": {},
+        "failure_observation_counts": {},
+        "failure_source_counts": {},
+        "run_validity_status_counts": {},
+        "stopped_reason_counts": {},
+        "proposal_quality": {
+            "proposal_attempts_total": 0,
+            "proposal_attempts_consumed": 0,
+            "proposal_quality_blocks": 0,
+            "quality_blocks": 0,
+            "quality_block_ledger_count": 0,
+            "reports_with_quality_blocks": 0,
+            "quality_block_reason_counts": {},
+        },
+        "top_examples": [],
+    }
+
+
+def _failure_taxonomy_entry(path: Path) -> dict[str, Any]:
+    doc = _read_json_object(path)
+    proposal = _compact_proposal_quality(
+        _mapping_or_empty(doc.get("proposal_quality"))
+    )
+    taxonomy = _compact_failure_taxonomy(
+        _mapping_or_empty(doc.get("failure_taxonomy"))
+    )
+    run_status = _compact_failure_run_status(
+        _mapping_or_empty(doc.get("run_status"))
+    )
+    failures = _compact_failure_taxonomy(_mapping_or_empty(doc.get("failures")))
+    if not proposal and not taxonomy and not failures and not run_status:
+        return {}
+    taxonomy_source = taxonomy or failures
+    top_failure_keys = _top_failure_keys(taxonomy_source)
+    examples = _failure_examples(path.name, taxonomy_source)
+    return {
+        "report": path.name,
+        "path": str(path),
+        "proposal_quality": proposal,
+        "failure_taxonomy": taxonomy_source,
+        "failure_observations_total": sum(
+            _int_or_zero(item.get("observations"))
+            for item in taxonomy_source.values()
+            if isinstance(item, Mapping)
+        ),
+        "top_failure_keys": top_failure_keys,
+        "top_examples": examples[:5],
+        "run_status": run_status,
+    }
+
+
+def _compact_proposal_quality(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "proposal_attempts_total": raw.get("proposal_attempts_total"),
+            "proposal_attempts_consumed": raw.get("proposal_attempts_consumed"),
+            "proposal_quality_blocks": raw.get("proposal_quality_blocks"),
+            "quality_blocks": raw.get("quality_blocks"),
+            "quality_block_ledger_count": raw.get("quality_block_ledger_count"),
+            "quality_block_reasons": _string_items(raw.get("quality_block_reasons")),
+            "semantics": raw.get("semantics"),
+        }
+    )
+
+
+def _compact_failure_taxonomy(raw: Mapping[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key, value in sorted(raw.items()):
+        if not isinstance(value, Mapping):
+            continue
+        bucket = _drop_empty(
+            {
+                "count": value.get("count"),
+                "observations": value.get("observations"),
+                "source_counts": _mapping_or_empty(value.get("source_counts")),
+                "examples": _string_items(value.get("examples"))[:3],
+            }
+        )
+        if bucket:
+            compact[str(key)] = bucket
+    return compact
+
+
+def _compact_failure_run_status(raw: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "run_validity_status": raw.get("run_validity_status"),
+            "stopped_reason": raw.get("stopped_reason"),
+            "run_complete": raw.get("run_complete"),
+            "run_completeness_status": raw.get("run_completeness_status"),
+            "wrapper_exit_status": raw.get("wrapper_exit_status"),
+            "campaign_exit_status": raw.get("campaign_exit_status"),
+        }
+    )
+
+
+def _top_failure_keys(taxonomy: Mapping[str, Any]) -> list[str]:
+    scored: list[tuple[int, int, str]] = []
+    for key, value in taxonomy.items():
+        if not isinstance(value, Mapping):
+            continue
+        observations = _int_or_zero(value.get("observations"))
+        count = _int_or_zero(value.get("count"))
+        if observations > 0 or count > 0:
+            scored.append((observations, count, str(key)))
+    scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    return [key for _, _, key in scored[:5]]
+
+
+def _failure_examples(report: str, taxonomy: Mapping[str, Any]) -> list[dict[str, str]]:
+    examples: list[dict[str, str]] = []
+    for key in _top_failure_keys(taxonomy):
+        bucket = _mapping_or_empty(taxonomy.get(key))
+        for example in _string_items(bucket.get("examples"))[:2]:
+            examples.append(
+                {
+                    "report": report,
+                    "failure_key": key,
+                    "example": example,
+                }
+            )
+            if len(examples) >= 5:
+                return examples
+    return examples
+
+
+def _merge_failure_taxonomy_aggregate(
+    aggregate: dict[str, Any],
+    entry: Mapping[str, Any],
+) -> None:
+    proposal = _mapping_or_empty(entry.get("proposal_quality"))
+    proposal_target = aggregate["proposal_quality"]
+    for key in (
+        "proposal_attempts_total",
+        "proposal_attempts_consumed",
+        "proposal_quality_blocks",
+        "quality_blocks",
+        "quality_block_ledger_count",
+    ):
+        proposal_target[key] = _int_or_zero(proposal_target.get(key)) + _int_or_zero(
+            proposal.get(key)
+        )
+    if (
+        _int_or_zero(proposal.get("proposal_quality_blocks")) > 0
+        or _int_or_zero(proposal.get("quality_blocks")) > 0
+        or _int_or_zero(proposal.get("quality_block_ledger_count")) > 0
+    ):
+        proposal_target["reports_with_quality_blocks"] += 1
+    for reason in _string_items(proposal.get("quality_block_reasons")):
+        _increment_count(proposal_target["quality_block_reason_counts"], reason)
+
+    taxonomy = _mapping_or_empty(entry.get("failure_taxonomy"))
+    for key, raw_bucket in taxonomy.items():
+        if not isinstance(raw_bucket, Mapping):
+            continue
+        bucket = _mapping_or_empty(raw_bucket)
+        aggregate["failure_count_maxima"][key] = max(
+            _int_or_zero(aggregate["failure_count_maxima"].get(key)),
+            _int_or_zero(bucket.get("count")),
+        )
+        observations = _int_or_zero(bucket.get("observations"))
+        if observations:
+            _increment_count(
+                aggregate["failure_observation_counts"],
+                str(key),
+                observations,
+            )
+        source_counts = bucket.get("source_counts")
+        if isinstance(source_counts, Mapping):
+            for source, count in sorted(source_counts.items()):
+                _increment_count(
+                    aggregate["failure_source_counts"],
+                    str(source),
+                    _int_or_zero(count),
+                )
+    run_status = _mapping_or_empty(entry.get("run_status"))
+    _increment_count(
+        aggregate["run_validity_status_counts"],
+        str(run_status.get("run_validity_status") or "unknown"),
+    )
+    _increment_count(
+        aggregate["stopped_reason_counts"],
+        str(run_status.get("stopped_reason") or "unknown"),
+    )
+    for example in entry.get("top_examples") or []:
+        if isinstance(example, Mapping) and len(aggregate["top_examples"]) < 5:
+            aggregate["top_examples"].append(dict(example))
 
 
 def _prompt_context_visibility_summary(

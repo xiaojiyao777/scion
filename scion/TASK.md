@@ -252,8 +252,9 @@ Current checkpoint:
   evidence-coverage requirement, and postrun analysis briefs summarize the
   current-run continuity metrics for delegated review. Postrun analysis briefs
   also summarize current-run measurement effect-vs-MDE, prompt context/source
-  visibility, prompt signal density, and runtime feedback/drain behavior without
-  exposing raw prompts, responses, patches, or mutating runtime semantics.
+  visibility, prompt signal density, runtime feedback/drain behavior, and
+  failure taxonomy/proposal quality without exposing raw prompts, responses,
+  patches, raw logs, or mutating runtime semantics.
   Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   and
@@ -266,6 +267,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-postrun-measurement-effect-brief-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-postrun-runtime-feedback-brief-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-postrun-failure-taxonomy-brief-repair-20260618.md`.
 - Budget-exhausting runtime semantics now avoid treating high aggregate
   `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
   soft-abandon signal, repeated-signal discriminator, screening feedback

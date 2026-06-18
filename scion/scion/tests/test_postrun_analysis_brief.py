@@ -174,6 +174,45 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                 "counts_toward_max_rounds": False,
                 "generates_new_hypothesis": False,
             },
+            "proposal_quality": {
+                "proposal_attempts_total": 3,
+                "proposal_attempts_consumed": 2,
+                "proposal_quality_blocks": 1,
+                "quality_blocks": 1,
+                "quality_block_ledger_count": 1,
+                "quality_block_reasons": ["schema_missing_effect_path"],
+                "semantics": "proposal/schema quality blocks before verification",
+            },
+            "failure_taxonomy": {
+                "code_generation": {
+                    "count": 1,
+                    "observations": 2,
+                    "source_counts": {"campaign_steps": 1, "run_log": 1},
+                    "examples": [
+                        "agentic_proposal:code_generation_failed old_string_not_found"
+                    ],
+                    "sources": [{"kind": "campaign_step", "index": 1}],
+                },
+                "tool_timeout": {
+                    "count": 1,
+                    "observations": 1,
+                    "source_counts": {"run_log": 1},
+                    "examples": ["Tool call timeout after 60s"],
+                },
+                "verification_heavy": {
+                    "count": 0,
+                    "observations": 0,
+                    "source_counts": {},
+                    "examples": [],
+                },
+            },
+            "run_status": {
+                "run_validity_status": "valid",
+                "stopped_reason": "requested_rounds_complete",
+                "run_complete": True,
+                "run_completeness_status": "complete",
+                "wrapper_exit_status": 0,
+            },
             "research_continuity": {
                 "same_mechanism_followup": {
                     "selected_same_branch_refinement_count": 1,
@@ -389,6 +428,58 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             }
         ],
     }
+    failure_summary = brief["failure_taxonomy_summary"]
+    assert failure_summary["schema_version"] == (
+        "scion.postrun_failure_taxonomy_summary.v1"
+    )
+    assert failure_summary["report_only"] is True
+    assert failure_summary["decision_features_excluded"] is True
+    assert failure_summary["raw_logs_excluded"] is True
+    assert failure_summary["available"] is True
+    assert failure_summary["current_run_evidence"] is True
+    assert failure_summary["failure_report_count"] == 1
+    failure_aggregate = failure_summary["aggregate"]
+    assert failure_aggregate["proposal_quality"] == {
+        "proposal_attempts_total": 3,
+        "proposal_attempts_consumed": 2,
+        "proposal_quality_blocks": 1,
+        "quality_blocks": 1,
+        "quality_block_ledger_count": 1,
+        "reports_with_quality_blocks": 1,
+        "quality_block_reason_counts": {"schema_missing_effect_path": 1},
+    }
+    assert failure_aggregate["failure_count_maxima"] == {
+        "code_generation": 1,
+        "tool_timeout": 1,
+        "verification_heavy": 0,
+    }
+    assert failure_aggregate["failure_observation_counts"] == {
+        "code_generation": 2,
+        "tool_timeout": 1,
+    }
+    assert failure_aggregate["failure_source_counts"] == {
+        "campaign_steps": 1,
+        "run_log": 2,
+    }
+    assert failure_aggregate["run_validity_status_counts"] == {"valid": 1}
+    assert failure_aggregate["stopped_reason_counts"] == {
+        "requested_rounds_complete": 1
+    }
+    failure_entry = failure_summary["entries"][0]
+    assert failure_entry["top_failure_keys"] == ["code_generation", "tool_timeout"]
+    assert failure_entry["failure_observations_total"] == 3
+    assert failure_entry["top_examples"] == [
+        {
+            "report": "normal.research_efficiency.v1.json",
+            "failure_key": "code_generation",
+            "example": "agentic_proposal:code_generation_failed old_string_not_found",
+        },
+        {
+            "report": "normal.research_efficiency.v1.json",
+            "failure_key": "tool_timeout",
+            "example": "Tool call timeout after 60s",
+        },
+    ]
     context_summary = brief["prompt_context_visibility_summary"]
     assert context_summary["schema_version"] == (
         "scion.postrun_prompt_context_visibility_summary.v1"
@@ -485,6 +576,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "1 | 0 | 1 | 0 | 0 | not_started |"
         in markdown
     )
+    assert "## Failure Taxonomy Summary" in markdown
+    assert "- Quality block reasons: schema_missing_effect_path=1" in markdown
+    assert (
+        "| normal.research_efficiency.v1.json | 1 | 3 | "
+        "code_generation, tool_timeout | valid | requested_rounds_complete |"
+        in markdown
+    )
     assert "## Prompt Context Visibility Summary" in markdown
     assert "- Prompt manifests loaded/ref: 1 / 0" in markdown
     assert (
@@ -503,6 +601,10 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     )
     assert any(
         "runtime_feedback_summary" in question
+        for question in brief["required_questions"]
+    )
+    assert any(
+        "failure_taxonomy_summary" in question
         for question in brief["required_questions"]
     )
 
@@ -569,6 +671,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["measurement_effect_summary"]["available"] is False
     assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
     assert brief["runtime_feedback_summary"]["available"] is False
+    assert brief["failure_taxonomy_summary"]["current_run_evidence"] is False
+    assert brief["failure_taxonomy_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
@@ -678,6 +782,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["measurement_effect_summary"]["available"] is False
     assert brief["runtime_feedback_summary"]["current_run_evidence"] is False
     assert brief["runtime_feedback_summary"]["available"] is False
+    assert brief["failure_taxonomy_summary"]["current_run_evidence"] is False
+    assert brief["failure_taxonomy_summary"]["available"] is False
     assert brief["prompt_context_visibility_summary"]["current_run_evidence"] is False
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
