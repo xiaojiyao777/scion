@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired, including report-only research-continuity metrics for same-mechanism follow-up, branch lesson usage, and weak-positive transfer; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, prepared contract checks, prepared-handoff rebuild tooling, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired, including report-only research-continuity metrics for same-mechanism follow-up, branch lesson usage, and weak-positive transfer; budget-exhausting runtime regression semantics repaired through Decision/lifecycle/proposal feedback/finalizer; low-signal same-branch scheduler sampling now stays `refine_active` and carries proposal lesson-usage requirements instead of repair-diagnostic drift; trajectory-divergent all-tie screening now expands as low-SNR rather than failing win-rate; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs and artifact inventories with current-run/resume-snapshot isolation, prepared/preflight-failed launch-root guards, actionable completion-preflight readiness/status artifacts, strict launch-ready CLI mode, prepared contract checks, prepared-handoff rebuild tooling, and postrun acceptance rebuild tooling cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -391,21 +391,23 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes;
-  current `317cacb` prepared roots were refreshed and pass static readiness.
-  Their prepared handoff artifacts were rebuilt from checkout `86d8561` with
-  current CVRP/warehouse `problem_specific_requirements` available, while the
-  prepared roots remain unstarted because real `gpt-5.5` completion preflight
-  still returns HTTP `401` / `not_authenticated`.
+  current `7308544` prepared roots were refreshed and pass static readiness.
+  Their prepared handoff artifacts carry current CVRP/warehouse
+  `problem_specific_requirements`, while strict launch readiness
+  (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
+  completion preflight returns HTTP `401` / `not_authenticated`.
   Report:
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
   Current prepared-handoff rebuild report:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
+  Current strict launch-readiness report:
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`.
   Current prepared handoff measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
   Current prepared contract measurement-diagnostics repair:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-strictlaunch-7308544-1r-gpt55-20260618T192932Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -426,7 +428,7 @@ Current checkpoint:
   Report:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-strictlaunch-7308544-6r-gpt55-20260618T192933Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

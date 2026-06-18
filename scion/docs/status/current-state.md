@@ -124,7 +124,9 @@ Framework:
   `run.sh` syntax, report-family expectations, and unstarted root state; launch
   readiness is true only when the optional real completion preflight succeeds.
   Completion-preflight failures now carry an `operator_action` and, when the
-  proxy exposes it, a login URL.
+  proxy exposes it, a login URL. Use `--require-launch-ready` for the final
+  operator/automation check; it implies a real completion preflight and exits
+  `0` only when `launch_ready=true`.
 - Historical and current run roots can be normalized for delegated analysis with
   `scion/tools/rebuild_postrun_acceptance.py`. The rebuild manifest reports
   per-family success/failure and preserves Phase 4 evidence gaps instead of
@@ -140,8 +142,8 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`.
-  Its prepared handoff artifacts were rebuilt from checkout `86d8561`; all
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-strictlaunch-7308544-6r-gpt55-20260618T192933Z-claw`.
+  Its prepared handoff artifacts were built from checkout `7308544`; all
   warehouse `problem_specific_requirements` are available.
 
 CVRP/VRP:
@@ -165,8 +167,8 @@ CVRP/VRP:
   opportunity classes. These diagnostics are proposal-only and remain excluded
   from `DecisionFeatures`, Protocol gates, lifecycle, scheduler, and promotion.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`.
-  Its prepared handoff artifacts were rebuilt from checkout `86d8561`; all
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-strictlaunch-7308544-1r-gpt55-20260618T192932Z-claw`.
+  Its prepared handoff artifacts were built from checkout `7308544`; all
   CVRP `problem_specific_requirements` are available.
 
 Infrastructure:
@@ -178,9 +180,10 @@ Infrastructure:
   with `classification=not_authenticated`, and readiness includes
   `operator_action.login_url`. The auth pool may move between expired and
   refreshing states, but launch remains blocked until a real completion
-  succeeds. The current `317cacb` prepared roots pass static readiness, have
-  current prepared handoff artifacts rebuilt from checkout `86d8561`, and
-  remain unstarted.
+  succeeds. The current `7308544` prepared roots pass static readiness, have
+  current prepared handoff artifacts, and remain unstarted. Strict launch
+  readiness currently exits `64` for both roots because completion preflight
+  still returns `not_authenticated` / HTTP `401`.
   Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty output after re-login/token refresh.
 - WSL runs must use the synchronized WSL checkout and set
@@ -191,7 +194,7 @@ Infrastructure:
 1. Restore and verify the live `gpt-5.5` route with a real chat-completion
    preflight. `/v1/models` is not enough; on WSL run
    `scion/tools/check_launch_readiness.py <prepared-root>
-   --completion-preflight --format json` and require `launch_ready=true`. If it
+   --require-launch-ready --format json` and require `launch_ready=true`. If it
    fails, follow the reported `operator_action`; the readiness tool now requests
    a proxy login URL on failure.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
@@ -220,6 +223,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-317cacb-20260618.md`.
   Current prepared-handoff rebuild tool and active-root refresh:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
+  Current strict launch-readiness mode and refreshed active roots:
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`.
   Current launcher-default repair:
   `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
   Current Phase 4 continuity coverage repair:
