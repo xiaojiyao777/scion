@@ -47,7 +47,10 @@ Framework:
   manifests, prepare-time delegated handoff briefs/inventories, and default
   postrun report generation. The generated briefs carry the prepared manifest's
   analysis intent, acceptance focus, and resume source; inventory/contract
-  checks remain report-only and outside `DecisionFeatures`.
+  checks remain report-only and outside `DecisionFeatures`. Prepared-only roots
+  now carry explicit launcher lifecycle/evidence-scope metadata, so copied
+  resume snapshots are marked `prepared_only/not_started` with zero current-run
+  effective rounds instead of masquerading as completed postrun evidence.
 
 Warehouse:
 
@@ -58,7 +61,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-handoff-6r-gpt55-20260618T125046Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lifecycle-6r-gpt55-20260618T130519Z-claw`.
 
 CVRP/VRP:
 
@@ -76,7 +79,7 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-handoff-1r-gpt55-20260618T125046Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-lifecycle-1r-gpt55-20260618T130518Z-claw`.
 
 Infrastructure:
 
@@ -137,6 +140,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prepared-run-contract-inventory-repair-20260618.md`.
 - Current prepared-handoff launcher repair:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-launcher-repair-20260618.md`.
+- Current prepared-only handoff lifecycle repair:
+  `scion/docs/experiments/v0.4/v04-prepared-only-handoff-lifecycle-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

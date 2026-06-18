@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs, artifact inventories, and prepared contract checks cover Phase 4 handoff/evidence availability*
+*Status: Phase 4 warehouse recovery checkpoint accepted; warehouse cost-compression telemetry repaired; CVRP continuation plumbing repaired; measurement integration real-asset coverage accepted; A/A runtime budget-hit evidence accepted; demand-slack/post-pivot/construction CVRP pivots rejected; provider guidance updated; status/readiness/research-efficiency projection repaired; budget-exhausting runtime regression semantics repaired through Decision/lifecycle; prepared-run manifests, prepare-time handoff briefs/inventories, postrun analysis briefs, artifact inventories, prepared contract checks, and prepared-only lifecycle guards cover Phase 4 handoff/evidence availability*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -287,9 +287,11 @@ Current checkpoint:
   prepare/postrun acceptance bundle enabled, including the secret-free
   prepared-run manifest, prepare-time delegated handoff brief/inventory,
   postrun analysis brief, and artifact/count inventory with report-only Phase 4
-  evidence coverage and prepared contract checks.
+  evidence coverage, prepared contract checks, and prepared-only lifecycle
+  guards that prevent copied resume artifacts from being treated as current-run
+  postrun evidence.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-handoff-1r-gpt55-20260618T125046Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-lifecycle-1r-gpt55-20260618T130518Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -300,9 +302,9 @@ Current checkpoint:
   brief/inventory at prepare time, and writes the standard postrun acceptance
   report bundle by default after Scion exits, including delegated analysis
   brief and artifact/count inventory with report-only Phase 4 evidence coverage
-  and prepared contract checks.
+  flags, prepared contract checks, and prepared-only lifecycle guards.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-handoff-6r-gpt55-20260618T125046Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lifecycle-6r-gpt55-20260618T130519Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
