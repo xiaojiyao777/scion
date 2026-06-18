@@ -56,6 +56,10 @@ Framework:
   prompt block-family signal with continuity gaps, so reviewers can audit
   whether failed prior-evidence transfer lines up with missing research or
   cross-branch context.
+- Live hypothesis prompts now receive a compact proposal-only
+  `research_shape_diagnostics` signal derived from the cross-branch research
+  map, so branch depth, shallow scatter, and repeated non-positive family shape
+  are visible before broader rules without entering `DecisionFeatures`.
 
 Warehouse:
 
@@ -65,7 +69,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lessondiag-b9836a6-6r-gpt55-20260618T203741Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-shapesignal-2f620ee-6r-gpt55-20260618T210606Z-claw`.
 
 CVRP/VRP:
 
@@ -79,14 +83,13 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-lessondiag-b9836a6-1r-gpt55-20260618T203729Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-shapesignal-2f620ee-1r-gpt55-20260618T210606Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `b9836a6`. After WSL
-  fast-forwarded through later checkouts whose guarded paths are unchanged,
-  strict readiness confirms both roots remain statically ready and
+- The current prepared roots were built from checkout `2f620ee`. Strict WSL
+  readiness confirms both roots are statically ready, not started, and
   runtime-guard valid.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
   readiness for both prepared roots returned `launch_ready=false`,
@@ -133,7 +136,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-b9836a6-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
