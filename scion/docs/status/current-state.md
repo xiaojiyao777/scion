@@ -93,6 +93,11 @@ CVRP/VRP:
   default; a construction revisit must explain broader formal-surface
   activation or direct objective-changing seed-selection effect with CMT2
   protection.
+- CVRP construction effect-attribution guidance is now more explicit:
+  seed/portfolio construction mechanisms must use a same-run
+  candidate-vs-baseline seed comparison or same-mechanism accepted delta for
+  direct effect evidence. Route-cap fallback activation, seed-pool size, or
+  merely choosing a seed is only activation/design evidence.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, unchanged route-merge
@@ -140,6 +145,9 @@ CVRP/VRP:
 - Warehouse split-preserving cost-compression telemetry interpretation is
   repaired as a generic diagnostic interpretation fix. This changes neither
   protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.
+- CVRP construction seed/portfolio guidance is repaired as a problem-owned
+  provider/prompt fix. This changes neither core `DecisionFeatures`, protocol
+  gates, budgets, lifecycle policy, nor generic telemetry validation.
 - WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`. Without
   it, Python may import stale Scion core modules from
@@ -161,6 +169,8 @@ CVRP/VRP:
    `cluster_biased_worst_removal`, or unchanged
    `route_limit_seed_diversification`. It should choose a materially different
    problem-owned owner or explain a new causal path with CMT2/CMT4 protection.
+   If it revisits construction, direct seed effect must come from a same-run
+   seed baseline or same-mechanism accepted delta, not fallback activation.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement.
 
@@ -191,6 +201,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-pivot-agentic-2r-28f3e5f-postrun-20260618.md`.
 - CVRP post-pivot guidance field check and construction-pivot lesson:
   `scion/docs/experiments/v0.4/v04-cvrp-postpivot-guidance-agentic-1r-acc21ba-postrun-20260618.md`.
+- CVRP construction effect-guidance repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-construction-effect-guidance-repair-20260618.md`.
 - Current CVRP construction-pivot infra failures:
   `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
 - CVRP launcher secret/preflight repair:

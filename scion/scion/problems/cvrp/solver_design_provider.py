@@ -295,8 +295,13 @@ class CvrpSolverDesignProvider:
                 "next default. A construction hypothesis must explain how it "
                 "will activate on more of the formal CVRP surface or provide a "
                 "direct objective-changing seed-selection effect with CMT2 "
-                "protection. Otherwise pivot to a different problem-owned "
-                "solver-design owner. Do not hardcode case ids, BKS values, "
+                "protection. For seed/portfolio construction mechanisms, "
+                "direct effect means a same-run candidate-vs-baseline seed "
+                "comparison or an accepted delta recorded under the same "
+                "mechanism id; route-cap fallback activation or merely choosing "
+                "a seed is not effect evidence. Otherwise pivot to a different "
+                "problem-owned solver-design owner. Do not hardcode case ids, "
+                "BKS values, "
                 "seeds, split membership, Decision rules, Protocol rules, "
                 "promotion gates, or broad budget changes."
             ),
@@ -376,7 +381,9 @@ class CvrpSolverDesignProvider:
                 "default. If target-intent chooses construction again, the "
                 "notes must explain broader formal-surface activation or a "
                 "direct objective-changing seed-selection effect with CMT2 "
-                "protection."
+                "protection, using a same-run seed baseline or same-mechanism "
+                "`context.record_move(..., delta=...)` rather than treating "
+                "fallback activation as effect."
             ),
             (
                 "A non-scheduler target is now preferred when the selected "
@@ -781,6 +788,18 @@ class CvrpSolverDesignProvider:
                 "that same mechanism when it improves the objective. Do not "
                 "rename the mechanism or edit the hypothesis telemetry contract "
                 "to silence algorithm smoke."
+            ),
+            (
+                "For construction seed/portfolio mechanisms, activation can be "
+                "recorded when the construction path actually runs, but effect "
+                "telemetry needs a direct seed-selection comparison: either "
+                "compare the selected candidate against the same-run baseline "
+                "seed/portfolio before downstream ALNS/VNS attribution becomes "
+                "ambiguous, or record an accepted candidate-vs-baseline delta "
+                "with `context.record_move('<mechanism>', delta=..., "
+                "best_improved=...)` under the declared mechanism id. Route-cap "
+                "fallback use, seed-pool size changes, or simply choosing a "
+                "seed are activation/design evidence, not objective effect."
             ),
             (
                 "For scheduler-policy and acceptance-temperature mechanisms, "

@@ -89,6 +89,8 @@ def test_solver_design_hypothesis_prompt_resolves_provider_from_ref() -> None:
     assert "`1/3/28` pair W/L/T" in user_prompt
     assert "`4/32` candidate runs" in user_prompt
     assert "Do not repeat unchanged `route_limit_seed_diversification`" in user_prompt
+    assert "same-run candidate-vs-baseline seed comparison" in user_prompt
+    assert "merely choosing a seed is not effect evidence" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None:
@@ -144,6 +146,8 @@ def test_solver_design_target_intent_prompt_resolves_provider_from_ref() -> None
     assert "`construction.py` / `route_limit_seed_diversification`" in user_prompt
     assert "screened as no-effect/negative (`1/3/28`)" in user_prompt
     assert "broader formal-surface activation" in user_prompt
+    assert "same-run seed baseline" in user_prompt
+    assert "fallback activation as effect" in user_prompt
 
 
 def test_solver_design_target_intent_prompt_uses_research_surface_context() -> None:

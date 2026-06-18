@@ -139,6 +139,9 @@ def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:
     assert "context.record_iteration" in rendered
     assert "context.record_context('<mechanism>" not in rendered
     assert "no `context.record_context` API" in rendered
+    assert "For construction seed/portfolio mechanisms" in rendered
+    assert "same-run baseline seed/portfolio" in rendered
+    assert "Route-cap fallback use" in rendered
     assert "Do not add new calls to `context.record_best_update`" in rendered
 
 
@@ -284,6 +287,8 @@ def test_cvrp_hypothesis_guidance_exposes_route_merge_pivot_lessons() -> None:
     assert "`4/32` candidate runs" in rendered
     assert "Do not repeat unchanged `route_limit_seed_diversification`" in rendered
     assert "direct objective-changing seed-selection effect with CMT2 protection" in rendered
+    assert "same-run candidate-vs-baseline seed comparison" in rendered
+    assert "merely choosing a seed is not effect evidence" in rendered
 
 
 def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -> None:
@@ -316,6 +321,8 @@ def test_cvrp_target_intent_guidance_prefers_pivot_after_route_merge_plateau() -
     assert "screened as no-effect/negative (`1/3/28`)" in rendered
     assert "only `4/32` candidate activations" in rendered
     assert "broader formal-surface activation" in rendered
+    assert "same-run seed baseline" in rendered
+    assert "fallback activation as effect" in rendered
     assert "A non-scheduler target is now preferred" in rendered
 
 

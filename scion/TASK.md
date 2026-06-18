@@ -308,6 +308,12 @@ Current checkpoint:
   different causal path and CMT2/CMT4 protection; otherwise pivot to another
   problem-owned solver-design owner. Avoid broad budget/gate changes,
   VNS-removal sweeps, or case/BKS/seed/split hardcoding.
+- CVRP construction effect-attribution guidance is now repaired in the
+  problem-owned provider. Seed/portfolio construction mechanisms must use a
+  same-run candidate-vs-baseline seed comparison or same-mechanism accepted
+  delta for direct effect evidence; route-cap fallback activation, seed-pool
+  size, or merely choosing a seed is only activation/design evidence. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-construction-effect-guidance-repair-20260618.md`.
 - Current infra checkpoint: the first construction-pivot follow-up attempts
   from `867f5de` produced no research evidence. The WSL `1R` rerun reached
   prompt construction but had `0` effective rounds because the local
