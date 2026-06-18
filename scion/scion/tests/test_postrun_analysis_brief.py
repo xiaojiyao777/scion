@@ -140,6 +140,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is False
+    assert checklist["prepared_run_manifest_json"] is False
     assert "## Minimum Delegated Analysis" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown

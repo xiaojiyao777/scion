@@ -204,6 +204,8 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
         "outer_exit": run_root / "exit.txt",
         "outer_command": run_root / "command.txt",
         "outer_launch_env": run_root / "launch.env",
+        "prepared_run_manifest_json": run_root / "prepared_run_manifest.v1.json",
+        "prepared_run_manifest_markdown": run_root / "prepared_run_manifest.md",
         "campaign_status": campaign_dir / "status.json",
         "campaign_run_status": campaign_dir / "run_status.json",
         "campaign_summary": campaign_dir / "campaign_summary.json",

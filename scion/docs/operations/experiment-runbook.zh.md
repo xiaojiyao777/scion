@@ -1012,10 +1012,12 @@ EXIT_CODE:0
 无效轮次处理：记录原因、修复外部条件，然后用同一个 round count 重跑。不要把这类
 结果解释成 proposal、branch governance 或算法质量行为。
 
-跑后先确认 analysis brief 和 artifact/count inventory，再开始人工或子 agent
-分析。新版 CVRP / warehouse agentic launcher 会默认写入
+跑后先确认 prepared-run manifest、analysis brief 和 artifact/count inventory，再开始
+人工或子 agent 分析。新版 CVRP / warehouse agentic launcher 会默认写入
+`$RUN_ROOT/prepared_run_manifest.v1.json`、
 `$RUN_ROOT/postrun_acceptance/analysis_brief/` 和
-`$RUN_ROOT/postrun_acceptance/inventory/`；如果是历史 run 或手工启动的 run，可手动生成：
+`$RUN_ROOT/postrun_acceptance/inventory/`；如果是历史 run 或手工启动的 run，可手动生成
+brief/inventory：
 
 ```bash
 cd /home/clawd/research/or-autoresearch-agent
@@ -1027,12 +1029,15 @@ cd /home/clawd/research/or-autoresearch-agent
   "$RUN_ROOT" > "$RUN_ROOT/postrun_artifact_inventory.md"
 ```
 
-analysis brief 是给实验分析子 agent 的入口清单：它汇总 validity、必查 artifact、
-Phase 4 coverage 和必须回答的问题。inventory 只列 artifacts、counts、validity、
-branch/trace/event 概览，以及 Phase 4 分析所需证据是否存在的 report-only coverage
-flags（target intent、hypothesis/code trace、formal candidate、proposal manifest、
-research-efficiency、measurement readiness、effect-vs-MDE、branch lessons、runtime
-feedback、source visibility）。它们都不判断研究质量，也不是新的 gate。正式分析按
+prepared-run manifest 是 launch/handoff contract：它记录 run intent、无密钥的
+problem/protocol/split/seeds、round budget、model/preflight、runtime guard 和 postrun
+acceptance families。analysis brief 是给实验分析子 agent 的入口清单：它汇总
+validity、必查 artifact、Phase 4 coverage 和必须回答的问题。inventory 只列
+artifacts、counts、validity、branch/trace/event 概览，以及 Phase 4 分析所需证据是否
+存在的 report-only coverage flags（target intent、hypothesis/code trace、formal
+candidate、proposal manifest、research-efficiency、measurement readiness、
+effect-vs-MDE、branch lessons、runtime feedback、source visibility）。它们都不判断研究
+质量，也不是新的 gate。正式分析按
 [`postrun-analysis-handoff.md`](postrun-analysis-handoff.md) 分发给实验分析
 子 agent，逐分支、逐轮次、逐 LLM 调用检查，再由主线程决定修复、同 count 重跑，
 还是进入下一档轮数。

@@ -89,6 +89,31 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepare_status["postrun_reports"] is True
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    prepared_manifest = json.loads(
+        (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
+    )
+    prepared_manifest_md = (run_root / "prepared_run_manifest.md").read_text(
+        encoding="utf-8"
+    )
+    assert prepared_manifest["schema_version"] == (
+        "scion.launcher_prepared_run_manifest.v1"
+    )
+    assert prepared_manifest["report_only"] is True
+    assert prepared_manifest["decision_features_excluded"] is True
+    assert prepared_manifest["problem_family"] == "cvrp"
+    assert prepared_manifest["execution"]["rounds"] == 4
+    assert prepared_manifest["execution"]["stage_transition_drain_limit"] == 4
+    assert prepared_manifest["config"]["problem"] == "scion/problems/cvrp/problem.yaml"
+    assert prepared_manifest["report_metadata"]["postrun_acceptance_families"] == [
+        "summaries",
+        "failures",
+        "research_efficiency",
+        "manifests",
+        "analysis_brief",
+        "inventory",
+    ]
+    assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
+    assert "CVRP post-pivot" in prepared_manifest_md
     assert f"SCION_DIR={SCION_DIR}" in launch_env
     assert f"PY={sys.executable}" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
@@ -154,6 +179,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
+    assert (
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
+        in command_txt
+    )
     assert "RESUME_FROM_CAMPAIGN=" in command_txt
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt

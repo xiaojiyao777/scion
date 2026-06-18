@@ -84,6 +84,33 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
 
     launch_env_path = run_root / "launch.env"
     launch_env = launch_env_path.read_text(encoding="utf-8")
+    prepared_manifest = json.loads(
+        (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
+    )
+    prepared_manifest_md = (run_root / "prepared_run_manifest.md").read_text(
+        encoding="utf-8"
+    )
+    assert prepared_manifest["schema_version"] == (
+        "scion.launcher_prepared_run_manifest.v1"
+    )
+    assert prepared_manifest["report_only"] is True
+    assert prepared_manifest["decision_features_excluded"] is True
+    assert prepared_manifest["problem_family"] == "warehouse_delivery"
+    assert prepared_manifest["execution"]["rounds"] == 6
+    assert prepared_manifest["config"]["warehouse_data_root"] == str(data_root)
+    assert prepared_manifest["config"]["problem_v1"] == str(
+        run_root / "config" / "problem-v1.yaml"
+    )
+    assert prepared_manifest["report_metadata"]["postrun_acceptance_families"] == [
+        "summaries",
+        "failures",
+        "research_efficiency",
+        "manifests",
+        "analysis_brief",
+        "inventory",
+    ]
+    assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
+    assert "Warehouse champion-v2" in prepared_manifest_md
     assert stat.S_IMODE(launch_env_path.stat().st_mode) == 0o600
     assert f"REPO_ROOT={PROJECT_ROOT}" in launch_env
     assert f"SCION_DIR={SCION_DIR}" in launch_env
@@ -161,6 +188,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
+    assert (
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
+        in command_txt
+    )
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 
 

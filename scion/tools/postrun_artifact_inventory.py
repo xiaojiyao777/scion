@@ -16,6 +16,8 @@ LAUNCHER_ARTIFACTS = (
     "run.sh",
     "launch.env",
     "command.txt",
+    "prepared_run_manifest.v1.json",
+    "prepared_run_manifest.md",
     "run.log",
     "exit.txt",
 )

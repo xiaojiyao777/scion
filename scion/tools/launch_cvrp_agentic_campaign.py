@@ -43,6 +43,25 @@ PROPOSAL_CONTEXT_ABLATION_CHOICES = (
     "minimal-research-context",
 )
 ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
+TASK_DOC = "scion/TASK.md"
+CURRENT_STATE_DOC = "scion/docs/status/current-state.md"
+ANALYSIS_HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
+CVRP_ANALYSIS_INTENT = (
+    "CVRP post-pivot branch-continuation check. Inspect target-intent and "
+    "hypothesis traces, branch lesson transfer, protocol effect-vs-MDE, "
+    "budget-exhausting runtime feedback, source visibility, and whether the "
+    "solver mechanism is materially different from rejected/default-avoid "
+    "directions before accepting any conclusion."
+)
+POSTRUN_ACCEPTANCE_FAMILIES = (
+    "summaries",
+    "failures",
+    "research_efficiency",
+    "manifests",
+    "analysis_brief",
+    "inventory",
+)
 
 
 COMPLETION_PREFLIGHT_SNIPPET = r'''
@@ -430,6 +449,137 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
     )
 
 
+def _write_prepared_run_manifest(
+    run_root: Path,
+    env: dict[str, object],
+    *,
+    command: str,
+) -> None:
+    manifest = {
+        "schema_version": PREPARED_RUN_MANIFEST_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "problem_family": "cvrp",
+        "analysis_intent": CVRP_ANALYSIS_INTENT,
+        "task_doc": TASK_DOC,
+        "current_state_doc": CURRENT_STATE_DOC,
+        "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,
+        "run_root": str(run_root),
+        "campaign_dir": str(env["CAMPAIGN_DIR"]),
+        "resume_from_campaign": str(env.get("RESUME_FROM_CAMPAIGN") or ""),
+        "command": command,
+        "launch_command": "nohup setsid bash run.sh > nohup.log 2>&1 &",
+        "model": {
+            "name": str(env["SCION_MODEL"]),
+            "base_url": str(env["SCION_BASE_URL"]),
+            "completion_preflight": bool(int(env["COMPLETION_PREFLIGHT"])),
+        },
+        "git": {
+            "commit": str(env["GIT_COMMIT"]),
+            "runtime_guard_paths": str(env["GIT_RUNTIME_GUARD_PATHS"]),
+        },
+        "config": {
+            "problem": str(env["PROBLEM"]),
+            "protocol": str(env["PROTOCOL"]),
+            "split": str(env["SPLIT"]),
+            "seeds": str(env["SEEDS"]),
+            "data_root": str(env["SCION_PROBLEM_DATA_ROOT"]),
+        },
+        "execution": {
+            "rounds": int(env["ROUNDS"]),
+            "time_limit_sec": int(env["TIME_LIMIT_SEC"]),
+            "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
+            "stage_transition_drain_limit": int(
+                env["SCION_STAGE_TRANSITION_DRAIN_LIMIT"]
+            ),
+            "measurement_governance": str(env["MEASUREMENT_GOVERNANCE"]),
+            "proposal_context_ablation": str(env["PROPOSAL_CONTEXT_ABLATION"]),
+            "agentic_proposal": bool(int(env["AGENTIC_PROPOSAL"])),
+            "disable_early_stop": bool(int(env["DISABLE_EARLY_STOP"])),
+        },
+        "report_metadata": {
+            "control_pair_key": str(env.get("CONTROL_PAIR_KEY") or ""),
+            "postrun_reports": bool(int(env["POSTRUN_REPORTS"])),
+            "postrun_report_dir": str(run_root / "postrun_acceptance"),
+            "postrun_acceptance_families": list(POSTRUN_ACCEPTANCE_FAMILIES),
+        },
+        "acceptance_focus": [
+            "Do not treat aggregate win rate alone as sufficient evidence.",
+            "Interpret candidate evidence against A/A MDE and case-level variance.",
+            "Require branch depth, mechanism continuity, useful branch lessons, and source visibility checks.",
+            "Treat this manifest as launch/handoff evidence only, not as Decision input.",
+        ],
+        "started_utc": str(env["STARTED_UTC"]),
+    }
+    (run_root / "prepared_run_manifest.v1.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (run_root / "prepared_run_manifest.md").write_text(
+        _render_prepared_run_manifest_markdown(manifest),
+        encoding="utf-8",
+    )
+
+
+def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
+    config = manifest["config"]
+    execution = manifest["execution"]
+    reports = manifest["report_metadata"]
+    assert isinstance(config, dict)
+    assert isinstance(execution, dict)
+    assert isinstance(reports, dict)
+    lines = [
+        "# Prepared Run Manifest",
+        "",
+        f"- Schema: `{manifest['schema_version']}`",
+        f"- Problem family: `{manifest['problem_family']}`",
+        f"- Report-only: `{manifest['report_only']}`",
+        f"- Decision features excluded: `{manifest['decision_features_excluded']}`",
+        f"- Run root: `{manifest['run_root']}`",
+        f"- Campaign dir: `{manifest['campaign_dir']}`",
+        f"- Resume from campaign: `{manifest['resume_from_campaign'] or ''}`",
+        f"- Analysis handoff: `{manifest['analysis_handoff_doc']}`",
+        "",
+        "## Analysis Intent",
+        str(manifest["analysis_intent"]),
+        "",
+        "## Config",
+    ]
+    for key in ("problem", "protocol", "split", "seeds", "data_root"):
+        lines.append(f"- {key}: `{config[key]}`")
+    lines.extend(["", "## Execution"])
+    for key in (
+        "rounds",
+        "time_limit_sec",
+        "agentic_session_timeout_sec",
+        "stage_transition_drain_limit",
+        "measurement_governance",
+        "proposal_context_ablation",
+        "agentic_proposal",
+        "disable_early_stop",
+    ):
+        lines.append(f"- {key}: `{execution[key]}`")
+    lines.extend(
+        [
+            "",
+            "## Postrun Acceptance",
+            f"- Enabled: `{reports['postrun_reports']}`",
+            f"- Report dir: `{reports['postrun_report_dir']}`",
+            f"- Families: `{', '.join(reports['postrun_acceptance_families'])}`",
+            f"- Control pair key: `{reports['control_pair_key']}`",
+            "",
+            "## Acceptance Focus",
+        ]
+    )
+    for item in manifest["acceptance_focus"]:
+        lines.append(f"- {item}")
+    return "\n".join(lines) + "\n"
+
+
 def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     repo_root = _repo_root()
     scion_dir = repo_root / "scion"
@@ -519,6 +669,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"CONTROL_PAIR_KEY={env['CONTROL_PAIR_KEY']}\n"
             f"POSTRUN_REPORTS={env['POSTRUN_REPORTS']}\n"
             f"POSTRUN_REPORT_DIR={env['RUN_ROOT'] / 'postrun_acceptance'}\n\n"
+            f"PREPARED_RUN_MANIFEST={env['RUN_ROOT'] / 'prepared_run_manifest.v1.json'}\n\n"
             f"RESUME_FROM_CAMPAIGN={env['RESUME_FROM_CAMPAIGN']}\n\n"
             "command:\n"
             f"{command}\n\n"
@@ -527,6 +678,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         ),
         encoding="utf-8",
     )
+    _write_prepared_run_manifest(run_root, env, command=command)
 
     if not args.launch:
         _write_prepare_status(run_root, env)

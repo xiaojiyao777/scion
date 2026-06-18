@@ -198,6 +198,8 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "command.txt": True,
         "exit.txt": True,
         "launch.env": True,
+        "prepared_run_manifest.md": False,
+        "prepared_run_manifest.v1.json": False,
         "run.log": True,
         "run.sh": True,
     }

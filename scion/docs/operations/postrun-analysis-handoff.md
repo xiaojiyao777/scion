@@ -21,6 +21,8 @@ Give the analysis subagent exactly these paths and constraints:
   `$RUN_ROOT/postrun_acceptance/analysis_brief/*.postrun_analysis_brief.md`.
 - Preferred generated inventory, when present:
   `$RUN_ROOT/postrun_acceptance/inventory/*.postrun_artifact_inventory.md`.
+- Preferred prepared-run manifest, when present:
+  `$RUN_ROOT/prepared_run_manifest.md`.
 - Design anchors:
   - `scion/design/scion-architecture-v3.md`
   - `scion/docs/AGENT_ONBOARDING.md`
@@ -37,6 +39,8 @@ The subagent must inspect these artifacts when present:
 
 - `$RUN_ROOT/run_status.json`, `$RUN_ROOT/run.log`, `$RUN_ROOT/command.txt`,
   `$RUN_ROOT/launch.env`.
+- `$RUN_ROOT/prepared_run_manifest.v1.json` and
+  `$RUN_ROOT/prepared_run_manifest.md` when present.
 - `$CAMPAIGN_DIR/status.json`, `$CAMPAIGN_DIR/run_status.json`,
   `$CAMPAIGN_DIR/campaign_summary.json`, `$CAMPAIGN_DIR/scion.db`.
 - `$CAMPAIGN_DIR/agentic_sessions/agentic_session_index.json`.
