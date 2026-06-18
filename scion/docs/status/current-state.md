@@ -50,7 +50,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-strictlaunch-7308544-6r-gpt55-20260618T192933Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-signaldensity-8d89fd9-6r-gpt55-20260618T194900Z-claw`.
 
 CVRP/VRP:
 
@@ -64,12 +64,12 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-strictlaunch-7308544-1r-gpt55-20260618T192932Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-signaldensity-8d89fd9-1r-gpt55-20260618T194900Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `7308544`. Strict
+- The current prepared roots were built from checkout `8d89fd9`. Strict
   readiness on the current branch confirms runtime guard paths are unchanged
   and both roots remain statically ready.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
