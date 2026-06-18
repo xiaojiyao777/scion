@@ -530,6 +530,27 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
     formal_index.parent.mkdir(parents=True)
     formal_index.write_text('{"candidate_id":"old-candidate"}\n', encoding="utf-8")
+    traces_dir = campaign_dir / "llm_traces"
+    traces_dir.mkdir()
+    _write_json(
+        traces_dir / "20260606T000000_hypothesis_branch_1.json",
+        {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
+    )
+    _write_json(
+        campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json",
+        {
+            "session_count": 1,
+            "trace_count": 1,
+            "sessions": [
+                {
+                    "session_id": "s-1",
+                    "branch_id": "branch-1",
+                    "traces": [{"trace_id": "t-hyp", "request_kind": "hypothesis"}],
+                }
+            ],
+        },
+    )
+    _write_db(campaign_dir / "scion.db")
 
     data = inventory_tool.build_inventory(run_root)
     markdown = inventory_tool.render_markdown(data)
@@ -540,6 +561,19 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert data["lifecycle"]["evidence_scope"] == (
         "pre_campaign_preflight_failed_with_resume_snapshot"
     )
+    assert data["branches"] == []
+    assert data["events"]["by_kind"] == {}
+    assert data["hypotheses"]["count"] == 0
+    assert data["llm_traces"]["trace_count"] == 0
+    assert data["resume_snapshot"]["present"] is True
+    assert data["resume_snapshot"]["current_run_evidence"] is False
+    assert data["resume_snapshot"]["branch_count"] == 1
+    assert data["resume_snapshot"]["llm_trace_count"] == 1
+    assert data["resume_snapshot"]["hypothesis_count"] == 2
+    assert data["resume_snapshot"]["events_by_kind"] == {
+        "decision": 1,
+        "experiment": 2,
+    }
     assert data["launcher"]["artifacts"][
         "pre_campaign_completion_preflight.v1.json"
     ] is True
@@ -572,6 +606,7 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert phase4["requirements"]["formal_candidate_artifact"]["available"] is False
     assert phase4["requirements"]["measurement_readiness"]["available"] is False
     assert "PRE-CAMPAIGN PREFLIGHT FAILED" in markdown
+    assert "## Resume Snapshot" in markdown
     assert "not current-run evidence" in markdown
 
 

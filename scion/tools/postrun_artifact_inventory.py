@@ -112,6 +112,22 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         session_counts=llm_traces["sessions_by_branch"],
         trace_counts=llm_traces["traces_by_branch"],
     )
+    resume_snapshot = _resume_snapshot_inventory(
+        lifecycle=lifecycle,
+        db_inventory=db_inventory,
+        llm_traces=llm_traces,
+        branches=branches,
+    )
+    if _launch_root_without_current_run(lifecycle):
+        current_branches: list[dict[str, Any]] = []
+        current_events = _empty_events()
+        current_hypotheses = _empty_hypotheses()
+        current_llm_traces = _empty_llm_trace_summary()
+    else:
+        current_branches = branches
+        current_events = db_inventory["events"]
+        current_hypotheses = db_inventory["hypotheses"]
+        current_llm_traces = _llm_trace_summary(llm_traces)
 
     return {
         "run_root": str(run_root),
@@ -133,24 +149,19 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         "counters": _prepared_only_counters(prepared_manifest)
         if _launch_root_without_current_run(lifecycle)
         else _counters(run_status, campaign_run_status, campaign_status, summary),
-        "llm_traces": {
-            "trace_count": llm_traces["trace_count"],
-            "by_kind": dict(sorted(llm_traces["by_kind"].items())),
-            "by_status": dict(sorted(llm_traces["by_status"].items())),
-            "index_trace_count": llm_traces["index_trace_count"],
-            "index_session_count": llm_traces["index_session_count"],
-        },
+        "llm_traces": current_llm_traces,
         "launcher": _launcher_inventory(run_root, run_status),
         "database": {
             "path": str(db_path),
             "present": db_path.exists(),
             "read_error": db_inventory.get("read_error"),
         },
+        "resume_snapshot": resume_snapshot,
         "postrun_reports": postrun_reports,
         "phase4_evidence_coverage": phase4_coverage,
-        "branches": branches,
-        "events": db_inventory["events"],
-        "hypotheses": db_inventory["hypotheses"],
+        "branches": current_branches,
+        "events": current_events,
+        "hypotheses": current_hypotheses,
         "analysis_handoff": HANDOFF_DOC,
     }
 
@@ -215,6 +226,21 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             )
     else:
         lines.append("- No branch rows found.")
+
+    resume_snapshot = inventory.get("resume_snapshot")
+    if isinstance(resume_snapshot, dict) and resume_snapshot.get("present") is True:
+        lines.extend(
+            [
+                "",
+                "## Resume Snapshot",
+                "- Copied campaign artifacts are launch input, not current-run evidence.",
+                f"- Source: {_display(resume_snapshot.get('resume_from_campaign'))}",
+                f"- Branches: {_display(resume_snapshot.get('branch_count'))}",
+                f"- LLM traces: {_display(resume_snapshot.get('llm_trace_count'))}",
+                f"- Events: {_counter_text(resume_snapshot.get('events_by_kind', {}))}",
+                f"- Hypotheses: {_display(resume_snapshot.get('hypothesis_count'))}",
+            ]
+        )
 
     lines.extend(
         [
@@ -1249,6 +1275,65 @@ def _read_llm_traces(
         "index_session_count": len(session_entries),
         "traces_by_branch": _max_counter(file_traces_by_branch, index_traces_by_branch),
         "sessions_by_branch": sessions_by_branch,
+    }
+
+
+def _llm_trace_summary(llm_traces: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "trace_count": llm_traces["trace_count"],
+        "by_kind": dict(sorted(llm_traces["by_kind"].items())),
+        "by_status": dict(sorted(llm_traces["by_status"].items())),
+        "index_trace_count": llm_traces["index_trace_count"],
+        "index_session_count": llm_traces["index_session_count"],
+    }
+
+
+def _empty_llm_trace_summary() -> dict[str, Any]:
+    return {
+        "trace_count": 0,
+        "by_kind": {},
+        "by_status": {},
+        "index_trace_count": 0,
+        "index_session_count": 0,
+    }
+
+
+def _resume_snapshot_inventory(
+    *,
+    lifecycle: Mapping[str, Any],
+    db_inventory: dict[str, Any],
+    llm_traces: dict[str, Any],
+    branches: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not _launch_root_without_current_run(lifecycle):
+        return {
+            "present": False,
+            "current_run_evidence": True,
+            "evidence_scope": lifecycle.get("evidence_scope") or "postrun_campaign",
+        }
+    return {
+        "present": bool(
+            branches
+            or llm_traces["trace_count"]
+            or llm_traces["index_trace_count"]
+            or db_inventory["hypotheses"].get("count")
+            or any(db_inventory["events"].get(key) for key in db_inventory["events"])
+        ),
+        "current_run_evidence": False,
+        "evidence_scope": lifecycle.get("evidence_scope") or "launch_root",
+        "resume_from_campaign": lifecycle.get("resume_from_campaign"),
+        "branch_count": len(branches),
+        "llm_trace_count": llm_traces["trace_count"],
+        "llm_index_trace_count": llm_traces["index_trace_count"],
+        "llm_index_session_count": llm_traces["index_session_count"],
+        "llm_by_kind": dict(sorted(llm_traces["by_kind"].items())),
+        "llm_by_status": dict(sorted(llm_traces["by_status"].items())),
+        "events_by_kind": db_inventory["events"].get("by_kind", {}),
+        "events_by_decision": db_inventory["events"].get("by_decision", {}),
+        "events_by_stage": db_inventory["events"].get("by_stage", {}),
+        "hypothesis_count": db_inventory["hypotheses"].get("count", 0),
+        "hypotheses_by_status": db_inventory["hypotheses"].get("by_status", {}),
+        "source": "copied campaign snapshot; not current-run evidence",
     }
 
 
