@@ -115,7 +115,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-f481f15-6r-gpt55-6r-gpt55-20260618T162746Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-e526df7-6r-gpt55-6r-gpt55-20260618T175202Z-claw`.
 
 CVRP/VRP:
 
@@ -133,16 +133,16 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-f481f15-1r-gpt55-1r-gpt55-20260618T162746Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-e526df7-1r-gpt55-1r-gpt55-20260618T175202Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` launch-readiness preflight reaches the proxy and reports
-  `authenticated=false`, `active=0`, `expired=0`, `refreshing=1`; the real
+  `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`; the real
   chat completion returns HTTP `401` with `classification=not_authenticated`,
-  and readiness includes `operator_action.login_url`. The current `f481f15`
+  and readiness includes `operator_action.login_url`. The current `e526df7`
   prepared roots pass static readiness and remain unstarted.
   Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty output after re-login/token refresh.
@@ -180,7 +180,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/`. Current report-only observability slice:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   Current prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-f481f15-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-e526df7-20260618.md`.
   Current launcher-default repair:
   `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
   Current Phase 4 continuity coverage repair:
