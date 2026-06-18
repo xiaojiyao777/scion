@@ -72,6 +72,9 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
+        "branch_research_state_summary": _branch_research_state_summary(
+            inventory,
+        ),
         "protocol_accounting_summary": _protocol_accounting_summary(
             run_root_path,
             inventory,
@@ -295,6 +298,68 @@ def render_markdown(brief: dict[str, Any]) -> str:
                     available=_display(item.get("available")),
                     count=_display(item.get("count")),
                     source=_display(item.get("source")),
+                )
+            )
+
+    branch_state = brief.get("branch_research_state_summary") or {}
+    branch_aggregate = _mapping_or_empty(branch_state.get("aggregate"))
+    lines.extend(
+        [
+            "",
+            "## Branch Research State Summary",
+            "- Source: current-run branch, hypothesis, event, and LLM trace "
+            "inventory counts.",
+            f"- Available: `{_display(branch_state.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(branch_state.get('current_run_evidence'))}`",
+            "- Branches / lineages: "
+            f"{_display(branch_aggregate.get('branch_count'))} / "
+            f"{_display(branch_aggregate.get('lineage_count'))}",
+            "- Branch states: "
+            f"{_mapping_text(branch_aggregate.get('branch_state_counts'))}",
+            "- Branches with hypotheses/events/sessions/traces: "
+            f"{_display(branch_aggregate.get('branches_with_hypotheses'))} / "
+            f"{_display(branch_aggregate.get('branches_with_events'))} / "
+            f"{_display(branch_aggregate.get('branches_with_sessions'))} / "
+            f"{_display(branch_aggregate.get('branches_with_traces'))}",
+            "- Rollbacks total / branches with rollback: "
+            f"{_display(branch_aggregate.get('rollback_count_total'))} / "
+            f"{_display(branch_aggregate.get('branches_with_rollback'))}",
+            "- Branch failure codes: "
+            f"{_mapping_text(branch_aggregate.get('failure_code_counts'))}",
+            "- Hypotheses by status/action/locus: "
+            f"{_mapping_text(branch_aggregate.get('hypotheses_by_status'))} / "
+            f"{_mapping_text(branch_aggregate.get('hypotheses_by_action'))} / "
+            f"{_mapping_text(branch_aggregate.get('hypotheses_by_change_locus'))}",
+            "- Events by kind/decision/stage: "
+            f"{_mapping_text(branch_aggregate.get('events_by_kind'))} / "
+            f"{_mapping_text(branch_aggregate.get('events_by_decision'))} / "
+            f"{_mapping_text(branch_aggregate.get('events_by_stage'))}",
+        ]
+    )
+    top_branches = branch_state.get("top_branches")
+    if isinstance(top_branches, list) and top_branches:
+        lines.extend(
+            [
+                "| Branch | State | Lineage | Hypotheses | Events | Sessions | Traces | Rollbacks | Failures |",
+                "|---|---|---|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for branch in top_branches:
+            if not isinstance(branch, dict):
+                continue
+            lines.append(
+                "| {branch_id} | {state} | {lineage_id} | {hypotheses} | "
+                "{events} | {sessions} | {traces} | {rollbacks} | {failures} |".format(
+                    branch_id=_display(branch.get("branch_id")),
+                    state=_display(branch.get("state")),
+                    lineage_id=_display(branch.get("lineage_id")),
+                    hypotheses=_display(branch.get("hypothesis_count")),
+                    events=_display(branch.get("event_count")),
+                    sessions=_display(branch.get("session_count")),
+                    traces=_display(branch.get("trace_count")),
+                    rollbacks=_display(branch.get("rollback_count")),
+                    failures=_list_text(branch.get("failure_codes") or []),
                 )
             )
 
@@ -769,6 +834,161 @@ def _artifact_checklist(run_root: Path, campaign_dir: Path) -> list[dict[str, An
         {"name": name, "path": str(path), "present": path.exists()}
         for name, path in paths.items()
     ]
+
+
+def _branch_research_state_summary(
+    inventory: Mapping[str, Any],
+) -> dict[str, Any]:
+    phase4 = _mapping_or_empty(inventory.get("phase4_evidence_coverage"))
+    current_run_evidence = phase4.get("current_run_evidence") is True
+    branches = [
+        dict(branch)
+        for branch in inventory.get("branches") or []
+        if isinstance(branch, Mapping)
+    ]
+    events = _mapping_or_empty(inventory.get("events"))
+    hypotheses = _mapping_or_empty(inventory.get("hypotheses"))
+    base = {
+        "schema_version": "scion.postrun_branch_research_state_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompts_excluded": True,
+        "raw_responses_excluded": True,
+        "patch_body_excluded": True,
+        "current_run_evidence": current_run_evidence,
+        "available": False,
+        "aggregate": _empty_branch_research_state_aggregate(),
+        "top_branches": [],
+    }
+    if not current_run_evidence:
+        return base
+
+    aggregate = _branch_research_state_aggregate(
+        branches=branches,
+        events=events,
+        hypotheses=hypotheses,
+    )
+    return {
+        **base,
+        "available": bool(
+            branches
+            or _mapping_has_counts(events)
+            or _int_or_zero(hypotheses.get("count")) > 0
+        ),
+        "aggregate": aggregate,
+        "top_branches": _top_branch_summaries(branches),
+    }
+
+
+def _empty_branch_research_state_aggregate() -> dict[str, Any]:
+    return {
+        "branch_count": 0,
+        "lineage_count": 0,
+        "branch_state_counts": {},
+        "branches_with_hypotheses": 0,
+        "branches_with_events": 0,
+        "branches_with_sessions": 0,
+        "branches_with_traces": 0,
+        "rollback_count_total": 0,
+        "branches_with_rollback": 0,
+        "failure_code_counts": {},
+        "hypothesis_count": 0,
+        "hypotheses_by_status": {},
+        "hypotheses_by_action": {},
+        "hypotheses_by_change_locus": {},
+        "events_by_kind": {},
+        "events_by_decision": {},
+        "events_by_stage": {},
+    }
+
+
+def _branch_research_state_aggregate(
+    *,
+    branches: list[dict[str, Any]],
+    events: Mapping[str, Any],
+    hypotheses: Mapping[str, Any],
+) -> dict[str, Any]:
+    aggregate = _empty_branch_research_state_aggregate()
+    aggregate["branch_count"] = len(branches)
+    aggregate["lineage_count"] = len(
+        {
+            str(branch.get("lineage_id") or branch.get("branch_id") or "")
+            for branch in branches
+            if str(branch.get("lineage_id") or branch.get("branch_id") or "")
+        }
+    )
+    for branch in branches:
+        _increment_count(
+            aggregate["branch_state_counts"],
+            str(branch.get("state") or "unknown"),
+        )
+        if _int_or_zero(branch.get("hypothesis_count")) > 0:
+            aggregate["branches_with_hypotheses"] += 1
+        if _int_or_zero(branch.get("event_count")) > 0:
+            aggregate["branches_with_events"] += 1
+        if _int_or_zero(branch.get("session_count")) > 0:
+            aggregate["branches_with_sessions"] += 1
+        if _int_or_zero(branch.get("trace_count")) > 0:
+            aggregate["branches_with_traces"] += 1
+        rollback_count = _int_or_zero(branch.get("rollback_count"))
+        aggregate["rollback_count_total"] += rollback_count
+        if rollback_count > 0:
+            aggregate["branches_with_rollback"] += 1
+        for code in _string_items(branch.get("failure_codes")):
+            _increment_count(aggregate["failure_code_counts"], code)
+
+    aggregate["hypothesis_count"] = _int_or_zero(hypotheses.get("count"))
+    aggregate["hypotheses_by_status"] = _int_mapping(
+        hypotheses.get("by_status")
+    )
+    aggregate["hypotheses_by_action"] = _int_mapping(
+        hypotheses.get("by_action")
+    )
+    aggregate["hypotheses_by_change_locus"] = _int_mapping(
+        hypotheses.get("by_change_locus")
+    )
+    aggregate["events_by_kind"] = _int_mapping(events.get("by_kind"))
+    aggregate["events_by_decision"] = _int_mapping(events.get("by_decision"))
+    aggregate["events_by_stage"] = _int_mapping(events.get("by_stage"))
+    return aggregate
+
+
+def _mapping_has_counts(value: Mapping[str, Any]) -> bool:
+    for item in value.values():
+        if isinstance(item, Mapping) and any(
+            _int_or_zero(count) for count in item.values()
+        ):
+            return True
+    return False
+
+
+def _top_branch_summaries(branches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(
+        branches,
+        key=lambda branch: (
+            -_int_or_zero(branch.get("event_count")),
+            -_int_or_zero(branch.get("hypothesis_count")),
+            str(branch.get("branch_id") or ""),
+        ),
+    )
+    return [_compact_branch_summary(branch) for branch in ordered[:10]]
+
+
+def _compact_branch_summary(branch: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "branch_id": branch.get("branch_id"),
+            "state": branch.get("state"),
+            "lineage_id": branch.get("lineage_id"),
+            "hypothesis_count": branch.get("hypothesis_count"),
+            "event_count": branch.get("event_count"),
+            "session_count": branch.get("session_count"),
+            "trace_count": branch.get("trace_count"),
+            "rollback_count": branch.get("rollback_count"),
+            "failure_codes": _string_items(branch.get("failure_codes")),
+        }
+    )
 
 
 def _protocol_accounting_summary(
@@ -2157,6 +2377,12 @@ def _mapping_text(value: Any) -> str:
 
 def _mapping_or_empty(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _int_mapping(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): _int_or_zero(item) for key, item in sorted(value.items())}
 
 
 def _safe_ratio(numerator: int, denominator: int) -> float | None:

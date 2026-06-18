@@ -365,6 +365,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
             ],
         },
     )
+    _write_db(campaign_dir / "scion.db")
 
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
@@ -381,6 +382,49 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert brief["phase4_evidence_coverage"]["requirements"]["target_intent_trace"][
         "available"
     ] is True
+    branch_state = brief["branch_research_state_summary"]
+    assert branch_state["schema_version"] == (
+        "scion.postrun_branch_research_state_summary.v1"
+    )
+    assert branch_state["report_only"] is True
+    assert branch_state["decision_features_excluded"] is True
+    assert branch_state["raw_prompts_excluded"] is True
+    assert branch_state["raw_responses_excluded"] is True
+    assert branch_state["patch_body_excluded"] is True
+    assert branch_state["available"] is True
+    assert branch_state["current_run_evidence"] is True
+    assert branch_state["aggregate"] == {
+        "branch_count": 1,
+        "lineage_count": 1,
+        "branch_state_counts": {"ready_validate": 1},
+        "branches_with_hypotheses": 1,
+        "branches_with_events": 1,
+        "branches_with_sessions": 1,
+        "branches_with_traces": 1,
+        "rollback_count_total": 1,
+        "branches_with_rollback": 1,
+        "failure_code_counts": {"CONTRACT": 1},
+        "hypothesis_count": 2,
+        "hypotheses_by_status": {"active": 1, "rejected": 1},
+        "hypotheses_by_action": {"create_new": 1, "modify": 1},
+        "hypotheses_by_change_locus": {"solver_design": 2},
+        "events_by_kind": {"decision": 1, "experiment": 2},
+        "events_by_decision": {"continue_explore": 1, "queue_validate": 1},
+        "events_by_stage": {"screening": 2},
+    }
+    assert branch_state["top_branches"] == [
+        {
+            "branch_id": "branch-1",
+            "state": "ready_validate",
+            "lineage_id": "lineage-1",
+            "hypothesis_count": 2,
+            "event_count": 3,
+            "session_count": 1,
+            "trace_count": 3,
+            "rollback_count": 1,
+            "failure_codes": ["CONTRACT"],
+        }
+    ]
     accounting_summary = brief["protocol_accounting_summary"]
     assert accounting_summary["schema_version"] == (
         "scion.postrun_protocol_accounting_summary.v1"
@@ -651,7 +695,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert continuity_entry["weak_positive_transfer"]["acceptance_rate"] == 1.0
     checklist = {item["name"]: item["present"] for item in brief["artifact_checklist"]}
     assert checklist["outer_command"] is True
-    assert checklist["campaign_database"] is False
+    assert checklist["campaign_database"] is True
     assert checklist["prepared_run_manifest_json"] is False
     assert checklist["prepared_handoff"] is False
     assert brief["prepared_run_contract"]["schema_version"] == (
@@ -667,6 +711,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "Acceptance focus" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
+    assert "## Branch Research State Summary" in markdown
+    assert "- Branches / lineages: 1 / 1" in markdown
+    assert "- Branch states: ready_validate=1" in markdown
+    assert (
+        "| branch-1 | ready_validate | lineage-1 | 2 | 3 | 1 | 3 | 1 | CONTRACT |"
+        in markdown
+    )
     assert "## Protocol Accounting Summary" in markdown
     assert "- Requested/effective rounds: 1 / 1" in markdown
     assert (
@@ -779,6 +830,8 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["counters"]["effective_rounds_completed"] == 0
     assert any("PREPARED-ONLY ROOT" in item for item in brief["stop_conditions"])
     assert brief["phase4_evidence_coverage"]["prepared_only"] is True
+    assert brief["branch_research_state_summary"]["current_run_evidence"] is False
+    assert brief["branch_research_state_summary"]["available"] is False
     assert brief["protocol_accounting_summary"]["current_run_evidence"] is False
     assert brief["protocol_accounting_summary"]["available"] is False
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
@@ -892,6 +945,8 @@ def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     assert brief["branches"]["ids"] == []
     assert brief["llm_traces"]["trace_count"] == 0
     assert brief["resume_snapshot"]["present"] is True
+    assert brief["branch_research_state_summary"]["current_run_evidence"] is False
+    assert brief["branch_research_state_summary"]["available"] is False
     assert brief["protocol_accounting_summary"]["current_run_evidence"] is False
     assert brief["protocol_accounting_summary"]["available"] is False
     assert brief["measurement_effect_summary"]["current_run_evidence"] is False
