@@ -44,7 +44,8 @@ Framework:
 - CVRP and warehouse launch helpers now support prepared follow-up roots with
   top-level `prepared` status, completion preflight, secret-safe API-key env
   wiring, runtime-source guards, campaign copy/resume, and default postrun
-  report generation, including artifact/count inventory.
+  report generation, including artifact/count inventory with report-only
+  Phase 4 evidence coverage flags.
 
 Warehouse:
 
@@ -94,8 +95,8 @@ Infrastructure:
    `CHAT_COMPLETION_OK`.
 2. Launch the prepared CVRP post-pivot follow-up from the clean WSL checkout,
    then inspect target-intent, hypothesis, branch lesson transfer, protocol
-   effect-vs-MDE, budget-exhausting runtime feedback, and postrun
-   research-efficiency reports before accepting any conclusion.
+   effect-vs-MDE, budget-exhausting runtime feedback, source visibility, and
+   postrun research-efficiency reports before accepting any conclusion.
 3. Keep the prepared warehouse `v2` follow-up available as the simpler
    continuous-improvement check once LLM access is stable.
 4. Keep status updates short: change this file only when the current operating

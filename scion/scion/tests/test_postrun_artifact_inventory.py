@@ -56,14 +56,43 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    for subdir, filename in (
-        ("summaries", "normal.summary.json"),
-        ("failures", "normal.failures.json"),
-        ("research_efficiency", "normal.research_efficiency.v1.json"),
-        ("manifests", "normal.proposal_trajectory_manifest.v1.json"),
-        ("inventory", "normal.postrun_artifact_inventory.v1.json"),
-    ):
-        _write_json(run_root / "postrun_acceptance" / subdir / filename, {})
+    postrun_payloads = {
+        ("summaries", "normal.summary.json"): {},
+        ("failures", "normal.failures.json"): {},
+        (
+            "research_efficiency",
+            "normal.research_efficiency.v1.json",
+        ): {
+            "measurement_readiness": {
+                "status": "ready",
+                "mde_at_power_80": 9.9,
+            },
+            "protocol_effects_vs_mde": {
+                "mde_source": "measurement_readiness.mde_at_power_80",
+            },
+            "cross_branch_observability": {"branch_lesson_record_count": 1},
+            "fresh_runtime_replay_drain": {"attempts": 1},
+        },
+        (
+            "manifests",
+            "normal.proposal_trajectory_manifest.v1.json",
+        ): {
+            "counts": {"prompt_manifest_loaded_count": 2},
+            "branch_lesson_usage_accounting": {
+                "field_counts": {"avoided_lessons": 1},
+            },
+            "sessions": [
+                {
+                    "trace_fingerprints": [
+                        {"visibility_ledger_digest": "visibility-ledger-1"}
+                    ],
+                }
+            ],
+        },
+        ("inventory", "normal.postrun_artifact_inventory.v1.json"): {},
+    }
+    for (subdir, filename), payload in postrun_payloads.items():
+        _write_json(run_root / "postrun_acceptance" / subdir / filename, payload)
     _write_json(
         campaign_dir / "status.json",
         {
@@ -83,7 +112,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         sessions_dir / "agentic_session_trace_index.json",
         {
             "session_count": 1,
-            "trace_count": 3,
+            "trace_count": 4,
             "sessions": [
                 {
                     "session_id": "s-1",
@@ -91,6 +120,11 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                     "traces": [
                         {"trace_id": "t-tool", "request_kind": "tool_selection"},
                         {"trace_id": "t-hyp", "request_kind": "hypothesis"},
+                        {
+                            "trace_id": "t-target",
+                            "request_kind": "target_intent",
+                            "prompt_manifest_artifact_ref": "prompt-manifest-1",
+                        },
                         {"trace_id": "t-code", "request_kind": "code"},
                     ],
                 }
@@ -99,7 +133,15 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     )
     _write_json(
         sessions_dir / "agentic_session_index.json",
-        {"sessions": [{"session_id": "s-1", "branch_id": "branch-1"}]},
+        {
+            "sessions": [
+                {
+                    "session_id": "s-1",
+                    "branch_id": "branch-1",
+                    "prompt_manifest_refs": ["prompt-manifest-1"],
+                }
+            ]
+        },
     )
     _write_json(
         traces_dir / "20260606T000000_tool_selection_branch_1.json",
@@ -110,12 +152,26 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         {"request_kind": "hypothesis", "ok": True, "branch_id": "branch-1"},
     )
     _write_json(
+        traces_dir / "20260606T000000_target_intent_branch_1.json",
+        {
+            "request_kind": "hypothesis",
+            "ok": True,
+            "branch_id": "branch-1",
+            "target_intent": {"change_locus": "solver_design"},
+            "prompt_manifest_ref": "prompt-manifest-1",
+        },
+    )
+    _write_json(
         traces_dir / "20260606T000001_code_branch_1.json",
         {"trace_kind": "code", "status": "failed", "branch_id": "branch-1"},
     )
+    formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    formal_index.parent.mkdir(parents=True)
+    formal_index.write_text('{"candidate_id":"cand-1"}\n', encoding="utf-8")
     _write_db(campaign_dir / "scion.db")
 
     data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
 
     assert data["run_root"] == str(run_root)
     assert data["campaign_dir"] == str(campaign_dir)
@@ -124,14 +180,15 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["counters"]["requested_rounds"] == 2
     assert data["counters"]["effective_rounds_completed"] == 2
     assert data["counters"]["formal_screened_candidates"] == 1
-    assert data["llm_traces"]["trace_count"] == 3
+    assert data["llm_traces"]["trace_count"] == 4
     assert data["llm_traces"]["by_kind"] == {
         "code": 1,
         "hypothesis": 1,
+        "hypothesis_target_intent": 1,
         "tool_selection": 1,
     }
-    assert data["llm_traces"]["by_status"] == {"failed": 1, "ok": 2}
-    assert data["llm_traces"]["index_trace_count"] == 3
+    assert data["llm_traces"]["by_status"] == {"failed": 1, "ok": 3}
+    assert data["llm_traces"]["index_trace_count"] == 4
     assert data["llm_traces"]["index_session_count"] == 1
     assert data["launcher"]["artifacts"] == {
         "command.txt": True,
@@ -162,6 +219,31 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["analysis_handoff"] == (
         "scion/docs/operations/postrun-analysis-handoff.md"
     )
+    phase4 = data["phase4_evidence_coverage"]
+    assert phase4["report_only"] is True
+    assert phase4["quality_judgment"] is False
+    assert phase4["decision_features_excluded"] is True
+    requirements = phase4["requirements"]
+    for key in (
+        "target_intent_trace",
+        "hypothesis_trace",
+        "code_trace",
+        "formal_candidate_artifact",
+        "proposal_trajectory_manifest",
+        "prompt_manifest_loaded",
+        "research_efficiency_report",
+        "measurement_readiness",
+        "protocol_effect_vs_mde",
+        "branch_lesson_transfer",
+        "runtime_feedback",
+        "source_visibility",
+    ):
+        assert requirements[key]["available"] is True
+    assert requirements["target_intent_trace"]["count"] == 1
+    assert requirements["formal_candidate_artifact"]["count"] == 1
+    assert requirements["prompt_manifest_loaded"]["count"] == 2
+    assert "## Phase 4 Evidence Coverage" in markdown
+    assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
 
     assert len(data["branches"]) == 1
     branch = data["branches"][0]
@@ -177,7 +259,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert branch["hypothesis_count"] == 2
     assert branch["event_count"] == 3
     assert branch["session_count"] == 1
-    assert branch["trace_count"] == 3
+    assert branch["trace_count"] == 4
     assert data["events"]["by_kind"] == {"decision": 1, "experiment": 2}
     assert data["events"]["by_decision"] == {
         "continue_explore": 1,

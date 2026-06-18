@@ -1023,8 +1023,11 @@ cd /home/clawd/research/or-autoresearch-agent
   "$RUN_ROOT" > "$RUN_ROOT/postrun_artifact_inventory.md"
 ```
 
-这个 inventory 只列 artifacts、counts、validity 和 branch/trace/event 概览，不判断
-研究质量。正式分析按
+这个 inventory 只列 artifacts、counts、validity、branch/trace/event 概览，以及
+Phase 4 分析所需证据是否存在的 report-only coverage flags（target intent、
+hypothesis/code trace、formal candidate、proposal manifest、research-efficiency、
+measurement readiness、effect-vs-MDE、branch lessons、runtime feedback、source
+visibility）。它不判断研究质量，也不是新的 gate。正式分析按
 [`postrun-analysis-handoff.md`](postrun-analysis-handoff.md) 分发给实验分析
 子 agent，逐分支、逐轮次、逐 LLM 调用检查，再由主线程决定修复、同 count 重跑，
 还是进入下一档轮数。

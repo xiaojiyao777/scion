@@ -72,6 +72,16 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         trace_index=trace_index,
         session_index=session_index,
     )
+    postrun_reports = _postrun_report_inventory(run_root)
+    phase4_coverage = _phase4_evidence_coverage(
+        run_root=run_root,
+        campaign_dir=campaign_dir,
+        campaign_status=campaign_status,
+        summary=summary,
+        trace_index=trace_index,
+        session_index=session_index,
+        llm_traces=llm_traces,
+    )
 
     branches = _merge_branch_counts(
         db_inventory["branches"],
@@ -104,7 +114,8 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
             "index_session_count": llm_traces["index_session_count"],
         },
         "launcher": _launcher_inventory(run_root, run_status),
-        "postrun_reports": _postrun_report_inventory(run_root),
+        "postrun_reports": postrun_reports,
+        "phase4_evidence_coverage": phase4_coverage,
         "branches": branches,
         "events": db_inventory["events"],
         "hypotheses": db_inventory["hypotheses"],
@@ -181,6 +192,26 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             f"- Session index entries: {llm['index_session_count']}",
             f"- By kind: {_counter_text(llm['by_kind'])}",
             f"- By status: {_counter_text(llm['by_status'])}",
+            "",
+            "## Phase 4 Evidence Coverage",
+            "| Requirement | Available | Count | Source |",
+            "|---|---:|---:|---|",
+        ]
+    )
+    for key, item in _phase4_requirements_for_markdown(
+        inventory.get("phase4_evidence_coverage")
+    ).items():
+        lines.append(
+            "| {key} | {available} | {count} | {source} |".format(
+                key=key,
+                available=_display(item.get("available")),
+                count=_display(item.get("count")),
+                source=_display(item.get("source")),
+            )
+        )
+
+    lines.extend(
+        [
             "",
             "## Events",
             f"- By kind: {_counter_text(events['by_kind'])}",
@@ -349,6 +380,218 @@ def _postrun_report_inventory(run_root: Path) -> dict[str, Any]:
     }
 
 
+def _phase4_evidence_coverage(
+    *,
+    run_root: Path,
+    campaign_dir: Path,
+    campaign_status: Any,
+    summary: Any,
+    trace_index: Any,
+    session_index: Any,
+    llm_traces: dict[str, Any],
+) -> dict[str, Any]:
+    """Return report-only coverage flags for Phase 4 postrun analysis inputs."""
+
+    trace_coverage = _phase4_trace_coverage(
+        campaign_dir=campaign_dir,
+        trace_index=trace_index,
+        session_index=session_index,
+    )
+    research_docs = _postrun_json_docs(run_root, "research_efficiency")
+    manifest_docs = _postrun_json_docs(run_root, "manifests")
+    source_docs = [
+        doc for doc in (summary, campaign_status, *research_docs, *manifest_docs) if doc
+    ]
+    formal_rows = _jsonl_row_count(
+        campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    )
+    prompt_manifest_loaded_count = sum(
+        _nested_int(doc, ("prompt_manifest_loaded_count",)) or 0
+        for doc in manifest_docs
+    )
+    prompt_manifest_refs = trace_coverage.get("prompt_manifest_ref_count", 0)
+    measurement_readiness_count = sum(
+        1
+        for doc in (summary, campaign_status, *research_docs)
+        if _contains_key_fragment(doc, ("measurement_readiness",))
+    )
+    effect_vs_mde_count = sum(
+        1
+        for doc in research_docs
+        if _contains_key_fragment(doc, ("protocol_effects_vs_mde", "mde_source"))
+    )
+    branch_lesson_count = sum(
+        1
+        for doc in source_docs
+        if _contains_key_fragment(doc, ("branch_lesson", "cross_branch"))
+    )
+    runtime_feedback_count = sum(
+        1
+        for doc in source_docs
+        if _contains_key_fragment(
+            doc,
+            (
+                "runtime_feedback",
+                "runtime_budget",
+                "fresh_runtime_replay",
+                "runtime_regression",
+            ),
+        )
+    )
+    source_visibility_count = sum(
+        1
+        for doc in source_docs
+        if _contains_key_fragment(
+            doc,
+            ("source_visibility", "target_source_visibility", "visibility_ledger"),
+        )
+    )
+
+    return {
+        "schema_version": "scion.postrun_phase4_evidence_coverage.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "requirements": {
+            "target_intent_trace": _coverage_item(
+                trace_coverage.get("target_intent_trace_count", 0),
+                "llm_traces or trace_index",
+            ),
+            "hypothesis_trace": _coverage_item(
+                _int_or_zero(llm_traces.get("by_kind", {}).get("hypothesis")),
+                "llm_traces",
+            ),
+            "code_trace": _coverage_item(
+                _int_or_zero(llm_traces.get("by_kind", {}).get("code")),
+                "llm_traces",
+            ),
+            "formal_candidate_artifact": _coverage_item(
+                formal_rows,
+                "campaign/artifacts/formal_candidates/index.jsonl",
+            ),
+            "proposal_trajectory_manifest": _coverage_item(
+                len(manifest_docs),
+                "postrun_acceptance/manifests",
+            ),
+            "prompt_manifest_loaded": _coverage_item(
+                prompt_manifest_loaded_count or prompt_manifest_refs,
+                "proposal_trajectory_manifest or trace_index prompt_manifest refs",
+            ),
+            "research_efficiency_report": _coverage_item(
+                len(research_docs),
+                "postrun_acceptance/research_efficiency",
+            ),
+            "measurement_readiness": _coverage_item(
+                measurement_readiness_count,
+                "campaign summary/status or research-efficiency report",
+            ),
+            "protocol_effect_vs_mde": _coverage_item(
+                effect_vs_mde_count,
+                "research-efficiency protocol_effects_vs_mde",
+            ),
+            "branch_lesson_transfer": _coverage_item(
+                branch_lesson_count,
+                "summary/status, research-efficiency, or trajectory manifest",
+            ),
+            "runtime_feedback": _coverage_item(
+                runtime_feedback_count,
+                "summary/status or research-efficiency runtime fields",
+            ),
+            "source_visibility": _coverage_item(
+                source_visibility_count,
+                "prompt manifests or trajectory visibility fingerprints",
+            ),
+        },
+        "analysis_handoff": HANDOFF_DOC,
+    }
+
+
+def _phase4_trace_coverage(
+    *,
+    campaign_dir: Path,
+    trace_index: Any,
+    session_index: Any,
+) -> dict[str, int]:
+    file_target_intent_count = 0
+    index_target_intent_count = 0
+    prompt_manifest_ref_count = 0
+    for path in sorted((campaign_dir / "llm_traces").glob("*.json")):
+        doc = _read_json(path)
+        if _is_target_intent_trace(doc, path):
+            file_target_intent_count += 1
+        if _prompt_manifest_ref_present(doc):
+            prompt_manifest_ref_count += 1
+    for entry in _trace_index_entries(trace_index):
+        if _is_target_intent_trace(entry, None):
+            index_target_intent_count += 1
+        if _prompt_manifest_ref_present(entry):
+            prompt_manifest_ref_count += 1
+    for entry in _session_index_entries(session_index):
+        if _prompt_manifest_ref_present(entry):
+            prompt_manifest_ref_count += 1
+    return {
+        "target_intent_trace_count": max(
+            file_target_intent_count,
+            index_target_intent_count,
+        ),
+        "prompt_manifest_ref_count": prompt_manifest_ref_count,
+    }
+
+
+def _coverage_item(count: int | None, source: str) -> dict[str, Any]:
+    safe_count = _int_or_zero(count)
+    return {"available": safe_count > 0, "count": safe_count, "source": source}
+
+
+def _phase4_requirements_for_markdown(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    requirements = value.get("requirements")
+    if not isinstance(requirements, dict):
+        return {}
+    return {
+        str(key): item
+        for key, item in sorted(requirements.items())
+        if isinstance(item, dict)
+    }
+
+
+def _postrun_json_docs(run_root: Path, family: str) -> list[dict[str, Any]]:
+    docs: list[dict[str, Any]] = []
+    subdir = run_root / "postrun_acceptance" / family
+    if not subdir.exists():
+        return docs
+    for path in sorted(subdir.glob("*.json")):
+        doc = _read_json(path)
+        if isinstance(doc, dict):
+            docs.append(doc)
+    return docs
+
+
+def _jsonl_row_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return sum(1 for line in handle if line.strip())
+    except OSError:
+        return 0
+
+
+def _contains_key_fragment(value: Any, fragments: tuple[str, ...]) -> bool:
+    lowered_fragments = tuple(fragment.lower() for fragment in fragments)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            lowered_key = str(key).lower()
+            if any(fragment in lowered_key for fragment in lowered_fragments):
+                return True
+            if _contains_key_fragment(item, fragments):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_key_fragment(item, fragments) for item in value)
+    return False
+
+
 def _status_fields(run_status: Any) -> dict[str, Any]:
     if not isinstance(run_status, dict):
         return {}
@@ -425,6 +668,9 @@ def _read_llm_traces(
 
 
 def _trace_kind(doc: Any, path: Path) -> str:
+    name = path.name.lower()
+    if "target_intent" in name:
+        return "hypothesis_target_intent"
     value = _first_string(
         doc,
         keys=(
@@ -437,14 +683,45 @@ def _trace_kind(doc: Any, path: Path) -> str:
             "llm_stage",
         ),
     )
+    if value and "target_intent" in value.lower():
+        return "hypothesis_target_intent"
     if value:
         return value
-    name = path.name.lower()
     if "hypothesis" in name:
         return "hypothesis"
     if "code" in name:
         return "code"
     return "unknown"
+
+
+def _is_target_intent_trace(doc: Any, path: Path | None) -> bool:
+    if path is not None and "target_intent" in path.name.lower():
+        return True
+    if not isinstance(doc, dict):
+        return False
+    value = _first_string(
+        doc,
+        keys=("trace_kind", "request_kind", "call_kind", "kind", "phase", "stage"),
+    )
+    if value and "target_intent" in value.lower():
+        return True
+    return _contains_key_fragment(doc, ("target_intent",))
+
+
+def _prompt_manifest_ref_present(doc: Any) -> bool:
+    if not isinstance(doc, dict):
+        return False
+    if _first_string(
+        doc,
+        keys=(
+            "prompt_manifest_artifact_ref",
+            "prompt_manifest_ref",
+            "prompt_manifest",
+        ),
+    ):
+        return True
+    refs = doc.get("prompt_manifest_artifact_refs") or doc.get("prompt_manifest_refs")
+    return isinstance(refs, list) and bool(refs)
 
 
 def _trace_status(doc: Any) -> str:
@@ -690,14 +967,27 @@ def _first_int(*docs: Any, keys: tuple[str, ...]) -> int | None:
     for doc in docs:
         if not isinstance(doc, dict):
             continue
-        value = _nested_first(doc, keys)
-        if value is None:
-            continue
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            continue
+        value = _nested_int(doc, keys)
+        if value is not None:
+            return value
     return None
+
+
+def _nested_int(doc: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    value = _nested_first(doc, keys)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _nested_first(doc: dict[str, Any], keys: tuple[str, ...]) -> Any:
