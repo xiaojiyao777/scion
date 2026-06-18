@@ -52,6 +52,9 @@ POSTRUN_REPORT_DIRS = (
     "analysis_brief",
     "inventory",
 )
+PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"
+PREPARED_RUN_CONTRACT_SCHEMA = "scion.prepared_run_contract_inventory.v1"
+SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -180,9 +183,35 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             "",
             "## Launcher Artifacts",
             f"- Present: {_existing_artifact_text(inventory['launcher']['artifacts'])}",
+            "- Prepared contract complete: "
+            f"{_display(inventory['launcher']['prepared_run_contract']['contract_complete'])}",
+            "- Prepared problem/model: "
+            f"{_display(inventory['launcher']['prepared_run_contract']['problem_family'])} / "
+            f"{_display(inventory['launcher']['prepared_run_contract']['model'])}",
+            "- Prepared control pair: "
+            f"{_display(inventory['launcher']['prepared_run_contract']['control_pair_key'])}",
             f"- Status fields: {_mapping_text(inventory['launcher']['status_fields'])}",
             f"- run.log markers: {_counter_text(inventory['launcher']['run_log_markers'])}",
             f"- exit.txt markers: {_counter_text(inventory['launcher']['exit_markers'])}",
+            "",
+            "### Prepared Run Contract Checks",
+            "| Check | Passed | Detail |",
+            "|---|---:|---|",
+        ]
+    )
+    for key, item in _prepared_contract_checks_for_markdown(
+        inventory["launcher"]["prepared_run_contract"]
+    ).items():
+        lines.append(
+            "| {key} | {passed} | {detail} |".format(
+                key=key,
+                passed=_display(item.get("passed")),
+                detail=_display(item.get("detail")),
+            )
+        )
+
+    lines.extend(
+        [
             "",
             "## Postrun Reports",
             f"- Report dir: `{inventory['postrun_reports']['report_dir']}`",
@@ -350,6 +379,7 @@ def _launcher_inventory(run_root: Path, run_status: Any) -> dict[str, Any]:
             name: (run_root / name).exists()
             for name in LAUNCHER_ARTIFACTS
         },
+        "prepared_run_contract": _prepared_run_contract(run_root),
         "status_fields": _status_fields(run_status),
         "run_log_markers": _marker_counts(
             _read_text(run_root / "run.log"),
@@ -381,6 +411,233 @@ def _postrun_report_inventory(run_root: Path) -> dict[str, Any]:
         "counts": counts,
         "files": files,
     }
+
+
+def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
+    """Return report-only checks for a prepared launch root."""
+
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = _read_json(manifest_path)
+    command_text = _read_text(run_root / "command.txt")
+    checks: dict[str, dict[str, Any]] = {}
+
+    def add_check(name: str, passed: bool, detail: Any = "") -> None:
+        checks[name] = {"passed": bool(passed), "detail": detail}
+
+    manifest_is_dict = isinstance(manifest, dict)
+    add_check("manifest_present", manifest_path.exists(), str(manifest_path))
+    add_check("manifest_json_object", manifest_is_dict, type(manifest).__name__)
+    if not manifest_is_dict:
+        return {
+            "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "manifest_path": str(manifest_path),
+            "manifest_present": manifest_path.exists(),
+            "contract_complete": False,
+            "problem_family": None,
+            "model": None,
+            "control_pair_key": None,
+            "completion_preflight": None,
+            "postrun_reports": None,
+            "checks": checks,
+        }
+
+    rendered_manifest = json.dumps(manifest, sort_keys=True)
+    run_root_text = str(manifest.get("run_root") or "")
+    campaign_dir_text = str(manifest.get("campaign_dir") or "")
+    report_metadata = manifest.get("report_metadata")
+    if not isinstance(report_metadata, dict):
+        report_metadata = {}
+    model = manifest.get("model")
+    if not isinstance(model, dict):
+        model = {}
+    config = manifest.get("config")
+    if not isinstance(config, dict):
+        config = {}
+
+    add_check(
+        "manifest_schema",
+        manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA,
+        manifest.get("schema_version"),
+    )
+    for key in ("report_only", "decision_features_excluded"):
+        add_check(f"manifest_{key}", manifest.get(key) is True, manifest.get(key))
+    for key in (
+        "quality_judgment",
+        "campaign_state_mutated",
+        "scheduler_state_mutated",
+        "promotion_state_mutated",
+    ):
+        add_check(f"manifest_{key}", manifest.get(key) is False, manifest.get(key))
+    add_check(
+        "manifest_secret_free",
+        "SCION_API_KEY" not in rendered_manifest,
+        "SCION_API_KEY absent",
+    )
+    add_check(
+        "run_root_identity",
+        _same_path_or_leaf(run_root_text, run_root),
+        run_root_text,
+    )
+    add_check(
+        "campaign_dir_identity",
+        _same_path_or_leaf(campaign_dir_text, run_root / "campaign"),
+        campaign_dir_text,
+    )
+
+    command = str(manifest.get("command") or "")
+    add_check("command_txt_present", bool(command_text.strip()), "command.txt")
+    add_check(
+        "command_matches_manifest",
+        bool(command and command in command_text),
+        command,
+    )
+    add_check(
+        "prepared_manifest_pointer",
+        _command_points_to_prepared_manifest(command_text, run_root, run_root_text),
+        "PREPARED_RUN_MANIFEST",
+    )
+    add_check("model_is_gpt55", model.get("name") == "gpt-5.5", model.get("name"))
+    add_check(
+        "completion_preflight_enabled",
+        model.get("completion_preflight") is True,
+        model.get("completion_preflight"),
+    )
+    add_check(
+        "control_pair_key_present",
+        bool(report_metadata.get("control_pair_key")),
+        report_metadata.get("control_pair_key"),
+    )
+    add_check(
+        "postrun_reports_enabled",
+        report_metadata.get("postrun_reports") is True,
+        report_metadata.get("postrun_reports"),
+    )
+    families = report_metadata.get("postrun_acceptance_families")
+    missing_families = [
+        family for family in POSTRUN_REPORT_DIRS if family not in (families or [])
+    ]
+    add_check(
+        "postrun_families_complete",
+        isinstance(families, list) and not missing_families,
+        ",".join(missing_families),
+    )
+    missing_config_paths = _missing_manifest_config_paths(
+        config,
+        manifest_run_root=run_root_text,
+        local_run_root=run_root,
+    )
+    add_check(
+        "config_paths_resolvable",
+        not missing_config_paths,
+        ",".join(missing_config_paths),
+    )
+
+    return {
+        "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "manifest_path": str(manifest_path),
+        "manifest_present": True,
+        "contract_complete": all(item["passed"] for item in checks.values()),
+        "problem_family": manifest.get("problem_family"),
+        "model": model.get("name"),
+        "control_pair_key": report_metadata.get("control_pair_key"),
+        "completion_preflight": model.get("completion_preflight"),
+        "postrun_reports": report_metadata.get("postrun_reports"),
+        "checks": checks,
+    }
+
+
+def _prepared_contract_checks_for_markdown(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    checks = value.get("checks")
+    if not isinstance(checks, dict):
+        return {}
+    return {
+        str(key): item
+        for key, item in sorted(checks.items())
+        if isinstance(item, dict)
+    }
+
+
+def _same_path_or_leaf(manifest_path: str, local_path: Path) -> bool:
+    if not manifest_path:
+        return False
+    remote = Path(manifest_path)
+    if remote == local_path:
+        return True
+    if remote.name == local_path.name and local_path.name != "campaign":
+        return True
+    return (
+        remote.name == local_path.name
+        and remote.parent.name == local_path.parent.name
+    )
+
+
+def _command_points_to_prepared_manifest(
+    command_text: str,
+    run_root: Path,
+    manifest_run_root: str,
+) -> bool:
+    for line in command_text.splitlines():
+        if not line.startswith("PREPARED_RUN_MANIFEST="):
+            continue
+        raw_path = line.split("=", 1)[1].strip()
+        if raw_path == str(run_root / "prepared_run_manifest.v1.json"):
+            return True
+        if raw_path == str(Path(manifest_run_root) / "prepared_run_manifest.v1.json"):
+            return True
+        prepared_path = Path(raw_path)
+        return (
+            prepared_path.name == "prepared_run_manifest.v1.json"
+            and prepared_path.parent.name == run_root.name
+        )
+    return False
+
+
+def _missing_manifest_config_paths(
+    config: dict[str, Any],
+    *,
+    manifest_run_root: str,
+    local_run_root: Path,
+) -> list[str]:
+    missing: list[str] = []
+    for key, value in sorted(config.items()):
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if key.endswith("data_root") or key in {
+            "warehouse_data_root",
+            "problem_data_root",
+        }:
+            continue
+        if _manifest_path_resolves(value, manifest_run_root, local_run_root):
+            continue
+        missing.append(f"{key}={value}")
+    return missing
+
+
+def _manifest_path_resolves(
+    value: str,
+    manifest_run_root: str,
+    local_run_root: Path,
+) -> bool:
+    path = Path(value)
+    candidates = [path]
+    if not path.is_absolute():
+        candidates.extend(
+            (SCION_PROJECT_DIR / path, SCION_PROJECT_DIR / "scion" / path)
+        )
+    if manifest_run_root and value.startswith(manifest_run_root):
+        try:
+            candidates.append(local_run_root / Path(value).relative_to(manifest_run_root))
+        except ValueError:
+            pass
+    return any(candidate.exists() for candidate in candidates)
 
 
 def _phase4_evidence_coverage(

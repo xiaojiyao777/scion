@@ -141,7 +141,15 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert checklist["outer_command"] is True
     assert checklist["campaign_database"] is False
     assert checklist["prepared_run_manifest_json"] is False
+    assert brief["prepared_run_contract"]["schema_version"] == (
+        "scion.prepared_run_contract_inventory.v1"
+    )
+    assert brief["prepared_run_contract"]["report_only"] is True
+    assert brief["prepared_run_contract"]["quality_judgment"] is False
+    assert brief["prepared_run_contract"]["decision_features_excluded"] is True
+    assert brief["prepared_run_contract"]["contract_complete"] is False
     assert "## Minimum Delegated Analysis" in markdown
+    assert "## Prepared Run Contract" in markdown
     assert "DecisionFeatures" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
 

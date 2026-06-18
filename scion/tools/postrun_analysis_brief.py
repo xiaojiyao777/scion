@@ -61,6 +61,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
             "ids": [branch["branch_id"] for branch in inventory["branches"]],
         },
         "artifact_checklist": _artifact_checklist(run_root_path, campaign_dir),
+        "prepared_run_contract": inventory["launcher"]["prepared_run_contract"],
         "postrun_reports": inventory["postrun_reports"],
         "phase4_evidence_coverage": inventory["phase4_evidence_coverage"],
         "stop_conditions": _stop_conditions(inventory),
@@ -124,6 +125,34 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 path=item["path"],
             )
         )
+
+    prepared_contract = brief.get("prepared_run_contract") or {}
+    lines.extend(
+        [
+            "",
+            "## Prepared Run Contract",
+            f"- Complete: `{_display(prepared_contract.get('contract_complete'))}`",
+            "- Problem/model: "
+            f"`{_display(prepared_contract.get('problem_family'))}` / "
+            f"`{_display(prepared_contract.get('model'))}`",
+            "- Control pair: "
+            f"`{_display(prepared_contract.get('control_pair_key'))}`",
+            "| Check | Passed | Detail |",
+            "|---|---:|---|",
+        ]
+    )
+    checks = prepared_contract.get("checks")
+    if isinstance(checks, dict):
+        for key, item in sorted(checks.items()):
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "| {key} | {passed} | {detail} |".format(
+                    key=key,
+                    passed=_display(item.get("passed")),
+                    detail=_display(item.get("detail")),
+                )
+            )
 
     phase4 = brief["phase4_evidence_coverage"]
     lines.extend(

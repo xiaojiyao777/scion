@@ -203,6 +203,15 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "run.log": True,
         "run.sh": True,
     }
+    prepared_contract = data["launcher"]["prepared_run_contract"]
+    assert prepared_contract["schema_version"] == (
+        "scion.prepared_run_contract_inventory.v1"
+    )
+    assert prepared_contract["report_only"] is True
+    assert prepared_contract["quality_judgment"] is False
+    assert prepared_contract["decision_features_excluded"] is True
+    assert prepared_contract["contract_complete"] is False
+    assert prepared_contract["checks"]["manifest_present"]["passed"] is False
     assert data["launcher"]["status_fields"] == {"wrapper_exit_status": 0}
     assert data["launcher"]["run_log_markers"] == {
         "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED": 1,
@@ -250,6 +259,8 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert requirements["formal_candidate_artifact"]["count"] == 1
     assert requirements["prompt_manifest_loaded"]["count"] == 2
     assert "## Phase 4 Evidence Coverage" in markdown
+    assert "## Launcher Artifacts" in markdown
+    assert "### Prepared Run Contract Checks" in markdown
     assert "| target_intent_trace | True | 1 | llm_traces or trace_index |" in markdown
 
     assert len(data["branches"]) == 1
@@ -277,6 +288,97 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["hypotheses"]["by_status"] == {"active": 1, "rejected": 1}
     assert data["hypotheses"]["by_action"] == {"create_new": 1, "modify": 1}
     assert data["hypotheses"]["by_change_locus"] == {"solver_design": 2}
+
+
+def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "prepared-run"
+    campaign_dir = run_root / "campaign"
+    config_dir = run_root / "config"
+    campaign_dir.mkdir(parents=True)
+    config_dir.mkdir()
+    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
+        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+
+    remote_root = f"/home/xjy-ubuntu/research/scion-experiments/{run_root.name}"
+    command = (
+        "/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m scion.cli.main run "
+        f"--problem {remote_root}/config/problem.yaml "
+        f"--protocol {remote_root}/config/protocol.yaml "
+        f"--split {remote_root}/config/split.yaml "
+        f"--seeds {remote_root}/config/seeds.yaml "
+        f"--campaign-dir {remote_root}/campaign "
+        "--rounds 1 --agentic-proposal"
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": remote_root,
+            "campaign_dir": f"{remote_root}/campaign",
+            "problem_family": "cvrp",
+            "command": command,
+            "model": {
+                "name": "gpt-5.5",
+                "base_url": "http://127.0.0.1:8080",
+                "completion_preflight": True,
+            },
+            "config": {
+                "problem": f"{remote_root}/config/problem.yaml",
+                "protocol": f"{remote_root}/config/protocol.yaml",
+                "split": f"{remote_root}/config/split.yaml",
+                "seeds": f"{remote_root}/config/seeds.yaml",
+                "data_root": "/home/xjy-ubuntu/research/scion-data",
+            },
+            "report_metadata": {
+                "control_pair_key": "cvrp.prepared:rep01",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                ],
+            },
+        },
+    )
+    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
+    (run_root / "command.txt").write_text(
+        "\n".join(
+            [
+                "environment:",
+                "SCION_MODEL=gpt-5.5",
+                "",
+                "report_metadata:",
+                f"PREPARED_RUN_MANIFEST={remote_root}/prepared_run_manifest.v1.json",
+                "",
+                "command:",
+                command,
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    contract = data["launcher"]["prepared_run_contract"]
+    assert contract["contract_complete"] is True
+    assert contract["problem_family"] == "cvrp"
+    assert contract["model"] == "gpt-5.5"
+    assert contract["control_pair_key"] == "cvrp.prepared:rep01"
+    assert all(item["passed"] for item in contract["checks"].values())
+    assert "- Prepared contract complete: True" in markdown
+    assert "| config_paths_resolvable | True |  |" in markdown
 
 
 def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:

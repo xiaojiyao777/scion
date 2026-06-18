@@ -30,8 +30,9 @@ Give the analysis subagent exactly these paths and constraints:
   another experiment, and do not call external LLM providers.
 
 The generated brief is a report-only delegation aid. It summarizes validity,
-required artifacts, Phase 4 evidence coverage, and the required questions below.
-It is not a quality judgment and must not be used as a gate by itself.
+required artifacts, prepared-run contract checks, Phase 4 evidence coverage,
+and the required questions below. It is not a quality judgment and must not be
+used as a gate by itself.
 
 ## Required Artifact Pass
 
