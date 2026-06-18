@@ -130,6 +130,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "inventory",
         "launch_readiness",
     ]
+    assert (
+        prepared_manifest["report_metadata"]["control_pair_key"]
+        == "cvrp.unit-cvrp:prepared"
+    )
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "CVRP post-pivot" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
@@ -158,7 +162,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SEEDS=scion/problems/cvrp/formal/seed_ledger.yaml" in launch_env
     assert "MEASUREMENT_GOVERNANCE=on" in launch_env
     assert "PROPOSAL_CONTEXT_ABLATION=full" in launch_env
-    assert "CONTROL_PAIR_KEY=''" in launch_env
+    assert "CONTROL_PAIR_KEY=cvrp.unit-cvrp:prepared" in launch_env
 
     run_sh = run_root / "run.sh"
     run_sh_text = run_sh.read_text(encoding="utf-8")
@@ -198,6 +202,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
+    assert "CONTROL_PAIR_KEY=cvrp.unit-cvrp:prepared" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     assert (
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
@@ -277,6 +282,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
+    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+        "control_pair_key_present"
+    ]["passed"] is True
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
     assert prepared_readiness["launch_ready"] is False

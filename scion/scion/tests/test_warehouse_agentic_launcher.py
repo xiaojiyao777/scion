@@ -34,6 +34,7 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--problem-v1" in result.stdout
     assert "--measurement-governance" in result.stdout
     assert "--proposal-context-ablation" in result.stdout
+    assert "--control-pair-key" in result.stdout
 
 
 def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
@@ -131,6 +132,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "inventory",
         "launch_readiness",
     ]
+    assert (
+        prepared_manifest["report_metadata"]["control_pair_key"]
+        == "warehouse.unit-warehouse:prepared"
+    )
     assert "SCION_API_KEY" not in json.dumps(prepared_manifest, sort_keys=True)
     assert "Warehouse champion-v2" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
@@ -147,6 +152,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
+    assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in launch_env
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
         "'scion/scion :(exclude)scion/scion/tests "
@@ -211,6 +217,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "scion/problems/warehouse_delivery surrogate" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
+    assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     assert (
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
@@ -285,6 +292,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert prepared_inventory["lifecycle"]["prepared_only"] is True
     assert prepared_inventory["launcher"]["artifacts"]["prepared_handoff"] is True
+    assert prepared_inventory["launcher"]["prepared_run_contract"]["checks"][
+        "control_pair_key_present"
+    ]["passed"] is True
     assert prepared_readiness["schema_version"] == "scion.launch_readiness.v1"
     assert prepared_readiness["static_ready"] is False
     assert prepared_readiness["launch_ready"] is False

@@ -320,7 +320,10 @@ Current checkpoint:
   snapshots, and prepared-only lifecycle guards plus structured
   preflight-failed launch-root guards that preserve failure classification,
   login-url presence, and operator action while preventing copied resume
-  artifacts from being treated as current-run postrun evidence. Inventory and
+  artifacts from being treated as current-run postrun evidence. Launchers now
+  auto-fill deterministic report-only `control_pair_key` metadata when the
+  operator omits it, preventing prepare-only roots from failing the prepared
+  contract because optional handoff metadata was blank. Inventory and
   analysis-brief top-level branch/event/hypothesis/LLM-trace fields are
   current-run scoped; copied campaign counts live under `resume_snapshot`. For
   historical roots or schema drift, rebuild the report-only acceptance bundle

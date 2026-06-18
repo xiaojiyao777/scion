@@ -65,6 +65,9 @@ Framework:
   wiring, runtime-source guards, campaign copy/resume, secret-free prepared-run
   manifests, prepare-time delegated handoff briefs/inventories,
   launch-readiness snapshots, and default postrun report generation. The
+  launchers now auto-fill a deterministic report-only `control_pair_key` when
+  the operator omits one, so prepare-only roots do not fail the prepared
+  contract solely because optional metadata was blank. The
   generated briefs carry the prepared manifest's analysis intent, acceptance
   focus, current problem-owned research-focus/default-avoid handoff, and resume
   source; inventory/contract/readiness checks remain report-only and outside
@@ -169,6 +172,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
   Current prepared-root refresh:
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-f481f15-20260618.md`.
+  Current launcher-default repair:
+  `scion/docs/experiments/v0.4/v04-launcher-control-pair-key-default-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -203,6 +204,20 @@ def _safe_label(label: str) -> str:
     if not normalized:
         raise SystemExit("--label must contain at least one filename-safe character")
     return normalized
+
+
+def _prepared_control_pair_key(value: str | None, *, label: str) -> str:
+    explicit = str(value or "").strip()
+    if explicit:
+        return explicit
+    key = f"cvrp.{label}:prepared"
+    if len(key) <= 128:
+        return key
+    digest = hashlib.sha1(label.encode("utf-8")).hexdigest()[:8]
+    suffix = f":prepared.{digest}"
+    max_label_len = max(1, 128 - len("cvrp.") - len(suffix))
+    trimmed = label[:max_label_len].rstrip("-._") or label[:max_label_len]
+    return f"cvrp.{trimmed}{suffix}"
 
 
 def _shell_assign(name: str, value: object) -> str:
@@ -708,6 +723,10 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         shutil.copytree(resume_source, campaign_dir)
         resume_from_campaign = str(resume_source)
     api_key, api_key_env = _resolve_api_key(args)
+    control_pair_key = _prepared_control_pair_key(
+        args.control_pair_key,
+        label=label,
+    )
 
     env: dict[str, object] = {
         "RUN_ROOT": run_root,
@@ -735,7 +754,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "TIME_LIMIT_SEC": args.time_limit_sec,
         "MEASUREMENT_GOVERNANCE": args.measurement_governance,
         "PROPOSAL_CONTEXT_ABLATION": args.proposal_context_ablation,
-        "CONTROL_PAIR_KEY": args.control_pair_key or "",
+        "CONTROL_PAIR_KEY": control_pair_key,
         "AGENTIC_PROPOSAL": 1,
         "DISABLE_EARLY_STOP": 1,
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
