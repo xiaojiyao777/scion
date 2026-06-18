@@ -50,10 +50,28 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert power["by_stage"]["screening"]["rows_at_or_above_mde"] == 1
     assert power["by_stage"]["validation"]["nonpositive_rows"] == 1
     assert power["top_rows_by_effect_to_mde"][0]["branch_id"] == "branch-a"
+    assert power["top_rows_by_effect_to_mde"][0]["mechanism_family"] == (
+        "regret_insertion"
+    )
     assert "raw_metrics_ref" not in power["top_rows_by_effect_to_mde"][0]
+    family_effects = power["mechanism_family_effect_summary"]
+    assert family_effects["decision_features_excluded"] is True
+    assert family_effects["mapping_status"] == "available"
+    assert family_effects["mapped_row_count"] == 3
+    assert family_effects["unmapped_row_count"] == 0
+    assert family_effects["by_family"]["regret_insertion"][
+        "protocol_row_count"
+    ] == 2
+    assert family_effects["by_family"]["regret_insertion"][
+        "rows_at_or_above_mde"
+    ] == 1
+    assert family_effects["by_family"]["route_merge"]["positive_rows"] == 1
     assert data["research_shape"]["decision_features_excluded"] is True
     assert data["research_shape"]["max_branch_depth"] == 3
     assert data["research_shape"]["branch_depth_distribution"] == {"1": 1, "3": 1}
+    assert data["research_shape"]["branch_mechanism_family_map"]["branch-a"][
+        "primary_family"
+    ] == "regret_insertion"
     assert data["cross_branch_observability"]["observable_step_count"] == 5
     assert data["cross_branch_observability"][
         "preserved_same_branch_lesson_count"
@@ -329,6 +347,18 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
                     "families": {
                         "regret_insertion": 3,
                         "route_merge": 1,
+                    },
+                },
+                "branch_mechanism_family_map": {
+                    "branch-a": {
+                        "primary_family": "regret_insertion",
+                        "families": {"regret_insertion": 3},
+                        "sources": {"step_history": 2, "branch_rows": 1},
+                    },
+                    "branch-b": {
+                        "primary_family": "route_merge",
+                        "families": {"route_merge": 1},
+                        "sources": {"step_history": 1},
                     },
                 },
             },

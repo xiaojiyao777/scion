@@ -46,9 +46,10 @@ Framework:
   quality-blocked proposal behavior, protocol-evaluated evidence, and
   plateau-review readiness before any delegated analysis calls the post-v2
   behavior a real plateau.
-- Research-continuity briefs now project branch-depth distribution, active
-  shape, and mechanism-family breadth so delegated review can distinguish deep
-  follow-up from many shallow one-off branches.
+- Research-continuity and measurement-effect briefs now project branch-depth
+  distribution, active shape, mechanism-family breadth, and mechanism-family
+  effect summaries so delegated review can distinguish deep follow-up from
+  shallow branch scattering and family-level sub-MDE/no-effect patterns.
 
 Warehouse:
 
@@ -122,6 +123,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-724c465-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:

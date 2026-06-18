@@ -110,6 +110,9 @@ def build_research_efficiency_report(
     research_shape_diagnostics = _mapping_value(
         cross_branch_observability.get("research_shape_diagnostics")
     )
+    branch_family_map = _mapping_value(
+        research_shape_diagnostics.get("branch_mechanism_family_map")
+    )
 
     report = {
         "schema_version": SCHEMA_VERSION,
@@ -263,6 +266,7 @@ def build_research_efficiency_report(
         "protocol_effects_vs_mde": _protocol_effects_vs_mde(
             steps,
             measurement_readiness or {},
+            branch_family_map,
         ),
         "research_shape": _compact_research_shape_diagnostics(
             research_shape_diagnostics
@@ -756,6 +760,9 @@ def _compact_research_shape_diagnostics(
         "mechanism_family_breadth": _mapping_value(
             diagnostics.get("mechanism_family_breadth")
         ),
+        "branch_mechanism_family_map": _mapping_value(
+            diagnostics.get("branch_mechanism_family_map")
+        ),
     }
 
 
@@ -980,8 +987,10 @@ def _same_branch_followup_interpretation(
 def _protocol_effects_vs_mde(
     steps: list[Any],
     measurement_readiness: Mapping[str, Any],
+    branch_family_map: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     mde = _first_float(measurement_readiness.get("mde_at_power_80"))
+    family_map = _mapping_value(branch_family_map)
     rows: list[dict[str, Any]] = []
     for item in steps:
         if not isinstance(item, Mapping):
@@ -989,7 +998,7 @@ def _protocol_effects_vs_mde(
         protocol = item.get("protocol_result")
         if not isinstance(protocol, Mapping):
             continue
-        row = _protocol_effect_row(item, protocol, mde)
+        row = _protocol_effect_row(item, protocol, mde, family_map)
         if row:
             rows.append(row)
 
@@ -1020,6 +1029,10 @@ def _protocol_effects_vs_mde(
             stage: _effect_row_counts(stage_rows, mde)
             for stage, stage_rows in sorted(stage_buckets.items())
         },
+        "mechanism_family_effect_summary": _mechanism_family_effect_summary(
+            rows,
+            mde,
+        ),
         "top_rows_by_effect_to_mde": _top_effect_rows(rows),
     }
 
@@ -1028,11 +1041,14 @@ def _protocol_effect_row(
     step: Mapping[str, Any],
     protocol: Mapping[str, Any],
     mde: float | None,
+    branch_family_map: Mapping[str, Any],
 ) -> dict[str, Any] | None:
     median_delta = _first_float(protocol.get("median_delta"))
     ci_low = _first_float(protocol.get("ci_low"))
     ci_high = _first_float(protocol.get("ci_high"))
     win_rate = _first_float(protocol.get("win_rate"), protocol.get("case_win_rate"))
+    branch_id = _first_str(step.get("branch_id"))
+    mechanism_family = _mechanism_family_for_branch(branch_id, branch_family_map)
     effect_to_mde_ratio = (
         round(median_delta / mde, 6)
         if median_delta is not None and mde is not None and mde > 0
@@ -1040,7 +1056,8 @@ def _protocol_effect_row(
     )
     return {
         "round": _first_int(step.get("round")),
-        "branch_id": _first_str(step.get("branch_id")),
+        "branch_id": branch_id,
+        "mechanism_family": mechanism_family,
         "stage": _first_str(protocol.get("stage"), "unknown"),
         "decision": _first_str(step.get("decision")),
         "gate_outcome": _first_str(protocol.get("gate_outcome")),
@@ -1060,6 +1077,52 @@ def _protocol_effect_row(
         ),
         "reason_codes": _list_of_str(protocol.get("effective_reason_codes"))
         or _list_of_str(protocol.get("reason_codes")),
+    }
+
+
+def _mechanism_family_for_branch(
+    branch_id: str,
+    branch_family_map: Mapping[str, Any],
+) -> str:
+    if not branch_id:
+        return ""
+    entry = branch_family_map.get(branch_id)
+    if isinstance(entry, Mapping):
+        return _first_str(entry.get("primary_family"))
+    if isinstance(entry, str):
+        return _first_str(entry)
+    return ""
+
+
+def _mechanism_family_effect_summary(
+    rows: list[Mapping[str, Any]],
+    mde: float | None,
+) -> dict[str, Any]:
+    buckets: dict[str, list[Mapping[str, Any]]] = {}
+    mapped = 0
+    unmapped = 0
+    for row in rows:
+        family = _first_str(row.get("mechanism_family"))
+        if family:
+            mapped += 1
+            buckets.setdefault(family, []).append(row)
+        else:
+            unmapped += 1
+
+    by_family = {
+        family: _effect_row_counts(family_rows, mde)
+        for family, family_rows in sorted(buckets.items())
+    }
+    return {
+        "schema_version": "scion.mechanism_family_effect_summary.v1",
+        "report_only": True,
+        "decision_features_excluded": True,
+        "decision_input_policy": "excluded_from_decision_features",
+        "mapping_status": "available" if mapped else "unavailable",
+        "mapped_row_count": mapped,
+        "unmapped_row_count": unmapped,
+        "mechanism_family_count": len(by_family),
+        "by_family": by_family,
     }
 
 
@@ -1147,6 +1210,7 @@ def _top_effect_rows(
             for key in (
                 "round",
                 "branch_id",
+                "mechanism_family",
                 "stage",
                 "decision",
                 "gate_outcome",

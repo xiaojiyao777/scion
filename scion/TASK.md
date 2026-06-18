@@ -355,10 +355,14 @@ Current checkpoint:
   missing prompt block-family accounting from generic source-visibility
   evidence. Report:
   `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`.
-- Research-continuity analysis briefs now expose branch-depth distribution,
-  active shape, and mechanism-family breadth, so delegated postrun review can
-  distinguish deep follow-up from shallow branch scattering. Report:
+- Research-continuity and measurement-effect analysis briefs now expose
+  branch-depth distribution, active shape, mechanism-family breadth, and
+  mechanism-family effect summaries, so delegated postrun review can
+  distinguish deep follow-up from shallow branch scattering and family-level
+  sub-MDE/no-effect patterns. Reports:
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`.
+  and
+  `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the

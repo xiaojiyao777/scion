@@ -552,8 +552,34 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"{_display(effect_aggregate.get('rows_with_ci_high_below_mde'))}",
             "- Max effect/MDE ratio: "
             f"{_display(effect_aggregate.get('max_effect_to_mde_ratio'))}",
+            "- Mechanism-family mapped/unmapped rows: "
+            f"{_display(effect_aggregate.get('mechanism_family_mapped_row_count'))} / "
+            f"{_display(effect_aggregate.get('mechanism_family_unmapped_row_count'))}",
         ]
     )
+    family_effects = effect_aggregate.get("mechanism_family_effects")
+    if isinstance(family_effects, dict) and family_effects:
+        lines.extend(
+            [
+                "| Mechanism family | Rows | Positive | Nonpositive | At/Above MDE | CI High Below MDE | Max Effect/MDE |",
+                "|---|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for family, payload in sorted(family_effects.items()):
+            if not isinstance(payload, dict):
+                continue
+            lines.append(
+                "| {family} | {rows} | {positive} | {nonpositive} | {above} | "
+                "{below} | {ratio} |".format(
+                    family=_display(family),
+                    rows=_display(payload.get("protocol_row_count")),
+                    positive=_display(payload.get("positive_rows")),
+                    nonpositive=_display(payload.get("nonpositive_rows")),
+                    above=_display(payload.get("rows_at_or_above_mde")),
+                    below=_display(payload.get("rows_with_ci_high_below_mde")),
+                    ratio=_display(payload.get("max_effect_to_mde_ratio")),
+                )
+            )
     effect_entries = effect_summary.get("entries")
     if isinstance(effect_entries, list) and effect_entries:
         lines.extend(
@@ -1562,6 +1588,9 @@ def _empty_measurement_effect_aggregate() -> dict[str, Any]:
         "positive_rows": 0,
         "nonpositive_rows": 0,
         "max_effect_to_mde_ratio": None,
+        "mechanism_family_mapped_row_count": 0,
+        "mechanism_family_unmapped_row_count": 0,
+        "mechanism_family_effects": {},
     }
 
 
@@ -1615,6 +1644,11 @@ def _compact_protocol_effect(effect: Mapping[str, Any]) -> dict[str, Any]:
             "nonpositive_rows": effect.get("nonpositive_rows"),
             "max_effect_to_mde_ratio": effect.get("max_effect_to_mde_ratio"),
             "by_stage": _mapping_or_empty(effect.get("by_stage")),
+            "mechanism_family_effect_summary": (
+                _compact_mechanism_family_effect_summary(
+                    _mapping_or_empty(effect.get("mechanism_family_effect_summary"))
+                )
+            ),
         }
     )
     top_rows = effect.get("top_rows_by_effect_to_mde")
@@ -1630,6 +1664,7 @@ def _compact_effect_row(row: Mapping[str, Any]) -> dict[str, Any]:
         {
             "round": row.get("round"),
             "branch_id": row.get("branch_id"),
+            "mechanism_family": row.get("mechanism_family"),
             "stage": row.get("stage"),
             "decision": row.get("decision"),
             "gate_outcome": row.get("gate_outcome"),
@@ -1644,6 +1679,87 @@ def _compact_effect_row(row: Mapping[str, Any]) -> dict[str, Any]:
             "reason_codes": row.get("reason_codes"),
         }
     )
+
+
+def _compact_mechanism_family_effect_summary(
+    summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not summary:
+        return {}
+    by_family: dict[str, Any] = {}
+    raw_by_family = summary.get("by_family")
+    if isinstance(raw_by_family, Mapping):
+        for family, payload in sorted(raw_by_family.items()):
+            if not isinstance(payload, Mapping):
+                continue
+            by_family[str(family)] = _compact_effect_count_summary(payload)
+    return _drop_empty(
+        {
+            "schema_version": summary.get("schema_version"),
+            "report_only": summary.get("report_only"),
+            "decision_features_excluded": summary.get(
+                "decision_features_excluded"
+            ),
+            "mapping_status": summary.get("mapping_status"),
+            "mapped_row_count": summary.get("mapped_row_count"),
+            "unmapped_row_count": summary.get("unmapped_row_count"),
+            "mechanism_family_count": summary.get("mechanism_family_count"),
+            "by_family": by_family,
+        }
+    )
+
+
+def _compact_effect_count_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "protocol_row_count": summary.get("protocol_row_count"),
+            "rows_with_median_delta": summary.get("rows_with_median_delta"),
+            "positive_rows": summary.get("positive_rows"),
+            "nonpositive_rows": summary.get("nonpositive_rows"),
+            "rows_at_or_above_mde": summary.get("rows_at_or_above_mde"),
+            "rows_below_mde": summary.get("rows_below_mde"),
+            "rows_with_ci_high_below_mde": summary.get(
+                "rows_with_ci_high_below_mde"
+            ),
+            "max_median_delta": summary.get("max_median_delta"),
+            "max_effect_to_mde_ratio": summary.get("max_effect_to_mde_ratio"),
+        }
+    )
+
+
+def _empty_effect_count_summary() -> dict[str, Any]:
+    return {
+        "protocol_row_count": 0,
+        "rows_with_median_delta": 0,
+        "positive_rows": 0,
+        "nonpositive_rows": 0,
+        "rows_at_or_above_mde": 0,
+        "rows_below_mde": 0,
+        "rows_with_ci_high_below_mde": 0,
+        "max_median_delta": None,
+        "max_effect_to_mde_ratio": None,
+    }
+
+
+def _merge_effect_count_summary(
+    target: dict[str, Any],
+    source: Mapping[str, Any],
+) -> None:
+    for key in (
+        "protocol_row_count",
+        "rows_with_median_delta",
+        "positive_rows",
+        "nonpositive_rows",
+        "rows_at_or_above_mde",
+        "rows_below_mde",
+        "rows_with_ci_high_below_mde",
+    ):
+        target[key] = _int_or_zero(target.get(key)) + _int_or_zero(source.get(key))
+    for key in ("max_median_delta", "max_effect_to_mde_ratio"):
+        current = _float_or_none(target.get(key))
+        value = _float_or_none(source.get(key))
+        if value is not None and (current is None or value > current):
+            target[key] = value
 
 
 def _merge_measurement_effect_aggregate(
@@ -1674,6 +1790,22 @@ def _merge_measurement_effect_aggregate(
     current = _float_or_none(aggregate.get("max_effect_to_mde_ratio"))
     if ratio is not None and (current is None or ratio > current):
         aggregate["max_effect_to_mde_ratio"] = ratio
+    family_summary = _mapping_or_empty(effect.get("mechanism_family_effect_summary"))
+    aggregate["mechanism_family_mapped_row_count"] = _int_or_zero(
+        aggregate.get("mechanism_family_mapped_row_count")
+    ) + _int_or_zero(family_summary.get("mapped_row_count"))
+    aggregate["mechanism_family_unmapped_row_count"] = _int_or_zero(
+        aggregate.get("mechanism_family_unmapped_row_count")
+    ) + _int_or_zero(family_summary.get("unmapped_row_count"))
+    by_family = _mapping_or_empty(family_summary.get("by_family"))
+    for family, payload in sorted(by_family.items()):
+        if not isinstance(payload, Mapping):
+            continue
+        target = aggregate["mechanism_family_effects"].setdefault(
+            str(family),
+            _empty_effect_count_summary(),
+        )
+        _merge_effect_count_summary(target, payload)
 
 
 def _runtime_feedback_summary(

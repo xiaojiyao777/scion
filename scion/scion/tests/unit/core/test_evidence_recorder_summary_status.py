@@ -1365,6 +1365,12 @@ def test_campaign_summary_and_status_report_research_shape_diagnostics(
     assert diagnostics["branch_depth_by_branch"] == {"branch-a": 2, "branch-b": 1}
     assert diagnostics["active_research_shape_signal"]["active_branch_count"] == 1
     assert diagnostics["mechanism_family_breadth"]["family_count"] >= 2
+    assert diagnostics["branch_mechanism_family_map"]["branch-a"][
+        "primary_family"
+    ] == "regret_insertion"
+    assert diagnostics["branch_mechanism_family_map"]["branch-b"][
+        "primary_family"
+    ] == "route_merge"
     assert any(
         card.get("observed_depth") == 2
         for card in summary["branch_history_cards"]

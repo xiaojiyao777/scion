@@ -187,10 +187,33 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                         "rows_at_or_above_mde": 1,
                     }
                 },
+                "mechanism_family_effect_summary": {
+                    "schema_version": "scion.mechanism_family_effect_summary.v1",
+                    "report_only": True,
+                    "decision_features_excluded": True,
+                    "mapping_status": "available",
+                    "mapped_row_count": 2,
+                    "unmapped_row_count": 0,
+                    "mechanism_family_count": 1,
+                    "by_family": {
+                        "regret_insertion": {
+                            "protocol_row_count": 2,
+                            "rows_with_median_delta": 2,
+                            "positive_rows": 1,
+                            "nonpositive_rows": 1,
+                            "rows_at_or_above_mde": 1,
+                            "rows_below_mde": 1,
+                            "rows_with_ci_high_below_mde": 1,
+                            "max_median_delta": 12.0,
+                            "max_effect_to_mde_ratio": 1.212121,
+                        }
+                    },
+                },
                 "top_rows_by_effect_to_mde": [
                     {
                         "round": 1,
                         "branch_id": "branch-1",
+                        "mechanism_family": "regret_insertion",
                         "stage": "screening",
                         "decision": "continue_explore",
                         "gate_outcome": "pass",
@@ -323,6 +346,13 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                         "regret_insertion": 3,
                         "route_merge": 1,
                     },
+                },
+                "branch_mechanism_family_map": {
+                    "branch-1": {
+                        "primary_family": "regret_insertion",
+                        "families": {"regret_insertion": 3},
+                        "sources": {"step_history": 3},
+                    }
                 },
             },
         },
@@ -573,6 +603,21 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "positive_rows": 1,
         "nonpositive_rows": 1,
         "max_effect_to_mde_ratio": 1.212121,
+        "mechanism_family_mapped_row_count": 2,
+        "mechanism_family_unmapped_row_count": 0,
+        "mechanism_family_effects": {
+            "regret_insertion": {
+                "protocol_row_count": 2,
+                "rows_with_median_delta": 2,
+                "positive_rows": 1,
+                "nonpositive_rows": 1,
+                "rows_at_or_above_mde": 1,
+                "rows_below_mde": 1,
+                "rows_with_ci_high_below_mde": 1,
+                "max_median_delta": 12.0,
+                "max_effect_to_mde_ratio": 1.212121,
+            }
+        },
     }
     effect_entry = effect_summary["entries"][0]
     assert effect_entry["measurement_readiness"] == {
@@ -586,6 +631,7 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         {
             "round": 1,
             "branch_id": "branch-1",
+            "mechanism_family": "regret_insertion",
             "stage": "screening",
             "decision": "continue_explore",
             "gate_outcome": "pass",
@@ -839,6 +885,8 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         in markdown
     )
     assert "## Measurement Effect Summary" in markdown
+    assert "- Mechanism-family mapped/unmapped rows: 2 / 0" in markdown
+    assert "| regret_insertion | 2 | 1 | 1 | 1 | 1 | 1.212121 |" in markdown
     assert (
         "| normal.research_efficiency.v1.json | ready | 9.9 | "
         "has_positive_protocol_effect_at_or_above_mde | 2 | 1 | 1 | 1.212121 |"

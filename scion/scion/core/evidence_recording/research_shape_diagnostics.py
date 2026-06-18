@@ -44,6 +44,7 @@ def build_campaign_research_shape_diagnostics(
     card_depths = _card_depths(card_list)
     depths = step_depths or card_depths
     family_counts = _mechanism_family_counts(step_list, row_list, card_list)
+    branch_family_map = _branch_mechanism_family_map(step_list, row_list, card_list)
     active_rows = [row for row in row_list if _is_active_branch_row(row)]
     active_cards = _active_cards(card_list, active_rows)
     active_families = _active_mechanism_families(active_cards)
@@ -90,6 +91,7 @@ def build_campaign_research_shape_diagnostics(
             "family_count": len(family_counts),
             "families": dict(sorted(family_counts.items())),
         },
+        "branch_mechanism_family_map": branch_family_map,
     }
 
 
@@ -176,6 +178,62 @@ def _mechanism_family_counts(
     }
 
 
+def _branch_mechanism_family_map(
+    steps: Iterable[StepRecord],
+    rows: Iterable[Mapping[str, Any]],
+    cards: Iterable[Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    by_branch: dict[str, Counter[str]] = {}
+    source_counts: dict[str, Counter[str]] = {}
+
+    def add(branch_id: str, families: Iterable[str], *, source: str) -> None:
+        branch = str(branch_id or "").strip()
+        if not branch:
+            return
+        for family in families:
+            clean = _clean_token(family)
+            if not clean or clean == "unknown":
+                continue
+            by_branch.setdefault(branch, Counter())[clean] += 1
+            source_counts.setdefault(branch, Counter())[source] += 1
+
+    for step in steps:
+        add(
+            getattr(step, "branch_id", ""),
+            (_step_mechanism_family(step),),
+            source="step_history",
+        )
+    for row in rows:
+        add(
+            str(row.get("id") or row.get("branch_id") or ""),
+            _row_mechanism_families(row),
+            source="branch_rows",
+        )
+    for card in cards:
+        add(
+            str(card.get("branch_id") or ""),
+            _card_mechanism_families(card),
+            source="branch_history_cards",
+        )
+
+    result: dict[str, dict[str, Any]] = {}
+    for branch_id, counts in sorted(by_branch.items()):
+        if not counts:
+            continue
+        primary_family, _ = sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[0]
+        result[branch_id] = {
+            "primary_family": primary_family,
+            "families": dict(sorted(counts.items())),
+            "sources": dict(
+                sorted(source_counts.get(branch_id, Counter()).items())
+            ),
+        }
+    return result
+
+
 def _step_mechanism_family(step: StepRecord) -> str:
     hypothesis = getattr(step, "hypothesis", None)
     if hypothesis is None:
@@ -192,7 +250,7 @@ def _row_mechanism_families(row: Mapping[str, Any]) -> list[str]:
         return families
     mechanism_ids = row.get("branch_mechanism_ids")
     if isinstance(mechanism_ids, (list, tuple)):
-        return [_clean_token(item) for item in mechanism_ids if _clean_token(item)]
+        return _mechanism_id_families(mechanism_ids)
     return []
 
 
@@ -208,7 +266,7 @@ def _card_mechanism_families(card: Mapping[str, Any]) -> list[str]:
             return [family]
     mechanism_ids = card.get("mechanism_ids") or card.get("branch_mechanism_ids")
     if isinstance(mechanism_ids, (list, tuple)):
-        families = [_clean_token(item) for item in mechanism_ids if _clean_token(item)]
+        families = _mechanism_id_families(mechanism_ids)
         if families:
             return families
     direction = str(card.get("direction") or "")
@@ -260,6 +318,29 @@ def _active_mechanism_families(cards: Iterable[Mapping[str, Any]]) -> list[str]:
     for card in cards:
         families.update(_card_mechanism_families(card))
     return sorted(family for family in families if family and family != "unknown")
+
+
+def _mechanism_id_family(value: Any) -> str:
+    token = _clean_token(value)
+    if not token:
+        return ""
+    key = generic_signature_key_from_parts(
+        mechanism_ids=(token,),
+        signature={},
+        target_file="",
+        action="",
+        change_locus="",
+    )
+    return _clean_token(key[0]) or token
+
+
+def _mechanism_id_families(values: Iterable[Any]) -> list[str]:
+    families: list[str] = []
+    for value in values:
+        family = _mechanism_id_family(value)
+        if family:
+            families.append(family)
+    return families
 
 
 def _shape_label(*, active_branch_count: int, max_depth: int) -> str:
