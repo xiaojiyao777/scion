@@ -82,8 +82,8 @@ Infrastructure:
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` chat-completion preflight reaches the proxy but reports
-  `AUTH_STATUS authenticated=False active=0 refreshing=1` and returns HTTP
-  `401` with `classification=not_authenticated`; do not launch prepared
+  `AUTH_STATUS authenticated=True active=1 refreshing=0` and returns HTTP
+  `401` with `classification=auth_token_invalidated`; do not launch prepared
   roots until `/v1/chat/completions` returns HTTP `200` with non-empty output
   after re-login.
 - WSL runs must use the synchronized WSL checkout and set
