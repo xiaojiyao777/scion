@@ -30,6 +30,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prepared_only_not_started"]["status"] == "ok"
     assert report["checks"]["prepared_contract_complete"]["status"] == "ok"
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
+    assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
@@ -86,6 +87,62 @@ def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
     assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
     assert contract["contract_complete"] is False
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
+
+
+def test_launch_readiness_rejects_missing_prompt_context_readiness(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path, include_prompt_context_readiness=False)
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert prompt_check["detail"]["failures"][0]["reason"] == (
+        "missing_prompt_context_readiness"
+    )
+
+
+def test_launch_readiness_rejects_prompt_context_bridge_marker_gap(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        prompt_context_launch_markers=False,
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    reasons = {
+        failure["reason"]
+        for failure in prompt_check["detail"]["failures"]
+    }
+    assert "prepared_focus_bridge_launch_markers_missing" in reasons
+
+
+def test_launch_readiness_rejects_stale_prompt_context_live_marker_gap(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    (run_root / "launch.env").unlink()
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == "live_prompt_bridge_markers_missing"
+        and "launch_markers.launch_env_assignment" in failure["missing"]
+        for failure in prompt_check["detail"]["failures"]
+    )
 
 
 def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
@@ -297,6 +354,8 @@ def _write_prepared_root(
     tmp_path: Path,
     *,
     include_research_focus: bool = True,
+    include_prompt_context_readiness: bool = True,
+    prompt_context_launch_markers: bool = True,
 ) -> Path:
     run_root = tmp_path / "prepared-root"
     campaign_dir = run_root / "campaign"
@@ -386,23 +445,37 @@ def _write_prepared_root(
         ),
         encoding="utf-8",
     )
+    (run_root / "launch.env").write_text(
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}\n",
+        encoding="utf-8",
+    )
     (run_root / "run.sh").write_text(
-        """#!/usr/bin/env bash
+        f"""#!/usr/bin/env bash
 set -uo pipefail
-write_postrun_acceptance_reports() {
+RUN_ROOT={run_root}
+PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
+export RUN_ROOT PREPARED_RUN_MANIFEST
+write_postrun_acceptance_reports() {{
   return 0
-}
-if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
+}}
+if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   PREFLIGHT_STATUS=64
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
-    printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}\\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
+    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}}\\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
     write_postrun_acceptance_reports
     exit "$PREFLIGHT_STATUS"
   fi
 fi
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-proposal
 """,
         encoding="utf-8",
     )
+    if include_prompt_context_readiness:
+        _write_prompt_context_readiness(
+            run_root,
+            ready=include_research_focus,
+            launch_markers=prompt_context_launch_markers,
+        )
     return run_root
 
 
@@ -458,6 +531,59 @@ def _cvrp_research_focus() -> dict[str, object]:
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _write_prompt_context_readiness(
+    run_root: Path,
+    *,
+    ready: bool,
+    launch_markers: bool,
+) -> None:
+    missing_required = [] if ready else ["prepared_research_focus"]
+    launch_marker_payload = {
+        "launch_env_assignment": launch_markers,
+        "prepared_manifest_exists": True,
+        "run_sh_exports_manifest": launch_markers,
+    }
+    _write_json(
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "cvrp_on_full.prepared_prompt_context_readiness.v1.json",
+        {
+            "schema_version": "scion.prepared_prompt_context_readiness.v1",
+            "artifact_kind": "prepared_prompt_context_readiness",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "raw_provider_prompt_rendered": False,
+            "run_root": str(run_root),
+            "readiness": {
+                "ready_for_launch_prompt_audit": ready,
+                "missing_required": missing_required,
+                "status": "ready" if ready else "missing_required_sources",
+            },
+            "signals": {
+                "prepared_research_focus_prompt_bridge": {
+                    "available": ready and launch_markers,
+                    "detail": {
+                        "launch_markers": launch_marker_payload,
+                        "source_markers": {
+                            "context_payload": True,
+                            "manifest_env_reader": True,
+                            "prompt_renderer": True,
+                        },
+                    },
+                    "required": True,
+                    "runtime_generated_after_launch": False,
+                    "source": "fixture",
+                }
+            },
+        },
+    )
 
 
 def _git_head_short() -> str:

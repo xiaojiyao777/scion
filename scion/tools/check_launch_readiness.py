@@ -20,7 +20,23 @@ from postrun_artifact_inventory import build_inventory  # noqa: E402
 
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
+PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
 UNREADY_EXIT = 64
+REPO_DIR = Path(__file__).resolve().parents[2]
+LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
+    "manifest_env_reader": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "PREPARED_RUN_MANIFEST",
+    ),
+    "context_payload": (
+        "scion/scion/proposal/context_manager/manager.py",
+        "launch_research_focus",
+    ),
+    "prompt_renderer": (
+        "scion/scion/proposal/engine/hypothesis_prompts.py",
+        "launch_research_focus",
+    ),
+}
 
 
 def build_readiness(
@@ -112,6 +128,10 @@ def build_readiness(
         "postrun_families_complete",
         _contract_check_status(contract_checks, "postrun_families_complete"),
         _contract_check_detail(contract_checks, "postrun_families_complete"),
+    )
+    add_check(
+        "prompt_context_readiness_complete",
+        *_prompt_context_readiness_check(root),
     )
 
     run_sh = root / "run.sh"
@@ -329,6 +349,182 @@ def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
         and marker_pos < exit_pos
         and "write_postrun_acceptance_reports" in text[marker_pos:exit_pos]
     )
+
+
+def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
+    readiness_dir = root / "prepared_handoff" / "prompt_context_readiness"
+    paths = sorted(readiness_dir.glob("*.json"))
+    detail: dict[str, Any] = {
+        "directory": str(readiness_dir),
+        "artifacts": [path.name for path in paths],
+        "failures": [],
+    }
+    failures: list[dict[str, Any]] = []
+    if not paths:
+        failures.append({"artifact": None, "reason": "missing_prompt_context_readiness"})
+
+    for path in paths:
+        payload = _read_json(path)
+        failures.extend(
+            {"artifact": path.name, **failure}
+            for failure in _prompt_context_artifact_failures(payload)
+        )
+
+    live_markers = {
+        "source_markers": {
+            name: _repo_path_contains(relative_path, marker)
+            for name, (relative_path, marker) in (
+                LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS.items()
+            )
+        },
+        "launch_markers": {
+            "prepared_manifest_exists": (
+                root / "prepared_run_manifest.v1.json"
+            ).is_file(),
+            "launch_env_assignment": _path_contains(
+                root / "launch.env",
+                "PREPARED_RUN_MANIFEST=",
+            ),
+            "run_sh_exports_manifest": _path_contains(
+                root / "run.sh",
+                "PREPARED_RUN_MANIFEST",
+            )
+            and _path_contains(root / "run.sh", "export ")
+            and _path_contains(root / "run.sh", "scion.cli.main run"),
+        },
+    }
+    detail["live_markers"] = live_markers
+    missing_live = [
+        f"{group}.{name}"
+        for group, markers in live_markers.items()
+        for name, available in markers.items()
+        if available is not True
+    ]
+    if missing_live:
+        failures.append(
+            {
+                "artifact": None,
+                "reason": "live_prompt_bridge_markers_missing",
+                "missing": missing_live,
+            }
+        )
+
+    detail["failures"] = failures
+    return ("ok" if not failures else "failed"), detail
+
+
+def _prompt_context_artifact_failures(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return [{"reason": "invalid_json_payload"}]
+
+    failures: list[dict[str, Any]] = []
+    if payload.get("schema_version") != PROMPT_CONTEXT_READINESS_SCHEMA:
+        failures.append(
+            {
+                "reason": "schema_mismatch",
+                "schema_version": payload.get("schema_version"),
+            }
+        )
+
+    boundary_expectations = {
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "raw_provider_prompt_rendered": False,
+    }
+    for key, expected in boundary_expectations.items():
+        if payload.get(key) is not expected:
+            failures.append(
+                {
+                    "reason": "boundary_flag_mismatch",
+                    "field": key,
+                    "expected": expected,
+                    "actual": payload.get(key),
+                }
+            )
+
+    readiness = payload.get("readiness")
+    readiness_dict = readiness if isinstance(readiness, dict) else {}
+    missing_required = readiness_dict.get("missing_required")
+    if readiness_dict.get("ready_for_launch_prompt_audit") is not True:
+        failures.append(
+            {
+                "reason": "prompt_audit_not_ready",
+                "status": readiness_dict.get("status"),
+            }
+        )
+    if missing_required != []:
+        failures.append(
+            {
+                "reason": "prompt_audit_missing_required",
+                "missing_required": missing_required,
+            }
+        )
+
+    signals = payload.get("signals")
+    signals_dict = signals if isinstance(signals, dict) else {}
+    bridge = signals_dict.get("prepared_research_focus_prompt_bridge")
+    if not isinstance(bridge, dict):
+        failures.append({"reason": "prepared_focus_bridge_missing"})
+        return failures
+
+    if bridge.get("required") is not True:
+        failures.append(
+            {
+                "reason": "prepared_focus_bridge_not_required",
+                "required": bridge.get("required"),
+            }
+        )
+    if bridge.get("available") is not True:
+        failures.append(
+            {
+                "reason": "prepared_focus_bridge_unavailable",
+                "available": bridge.get("available"),
+            }
+        )
+    if bridge.get("runtime_generated_after_launch") is True:
+        failures.append({"reason": "prepared_focus_bridge_runtime_generated"})
+
+    detail = bridge.get("detail")
+    detail_dict = detail if isinstance(detail, dict) else {}
+    for group in ("source_markers", "launch_markers"):
+        markers = detail_dict.get(group)
+        markers_dict = markers if isinstance(markers, dict) else {}
+        missing = [
+            name
+            for name, available in markers_dict.items()
+            if available is not True
+        ]
+        if not markers_dict or missing:
+            failures.append(
+                {
+                    "reason": f"prepared_focus_bridge_{group}_missing",
+                    "missing": missing or ["<all>"],
+                }
+            )
+
+    return failures
+
+
+def _read_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _repo_path_contains(relative_path: str, marker: str) -> bool:
+    return _path_contains(REPO_DIR / relative_path, marker)
+
+
+def _path_contains(path: Path, marker: str) -> bool:
+    try:
+        return marker in path.read_text(encoding="utf-8")
+    except OSError:
+        return False
 
 
 def _completion_preflight_check(
