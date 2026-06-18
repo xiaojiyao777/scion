@@ -233,147 +233,35 @@ Status docs to update:
 
 Current checkpoint:
 
-- Warehouse recovery remains accepted as the v0.4 positive research-path
-  checkpoint.
-- Warehouse split-preserving cost-compression telemetry interpretation is
-  repaired. Report:
-  `scion/docs/experiments/v0.4/v04-warehouse-cost-compression-telemetry-interpretation-repair-20260618.md`.
-  Zero `split_delta_sum` can remain a field-level warning while positive
-  `cost_delta_sum`/improving-move evidence keeps the mechanism effect-positive;
-  `TELEMETRY_EFFECT_ZERO_DIAGNOSTIC` is not raised for that shape. This is a
-  generic telemetry interpretation repair, not a gate, budget, lifecycle, or
-  problem-semantic change.
-- CVRP target-intent/provider guidance injection is field-verified and formal
-  screening can complete with evidence. Branch-card evidence retention is
-  repaired for the focused `EXPAND_SCREENING` path and field-verified for the
-  normal `CONTINUE_EXPLORE` transfer path.
-- Older CVRP route-merge solver evidence remains negative. Repeated
-  `route_merge_repair` absorption/guarded variants produced zero objective
-  effect, mixed quality, or regression. This is framework-valid rejection and
-  transfer evidence, not an effective solver improvement.
-- The provider-guidance pivot field check from commit `ff2e652` is accepted:
-  live target-intent selected `destroy_repair.py` /
-  `demand_slack_regret_insertion` instead of another route-merge absorption
-  follow-up; formal screening completed `32/32` valid pairs with `0` failures;
-  Decision selected `expand_screening`; pair W/L/T was `13/11/8`, case W/L/T
-  was `3/2/3`, and telemetry for the declared mechanism was observed. This is
-  positive CVRP research-loop behavior, not promotion.
-- Campaign reopen/continuation is repaired for copied-campaign follow-up:
-  reopening an existing campaign now restores the persisted current champion,
-  active branch state, mechanism/evidence summaries, branch workspace mapping,
-  active hypothesis, and candidate patch from recorded formal artifacts.
-- The same-mechanism `demand_slack_regret_insertion` follow-up from commit
-  `6e78a95` completed valid expanded screening and rejected the unchanged
-  branch as `quality_regression`: `48/48` valid pairs, pair W/L/T `16/28/4`,
-  case W/L/T `3/6/3`, median delta `-3.75`, CI `[-7.0, 1.75]`, final branch
-  state `parked_lineage`. CMT4 was retested and remained negative; prior
-  negative CMT2 was not included in the expanded set, exposing a follow-up case
-  targeting caveat.
-- Branch-specific follow-up case targeting is now repaired and focused-test
-  accepted locally and on WSL. Expand-stage protocol selection retains prior
-  branch evidence cases by exact id or unique basename, records requested
-  priority case ids in raw metrics, and keeps the evidence outside
-  `DecisionFeatures`. Formal CVRP selection smoke confirms that CMT2 is
-  restored to the expanded screening set without changing the configured case
-  count.
-- The CVRP problem-owned solver-design provider now carries the demand-slack
-  negative lesson in both target-intent and hypothesis guidance. A fresh live
-  prompt no longer treats unchanged `demand_slack_regret_insertion` as an
-  acceptable default continuation.
-- The `28f3e5f` WSL demand-slack-pivot field check is accepted as
-  framework/research-loop evidence and rejected as solver-improvement evidence.
-  It completed validly with `2/2` effective rounds, generated two material
-  instrumented solver-design pivots, and abandoned both on quality evidence:
-  `cross_route_2opt_reconnect` (`32/32` valid pairs, `0` failures, `5/10/17`
-  pair W/L/T, CMT2 negative) and `cluster_biased_worst_removal` (`32/32`,
-  `8/16/8`, median delta `-0.5`, CMT2/CMT4 not fixed). This shows the current
-  framework can consume problem-owned lessons, produce different code, observe
-  telemetry, and reject bad CVRP hypotheses, but it still has not produced a
-  CVRP solver improvement or promotion.
-- The CVRP provider now also carries the post-demand-slack pivot lesson. The
-  `acc21ba` WSL post-pivot guidance check field-accepts that newer lesson:
-  live target-intent/hypothesis prompts contained it and selected a new
-  construction owner, `route_limit_seed_diversification`, instead of repeating
-  demand-slack/route-merge/cross-route/cluster-biased defaults. The candidate
-  is rejected as solver evidence: `32/32` valid pairs, `0` failures, pair W/L/T
-  `1/3/28`, median delta `0.0`, CMT2 negative, activation only in `4/32`
-  candidate runs, and missing direct effect attribution.
-- The CVRP provider now also carries the construction-pivot lesson. Next CVRP
-  checkpoint: run from a clean synchronized commit and verify live
-  target-intent/hypothesis prompts contain this lesson before interpreting the
-  candidate. Do not continue unchanged demand-slack, unchanged route-merge
-  absorption, unchanged `cross_route_2opt_reconnect`, unchanged
-  `cluster_biased_worst_removal`, or unchanged
-  `route_limit_seed_diversification`. A revisit must explain a materially
-  different causal path and CMT2/CMT4 protection; otherwise pivot to another
-  problem-owned solver-design owner. Avoid broad budget/gate changes,
-  VNS-removal sweeps, or case/BKS/seed/split hardcoding.
-- CVRP construction effect-attribution guidance is now repaired in the
-  problem-owned provider. Seed/portfolio construction mechanisms must use a
-  same-run candidate-vs-baseline seed comparison or same-mechanism accepted
-  delta for direct effect evidence; route-cap fallback activation, seed-pool
-  size, or merely choosing a seed is only activation/design evidence. Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-construction-effect-guidance-repair-20260618.md`.
-- Current infra checkpoint: the first construction-pivot follow-up attempts
-  from `867f5de` produced no research evidence. The WSL `1R` rerun reached
-  prompt construction but had `0` effective rounds because the local
-  `127.0.0.1:8080` proxy returned `401` after upstream OAuth invalidation; the
-  server fallback through `https://aihubmix.com` also had `0` effective rounds
-  because the account returned `insufficient_user_quota`, and the official
-  OpenAI key returned `insufficient_quota`. A clean `f462133` rerun accepted
-  the new launcher preflight path and confirmed live target-intent/hypothesis
-  prompts include the construction-pivot lesson, but the real agentic proposal
-  requests still failed with `403 insufficient_user_quota`, so there is still
-  no target, hypothesis, patch, screening row, or solver evidence. Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-constructionpivot-guidance-infra-failures-867f5de-20260618.md`.
-  Next action is to restore a `gpt-5.5` route with enough balance/quota for
-  full Scion agentic proposal prompts; `/v1/models` is not an adequate
-  preflight, and a tiny non-empty completion only proves auth/response shape.
-  Then rerun the same one-round construction-pivot guidance check from a clean
-  synchronized commit.
-- Implemented the CVRP launcher repair needed for that resume path. Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-launch-secret-completion-preflight-repair-20260618.md`.
-  `launch_cvrp_agentic_campaign.py` now supports `--api-key-env` so real
-  non-local keys are read by `run.sh` at runtime instead of written to
-  `launch.env`; `launch.env` is mode `0600`; and `--completion-preflight`
-  performs a real chat-completion readiness check before campaign startup.
-  Local acceptance after fixing the inherited-`SCION_API_KEY` self-reference
-  path: launcher suite `13 passed`; launcher py_compile passed.
-  The next restored-channel CVRP rerun should use `--completion-preflight` and
-  `--api-key-env SCION_API_KEY` when the key is not the local 8080 proxy key.
-- Repaired campaign-summary branch-history status projection. Report:
-  `scion/docs/experiments/v0.4/v04-branch-history-status-projection-repair-20260618.md`.
-  Reconstructed terminal history cards now carry compact
-  `branch_code_status`, `lineage_status`, `active_slot_status`,
-  `counts_toward_active_slots`, and `final_branch_classification` fields even
-  when the branch is no longer present in live branch rows. Existing live-card
-  values remain authoritative. Acceptance: branch-history focused summary tests
-  `2 passed`, full summary/status file `53 passed`, py_compile passed, and
-  `git diff --check` passed.
-- Repaired in-flight run-status branch progress projection. Report:
-  `scion/docs/experiments/v0.4/v04-run-status-branch-progress-projection-repair-20260618.md`.
-  During long formal protocol work, `current_progress` and
-  `in_flight_protocol` now project compact branch-card lifecycle/status fields
-  at top level when a matching branch row is available:
-  `branch_code_status`, `active_slot_status`, `counts_toward_active_slots`,
-  `final_branch_classification`, and related branch classification fields.
-  This is status/report projection only and does not change Decision,
-  `DecisionFeatures`, Protocol, scheduling, gates, budgets, or problem
-  semantics. Acceptance: focused status sync test `1 passed`, full
-  summary/status file `53 passed`, py_compile passed, and `git diff --check`
-  passed.
-- Repaired research-efficiency observability projection. Report:
-  `scion/docs/experiments/v0.4/v04-research-efficiency-observability-projection-repair-20260618.md`.
-  `report research-efficiency` now includes reduced `measurement_readiness`,
-  protocol effect-vs-MDE summaries, compact research-shape diagnostics, and
-  cross-branch observability counters for branch lessons, same-branch
-  refinement allowance, weak-positive transfer, clean-fork contrast, and
-  material-difference pressure. For older copied artifacts that predate
-  status-projected readiness, the report can recover reduced readiness from a
-  compatible copied `problem-v1.yaml` plus `scion.aa_noise_floor.v1`
-  calibration artifact. This is report-only and does not change Decision,
-  `DecisionFeatures`, Protocol, scheduling, gates, budgets, lifecycle policy,
-  proposal context, or problem semantics.
+- Warehouse remains the accepted v0.4 positive research-path checkpoint.
+  Champion `v2` promotion and the split-preserving cost-compression telemetry
+  repair show that the framework can still support useful warehouse research.
+  The open warehouse question is continuous follow-on improvement, not basic
+  viability.
+- CVRP continuation and observability are now repaired enough for meaningful
+  follow-up: copied campaigns restore champion, active branch, workspace,
+  hypothesis, candidate patch, branch evidence, follow-up case targeting, compact
+  status/progress, measurement readiness, and research-efficiency reporting.
+- CVRP live agentic checks now demonstrate useful research-loop behavior
+  without yet demonstrating solver improvement. The framework can steer
+  target-intent, carry branch lessons into prompts, generate material solver
+  code, complete formal screening, preserve mechanism telemetry, and reject weak
+  or negative mechanisms with evidence.
+- Rejected/default-avoid CVRP directions include broad VNS removal, pure
+  ALNS/no-polish, simple initial-VNS disablement, raw cadence-2,
+  recent-best/stall gating, fixed early-8, tested share70 cap/rescue variants,
+  unchanged route-merge absorption, unchanged demand-slack regret insertion,
+  unchanged cross-route 2-opt reconnect, unchanged cluster-biased worst removal,
+  and unchanged route-limit seed diversification.
+- Construction seed/portfolio mechanisms must show direct objective-changing
+  seed effect via same-run seed baseline or same-mechanism accepted delta.
+  Route-cap fallback activation, seed-pool size, or merely selecting a seed is
+  only activation/design evidence.
+- The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
+  Scion code. Restore a `gpt-5.5` route that passes a real
+  `/v1/chat/completions` check with non-empty output before launching. Use the
+  repaired launcher `--completion-preflight` and `--api-key-env` paths when
+  appropriate.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
