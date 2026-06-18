@@ -330,6 +330,13 @@ Current checkpoint:
   seed effect via same-run seed baseline or same-mechanism accepted delta.
   Route-cap fallback activation, seed-pool size, or merely selecting a seed is
   only activation/design evidence.
+- CVRP hypothesis proposal context now receives problem-owned
+  measurement/opportunity diagnostics: MDE-vs-practical-delta, low-SNR
+  interpretation, aggregate screening headroom, current default-avoid
+  mechanisms, and measurable opportunity classes. These diagnostics are
+  proposal-only and remain outside `DecisionFeatures`, Protocol gates,
+  lifecycle, scheduler, and promotion. Report:
+  `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
 - The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the

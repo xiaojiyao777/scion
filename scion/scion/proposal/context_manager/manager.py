@@ -233,13 +233,17 @@ def _problem_measurement_diagnostics(
         adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
         if not adapter_payload:
             return {}
-        return {
+        adapter_opportunities = _adapter_opportunity_diagnostics(adapter_payload)
+        payload = {
             "schema_version": "problem_measurement_proposal_diagnostic.v1",
             "taint": "problem_owned_proposal_diagnostic",
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
             "adapter_diagnostics": adapter_payload,
         }
+        if adapter_opportunities:
+            payload["opportunity_diagnostics"] = adapter_opportunities
+        return payload
     effect_scale = getattr(measurement, "effect_scale", None)
     readiness = measurement_readiness_status(problem_spec)
     payload = {
@@ -291,6 +295,9 @@ def _problem_measurement_diagnostics(
     }
     adapter_payload = _adapter_problem_measurement_diagnostics(adapter)
     if adapter_payload:
+        adapter_opportunities = _adapter_opportunity_diagnostics(adapter_payload)
+        if adapter_opportunities:
+            payload["opportunity_diagnostics"] = adapter_opportunities
         payload["adapter_diagnostics"] = adapter_payload
     return {
         key: value
@@ -308,6 +315,45 @@ def _adapter_problem_measurement_diagnostics(adapter: Any | None) -> dict[str, A
     except Exception:
         return {}
     return dict(payload) if isinstance(payload, Mapping) else {}
+
+
+def _adapter_opportunity_diagnostics(
+    adapter_payload: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    raw_items = adapter_payload.get("opportunity_diagnostics")
+    if not isinstance(raw_items, (list, tuple)):
+        return []
+    fields = (
+        "diagnostic_type",
+        "surface",
+        "mechanism_family",
+        "metric",
+        "summary",
+        "recommended_action",
+        "confidence",
+        "reason_codes",
+    )
+    items: list[dict[str, Any]] = []
+    for raw in raw_items:
+        if not isinstance(raw, Mapping):
+            continue
+        projected: dict[str, Any] = {}
+        for field in fields:
+            if field not in raw:
+                continue
+            if field == "reason_codes":
+                value = _string_list(raw.get(field))
+            else:
+                value = raw.get(field)
+                if not isinstance(value, (str, int, float, bool)):
+                    value = str(value) if value not in (None, "", [], {}, ()) else ""
+                if isinstance(value, str):
+                    value = value.strip()
+            if value not in ("", None, [], {}, ()):
+                projected[field] = value
+        if projected:
+            items.append(projected)
+    return items[:8]
 
 
 def _proposal_branch_lesson_usage_requirement(

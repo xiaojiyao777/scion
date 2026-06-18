@@ -132,6 +132,11 @@ CVRP/VRP:
 - Construction seed/portfolio mechanisms need direct effect attribution from a
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
+- CVRP proposal context now receives problem-owned measurement/opportunity
+  diagnostics: MDE-vs-practical-delta, low-SNR interpretation, aggregate
+  screening headroom, default-avoid mechanism directions, and measurable
+  opportunity classes. These diagnostics are proposal-only and remain excluded
+  from `DecisionFeatures`, Protocol gates, lifecycle, scheduler, and promotion.
 - Prepared but not launched:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-e526df7-1r-gpt55-1r-gpt55-20260618T175202Z-claw`.
 
