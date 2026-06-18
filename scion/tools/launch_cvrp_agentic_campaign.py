@@ -8,20 +8,21 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 
-DEFAULT_EXPERIMENTS_ROOT = Path("/home/clawd/research/scion-experiments")
+DEFAULT_EXPERIMENTS_ROOT = Path.home() / "research" / "scion-experiments"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
-DEFAULT_PYTHON = Path("/home/clawd/miniconda3/envs/claw/bin/python")
+DEFAULT_PYTHON = Path(sys.executable)
 DEFAULT_USER_SUFFIX = "claw"
 PREFLIGHT_FAILURE_EXIT_CODE = 64
 

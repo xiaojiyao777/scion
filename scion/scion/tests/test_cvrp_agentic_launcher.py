@@ -79,7 +79,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     assert f"SCION_DIR={SCION_DIR}" in launch_env
-    assert "PY=/home/clawd/miniconda3/envs/claw/bin/python" in launch_env
+    assert f"PY={sys.executable}" in launch_env
     assert f"PYTHONPATH={SCION_DIR}" in launch_env
     assert f"SCION_PROBLEM_DATA_ROOT={PROJECT_ROOT / 'vrp'}" in launch_env
     assert "SCION_MODEL=gpt-5.5" in launch_env

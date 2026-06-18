@@ -38,6 +38,8 @@ launcher gaps:
   new run root before launch, so focused follow-ups can continue from restored
   champion, branch, workspace, and evidence state instead of relying on manual
   copy steps.
+- portable defaults for `--experiments-root` and `--python`, derived from the
+  invoking user/home and interpreter instead of fixed `/home/clawd/...` paths.
 - `launch.env` is written with mode `0600`.
 
 This is launch/readiness plumbing only. It does not change Decision,
@@ -79,6 +81,10 @@ Coverage added:
 - `--skip-postrun-reports` records `POSTRUN_REPORTS=0`.
 - `--resume-from-campaign` copies champion, database, and branch-evidence
   artifacts and records the source in `launch.env` and `command.txt`.
+- Default run roots and generated `PY` values follow the environment used to
+  invoke the launcher, which keeps WSL prepare-only runs under
+  `/home/xjy-ubuntu/research/scion-experiments` when run from the WSL conda
+  Python.
 - `--api-key` and `--api-key-env` are mutually exclusive.
 - Invalid environment variable names are rejected.
 
