@@ -150,7 +150,8 @@ CVRP/VRP:
   readiness, protocol effect-vs-MDE summaries, and existing research-shape /
   cross-branch observability counters, so branch depth, same-branch lesson use,
   refinement allowance, weak-positive transfer, and MDE interpretation can be
-  audited from one report artifact.
+  audited from one report artifact. It can also recover readiness for older
+  copied artifacts from compatible `problem-v1.yaml` and A/A calibration files.
 - Warehouse split-preserving cost-compression telemetry interpretation is
   repaired as a generic diagnostic interpretation fix. This changes neither
   protocol gates, budgets, scheduling, lifecycle policy, nor problem semantics.

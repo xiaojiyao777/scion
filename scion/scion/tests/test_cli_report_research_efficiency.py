@@ -36,6 +36,7 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
         "fresh_runtime_replay": 1,
     }
     assert data["measurement_readiness"]["status"] == "ready"
+    assert data["measurement_readiness_source"] == "summary_status"
     assert data["measurement_readiness"]["mde_at_power_80"] == 9.9
     assert "calibration_ref" not in data["measurement_readiness"]
     power = data["protocol_effects_vs_mde"]
@@ -101,6 +102,85 @@ def test_research_efficiency_report_write_to_file_from_campaign_dir(tmp_path):
     )
     assert data["source_files"]["run_log"].endswith("run.log")
     assert data["run_status"]["wrapper_exit_status"] == 0
+
+
+def test_research_efficiency_report_falls_back_to_copied_calibration(tmp_path):
+    campaign_dir = tmp_path / "campaign"
+    calibration_dir = campaign_dir / "champions" / "champion_v1" / "formal" / "calibration"
+    calibration_dir.mkdir(parents=True)
+    (campaign_dir / "campaign_summary.json").write_text(
+        json.dumps(
+            {
+                "campaign_id": "fallback-campaign",
+                "steps": [
+                    {
+                        "round": 1,
+                        "branch_id": "branch-cvrp",
+                        "decision": "abandon",
+                        "protocol_result": {
+                            "stage": "screening",
+                            "median_delta": 12.0,
+                            "ci_high": 15.0,
+                            "gate_outcome": "fail",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (campaign_dir / "champions" / "champion_v1" / "problem-v1.yaml").write_text(
+        "\n".join(
+            [
+                'spec_version: "problem-v1"',
+                "id: cvrp",
+                "measurement:",
+                "  runtime_model: budget_exhausting",
+                "  pairing_validity: trajectory_divergent",
+                "  effect_scale:",
+                "    metric: total_distance",
+                "    unit: raw_delta",
+                "    practical_delta_screen: 2.0",
+                "    practical_delta_validate: 1.0",
+                "  calibration_ref: formal/calibration/aa_noise_floor.json",
+                "  calibration_max_age_days: 9999",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (calibration_dir / "aa_noise_floor.json").write_text(
+        json.dumps(
+            {
+                "schema": "scion.aa_noise_floor.v1",
+                "problem_id": "cvrp",
+                "measurement_metric": "total_distance",
+                "measurement_unit": "raw_delta",
+                "calibrated_at": "2026-06-11T22:03:16+00:00",
+                "n_pairs": 96,
+                "decision_features_excluded": True,
+                "protocol_power": {"mde_at_power_80": 9.9},
+                "per_case": [{"delta_p90_abs": 14.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["report", "research-efficiency", "--campaign-dir", str(campaign_dir)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["measurement_readiness_source"] == "artifact_fallback"
+    assert data["measurement_readiness"]["status"] == "ready"
+    assert data["measurement_readiness"]["mde_at_power_80"] == 9.9
+    assert data["measurement_readiness"]["signal_to_noise_tier"] == "low_power"
+    assert "calibration_ref" not in data["measurement_readiness"]
+    power = data["protocol_effects_vs_mde"]
+    assert power["mde_source"] == "measurement_readiness.mde_at_power_80"
+    assert power["rows_at_or_above_mde"] == 1
+    assert power["max_effect_to_mde_ratio"] == 1.212121
 
 
 def test_existing_failures_report_still_works(tmp_path):

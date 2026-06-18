@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+import yaml
+
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 
 SCHEMA_VERSION = "scion.research_efficiency_report.v1"
@@ -95,6 +97,13 @@ def build_research_efficiency_report(
     measurement_readiness = reduced_measurement_readiness_payload(
         summary.get("measurement_readiness")
     ) or reduced_measurement_readiness_payload(status.get("measurement_readiness"))
+    measurement_readiness_source = "summary_status" if measurement_readiness else ""
+    if not measurement_readiness:
+        measurement_readiness = _artifact_measurement_readiness(
+            campaign_path=campaign_path,
+            run_root=run_root,
+        )
+        measurement_readiness_source = "artifact_fallback" if measurement_readiness else ""
     cross_branch_observability = _mapping_value(
         summary.get("cross_branch_research_observability")
     ) or _mapping_value(status.get("cross_branch_research_observability"))
@@ -250,6 +259,7 @@ def build_research_efficiency_report(
             ),
         },
         "measurement_readiness": measurement_readiness or {},
+        "measurement_readiness_source": measurement_readiness_source,
         "protocol_effects_vs_mde": _protocol_effects_vs_mde(
             steps,
             measurement_readiness or {},
@@ -998,6 +1008,211 @@ def _top_effect_rows(
     ]
 
 
+def _artifact_measurement_readiness(
+    *,
+    campaign_path: Path,
+    run_root: Path,
+) -> dict[str, Any] | None:
+    for problem_path in _candidate_problem_v1_paths(campaign_path, run_root):
+        problem = _read_yaml_object(problem_path)
+        measurement = _mapping_value(problem.get("measurement"))
+        if not measurement:
+            continue
+        artifact_path = _find_calibration_artifact(
+            problem_path=problem_path,
+            measurement=measurement,
+            campaign_path=campaign_path,
+            run_root=run_root,
+        )
+        if artifact_path is None:
+            continue
+        artifact = _read_json_object(artifact_path)
+        if not _calibration_compatible(problem, measurement, artifact):
+            continue
+        return _readiness_from_calibration_artifact(measurement, artifact)
+    return None
+
+
+def _candidate_problem_v1_paths(campaign_path: Path, run_root: Path) -> list[Path]:
+    candidates: list[Path] = []
+    roots = [
+        campaign_path,
+        run_root,
+        run_root.parent,
+        run_root.parent.parent,
+    ]
+    for root in roots:
+        candidates.append(root / "problem-v1.yaml")
+        candidates.append(root / "config" / "problem-v1.yaml")
+    for pattern in (
+        "champions/*/problem-v1.yaml",
+        "workspaces/*/problem-v1.yaml",
+        "weight_opt_*/problem-v1.yaml",
+    ):
+        candidates.extend(campaign_path.glob(pattern))
+    return _existing_unique_paths(candidates)
+
+
+def _find_calibration_artifact(
+    *,
+    problem_path: Path,
+    measurement: Mapping[str, Any],
+    campaign_path: Path,
+    run_root: Path,
+) -> Path | None:
+    ref = _first_str(measurement.get("calibration_ref"))
+    if not ref:
+        return None
+    ref_path = Path(ref)
+    candidates: list[Path] = []
+    if ref_path.is_absolute():
+        candidates.append(ref_path)
+    else:
+        candidates.extend(
+            [
+                problem_path.parent / ref_path,
+                campaign_path / ref_path,
+                run_root / ref_path,
+                run_root.parent / ref_path,
+                run_root.parent.parent / ref_path,
+            ]
+        )
+        for pattern in (
+            f"champions/*/{ref}",
+            f"workspaces/*/{ref}",
+            f"weight_opt_*/{ref}",
+        ):
+            candidates.extend(campaign_path.glob(pattern))
+    for candidate in _existing_unique_paths(candidates):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _calibration_compatible(
+    problem: Mapping[str, Any],
+    measurement: Mapping[str, Any],
+    artifact: Mapping[str, Any],
+) -> bool:
+    if artifact.get("schema") != "scion.aa_noise_floor.v1":
+        return False
+    if artifact.get("decision_features_excluded") is not True:
+        return False
+    problem_id = _first_str(problem.get("id"), problem.get("name"))
+    artifact_problem_id = _first_str(artifact.get("problem_id"))
+    if problem_id and artifact_problem_id and problem_id != artifact_problem_id:
+        return False
+    effect_scale = _mapping_value(measurement.get("effect_scale"))
+    metric = _first_str(effect_scale.get("metric"))
+    unit = _first_str(effect_scale.get("unit"))
+    if metric and _first_str(artifact.get("measurement_metric")) != metric:
+        return False
+    if unit and _first_str(artifact.get("measurement_unit")) != unit:
+        return False
+    return True
+
+
+def _readiness_from_calibration_artifact(
+    measurement: Mapping[str, Any],
+    artifact: Mapping[str, Any],
+) -> dict[str, Any]:
+    max_age_days = _nonnegative_int(measurement.get("calibration_max_age_days"))
+    calibrated_at = _parse_datetime(artifact.get("calibrated_at"))
+    age_days = (
+        max(0, (datetime.now(timezone.utc).date() - calibrated_at.date()).days)
+        if calibrated_at is not None
+        else None
+    )
+    power = _mapping_value(artifact.get("protocol_power"))
+    mde = _first_float(power.get("mde_at_power_80"))
+    effect_scale = _mapping_value(measurement.get("effect_scale"))
+    practical_delta = _first_float(effect_scale.get("practical_delta_screen"))
+    effect_to_mde = (
+        practical_delta / mde
+        if practical_delta is not None and mde is not None and mde > 0
+        else None
+    )
+    status = "ready"
+    reason_code = "ok"
+    if calibrated_at is None or mde is None:
+        status = "degraded"
+        reason_code = "calibration_incomplete"
+    elif age_days is not None and age_days > max_age_days:
+        status = "degraded"
+        reason_code = "calibration_stale"
+    return {
+        "status": status,
+        "reason_code": reason_code,
+        "calibration_age_days": age_days,
+        "calibration_max_age_days": max_age_days,
+        "n_pairs": _nonnegative_int(artifact.get("n_pairs")),
+        "mde_at_power_80": mde,
+        "noise_band_p90_abs": _noise_band_p90_abs(artifact.get("per_case")),
+        "effect_to_mde_ratio": effect_to_mde,
+        "signal_to_noise_tier": _signal_to_noise_tier(effect_to_mde),
+        "decision_features_excluded": True,
+    }
+
+
+def _read_yaml_object(path: Path) -> dict[str, Any]:
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return dict(loaded) if isinstance(loaded, Mapping) else {}
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = _first_str(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _noise_band_p90_abs(value: Any) -> float | None:
+    if not isinstance(value, list):
+        return None
+    values = [
+        parsed
+        for row in value
+        if isinstance(row, Mapping)
+        for parsed in [_first_float(row.get("delta_p90_abs"))]
+        if parsed is not None
+    ]
+    return max(values) if values else None
+
+
+def _signal_to_noise_tier(ratio: float | None) -> str:
+    if ratio is None:
+        return "unknown"
+    if ratio >= 1.0:
+        return "ready"
+    if ratio >= 1.0 / 3.0:
+        return "marginal"
+    return "low_power"
+
+
+def _existing_unique_paths(candidates: list[Path]) -> list[Path]:
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved in seen or not resolved.exists():
+            continue
+        seen.add(resolved)
+        result.append(resolved)
+    return result
+
+
 def _source_ref(path: Path | None) -> str:
     if path is None:
         return ""
@@ -1037,6 +1252,15 @@ def _first_float(*values: Any) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _nonnegative_int(value: Any) -> int:
+    if value is None or isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _first_str(*values: Any) -> str:

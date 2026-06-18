@@ -368,9 +368,12 @@ Current checkpoint:
   protocol effect-vs-MDE summaries, compact research-shape diagnostics, and
   cross-branch observability counters for branch lessons, same-branch
   refinement allowance, weak-positive transfer, clean-fork contrast, and
-  material-difference pressure. This is report-only and does not change
-  Decision, `DecisionFeatures`, Protocol, scheduling, gates, budgets,
-  lifecycle policy, proposal context, or problem semantics.
+  material-difference pressure. For older copied artifacts that predate
+  status-projected readiness, the report can recover reduced readiness from a
+  compatible copied `problem-v1.yaml` plus `scion.aa_noise_floor.v1`
+  calibration artifact. This is report-only and does not change Decision,
+  `DecisionFeatures`, Protocol, scheduling, gates, budgets, lifecycle policy,
+  proposal context, or problem semantics.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
