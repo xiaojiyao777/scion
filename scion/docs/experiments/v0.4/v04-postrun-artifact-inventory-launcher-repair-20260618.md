@@ -70,14 +70,7 @@ Launcher smoke generated prepared CVRP and warehouse roots in temporary
 directories, `bash -n` passed for both `run.sh` files, and each generated script
 contained the guarded inventory JSON/Markdown commands.
 
-WSL prepared-root refresh on commit `85ff422` produced:
-
-- CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-coverage-1r-gpt55-20260618T114826Z-claw`
-- Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-coverage-6r-gpt55-20260618T114826Z-claw`
-
-Both roots have top-level `prepared` status, completion preflight, the expected
-`control_pair_key`, shared `check_gpt55_proxy.py`, inventory JSON/Markdown
-commands, `bash -n` clean `run.sh`, and inventory JSON smoke coverage for the
-`scion.postrun_phase4_evidence_coverage.v1` schema.
+The current launch-prepared roots were refreshed again after the analysis-brief
+repair. See
+`scion/docs/experiments/v0.4/v04-postrun-analysis-brief-launcher-repair-20260618.md`
+for the authoritative prepared root paths.
