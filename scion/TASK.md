@@ -343,6 +343,14 @@ Current checkpoint:
   seed effect via same-run seed baseline or same-mechanism accepted delta.
   Route-cap fallback activation, seed-pool size, or merely selecting a seed is
   only activation/design evidence.
+- A direct WSL external-control replay found a strong large-instance
+  intra-route two-opt signal above the VNS threshold (`8/8` feasible wins on
+  four XL cases x two seeds), but the current `vrp/src/solver.py` diff is not
+  accepted because the local-search operator is not deadline-aware. It may be
+  used as a problem-owned research-focus seed for a budget-aware CVRP
+  hypothesis, not as Scion Protocol evidence or an accepted baseline update.
+  Report:
+  `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`.
 - CVRP hypothesis proposal context now receives problem-owned
   measurement/opportunity diagnostics: MDE-vs-practical-delta, low-SNR
   interpretation, aggregate screening headroom, current default-avoid

@@ -88,6 +88,12 @@ CVRP/VRP:
 - CVRP active solver context now marks the existing size70 two-opt fallback as
   an active fact and readable scheduler slice, so follow-up agents should not
   propose it as a missing mechanism.
+- A direct WSL external-control replay found a strong large-instance
+  intra-route two-opt signal above the VNS threshold (`8/8` feasible wins on
+  four XL cases x two seeds), but the current diff is not accepted because
+  `two_opt_intra` has no deadline and can violate the nominal solver budget.
+  Treat it as a problem-owned research-focus seed, not Scion evidence or a
+  baseline solver update.
 - Prepared `research_focus` now enters hypothesis prompt compact research
   signals as proposal-only launch focus. Prepared handoff readiness audits this
   bridge through `prepared_research_focus_prompt_bridge`; the signal remains
@@ -170,6 +176,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
   `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
