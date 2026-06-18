@@ -29,30 +29,32 @@ launching a campaign or mutating runtime state.
 - Rebuilt CVRP/warehouse problem-specific requirements remain delegated-review
   handoff evidence, not deterministic Decision input.
 
-## Active Root Refresh
+## Current Active Root Refresh
 
-Rebuild tool commit: `86d85615`.
+Current rebuild verification checkout: `9660c10`.
 
 Refreshed on WSL:
 
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-317cacb-1r-gpt55-1r-gpt55-20260618T183304Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-317cacb-6r-gpt55-6r-gpt55-20260618T183318Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`
 
 Both rebuild manifests report:
 
 - `complete=true`
-- `checkout_commit=86d8561`
-- `prepared_manifest_commit=317cacb`
+- `checkout_commit=9660c10`
 - `campaign_state_mutated=false`
 - `scheduler_state_mutated=false`
 - `promotion_state_mutated=false`
 - `decision_features_excluded=true`
 
-The prepared manifest commit stays `317cacb` because these are the existing
+Prepared manifest commits remain root-specific because these are existing
 prepared launch roots; only their report-only handoff artifacts were refreshed
-from the newer checkout.
+from the newer checkout:
+
+- CVRP: `prepared_manifest_commit=ece0256`
+- Warehouse: `prepared_manifest_commit=7f3028a`
 
 ## Problem-Specific Coverage
 
@@ -62,6 +64,8 @@ CVRP rebuilt analysis brief and inventory now expose all required
 - `cvrp_decision_boundary_handoff`
 - `cvrp_default_avoid_handoff`
 - `cvrp_direct_effect_rules_handoff`
+- `cvrp_large_twoopt_seed_handoff`
+- `cvrp_large_twoopt_unbounded_default_avoid_handoff`
 - `cvrp_low_snr_reason_handoff`
 - `cvrp_measurable_opportunity_handoff`
 - `cvrp_measurement_mde_handoff`
@@ -85,8 +89,10 @@ not be launched yet:
 
 - CVRP: `static_ready=true`, `launch_ready=false`, `ready=false`
 - Warehouse: `static_ready=true`, `launch_ready=false`, `ready=false`
-- Completion preflight failed for both with `classification=not_authenticated`
-  and HTTP `401`; the proxy returned a login URL.
+- Strict launch readiness exits `64` for both roots.
+- Completion preflight failed for both with HTTP `401`,
+  `classification=not_authenticated`, and `code=invalid_api_key`.
+- The proxy auth pool reported `active=0`, `refreshing=1`, and `total=1`.
 
 Launch remains blocked until `/v1/chat/completions` returns HTTP `200` with a
 non-empty `gpt-5.5` completion.

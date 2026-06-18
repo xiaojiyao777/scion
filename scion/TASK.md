@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; the current CVRP prepared root was regenerated from checkout `ece0256` with the large-instance two-opt seed as proposal-only research focus, the warehouse prepared root remains statically ready from checkout `7f3028a`, and launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; the current CVRP and warehouse prepared roots have report-only handoff artifacts rebuilt from WSL checkout `9660c10`, both remain statically ready, and launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -406,7 +406,7 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-branch-lesson-actionability-reason-mix-repair-20260618.md`.
   and
   `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`.
-- The next CVRP campaign is temporarily blocked by LLM infrastructure, not by
+- The next prepared campaign is temporarily blocked by LLM infrastructure, not by
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
   latest WSL launch-readiness preflight reaches the proxy and reports
@@ -448,16 +448,19 @@ Current checkpoint:
   to report `launch_ready=true`; if completion preflight fails, follow its
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes.
-  The current CVRP root was refreshed from runtime checkout `ece0256` with the
+  The current CVRP root was prepared from manifest commit `ece0256` with the
   large-instance two-opt seed as proposal-only research focus; the current
-  warehouse root remains the identity-guard root from checkout `7f3028a`. Both
-  pass static launch, prompt/context identity, and launch-env readiness with
+  warehouse root was prepared from manifest commit `7f3028a` for the champion
+  `v2` continuous-improvement follow-up. Both current roots now have
+  report-only prepared handoff artifacts rebuilt from WSL checkout `9660c10`
+  and pass static launch, prompt/context identity, launch-env readiness, and
   runtime-guard consistency.
   Their prepared handoff artifacts carry current CVRP/warehouse
   `problem_specific_requirements`, while strict launch readiness
   (`--require-launch-ready`) still exits `64` because real `gpt-5.5`
-  completion preflight returns HTTP `401` / `not_authenticated`
-  with no active authenticated account in the proxy auth pool.
+  completion preflight returns HTTP `401` / `not_authenticated` with
+  `code=invalid_api_key`, auth pool `active=0`, `refreshing=1`, and
+  `total=1`.
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
