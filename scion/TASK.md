@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP route_merge_repair steering/branch-card plumbing repaired; provider pivot field-accepted with active marginal `demand_slack_regret_insertion` branch*
+*Status: Phase 4 warehouse recovery checkpoint accepted; CVRP continuation plumbing repaired; `demand_slack_regret_insertion` rejected; follow-up case targeting repaired*
 *Updated: 2026-06-18*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -259,14 +259,21 @@ Current checkpoint:
   branch as `quality_regression`: `48/48` valid pairs, pair W/L/T `16/28/4`,
   case W/L/T `3/6/3`, median delta `-3.75`, CI `[-7.0, 1.75]`, final branch
   state `parked_lineage`. CMT4 was retested and remained negative; prior
-  negative CMT2 was not included in the expanded set, so follow-up case
-  targeting remains a caveat.
+  negative CMT2 was not included in the expanded set, exposing a follow-up case
+  targeting caveat.
+- Branch-specific follow-up case targeting is now repaired and focused-test
+  accepted locally and on WSL. Expand-stage protocol selection retains prior
+  branch evidence cases by exact id or unique basename, records requested
+  priority case ids in raw metrics, and keeps the evidence outside
+  `DecisionFeatures`. Formal CVRP selection smoke confirms that CMT2 is
+  restored to the expanded screening set without changing the configured case
+  count.
 - Next CVRP checkpoint: do not continue the unchanged
-  `demand_slack_regret_insertion` patch. Either repair branch-specific
-  follow-up case targeting so prior negative cases such as CMT2 remain in
-  scope, or pivot to a materially different problem-owned solver-design
-  mechanism with explicit CMT2/CMT4 coverage. Avoid broad budget/gate changes,
-  VNS-removal sweeps, or unchanged route-merge absorption variants.
+  `demand_slack_regret_insertion` patch. Use the repaired follow-up targeting
+  when expand screening is reached, or pivot to a materially different
+  problem-owned solver-design mechanism with explicit CMT2/CMT4 coverage. Avoid
+  broad budget/gate changes, VNS-removal sweeps, or unchanged route-merge
+  absorption variants.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

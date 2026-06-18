@@ -15,7 +15,10 @@ from scion.core.branch_lifecycle_policy import (
     TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
 )
 from scion.core.decision_coordinator import DecisionCoordinator
-from scion.core.evaluation_orchestrator import EvaluationOrchestrator
+from scion.core.evaluation_orchestrator import (
+    EvaluationOrchestrator,
+    _branch_followup_priority_cases,
+)
 from scion.core.features import BudgetState, SafeFeatureExtractor
 from scion.core.models import (
     Branch,
@@ -61,6 +64,33 @@ def _hypothesis() -> HypothesisProposal:
         action="modify",
         target_file="policies/baseline_modules/scheduler.py",
         mechanism_changes=(),
+    )
+
+
+def test_branch_followup_priority_cases_prefer_losses_then_winners() -> None:
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.EXPLORE_EXPAND,
+        base_champion_id=1,
+        base_champion_hash="champion-hash",
+    )
+    branch.branch_evidence_summary = {
+        "case_level_negative_cases": [
+            {"case_id": "CMT2.vrp"},
+            {"case_id": "CMT4.vrp"},
+        ],
+        "case_level_losses": [{"case_id": "CMT2.vrp"}],
+        "case_level_positive_cases": [
+            {"case_id": "A-n64-k9.vrp"},
+            "E-n101-k14.vrp",
+        ],
+    }
+
+    assert _branch_followup_priority_cases(branch) == (
+        "CMT2.vrp",
+        "CMT4.vrp",
+        "A-n64-k9.vrp",
+        "E-n101-k14.vrp",
     )
 
 

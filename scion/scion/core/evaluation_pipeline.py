@@ -47,6 +47,7 @@ class EvaluationRequest:
     expected_telemetry: Mapping[str, Any] | None = None
     mechanism_changes: tuple[Any, ...] = ()
     protected_objectives: tuple[str, ...] = ()
+    priority_case_ids: tuple[str, ...] = ()
     patch: Optional[PatchProposal] = None
     retry_count: int = 0
     screening_expand_count: int = 0
@@ -88,6 +89,7 @@ class ExperimentProtocolLike(Protocol):
         expected_telemetry: Mapping[str, Any] | None = None,
         mechanism_changes: tuple[Any, ...] = (),
         protected_objectives: tuple[str, ...] = (),
+        priority_case_ids: tuple[str, ...] = (),
     ) -> ProtocolResult:
         ...
 
@@ -160,6 +162,7 @@ class EvaluationPipeline:
                         expected_telemetry=request.expected_telemetry,
                         mechanism_changes=request.mechanism_changes,
                         protected_objectives=request.protected_objectives,
+                        priority_case_ids=request.priority_case_ids,
                         force_fresh_champion=request.force_fresh_champion,
                     )
                     protocol_result = _annotate_telemetry_validation_failure(
@@ -373,6 +376,11 @@ def _run_protocol_experiment(
     expected_telemetry = kwargs.pop("expected_telemetry", None)
     mechanism_changes = kwargs.pop("mechanism_changes", None)
     protected_objectives = kwargs.pop("protected_objectives", None)
+    priority_case_ids = tuple(
+        str(case_id).strip()
+        for case_id in (kwargs.pop("priority_case_ids", None) or ())
+        if str(case_id).strip()
+    )
     force_fresh_champion = bool(kwargs.pop("force_fresh_champion", False))
     if _should_forward_selected_surface(
         protocol,
@@ -398,6 +406,12 @@ def _run_protocol_experiment(
         "protected_objectives",
     ):
         kwargs["protected_objectives"] = protected_objectives
+    if priority_case_ids and _method_accepts_keyword(
+        protocol,
+        "run_experiment",
+        "priority_case_ids",
+    ):
+        kwargs["priority_case_ids"] = priority_case_ids
     if force_fresh_champion:
         return _run_with_fresh_champion_policy(protocol, kwargs)
     return protocol.run_experiment(**kwargs)

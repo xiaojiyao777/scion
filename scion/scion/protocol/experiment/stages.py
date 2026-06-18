@@ -96,6 +96,7 @@ def run_experiment(
     expected_telemetry: Mapping[str, Any] | None = None,
     mechanism_changes: Sequence[Any] | None = None,
     protected_objectives: Sequence[str] = (),
+    priority_case_ids: Sequence[str] = (),
 ) -> ProtocolResult:
     """Execute paired A/B evaluation for the given stage.
 
@@ -104,8 +105,16 @@ def run_experiment(
     T4: expand increases case count; seed set is unchanged.
     T5: case count depends on stage + hypothesis_action + expand flag.
     """
+    requested_priority_case_ids = tuple(
+        str(case_id).strip()
+        for case_id in (priority_case_ids or ())
+        if str(case_id).strip()
+    )
     cases = protocol._select_cases(
-        stage, hypothesis_action, expand_round if expand else 0
+        stage,
+        hypothesis_action,
+        expand_round if expand else 0,
+        priority_case_ids=requested_priority_case_ids,
     )
     seeds = protocol._select_seeds(stage)
     total_pairs = len(cases) * len(seeds)
@@ -228,6 +237,9 @@ def run_experiment(
                     "stage": stage.value,
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
+                    "requested_priority_case_ids": list(
+                        requested_priority_case_ids
+                    ),
                     "case_ids": cases,
                     "time_limit_policy": protocol.time_limit_policy_summary(
                         stage=stage,

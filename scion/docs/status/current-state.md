@@ -53,15 +53,21 @@ CVRP/VRP:
   delta `-3.75`, CI `[-7.0, 1.75]`. A/E gains survived only on selected cases;
   CMT4 remained negative, and the expanded set did not retest prior-negative
   CMT2.
+- Branch-specific follow-up case targeting is now locally and WSL focused-test
+  accepted. Expand-stage protocol selection retains prior branch evidence cases
+  by exact id or unique basename, keeps those diagnostics out of
+  `DecisionFeatures`, and records requested priority cases in raw metrics.
+  Formal CVRP selection smoke confirms that CMT2 is restored to the expanded
+  screening set without changing the configured case count.
 - Rejected default directions remain broad VNS removal, pure ALNS/no-polish,
   simple initial-VNS disablement, raw cadence-2, recent-best/stall gating,
   fixed early-8, tested share70 cap/rescue variants, and unchanged route-merge
   absorption/guarded variants.
 - Next CVRP work should not continue the unchanged
-  `demand_slack_regret_insertion` patch. Either repair branch-specific
-  follow-up case targeting so prior negative cases such as `CMT2` stay in
-  scope, or pivot to a materially different problem-owned solver-design
-  mechanism with explicit CMT4/CMT2 acceptance coverage.
+  `demand_slack_regret_insertion` patch. It should use the repaired follow-up
+  targeting when expand screening is reached, and otherwise pivot to a
+  materially different problem-owned solver-design mechanism with explicit
+  CMT4/CMT2 acceptance coverage.
 
 ## Active Work
 
@@ -80,9 +86,10 @@ CVRP/VRP:
 
 1. Do not rerun the unchanged `demand_slack_regret_insertion` candidate as the
    next CVRP step; it is parked as quality regression.
-2. Decide the next CVRP slice: branch-specific follow-up case targeting
-   repair, or a materially different problem-owned solver-design mechanism with
-   explicit CMT2/CMT4 coverage.
+2. Run the next CVRP research slice from a clean synchronized worktree. It
+   should either use repaired follow-up targeting for a genuine same-branch
+   follow-up, or pivot to a materially different problem-owned solver-design
+   mechanism with explicit CMT2/CMT4 coverage.
 3. Clean up status/projection polish separately: abandoned branch DB rows retain
    mechanism/evidence, but their history-card projection can still drop compact
    status fields; in-flight `run_status.json` also remains too coarse during
@@ -109,6 +116,8 @@ CVRP/VRP:
   `scion/docs/experiments/v0.4/v04-campaign-reopen-active-branch-restore-repair-20260618.md`.
 - CVRP demand-slack follow-up:
   `scion/docs/experiments/v0.4/v04-cvrp-demand-slack-followup-agentic-resume1r-6e78a95-postrun-20260618.md`.
+- CVRP follow-up case targeting repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-followup-case-targeting-repair-20260618.md`.
 - WSL reference docs:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.

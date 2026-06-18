@@ -36,6 +36,7 @@ def _request(
     expand_round: int = 0,
     selected_surface: str | None = None,
     mechanism_changes: tuple[object, ...] = (),
+    priority_case_ids: tuple[str, ...] = (),
     force_fresh_champion: bool = False,
 ) -> EvaluationRequest:
     return EvaluationRequest(
@@ -48,6 +49,7 @@ def _request(
         expand_round=expand_round,
         selected_surface=selected_surface,
         mechanism_changes=mechanism_changes,
+        priority_case_ids=priority_case_ids,
         force_fresh_champion=force_fresh_champion,
     )
 
@@ -249,6 +251,25 @@ def test_force_fresh_champion_temporarily_bypasses_champion_cache_policy() -> No
     assert protocol.policies_seen == ["fresh_always"]
     assert protocol.config.runtime.champion_runtime_policy == (
         "fresh_required_for_runtime_tie"
+    )
+
+
+def test_priority_case_ids_forward_to_protocol() -> None:
+    protocol = RecordingProtocol(_protocol_result())
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    pipeline.evaluate(
+        _request(
+            state=BranchState.EXPLORE_EXPAND,
+            expand=True,
+            expand_round=1,
+            priority_case_ids=("CMT2.vrp", "CMT4.vrp"),
+        )
+    )
+
+    assert protocol.experiment_calls[0]["priority_case_ids"] == (
+        "CMT2.vrp",
+        "CMT4.vrp",
     )
 
 

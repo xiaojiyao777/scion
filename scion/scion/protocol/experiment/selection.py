@@ -114,6 +114,78 @@ def _select_evenly_spaced_cases(all_cases: Sequence[str], n: int) -> List[str]:
     return [cases[i] for i in sorted(selected[:n])]
 
 
+def _select_cases_with_priorities(
+    all_cases: Sequence[str],
+    n: int,
+    priority_case_ids: Sequence[str] = (),
+) -> List[str]:
+    """Select cases while retaining requested follow-up cases when possible.
+
+    Priority case ids come from branch evidence. They may be stored as bare
+    case names while the manifest stores split-relative paths, so matching uses
+    exact id first and then a unique basename match. Ambiguous basenames are
+    ignored rather than guessed.
+    """
+    cases = list(all_cases)
+    total = len(cases)
+    if n <= 0:
+        return []
+    if n >= total:
+        return cases
+
+    selected: set[str] = set()
+    for case in _resolve_priority_cases(cases, priority_case_ids):
+        if len(selected) >= n:
+            break
+        selected.add(case)
+
+    if len(selected) < n:
+        for case in _select_evenly_spaced_cases(cases, n):
+            if len(selected) >= n:
+                break
+            selected.add(case)
+
+    if len(selected) < n:
+        for case in cases:
+            if len(selected) >= n:
+                break
+            selected.add(case)
+
+    return [case for case in cases if case in selected]
+
+
+def _resolve_priority_cases(
+    all_cases: Sequence[str],
+    priority_case_ids: Sequence[str],
+) -> List[str]:
+    cases = [str(case) for case in all_cases]
+    exact = {case: case for case in cases}
+    basename_matches: dict[str, list[str]] = {}
+    for case in cases:
+        basename_matches.setdefault(_case_basename(case), []).append(case)
+
+    selected: list[str] = []
+    seen: set[str] = set()
+    for raw_case_id in priority_case_ids or ():
+        case_id = str(raw_case_id or "").strip()
+        if not case_id:
+            continue
+        match = exact.get(case_id)
+        if match is None:
+            matches = basename_matches.get(_case_basename(case_id), [])
+            if len(matches) == 1:
+                match = matches[0]
+        if match is None or match in seen:
+            continue
+        selected.append(match)
+        seen.add(match)
+    return selected
+
+
+def _case_basename(case_id: str) -> str:
+    return str(case_id).replace("\\", "/").rstrip("/").split("/")[-1]
+
+
 def select_cases(
     *,
     config,
@@ -121,6 +193,7 @@ def select_cases(
     stage: ExperimentStage,
     hypothesis_action: str,
     expand_round: int,
+    priority_case_ids: Sequence[str] = (),
 ) -> List[str]:
     """Select deterministic protocol cases for a stage/action pair."""
     all_cases = split_manager.get_cases(stage)
@@ -149,7 +222,7 @@ def select_cases(
     else:
         return all_cases
 
-    return _select_evenly_spaced_cases(all_cases, n)
+    return _select_cases_with_priorities(all_cases, n, priority_case_ids)
 
 
 def select_seeds(*, seed_ledger: SeedLedger, stage: ExperimentStage) -> List[int]:

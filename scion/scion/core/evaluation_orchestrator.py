@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
@@ -153,6 +154,9 @@ class EvaluationOrchestrator:
                 ), CanaryResult(passed=True, reason=FROZEN_BUDGET_EXHAUSTED)
 
         expand, expand_round = self._prepare_expand(branch, protocol)
+        priority_case_ids = (
+            _branch_followup_priority_cases(branch) if expand else ()
+        )
         request = EvaluationRequest(
             branch_id=bid,
             branch_state=branch.state,
@@ -167,6 +171,7 @@ class EvaluationOrchestrator:
             protected_objectives=tuple(
                 getattr(hypothesis, "protected_objectives", ()) or ()
             ),
+            priority_case_ids=priority_case_ids,
             patch=self.branch_patches.get(bid),
             retry_count=branch.retry_count,
             screening_expand_count=branch.screening_expand_count,
@@ -354,6 +359,41 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _branch_followup_priority_cases(branch: Branch) -> tuple[str, ...]:
+    summary = getattr(branch, "branch_evidence_summary", {}) or {}
+    if not isinstance(summary, Mapping):
+        return ()
+    case_ids: list[str] = []
+    for key in (
+        "case_level_negative_cases",
+        "case_level_losses",
+        "case_level_positive_cases",
+        "case_level_winners",
+    ):
+        case_ids.extend(_case_ids_from_evidence(summary.get(key)))
+    return tuple(dict.fromkeys(case_id for case_id in case_ids if case_id))
+
+
+def _case_ids_from_evidence(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        stripped = value.strip()
+        return (stripped,) if stripped else ()
+    if isinstance(value, Mapping):
+        for key in ("case_id", "case", "id", "instance", "path"):
+            raw = value.get(key)
+            if isinstance(raw, str) and raw.strip():
+                return (raw.strip(),)
+        return ()
+    if isinstance(value, (list, tuple, set)):
+        case_ids: list[str] = []
+        for item in value:
+            case_ids.extend(_case_ids_from_evidence(item))
+        return tuple(case_ids)
+    return ()
 
 
 def _soft_lifecycle_bookkeeping(

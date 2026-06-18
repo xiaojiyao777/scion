@@ -31,6 +31,7 @@ from scion.protocol.experiment import (
     ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
     _select_evenly_spaced_cases,
 )
+from scion.protocol.experiment.selection import select_cases
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
@@ -443,6 +444,39 @@ def test_screening_expand_respects_action_specific_limits(
     # Both must be more than their non-expand counterparts
     assert n_modify > minimal_config.screening.n_cases_modify  # 6 > 3
     assert n_create > minimal_config.screening.n_cases_create  # 8 > 5
+
+
+def test_priority_cases_are_retained_by_unique_basename(
+    minimal_config
+):
+    manifest = SplitManifest(
+        version="test",
+        screening=[
+            "cvrplib/A/A1.vrp",
+            "cvrplib/CMT/CMT1.vrp",
+            "cvrplib/CMT/CMT2.vrp",
+            "cvrplib/CMT/CMT3.vrp",
+            "cvrplib/CMT/CMT4.vrp",
+            "cvrplib/P/P1.vrp",
+            "cvrplib/P/P2.vrp",
+            "cvrplib/X/X1.vrp",
+        ],
+        validation=[],
+        frozen=[],
+        canary=["c1"],
+    )
+
+    selected = select_cases(
+        config=minimal_config,
+        split_manager=SplitManager(manifest),
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="modify",
+        expand_round=0,
+        priority_case_ids=("CMT2.vrp",),
+    )
+
+    assert len(selected) == minimal_config.screening.n_cases_modify
+    assert "cvrplib/CMT/CMT2.vrp" in selected
 
 
 # ---------------------------------------------------------------------------

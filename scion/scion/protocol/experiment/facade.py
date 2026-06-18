@@ -221,6 +221,7 @@ class ExperimentProtocol:
         stage: ExperimentStage,
         hypothesis_action: str,
         expand_round: int,
+        priority_case_ids: Sequence[str] = (),
     ) -> List[str]:
         return select_cases(
             config=self.config,
@@ -228,6 +229,7 @@ class ExperimentProtocol:
             stage=stage,
             hypothesis_action=hypothesis_action,
             expand_round=expand_round,
+            priority_case_ids=priority_case_ids,
         )
 
     def _select_seeds(self, stage: ExperimentStage) -> List[int]:
@@ -316,6 +318,7 @@ class ExperimentProtocol:
         expected_telemetry: Mapping[str, Any] | None = None,
         mechanism_changes: Sequence[Any] | None = None,
         protected_objectives: Sequence[str] = (),
+        priority_case_ids: Sequence[str] = (),
     ) -> ProtocolResult:
         from .stages import run_experiment
 
@@ -331,6 +334,7 @@ class ExperimentProtocol:
             expected_telemetry=expected_telemetry,
             mechanism_changes=mechanism_changes,
             protected_objectives=protected_objectives,
+            priority_case_ids=priority_case_ids,
         )
 
 
