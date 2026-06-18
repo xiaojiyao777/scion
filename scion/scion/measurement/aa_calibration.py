@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
 _CALIBRATION_RUNNER_TIMEOUT_GRACE_SEC = 15
+_RUNTIME_BUDGET_HIT_RATIO = 0.98
 
 
 @dataclass(frozen=True)
@@ -287,8 +288,44 @@ def _pair_record_payload(record: AAPairRecord) -> dict[str, Any]:
     if record.case_resolution is not None:
         payload["case_resolution"] = dict(record.case_resolution)
     if record.time_limit_sec is not None:
-        payload["time_limit_sec"] = int(record.time_limit_sec)
+        time_limit_sec = int(record.time_limit_sec)
+        payload["time_limit_sec"] = time_limit_sec
+        payload["champion_runtime_budget_ratio"] = _runtime_budget_ratio(
+            record.champion_elapsed_ms,
+            time_limit_sec,
+        )
+        payload["candidate_runtime_budget_ratio"] = _runtime_budget_ratio(
+            record.candidate_elapsed_ms,
+            time_limit_sec,
+        )
+        payload["champion_runtime_budget_hit"] = _runtime_budget_hit(
+            record.champion_elapsed_ms,
+            time_limit_sec,
+        )
+        payload["candidate_runtime_budget_hit"] = _runtime_budget_hit(
+            record.candidate_elapsed_ms,
+            time_limit_sec,
+        )
     return payload
+
+
+def _runtime_budget_ratio(
+    elapsed_ms: int | None,
+    time_limit_sec: int,
+) -> float | None:
+    if elapsed_ms is None or time_limit_sec <= 0:
+        return None
+    return round(float(elapsed_ms) / (float(time_limit_sec) * 1000.0), 4)
+
+
+def _runtime_budget_hit(
+    elapsed_ms: int | None,
+    time_limit_sec: int,
+) -> bool | None:
+    ratio = _runtime_budget_ratio(elapsed_ms, time_limit_sec)
+    if ratio is None:
+        return None
+    return ratio >= _RUNTIME_BUDGET_HIT_RATIO
 
 
 def _bootstrap_pass_rate(

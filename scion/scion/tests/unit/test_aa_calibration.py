@@ -154,10 +154,63 @@ def test_aa_calibration_payload_is_problem_owned_diagnostic() -> None:
                 "safe": True,
             },
             "time_limit_sec": 45,
+            "champion_runtime_budget_ratio": 0.0267,
+            "candidate_runtime_budget_ratio": 0.0278,
+            "champion_runtime_budget_hit": False,
+            "candidate_runtime_budget_hit": False,
         }
     ]
     assert payload["policy"] == "problem_owned_measurement_diagnostic"
     assert payload["protocol_power"]["recommended_min_effect"] is not None
+
+
+def test_aa_calibration_payload_marks_runtime_budget_hits() -> None:
+    records = [
+        AAPairRecord(
+            "case-a",
+            1,
+            0,
+            "tie",
+            0.0,
+            0.0,
+            champion_elapsed_ms=44_100,
+            candidate_elapsed_ms=45_250,
+            time_limit_sec=45,
+        ),
+        AAPairRecord(
+            "case-b",
+            1,
+            0,
+            "tie",
+            0.0,
+            0.0,
+            champion_elapsed_ms=None,
+            candidate_elapsed_ms=None,
+            time_limit_sec=45,
+        ),
+    ]
+
+    payload = build_aa_noise_floor_payload(
+        records=records,
+        problem_id="toy",
+        stage="screening",
+        metric="cost",
+        unit="raw_delta",
+        win_rate_min=0.667,
+        practical_delta=0.1,
+        calibrated_at="2026-06-11T00:00:00+00:00",
+        n_boot=10,
+    )
+
+    first, second = payload["pair_evidence"]
+    assert first["champion_runtime_budget_ratio"] == 0.98
+    assert first["candidate_runtime_budget_ratio"] == 1.0056
+    assert first["champion_runtime_budget_hit"] is True
+    assert first["candidate_runtime_budget_hit"] is True
+    assert second["champion_runtime_budget_ratio"] is None
+    assert second["candidate_runtime_budget_ratio"] is None
+    assert second["champion_runtime_budget_hit"] is None
+    assert second["candidate_runtime_budget_hit"] is None
 
 
 def test_aa_calibration_runtime_policy_can_resolve_protocol_case_rules() -> None:

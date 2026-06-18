@@ -39,6 +39,8 @@ Framework:
   validity, and reduced readiness feed deterministic protocol config fields;
   raw calibration diagnostics stay outside `DecisionFeatures`; warehouse
   problem specs no longer hard-code local absolute surrogate paths.
+- A/A calibration pair evidence now records explicit champion/candidate runtime
+  budget-hit ratios and flags so budget saturation can be audited per replay.
 - CVRP and warehouse launch helpers now support prepared follow-up roots,
   completion preflight, secret-safe API-key env wiring, runtime-source guards,
   campaign copy/resume, and default postrun report generation.
@@ -109,6 +111,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`.
 - Current measurement-integration repair:
   `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
+- Current calibration evidence repair:
+  `scion/docs/experiments/v0.4/v04-aa-calibration-runtime-budget-hit-evidence-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `RSYNC_PATHS.md`.
