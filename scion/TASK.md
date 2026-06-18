@@ -520,6 +520,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
   Current warehouse follow-up analysis-brief repair:
   `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
+  Current warehouse plateau-review regression coverage:
+  `scion/docs/experiments/v0.4/v04-warehouse-followup-plateau-review-coverage-20260618.md`.
   Current launch-prepared warehouse root:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`.
 - Future WSL campaign launches must set

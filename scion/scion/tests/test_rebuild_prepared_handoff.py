@@ -271,18 +271,21 @@ def _cvrp_research_focus() -> dict[str, object]:
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
             ],
         },
         "measurable_opportunity_classes": [
             "construction_seed_portfolio",
             "destroy_repair_selection",
             "bounded_local_search_variant",
+            "large_instance_intra_route_two_opt_seed",
             "acceptance_or_adaptive_weighting",
         ],
         "default_avoid_directions": [
             "unchanged broad VNS removal",
             "pure ALNS/no-polish",
             "simple initial-VNS disablement",
+            "unbounded large-instance two-opt fallback without deadline or wall-clock evidence",
             "raw cadence-2",
             "tested share70 cap/rescue variants",
             "route-merge absorption",
@@ -292,10 +295,12 @@ def _cvrp_research_focus() -> dict[str, object]:
             "route-limit seed diversification",
         ],
         "route_merge_exception_rule": (
-            "Only continue route_merge_repair with direct objective evidence."
+            "Only continue route_merge_repair when the proposal names a causal "
+            "path beyond tested variants and defines direct activation-to-objective-effect evidence."
         ),
         "construction_seed_rule": (
-            "Require same-run seed baseline or same-mechanism accepted delta."
+            "Require same-run seed baseline or same-mechanism accepted delta "
+            "for construction seed objective-effect claims."
         ),
         "decision_boundary": (
             "This focus must not enter DecisionFeatures, Protocol gates, "
