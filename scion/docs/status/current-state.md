@@ -94,7 +94,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-7e12c62-6r-gpt55-6r-gpt55-20260618T155038Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-2a78e08-6r-gpt55-6r-gpt55-20260618T160640Z-claw`.
 
 CVRP/VRP:
 
@@ -112,16 +112,17 @@ CVRP/VRP:
   same-run seed baseline or same-mechanism accepted delta. Fallback activation,
   seed-pool size, or merely selecting a seed is only activation/design evidence.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-7e12c62-1r-gpt55-1r-gpt55-20260618T155025Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-2a78e08-1r-gpt55-1r-gpt55-20260618T160627Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
 - The next focused campaigns are blocked by LLM infrastructure. The latest WSL
   `gpt-5.5` launch-readiness preflight reaches the proxy and reports
-  `authenticated=false`, `active=0`, `refreshing=1`; the real
+  `authenticated=false`, `active=0`, `expired=1`, `refreshing=0`; the real
   chat completion returns HTTP `401` with `classification=not_authenticated`,
-  and readiness now includes `operator_action.login_url`.
+  and readiness includes `operator_action.login_url`. The current `2a78e08`
+  prepared roots pass static readiness and remain unstarted.
   Do not launch prepared roots until `/v1/chat/completions` returns HTTP `200`
   with non-empty output after re-login/token refresh.
 - WSL runs must use the synchronized WSL checkout and set
@@ -199,7 +200,7 @@ Infrastructure:
 - Current launch-readiness login actionability repair:
   `scion/docs/experiments/v0.4/v04-launch-readiness-login-actionability-repair-20260618.md`.
 - Current prepared-root runtime guard refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-7e12c62-20260618.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-2a78e08-20260618.md`.
 - Current CVRP prepared research-focus handoff:
   `scion/docs/experiments/v0.4/v04-cvrp-prepared-research-focus-handoff-repair-20260618.md`.
 - Current warehouse prepared research-focus handoff:

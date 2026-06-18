@@ -53,6 +53,22 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
 
 Result: `125 passed`.
 
+WSL:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/unit/test_cross_branch_research.py \
+  scion/scion/tests/unit/core/test_branch_lesson_usage.py \
+  scion/scion/tests/unit/test_hypothesis_context_profiles.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline_hypothesis.py \
+  scion/scion/tests/unit/test_branch_prompt_projection.py \
+  scion/scion/tests/unit/core/test_scheduler_runtime_evidence_pressure.py \
+  scion/scion/tests/unit/core/test_branch_step_runner_scheduler_metadata.py
+```
+
+Result: `125 passed`.
+
 ## Acceptance
 
 Accepted as a narrow v0.4 proposal-context repair. It closes the gap between
