@@ -29,9 +29,40 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
             "run_validity_status": "valid",
             "run_completeness_status": "complete",
             "last_stop_reason": "max_rounds_exhausted",
+            "wrapper_exit_status": 0,
             "requested_rounds": 2,
         },
     )
+    (run_root / "run.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (run_root / "launch.env").write_text("SCION_MODEL=gpt-5.5\n", encoding="utf-8")
+    (run_root / "command.txt").write_text("./run.sh\n", encoding="utf-8")
+    (run_root / "run.log").write_text(
+        "\n".join(
+            [
+                "POSTRUN_REPORTS_STARTED_AT:2026-06-18T00:00:00Z",
+                "POSTRUN_REPORT_DIR:/tmp/run-a/postrun_acceptance",
+                "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=a actual=b paths=docs",
+                "POSTRUN_REPORTS_FINISHED_AT:2026-06-18T00:01:00Z",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_root / "exit.txt").write_text(
+        "\n".join(
+            [
+                "WRAPPER_EXIT_STATUS:0",
+                "POSTRUN_ACCEPTANCE_DIR:/tmp/run-a/postrun_acceptance",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    for subdir, filename in (
+        ("summaries", "normal.summary.json"),
+        ("failures", "normal.failures.json"),
+        ("research_efficiency", "normal.research_efficiency.v1.json"),
+        ("manifests", "normal.proposal_trajectory_manifest.v1.json"),
+    ):
+        _write_json(run_root / "postrun_acceptance" / subdir / filename, {})
     _write_json(
         campaign_dir / "status.json",
         {
@@ -101,6 +132,31 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["llm_traces"]["by_status"] == {"failed": 1, "ok": 2}
     assert data["llm_traces"]["index_trace_count"] == 3
     assert data["llm_traces"]["index_session_count"] == 1
+    assert data["launcher"]["artifacts"] == {
+        "command.txt": True,
+        "exit.txt": True,
+        "launch.env": True,
+        "run.log": True,
+        "run.sh": True,
+    }
+    assert data["launcher"]["status_fields"] == {"wrapper_exit_status": 0}
+    assert data["launcher"]["run_log_markers"] == {
+        "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED": 1,
+        "POSTRUN_REPORT_DIR": 1,
+        "POSTRUN_REPORTS_FINISHED_AT": 1,
+        "POSTRUN_REPORTS_STARTED_AT": 1,
+    }
+    assert data["launcher"]["exit_markers"] == {
+        "POSTRUN_ACCEPTANCE_DIR": 1,
+        "WRAPPER_EXIT_STATUS": 1,
+    }
+    assert data["postrun_reports"]["exists"] is True
+    assert data["postrun_reports"]["counts"] == {
+        "failures": 1,
+        "manifests": 1,
+        "research_efficiency": 1,
+        "summaries": 1,
+    }
     assert data["analysis_handoff"] == (
         "scion/docs/operations/postrun-analysis-handoff.md"
     )

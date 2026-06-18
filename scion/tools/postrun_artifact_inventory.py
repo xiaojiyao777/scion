@@ -12,6 +12,42 @@ from typing import Any
 
 
 HANDOFF_DOC = "scion/docs/operations/postrun-analysis-handoff.md"
+LAUNCHER_ARTIFACTS = (
+    "run.sh",
+    "launch.env",
+    "command.txt",
+    "run.log",
+    "exit.txt",
+)
+LAUNCHER_STATUS_KEYS = (
+    "wrapper_exit_status",
+    "pre_campaign_completion_preflight",
+    "api_key_env_missing",
+    "warehouse_data_root_missing",
+    "git_runtime_dirty",
+    "git_runtime_commit_mismatch",
+)
+RUN_LOG_MARKERS = (
+    "COMPLETION_PREFLIGHT_FAILED",
+    "COMPLETION_PREFLIGHT_OK",
+    "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED",
+    "GIT_COMMIT_MISMATCH",
+    "GIT_RUNTIME_DIRTY",
+    "POSTRUN_REPORT_DIR",
+    "POSTRUN_REPORTS_FINISHED_AT",
+    "POSTRUN_REPORTS_STARTED_AT",
+)
+EXIT_MARKERS = (
+    "POSTRUN_ACCEPTANCE_DIR",
+    "PRE_CAMPAIGN_COMPLETION_PREFLIGHT_FAILED",
+    "WRAPPER_EXIT_STATUS",
+)
+POSTRUN_REPORT_DIRS = (
+    "summaries",
+    "failures",
+    "research_efficiency",
+    "manifests",
+)
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -66,6 +102,8 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
             "index_trace_count": llm_traces["index_trace_count"],
             "index_session_count": llm_traces["index_session_count"],
         },
+        "launcher": _launcher_inventory(run_root, run_status),
+        "postrun_reports": _postrun_report_inventory(run_root),
         "branches": branches,
         "events": db_inventory["events"],
         "hypotheses": db_inventory["hypotheses"],
@@ -124,6 +162,17 @@ def render_markdown(inventory: dict[str, Any]) -> str:
 
     lines.extend(
         [
+            "",
+            "## Launcher Artifacts",
+            f"- Present: {_existing_artifact_text(inventory['launcher']['artifacts'])}",
+            f"- Status fields: {_mapping_text(inventory['launcher']['status_fields'])}",
+            f"- run.log markers: {_counter_text(inventory['launcher']['run_log_markers'])}",
+            f"- exit.txt markers: {_counter_text(inventory['launcher']['exit_markers'])}",
+            "",
+            "## Postrun Reports",
+            f"- Report dir: `{inventory['postrun_reports']['report_dir']}`",
+            f"- Exists: {_display(inventory['postrun_reports']['exists'])}",
+            f"- Counts: {_mapping_text(inventory['postrun_reports']['counts'])}",
             "",
             "## LLM Traces",
             f"- Trace files: {llm['trace_count']}",
@@ -258,6 +307,74 @@ def _counters(*docs: Any) -> dict[str, int | None]:
         name: _first_int(*docs, keys=keys)
         for name, keys in fields.items()
     }
+
+
+def _launcher_inventory(run_root: Path, run_status: Any) -> dict[str, Any]:
+    return {
+        "artifacts": {
+            name: (run_root / name).exists()
+            for name in LAUNCHER_ARTIFACTS
+        },
+        "status_fields": _status_fields(run_status),
+        "run_log_markers": _marker_counts(
+            _read_text(run_root / "run.log"),
+            RUN_LOG_MARKERS,
+        ),
+        "exit_markers": _marker_counts(
+            _read_text(run_root / "exit.txt"),
+            EXIT_MARKERS,
+        ),
+    }
+
+
+def _postrun_report_inventory(run_root: Path) -> dict[str, Any]:
+    report_dir = run_root / "postrun_acceptance"
+    counts: dict[str, int] = {}
+    files: dict[str, list[str]] = {}
+    for name in POSTRUN_REPORT_DIRS:
+        subdir = report_dir / name
+        found = sorted(
+            str(path.relative_to(report_dir))
+            for path in subdir.glob("*.json")
+            if path.is_file()
+        ) if subdir.exists() else []
+        counts[name] = len(found)
+        files[name] = found
+    return {
+        "report_dir": str(report_dir),
+        "exists": report_dir.exists(),
+        "counts": counts,
+        "files": files,
+    }
+
+
+def _status_fields(run_status: Any) -> dict[str, Any]:
+    if not isinstance(run_status, dict):
+        return {}
+    return {
+        key: run_status[key]
+        for key in LAUNCHER_STATUS_KEYS
+        if key in run_status
+    }
+
+
+def _read_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _marker_counts(text: str, markers: tuple[str, ...]) -> dict[str, int]:
+    marker_set = set(markers)
+    counts: Counter[str] = Counter()
+    for raw_line in text.splitlines():
+        key = raw_line.split(":", 1)[0].strip()
+        if key in marker_set:
+            counts[key] += 1
+    return dict(sorted(counts.items()))
 
 
 def _read_llm_traces(
@@ -625,6 +742,19 @@ def _counter_text(counter: dict[str, int]) -> str:
     if not counter:
         return "none"
     return ", ".join(f"{key}={value}" for key, value in sorted(counter.items()))
+
+
+def _mapping_text(mapping: dict[str, Any]) -> str:
+    if not mapping:
+        return "none"
+    return ", ".join(
+        f"{key}={_display(value)}" for key, value in sorted(mapping.items())
+    )
+
+
+def _existing_artifact_text(artifacts: dict[str, bool]) -> str:
+    present = [key for key, exists in sorted(artifacts.items()) if exists]
+    return ", ".join(present) if present else "none"
 
 
 def _display(value: Any) -> str:
