@@ -48,6 +48,26 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion python -m py_compile
 # clean
 ```
 
+WSL verification after fast-forwarding the synchronized checkout to `b9836a6`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_cli_report_research_efficiency.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+# 23 passed in 1.60s
+
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/scion/core/research_efficiency_report.py \
+  scion/tools/postrun_analysis_brief.py \
+  scion/scion/tests/test_cli_report_research_efficiency.py \
+  scion/scion/tests/test_postrun_analysis_brief.py
+# clean
+```
+
 ## Acceptance
 
 Accepted as an R3/R4 delegated-analysis repair. Future postrun briefs can show

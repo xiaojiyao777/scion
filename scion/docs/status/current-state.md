@@ -61,7 +61,7 @@ Warehouse:
 - The open warehouse question is continuous follow-on improvement, not basic
   viability.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-familyeffect-fa804e0-6r-gpt55-20260618T202627Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-lessondiag-b9836a6-6r-gpt55-20260618T203741Z-claw`.
 
 CVRP/VRP:
 
@@ -75,12 +75,12 @@ CVRP/VRP:
   attribution. Construction seed/portfolio mechanisms need same-run seed
   baselines or accepted same-mechanism delta; activation alone is insufficient.
 - Prepared but not launched:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-familyeffect-fa804e0-1r-gpt55-20260618T202615Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-lessondiag-b9836a6-1r-gpt55-20260618T203729Z-claw`.
 
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The current prepared roots were built from checkout `fa804e0`. Strict
+- The current prepared roots were built from checkout `b9836a6`. Strict
   readiness on WSL confirms both roots remain statically ready and aligned to
   guarded source.
 - Launch is still blocked by `gpt-5.5` auth. On 2026-06-18, WSL strict
@@ -127,7 +127,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-fa804e0-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-prepared-root-runtime-guard-refresh-b9836a6-20260618.md`,
   and `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
