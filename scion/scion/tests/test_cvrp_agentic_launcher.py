@@ -88,6 +88,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
+    assert (
+        "GIT_RUNTIME_GUARD_PATHS='scion/scion scion/problems/cvrp vrp'"
+        in launch_env
+    )
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert "ROUNDS=4" in launch_env
@@ -106,7 +110,9 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY" in run_sh_text
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT" in run_sh_text
     assert "OMP_NUM_THREADS=1" in run_sh_text
+    assert "GIT_RUNTIME_DIRTY" in run_sh_text
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
+    assert "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED" in run_sh_text
     assert 'cp "$CAMPAIGN_DIR/run_status.json" "$RUN_ROOT/run_status.json"' in (
         run_sh_text
     )
@@ -121,6 +127,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     assert "COMPLETION_PREFLIGHT=0" in command_txt
+    assert "GIT_RUNTIME_GUARD_PATHS=scion/scion scion/problems/cvrp vrp" in command_txt
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     assert "RESUME_FROM_CAMPAIGN=" in command_txt
@@ -496,6 +503,14 @@ def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(
         line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
     )
     run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "GIT_RUNTIME_GUARD_PATHS='scion/scion scion/problems/cvrp vrp'",
+            "GIT_RUNTIME_GUARD_PATHS=scion/design/scion-architecture-v3.md",
+        ),
+        encoding="utf-8",
+    )
 
     run_result = subprocess.run(
         ["bash", str(run_root / "run.sh")],

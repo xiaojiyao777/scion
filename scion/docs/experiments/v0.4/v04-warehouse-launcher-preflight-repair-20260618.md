@@ -34,8 +34,11 @@ The launcher prepares a run root with:
   wrapper exit code;
 - `--skip-postrun-reports` for unusual smoke cases that should not generate
   postrun report artifacts;
-- a run-time git commit check, warehouse data-root directory check, and copied
-  top-level `run_status.json` / `exit.txt` wrapper behavior.
+- run-time git guard paths for warehouse-relevant source, warehouse data-root
+  directory checks, and copied top-level `run_status.json` / `exit.txt`
+  wrapper behavior. Runtime-path dirty changes or runtime-path commit drift
+  fail before campaign startup; later docs-only status commits are allowed and
+  logged.
 
 The default mode is prepare-only. Passing `--launch` starts `run.sh` with
 `nohup setsid`.
@@ -82,8 +85,8 @@ Result:
 
 The focused tests verify help output, prepare-only run-root generation,
 warehouse config rewriting, secret-safe `--api-key-env`, completion preflight
-wiring, resume-campaign copying, postrun report wiring, wrapper checks, and
-generated shell syntax.
+wiring, resume-campaign copying, postrun report wiring, runtime-path git guard
+wiring, wrapper checks, and generated shell syntax.
 
 Additional local real-artifact smoke:
 

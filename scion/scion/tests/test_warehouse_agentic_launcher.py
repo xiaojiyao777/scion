@@ -84,6 +84,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
+    assert (
+        "GIT_RUNTIME_GUARD_PATHS="
+        "'scion/scion scion/problems/warehouse_delivery surrogate'" in launch_env
+    )
     assert "ROUNDS=6" in launch_env
     assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert f"PROBLEM={run_root / 'config' / 'problem.yaml'}" in launch_env
@@ -114,7 +118,9 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     run_sh_text = run_sh.read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert 'cd "$SCION_DIR"' in run_sh_text
+    assert "GIT_RUNTIME_DIRTY" in run_sh_text
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
+    assert "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED" in run_sh_text
     assert "WAREHOUSE_DATA_ROOT_MISSING" in run_sh_text
     assert "COMPLETION_PREFLIGHT_FAILED" in run_sh_text
     assert "postrun_acceptance" in run_sh_text
@@ -128,6 +134,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
+    assert (
+        "GIT_RUNTIME_GUARD_PATHS="
+        "scion/scion scion/problems/warehouse_delivery surrogate" in command_txt
+    )
     assert "POSTRUN_REPORTS=1" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     subprocess.run(["bash", "-n", str(run_sh)], check=True)

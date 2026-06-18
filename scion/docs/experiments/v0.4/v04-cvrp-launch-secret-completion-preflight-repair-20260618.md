@@ -40,9 +40,10 @@ launcher gaps:
   copy steps.
 - portable defaults for `--experiments-root` and `--python`, derived from the
   invoking user/home and interpreter instead of fixed `/home/clawd/...` paths.
-- run-time git commit mismatch detection plus single-thread BLAS/OMP caps in
-  generated `run.sh`, preventing accidental launches from a drifted checkout or
-  noisy thread oversubscription.
+- run-time git guard paths plus single-thread BLAS/OMP caps in generated
+  `run.sh`, preventing accidental launches from dirty or runtime-drifted
+  source while allowing later docs-only status commits to coexist with prepared
+  run roots.
 - `launch.env` is written with mode `0600`.
 
 This is launch/readiness plumbing only. It does not change Decision,
@@ -88,8 +89,10 @@ Coverage added:
   invoke the launcher, which keeps WSL prepare-only runs under
   `/home/xjy-ubuntu/research/scion-experiments` when run from the WSL conda
   Python.
-- Generated `run.sh` records `GIT_COMMIT_MISMATCH` as a pre-campaign wrapper
-  failure and exports deterministic one-thread numeric-library caps.
+- Generated `run.sh` records `GIT_RUNTIME_DIRTY` or runtime-path
+  `GIT_COMMIT_MISMATCH` as pre-campaign wrapper failures, allows
+  docs-only commit drift with `GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED`, and
+  exports deterministic one-thread numeric-library caps.
 - `--api-key` and `--api-key-env` are mutually exclusive.
 - Invalid environment variable names are rejected.
 
