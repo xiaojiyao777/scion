@@ -265,7 +265,9 @@ Current checkpoint:
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
-  same real completion preflight requirement before campaign startup.
+  same real completion preflight requirement before campaign startup. It can
+  copy the accepted warehouse `v2` campaign as the new run root so the next
+  check continues from the promoted champion rather than restarting baseline.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

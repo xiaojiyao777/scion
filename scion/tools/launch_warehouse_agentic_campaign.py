@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -311,6 +312,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
     ordered_keys = [
         "RUN_ROOT",
         "CAMPAIGN_DIR",
+        "RESUME_FROM_CAMPAIGN",
         "CONFIG_DIR",
         "REPO_ROOT",
         "SCION_DIR",
@@ -461,7 +463,18 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     run_root = args.experiments_root.expanduser().resolve() / run_name
     campaign_dir = run_root / "campaign"
     config_dir = run_root / "config"
-    campaign_dir.mkdir(parents=True, exist_ok=False)
+    if args.resume_from_campaign is None:
+        campaign_dir.mkdir(parents=True, exist_ok=False)
+        resume_from_campaign = ""
+    else:
+        resume_source = args.resume_from_campaign.expanduser().resolve()
+        if not resume_source.is_dir():
+            raise SystemExit(
+                f"--resume-from-campaign is not a directory: {resume_source}"
+            )
+        run_root.mkdir(parents=True, exist_ok=False)
+        shutil.copytree(resume_source, campaign_dir)
+        resume_from_campaign = str(resume_source)
     warehouse_data_root = args.warehouse_data_root.expanduser().resolve()
     config_paths = _rewrite_warehouse_configs(
         repo_root=repo_root,
@@ -478,6 +491,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
     env: dict[str, object] = {
         "RUN_ROOT": run_root,
         "CAMPAIGN_DIR": campaign_dir,
+        "RESUME_FROM_CAMPAIGN": resume_from_campaign,
         "CONFIG_DIR": config_dir,
         "REPO_ROOT": repo_root,
         "SCION_DIR": scion_dir,
@@ -536,6 +550,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"PROTOCOL={env['PROTOCOL']}\n"
             f"SPLIT={env['SPLIT']}\n"
             f"SEEDS={env['SEEDS']}\n\n"
+            f"RESUME_FROM_CAMPAIGN={env['RESUME_FROM_CAMPAIGN']}\n\n"
             "command:\n"
             f"{command}\n\n"
             "launch:\n"
@@ -622,6 +637,16 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Warehouse production data root for generated/converted cases. "
             "The launcher rewrites copied production split paths to this root."
+        ),
+    )
+    parser.add_argument(
+        "--resume-from-campaign",
+        type=Path,
+        default=None,
+        help=(
+            "Copy an existing campaign directory into the new run root before "
+            "launch. Use this to continue from a promoted champion such as "
+            "warehouse champion v2 instead of starting from the baseline."
         ),
     )
     parser.add_argument(

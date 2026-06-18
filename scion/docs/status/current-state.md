@@ -105,8 +105,8 @@ Framework observability:
    seed baseline or same-mechanism accepted delta, not fallback activation.
 3. Keep a later warehouse repeat available to test whether champion `v2`
    enables continuous follow-on improvement. Use the warehouse launcher to
-   prepare copied/rebased production configs and run completion preflight before
-   launch.
+   copy the accepted `v2` campaign, prepare rebased production configs, and run
+   completion preflight before launch.
 
 ## Key Evidence
 

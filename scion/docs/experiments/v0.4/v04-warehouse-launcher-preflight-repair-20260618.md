@@ -25,6 +25,9 @@ The launcher prepares a run root with:
 - `--api-key-env` support so non-local credentials do not get written to disk;
 - `--completion-preflight` support using a real chat completion before Scion
   starts;
+- `--resume-from-campaign` support that copies an existing campaign into the
+  new run root before launch, so a follow-up can continue from a promoted
+  champion such as warehouse `v2` instead of starting from the baseline;
 - a run-time git commit check, warehouse data-root directory check, and copied
   top-level `run_status.json` / `exit.txt` wrapper behavior.
 
@@ -39,6 +42,11 @@ policy, proposal context, problem semantics, or warehouse operator guidance.
 
 The config rewrite is problem-owned launch preparation for the warehouse
 production split. It keeps warehouse path semantics outside generic Scion core.
+
+Campaign resume uses existing Scion reopen semantics: the copied campaign keeps
+its champion database rows and local `champions/champion_v*` snapshots. When
+the campaign manager starts, the current champion is restored from the champion
+store and re-anchored to the copied local snapshot if the hash matches.
 
 ## Current LLM Route Probe
 
@@ -64,7 +72,22 @@ Result:
 
 The focused tests verify help output, prepare-only run-root generation,
 warehouse config rewriting, secret-safe `--api-key-env`, completion preflight
-wiring, wrapper checks, and generated shell syntax.
+wiring, resume-campaign copying, wrapper checks, and generated shell syntax.
+
+Additional local real-artifact smoke:
+
+```bash
+python scion/tools/launch_warehouse_agentic_campaign.py \
+  --rounds 2 \
+  --label smoke-warehouse-v2-resume \
+  --experiments-root /tmp/scion-warehouse-launcher-smoke \
+  --warehouse-data-root /home/clawd/research/scion-data \
+  --resume-from-campaign /home/clawd/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z/rep01/full_context/campaign
+```
+
+Result: prepare-only succeeded, copied `scion.db` and `champions/champion_v2`,
+rewrote production split paths to `/home/clawd/research/scion-data`, and
+generated a `bash -n` clean `run.sh`. No campaign was launched.
 
 ## Next Use
 
@@ -76,6 +99,7 @@ python scion/tools/launch_warehouse_agentic_campaign.py \
   --rounds 6 \
   --label v04-warehouse-v2-followup \
   --warehouse-data-root /home/xjy-ubuntu/research/scion-data \
+  --resume-from-campaign /home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z/rep01/full_context/campaign \
   --completion-preflight
 ```
 

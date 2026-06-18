@@ -28,6 +28,7 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--api-key-env" in result.stdout
     assert "--completion-preflight" in result.stdout
     assert "--warehouse-data-root" in result.stdout
+    assert "--resume-from-campaign" in result.stdout
     assert "--problem-v1" in result.stdout
     assert "--measurement-governance" in result.stdout
     assert "--proposal-context-ablation" in result.stdout
@@ -82,6 +83,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "SCION_API_KEY_ENV=''" in launch_env
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "ROUNDS=6" in launch_env
+    assert "RESUME_FROM_CAMPAIGN=''" in launch_env
     assert f"PROBLEM={run_root / 'config' / 'problem.yaml'}" in launch_env
     assert f"PROBLEM_V1={run_root / 'config' / 'problem-v1.yaml'}" in launch_env
     assert f"PROTOCOL={run_root / 'config' / 'protocol_prod.yaml'}" in launch_env
@@ -118,6 +120,50 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "--proposal-context-ablation full" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
+
+
+def test_warehouse_agentic_launcher_can_copy_resume_campaign(tmp_path: Path) -> None:
+    source_campaign = tmp_path / "source-campaign"
+    (source_campaign / "champions" / "champion_v2").mkdir(parents=True)
+    (source_campaign / "champions" / "champion_v2" / "registry.yaml").write_text(
+        "operators: {}\n",
+        encoding="utf-8",
+    )
+    (source_campaign / "scion.db").write_text("fake-db", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LAUNCHER),
+            "--rounds",
+            "2",
+            "--label",
+            "unit-warehouse-resume",
+            "--experiments-root",
+            str(tmp_path / "experiments"),
+            "--warehouse-data-root",
+            str(tmp_path / "data"),
+            "--resume-from-campaign",
+            str(source_campaign),
+        ],
+        cwd=SCION_DIR,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    run_root_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("RUN_ROOT=")
+    )
+    run_root = Path(run_root_line.removeprefix("RUN_ROOT="))
+
+    assert (run_root / "campaign" / "scion.db").read_text(encoding="utf-8") == "fake-db"
+    assert (
+        run_root / "campaign" / "champions" / "champion_v2" / "registry.yaml"
+    ).is_file()
+    launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
+    command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
+    assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in launch_env
+    assert f"RESUME_FROM_CAMPAIGN={source_campaign}" in command_txt
 
 
 def test_warehouse_agentic_launcher_api_key_env_avoids_secret_file(
