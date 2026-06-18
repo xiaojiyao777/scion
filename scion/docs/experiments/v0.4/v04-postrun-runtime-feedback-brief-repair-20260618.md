@@ -68,3 +68,36 @@ Observed `runtime_feedback_summary.available=true`,
 `current_run_evidence=true`, `runtime_report_count=6`, and aggregate fresh
 runtime replay drain `attempts=6`, `executed=0`, `skipped=6`,
 `protocol_results=0`.
+
+## WSL Verification
+
+After fast-forwarding the synchronized WSL checkout to `03397f39`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+
+/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile \
+  scion/tools/postrun_analysis_brief.py \
+  scion/tools/postrun_artifact_inventory.py \
+  scion/tools/rebuild_postrun_acceptance.py
+```
+
+Result: `12 passed`; py-compile clean.
+
+WSL smoke check on an existing warehouse postrun root:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+  scion/tools/postrun_analysis_brief.py \
+  /home/xjy-ubuntu/research/scion-experiments/v04-warehouse-validation-transfer-contract-rerun6r-ce5d884-20260617T152944Z \
+  --format json
+```
+
+Observed `runtime_feedback_summary.available=true`,
+`current_run_evidence=true`, `runtime_report_count=1`, and aggregate fresh
+runtime replay drain `attempts=1`, `skipped=1`, `protocol_results=0`.
