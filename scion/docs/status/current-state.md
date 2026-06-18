@@ -124,6 +124,10 @@ Infrastructure:
   remains the identity-guard root from checkout `7f3028a`; under the current
   checkout it is still statically ready because runtime guard paths are
   unchanged.
+  The CVRP root's prepared handoff artifacts have been rebuilt with checkout
+  `c34c0ff`, so its prepared brief and inventory expose the named
+  `cvrp_large_twoopt_seed_handoff` and
+  `cvrp_large_twoopt_unbounded_default_avoid_handoff` coverage items.
   WSL readiness confirms both roots are statically ready, not started,
   runtime-guard valid, and `prompt_context_readiness_complete=ok`.
 - Both current prepared roots have regenerated `prompt_context_readiness`

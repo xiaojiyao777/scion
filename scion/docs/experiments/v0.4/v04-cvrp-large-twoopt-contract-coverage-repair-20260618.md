@@ -55,3 +55,26 @@ seed guidance is silently dropped before the next agentic run.
 The named coverage items make this visible directly in prepared analysis brief
 and artifact inventory outputs, rather than hiding the signal inside generic
 opportunity/default-avoid counts.
+
+## Prepared Root Refresh
+
+After the named coverage repair landed at `c34c0ff`, the current CVRP prepared
+root was rebuilt in WSL:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+  scion/tools/rebuild_prepared_handoff.py \
+  /home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw \
+  --strict --format json
+```
+
+The rebuild completed with all prepared handoff families `ok`. The prepared
+analysis brief and artifact inventory now expose:
+
+- `cvrp_large_twoopt_seed_handoff=true`
+- `cvrp_large_twoopt_unbounded_default_avoid_handoff=true`
+
+Static readiness remains `true`; strict launch readiness remains blocked only
+by the `gpt-5.5` completion preflight returning HTTP `401` /
+`not_authenticated`.
