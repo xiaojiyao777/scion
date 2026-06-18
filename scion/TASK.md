@@ -279,11 +279,10 @@ Current checkpoint:
   Scion code. Restore a `gpt-5.5` route that passes a real
   `/v1/chat/completions` check with non-empty output before launching; the
   current WSL proxy path reaches chat-completion but returns HTTP `401`
-  because the proxy account refresh token is invalidated
-  (`refresh_token_invalidated` / "session has ended"). Use the repaired
-  launcher `--completion-preflight` and `--api-key-env` paths when appropriate,
-  use `--resume-from-campaign` for branch-continuation checks, and keep its
-  default postrun acceptance report bundle enabled.
+  with `classification=auth_token_invalidated`. Use the repaired launcher
+  `--completion-preflight` and `--api-key-env` paths when appropriate, use
+  `--resume-from-campaign` for branch-continuation checks, and keep its default
+  postrun acceptance report bundle enabled.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the

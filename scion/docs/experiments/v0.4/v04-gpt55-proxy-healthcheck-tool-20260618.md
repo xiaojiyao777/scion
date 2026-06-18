@@ -75,6 +75,19 @@ Result:
 WSL check after installing the tool on commit `04bc996` correctly classified
 the live proxy failure as unhealthy without launching a campaign.
 
+WSL launcher integration check on commit `4517140` passed the focused launcher
+suite (`28 passed`) and regenerated both prepared roots without launching:
+
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-postpivot-resume-ready-healthcheck-1r-gpt55-20260618T112336Z-claw`
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-healthcheck-6r-gpt55-20260618T112336Z-claw`
+
+Both roots have top-level `run_status.json` with
+`schema=scion.launcher_prepare.v1`, `status=prepared`,
+`prepared_only=true`, `completion_preflight=true`, the expected
+`control_pair_key`, and `run.sh` calls `tools/check_gpt55_proxy.py`.
+
 ## Residual Blocker
 
 No campaign was launched. The WSL proxy still requires re-login before prepared
