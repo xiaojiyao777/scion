@@ -462,7 +462,8 @@ class DecisionEngine:
         ):
             return False
         if (
-            features.runtime_regression_rate is not None
+            _runtime_regression_rate_actionable(self.config)
+            and features.runtime_regression_rate is not None
             and features.runtime_regression_rate >= 0.90
         ):
             return False
@@ -616,16 +617,28 @@ def _merge_reason_codes(
 
 
 def _lifecycle_policy_for_config(config: ProtocolConfig) -> BranchLifecyclePolicy:
+    runtime_regression_rate_actionable = _runtime_regression_rate_actionable(config)
     if getattr(config, "pairing_validity", "trajectory_stable") != (
         "trajectory_divergent"
     ):
-        return BranchLifecyclePolicy()
+        return BranchLifecyclePolicy(
+            runtime_regression_rate_actionable=(
+                runtime_regression_rate_actionable
+            ),
+        )
     return BranchLifecyclePolicy(
         zero_win_streak_limit=5,
         no_effect_followup_limit=3,
         marginal_no_effect_streak_limit=3,
         repeated_signal_signature_limit=3,
         diagnostic_zero_win_streak_limit=3,
+        runtime_regression_rate_actionable=runtime_regression_rate_actionable,
+    )
+
+
+def _runtime_regression_rate_actionable(config: ProtocolConfig) -> bool:
+    return getattr(config.runtime, "runtime_model", "comparative") != (
+        "budget_exhausting"
     )
 
 

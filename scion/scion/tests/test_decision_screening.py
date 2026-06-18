@@ -226,6 +226,68 @@ def test_decision_trajectory_divergent_low_snr_expands_below_half_win_rate():
     )
 
 
+def test_decision_comparative_runtime_regression_rate_blocks_low_snr_expand():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=16,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.ABANDON
+    assert "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT" not in out.reason_codes
+    assert "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE" in out.reason_codes
+
+
+def test_decision_budget_exhausting_runtime_regression_rate_does_not_block_low_snr_expand():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "runtime": {"runtime_model": "budget_exhausting"},
+            }
+        )
+    )
+    f = _features(
+        stage="screening",
+        wins=3,
+        losses=4,
+        ties=9,
+        win_rate=3 / 16,
+        median_delta=0.0,
+        ci_low=-1.0,
+        ci_high=2.0,
+        pair_wins=14,
+        pair_losses=11,
+        pair_ties=32,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=16,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.EXPAND_SCREENING
+    assert out.reason_codes == (
+        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
+    )
+
+
 def test_decision_trajectory_stable_low_snr_shape_does_not_expand():
     f = _features(
         stage="screening",
@@ -294,6 +356,44 @@ def test_decision_low_snr_expand_exhausted_continues_with_relaxed_lifecycle():
     assert out.decision == Decision.CONTINUE_EXPLORE
     assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
     assert out.lifecycle_action == "retain_head"
+    assert "SCREENING_ZERO_WIN_STREAK_EXHAUSTED" not in out.reason_codes
+
+
+def test_decision_budget_exhausting_runtime_regression_rate_does_not_archive_low_snr_followup():
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate(
+            {
+                "pairing_validity": "trajectory_divergent",
+                "runtime": {"runtime_model": "budget_exhausting"},
+            }
+        )
+    )
+    f = _features(
+        stage="screening",
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        pair_wins=12,
+        pair_losses=12,
+        pair_ties=40,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=16,
+    )
+    from dataclasses import replace
+
+    f = replace(f, screening_expand_count=1, lifecycle_zero_win_streak=2)
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert out.lifecycle_action == "retain_head"
+    assert "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE" not in out.reason_codes
     assert "SCREENING_ZERO_WIN_STREAK_EXHAUSTED" not in out.reason_codes
 
 

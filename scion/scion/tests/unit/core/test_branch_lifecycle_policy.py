@@ -173,6 +173,44 @@ def test_low_runtime_confidence_does_not_drive_runtime_soft_abandon() -> None:
     )
 
 
+def test_report_only_runtime_regression_rate_does_not_soft_abandon() -> None:
+    features = _features(
+        n_cases=10,
+        wins=4,
+        losses=0,
+        ties=6,
+        win_rate=0.4,
+        median_delta=0.0,
+        valid_pairs=10,
+        runtime_pairs=10,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.95,
+        runtime_evidence_confidence="sufficient",
+    )
+
+    actionable = BranchLifecyclePolicy().decide(features)
+    report_only_policy = BranchLifecyclePolicy(
+        runtime_regression_rate_actionable=False
+    )
+    report_only = report_only_policy.decide(features)
+
+    assert actionable.action == "archive_lineage"
+    assert SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE in (
+        actionable.reason_codes
+    )
+    assert report_only.action == "retain_head"
+    assert report_only.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
+    assert SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE not in (
+        report_only.reason_codes
+    )
+    assert (
+        report_only_policy.evidence_metadata(features, report_only)["thresholds"][
+            "runtime_regression_rate_actionable"
+        ]
+        is False
+    )
+
+
 def test_balanced_mixed_screening_signal_is_marginal_not_weak_positive() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(
@@ -791,6 +829,65 @@ def test_relaxed_low_snr_policy_allows_multiple_marginal_followups() -> None:
         SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
     )
     assert exhausted.next_marginal_no_effect_streak == 3
+
+
+def test_report_only_runtime_regression_rate_does_not_fragment_signal_signature() -> None:
+    first_features = _features(
+        n_cases=12,
+        wins=3,
+        losses=3,
+        ties=6,
+        win_rate=0.25,
+        median_delta=0.0,
+        ci_low=-0.5,
+        ci_high=0.5,
+        valid_pairs=12,
+        runtime_pairs=12,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.10,
+    )
+    second_features = _features(
+        n_cases=12,
+        wins=3,
+        losses=3,
+        ties=6,
+        win_rate=0.25,
+        median_delta=0.0,
+        ci_low=-0.5,
+        ci_high=0.5,
+        valid_pairs=12,
+        runtime_pairs=12,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.95,
+    )
+    policy = BranchLifecyclePolicy(
+        runtime_regression_rate_actionable=False,
+        marginal_no_effect_streak_limit=2,
+        repeated_signal_signature_limit=2,
+    )
+
+    first = policy.decide(
+        first_features,
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+    second = policy.decide(
+        second_features,
+        current_marginal_no_effect_streak=first.next_marginal_no_effect_streak,
+        last_signal_signature=first.next_signal_signature,
+        current_signal_signature_repeat_count=(
+            first.next_signal_signature_repeat_count
+        ),
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+
+    assert first.next_signal_signature == second.next_signal_signature
+    assert second.action == "park_lineage"
+    assert second.reason_codes == (
+        SCREENING_MARGINAL_NO_EFFECT_LOOP_EXHAUSTED,
+        SCREENING_REPEATED_SIGNAL_SIGNATURE_EXHAUSTED,
+    )
 
 
 def test_no_effect_exhausted_parks_instead_of_archiving() -> None:

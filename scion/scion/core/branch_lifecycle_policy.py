@@ -134,6 +134,7 @@ class BranchLifecyclePolicy:
     rollback_budget_limit: int = 2
     soft_runtime_ratio_threshold: float = 1.10
     high_runtime_regression_rate: float = 0.90
+    runtime_regression_rate_actionable: bool = True
     telemetry_diagnostic_streak_limit: int = 3
     diagnostic_zero_win_streak_limit: int = 2
 
@@ -262,7 +263,12 @@ class BranchLifecyclePolicy:
             and current_marginal_no_effect_streak > 0
         ):
             loss_heavy_followup_tier = "marginal"
-        signal_signature = decision_features_signal_signature(features)
+        signal_signature = decision_features_signal_signature(
+            features,
+            runtime_regression_rate_actionable=(
+                self.runtime_regression_rate_actionable
+            ),
+        )
         previous_signature = str(last_signal_signature or "")
         next_signature_repeat_count = (
             max(0, int(current_signal_signature_repeat_count or 0)) + 1
@@ -495,6 +501,9 @@ class BranchLifecyclePolicy:
                 "rollback_budget_limit": self.rollback_budget_limit,
                 "soft_runtime_ratio_threshold": self.soft_runtime_ratio_threshold,
                 "high_runtime_regression_rate": self.high_runtime_regression_rate,
+                "runtime_regression_rate_actionable": (
+                    self.runtime_regression_rate_actionable
+                ),
                 "telemetry_diagnostic_streak_limit": (
                     self.telemetry_diagnostic_streak_limit
                 ),
@@ -650,7 +659,8 @@ class BranchLifecyclePolicy:
         ):
             reasons.append(SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN)
         if (
-            features.runtime_regression_rate is not None
+            self.runtime_regression_rate_actionable
+            and features.runtime_regression_rate is not None
             and features.runtime_regression_rate >= self.high_runtime_regression_rate
             and self._runtime_evidence_confident(features)
         ):
@@ -777,7 +787,11 @@ class BranchLifecyclePolicy:
         return bool(severe_ratio and severe_delta and severe_rate)
 
 
-def decision_features_signal_signature(features: DecisionFeatures) -> str:
+def decision_features_signal_signature(
+    features: DecisionFeatures,
+    *,
+    runtime_regression_rate_actionable: bool = True,
+) -> str:
     """Return a generic evidence signature for lifecycle loop detection."""
 
     wins = max(0, int(getattr(features, "wins", 0) or 0))
@@ -811,7 +825,11 @@ def decision_features_signal_signature(features: DecisionFeatures) -> str:
         ci_high=getattr(features, "ci_high", None),
         runtime_ratio_median=getattr(features, "runtime_ratio_median", None),
         runtime_delta_median_ms=getattr(features, "runtime_delta_median_ms", None),
-        runtime_regression_rate=getattr(features, "runtime_regression_rate", None),
+        runtime_regression_rate=(
+            getattr(features, "runtime_regression_rate", None)
+            if runtime_regression_rate_actionable
+            else None
+        ),
         runtime_pairs=max(0, int(getattr(features, "runtime_pairs", 0) or 0)),
         effect_status=effect_status,
     )
