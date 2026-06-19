@@ -41,7 +41,7 @@ campaign state, proposal generation, problem solvers, or runtime budgets.
 
 ## Verification
 
-Local checkout with uncommitted change:
+Local checkout `b9dd1d1f`:
 
 ```bash
 python -m py_compile \
@@ -61,3 +61,34 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_rebuild_postrun_acceptance.py
 # 68 passed
 ```
+
+WSL checkout `8f2fe87`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py
+# 68 passed
+```
+
+## Launch Impact
+
+Prepared roots were regenerated from WSL runtime commit `8f2fe87` so the next
+warehouse and CVRP launches use postrun readiness that requires
+`branch_research_state_actionability`.
+
+Warehouse:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchstate-8f2fe87-6r-gpt55-20260619T122315Z-claw`
+
+CVRP:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchstate-8f2fe87-1r-gpt55-20260619T122328Z-claw`
+
+Strict launch readiness for both roots reports `static_ready=true`,
+`git_runtime_consistent=ok`, and `launch_ready=false` because real GPT-5.5
+completion preflight still returns HTTP `401`, `classification=not_authenticated`,
+`code=invalid_api_key`.
