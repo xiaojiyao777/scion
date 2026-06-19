@@ -30,6 +30,10 @@ plus `command_disable_early_stop=true`. This lets postrun inventory and
 analysis briefs audit the no-early-stop launch contract directly from
 `prepared_run_contract`, not only from launch-readiness JSON.
 
+Follow-up: launch readiness and artifact inventory now match
+`--disable-early-stop` as an exact shell token. Prefix-like options such as
+`--disable-early-stopper` do not satisfy the guard.
+
 ## Boundary
 
 This is a launch/readiness guard only. It does not change Decision,
@@ -100,19 +104,32 @@ PYTHONPATH=scion \
 # 103 passed
 ```
 
+Local checkout `6d445a39` and WSL checkout `8f1d79a`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 105 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `0a4d47e` because
-`scion/tools/postrun_artifact_inventory.py` is part of the guarded
+New prepare-only roots were generated from WSL checkout `8f1d79a` because
+`scion/tools/postrun_artifact_inventory.py` and
+`scion/tools/check_launch_readiness.py` are part of the guarded
 launch/readiness and postrun audit surface.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-prepcontract-0a4d47e-6r-gpt55-20260619T100547Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-exactflag-8f1d79a-6r-gpt55-20260619T102055Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-prepcontract-0a4d47e-1r-gpt55-20260619T100600Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-exactflag-8f1d79a-1r-gpt55-20260619T102109Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -145,7 +162,8 @@ static readiness or no-early-stop launch semantics.
 ## Acceptance
 
 Accepted as the current prepared-root refresh after no-early-stop launch
-readiness enforcement and prepared-contract inventory binding. It supersedes the
-model-route and noearlystop prepared roots as the current prepared-root pointer.
+readiness enforcement, prepared-contract inventory binding, and exact-token flag
+matching. It supersedes the model-route, noearlystop, and prepcontract prepared
+roots as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
