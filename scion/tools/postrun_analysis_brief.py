@@ -1055,6 +1055,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
         cvrp_large_twoopt.get("available") is True
         or cvrp_large_twoopt.get("problem_family") == "cvrp"
     ):
+        cvrp_current_run_evidence = (
+            cvrp_large_twoopt.get("current_run_evidence") is True
+        )
         evidence = _mapping_or_empty(cvrp_large_twoopt.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
@@ -1065,8 +1068,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
             [
                 "",
                 "## CVRP Large Two-Opt Summary",
-                "- Source: prepared CVRP large-twoopt research_focus plus current-run "
-                "protocol, measurement, runtime, and continuity summaries.",
+                _cvrp_large_twoopt_source_line(cvrp_current_run_evidence),
                 f"- Available: `{_display(cvrp_large_twoopt.get('available'))}`",
                 "- Current-run evidence: "
                 f"`{_display(cvrp_large_twoopt.get('current_run_evidence'))}`",
@@ -1120,7 +1122,13 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("  - none")
         axes = cvrp_large_twoopt.get("required_review_axes")
-        lines.append("- Required CVRP bounded two-opt review axes:")
+        if cvrp_current_run_evidence:
+            lines.append("- Required CVRP bounded two-opt review axes:")
+        else:
+            lines.append("- Deferred post-launch CVRP bounded two-opt review axes:")
+            lines.append(
+                "  - not_actionable_before_launch_current_run_evidence_required"
+            )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
         else:
@@ -1131,6 +1139,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         warehouse.get("available") is True
         or warehouse.get("problem_family") == "warehouse_delivery"
     ):
+        warehouse_current_run_evidence = warehouse.get("current_run_evidence") is True
         evidence = _mapping_or_empty(warehouse.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
@@ -1141,8 +1150,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
             [
                 "",
                 "## Warehouse Follow-up Summary",
-                "- Source: prepared warehouse research_focus plus current-run "
-                "protocol, measurement, runtime, failure, and continuity summaries.",
+                _warehouse_followup_source_line(warehouse_current_run_evidence),
                 f"- Available: `{_display(warehouse.get('available'))}`",
                 "- Current-run evidence: "
                 f"`{_display(warehouse.get('current_run_evidence'))}`",
@@ -1207,7 +1215,13 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("  - none")
         axes = warehouse.get("required_review_axes")
-        lines.append("- Required warehouse review axes:")
+        if warehouse_current_run_evidence:
+            lines.append("- Required warehouse review axes:")
+        else:
+            lines.append("- Deferred post-launch warehouse review axes:")
+            lines.append(
+                "  - not_actionable_before_launch_current_run_evidence_required"
+            )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
         else:
@@ -1267,6 +1281,30 @@ def _minimum_delegated_analysis_lines(brief: Mapping[str, Any]) -> list[str]:
         "Protocol/Decision, branch lessons, runtime feedback, and source visibility.",
         "- Decide whether the next action is repair, same-round rerun, or ladder advancement.",
     ]
+
+
+def _cvrp_large_twoopt_source_line(current_run_evidence: bool) -> str:
+    if current_run_evidence:
+        return (
+            "- Source: prepared CVRP large-twoopt research_focus plus current-run "
+            "protocol, measurement, runtime, and continuity summaries."
+        )
+    return (
+        "- Source: prepared CVRP large-twoopt research_focus handoff; current-run "
+        "protocol, measurement, runtime, and continuity summaries are absent before launch."
+    )
+
+
+def _warehouse_followup_source_line(current_run_evidence: bool) -> str:
+    if current_run_evidence:
+        return (
+            "- Source: prepared warehouse research_focus plus current-run "
+            "protocol, measurement, runtime, failure, and continuity summaries."
+        )
+    return (
+        "- Source: prepared warehouse research_focus handoff; current-run protocol, "
+        "measurement, runtime, failure, and continuity summaries are absent before launch."
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

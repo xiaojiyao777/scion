@@ -1217,6 +1217,12 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert "## Warehouse Follow-up Summary" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
     assert (
+        "prepared warehouse research_focus handoff; current-run protocol" in markdown
+    )
+    assert "- Deferred post-launch warehouse review axes:" in markdown
+    assert "- Required warehouse review axes:" not in markdown
+    assert "not_actionable_before_launch_current_run_evidence_required" in markdown
+    assert (
         "| warehouse_required_evidence_handoff | True | 1 | "
         "prepared_run_manifest warehouse research_focus required_evidence |"
         in markdown
@@ -1275,6 +1281,13 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     ]
     assert "## CVRP Large Two-Opt Summary" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
+    assert (
+        "prepared CVRP large-twoopt research_focus handoff; current-run protocol"
+        in markdown
+    )
+    assert "- Deferred post-launch CVRP bounded two-opt review axes:" in markdown
+    assert "- Required CVRP bounded two-opt review axes:" not in markdown
+    assert "not_actionable_before_launch_current_run_evidence_required" in markdown
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
     assert any(
         "cvrp_large_twoopt_summary" in question
