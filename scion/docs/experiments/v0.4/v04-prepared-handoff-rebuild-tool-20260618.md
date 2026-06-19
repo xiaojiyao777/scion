@@ -31,14 +31,14 @@ launching a campaign or mutating runtime state.
 
 ## Current Active Root Refresh
 
-Current rebuild verification checkout: `cff825a`.
+Current rebuild verification checkout: `4830d81`.
 
 Refreshed on WSL:
 
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-cff825a-1r-gpt55-20260619T013400Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-4830d81-1r-gpt55-20260619T014742Z-claw`
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-cff825a-6r-gpt55-20260619T013400Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4830d81-6r-gpt55-20260619T014742Z-claw`
 
 Both rebuild manifests report:
 
@@ -52,8 +52,8 @@ Prepared manifest commits are root-specific. The current CVRP and warehouse
 roots were regenerated after later runtime-guard and prepared-only review
 guidance changes so the manifest and current handoff tooling agree:
 
-- CVRP: `prepared_manifest_commit=cff825a`
-- Warehouse: `prepared_manifest_commit=cff825a`
+- CVRP: `prepared_manifest_commit=4830d81`
+- Warehouse: `prepared_manifest_commit=4830d81`
 
 ## Problem-Specific Coverage
 

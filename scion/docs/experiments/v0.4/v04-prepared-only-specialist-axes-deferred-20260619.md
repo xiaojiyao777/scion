@@ -30,7 +30,7 @@ effective research, plateau analysis, or bounded two-opt implementation work.
 - It does not add budgets, truncation, compression, or generic gate tightening.
 - CVRP and warehouse semantics stay in problem-owned summary/report layers.
 
-## Current Prepared Roots
+## Prepared Roots For This Repair
 
 WSL checkout: `cff825a`
 
@@ -112,6 +112,16 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Acceptance
 
-Accepted as the current prepared-root review and launch-readiness refresh. Once
-`gpt-5.5` auth is restored and strict launch readiness reports
-`launch_ready=true`, these are the current warehouse and CVRP roots to launch.
+Accepted as the prepared-only specialist-axis deferral repair.
+
+Later current root:
+
+- The `cff825a` roots were superseded after the specialist-axis deferral became
+  structured JSON evidence and launch readiness began checking prepared analysis
+  brief currency directly.
+- Current warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4830d81-6r-gpt55-20260619T014742Z-claw`.
+- Current CVRP root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-4830d81-1r-gpt55-20260619T014742Z-claw`.
+- Current refresh report:
+  `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
