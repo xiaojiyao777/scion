@@ -1879,6 +1879,65 @@ def test_postrun_acceptance_rejects_warehouse_quality_blocked_without_taxonomy_s
     )
 
 
+def test_postrun_acceptance_rejects_warehouse_quality_blocked_when_protocol_evaluated(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-quality-blocked-protocol-evaluated"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    evidence = _warehouse_quality_blocked_problem_evidence()
+    protocol_evidence = evidence["protocol"]
+    assert isinstance(protocol_evidence, dict)
+    protocol_evidence["protocol_evaluated_candidates"] = 1
+    protocol_evidence["protocol_metric_results"] = 1
+    protocol_evidence["formal_candidate_artifact_rows"] = 1
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_warehouse_quality_blocked_review_inputs(brief, quality_block_count=2)
+    _mark_protocol_accounting_evaluated(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency_check["status"] == "failed"
+    assert (
+        "quality_blocked_no_protocol_has_protocol_evaluated_candidates"
+        in consistency_check["detail"]["failures"]
+    )
+    assert consistency_check["detail"]["summary_protocol_evaluated_candidates"] == 1
+    assert consistency_check["detail"]["input_protocol_evaluated_candidates"] == 1
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_accepts_cvrp_quality_blocked_no_protocol_conclusion(
     tmp_path: Path,
 ) -> None:
@@ -1980,6 +2039,65 @@ def test_postrun_acceptance_rejects_cvrp_quality_blocked_without_taxonomy_signal
     ]["failures"]
     assert consistency_check["detail"]["summary_quality_block_signal"] == 2
     assert consistency_check["detail"]["input_quality_block_signal"] == 0
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_cvrp_quality_blocked_when_protocol_evaluated(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "cvrp-run-quality-blocked-protocol-evaluated"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    evidence = _cvrp_quality_blocked_problem_evidence()
+    protocol_evidence = evidence["protocol"]
+    assert isinstance(protocol_evidence, dict)
+    protocol_evidence["protocol_evaluated_candidates"] = 1
+    protocol_evidence["protocol_metric_results"] = 1
+    protocol_evidence["formal_candidate_artifact_rows"] = 1
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_twoopt_conclusion",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_cvrp_quality_blocked_review_inputs(brief, quality_block_count=2)
+    _mark_protocol_accounting_evaluated(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency_check["status"] == "failed"
+    assert (
+        "quality_blocked_no_protocol_has_protocol_evaluated_candidates"
+        in consistency_check["detail"]["failures"]
+    )
+    assert consistency_check["detail"]["summary_protocol_evaluated_candidates"] == 1
+    assert consistency_check["detail"]["input_protocol_evaluated_candidates"] == 1
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
@@ -2780,6 +2898,19 @@ def _apply_quality_blocked_review_inputs(
     _mark_runtime_feedback_unavailable(brief["runtime_feedback_summary"])
     _mark_research_continuity_unavailable(brief["research_continuity_summary"])
     _set_failure_taxonomy_quality_blocks(brief, quality_block_count)
+
+
+def _mark_protocol_accounting_evaluated(brief: dict[str, object]) -> None:
+    protocol = brief["protocol_accounting_summary"]
+    assert isinstance(protocol, dict)
+    protocol["aggregate"] = {
+        "formal_screened_candidates": 1,
+        "formal_protocol_evaluated_candidates": 1,
+        "protocol_rows": {
+            "protocol_evaluated_candidates": 1,
+            "protocol_metric_results": 1,
+        },
+    }
 
 
 def _mark_measurement_effect_unavailable(summary: object) -> None:

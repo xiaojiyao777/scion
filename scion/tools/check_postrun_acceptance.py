@@ -1071,6 +1071,10 @@ def _problem_summary_input_consistency(
         if input_protocol_evaluated <= 0:
             failures.append("review_input_protocol_evaluated_missing")
     if _is_quality_blocked_interpretation(interpretation):
+        if summary_protocol_evaluated > 0 or input_protocol_evaluated > 0:
+            failures.append(
+                "quality_blocked_no_protocol_has_protocol_evaluated_candidates"
+            )
         if summary_quality_block_signal <= 0:
             failures.append("problem_summary_quality_block_signal_missing")
         if input_quality_block_signal <= 0:
