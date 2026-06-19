@@ -37,6 +37,10 @@ LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
         "launch_research_focus",
     ),
 }
+PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
+    "cvrp": ("cvrp_",),
+    "warehouse_delivery": ("warehouse_",),
+}
 
 
 def build_readiness(
@@ -128,6 +132,15 @@ def build_readiness(
         "postrun_families_complete",
         _contract_check_status(contract_checks, "postrun_families_complete"),
         _contract_check_detail(contract_checks, "postrun_families_complete"),
+    )
+    problem_specific_status, problem_specific_detail, problem_specific_required = (
+        _problem_specific_prepared_handoff_check(prepared_contract)
+    )
+    add_check(
+        "problem_specific_prepared_handoff",
+        problem_specific_status,
+        problem_specific_detail,
+        required=problem_specific_required,
     )
     add_check(
         "prompt_context_readiness_complete",
@@ -313,6 +326,77 @@ def _contract_check_detail(checks: Any, name: str) -> Any:
         return ""
     item = checks.get(name)
     return item.get("detail") if isinstance(item, dict) else ""
+
+
+def _problem_specific_prepared_handoff_check(
+    prepared_contract: Any,
+) -> tuple[str, Any, bool]:
+    if not isinstance(prepared_contract, dict):
+        return (
+            "failed",
+            {"reason": "missing_prepared_contract"},
+            True,
+        )
+    problem_family = prepared_contract.get("problem_family")
+    prefixes = PROBLEM_SPECIFIC_CONTRACT_PREFIXES.get(str(problem_family))
+    if not prefixes:
+        return (
+            "skipped",
+            {
+                "problem_family": problem_family,
+                "reason": "no_problem_specific_prepared_handoff_requirements",
+            },
+            False,
+        )
+
+    checks = prepared_contract.get("checks")
+    if not isinstance(checks, dict):
+        return (
+            "failed",
+            {
+                "problem_family": problem_family,
+                "reason": "missing_prepared_contract_checks",
+            },
+            True,
+        )
+
+    selected: dict[str, dict[str, Any]] = {}
+    failed: list[str] = []
+    for name, item in sorted(checks.items()):
+        if not any(str(name).startswith(prefix) for prefix in prefixes):
+            continue
+        if not isinstance(item, dict):
+            passed = False
+            detail: Any = ""
+        else:
+            passed = item.get("passed") is True
+            detail = item.get("detail")
+        selected[str(name)] = {
+            "passed": passed,
+            "detail": detail,
+        }
+        if not passed:
+            failed.append(str(name))
+
+    if not selected:
+        return (
+            "failed",
+            {
+                "problem_family": problem_family,
+                "reason": "missing_problem_specific_prepared_contract_checks",
+                "required_prefixes": list(prefixes),
+            },
+            True,
+        )
+    return (
+        "ok" if not failed else "failed",
+        {
+            "problem_family": problem_family,
+            "failed_checks": failed,
+            "checks": selected,
+        },
+        True,
+    )
 
 
 def _run_script_syntax(run_sh: Path) -> tuple[str, Any]:

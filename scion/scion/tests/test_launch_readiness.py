@@ -30,6 +30,15 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prepared_only_not_started"]["status"] == "ok"
     assert report["checks"]["prepared_contract_complete"]["status"] == "ok"
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "ok"
+    assert problem_specific["required"] is True
+    assert (
+        problem_specific["detail"]["checks"][
+            "cvrp_large_twoopt_bounded_constraints_present"
+        ]["passed"]
+        is True
+    )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
@@ -85,8 +94,61 @@ def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
     assert report["ready"] is False
     assert report["static_ready"] is False
     assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "cvrp_measurement_handoff_present" in problem_specific["detail"][
+        "failed_checks"
+    ]
+    assert "cvrp_large_twoopt_bounded_constraints_present" in problem_specific[
+        "detail"
+    ]["failed_checks"]
     assert contract["contract_complete"] is False
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
+
+
+def test_launch_readiness_problem_specific_helper_reports_warehouse_failures() -> None:
+    status, detail, required = (
+        readiness_tool._problem_specific_prepared_handoff_check(
+            {
+                "problem_family": "warehouse_delivery",
+                "checks": {
+                    "warehouse_followup_handoff_present": {
+                        "passed": True,
+                        "detail": "research_focus",
+                    },
+                    "warehouse_followup_v2_checkpoint_present": {
+                        "passed": False,
+                        "detail": {"missing": ["v2"]},
+                    },
+                    "git_runtime_consistent": {
+                        "passed": True,
+                        "detail": "not problem-specific",
+                    },
+                },
+            }
+        )
+    )
+
+    assert status == "failed"
+    assert required is True
+    assert detail["problem_family"] == "warehouse_delivery"
+    assert detail["failed_checks"] == ["warehouse_followup_v2_checkpoint_present"]
+    assert "git_runtime_consistent" not in detail["checks"]
+
+
+def test_launch_readiness_problem_specific_helper_skips_generic_problem() -> None:
+    status, detail, required = (
+        readiness_tool._problem_specific_prepared_handoff_check(
+            {
+                "problem_family": "generic_problem",
+                "checks": {},
+            }
+        )
+    )
+
+    assert status == "skipped"
+    assert required is False
+    assert detail["reason"] == "no_problem_specific_prepared_handoff_requirements"
 
 
 def test_launch_readiness_rejects_missing_prompt_context_readiness(
