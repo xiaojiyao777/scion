@@ -42,6 +42,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
+    assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
@@ -362,6 +363,28 @@ fi
     assert readiness_tool._run_sh_contains_preflight_failure_report_path(run_sh)
 
 
+def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "--require-current-run-ready",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    strict_check = report["checks"]["run_script_strict_postrun_readiness"]
+    assert strict_check["required"] is True
+    assert strict_check["status"] == "failed"
+
+
 def test_completion_preflight_fetches_login_url_and_operator_action(
     tmp_path: Path,
     monkeypatch,
@@ -628,7 +651,13 @@ RUN_ROOT={run_root}
 PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
 export RUN_ROOT PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
-  return 0
+  POSTRUN_READINESS_STATUS=0
+  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
+    --require-current-run-ready \
+    --format json \
+    > "$RUN_ROOT/postrun_acceptance/readiness/fixture.postrun_acceptance_readiness.v1.json" \
+    || POSTRUN_READINESS_STATUS=$?
+  echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" >> "$RUN_ROOT/run.log"
 }}
 if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   PREFLIGHT_STATUS=64

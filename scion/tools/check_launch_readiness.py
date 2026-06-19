@@ -176,6 +176,12 @@ def build_readiness(
         "write_postrun_acceptance_reports after pre_campaign_completion_preflight=failed",
     )
     add_check(
+        "run_script_strict_postrun_readiness",
+        "ok" if _run_sh_contains_strict_postrun_readiness(run_sh) else "failed",
+        "check_postrun_acceptance.py --require-current-run-ready and "
+        "POSTRUN_READINESS_EXIT_STATUS",
+    )
+    add_check(
         "not_already_started",
         "ok" if not (root / "exit.txt").exists() else "failed",
         str(root / "exit.txt"),
@@ -447,6 +453,19 @@ def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
         "write_postrun_acceptance_reports() {" in text
         and marker_pos < exit_pos
         and "write_postrun_acceptance_reports" in text[marker_pos:exit_pos]
+    )
+
+
+def _run_sh_contains_strict_postrun_readiness(run_sh: Path) -> bool:
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return (
+        "write_postrun_acceptance_reports() {" in text
+        and "tools/check_postrun_acceptance.py" in text
+        and "--require-current-run-ready" in text
+        and "POSTRUN_READINESS_EXIT_STATUS" in text
     )
 
 
