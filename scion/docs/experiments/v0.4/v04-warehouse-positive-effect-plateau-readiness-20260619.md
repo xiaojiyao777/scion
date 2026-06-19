@@ -42,7 +42,7 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
 Result:
 
 ```text
-159 passed in 40.26s
+161 passed in 40.18s
 ```
 
 WSL command:
@@ -59,29 +59,29 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 Result:
 
 ```text
-159 passed in 27.32s
+161 passed in 28.01s
 ```
 
 ## Prepared Roots
 
 Because this repair touched `scion/tools`, the active prepared roots were
-regenerated on WSL from runtime commit `be6cb8b5` and mirrored locally.
+regenerated on WSL from runtime commit `48a61ed6` and mirrored locally.
 
 Warehouse WSL:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
 
 Warehouse local mirror:
 
-`/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+`/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
 
 CVRP WSL:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
 
 CVRP local mirror:
 
-`/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+`/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
 
 Strict WSL launch readiness for both roots:
 

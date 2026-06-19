@@ -41,9 +41,9 @@ which is covered by the runtime guard. WSL static readiness passes; launch
 readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `be6cb8b5`; CVRP `be6cb8b5`.
+- Runtime commits: warehouse `48a61ed6`; CVRP `48a61ed6`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:

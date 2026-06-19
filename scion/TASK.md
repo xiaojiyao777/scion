@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `be6cb8b5` after warehouse positive-effect-vs-plateau postrun readiness was tightened. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `48a61ed6` after warehouse positive-effect-vs-plateau postrun readiness was tightened. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -389,9 +389,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ciplateau-48a61ed6-preflight-6r-gpt55-20260619T233848Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-ciplateau-48a61ed6-preflight-4r-gpt55-20260619T233849Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -436,7 +436,7 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `be6cb8b5`, whose runtime guard paths match after the warehouse
+  `48a61ed6`, whose runtime guard paths match after the warehouse
   positive-effect-vs-plateau postrun readiness repair touched `scion/tools`.
   Solver-design
   target file and code-phase surface reads now use `96000` char source
