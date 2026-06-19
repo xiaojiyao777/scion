@@ -248,8 +248,8 @@ Infrastructure:
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `423cf5a`; after docs-only status commits, strict
-  readiness reports `git_runtime_consistent=ok` with
+  whose git commit is `423cf5a`; after later non-runtime status/test commits,
+  strict readiness reports `git_runtime_consistent=ok` with
   `checkout differs, but runtime guard paths are unchanged`. Older prepared
   roots before the summaryinputguard roots above are not current. Exact
   supersession
