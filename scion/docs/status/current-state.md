@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after CVRP large-twoopt phase
-evidence and prepared/readiness checkout-import repairs touched `scion/tools`,
+The active prepared roots were generated on WSL after the warehouse
+positive-effect-vs-plateau postrun readiness repair touched `scion/tools`,
 which is covered by the runtime guard. WSL static readiness passes; launch
 readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptphaseimport-8ca17e34-preflight-6r-gpt55-20260619T230608Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptphaseimport-8ca17e34-preflight-4r-gpt55-20260619T230622Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `8ca17e34`; CVRP `8ca17e34`.
+- Runtime commits: warehouse `be6cb8b5`; CVRP `be6cb8b5`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:

@@ -31,6 +31,8 @@ Local command:
 
 ```bash
 PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
+  scion/scion/tests/test_rebuild_prepared_handoff.py \
+  scion/scion/tests/test_launch_readiness.py \
   scion/scion/tests/test_postrun_analysis_brief.py \
   scion/scion/tests/test_check_postrun_acceptance.py
 ```
@@ -38,15 +40,62 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
 Result:
 
 ```text
-73 passed in 33.15s
+159 passed in 40.26s
 ```
 
-The broader launch-readiness test group was intentionally deferred until after
-committing because launch readiness checks the runtime worktree cleanliness of
-`scion/tools`.
+WSL command:
 
-## Current Launch Status
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_rebuild_prepared_handoff.py \
+  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+```
 
-No prepared root was relaunched by this repair. The active warehouse and CVRP
-prepared roots remain statically ready, but live launch is still blocked until
-the WSL `gpt-5.5` completion preflight succeeds.
+Result:
+
+```text
+159 passed in 27.32s
+```
+
+## Prepared Roots
+
+Because this repair touched `scion/tools`, the active prepared roots were
+regenerated on WSL from runtime commit `be6cb8b5` and mirrored locally.
+
+Warehouse WSL:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+
+Warehouse local mirror:
+
+`/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-posplateau-be6cb8b5-preflight-6r-gpt55-20260619T232818Z-claw`
+
+CVRP WSL:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+
+CVRP local mirror:
+
+`/home/clawd/research/scion-experiments/v04-cvrp-large-twoopt-phase4-posplateau-be6cb8b5-preflight-4r-gpt55-20260619T232819Z-claw`
+
+Strict WSL launch readiness for both roots:
+
+```text
+static_ready=True
+launch_ready=False
+failed_required_checks=[completion_preflight]
+failed_static_required_checks=[]
+completion_preflight=failed
+http_status=401
+classification=not_authenticated
+code=invalid_api_key
+auth_pool.active=0
+auth_pool.expired=1
+auth_pool.refreshing=0
+```
+
+Live launch remains blocked until the WSL `gpt-5.5` completion preflight
+succeeds.
