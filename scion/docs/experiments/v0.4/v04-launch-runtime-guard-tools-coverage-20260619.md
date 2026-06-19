@@ -60,8 +60,8 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Results: launch-readiness group `24 passed`; full v0.4 readiness/reporting
-group `91 passed`.
+Results: launch-readiness group `25 passed`; full v0.4 readiness/reporting
+group `92 passed`.
 
 WSL checkout after sync:
 
@@ -78,7 +78,7 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Result: full v0.4 readiness/reporting group `91 passed`.
+Result: full v0.4 readiness/reporting group `92 passed`.
 
 Old prepared roots from WSL checkout `f1ee04e` now fail static readiness with
 `runtime_guard_paths_cover_launch_tools=failed` because their manifests omit
@@ -86,22 +86,24 @@ Old prepared roots from WSL checkout `f1ee04e` now fail static readiness with
 
 Prepared roots from WSL checkout `49edd77` are also superseded because the
 run-script guard enforcement check changed `scion/tools`; current launch roots
-must be prepared from the newer WSL checkout `0ba0a93`.
+were later replaced again after the campaign-exit postrun report call check
+changed `scion/tools`.
 
 Replacement prepared roots:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runshguard-ready-6r-gpt55-20260619T035659Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-runshguard-ready-1r-gpt55-20260619T035700Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`
 
 Strict launch readiness for both replacements reports `static_ready=true`,
 `git_runtime_consistent=ok`, `runtime_guard_paths_cover_launch_tools=ok`,
 `prepared_analysis_brief_current=ok`, `prompt_context_readiness_complete=ok`,
 `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`, and
 `run_script_strict_postrun_readiness=ok`,
-`run_script_runtime_guard_enforced=ok`. Launch readiness remains blocked only by
-the external `gpt-5.5` completion preflight: HTTP `401`,
+`run_script_runtime_guard_enforced=ok`,
+`run_script_postrun_reports_after_campaign=ok`. Launch readiness remains blocked
+only by the external `gpt-5.5` completion preflight: HTTP `401`,
 `classification=not_authenticated`, `code=invalid_api_key`, auth pool
 `active=0`, `expired=1`, `refreshing=0`, `total=1`.
 
@@ -111,5 +113,7 @@ New regression coverage:
   `scion/tools`;
 - launch readiness rejects a prepared root whose `run.sh` omits runtime guard
   markers or places them after the campaign command; and
+- launch readiness rejects a prepared root whose normal campaign-exit path does
+  not call `write_postrun_acceptance_reports` before `exit "$STATUS"`; and
 - new CVRP/warehouse prepared manifests and `launch.env` files include
   `scion/tools` in runtime guard paths.

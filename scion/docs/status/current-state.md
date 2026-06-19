@@ -71,6 +71,11 @@ Framework:
   postrun readiness path itself, exposed as
   `run_script_strict_postrun_readiness=ok`; stale scripts that omit
   `--require-current-run-ready` cannot pass static readiness.
+- Launch readiness also verifies that the normal campaign-exit path calls
+  `write_postrun_acceptance_reports` after `STATUS=$?` and before
+  `exit "$STATUS"`, exposed as
+  `run_script_postrun_reports_after_campaign=ok`; stale scripts that only
+  define the postrun function cannot pass static readiness.
 - Launch readiness also requires runtime guard coverage for `scion/tools`, so
   prepared roots generated before launcher/report/readiness tooling changes must
   be regenerated rather than launched from a drifted checkout.
@@ -84,8 +89,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `0ba0a93`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runshguard-ready-6r-gpt55-20260619T035659Z-claw`.
+- Current prepared root, prepared from WSL checkout `9f7bd6a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -108,8 +113,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `0ba0a93`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-runshguard-ready-1r-gpt55-20260619T035700Z-claw`.
+- Current prepared root, prepared from WSL checkout `9f7bd6a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -133,9 +138,11 @@ Infrastructure:
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
   `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`,
   `run_script_runtime_guard_enforced=ok`,
+  `run_script_postrun_reports_after_campaign=ok`,
   `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
   `failed`. Both current root `run.sh` files execute git dirty/head-mismatch
-  runtime guards before `scion.cli.main run` and include
+  runtime guards before `scion.cli.main run`, call postrun report/readiness
+  generation after campaign exit and before `exit "$STATUS"`, and include
   `tools/check_postrun_acceptance.py`, `--require-current-run-ready`, and
   `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract
@@ -144,7 +151,9 @@ Infrastructure:
   commit; readiness remains acceptable only when runtime guard paths are
   unchanged. The older `f1ee04e` roots are superseded because their manifests
   did not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by
-  the run-script guard enforcement change in `scion/tools`.
+  the run-script guard enforcement change in `scion/tools`; the `0ba0a93`
+  runshguard roots are superseded by the normal campaign-exit postrun-call
+  check in `scion/tools`.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,

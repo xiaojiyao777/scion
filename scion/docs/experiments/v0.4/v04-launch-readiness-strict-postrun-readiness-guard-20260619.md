@@ -9,12 +9,17 @@ generate postrun acceptance readiness without enforcing current-run analysis
 readiness. The launcher templates now write `POSTRUN_READINESS_EXIT_STATUS`
 from a strict `check_postrun_acceptance.py --require-current-run-ready` call,
 but launch readiness also needs to reject stale prepared roots whose scripts do
-not carry that strict marker path.
+not carry that strict marker path or skip the postrun report/readiness call on
+the normal campaign-exit path.
 
 ## Change
 
 `scion/tools/check_launch_readiness.py` now requires
 `run_script_strict_postrun_readiness=ok` before `static_ready=true`.
+
+It also requires `run_script_postrun_reports_after_campaign=ok`, proving
+`run.sh` captures `STATUS=$?`, calls `write_postrun_acceptance_reports`, and
+only then exits with `exit "$STATUS"`.
 
 The check verifies that `run.sh` contains:
 
@@ -23,8 +28,8 @@ The check verifies that `run.sh` contains:
 - `--require-current-run-ready`
 - `POSTRUN_READINESS_EXIT_STATUS`
 
-This makes launch readiness guard the runtime script, not only the generated
-artifact family declarations.
+This makes launch readiness guard the runtime script and both postrun call
+paths, not only the generated artifact family declarations.
 
 ## Boundary
 
@@ -34,7 +39,7 @@ validity, or warehouse/CVRP solver behavior.
 
 ## Verification
 
-Local checkout `f9f24810`:
+Local checkout `01182267`:
 
 ```bash
 python -m py_compile scion/tools/check_launch_readiness.py
@@ -55,10 +60,10 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Results: focused launch/readiness group `44 passed`; full v0.4 group
-`81 passed`.
+Results: launch-readiness group `25 passed`; full v0.4 readiness/reporting
+group `92 passed`.
 
-WSL checkout `f1ee04e`:
+WSL checkout `9f7bd6a`:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
@@ -73,27 +78,30 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Result: `81 passed`.
+Result: full v0.4 readiness/reporting group `92 passed`.
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `f1ee04e` because the
-launch-readiness guard now checks the generated `run.sh` strict postrun
-readiness path.
+Current prepare-only roots were generated from WSL checkout `9f7bd6a` because
+the launch-readiness guard now checks the generated `run.sh` strict postrun
+readiness path and the normal campaign-exit postrun report call.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-f1ee04e-6r-gpt55-20260619T025919Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncall-ready-6r-gpt55-20260619T040458Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-f1ee04e-1r-gpt55-20260619T025920Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-postruncall-ready-1r-gpt55-20260619T040458Z-claw`
 
 Strict launch readiness for both roots reports exit `64` with:
 
 - `static_ready=true`
 - `launch_ready=false`
 - `run_script_strict_postrun_readiness=ok`
+- `run_script_postrun_reports_after_campaign=ok`
+- `run_script_runtime_guard_enforced=ok`
+- `runtime_guard_paths_cover_launch_tools=ok`
 - `postrun_families_complete=ok`
 - `prepared_analysis_brief_current=ok`
 - `prompt_context_readiness_complete=ok`
@@ -102,4 +110,5 @@ Strict launch readiness for both roots reports exit `64` with:
 
 The remaining blocker is external `gpt-5.5` auth, not Scion static readiness:
 completion preflight returns HTTP `401`, `classification=not_authenticated`,
-`code=invalid_api_key`, with auth pool `active=0`, `refreshing=1`, `total=1`.
+`code=invalid_api_key`, with auth pool `active=0`, `expired=1`,
+`refreshing=0`, `total=1`.
