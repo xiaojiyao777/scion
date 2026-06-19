@@ -80,8 +80,15 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
     run_log_markers = _mapping_or_empty(launcher.get("run_log_markers"))
 
     report_dir = root / "postrun_acceptance"
-    rebuild_manifest = _latest_json(report_dir / "rebuild")
-    analysis_brief = _latest_json(report_dir / "analysis_brief")
+    rebuild_manifest = _read_rebuild_manifest(report_dir)
+    analysis_brief_path = _analysis_brief_path_from_rebuild_manifest(
+        rebuild_manifest,
+    )
+    analysis_brief = (
+        _read_json_object(analysis_brief_path)
+        if analysis_brief_path
+        else {}
+    )
 
     add_check("inventory_loaded", "ok", str(root))
     add_check(
@@ -102,6 +109,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         rebuild_manifest.get("schema_version"),
     )
     add_check(
+        "rebuild_manifest_run_identity",
+        "ok"
+        if _payload_path_matches(rebuild_manifest.get("run_root"), root)
+        else "failed",
+        {
+            "expected_run_root": str(root),
+            "manifest_run_root": rebuild_manifest.get("run_root"),
+        },
+    )
+    add_check(
         "rebuild_manifest_complete",
         "ok" if rebuild_manifest.get("complete") is True else "failed",
         {
@@ -112,7 +129,12 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
     add_check(
         "analysis_brief_present",
         "ok" if analysis_brief else "failed",
-        _artifact_paths(report_dir / "analysis_brief"),
+        {
+            "selected_from_rebuild_manifest": str(analysis_brief_path)
+            if analysis_brief_path
+            else "",
+            "available_artifacts": _artifact_paths(report_dir / "analysis_brief"),
+        },
     )
     add_check(
         "analysis_brief_schema",
@@ -120,6 +142,19 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         if analysis_brief.get("schema_version") == ANALYSIS_BRIEF_SCHEMA
         else "failed",
         analysis_brief.get("schema_version"),
+    )
+    add_check(
+        "analysis_brief_run_identity",
+        "ok"
+        if _payload_path_matches(analysis_brief.get("run_root"), root)
+        else "failed",
+        {
+            "expected_run_root": str(root),
+            "analysis_brief_run_root": analysis_brief.get("run_root"),
+            "analysis_brief_path": str(analysis_brief_path)
+            if analysis_brief_path
+            else "",
+        },
     )
     add_check(
         "inventory_artifact_present",
@@ -292,15 +327,36 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _latest_json(directory: Path) -> dict[str, Any]:
-    paths = sorted(path for path in directory.glob("*.json") if path.is_file())
-    if not paths:
-        return {}
-    return _read_json_object(paths[-1])
+def _read_rebuild_manifest(report_dir: Path) -> dict[str, Any]:
+    return _read_json_object(report_dir / "rebuild" / "rebuild_manifest.v1.json")
+
+
+def _analysis_brief_path_from_rebuild_manifest(
+    rebuild_manifest: Mapping[str, Any],
+) -> Path | None:
+    families = _mapping_or_empty(rebuild_manifest.get("families"))
+    analysis_brief = _mapping_or_empty(families.get("analysis_brief"))
+    outputs = analysis_brief.get("outputs")
+    if not isinstance(outputs, list):
+        return None
+    for item in outputs:
+        path = Path(str(item))
+        if path.suffix == ".json" and path.is_file():
+            return path
+    return None
 
 
 def _artifact_paths(directory: Path) -> list[str]:
     return sorted(str(path) for path in directory.glob("*.json") if path.is_file())
+
+
+def _payload_path_matches(value: Any, expected: Path) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        return Path(value).expanduser().resolve() == expected
+    except OSError:
+        return False
 
 
 def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:

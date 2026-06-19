@@ -139,6 +139,54 @@ def test_postrun_acceptance_readiness_requires_expected_problem_summary(
     )
 
 
+def test_postrun_acceptance_readiness_uses_manifest_bound_analysis_brief(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-stale-brief")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    _add_prompt_source_visibility_summary(brief)
+    brief.pop("cvrp_large_twoopt_summary", None)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    stale_brief = dict(brief)
+    stale_brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "bounded_twoopt_review_ready",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    stale_path = (
+        run_root
+        / "postrun_acceptance"
+        / "analysis_brief"
+        / "zz_stale.postrun_analysis_brief.v1.json"
+    )
+    _write_json(stale_path, stale_brief)
+
+    readiness = check_tool.build_readiness(run_root)
+    brief_check = readiness["checks"]["analysis_brief_present"]
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert brief_check["status"] == "ok"
+    assert brief_check["detail"]["selected_from_rebuild_manifest"] == str(brief_path)
+    assert str(stale_path) in brief_check["detail"]["available_artifacts"]
+    assert problem_check["status"] == "failed"
+    assert problem_check["detail"]["reason"] == "missing_problem_specific_summary"
+
+
 def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     tmp_path: Path,
 ) -> None:
