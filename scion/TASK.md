@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `8f2fe87` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, report-only branch-research-state readiness, and report-only champion-progress postrun auditing. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `f12c3d8` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -297,15 +297,18 @@ Current checkpoint:
   review. The summary is report-only, excludes raw prompts/responses/patch
   bodies, and makes branch/hypothesis/event/trace coverage auditable without
   requiring a positive result or changing Decision/Protocol/promotion state.
+  It is recomputed from current-run inventory before readiness accepts it, so a
+  hand-written or stale branch summary cannot disagree with branch, hypothesis,
+  event, session, or trace counts.
 - Postrun acceptance readiness also cross-checks the problem-specific summary's
   protocol, measurement, runtime, continuity, and quality-block evidence against
   those input summaries. A stale or hand-written problem summary can no longer
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchstate-8f2fe87-6r-gpt55-20260619T122315Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchconsistency-f12c3d8-6r-gpt55-20260619T123134Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchstate-8f2fe87-1r-gpt55-20260619T122328Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchconsistency-f12c3d8-1r-gpt55-20260619T123146Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -327,7 +330,7 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `8f2fe87`. Current
+  true. The roots were prepared from WSL runtime commit `f12c3d8`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure

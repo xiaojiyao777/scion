@@ -280,7 +280,7 @@ PYTHONPATH=scion \
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `8f2fe87` because
+New prepare-only roots were generated from WSL runtime commit `f12c3d8` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -294,17 +294,17 @@ CVRP two-opt ready claims, and realized warehouse continuity evidence
 recomputed from review inputs before accepting warehouse plateau-ready claims.
 The postrun bundle also includes report-only champion-progress auditing so a
 current run can distinguish copied resume champion history from current-run
-champion advancement, and report-only branch-research-state readiness so
-current-run delegated review cannot omit the branch/hypothesis/event/trace
-audit surface.
+champion advancement, and report-only branch-research-state readiness and input
+consistency so current-run delegated review cannot omit or hand-write a stale
+branch/hypothesis/event/trace audit surface.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchstate-8f2fe87-6r-gpt55-20260619T122315Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchconsistency-f12c3d8-6r-gpt55-20260619T123134Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchstate-8f2fe87-1r-gpt55-20260619T122328Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchconsistency-f12c3d8-1r-gpt55-20260619T123146Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -371,11 +371,12 @@ surface: CVRP large-twoopt ready claims and warehouse plateau-ready claims are
 recomputed from review inputs before being accepted, and champion-progress
 postrun summaries are required as report-only delegated-review input for
 warehouse/CVRP runs. Branch-research-state summaries are also required as
-report-only delegated-review input for warehouse/CVRP current runs. It
-supersedes
+report-only delegated-review input for warehouse/CVRP current runs and are
+checked against current-run inventory. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
 postrunexec, preflfailpath, execmarkers, execruntimeguard, execpostrunfn,
 execsource, inputcheck, and championprogress prepared roots; the branchstate
-roots listed above are the current prepared-root pointers.
+roots are also superseded. The branchconsistency roots listed above are the
+current prepared-root pointers.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
