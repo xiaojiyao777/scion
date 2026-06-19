@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `f00b3a1b` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) plus APS tool-loop headroom (`3600` sec, `240` steps, `200` total tool calls, `200` code-phase tool calls, `2000000` observation chars) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof, and rejects missing, empty, or stale active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `cf8fb5a7` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`), APS tool-loop headroom (`3600` sec, `240` steps, `200` total tool calls, `200` code-phase tool calls, `2000000` observation chars), solver-design source-read headroom, absolute WSL launch paths, clean runtime-guard paths, problem-owned measurement handoffs, and current active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -381,9 +381,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeheadroom-f00b3a1b-preflight-6r-gpt55-20260619T202816Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sourceheadroom-cf8fb5a7-preflight-6r-gpt55-20260619T210116Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeheadroom-f00b3a1b-preflight-1r-gpt55-20260619T202817Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sourceheadroom-cf8fb5a7-preflight-1r-gpt55-20260619T210116Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -424,11 +424,13 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `f00b3a1b` with explicit
+  were prepared from WSL runtime commit `cf8fb5a7` with explicit
   proposal-attempt/proposal-quality-loop headroom (`64`/`64`) plus APS
   tool-loop headroom: session timeout `3600`, max steps `240`, max total
   tool calls `200`, max code-phase tool calls `200`, and max observation
-  chars `2000000`. Current
+  chars `2000000`. Solver-design target file and code-phase surface reads now
+  use `96000` char source headroom, while bounded algorithm slices remain at
+  `24000`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   absolute `SCION_DIR`/`PYTHONPATH`, no-early-stop launch semantics, executable
@@ -540,9 +542,9 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-aps-tool-loop-headroom-readiness-20260619.md`.
-  Earlier run-script guard and proposal-headroom details remain in
-  `scion/docs/experiments/v0.4/`; they are not the current prepared-root
+  `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.
+  Earlier run-script guard, proposal-headroom, and APS tool-loop details remain
+  in `scion/docs/experiments/v0.4/`; they are not the current prepared-root
   pointer.
 - Current CVRP CMT case-protection handoff evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
