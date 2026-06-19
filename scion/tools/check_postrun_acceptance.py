@@ -870,6 +870,16 @@ def _summary_actionability_detail(
     problem_family = summary.get("problem_family")
     if expected_family is not None and problem_family != expected_family:
         summary_failures.append("problem_summary_family_mismatch")
+    launch_required_field = {
+        "warehouse_followup_summary": "launch_required_before_plateau_conclusion",
+        "cvrp_large_twoopt_summary": "launch_required_before_twoopt_conclusion",
+    }.get(key)
+    if (
+        launch_required_field is not None
+        and summary.get("current_run_evidence") is True
+        and summary.get(launch_required_field) is True
+    ):
+        summary_failures.append("problem_summary_launch_required_flag_stale")
     return {
         "summary": key,
         "problem_family": problem_family,
@@ -881,6 +891,12 @@ def _summary_actionability_detail(
         "expected_schema_version": expected_schema,
         "schema_current": schema_version == expected_schema,
         "current_run_evidence": summary.get("current_run_evidence"),
+        "launch_required_field": launch_required_field,
+        "launch_required_before_conclusion": (
+            summary.get(launch_required_field)
+            if launch_required_field is not None
+            else None
+        ),
         "report_only": summary.get("report_only"),
         "quality_judgment": summary.get("quality_judgment"),
         "decision_features_excluded": summary.get("decision_features_excluded"),
