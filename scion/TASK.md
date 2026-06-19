@@ -256,8 +256,8 @@ Current checkpoint:
   two-opt review readiness now rejects generic, cross-route,
   unbounded/fallback, VNS, and two-opt-star protocol family labels as
   two-opt-like but non-qualifying signals, and requires direct
-  activation/effect/phase telemetry on a matching top effect row before calling
-  the follow-up `bounded_twoopt_review_ready`.
+  activation/effect/phase telemetry co-located on the same matching top effect
+  row before calling the follow-up `bounded_twoopt_review_ready`.
 - Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
   be review-ready: runtime budget diagnostics remain reportable, but
   fresh-runtime replay drain status and stage-transition drain status must both

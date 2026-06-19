@@ -99,10 +99,11 @@ CVRP/VRP:
   post-launch current-run evidence exists.
 - Postrun bounded two-opt review readiness now requires both a qualifying
   large/two-opt protocol-effect row signal in measurement evidence and direct
-  activation/effect/phase telemetry on a matching top effect row. Generic,
-  cross-route, unbounded/fallback, VNS, or two-opt-star family labels are listed
-  as rejected two-opt-like families instead of making the follow-up review-ready.
-  Research-continuity family mentions remain context only.
+  activation/effect/phase telemetry co-located on the same matching top effect
+  row. Generic, cross-route, unbounded/fallback, VNS, or two-opt-star family
+  labels are listed as rejected two-opt-like families instead of making the
+  follow-up review-ready. Research-continuity family mentions remain context
+  only.
 
 Infrastructure:
 
@@ -165,6 +166,8 @@ Infrastructure:
   Earlier launch/readiness guard details remain in
   `scion/docs/experiments/v0.4/`; this page keeps only the current root
   pointer and launch blocker.
+- Current CVRP postrun evidence-accounting repair:
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-direct-evidence-row-coherence-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:

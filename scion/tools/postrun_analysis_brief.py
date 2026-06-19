@@ -3932,6 +3932,7 @@ def _empty_cvrp_large_twoopt_direct_evidence() -> dict[str, Any]:
         "ready": False,
         "missing": [],
         "top_rows_checked": 0,
+        "complete_direct_evidence_row_count": 0,
         "positive_effect_row_count": 0,
         "activation_observed_count": 0,
         "objective_effect_observed_count": 0,
@@ -3944,24 +3945,32 @@ def _merge_cvrp_large_twoopt_direct_evidence(
     row: Mapping[str, Any],
 ) -> None:
     direct_evidence["top_rows_checked"] += 1
-    if row.get("positive_effect_at_or_above_mde") is True:
+    positive_effect = row.get("positive_effect_at_or_above_mde") is True
+    activation_observed = _mechanism_activation_observed(row)
+    objective_effect_observed = _mechanism_objective_effect_observed(row)
+    phase_telemetry_observed = _phase_telemetry_observed(row)
+    if positive_effect:
         direct_evidence["positive_effect_row_count"] += 1
-    if _mechanism_activation_observed(row):
+    if activation_observed:
         direct_evidence["activation_observed_count"] += 1
-    if _mechanism_objective_effect_observed(row):
+    if objective_effect_observed:
         direct_evidence["objective_effect_observed_count"] += 1
-    if _phase_telemetry_observed(row):
+    if phase_telemetry_observed:
         direct_evidence["phase_telemetry_observed_count"] += 1
+    if (
+        positive_effect
+        and activation_observed
+        and objective_effect_observed
+        and phase_telemetry_observed
+    ):
+        direct_evidence["complete_direct_evidence_row_count"] += 1
 
 
 def _cvrp_large_twoopt_direct_evidence_ready(
     direct_evidence: Mapping[str, Any],
 ) -> bool:
     return (
-        _int_or_zero(direct_evidence.get("positive_effect_row_count")) > 0
-        and _int_or_zero(direct_evidence.get("activation_observed_count")) > 0
-        and _int_or_zero(direct_evidence.get("objective_effect_observed_count")) > 0
-        and _int_or_zero(direct_evidence.get("phase_telemetry_observed_count")) > 0
+        _int_or_zero(direct_evidence.get("complete_direct_evidence_row_count")) > 0
     )
 
 
@@ -3977,6 +3986,12 @@ def _cvrp_large_twoopt_direct_evidence_missing(
         missing.append("missing_objective_effect_telemetry")
     if _int_or_zero(direct_evidence.get("phase_telemetry_observed_count")) <= 0:
         missing.append("missing_phase_telemetry")
+    if (
+        not missing
+        and _int_or_zero(direct_evidence.get("complete_direct_evidence_row_count"))
+        <= 0
+    ):
+        missing.append("missing_complete_direct_evidence_row")
     return missing
 
 

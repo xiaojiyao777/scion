@@ -1638,6 +1638,70 @@ def test_cvrp_large_twoopt_summary_requires_direct_evidence_for_review_ready(
     )
 
 
+def test_cvrp_large_twoopt_summary_requires_direct_evidence_on_same_top_row(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-twoopt-split-direct-evidence"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+    report_path = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
+    first = dict(top_rows[0])
+    first["mechanism_evidence"] = {
+        "primary_mechanism": "bounded_large_twoopt",
+        "primary_activation_status": "observed",
+        "primary_effect_status": "not_observed",
+    }
+    first.pop("candidate_phase_telemetry_summary", None)
+    second = dict(top_rows[0])
+    second["positive_effect_at_or_above_mde"] = False
+    second["mechanism_evidence"] = {
+        "primary_mechanism": "bounded_large_twoopt",
+        "primary_activation_status": "not_observed",
+        "primary_effect_status": "positive",
+        "objective_effect_status": "mixed_objective_effect",
+    }
+    second["candidate_phase_telemetry_summary"] = {
+        "selected_surface": "solver_design",
+        "runtime_observed_pairs": 8,
+        "buckets": {"two_opt": {"weighted_sum_ms": 120.0}},
+    }
+    report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"] = [
+        first,
+        second,
+    ]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    brief = brief_tool.build_brief(run_root)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["interpretation"] == (
+        "protocol_evaluated_without_large_twoopt_direct_evidence"
+    )
+    mechanism = summary["evidence"]["large_twoopt_mechanism"]
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["direct_evidence_ready"] is False
+    direct_evidence = mechanism["direct_evidence"]
+    assert direct_evidence["positive_effect_row_count"] == 1
+    assert direct_evidence["activation_observed_count"] == 1
+    assert direct_evidence["objective_effect_observed_count"] == 1
+    assert direct_evidence["phase_telemetry_observed_count"] == 1
+    assert direct_evidence["complete_direct_evidence_row_count"] == 0
+    assert direct_evidence["missing"] == ["missing_complete_direct_evidence_row"]
+
+
 def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     tmp_path: Path,
 ) -> None:
@@ -1674,6 +1738,7 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     assert mechanism["protocol_row_count"] == 2
     assert mechanism["mechanism_family_available"] is True
     assert mechanism["direct_evidence_ready"] is True
+    assert mechanism["direct_evidence"]["complete_direct_evidence_row_count"] == 1
     assert mechanism["direct_evidence"]["missing"] == []
     assert "- Interpretation: bounded_twoopt_review_ready" in markdown
     assert "- Large two-opt direct evidence ready / missing: `True` / none" in (
