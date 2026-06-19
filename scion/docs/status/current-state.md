@@ -86,8 +86,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `feaddec7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-feaddec7-6r-gpt55-20260619T183236Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `72e99111`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sourcepath-72e99111-6r-gpt55-20260619T185716Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -128,8 +128,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `feaddec7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-feaddec7-1r-gpt55-20260619T183236Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `72e99111`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sourcepath-72e99111-1r-gpt55-20260619T185738Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -159,7 +159,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `feaddec7`
+- The active prepared roots were generated from WSL runtime commit `72e99111`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
