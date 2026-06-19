@@ -47,16 +47,44 @@ python scion/tools/check_gpt55_proxy.py \
 Result: output parsed as JSON with `ok=false` and
 `chat.classification=transport_error`; exit code remained `64`.
 
+WSL verification after syncing the repair:
+
+```bash
+cd /home/xjy-ubuntu/research/or-autoresearch-agent &&
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_gpt55_proxy_check.py
+```
+
+Result: `5 passed in 0.12s`.
+
+WSL proxy probe using the new alias:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python \
+  scion/tools/check_gpt55_proxy.py \
+  --base-url http://127.0.0.1:8080 \
+  --model gpt-5.5 \
+  --api-key pwd \
+  --login-url-on-failure \
+  --format json
+```
+
+Result: output parsed as JSON; exit code remained `64` because the provider
+auth is still unhealthy.
+
 ## Current Auth Status
 
-The live WSL proxy is still not launch-ready. The latest WSL probe using the
-same tool reports:
+The live WSL proxy is still not launch-ready. WSL probes using the same tool
+reported:
 
 - `ok=false`
 - chat HTTP `401`
 - `classification=not_authenticated`
 - `code=invalid_api_key`
-- auth pool `active=0`, `refreshing=1`, `total=1`
+- auth pool `active=0`, `total=1`, with the sole account observed as either
+  `refreshing=1` or `expired=1` across repeated preflights
 
 The prepared warehouse and CVRP roots must still wait for strict launch
 readiness to report `launch_ready=true`.
