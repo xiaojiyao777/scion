@@ -689,6 +689,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         assert problem_specific[key]["available"] is True
     assert all(item["passed"] for item in contract["checks"].values())
     assert contract["git"]["consistent"] is True
+    assert contract["git"]["commit"] == contract["git"]["manifest_commit"]
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
     assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown

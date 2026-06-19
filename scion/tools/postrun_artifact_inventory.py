@@ -866,11 +866,20 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
         "research_focus": _mapping_or_empty(manifest.get("research_focus")),
         "resume_from_campaign": _string_or_none(manifest.get("resume_from_campaign")),
-        "git": git_consistency,
+        "git": _prepared_contract_git_identity(git_consistency),
         "control_pair_key": report_metadata.get("control_pair_key"),
         "completion_preflight": model.get("completion_preflight"),
         "postrun_reports": report_metadata.get("postrun_reports"),
         "checks": checks,
+    }
+
+
+def _prepared_contract_git_identity(
+    git_consistency: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        **dict(git_consistency),
+        "commit": git_consistency.get("manifest_commit"),
     }
 
 
