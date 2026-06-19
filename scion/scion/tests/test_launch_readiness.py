@@ -216,6 +216,38 @@ def test_launch_readiness_rejects_stale_prepared_analysis_brief_questions(
     assert "problem_summary_deferred_review_axes_missing" in reasons
 
 
+def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    brief_path = (
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.v1.json"
+    )
+    payload = json.loads(brief_path.read_text(encoding="utf-8"))
+    payload["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    payload["prepared_run_contract"]["git"]["commit"] = "stale123"
+    brief_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    brief_check = report["checks"]["prepared_analysis_brief_current"]
+    assert brief_check["status"] == "failed"
+    mismatches = [
+        failure
+        for failure in brief_check["detail"]["failures"]
+        if failure["reason"] == "prepared_run_contract_identity_mismatch"
+    ]
+    assert {item["field"] for item in mismatches} == {
+        "git.commit",
+        "problem_family",
+    }
+
+
 def test_launch_readiness_rejects_prompt_context_bridge_marker_gap(
     tmp_path: Path,
 ) -> None:
@@ -701,6 +733,9 @@ def _large_twoopt_constraints() -> dict[str, object]:
 
 
 def _write_prepared_analysis_brief(run_root: Path) -> None:
+    manifest = json.loads(
+        (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
+    )
     _write_json(
         run_root
         / "prepared_handoff"
@@ -723,6 +758,16 @@ def _write_prepared_analysis_brief(run_root: Path) -> None:
             "validity": {
                 "run_validity_status": "prepared_only",
                 "run_completeness_status": "not_started",
+            },
+            "prepared_run_contract": {
+                "schema_version": "scion.prepared_run_contract_inventory.v1",
+                "manifest_path": str(run_root / "prepared_run_manifest.v1.json"),
+                "contract_complete": True,
+                "problem_family": manifest["problem_family"],
+                "model": manifest["model"]["name"],
+                "control_pair_key": manifest["report_metadata"]["control_pair_key"],
+                "resume_from_campaign": manifest["resume_from_campaign"],
+                "git": {"commit": manifest["git"]["commit"]},
             },
             "required_questions": [
                 (

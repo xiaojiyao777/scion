@@ -688,6 +688,7 @@ def _prepared_analysis_brief_failures(
                 "actual": payload.get("run_root"),
             }
         )
+    failures.extend(_prepared_analysis_contract_failures(payload, root=root))
 
     boundary_expectations = {
         "report_only": True,
@@ -743,13 +744,74 @@ def _prepared_analysis_brief_failures(
             )
 
     questions = payload.get("required_questions")
-    questions_list = [str(item) for item in questions] if isinstance(questions, list) else []
+    questions_list = (
+        [str(item) for item in questions] if isinstance(questions, list) else []
+    )
     if PREPARED_ONLY_REQUIRED_QUESTION_MARKER not in questions_list:
         failures.append({"reason": "prepared_only_required_question_missing"})
     if CURRENT_RUN_REQUIRED_QUESTION_MARKER in questions_list:
         failures.append({"reason": "current_run_required_question_present"})
 
     failures.extend(_prepared_problem_summary_failures(payload))
+    return failures
+
+
+def _prepared_analysis_contract_failures(
+    payload: dict[str, Any],
+    *,
+    root: Path,
+) -> list[dict[str, Any]]:
+    manifest_path = root / "prepared_run_manifest.v1.json"
+    manifest = _read_json(manifest_path)
+    manifest_dict = manifest if isinstance(manifest, dict) else {}
+    contract = payload.get("prepared_run_contract")
+    if not isinstance(contract, dict):
+        return [{"reason": "prepared_run_contract_missing"}]
+
+    failures: list[dict[str, Any]] = []
+    if contract.get("contract_complete") is not True:
+        failures.append(
+            {
+                "reason": "prepared_run_contract_incomplete",
+                "contract_complete": contract.get("contract_complete"),
+            }
+        )
+
+    report_metadata = manifest_dict.get("report_metadata")
+    report_metadata_dict = (
+        report_metadata if isinstance(report_metadata, dict) else {}
+    )
+    expected_identity = {
+        "manifest_path": str(manifest_path),
+        "problem_family": manifest_dict.get("problem_family"),
+        "model": _manifest_model_name(manifest_dict),
+        "control_pair_key": report_metadata_dict.get("control_pair_key"),
+        "resume_from_campaign": manifest_dict.get("resume_from_campaign"),
+    }
+    for field, expected in expected_identity.items():
+        if contract.get(field) != expected:
+            failures.append(
+                {
+                    "reason": "prepared_run_contract_identity_mismatch",
+                    "field": field,
+                    "expected": expected,
+                    "actual": contract.get(field),
+                }
+            )
+
+    git = contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    expected_commit = _manifest_commit(manifest_dict)
+    if git_dict.get("commit") != expected_commit:
+        failures.append(
+            {
+                "reason": "prepared_run_contract_identity_mismatch",
+                "field": "git.commit",
+                "expected": expected_commit,
+                "actual": git_dict.get("commit"),
+            }
+        )
+
     return failures
 
 
