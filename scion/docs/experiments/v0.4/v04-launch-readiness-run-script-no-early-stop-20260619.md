@@ -152,22 +152,33 @@ PYTHONPATH=scion pytest -q \
 # 111 passed
 ```
 
+Local checkout `ef04d4f6` and WSL checkout `96d56d5`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 113 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `1c13a8f` because
+New prepare-only roots were generated from WSL checkout `96d56d5` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
-runtime surface. The new checkout upgrades
-`run_script_preflight_failure_reports` from a loose marker check to a structured
-check requiring an executable preflight-failure status writer, then
-`write_postrun_acceptance_reports`, then `exit "$PREFLIGHT_STATUS"`.
+runtime surface. The current checkout requires completion-preflight failure
+status writing and data-root/API-key-env failure markers to be executable shell
+paths, not comment-only markers.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-preflfailpath-1c13a8f-6r-gpt55-20260619T105038Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execmarkers-96d56d5-6r-gpt55-20260619T105800Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-preflfailpath-1c13a8f-1r-gpt55-20260619T105038Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execmarkers-96d56d5-1r-gpt55-20260619T105800Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -188,6 +199,13 @@ Strict WSL launch readiness for both roots exits `64` and reports:
   `preflight_status_writer_kind=helper`, empty failures, and ordered
   preflight-failure status writer, postrun report call, and
   `exit "$PREFLIGHT_STATUS"`
+- `run_script_data_root_failure_reports=ok`; warehouse reports executable
+  `WAREHOUSE_DATA_ROOT_MISSING` marker with
+  `ignored_non_executable_marker_count=0`, while CVRP correctly reports no
+  data-root failure path is required
+- `run_script_api_key_env_failure_reports=ok` with executable
+  `SCION_API_KEY_ENV_MISSING` marker and
+  `ignored_non_executable_marker_count=0`
 - `run_script_model_route_enforced=ok` with executable proxy command and
   token-level model/base-url arguments
 - `run_script_runtime_guard_enforced=ok`
@@ -212,8 +230,10 @@ readiness enforcement, prepared-contract inventory binding, and exact-token flag
 matching. It also requires the GPT-5.5 proxy preflight to be an executable
 command block using token-level model/base-url arguments, and it requires
 preflight-failure reporting to use an executable status writer before the
-postrun bundle and preflight-status exit. It supersedes the model-route,
-noearlystop, prepcontract, exactflag, execpreflight, and postrunexec prepared
-roots as the current prepared-root pointer.
+postrun bundle and preflight-status exit, and it requires data-root/API-key-env
+failure markers to be executable shell lines rather than comments. It supersedes
+the model-route, noearlystop, prepcontract, exactflag, execpreflight,
+postrunexec, and preflfailpath prepared roots as the current prepared-root
+pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
