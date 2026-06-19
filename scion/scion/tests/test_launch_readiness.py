@@ -49,6 +49,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
     )
+    assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
@@ -737,6 +738,33 @@ def test_launch_readiness_rejects_disabled_run_script_completion_preflight(
     ]
 
 
+def test_launch_readiness_rejects_missing_pythonpath(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        "\n".join(
+            line
+            for line in launch_env.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("PYTHONPATH=")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    pythonpath_check = report["checks"]["run_script_pythonpath_enforced"]
+    assert pythonpath_check["status"] == "failed"
+    assert {
+        "reason": "pythonpath_missing",
+        "launch_env": str(launch_env),
+    } in pythonpath_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -1062,6 +1090,8 @@ def _write_prepared_root(
         "\n".join(
             [
                 f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
+                f"SCION_DIR={SCION_DIR}",
+                f"PYTHONPATH={SCION_DIR}",
                 "COMPLETION_PREFLIGHT=1",
                 "",
             ]
@@ -1079,7 +1109,7 @@ PY={sys.executable}
 GIT_COMMIT={_git_head_short()}
 GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}
 PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
-export RUN_ROOT REPO_ROOT SCION_DIR PY GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
+export RUN_ROOT REPO_ROOT SCION_DIR PY PYTHONPATH GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
   POSTRUN_READINESS_STATUS=0
   "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \

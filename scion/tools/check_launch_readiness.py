@@ -312,6 +312,10 @@ def build_readiness(
         *_run_script_completion_preflight_enforced(root, run_sh),
     )
     add_check(
+        "run_script_pythonpath_enforced",
+        *_run_script_pythonpath_enforced(root, run_sh),
+    )
+    add_check(
         "run_script_strict_postrun_readiness",
         "ok" if _run_sh_contains_strict_postrun_readiness(run_sh) else "failed",
         "check_postrun_acceptance.py --require-current-run-ready and "
@@ -872,6 +876,78 @@ def _run_script_completion_preflight_enforced(
     return ("ok" if not failures else "failed"), detail
 
 
+def _run_script_pythonpath_enforced(root: Path, run_sh: Path) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    scion_dir = _shell_assignment_value(launch_env_text, "SCION_DIR")
+    pythonpath = _shell_assignment_value(launch_env_text, "PYTHONPATH")
+    if not pythonpath:
+        failures.append({"reason": "pythonpath_missing", "launch_env": str(launch_env)})
+    elif scion_dir and not _path_list_contains(pythonpath, scion_dir):
+        failures.append(
+            {
+                "reason": "pythonpath_missing_scion_dir",
+                "launch_env": str(launch_env),
+                "pythonpath": pythonpath,
+                "scion_dir": scion_dir,
+            }
+        )
+
+    source_pos = _first_launch_env_source_position(run_text)
+    export_pos = _export_assignment_position(run_text, "PYTHONPATH")
+    campaign_pos = _campaign_command_position(run_text)
+    if source_pos < 0:
+        failures.append({"reason": "run_script_does_not_source_launch_env"})
+    if export_pos < 0:
+        failures.append({"reason": "run_script_does_not_export_pythonpath"})
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if source_pos >= 0 and campaign_pos >= 0 and source_pos > campaign_pos:
+        failures.append({"reason": "launch_env_sourced_after_campaign"})
+    if export_pos >= 0 and campaign_pos >= 0 and export_pos > campaign_pos:
+        failures.append({"reason": "pythonpath_export_after_campaign"})
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "scion_dir": scion_dir,
+        "pythonpath": pythonpath,
+        "launch_env_source_position": source_pos,
+        "pythonpath_export_position": export_pos,
+        "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
 def _shell_assignment_value(text: str, key: str) -> str | None:
     prefix = f"{key}="
     for line in text.splitlines():
@@ -889,6 +965,13 @@ def _shell_assignment_value(text: str, key: str) -> str | None:
     return None
 
 
+def _path_list_contains(path_list: str, required: str) -> bool:
+    if not required:
+        return True
+    entries = [entry for entry in path_list.split(os.pathsep) if entry]
+    return required in entries
+
+
 def _first_launch_env_source_position(text: str) -> int:
     candidates = [
         text.find('source "$(dirname "$0")/launch.env"'),
@@ -898,6 +981,16 @@ def _first_launch_env_source_position(text: str) -> int:
     ]
     positions = [position for position in candidates if position >= 0]
     return min(positions) if positions else -1
+
+
+def _export_assignment_position(text: str, key: str) -> int:
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("export ") and key in stripped.split()[1:]:
+            return offset + line.find(key)
+        offset += len(line)
+    return -1
 
 
 def _campaign_command_position(text: str) -> int:
