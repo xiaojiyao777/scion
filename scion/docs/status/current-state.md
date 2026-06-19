@@ -45,6 +45,9 @@ Framework:
   current-run counters and Phase 4 coverage are zeroed, and warehouse/CVRP
   summaries classify them as infra-only rather than prepared-only or
   review-ready.
+- Launchers now log `POSTRUN_REPORTS_EXIT_STATUS` after postrun acceptance
+  rebuilds so delegated review can see whether the report-only bundle rebuild
+  succeeded without treating rebuild failure as solver evidence.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -142,6 +145,7 @@ Infrastructure:
   prepared analysis brief contract identity.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,

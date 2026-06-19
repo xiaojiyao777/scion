@@ -481,6 +481,9 @@ Current checkpoint:
   counters and Phase 4 coverage are zeroed, and warehouse/CVRP summaries use
   `invalid_infra_only_no_research_conclusion` with
   `not_actionable_invalid_infra_only` review axes.
+  Launchers now also emit `POSTRUN_REPORTS_EXIT_STATUS` after postrun
+  acceptance rebuilds so delegated review can audit report-bundle rebuild
+  failures without treating them as solver evidence.
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
@@ -523,6 +526,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.
   Current invalid-infra postrun evidence isolation:
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`.
+  Current postrun report status marker:
+  `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`.
   Current prepared prompt/context readiness report:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
   Current strict launch-readiness report:
