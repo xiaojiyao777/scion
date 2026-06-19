@@ -233,360 +233,41 @@ Status docs to update:
 
 Current checkpoint:
 
-- Warehouse remains the accepted v0.4 positive research-path checkpoint.
-  Champion `v2` promotion and the split-preserving cost-compression telemetry
-  repair show that the framework can still support useful warehouse research.
-  The open warehouse question is continuous follow-on improvement, not basic
-  viability.
-- CVRP continuation and observability are now repaired enough for meaningful
-  follow-up: copied campaigns restore champion, active branch, workspace,
-  hypothesis, candidate patch, branch evidence, follow-up case targeting, compact
-  status/progress, measurement readiness, and research-efficiency reporting.
-- Research-efficiency reports now include a report-only `research_continuity`
-  block that turns existing observability counters into same-mechanism follow-up
-  selection rate, branch-lesson satisfaction/semantic-gap rates, weak-positive
-  transfer acceptance rate, lesson action counts, and branch-shape summary. This
-  is postrun audit material only; it does not feed Decision, Protocol gates,
-  scheduling, lifecycle, promotion, or proposal context. Postrun artifact
-  inventories now mark `research_continuity` as an explicit Phase 4
-  evidence-coverage requirement, and postrun analysis briefs summarize the
-  current-run continuity metrics for delegated review. Postrun analysis briefs
-  also summarize current-run branch/event/hypothesis state,
-  protocol/formal-candidate accounting, measurement effect-vs-MDE, prompt
-  context/source visibility, code/hypothesis source-visibility guarantees,
-  prompt signal density, runtime feedback/drain behavior, and failure
-  taxonomy/proposal quality without exposing raw prompts, responses, patches,
-  raw logs, source bodies, or mutating runtime semantics. Postrun artifact
-  inventories now distinguish broad source-visibility fingerprints from
-  code-phase source-visibility guarantee evidence, and split
-  research-continuity coverage into same-mechanism follow-up, branch-lesson
-  usage, weak-positive transfer, and branch research shape. Protocol row,
-  candidate, and validation/frozen stage accounting are also explicit Phase 4
-  coverage items.
-  Reports:
-  `scion/docs/experiments/v0.4/v04-research-continuity-report-metrics-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-phase4-research-continuity-coverage-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-phase4-research-continuity-subsignal-coverage-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-phase4-protocol-stage-coverage-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-research-continuity-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-prompt-context-visibility-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-measurement-effect-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-runtime-feedback-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-failure-taxonomy-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-protocol-accounting-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-branch-state-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-postrun-source-visibility-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-phase4-code-source-visibility-coverage-repair-20260618.md`.
-- Budget-exhausting runtime semantics now avoid treating high aggregate
-  `runtime_regression_rate` as a hard low-SNR expansion blocker, lifecycle
-  soft-abandon signal, repeated-signal discriminator, screening feedback
-  `runtime_regression` tier, low-signal `retain_head` workspace veto, or strong
-  prompt action signal when the problem declares
-  `runtime_model=budget_exhausting`. Reports:
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-runtime-regression-semantics-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-decision-lifecycle-runtime-semantics-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-screening-feedback-runtime-tier-repair-20260618.md`
-  and
-  `scion/docs/experiments/v0.4/v04-budget-exhausting-finalizer-retain-head-repair-20260618.md`.
-- Low-signal same-branch observation samples now retain scheduler/result
-  semantics as `refine_active` instead of `repair_diagnostic`, so the one
-  allowed no-effect same-mechanism sample is not reported as repair work before
-  any subsequent clean fork. Report:
-  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-scheduler-slot-repair-20260618.md`.
-- Current active no-effect branch-local lessons now produce advisory
-  `same_branch_refinement` proposal requirements, so the next same-mechanism
-  hypothesis must contrast the prior no-effect evidence rather than repeat the
-  same activation/effect path. Report:
-  `scion/docs/experiments/v0.4/v04-low-signal-same-branch-lesson-usage-repair-20260618.md`.
-- Trajectory-divergent all-tie screening now counts as low-SNR expand/continue
-  evidence instead of a win-rate failure when quality is non-regressive and no
-  runtime/candidate-failure veto is present. Report:
-  `scion/docs/experiments/v0.4/v04-trajectory-divergent-all-tie-low-snr-expand-repair-20260618.md`.
-- Measurement integration now has real-asset coverage for CVRP formal and
-  warehouse production problem/protocol loading plus the `scion run` problem-v1
-  ingress path. Problem-owned practical deltas, runtime model, pairing
-  validity, and reduced readiness feed deterministic `ProtocolConfig` fields;
-  raw calibration diagnostics remain outside `DecisionFeatures`; warehouse
-  specs no longer hard-code local surrogate paths, so WSL checkouts resolve the
-  same calibration asset. Report:
-  `scion/docs/experiments/v0.4/v04-measurement-integration-real-asset-coverage-20260618.md`.
-- A/A calibration artifacts now include explicit champion/candidate runtime
-  budget-hit ratios and flags per replay, so budget saturation is auditable
-  without feeding raw diagnostics into `DecisionFeatures`. Report:
-  `scion/docs/experiments/v0.4/v04-aa-calibration-runtime-budget-hit-evidence-20260618.md`.
-- CVRP live agentic checks now demonstrate useful research-loop behavior
-  without yet demonstrating solver improvement. The framework can steer
-  target-intent, carry branch lessons into prompts, generate material solver
-  code, complete formal screening, preserve mechanism telemetry, and reject weak
-  or negative mechanisms with evidence.
-- Rejected/default-avoid CVRP directions include broad VNS removal, pure
-  ALNS/no-polish, simple initial-VNS disablement, raw cadence-2,
-  recent-best/stall gating, fixed early-8, tested share70 cap/rescue variants,
-  unchanged route-merge absorption, unchanged demand-slack regret insertion,
-  unchanged cross-route 2-opt reconnect, unchanged cluster-biased worst removal,
-  and unchanged route-limit seed diversification.
-- Construction seed/portfolio mechanisms must show direct objective-changing
-  seed effect via same-run seed baseline or same-mechanism accepted delta.
-  Route-cap fallback activation, seed-pool size, or merely selecting a seed is
-  only activation/design evidence.
-- A direct WSL external-control replay found a strong large-instance
-  intra-route two-opt signal above the VNS threshold (`8/8` feasible wins on
-  four XL cases x two seeds), but the tested unbounded `vrp/src/solver.py`
-  fallback is not accepted and is not present in the clean checkout because the
-  local-search operator is not deadline-aware. It may be used as a
-  problem-owned research-focus seed for a budget-aware CVRP hypothesis, not as
-  Scion Protocol evidence or an accepted baseline update.
-  Report:
-  `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`.
-- The CVRP launcher now exposes this seed in the prepared `research_focus`,
-  requires the agent to pursue it only as a deadline-aware bounded
-  local-search mechanism, and lists the unbounded fallback as default-avoid.
-  Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`.
-- Prepared contract/inventory coverage now requires both the
-  `large_instance_intra_route_two_opt_seed` opportunity token and the
-  unbounded large-instance two-opt fallback default-avoid token, so future
-  prepared roots fail static handoff coverage if the guidance is dropped. The
-  coverage is also exposed as named problem-specific prepared-brief/inventory
-  items for delegated review.
-  Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
-- CVRP hypothesis proposal context now receives problem-owned
-  measurement/opportunity diagnostics: MDE-vs-practical-delta, low-SNR
-  interpretation, aggregate screening headroom, current default-avoid
-  mechanisms, and measurable opportunity classes. These diagnostics are
-  proposal-only and remain outside `DecisionFeatures`, Protocol gates,
-  lifecycle, scheduler, and promotion. Report:
-  `scion/docs/experiments/v0.4/v04-cvrp-measurement-opportunity-diagnostics-repair-20260618.md`.
-- Phase 4 artifact inventories now expose prompt signal-density coverage as a
-  separate report-only requirement, so delegated postrun review can distinguish
-  missing prompt block-family accounting from generic source-visibility
-  evidence. Report:
-  `scion/docs/experiments/v0.4/v04-prompt-signal-density-coverage-repair-20260618.md`.
-- Research-continuity and measurement-effect analysis briefs now expose
-  branch-depth distribution, active shape, mechanism-family breadth, and
-  mechanism-family effect summaries. They also aggregate branch-lesson semantic
-  failure/block counts, so delegated postrun review can distinguish deep
-  follow-up from shallow branch scattering, family-level sub-MDE/no-effect
-  patterns, and follow-up hypotheses that mention prior evidence without
-  semantically using it. Postrun briefs now also include a report-only
-  `research_context_actionability_summary` joining prompt block-family signal
-  with research-continuity gaps, so delegated review can tell whether semantic
-  branch-lesson gaps or missed follow-up opportunities align with missing
-  research/cross-branch context, omitted/truncated sections, or governance-heavy
-  prompts. That actionability summary now also carries branch-lesson semantic
-  failure/block reason mixes, so reviewers can separate metadata-only payloads,
-  unrecognized linkage aliases, and true semantic mismatches. Live hypothesis
-  prompts now also receive a compact proposal-only `research_shape_diagnostics`
-  signal from the cross-branch research map, so branch depth, shallow scatter,
-  and repeated non-positive family shape are available during proposal planning
-  while remaining excluded from `DecisionFeatures`. Reports:
-  `scion/docs/experiments/v0.4/v04-research-continuity-brief-shape-projection-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-mechanism-family-effect-summary-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-branch-lesson-semantic-diagnostics-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-research-context-actionability-brief-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-branch-lesson-actionability-reason-mix-repair-20260618.md`.
-  and
-  `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`.
-- The next prepared campaign is temporarily blocked by LLM infrastructure, not by
-  Scion code. Restore a `gpt-5.5` route that passes a real
-  `/v1/chat/completions` check with non-empty output before launching; the
-  latest WSL launch-readiness preflight reaches the proxy and reports
-  no active authenticated account, while the real chat completion returns HTTP
-  `401` with `classification=not_authenticated`. The auth pool may move between
-  expired and refreshing states, but launch remains blocked until a real
-  completion succeeds.
-  Readiness now includes `operator_action.login_url`. Use the repaired launcher
-  `--completion-preflight` and `--api-key-env` paths when appropriate, use
-  `--resume-from-campaign` for branch-continuation checks, and keep its
-  prepare/postrun acceptance bundle enabled, including the secret-free
-  prepared-run manifest, prepare-time delegated handoff brief/inventory,
-  CVRP research-focus/default-avoid handoff and CVRP
-  measurement/opportunity handoff diagnostics,
-  postrun analysis brief, and artifact/count inventory with report-only Phase 4
-  evidence coverage, prepared contract checks, launch-readiness handoff
-  snapshots, and prepared-only lifecycle guards plus structured
-  preflight-failed launch-root guards that preserve failure classification,
-  login-url presence, and operator action while preventing copied resume
-  artifacts from being treated as current-run postrun evidence. Launchers now
-  auto-fill deterministic report-only `control_pair_key` metadata when the
-  operator omits it, preventing prepare-only roots from failing the prepared
-  contract because optional handoff metadata was blank. CVRP prepared contracts
-  now also require the measurement/opportunity handoff diagnostics before
-  static readiness can pass, plus default-avoid coverage,
-  route-merge/construction-seed direct-effect rules, and explicit
-  decision-boundary coverage exposed as CVRP `problem_specific_requirements`.
-  Current CVRP handoff coverage repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-handoff-coverage-repair-20260618.md`.
-  Inventory and
-  analysis-brief top-level branch/event/hypothesis/LLM-trace fields are
-  current-run scoped; copied campaign counts live under `resume_snapshot`. For
-  historical roots or schema drift, rebuild the report-only acceptance bundle
-  with
-  `scion/tools/rebuild_postrun_acceptance.py` before delegating postrun
-  analysis; current launcher postrun paths call this rebuild tool directly.
-  Before launch, require
+- Warehouse is the accepted v0.4 positive research-path checkpoint. Champion
+  `v2` promoted in the validation-transfer rerun; the open question is whether
+  Scion can produce additional useful research from `v2` or correctly diagnose a
+  real post-v2 plateau.
+- CVRP/VRP continuation is repaired enough for a focused solver-design follow-up:
+  the current prepared root carries the large-instance intra-route two-opt seed
+  only as proposal guidance, requires deadline-aware bounded implementation, and
+  keeps the unbounded fallback as default-avoid.
+- Current WSL prepared roots:
+  - Warehouse:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-deb1158-6r-gpt55-20260619T024307Z-claw`
+  - CVRP:
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-deb1158-1r-gpt55-20260619T024308Z-claw`
+- Strict launch readiness for both current roots reports `static_ready=true`,
+  `launch_ready=false`, `prepared_analysis_brief_current=ok`,
+  `prompt_context_readiness_complete=ok`,
+  `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`, and
+  `git_runtime_consistent=ok`.
+- The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
+  `/v1/chat/completions` preflight returns HTTP `401`,
+  `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
+  `active=0`, `total=1`. Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
-  to report `launch_ready=true`; if completion preflight fails, follow its
-  `operator_action` and use the reported proxy login URL when present.
-  The previous prepared roots were invalidated by runtime guard path changes
-  and later prepared analysis brief identity checks.
-  The current CVRP root was prepared from WSL checkout `deb1158` with the
-  large-instance two-opt seed as proposal-only research focus and structured
-  `large_instance_two_opt_constraints`; the current
-  warehouse root was prepared from WSL checkout `deb1158` for the champion
-  `v2` continuous-improvement follow-up. Both current roots pass static
-  launch, prompt/context identity, launch-env readiness, and runtime-guard
-  consistency, and both `run.sh` files generate postrun acceptance readiness
-  artifacts after campaign exit. Their prepared analysis briefs keep required
-  review questions problem-specific: warehouse roots do not ask the CVRP
-  large-twoopt question, and CVRP roots do not ask the warehouse plateau
-  question. Because both roots are prepare-only, required answers now focus on
-  launch/readiness/handoff
-  verification and explicitly avoid research-quality, plateau, or bounded
-  two-opt conclusions before launch. Their minimum delegated-analysis markdown
-  guidance likewise omits current-run branch/LLM/Protocol inspection steps.
-  Their specialist summary review axes are also deferred post-launch with
-  `not_actionable_before_launch_current_run_evidence_required` until real
-  current-run evidence exists, and strict launch readiness now requires the
-  prepared analysis brief JSON to carry that structured prepared-only
-  actionability state and a `prepared_run_contract` identity matching the
-  prepared-run manifest.
-  Their prepared handoff artifacts carry current CVRP/warehouse
-  `problem_specific_requirements`, and strict launch readiness now expands the
-  corresponding problem-specific prepared contract checks as
-  `problem_specific_prepared_handoff=ok`, while
-  `--require-launch-ready` still exits `64` because real `gpt-5.5`
-  completion preflight returns HTTP `401` / `not_authenticated` with
-  `code=invalid_api_key` and auth pool `active=0`, `total=1`.
-  The non-active account may appear as expired or refreshing.
-  Postrun evidence handling now also isolates any `invalid_infra_only` root:
-  copied or partial artifacts remain under `resume_snapshot`, current-run
-  counters and Phase 4 coverage are zeroed, and warehouse/CVRP summaries use
-  `invalid_infra_only_no_research_conclusion` with
-  `not_actionable_invalid_infra_only` review axes.
-  Launchers now also emit `POSTRUN_REPORTS_EXIT_STATUS` after postrun
-  acceptance rebuilds so delegated review can audit report-bundle rebuild
-  failures without treating them as solver evidence.
-  Prepared handoff rebuilds now also emit report-only
-  `prompt_context_readiness` artifacts. The current CVRP and warehouse
-  prepared roots both report `ready_for_launch_prompt_audit=true` with no
-  missing required sources, proving prepared research focus, copied
-  campaign summary/status, problem-specific handoff fields, the live
-  `research_shape_diagnostics` prompt path, and the
-  `prepared_research_focus_prompt_bridge` source and launch-environment markers
-  are visible before launch without rendering raw provider prompts or changing
-  runtime decisions. `check_launch_readiness.py` now requires this
-  prompt/context readiness artifact, checks that it belongs to the current
-  prepared root and manifest commit, and rechecks the source and launch markers
-  as part of static readiness. The launchers export `PREPARED_RUN_MANIFEST` in
-  the generated `run.sh`; readiness audits require the manifest file,
-  `launch.env` assignment, and `run.sh` export marker.
-  Current prepared-handoff rebuild report:
-  `scion/docs/experiments/v0.4/v04-prepared-handoff-rebuild-tool-20260618.md`.
-  Current warehouse prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-warehouse-v2-followup-root-refresh-20260619.md`.
-  Current launch-readiness problem-specific handoff visibility and prepared-root
-  refresh:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-problem-specific-handoff-visibility-20260619.md`.
-  Current postrun handoff review-ready guard and prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-postrun-handoff-review-ready-guard-20260619.md`.
-  Current incomplete-handoff required-review-question refresh:
-  `scion/docs/experiments/v0.4/v04-postrun-incomplete-handoff-review-question-20260619.md`.
-  Current problem-specific postrun review-question filter and prepared-root
-  refresh:
-  `scion/docs/experiments/v0.4/v04-postrun-problem-specific-review-question-filter-20260619.md`.
-  Current prepared-only review-question filter and prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-only-review-question-filter-20260619.md`.
-  Current prepared-only minimum-analysis guidance filter and prepared-root
-  refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-only-minimum-analysis-guidance-20260619.md`.
-  Current prepared-only specialist review-axis deferral and prepared-root
-  refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-only-specialist-axes-deferred-20260619.md`.
-  Current prepared analysis-brief readiness guard and prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
-  Current prepared brief contract identity guard and prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.
-  Current invalid-infra postrun evidence isolation:
-  `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`.
-  Current postrun report status marker:
-  `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`.
-  Current postrun acceptance readiness checker and prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`.
-  Current postrun problem-summary readiness guard and prepared-root refresh:
+  reports `launch_ready=true`.
+- Current postrun/delegated-review boundary: postrun readiness is report-only and
+  requires the matching warehouse/CVRP problem-specific summary before a current
+  run can be called `current_run_analysis_ready=true`. It does not change
+  Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
+  solver behavior.
+- Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`.
-  Current prepared prompt/context readiness report:
-  `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
-  Current strict launch-readiness report:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`.
-  Current prepared-root refresh:
-  `scion/docs/experiments/v0.4/v04-research-shape-prompt-signal-repair-20260618.md`.
-  Current prepared handoff measurement-diagnostics repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-prepared-handoff-measurement-diagnostics-repair-20260618.md`.
-  Current prepared contract measurement-diagnostics repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-prepared-contract-measurement-handoff-repair-20260618.md`.
-  Current CVRP active solver context repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-size70-active-solver-context-repair-20260618.md`.
-  Current prepared research-focus prompt bridge repair:
-  `scion/docs/experiments/v0.4/v04-prepared-research-focus-prompt-bridge-repair-20260618.md`.
-  Current launch readiness prompt/context guard repair:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-prompt-context-guard-repair-20260618.md`.
-  Current CVRP bounded large-twoopt handoff repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`.
-  Current CVRP large-twoopt postrun summary guard:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`.
-  Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-deb1158-1r-gpt55-20260619T024308Z-claw`.
-- Warehouse continuous-improvement follow-up is now launch-prepared but not
-  launched. `launch_warehouse_agentic_campaign.py` writes copied production
-  configs with repo/data-root path rewrites, secret-safe env handling, and the
-  same real completion preflight requirement before campaign startup. It can
-  copy the accepted warehouse `v2` campaign as the new run root so the next
-  check continues from the promoted champion rather than restarting baseline,
-  writes a secret-free prepared-run manifest and delegated handoff
-  brief/inventory at prepare time, and writes the standard postrun acceptance
-  report bundle by default after Scion exits, including delegated analysis
-  brief and artifact/count inventory with report-only Phase 4 evidence coverage
-  flags, prepared contract checks, problem-specific warehouse follow-up handoff
-  coverage, launch-readiness handoff snapshots, prepared-only lifecycle guards,
-  and preflight-failed launch-root guards. Warehouse prepared contracts now
-  require the champion-v2 plateau-vs-continuous-improvement framing, promotion
-  preservation, branch transfer, quality-blocked-vs-protocol-evaluated
-  distinction, cost-vs-split telemetry, and fast-completion runtime explanation
-  needed for the next postrun review. Warehouse postrun analysis briefs now
-  also include `warehouse_followup_summary`, so delegated review can separate
-  prepared-only launch roots, quality-blocked proposal behavior,
-  protocol-evaluated evidence with missing review inputs, and
-  plateau-review-ready evidence before making any stagnation conclusion.
-  Report:
-  `scion/docs/experiments/v0.4/v04-warehouse-followup-handoff-coverage-repair-20260618.md`.
-  Current warehouse follow-up analysis-brief repair:
-  `scion/docs/experiments/v0.4/v04-warehouse-followup-analysis-brief-repair-20260618.md`.
-  Current warehouse plateau-review regression coverage:
-  `scion/docs/experiments/v0.4/v04-warehouse-followup-plateau-review-coverage-20260618.md`.
-  Current warehouse plateau-review input guard:
-  `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`.
-  Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-deb1158-6r-gpt55-20260619T024307Z-claw`.
+- Current operational truth lives in `scion/docs/status/current-state.md`.
+  Historical repair details live in `scion/docs/status/v0.4-history.md` and
+  `scion/docs/experiments/v0.4/`; do not read historical experiment reports by
+  default unless the current task explicitly needs one.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from
