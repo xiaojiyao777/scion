@@ -156,6 +156,11 @@ Framework:
   API-key-env-missing pre-campaign failures, and launch readiness exposes this as
   `run_script_api_key_env_failure_reports=ok`; missing env-var configuration
   should leave delegated-analysis artifacts instead of only `exit.txt`.
+- Launch readiness also verifies that prepared `launch.env` enables
+  `COMPLETION_PREFLIGHT=1` and that generated `run.sh` sources `launch.env`,
+  calls `tools/check_gpt55_proxy.py`, and completes that completion preflight
+  path before the real campaign command. Logged `COMMAND:` lines are ignored for
+  this ordering check.
 - Launch readiness also requires runtime guard coverage for `scion/tools`, the
   postrun/report package subtrees `scion/scion/cli`, `scion/scion/core`, and
   `scion/scion/lineage`, and the matching problem runtime paths
@@ -174,8 +179,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `aa54418`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postsummary-aa54418-6r-gpt55-20260619T090659Z-claw`.
+- Current prepared root, prepared from WSL checkout `5ba9d56`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-preflightpos-5ba9d56-6r-gpt55-20260619T091903Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -201,8 +206,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `aa54418`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postsummary-aa54418-1r-gpt55-20260619T090714Z-claw`.
+- Current prepared root, prepared from WSL checkout `5ba9d56`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-preflightpos-5ba9d56-1r-gpt55-20260619T091903Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -235,6 +240,7 @@ Infrastructure:
   `run_script_postrun_reports_after_campaign=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`,
+  `run_script_completion_preflight_enforced=ok`,
   `runtime_guard_paths_cover_launch_tools=ok` with required coverage for
   `scion/tools`, `scion/scion/cli`, `scion/scion/core`, and
   `scion/scion/lineage`, `runtime_guard_paths_cover_problem_runtime=ok` with
@@ -250,10 +256,12 @@ Infrastructure:
   generation after campaign exit and before `exit "$STATUS"`, preserve
   warehouse data-root-missing and API-key-env-missing failures as
   postrun-reportable infra-only roots,
+  source `launch.env`, require `COMPLETION_PREFLIGHT=1`, and call
+  `tools/check_gpt55_proxy.py` before the real campaign command,
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `aa54418`. Older prepared roots before the postsummary
+  whose git commit is `5ba9d56`. Older prepared roots before the preflightpos
   roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
@@ -296,13 +304,15 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
+  `scion/docs/experiments/v0.4/v04-launch-readiness-run-script-completion-preflight-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`,
   and
   `scion/docs/experiments/v0.4/v04-api-key-env-preflight-postrun-report-20260619.md`.
   They supersede older prepared-root pointers after launch readiness began
-  checking strict postrun readiness markers, campaign-exit postrun calls, and
-  warehouse data-root/API-key-env failure report paths in generated `run.sh`.
+  checking generated `run.sh` for completion preflight enforcement, strict
+  postrun readiness markers, campaign-exit postrun calls, and warehouse
+  data-root/API-key-env failure report paths.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
