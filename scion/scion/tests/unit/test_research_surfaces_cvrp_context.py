@@ -278,4 +278,8 @@ def test_cvrp_solver_design_code_prompt_gets_provider_from_context_manager() -> 
     assert "CvrpSolverDesignProvider" in ctx["solver_design_prompt_provider_ref"]
     assert "_ALNSVNSSolver" in rendered
     assert "`_Solution` and `_Route` are slotted state objects" in rendered
+    assert "Active Subject Code Constraints" in rendered
+    assert "large_instance_two_opt_runtime_guard" in rendered
+    assert "large_instance_intra_route_two_opt_seed" in rendered
+    assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered
     assert "Do not edit `policies/baseline_modules/state.py`" in rendered

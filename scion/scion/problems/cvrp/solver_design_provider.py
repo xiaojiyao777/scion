@@ -557,6 +557,39 @@ class CvrpSolverDesignProvider:
             "surface": "solver_design",
             "subject_id": "cvrp.solver_design.active_baseline",
             "version": "cvrp_solver_design_code_constraints.v1",
+            "constraints": (
+                {
+                    "id": "large_instance_two_opt_runtime_guard",
+                    "summary": (
+                        "Large-instance intra-route two-opt is in scope only as "
+                        "deadline-aware bounded solver work."
+                    ),
+                    "constraint": (
+                        "If a hypothesis pursues the current "
+                        "large_instance_intra_route_two_opt_seed, derive an "
+                        "explicit deadline or remaining-time guard from the "
+                        "solver time limit, poll wall-clock/remaining budget "
+                        "before route, sweep, and improvement work, and stop "
+                        "before the deadline instead of running an unbounded "
+                        "polish."
+                    ),
+                },
+                {
+                    "id": "large_instance_two_opt_evidence_contract",
+                    "summary": (
+                        "Two-opt follow-up code must preserve feasibility and "
+                        "make pair-level runtime/effect evidence auditable."
+                    ),
+                    "constraint": (
+                        "Preserve feasibility and route count when applying "
+                        "two-opt changes. Emit stable activation, budget, and "
+                        "direct effect telemetry under the declared mechanism "
+                        "id so postrun review can inspect pair-level "
+                        "total_distance, feasibility, route-count, and "
+                        "wall-clock evidence."
+                    ),
+                },
+            ),
             "object_model_hints": (
                 {
                     "id": "objective_value_mapping",
@@ -634,6 +667,7 @@ class CvrpSolverDesignProvider:
                 "invented `_Solution.from_routes`/`from_public`/`to_public` bridge methods",
                 "raw cumulative `context.elapsed_ms()` passed as a phase duration",
                 "new candidate calls to `context.record_best_update` or other non-stable telemetry helpers",
+                "UNBOUNDED_TWO_OPT_DEFAULT_REJECT: do not call unbounded `_two_opt_intra` or full VNS as a default large-case fallback",
             ),
         }
 

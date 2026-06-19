@@ -161,6 +161,12 @@ def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
     assert "context.record_best_update" in rendered_payload
     assert "_Solution" in rendered_payload
     assert "__slots__" in rendered_payload
+    assert "large_instance_two_opt_runtime_guard" in rendered_payload
+    assert "large_instance_intra_route_two_opt_seed" in rendered_payload
+    assert "deadline-aware bounded solver work" in rendered_payload
+    assert "wall-clock/remaining budget before route, sweep" in rendered_payload
+    assert "pair-level total_distance" in rendered_payload
+    assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered_payload
     system_blocks, user_prompt = _split_code_context(
         {
             "problem_summary": "CVRP",
@@ -176,6 +182,8 @@ def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
     )
     assert "Active Subject Code Constraints" in rendered_prompt
     assert "ObjectiveValue" in rendered_prompt
+    assert "large_instance_two_opt_runtime_guard" in rendered_prompt
+    assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered_prompt
 
 
 def test_code_prompt_renders_provider_active_subject_code_constraints() -> None:
