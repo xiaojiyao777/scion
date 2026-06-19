@@ -24,7 +24,7 @@ def _read_solver_design_support_artifacts(
     root = Path(source_root).expanduser().resolve()
     primary = _normalize_rel_path(primary_target) or ""
     per_file_limit = min(primary_code_char_limit, _COMPACT_SURFACE_CODE_CHARS)
-    total_limit = 11000 if detail == "full" else 9000
+    total_limit = 11000
     artifacts: list[dict[str, Any]] = []
     remaining = total_limit
     for rel, path in _solver_design_support_candidate_paths(

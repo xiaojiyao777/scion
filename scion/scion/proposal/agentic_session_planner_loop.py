@@ -898,7 +898,7 @@ class AgenticSessionPlannerLoopMixin:
                     "recommended_args": {
                         "surface": "solver_design",
                         "slice_id": recommended_slice_id,
-                        "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                        "max_chars": _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
                     },
                     "purpose": (
                         "Read a bounded provider-declared algorithm slice after "

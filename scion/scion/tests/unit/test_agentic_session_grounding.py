@@ -121,8 +121,10 @@ def test_code_phase_prioritizes_solver_design_target_read_before_final_preview_s
         selection_source="code_phase_required",
     )
 
-    assert [observation.tool_name for observation in observations] == [
-        "context.read_algorithm_file"
+    assert observations
+    assert observations[0].tool_name == "context.read_algorithm_file"
+    assert "context.read_surface" in [
+        observation.tool_name for observation in observations
     ]
     assert observations[0].is_error is False
     assert observations[0].structured_payload["file_path"] == hypothesis.target_file
@@ -131,10 +133,9 @@ def test_code_phase_prioritizes_solver_design_target_read_before_final_preview_s
         "champion_snapshot",
         "problem_spec_root",
     }
-    assert any(
-        event.metadata.get("tool_name") == "context.read_surface"
+    assert not any(
+        event.metadata.get("tool_name") == "context.read_algorithm_file"
         and event.metadata.get("skip_reason")
-        == "code_self_check_tool_slot_reserved"
         for event in state.transcript
     )
 

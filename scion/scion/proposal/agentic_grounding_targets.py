@@ -13,6 +13,9 @@ from scion.proposal.agentic_session_tools import (
     _has_successful_tool,
     _is_solver_design_algorithm_target,
 )
+from scion.proposal.agentic_session_tools_config import (
+    _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+)
 from scion.proposal.tools import ProposalObservation, ProposalToolContext
 
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
@@ -21,7 +24,7 @@ _SOLVER_DESIGN_GROUNDING_TOOLS = (
     "context.read_solver_call_graph",
 )
 _SOLVER_DESIGN_FILE_DISCOVERY_TOOLS = ("context.list_algorithm_files",)
-_APS_TARGET_ALGORITHM_FILE_READ_CHARS = 24000
+_APS_TARGET_ALGORITHM_FILE_READ_CHARS = _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS
 _APS_EXISTING_TARGET_PREGROUNDING_READ_LIMIT = 3
 
 

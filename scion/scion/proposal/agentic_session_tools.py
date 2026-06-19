@@ -35,8 +35,10 @@ from scion.proposal.agentic_session_tools_config import (
     _ACTIVE_SOLVER_FILE_READ_TOOLS,
     _ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS,
     _ACTIVE_SOLVER_TOOL_ALLOWLIST,
+    _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
     _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
     _APS_CODE_SURFACE_READ_CODE_CHARS,
+    _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS,
     _APS_SURFACE_READ_CODE_CHARS,
     _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT,
     _CODE_PHASE_TOOL_ALLOWLIST,
@@ -125,11 +127,13 @@ def _budgeted_tool_args(
     if selection_source.startswith("code_phase"):
         target_file = str(budgeted.get("target_file") or "").strip()
         surface = str(budgeted.get("surface") or "").strip()
-        if _is_solver_design_algorithm_target(
+        solver_design_target = _is_solver_design_algorithm_target(
             target_file,
             context=context,
             surface=surface,
-        ):
+        )
+        solver_design_surface = surface in {"solver_design", "solver_algorithm"}
+        if solver_design_target:
             budgeted["section"] = "target_preview"
         if _is_solver_design_support_module_target(
             target_file,
@@ -148,17 +152,22 @@ def _budgeted_tool_args(
             return budgeted
         if budgeted.get("detail") != "full":
             budgeted["detail"] = "full"
+        code_limit = (
+            _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS
+            if solver_design_target or solver_design_surface
+            else _APS_CODE_SURFACE_READ_CODE_CHARS
+        )
         max_code_chars = budgeted.get("max_code_chars")
         if max_code_chars is None:
-            budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+            budgeted["max_code_chars"] = code_limit
             return budgeted
         try:
             requested = int(max_code_chars)
         except Exception:
-            budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+            budgeted["max_code_chars"] = code_limit
             return budgeted
-        if requested > _APS_CODE_SURFACE_READ_CODE_CHARS or requested < 0:
-            budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+        if requested > code_limit or requested < 0:
+            budgeted["max_code_chars"] = code_limit
         return budgeted
     if budgeted.get("detail") != "compact":
         budgeted["detail"] = "compact"

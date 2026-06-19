@@ -320,6 +320,7 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     assert "class _Solution" in state_artifact["python_api_summary"]
     assert any(
         "class _ALNSVNSSolver" in artifact.get("content_preview", "")
+        or "class _ALNSVNSSolver" in artifact.get("python_api_summary", "")
         for artifact in payload["support_artifacts"]
     )
     assert "content_preview" not in payload["surface_contract"]["target_preview"]

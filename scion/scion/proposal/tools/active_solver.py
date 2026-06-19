@@ -24,6 +24,7 @@ from scion.proposal.tools.models import (
 )
 
 _REJECTED_FILE_PATH = "<path_rejected>"
+_SOLVER_SOURCE_READ_HEADROOM_CHARS = 96000
 _ALGORITHM_FILE_LIST_TOOL = "context.list_algorithm_files"
 _ALGORITHM_FILE_READ_TOOLS = frozenset(
     {"context.read_algorithm_file", "context.read_algorithm_symbol"}
@@ -85,7 +86,11 @@ class ReadAlgorithmFileInput(_StrictInput):
             "as solver_design."
         )
     )
-    max_chars: int = Field(default=12000, ge=0, le=24000)
+    max_chars: int = Field(
+        default=_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+        ge=0,
+        le=_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+    )
 
 
 class ReadAlgorithmSymbolInput(_StrictInput):
@@ -115,7 +120,11 @@ class ReadAlgorithmSymbolInput(_StrictInput):
             "Top-level symbol or Class.method name from an allowed algorithm file."
         )
     )
-    max_chars: int = Field(default=12000, ge=0, le=24000)
+    max_chars: int = Field(
+        default=_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+        ge=0,
+        le=_SOLVER_SOURCE_READ_HEADROOM_CHARS,
+    )
 
 
 class ContextReadActiveSolverDesignTool(_BaseReadOnlyTool):

@@ -20,6 +20,7 @@ from scion.proposal.agentic_session_tools_config import (
     _ACTIVE_SOLVER_FILE_READ_TOOLS,
     _ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS,
     _APS_CODE_SURFACE_READ_CODE_CHARS,
+    _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS,
     _SINGLE_SUCCESS_OBSERVATION_TOOLS,
 )
 from scion.proposal.agentic_utils import (
@@ -415,7 +416,11 @@ def _has_code_phase_surface_read(
             max_chars = int(artifact.get("max_chars") or 0)
         except (TypeError, ValueError):
             max_chars = 0
-        required_chars = _APS_CODE_SURFACE_READ_CODE_CHARS
+        required_chars = (
+            _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS
+            if expected_surface in {"solver_design", "solver_algorithm"}
+            else _APS_CODE_SURFACE_READ_CODE_CHARS
+        )
         if max_chars >= required_chars or not artifact.get("truncated"):
             return True
     return False

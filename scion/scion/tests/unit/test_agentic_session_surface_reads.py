@@ -93,7 +93,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         observation["tool_name"] == "context.read_algorithm_file"
         and observation["structured_payload"]["file_path"]
         == "policies/baseline_algorithm.py"
-        and observation["structured_payload"]["max_chars"] == 24000
+        and observation["structured_payload"]["max_chars"] == 96000
         and "def solve" in observation["structured_payload"]["content_preview"]
         for observation in code_observations
     )

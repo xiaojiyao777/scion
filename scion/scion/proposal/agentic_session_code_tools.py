@@ -579,10 +579,23 @@ class AgenticSessionCodeToolsMixin:
             ):
                 calls.append(("context.read_algorithm_file", target_read_args))
             if not _has_code_phase_surface_read(prior_observations, hypothesis):
+                solver_design_target = _is_solver_design_algorithm_target(
+                    hypothesis.target_file,
+                    context=context,
+                    surface=hypothesis.change_locus,
+                )
+                solver_design_surface = str(hypothesis.change_locus or "").strip() in {
+                    "solver_design",
+                    "solver_algorithm",
+                }
                 args: dict[str, Any] = {
                     "surface": hypothesis.change_locus,
                     "detail": "full",
-                    "max_code_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
+                    "max_code_chars": (
+                        _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS
+                        if solver_design_target or solver_design_surface
+                        else _APS_CODE_SURFACE_READ_CODE_CHARS
+                    ),
                 }
                 if hypothesis.target_file:
                     args["target_file"] = hypothesis.target_file

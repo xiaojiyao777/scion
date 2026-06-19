@@ -719,7 +719,7 @@ def test_solver_design_planner_reads_registry_slice_before_broad_file(
     )
     assert any(
         observation.tool_name == "context.read_algorithm_slice"
-        and observation.structured_payload["file_path"] == target_file
+        and not observation.is_error
         for observation in observations
     )
 

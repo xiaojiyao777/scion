@@ -157,6 +157,9 @@ class _StrictInput(BaseModel):
 class EmptyInput(_StrictInput):
     pass
 
+_READ_SURFACE_CODE_HEADROOM_CHARS = 96000
+
+
 class ReadSurfaceInput(_StrictInput):
     surface: str = Field(
         description=(
@@ -176,7 +179,11 @@ class ReadSurfaceInput(_StrictInput):
         "target_preview",
     ] = "all"
     include_code: bool = True
-    max_code_chars: int | None = Field(default=None, ge=0, le=24000)
+    max_code_chars: int | None = Field(
+        default=None,
+        ge=0,
+        le=_READ_SURFACE_CODE_HEADROOM_CHARS,
+    )
 
 class MemoryQueryInput(_StrictInput):
     query: str | None = None

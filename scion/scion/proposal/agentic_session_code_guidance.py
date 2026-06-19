@@ -58,18 +58,27 @@ class AgenticSessionCodeGuidanceMixin:
             feedback_args = _feedback_query_args(context)
             if hypothesis.change_locus and "surface" not in feedback_args:
                 feedback_args["surface"] = hypothesis.change_locus
-            read_surface_args: dict[str, Any] = {
-                "surface": hypothesis.change_locus,
-                "detail": "full",
-                "max_code_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
-            }
-            if hypothesis.target_file:
-                read_surface_args["target_file"] = hypothesis.target_file
-            if _is_solver_design_algorithm_target(
+            solver_design_target = _is_solver_design_algorithm_target(
                 hypothesis.target_file,
                 context=context,
                 surface=hypothesis.change_locus,
-            ):
+            )
+            solver_design_surface = str(hypothesis.change_locus or "").strip() in {
+                "solver_design",
+                "solver_algorithm",
+            }
+            read_surface_args: dict[str, Any] = {
+                "surface": hypothesis.change_locus,
+                "detail": "full",
+                "max_code_chars": (
+                    _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS
+                    if solver_design_target or solver_design_surface
+                    else _APS_CODE_SURFACE_READ_CODE_CHARS
+                ),
+            }
+            if hypothesis.target_file:
+                read_surface_args["target_file"] = hypothesis.target_file
+            if solver_design_target:
                 read_surface_args["section"] = "target_preview"
             if _is_solver_design_support_module_target(
                 hypothesis.target_file,
@@ -179,7 +188,7 @@ class AgenticSessionCodeGuidanceMixin:
                     "recommended_args": {
                         "surface": hypothesis.change_locus,
                         "slice_id": recommended_slice_id,
-                        "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                        "max_chars": _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
                     },
                     "purpose": (
                         "Read one bounded algorithm slice after the active solver "

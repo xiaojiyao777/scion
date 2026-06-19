@@ -150,8 +150,10 @@ from scion.proposal.agentic_session_feedback import (
     _observation_satisfies_compact_requirement,
 )
 from scion.proposal.agentic_session_tools import (
+    _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
     _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
     _APS_CODE_SURFACE_READ_CODE_CHARS,
+    _APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS,
     _APS_SURFACE_READ_CODE_CHARS,
     _active_solver_map_context,
     _active_solver_map_followup_calls,
@@ -172,6 +174,9 @@ from scion.proposal.agentic_session_tools import (
     _recommended_algorithm_file_path,
     _solver_design_code_algorithm_file_read_budget_exhausted,
     _surface_names_from_observations,
+)
+from scion.proposal.agentic_session_tools_config import (
+    _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS,
 )
 from scion.proposal.agentic_tool_selection_ledger import (
     record_tool_selection_ledger_entry as _record_tool_selection_ledger_entry,
@@ -228,7 +233,7 @@ _MAX_HYPOTHESIS_SEMANTIC_RETRIES = 1
 _MAX_HYPOTHESIS_PREVIEW_RETRIES = 1
 _MAX_HYPOTHESIS_GROUNDING_RETRIES = 1
 _MAX_HYPOTHESIS_GROUNDING_TARGET_KEYS = 2
-_APS_TARGET_ALGORITHM_FILE_READ_CHARS = 24000
+_APS_TARGET_ALGORITHM_FILE_READ_CHARS = _ACTIVE_SOLVER_SOURCE_READ_HEADROOM_CHARS
 _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS = 24000
 _MECHANISM_NOVELTY_GATE = MechanismNoveltyGate()
 
@@ -276,8 +281,10 @@ __all__ = (
     "ProposalValidationError",
     "Protocol",
     "_ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC",
+    "_APS_CODE_ALGORITHM_SLICE_READ_CHARS",
     "_APS_CODE_MODULE_SURFACE_READ_CODE_CHARS",
     "_APS_CODE_SURFACE_READ_CODE_CHARS",
+    "_APS_SOLVER_DESIGN_CODE_SURFACE_READ_CODE_CHARS",
     "_APS_SURFACE_READ_CODE_CHARS",
     "_APS_TARGET_ALGORITHM_FILE_READ_CHARS",
     "_CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC",

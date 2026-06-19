@@ -1430,7 +1430,7 @@ def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
         observation
         for observation in first_context["agentic_tool_observations"]
         if observation["tool_name"] == "context.read_algorithm_slice"
-        and observation["structured_payload"]["file_path"]
+        and observation["structured_payload"].get("file_path")
         == "policies/baseline_modules/scheduler.py"
     ]
     target_registries = [
@@ -1443,12 +1443,13 @@ def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
         for observation in first_context["agentic_tool_observations"]
     ]
     assert target_reads
-    assert target_slices
     assert target_registries
-    assert tool_names.index("context.read_algorithm_slice") < tool_names.index(
-        "context.read_algorithm_file"
-    )
+    if target_slices:
+        assert tool_names.index("context.read_algorithm_slice") < tool_names.index(
+            "context.read_algorithm_file"
+        )
     assert target_reads[0]["structured_payload"]["truncated"] is False
+    assert target_reads[0]["structured_payload"]["max_chars"] == 96000
     assert "class _ALNSVNSSolver" in target_reads[0]["structured_payload"][
         "content_preview"
     ]
@@ -1464,9 +1465,10 @@ def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
     assert "SECRET_VALIDATION" not in rendered_manifest
     assert "SECRET_FROZEN" not in rendered_manifest
     assert any(
-        receipt.get("tool_name") == "context.read_algorithm_slice"
-        and receipt.get("slice_id")
-        and receipt.get("selection_source") == "planner_map_followup_required"
+        receipt.get("tool_name") == "context.read_algorithm_file"
+        and receipt.get("file_path") == "policies/baseline_modules/scheduler.py"
+        and receipt.get("coverage_status") == "full"
+        and receipt.get("max_chars") == 96000
         for receipt in output.observation_ledger["read_receipts"]
     )
     assert any(

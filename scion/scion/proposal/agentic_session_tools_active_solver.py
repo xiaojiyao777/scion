@@ -12,7 +12,7 @@ from typing import Any, Mapping
 from scion.core.models import HypothesisProposal
 from scion.proposal.agentic_session_tools_config import (
     _ACTIVE_SOLVER_FILE_READ_TOOLS,
-    _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+    _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
     _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT,
 )
 from scion.proposal.agentic_session_tools_observations import (
@@ -185,7 +185,7 @@ def _active_solver_map_followup_calls(
         {
             "surface": effective_surface,
             "slice_id": slice_id,
-            "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+            "max_chars": _APS_CODE_ALGORITHM_SLICE_READ_CHARS,
         }
     )
     if (
