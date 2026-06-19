@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `04a9f63a` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, and rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `79090dc6` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof, and now rejects missing, empty, or stale active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -245,7 +245,8 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid. CVRP and warehouse
   code-generation prompts now receive provider-owned active subject code
   constraints, and launch readiness checks the family-specific code-constraint
-  prompt bridge before static readiness can pass. Current-run postrun analysis
+  prompt bridge plus the current provider payload summary before static
+  readiness can pass. Current-run postrun analysis
   can audit whether actual code prompt traces carried that constraints section,
   using section status, digest, and count fingerprints rather than raw prompt
   text; CVRP and warehouse delegated-analysis readiness now require that trace
@@ -380,9 +381,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-abspath-04a9f63a-6r-gpt55-20260619T190850Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codepayload-79090dc6-6r-gpt55-20260619T194212Z-claw-6r-gpt55-20260619T194227Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-abspath-04a9f63a-1r-gpt55-20260619T190850Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codepayload-79090dc6-1r-gpt55-20260619T194212Z-claw-1r-gpt55-20260619T194241Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -413,13 +414,17 @@ Current checkpoint:
   `scion/tools`, `scion/scion/cli`, `scion/scion/core`, `scion/scion/lineage`,
   and the matching CVRP/warehouse problem package/assets/data paths. The
   warehouse root reports
-  `warehouse_active_subject_code_constraint_source_markers` all true, and the
-  CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true, and `cvrp_cmt_case_protection_present=true` with protected cases
+  `warehouse_active_subject_code_constraint_source_markers` all true plus
+  provider payload version
+  `warehouse_operator_validation_transfer_code_constraints.v1` with total
+  guidance items `10`; the CVRP root reports
+  `cvrp_active_subject_code_constraint_source_markers` all true plus provider
+  payload version `cvrp_solver_design_code_constraints.v1` with total guidance
+  items `13`, and `cvrp_cmt_case_protection_present=true` with protected cases
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `04a9f63a` with explicit
+  were prepared from WSL runtime commit `79090dc6` with explicit
   proposal-attempt/proposal-quality-loop headroom (`64`/`64`). Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout

@@ -82,6 +82,10 @@ Framework:
 - Prepared-root launch readiness rejects relative `SCION_DIR` values in
   `launch.env`; `PYTHONPATH` must include the absolute active checkout before a
   root can be static-ready.
+- Prepared prompt-context readiness records a report-only active-subject
+  code-constraint provider payload summary. Launch readiness recomputes the
+  current problem-owned provider payload and rejects missing, empty,
+  unavailable, or stale summaries before static readiness can pass.
 
 Warehouse:
 
@@ -89,8 +93,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `04a9f63a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-abspath-04a9f63a-6r-gpt55-20260619T190850Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `79090dc6`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codepayload-79090dc6-6r-gpt55-20260619T194212Z-claw-6r-gpt55-20260619T194227Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -102,6 +106,9 @@ Warehouse:
   measurement handoff and active-subject source-constraint prompt bridge.
   Because this root is prepare-only, warehouse specialist review axes remain
   deferred until post-launch current-run evidence exists.
+  The active-subject provider payload summary is
+  `warehouse_operator_validation_transfer_code_constraints.v1`, with
+  constraints `5`, forbidden patterns `5`, and total guidance items `10`.
 - Postrun warehouse plateau review readiness now requires substantive
   realized research-continuity evidence, such as branch depth, selected
   same-mechanism follow-up, satisfied branch-lesson transfer, or accepted
@@ -131,8 +138,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `04a9f63a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-abspath-04a9f63a-1r-gpt55-20260619T190850Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `79090dc6`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codepayload-79090dc6-1r-gpt55-20260619T194212Z-claw-1r-gpt55-20260619T194241Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -144,6 +151,10 @@ CVRP/VRP:
   same constraints through CVRP active-subject source constraints. Because this
   root is prepare-only, CVRP specialist review axes remain deferred until
   post-launch current-run evidence exists.
+  The active-subject provider payload summary is
+  `cvrp_solver_design_code_constraints.v1`, with constraints `2`,
+  object-model hints `3`, API contracts `2`, forbidden patterns `6`, and total
+  guidance items `13`.
 - Postrun bounded two-opt review readiness now requires both a qualifying
   large/two-opt protocol-effect row signal in measurement evidence and direct
   activation/effect/phase telemetry co-located on the same matching top effect
@@ -162,13 +173,14 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `04a9f63a`
+- The active prepared roots were generated from WSL runtime commit `79090dc6`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
   proposal-headroom/readiness-contract repair plus CVRP/warehouse problem-owned
-  measurement-handoff source repair and absolute launch-path readiness repair.
+  measurement-handoff source repair, absolute launch-path readiness repair, and
+  active-subject code-constraint provider-payload readiness repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
   expose proposal-attempt and proposal-quality-loop limits as `64`/`64`, and
@@ -177,7 +189,7 @@ Infrastructure:
   `run_script_pythonpath_enforced=ok` with absolute WSL `SCION_DIR` and
   `PYTHONPATH`; both roots also report
   `problem_specific_prepared_handoff=ok` with problem-owned measurement source
-  proof.
+  proof and verified active-subject code-constraint provider payload summaries.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
   inconsistent, or unexpected generated files, no manifest identity/boundary
@@ -249,6 +261,8 @@ Infrastructure:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
+  `scion/docs/experiments/v0.4/v04-active-subject-code-constraint-provider-payload-readiness-20260619.md`.
+- Previous absolute-path launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-launch-absolute-scion-path-readiness-20260619.md`.
 - Current CVRP measurement-handoff evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-handoff-contract-20260619.md`.
