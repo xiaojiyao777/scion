@@ -461,7 +461,7 @@ Current checkpoint:
   `problem_specific_prepared_handoff=ok`, while
   `--require-launch-ready` still exits `64` because real `gpt-5.5`
   completion preflight returns HTTP `401` / `not_authenticated` with
-  `code=invalid_api_key`, auth pool `active=0`, `refreshing=1`, and `total=1`.
+  `code=invalid_api_key` and auth pool `active=0`, `total=1`.
   The non-active account may appear as expired or refreshing.
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
