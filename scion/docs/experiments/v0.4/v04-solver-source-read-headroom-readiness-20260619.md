@@ -95,6 +95,13 @@ The CVRP 1R root above was a source-headroom diagnostic root. It has been
 superseded for Phase 4 launch by the 4R root documented in
 `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`.
 
+The warehouse root above was the initial source-headroom prepared root. It has
+been superseded for launch by the measurement-note regenerated root documented
+in
+`scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`
+because `scion/problems/warehouse_delivery/protocol_prod.yaml` is covered by the
+runtime guard.
+
 Both roots report:
 
 - `static_ready=true`
@@ -111,7 +118,8 @@ completion preflight returns HTTP `401`, `classification=not_authenticated`,
 
 ## Acceptance
 
-Accepted as the current prepare-only source-read repair and current
-prepared-root pointer. It does not close v0.4; closure still requires live
-warehouse follow-up to show useful post-v2 research behavior and live CVRP
-follow-up to produce evidence-backed solver-design progress.
+Accepted as the prepare-only source-read repair evidence. Its initial prepared
+roots have both been superseded for launch by later current roots. It does not
+close v0.4; closure still requires live warehouse follow-up to show useful
+post-v2 research behavior and live CVRP follow-up to produce evidence-backed
+solver-design progress.

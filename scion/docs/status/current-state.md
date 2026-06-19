@@ -36,11 +36,12 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 ## Prepared Roots
 
 The active prepared roots were generated on WSL after the solver-source read
-headroom repair. Static readiness passes; launch readiness fails only at
-completion preflight auth.
+headroom repair. The warehouse root was regenerated after a runtime-guarded
+protocol measurement-note cleanup. Static readiness passes; launch readiness
+fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sourceheadroom-cf8fb5a7-preflight-6r-gpt55-20260619T210116Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measnote-19af96c2-preflight-6r-gpt55-20260619T212315Z-claw`
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-a46830e0-preflight-4r-gpt55-20260619T211538Z-claw`
 
@@ -50,6 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
+- Runtime commits: warehouse `19af96c2`; CVRP `a46830e0`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -141,6 +143,7 @@ Prepared manifests record:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
+  `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and
   `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.
