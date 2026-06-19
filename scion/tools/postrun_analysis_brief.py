@@ -21,7 +21,7 @@ SCHEMA_VERSION = "scion.postrun_analysis_brief.v1"
 ARCHITECTURE_DOC = "scion/design/scion-architecture-v3.md"
 CURRENT_STATE_DOC = "scion/docs/status/current-state.md"
 
-REQUIRED_QUESTIONS = (
+COMMON_REQUIRED_QUESTIONS = (
     "Did the run complete enough formal candidates to be valid for its requested effective budget?",
     "Did the agent perform effective research, or only satisfy framework controls?",
     "Were branch hypotheses and code changes internally coherent?",
@@ -38,15 +38,21 @@ REQUIRED_QUESTIONS = (
     "and budget diagnostics consistent with the declared runtime model?",
     "Did failure_taxonomy_summary distinguish provider/infra, framework/control, "
     "proposal/codegen/tool, and algorithm-quality failures?",
-    "For warehouse follow-up, did warehouse_followup_summary distinguish "
-    "prepared-only, incomplete-handoff, quality-blocked, protocol-evaluated, "
-    "and plateau-review-ready evidence?",
-    "For CVRP large-twoopt follow-up, did cvrp_large_twoopt_summary distinguish "
-    "prepared-only, incomplete handoff, missing review inputs, missing two-opt "
-    "mechanism signal, and review-ready evidence?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
+)
+
+WAREHOUSE_FOLLOWUP_REQUIRED_QUESTION = (
+    "For warehouse follow-up, did warehouse_followup_summary distinguish "
+    "prepared-only, incomplete-handoff, quality-blocked, protocol-evaluated, "
+    "and plateau-review-ready evidence?"
+)
+
+CVRP_LARGE_TWOOPT_REQUIRED_QUESTION = (
+    "For CVRP large-twoopt follow-up, did cvrp_large_twoopt_summary distinguish "
+    "prepared-only, incomplete handoff, missing review inputs, missing two-opt "
+    "mechanism signal, and review-ready evidence?"
 )
 
 WAREHOUSE_FOLLOWUP_REQUIREMENT_KEYS = (
@@ -173,8 +179,24 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "warehouse_followup_summary": warehouse_followup_summary,
         "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
         "stop_conditions": _stop_conditions(inventory),
-        "required_questions": list(REQUIRED_QUESTIONS),
+        "required_questions": _required_questions(
+            warehouse_followup_summary=warehouse_followup_summary,
+            cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
+        ),
     }
+
+
+def _required_questions(
+    *,
+    warehouse_followup_summary: Mapping[str, Any],
+    cvrp_large_twoopt_summary: Mapping[str, Any],
+) -> list[str]:
+    questions = list(COMMON_REQUIRED_QUESTIONS)
+    if warehouse_followup_summary.get("available") is True:
+        questions.append(WAREHOUSE_FOLLOWUP_REQUIRED_QUESTION)
+    if cvrp_large_twoopt_summary.get("available") is True:
+        questions.append(CVRP_LARGE_TWOOPT_REQUIRED_QUESTION)
+    return questions
 
 
 def render_markdown(brief: dict[str, Any]) -> str:

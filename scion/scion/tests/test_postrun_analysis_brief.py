@@ -1212,6 +1212,10 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
         and "incomplete-handoff" in question
         for question in brief["required_questions"]
     )
+    assert not any(
+        "cvrp_large_twoopt_summary" in question
+        for question in brief["required_questions"]
+    )
 
 
 def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
@@ -1257,6 +1261,10 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert any(
         "cvrp_large_twoopt_summary" in question
         and "incomplete handoff" in question
+        for question in brief["required_questions"]
+    )
+    assert not any(
+        "warehouse_followup_summary" in question
         for question in brief["required_questions"]
     )
 
