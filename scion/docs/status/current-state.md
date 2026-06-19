@@ -29,32 +29,16 @@ Framework:
 - All current repair signals remain report-only, control-plane, or
   problem-owned proposal diagnostics. They must not enter Decision,
   `DecisionFeatures`, promotion, scheduler state, or solver semantics.
-- Prepared roots are static-ready only when launch readiness proves the current
-  prepared contract, prepared analysis brief, matching prepared-contract
-  identity between inventory/launcher and analysis brief, prompt-context
-  bridge, problem-specific handoff, postrun families, runtime guard coverage,
-  executable runtime guard markers, `gpt-5.5` model routing, active-checkout
-  `PYTHONPATH`, executable `launch.env` sourcing, exact no-early-stop launch
-  semantics, executable completion preflight, executable preflight-failure
-  status writer, executable pre-campaign failure markers, executable postrun
-  report function, executable strict postrun readiness, and postrun-reportable
-  campaign/pre-campaign exit paths.
-- Current-run delegated review readiness for warehouse/CVRP requires matching
-  problem summaries, rebuild-manifest identity and declared outputs,
-  inventory-authoritative prepared problem family, prompt/source visibility
-  traces, research-context/signal-density/failure-taxonomy/review-input
-  summaries, report-only branch-research-state summaries, report-only
-  champion-progress summaries, and consistency between inventory, review
-  inputs, branch summaries, champion-progress summaries, prepared contracts,
-  and the problem-specific conclusion. Required review inputs are
-  interpretation-specific: protocol-evaluated conclusions require the relevant
-  measurement/runtime/continuity inputs, while taxonomy-backed quality-blocked
-  no-protocol conclusions can be analysis-ready without plateau evidence
-  inputs. Stale or unsupported negative conclusions still fail readiness.
-  Review surfaces must also preserve current schemas,
-  report-only/non-quality-judgment boundary markers where applicable,
-  `DecisionFeatures` exclusion, and raw
-  prompt/response/patch body/log exclusion markers.
+- Launch readiness is the authority for prepared roots. It must prove the
+  current prepared contract/brief identity, prompt-context bridge,
+  problem-specific handoff, runtime guards, model route, active-checkout
+  `PYTHONPATH`, no-early-stop semantics, completion preflight, pre-campaign
+  failure reporting, and strict postrun readiness before a root is launched.
+- Postrun delegated-review readiness is interpretation-specific. Protocol
+  conclusions require current-run measurement/runtime/continuity inputs;
+  taxonomy-backed quality-blocked no-protocol conclusions can be analysis-ready
+  without plateau inputs only when failure taxonomy agrees. Unsupported or stale
+  conclusions still fail readiness.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
@@ -71,13 +55,9 @@ Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefsurface-6893f1d-6r-gpt55-6r-gpt55-20260619T141525Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
-  Static readiness also verifies the
-  `warehouse_active_subject_code_constraints_prompt_bridge` source/provider
-  markers.
-  Because the root is prepare-only, required answers focus on
-  launch/readiness/handoff rather than research-quality or plateau conclusions;
-  the warehouse specialist review axes are marked deferred until post-launch
-  current-run evidence exists.
+  Static readiness verifies the active-subject source-constraint prompt bridge.
+  Because this root is prepare-only, warehouse specialist review axes remain
+  deferred until post-launch current-run evidence exists.
 - Postrun warehouse plateau review readiness now requires substantive
   realized research-continuity evidence, such as branch depth, selected
   same-mechanism follow-up, satisfied branch-lesson transfer, or accepted
@@ -109,20 +89,13 @@ CVRP/VRP:
   not present in the clean checkout because it is not deadline-aware.
 - Current prepared root, prepared from WSL runtime commit `6893f1d`:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-briefsurface-6893f1d-1r-gpt55-1r-gpt55-20260619T141526Z-claw`.
-- The handoff exposes the large-instance two-opt seed only as proposal guidance
-  and now carries structured `large_instance_two_opt_constraints`: derive an
-  explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
-  preserve feasibility/route-count evidence, and require pair-level objective,
-  feasibility, route-count, and wall-clock evidence. The handoff also carries
-  structured `case_protection_requirements` for CMT2/CMT4 coverage before
-  another construction, route-merge, demand-slack, VNS, or share70-derived
-  branch slot is spent. The code-generation prompt receives the same
-  bounded/deadline/evidence constraints through CVRP active subject code
-  constraints, and static readiness verifies the
-  `cvrp_active_subject_code_constraints_prompt_bridge` source/provider markers.
-  Because the root is prepare-only, required answers focus on
-  launch/readiness/handoff rather than research-quality or bounded two-opt
-  conclusions; the CVRP specialist review axes are marked deferred until
+- The handoff exposes the large-instance two-opt seed only as proposal guidance.
+  It requires bounded/deadline-aware implementation, pair-level
+  objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
+  protection before another construction, route-merge, demand-slack, VNS, or
+  share70-derived branch slot is spent. The code-generation prompt receives the
+  same constraints through CVRP active-subject source constraints. Because this
+  root is prepare-only, CVRP specialist review axes remain deferred until
   post-launch current-run evidence exists.
 - Postrun bounded two-opt review readiness now requires both a qualifying
   large/two-opt protocol-effect row signal in measurement evidence and direct
@@ -140,17 +113,7 @@ Infrastructure:
   after the CVRP CMT case-protection handoff and analysis-brief surface
   repairs.
 - WSL strict launch readiness for both current prepared roots reports
-  `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
-  prepared contract/brief identity, prepared-contract consistency,
-  prompt-context handoff,
-  problem-specific handoff, postrun family coverage, executable runtime guards,
-  active checkout import path, exact no-early-stop semantics, model-route
-  consistency, executable `launch.env` source, executable completion
-  preflight, executable preflight-failure status writer, executable
-  pre-campaign failure markers, executable postrun report function, executable
-  strict postrun readiness, postrun-reportable campaign/pre-campaign exit
-  paths, and the CVRP `cvrp_cmt_case_protection_present` prepared-handoff
-  check.
+  `static_ready=true`, `launch_ready=false`, exit `64`.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
