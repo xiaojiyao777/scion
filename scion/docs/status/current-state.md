@@ -31,6 +31,9 @@ Framework:
   inventory, launch-readiness, and `prompt_context_readiness` families. Static
   readiness now checks artifact identity, launch markers, problem-specific
   handoff coverage, and the prompt bridge before any prepared root is launched.
+  Launch-readiness reports now expose the problem-specific prepared handoff
+  checks directly, instead of hiding them behind only
+  `prepared_contract_complete`.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -41,8 +44,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `529b9ef`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-529b9ef-6r-gpt55-20260619T003636Z-claw`.
+- Current prepared root, prepared from WSL checkout `a57fd07`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-a57fd07-6r-gpt55-20260619T004725Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
 
@@ -57,8 +60,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `529b9ef`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-529b9ef-1r-gpt55-20260619T003637Z-claw`.
+- Current prepared root, prepared from WSL checkout `a57fd07`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-a57fd07-1r-gpt55-20260619T004725Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -73,10 +76,11 @@ Infrastructure:
 - No LLM campaign is currently running.
 - WSL strict launch-readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`,
-  `prompt_context_readiness_complete=ok`, `git_runtime_consistent=ok`, and
+  `prompt_context_readiness_complete=ok`,
+  `problem_specific_prepared_handoff=ok`, `git_runtime_consistent=ok`, and
   completion preflight `failed`. Later docs-only commits may make the checkout
-  differ from a prepared manifest commit; readiness remains acceptable only when
-  runtime guard paths are unchanged.
+  differ from a prepared manifest commit; readiness remains acceptable only
+  when runtime guard paths are unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`. The
@@ -114,9 +118,9 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-cvrp-twoopt-summary-guard-20260619.md`.
-  It supersedes older prepared-root pointers after the CVRP large two-opt
-  postrun summary guard changed a runtime guard path.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-problem-specific-handoff-visibility-20260619.md`.
+  It supersedes older prepared-root pointers after launch-readiness
+  problem-specific handoff visibility changed a runtime guard path.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,

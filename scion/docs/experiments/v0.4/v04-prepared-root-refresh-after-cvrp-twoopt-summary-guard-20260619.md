@@ -81,6 +81,9 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 
 ## Acceptance
 
-Accepted as the current prepared-root refresh. Once `gpt-5.5` auth is restored,
-launch the warehouse v2 follow-up first, then the CVRP bounded large-twoopt
-follow-up.
+Accepted as the prepared-root refresh after the CVRP large two-opt postrun
+summary guard. It was later superseded after launch-readiness problem-specific
+handoff visibility changed a runtime guard path.
+
+Current refresh report:
+`scion/docs/experiments/v0.4/v04-launch-readiness-problem-specific-handoff-visibility-20260619.md`.

@@ -96,9 +96,9 @@ warehouse root to launch for the simpler continuous-improvement proof.
 
 Later current root:
 
-- The `35dd723` and `67f4da9` roots were superseded after later runtime guard
-  path changes.
+- The `35dd723`, `67f4da9`, and `529b9ef` roots were superseded after later
+  runtime guard path changes.
 - Current warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-529b9ef-6r-gpt55-20260619T003636Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-a57fd07-6r-gpt55-20260619T004725Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-cvrp-twoopt-summary-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-problem-specific-handoff-visibility-20260619.md`.

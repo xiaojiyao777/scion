@@ -148,9 +148,9 @@ accepting the unbounded fallback diff.
 
 Later current root:
 
-- The `dc83d83` and `67f4da9` roots were superseded after later runtime guard
-  path changes.
+- The `dc83d83`, `67f4da9`, and `529b9ef` roots were superseded after later
+  runtime guard path changes.
 - Current CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-529b9ef-1r-gpt55-20260619T003637Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-a57fd07-1r-gpt55-20260619T004725Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-cvrp-twoopt-summary-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-problem-specific-handoff-visibility-20260619.md`.
