@@ -280,7 +280,7 @@ PYTHONPATH=scion \
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `865e0fb` because
+New prepare-only roots were generated from WSL runtime commit `15ef16c` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -300,15 +300,17 @@ review cannot omit or hand-write a stale branch/hypothesis/event/trace audit
 surface. It also requires prompt/source visibility, research-context,
 signal-density, and failure-taxonomy review surfaces to preserve current schemas,
 report-only and `DecisionFeatures`-excluded boundary markers, and raw material
-exclusion markers.
+exclusion markers. The postrun bundle also requires the analysis brief
+`prepared_run_contract` to match the inventory/launcher prepared contract, and
+problem-family routing uses the inventory contract as the authority.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundarymarkers-865e0fb-6r-gpt55-20260619T125317Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-contractconsistency-15ef16c-6r-gpt55-20260619T130229Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundarymarkers-865e0fb-1r-gpt55-20260619T125317Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-contractconsistency-15ef16c-1r-gpt55-20260619T130228Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -346,6 +348,7 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `runtime_guard_paths_cover_problem_runtime=ok`
 - `prepared_analysis_brief_current=ok`
+- `analysis_brief_prepared_contract_consistency=ok`
 - `prompt_context_readiness_complete=ok`
 - `problem_specific_prepared_handoff=ok`
 - `postrun_families_complete=ok`
@@ -357,6 +360,7 @@ Strict WSL launch readiness for both roots exits `64` and reports:
   `ignored_non_executable_function_definition_count=0`
 - completion preflight `failed`, HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`
+- latest auth pool `active=0`, `expired=1`, `refreshing=0`, `total=1`
 
 The current blocker remains external GPT-5.5 proxy authentication, not Scion
 static readiness or no-early-stop launch semantics.
@@ -364,7 +368,8 @@ static readiness or no-early-stop launch semantics.
 ## Acceptance
 
 Accepted as the current prepared-root refresh after no-early-stop launch
-readiness enforcement, prepared-contract inventory binding, and exact-token flag
+readiness enforcement, prepared-contract inventory binding, analysis-brief
+prepared-contract consistency, and exact-token flag
 matching. It also requires the GPT-5.5 proxy preflight to be an executable
 command block using token-level model/base-url arguments, and it requires
 preflight-failure reporting to use an executable status writer before the
@@ -382,6 +387,7 @@ signal-density, and failure-taxonomy summaries must also preserve current
 schemas, boundary markers, and raw-material exclusion markers. It supersedes
 earlier prepared roots that lacked any of these guarded
 launch/readiness/postrun guarantees. The boundarymarkers roots
-listed above are the current prepared-root pointers.
+listed in older sections are superseded by the contractconsistency roots above,
+which are the current prepared-root pointers.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.

@@ -30,8 +30,9 @@ Framework:
   problem-owned proposal diagnostics. They must not enter Decision,
   `DecisionFeatures`, promotion, scheduler state, or solver semantics.
 - Prepared roots are static-ready only when launch readiness proves the current
-  prepared contract, prepared analysis brief, prompt-context bridge,
-  problem-specific handoff, postrun families, runtime guard coverage,
+  prepared contract, prepared analysis brief, matching prepared-contract
+  identity between inventory/launcher and analysis brief, prompt-context
+  bridge, problem-specific handoff, postrun families, runtime guard coverage,
   executable runtime guard markers, `gpt-5.5` model routing, active-checkout
   `PYTHONPATH`, executable `launch.env` sourcing, exact no-early-stop launch
   semantics, executable completion preflight, executable preflight-failure
@@ -40,15 +41,16 @@ Framework:
   campaign/pre-campaign exit paths.
 - Current-run delegated review readiness for warehouse/CVRP requires matching
   problem summaries, rebuild-manifest identity and declared outputs,
-  prompt/source visibility traces, research-context/signal-density/failure
-  taxonomy/review-input summaries, report-only branch-research-state summaries,
-  report-only champion-progress summaries, and consistency between inventory,
-  review inputs, branch summaries, champion-progress summaries, and the
-  problem-specific conclusion. Missing review inputs fail readiness; valid
-  negative conclusions can still be analysis-ready. Review surfaces must also
-  preserve current schemas, report-only/non-quality-judgment boundary markers
-  where applicable, `DecisionFeatures` exclusion, and raw prompt/response/patch
-  body/log exclusion markers.
+  inventory-authoritative prepared problem family, prompt/source visibility
+  traces, research-context/signal-density/failure-taxonomy/review-input
+  summaries, report-only branch-research-state summaries, report-only
+  champion-progress summaries, and consistency between inventory, review
+  inputs, branch summaries, champion-progress summaries, prepared contracts,
+  and the problem-specific conclusion. Missing review inputs fail readiness;
+  valid negative conclusions can still be analysis-ready. Review surfaces must
+  also preserve current schemas, report-only/non-quality-judgment boundary
+  markers where applicable, `DecisionFeatures` exclusion, and raw
+  prompt/response/patch body/log exclusion markers.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
@@ -61,8 +63,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `865e0fb`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundarymarkers-865e0fb-6r-gpt55-20260619T125317Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `15ef16c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-contractconsistency-15ef16c-6r-gpt55-20260619T130229Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -95,8 +97,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `865e0fb`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundarymarkers-865e0fb-1r-gpt55-20260619T125317Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `15ef16c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-contractconsistency-15ef16c-1r-gpt55-20260619T130228Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -121,10 +123,11 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `865e0fb`.
+- The active prepared roots were generated from WSL runtime commit `15ef16c`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
-  prepared contract/brief identity, prompt-context handoff,
+  prepared contract/brief identity, prepared-contract consistency,
+  prompt-context handoff,
   problem-specific handoff, postrun family coverage, executable runtime guards,
   active checkout import path, exact no-early-stop semantics, model-route
   consistency, executable `launch.env` source, executable completion
@@ -136,8 +139,8 @@ Infrastructure:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `refreshing=1`,
-  `total=1`, and no launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `expired=1`,
+  `refreshing=0`, `total=1`, and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -177,24 +180,8 @@ Infrastructure:
   Earlier launch/readiness guard details remain in
   `scion/docs/experiments/v0.4/`; this page keeps only the current root
   pointer and launch blocker.
-- Current CVRP postrun evidence-accounting repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-direct-evidence-row-coherence-20260619.md`.
-- Current CVRP postrun acceptance consistency repair:
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-readiness-input-consistency-20260619.md`.
-- Current warehouse postrun evidence-accounting repair:
-  `scion/docs/experiments/v0.4/v04-warehouse-continuity-realized-signal-20260619.md`.
-- Current warehouse postrun acceptance consistency repair:
-  `scion/docs/experiments/v0.4/v04-warehouse-readiness-input-consistency-20260619.md`.
-- Current champion-progress postrun audit repair:
-  `scion/docs/experiments/v0.4/v04-champion-progress-postrun-summary-20260619.md`.
-- Current champion-progress input consistency repair:
-  `scion/docs/experiments/v0.4/v04-champion-progress-input-consistency-20260619.md`.
-- Current branch-research-state postrun readiness repair:
-  `scion/docs/experiments/v0.4/v04-branch-research-state-readiness-20260619.md`.
-- Current branch-research-state input consistency repair:
-  `scion/docs/experiments/v0.4/v04-branch-research-state-input-consistency-20260619.md`.
-- Current postrun review-surface boundary repair:
-  `scion/docs/experiments/v0.4/v04-postrun-review-surface-boundary-markers-20260619.md`.
+- Current postrun prepared-contract consistency repair:
+  `scion/docs/experiments/v0.4/v04-postrun-prepared-contract-consistency-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
