@@ -16,8 +16,8 @@ WSL root:
 
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-a46830e0-preflight-4r-gpt55-20260619T211538Z-claw`
 
-Prepared from WSL checkout `a46830e0`. The current runtime-guard paths are clean
-and unchanged by the docs-only commits after `cf8fb5a7`.
+Prepared from WSL checkout `a46830e0`. At creation time, the runtime-guard paths
+were clean and unchanged by the docs-only commits after `cf8fb5a7`.
 
 Command:
 
@@ -76,7 +76,8 @@ Result:
 
 ## Acceptance
 
-Accepted as the current CVRP prepared root once provider auth is restored. It
-does not close v0.4; it only gives the CVRP follow-up enough runway to inspect
-bounded two-opt target intent, code behavior, branch continuity, effect-vs-MDE,
-runtime behavior, and source visibility.
+Accepted as the CVRP Phase 4 four-round prepared-root evidence. It was later
+superseded for launch by the proxy-format root refresh documented in
+`scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`
+because a runtime-guarded `scion/tools` file changed. Launch still requires
+external `gpt-5.5` auth and strict launch readiness with `launch_ready=true`.

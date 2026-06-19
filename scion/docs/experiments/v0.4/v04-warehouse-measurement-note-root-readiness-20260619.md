@@ -52,7 +52,7 @@ Result: `10 passed in 2.85s`.
 
 ## Prepared Root
 
-Current warehouse prepared root:
+Measurement-note prepared root:
 
 `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measnote-19af96c2-preflight-6r-gpt55-20260619T212315Z-claw`
 
@@ -60,7 +60,7 @@ Local mirror:
 
 `/home/clawd/research/scion-experiments/v04-warehouse-v2-followup-measnote-19af96c2-preflight-6r-gpt55-20260619T212315Z-claw`
 
-Prepared manifest summary:
+Prepared manifest summary at creation time:
 
 - Runtime commit: `19af96c2`.
 - Rounds: `6`.
@@ -98,7 +98,9 @@ Summary:
 
 ## Acceptance
 
-Accepted as the current warehouse prepared root once external `gpt-5.5` auth is
-refreshed and strict launch readiness reports `launch_ready=true`. This does
-not close v0.4; warehouse still needs a live champion-v2 follow-up run showing
-useful post-v2 research behavior or a protocol-evaluated plateau diagnosis.
+Accepted as the warehouse measurement-note prepared-root evidence. It was later
+superseded for launch by the proxy-format root refresh documented in
+`scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`
+because a runtime-guarded `scion/tools` file changed. This does not close v0.4;
+warehouse still needs a live champion-v2 follow-up run showing useful post-v2
+research behavior or a protocol-evaluated plateau diagnosis.
