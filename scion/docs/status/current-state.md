@@ -46,6 +46,11 @@ Framework:
   direct effect telemetry for postrun pair-level review. CVRP launch readiness
   now requires the prepared prompt-context handoff to prove that this
   code-constraint bridge is present before a prepared root can be static-ready.
+- Current-run postrun analysis can now audit whether actual code prompt traces
+  carried active subject code constraints. The manifest/trajectory/brief path
+  records section status, required/full-visible/not-full-visible counts,
+  payload digest, and constraint/forbidden-pattern counts without storing raw
+  prompt text or adding Decision input.
 - Adapter-owned measurement/opportunity diagnostics are redacted before prompt
   exposure for raw pair/calibration rows, BKS/gap details, holdout/case details,
   prompt ratios, and LLM text.
@@ -111,8 +116,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `02453d6`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codebridge-ready-02453d6-6r-gpt55-20260619T051639Z-claw`.
+- Current prepared root, prepared from WSL checkout `7aeffd0`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeaudit-ready-7aeffd0-6r-gpt55-20260619T053013Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -135,8 +140,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `02453d6`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codebridge-ready-02453d6-1r-gpt55-20260619T051623Z-claw`.
+- Current prepared root, prepared from WSL checkout `7aeffd0`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeaudit-ready-7aeffd0-1r-gpt55-20260619T053012Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -178,14 +183,14 @@ Infrastructure:
   postrun-reportable infra-only roots,
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
-  The prepared analysis brief contract
-  identity matches the prepared manifest, including the manifest git commit.
-  Later docs-only commits may make the checkout differ from a prepared manifest
-  commit; readiness remains acceptable only when runtime guard paths are
-  unchanged. Older prepared roots through the `4cbbd56` codeconstraints roots
-  are not current because runtime guard paths changed after prepare time; use
-  the codebridge roots above. Exact supersession details belong in
-  launch/readiness evidence docs, not this operational snapshot.
+  The prepared analysis brief contract identity matches the prepared manifest,
+  including the manifest git commit. Later docs-only commits may make the
+  checkout differ from a prepared manifest commit; readiness remains acceptable
+  only when runtime guard paths are unchanged. Older prepared roots through the
+  `02453d6` codebridge roots are not current because prompt/trajectory/postrun
+  audit runtime paths changed after prepare time; use the codeaudit roots above.
+  Exact supersession details belong in launch/readiness evidence docs, not this
+  operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`;

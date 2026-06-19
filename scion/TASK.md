@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability for active subject code constraints, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -245,12 +245,15 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid. CVRP code-generation prompts
   now also receive the same bounded/deadline/evidence constraints through
   provider-owned active subject code constraints, and launch readiness now
-  checks that the CVRP code-constraint prompt bridge is present.
+  checks that the CVRP code-constraint prompt bridge is present. Current-run
+  postrun analysis can now audit whether actual code prompt traces carried that
+  constraints section, using section status, digest, and count fingerprints
+  rather than raw prompt text.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codebridge-ready-02453d6-6r-gpt55-20260619T051639Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeaudit-ready-7aeffd0-6r-gpt55-20260619T053013Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codebridge-ready-02453d6-1r-gpt55-20260619T051623Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeaudit-ready-7aeffd0-1r-gpt55-20260619T053012Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -262,7 +265,7 @@ Current checkpoint:
   `run_script_api_key_env_failure_reports=ok`, and runtime guard coverage for
   `scion/tools`. The CVRP root also reports
   `cvrp_active_subject_code_constraint_source_markers` all true. The roots were
-  prepared from WSL checkout `02453d6`.
+  prepared from WSL checkout `7aeffd0`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -297,9 +300,9 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots through the `4cbbd56` codeconstraints roots are not
-  current because runtime guard paths changed after prepare time; use the
-  codebridge roots above. Exact supersession details belong in the
+  Older prepared roots through the `02453d6` codebridge roots are not current
+  because prompt/trajectory/postrun audit runtime paths changed after prepare
+  time; use the codeaudit roots above. Exact supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
