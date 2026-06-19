@@ -930,6 +930,83 @@ def test_no_effect_followup_budget_allows_only_one_diagnostic_retry() -> None:
     assert decision.next_no_effect_diagnostic_followups == 2
 
 
+def test_open_ended_low_signal_policy_keeps_no_effect_followup() -> None:
+    decision = BranchLifecyclePolicy(
+        open_ended_low_signal_followup=True,
+        no_effect_followup_limit=2,
+        marginal_no_effect_streak_limit=2,
+        repeated_signal_signature_limit=2,
+    ).decide(
+        _features(wins=0, losses=0, ties=12, win_rate=0.0),
+        current_zero_win_streak=8,
+        current_no_effect_diagnostic_followups=8,
+        current_marginal_no_effect_streak=8,
+        current_signal_signature_repeat_count=8,
+        branch_code_status="active_no_effect",
+        branch_screening_tier="no_effect",
+    )
+
+    assert decision.action == "retain_head"
+    assert decision.reason_codes == (SCREENING_NEUTRAL_SIGNAL_CONTINUE,)
+    assert decision.next_no_effect_diagnostic_followups == 9
+
+
+def test_open_ended_low_signal_policy_keeps_repeated_marginal_signature() -> None:
+    features = _features(
+        n_cases=12,
+        wins=3,
+        losses=3,
+        ties=6,
+        win_rate=0.25,
+        median_delta=0.0,
+        ci_low=-0.5,
+        ci_high=0.5,
+        valid_pairs=12,
+        runtime_pairs=12,
+        runtime_ratio_median=1.0,
+        runtime_regression_rate=0.0,
+    )
+    signature = decision_features_signal_signature(features)
+
+    decision = BranchLifecyclePolicy(
+        open_ended_low_signal_followup=True,
+        marginal_no_effect_streak_limit=2,
+        repeated_signal_signature_limit=2,
+    ).decide(
+        features,
+        current_marginal_no_effect_streak=8,
+        last_signal_signature=signature,
+        current_signal_signature_repeat_count=8,
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+
+    assert decision.action == "retain_head"
+    assert decision.reason_codes == (SCREENING_MARGINAL_SIGNAL_CONTINUE,)
+    assert decision.next_marginal_no_effect_streak == 9
+
+
+def test_open_ended_low_signal_policy_still_stops_negative_effect() -> None:
+    decision = BranchLifecyclePolicy(
+        open_ended_low_signal_followup=True,
+    ).decide(
+        _features(
+            wins=2,
+            losses=4,
+            ties=2,
+            win_rate=0.25,
+            median_delta=-1.0,
+            ci_low=-2.0,
+            ci_high=0.5,
+        ),
+        branch_code_status="active_marginal",
+        branch_screening_tier="marginal",
+    )
+
+    assert decision.action == "park_lineage"
+    assert SCREENING_SOFT_ABANDON_NEGATIVE_DELTA in decision.reason_codes
+
+
 def test_screening_telemetry_diagnostic_retries_before_streak_limit() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(

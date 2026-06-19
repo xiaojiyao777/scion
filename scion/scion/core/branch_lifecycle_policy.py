@@ -127,6 +127,7 @@ class BranchLifecyclePolicy:
     """Classify low-win screening branches without problem-specific semantics."""
 
     low_win_rate_threshold: float = 0.5
+    open_ended_low_signal_followup: bool = False
     zero_win_streak_limit: int = 3
     no_effect_followup_limit: int = 2
     marginal_no_effect_streak_limit: int = 2
@@ -358,9 +359,12 @@ class BranchLifecyclePolicy:
             and set(soft_reasons) == {SCREENING_SOFT_ABANDON_LOSS_HEAVY_FOLLOWUP}
         ):
             soft_reasons = ()
-        if self._rollback_budget_exhausted(
-            rollback_count=rollback_count,
-            has_checkpoint=has_checkpoint,
+        if (
+            not self.open_ended_low_signal_followup
+            and self._rollback_budget_exhausted(
+                rollback_count=rollback_count,
+                has_checkpoint=has_checkpoint,
+            )
         ):
             return build(
                 action="park_lineage",
@@ -393,6 +397,17 @@ class BranchLifecyclePolicy:
         diagnostic_reroute_reasons = self._low_signal_diagnostic_reroute_reasons(
             features
         )
+        if self.open_ended_low_signal_followup:
+            return self._open_ended_low_signal_decision(
+                build,
+                features,
+                wins=wins,
+                losses=losses,
+                ties=ties,
+                pair_wins=pair_wins,
+                diagnostic_reasons=diagnostic_reasons,
+                current_signal_tier=current_signal_tier,
+            )
         if (
             current_signal_tier == "no_effect"
             and next_no_effect_followups >= self.no_effect_followup_limit
@@ -504,6 +519,9 @@ class BranchLifecyclePolicy:
                 "runtime_regression_rate_actionable": (
                     self.runtime_regression_rate_actionable
                 ),
+                "open_ended_low_signal_followup": (
+                    self.open_ended_low_signal_followup
+                ),
                 "telemetry_diagnostic_streak_limit": (
                     self.telemetry_diagnostic_streak_limit
                 ),
@@ -594,6 +612,64 @@ class BranchLifecyclePolicy:
             reason_codes=(reason,),
             next_zero_win_streak=0,
             next_telemetry_diagnostic_streak=next_streak,
+        )
+
+    def _open_ended_low_signal_decision(
+        self,
+        build,
+        features: DecisionFeatures,
+        *,
+        wins: int,
+        losses: int,
+        ties: int,
+        pair_wins: int,
+        diagnostic_reasons: tuple[str, ...],
+        current_signal_tier: str,
+    ) -> BranchLifecycleDecision:
+        if wins > 0 and self._clear_weak_positive_case_signal(
+            features,
+            wins=wins,
+            losses=losses,
+        ):
+            return build(
+                action="retain_head",
+                reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
+                zero_win_streak=0,
+            )
+        if wins > 0:
+            return build(
+                action="retain_head",
+                reason_codes=(SCREENING_MARGINAL_SIGNAL_CONTINUE,),
+                zero_win_streak=0,
+            )
+        if pair_wins > 0:
+            reason_codes = (
+                SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
+                *diagnostic_reasons,
+            )
+            if diagnostic_reasons:
+                return build(action="retain_head", reason_codes=reason_codes)
+            return build(
+                action="retain_head",
+                reason_codes=reason_codes,
+                zero_win_streak=0,
+            )
+        if current_signal_tier == "no_effect":
+            return build(
+                action="retain_head",
+                reason_codes=(
+                    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+                    *diagnostic_reasons,
+                ),
+            )
+        reason = (
+            SCREENING_NEUTRAL_SIGNAL_CONTINUE
+            if self._mostly_ties(features, ties=ties, losses=losses)
+            else SCREENING_ZERO_WIN_STREAK_CONTINUE
+        )
+        return build(
+            action="retain_head",
+            reason_codes=(reason, *diagnostic_reasons),
         )
 
     def _eligible_low_win_screening(self, features: DecisionFeatures) -> bool:

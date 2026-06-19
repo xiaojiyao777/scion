@@ -626,6 +626,7 @@ def _lifecycle_policy_for_config(config: ProtocolConfig) -> BranchLifecyclePolic
             ),
         )
     return BranchLifecyclePolicy(
+        open_ended_low_signal_followup=True,
         zero_win_streak_limit=5,
         no_effect_followup_limit=3,
         marginal_no_effect_streak_limit=3,

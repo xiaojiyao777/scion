@@ -1169,3 +1169,72 @@ def test_decision_screening_high_win_negative_effect_ignores_validation_expand_c
     assert out.decision == Decision.CONTINUE_EXPLORE
     assert "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT" in out.reason_codes
     assert all("PASS" not in reason for reason in out.reason_codes)
+
+
+def test_decision_trajectory_divergent_low_signal_does_not_park_by_fixed_budget():
+    from dataclasses import replace
+
+    engine = DecisionEngine(
+        ProtocolConfig.model_validate({"pairing_validity": "trajectory_divergent"})
+    )
+    f = _features(
+        stage="screening",
+        wins=0,
+        losses=0,
+        ties=16,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        pair_wins=0,
+        pair_losses=0,
+        pair_ties=64,
+    )
+    f = replace(
+        f,
+        lifecycle_zero_win_streak=9,
+        lifecycle_no_effect_diagnostic_followups=9,
+        lifecycle_marginal_no_effect_streak=9,
+        lifecycle_previous_signal_repeat_count=9,
+        lifecycle_signal_matches_previous=True,
+        screening_expand_count=1,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert out.lifecycle_action == "retain_head"
+    assert "SCREENING_LOW_SNR_EXPAND_EXHAUSTED_CONTINUE" in out.reason_codes
+    assert "BRANCH_LIFECYCLE_PARK_LINEAGE" not in out.reason_codes
+    assert "SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED" not in out.reason_codes
+
+
+def test_decision_trajectory_stable_low_signal_keeps_fixed_budget_stop():
+    from dataclasses import replace
+
+    engine = DecisionEngine(ProtocolConfig.model_validate({}))
+    f = _features(
+        stage="screening",
+        wins=0,
+        losses=0,
+        ties=16,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+    )
+    f = replace(
+        f,
+        lifecycle_zero_win_streak=9,
+        lifecycle_no_effect_diagnostic_followups=9,
+        lifecycle_marginal_no_effect_streak=9,
+        lifecycle_previous_signal_repeat_count=9,
+        lifecycle_signal_matches_previous=True,
+    )
+
+    out = engine.decide(f)
+
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert out.lifecycle_action == "park_lineage"
+    assert "BRANCH_LIFECYCLE_PARK_LINEAGE" in out.reason_codes
+    assert "SCREENING_NO_EFFECT_FOLLOWUP_EXHAUSTED" in out.reason_codes
