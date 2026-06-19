@@ -164,21 +164,34 @@ PYTHONPATH=scion pytest -q \
 # 113 passed
 ```
 
+Local checkout `a8b2dd4f` and WSL checkout `a92fe84`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 115 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `96d56d5` because
+New prepare-only roots were generated from WSL checkout `a92fe84` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
 runtime surface. The current checkout requires completion-preflight failure
 status writing and data-root/API-key-env failure markers to be executable shell
-paths, not comment-only markers.
+paths, not comment-only markers. Runtime guard command markers must also be
+actual executable guard lines, not comments or echo-only text.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execmarkers-96d56d5-6r-gpt55-20260619T105800Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execruntimeguard-a92fe84-6r-gpt55-20260619T110435Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execmarkers-96d56d5-1r-gpt55-20260619T105800Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execruntimeguard-a92fe84-1r-gpt55-20260619T110436Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -209,6 +222,8 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `run_script_model_route_enforced=ok` with executable proxy command and
   token-level model/base-url arguments
 - `run_script_runtime_guard_enforced=ok`
+  with `ignored_non_executable_marker_counts=0` for all required runtime guard
+  markers in both current roots
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `runtime_guard_paths_cover_problem_runtime=ok`
 - `prepared_analysis_brief_current=ok`
@@ -233,7 +248,7 @@ preflight-failure reporting to use an executable status writer before the
 postrun bundle and preflight-status exit, and it requires data-root/API-key-env
 failure markers to be executable shell lines rather than comments. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
-postrunexec, and preflfailpath prepared roots as the current prepared-root
-pointer.
+postrunexec, preflfailpath, and execmarkers prepared roots as the current
+prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
