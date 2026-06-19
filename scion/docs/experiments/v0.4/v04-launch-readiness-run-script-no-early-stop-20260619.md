@@ -140,19 +140,34 @@ PYTHONPATH=scion pytest -q \
 # 109 passed
 ```
 
+Local checkout `a0201576` and WSL checkout `1c13a8f`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 111 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `1842e50` because
+New prepare-only roots were generated from WSL checkout `1c13a8f` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
-runtime surface.
+runtime surface. The new checkout upgrades
+`run_script_preflight_failure_reports` from a loose marker check to a structured
+check requiring an executable preflight-failure status writer, then
+`write_postrun_acceptance_reports`, then `exit "$PREFLIGHT_STATUS"`.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunexec-1842e50-6r-gpt55-20260619T103509Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-preflfailpath-1c13a8f-6r-gpt55-20260619T105038Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunexec-1842e50-1r-gpt55-20260619T103525Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-preflfailpath-1c13a8f-1r-gpt55-20260619T105038Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -169,6 +184,10 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `run_script_model_route_enforced=ok`
 - `run_script_pythonpath_enforced=ok`
 - `run_script_completion_preflight_enforced=ok`
+- `run_script_preflight_failure_reports=ok` with
+  `preflight_status_writer_kind=helper`, empty failures, and ordered
+  preflight-failure status writer, postrun report call, and
+  `exit "$PREFLIGHT_STATUS"`
 - `run_script_model_route_enforced=ok` with executable proxy command and
   token-level model/base-url arguments
 - `run_script_runtime_guard_enforced=ok`
@@ -191,8 +210,10 @@ static readiness or no-early-stop launch semantics.
 Accepted as the current prepared-root refresh after no-early-stop launch
 readiness enforcement, prepared-contract inventory binding, and exact-token flag
 matching. It also requires the GPT-5.5 proxy preflight to be an executable
-command block using token-level model/base-url arguments. It supersedes the
-model-route, noearlystop, prepcontract, exactflag, and execpreflight prepared
+command block using token-level model/base-url arguments, and it requires
+preflight-failure reporting to use an executable status writer before the
+postrun bundle and preflight-status exit. It supersedes the model-route,
+noearlystop, prepcontract, exactflag, execpreflight, and postrunexec prepared
 roots as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
