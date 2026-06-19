@@ -118,6 +118,11 @@ Framework:
   empty failure taxonomy now prevents `current_run_analysis_ready=true`, even
   when the hand-written problem summary, prompt/source visibility, and research
   context summaries look actionable.
+- Postrun readiness also requires current-run protocol accounting,
+  measurement-effect, runtime-feedback, and research-continuity summaries for
+  warehouse/CVRP delegated review. A hand-written problem-specific summary no
+  longer bypasses missing review-input summaries; runtime feedback must still
+  be review-ready with drain status complete.
 - Runtime feedback is review-ready only when raw runtime feedback exists and
   both fresh-runtime replay drain status and stage-transition drain status are
   present. Budget diagnostics remain useful for investigation, but they do not
@@ -160,8 +165,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `5315453`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-failuretaxonomyguard-6r-gpt55-20260619T080353Z-claw`.
+- Current prepared root, prepared from WSL checkout `458fd5c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-reviewinputguard-6r-gpt55-20260619T081229Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -187,8 +192,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `5315453`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-failuretaxonomyguard-1r-gpt55-20260619T080406Z-claw`.
+- Current prepared root, prepared from WSL checkout `458fd5c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-reviewinputguard-1r-gpt55-20260619T081243Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -239,10 +244,10 @@ Infrastructure:
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `5315453`; after docs-only status commits, strict
+  whose git commit is `458fd5c`; after docs-only status commits, strict
   readiness reports `git_runtime_consistent=ok` with
   `checkout differs, but runtime guard paths are unchanged`. Older prepared
-  roots before the failuretaxonomyguard roots above are not current. Exact
+  roots before the reviewinputguard roots above are not current. Exact
   supersession
   details belong in launch/readiness evidence docs, not this operational
   snapshot.
