@@ -43,6 +43,21 @@ COMMON_REQUIRED_QUESTIONS = (
     "Is the next step repair, same-round rerun, or ladder advancement?",
 )
 
+PREPARED_ONLY_REQUIRED_QUESTIONS = (
+    "Is this still a prepared-only launch root with zero current-run counters "
+    "and no postrun acceptance evidence?",
+    "Do prepared_run_contract, launch_readiness, and prompt_context_readiness "
+    "prove artifact identity, manifest commit, launch markers, and prompt bridge "
+    "readiness?",
+    "Does the problem-specific prepared handoff include all required report-only "
+    "requirements while keeping DecisionFeatures, scheduler, promotion, and "
+    "solver semantics unchanged?",
+    "Does completion preflight block launch with actionable auth/operator status "
+    "when the real completion route is unavailable?",
+    "Is the next step launch-readiness recheck or launch, not a research-quality "
+    "or plateau/two-opt conclusion?",
+)
+
 WAREHOUSE_FOLLOWUP_REQUIRED_QUESTION = (
     "For warehouse follow-up, did warehouse_followup_summary distinguish "
     "prepared-only, incomplete-handoff, quality-blocked, protocol-evaluated, "
@@ -180,6 +195,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
         "stop_conditions": _stop_conditions(inventory),
         "required_questions": _required_questions(
+            lifecycle=inventory["lifecycle"],
             warehouse_followup_summary=warehouse_followup_summary,
             cvrp_large_twoopt_summary=cvrp_large_twoopt_summary,
         ),
@@ -188,10 +204,14 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
 
 def _required_questions(
     *,
+    lifecycle: Mapping[str, Any],
     warehouse_followup_summary: Mapping[str, Any],
     cvrp_large_twoopt_summary: Mapping[str, Any],
 ) -> list[str]:
-    questions = list(COMMON_REQUIRED_QUESTIONS)
+    if lifecycle.get("prepared_only") is True:
+        questions = list(PREPARED_ONLY_REQUIRED_QUESTIONS)
+    else:
+        questions = list(COMMON_REQUIRED_QUESTIONS)
     if warehouse_followup_summary.get("available") is True:
         questions.append(WAREHOUSE_FOLLOWUP_REQUIRED_QUESTION)
     if cvrp_large_twoopt_summary.get("available") is True:

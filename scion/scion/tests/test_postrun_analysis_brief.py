@@ -1155,6 +1155,14 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert brief["prompt_context_visibility_summary"]["available"] is False
     assert brief["research_continuity_summary"]["current_run_evidence"] is False
     assert brief["research_continuity_summary"]["available"] is False
+    assert any(
+        "prepared-only launch root" in question
+        for question in brief["required_questions"]
+    )
+    assert not any(
+        "Did the agent perform effective research" in question
+        for question in brief["required_questions"]
+    )
     assert markdown.startswith("# Prepared Analysis Brief:")
     assert "do not analyze copied campaign artifacts as current-run research evidence" in (
         markdown
@@ -1212,6 +1220,10 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
         and "incomplete-handoff" in question
         for question in brief["required_questions"]
     )
+    assert any(
+        "not a research-quality" in question
+        for question in brief["required_questions"]
+    )
     assert not any(
         "cvrp_large_twoopt_summary" in question
         for question in brief["required_questions"]
@@ -1261,6 +1273,10 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert any(
         "cvrp_large_twoopt_summary" in question
         and "incomplete handoff" in question
+        for question in brief["required_questions"]
+    )
+    assert any(
+        "not a research-quality" in question
         for question in brief["required_questions"]
     )
     assert not any(
