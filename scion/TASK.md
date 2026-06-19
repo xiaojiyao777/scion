@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and postrun acceptance readiness generation. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and postrun acceptance readiness that requires problem-specific warehouse/CVRP summaries. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -449,10 +449,10 @@ Current checkpoint:
   `operator_action` and use the reported proxy login URL when present.
   The previous prepared roots were invalidated by runtime guard path changes
   and later prepared analysis brief identity checks.
-  The current CVRP root was prepared from WSL checkout `9a5d00c` with the
+  The current CVRP root was prepared from WSL checkout `deb1158` with the
   large-instance two-opt seed as proposal-only research focus and structured
   `large_instance_two_opt_constraints`; the current
-  warehouse root was prepared from WSL checkout `9a5d00c` for the champion
+  warehouse root was prepared from WSL checkout `deb1158` for the champion
   `v2` continuous-improvement follow-up. Both current roots pass static
   launch, prompt/context identity, launch-env readiness, and runtime-guard
   consistency, and both `run.sh` files generate postrun acceptance readiness
@@ -532,6 +532,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`.
   Current postrun acceptance readiness checker and prepared-root refresh:
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`.
+  Current postrun problem-summary readiness guard and prepared-root refresh:
+  `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`.
   Current prepared prompt/context readiness report:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
   Current strict launch-readiness report:
@@ -553,7 +555,7 @@ Current checkpoint:
   Current CVRP large-twoopt postrun summary guard:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`.
   Current launch-prepared CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a5d00c-1r-gpt55-20260619T023302Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-deb1158-1r-gpt55-20260619T024308Z-claw`.
 - Warehouse continuous-improvement follow-up is now launch-prepared but not
   launched. `launch_warehouse_agentic_campaign.py` writes copied production
   configs with repo/data-root path rewrites, secret-safe env handling, and the
@@ -584,7 +586,7 @@ Current checkpoint:
   Current warehouse plateau-review input guard:
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`.
   Current launch-prepared warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a5d00c-6r-gpt55-20260619T023301Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-deb1158-6r-gpt55-20260619T024307Z-claw`.
 - Future WSL campaign launches must set
   `PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion`; without
   it, WSL may import stale Scion core modules from

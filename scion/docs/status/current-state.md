@@ -52,6 +52,9 @@ Framework:
   `postrun_acceptance/readiness/` and log `POSTRUN_READINESS_EXIT_STATUS`.
   This remains report-only delegated-analysis readiness, not a Decision,
   `DecisionFeatures`, Protocol, promotion, scheduler, or solver change.
+- Postrun acceptance readiness now requires the matching problem-specific
+  summary for warehouse and CVRP current runs before reporting
+  `current_run_analysis_ready=true`.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -62,8 +65,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `9a5d00c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a5d00c-6r-gpt55-20260619T023301Z-claw`.
+- Current prepared root, prepared from WSL checkout `deb1158`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-deb1158-6r-gpt55-20260619T024307Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -82,8 +85,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `9a5d00c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a5d00c-1r-gpt55-20260619T023302Z-claw`.
+- Current prepared root, prepared from WSL checkout `deb1158`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-deb1158-1r-gpt55-20260619T024308Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -145,13 +148,14 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`.
-  It supersedes older prepared-root pointers after launcher templates began
-  emitting postrun acceptance readiness artifacts.
+  `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`.
+  It supersedes older prepared-root pointers after postrun acceptance readiness
+  began requiring problem-specific summaries for warehouse/CVRP current runs.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
