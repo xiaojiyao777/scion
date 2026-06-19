@@ -126,6 +126,25 @@ CVRP_REQUIRED_LARGE_TWOOPT_REJECT_TOKENS = (
     "activation",
     "wall-clock",
 )
+CVRP_REQUIRED_PROTECTED_CASES = ("CMT2", "CMT4")
+CVRP_REQUIRED_CASE_PROTECTION_RULE_TOKENS = (
+    "cmt2",
+    "cmt4",
+    "target intent",
+    "hypothesis",
+    "formal coverage",
+    "materially different",
+    "do not hardcode",
+)
+CVRP_REQUIRED_CASE_PROTECTION_EVIDENCE_TOKENS = (
+    "target-intent",
+    "hypothesis",
+    "formal screening",
+    "case-level",
+    "total_distance",
+    "cmt2",
+    "cmt4",
+)
 WAREHOUSE_REQUIRED_EVIDENCE_TOKENS = (
     ("promotion behavior",),
     ("branch transfer",),
@@ -419,6 +438,23 @@ def render_markdown(inventory: dict[str, Any]) -> str:
             value = research_focus.get(key)
             if value:
                 lines.append(f"- {label}: {_display(value)}")
+        case_protection = research_focus.get("case_protection_requirements")
+        if isinstance(case_protection, dict) and case_protection:
+            lines.append("- Case-protection requirements:")
+            protected_cases = case_protection.get("protected_cases")
+            if isinstance(protected_cases, list) and protected_cases:
+                lines.append(
+                    "  - protected_cases: "
+                    + ", ".join(_display(item) for item in protected_cases)
+                )
+            rules = case_protection.get("rules")
+            if isinstance(rules, list) and rules:
+                lines.append("  - rules:")
+                lines.extend(f"    - {_display(item)}" for item in rules)
+            evidence = case_protection.get("required_evidence")
+            if isinstance(evidence, list) and evidence:
+                lines.append("  - required_evidence:")
+                lines.extend(f"    - {_display(item)}" for item in evidence)
 
     lines.extend(
         [
@@ -1057,6 +1093,13 @@ def _add_cvrp_measurement_handoff_checks(
             "construction_seed_rule": focus.get("construction_seed_rule"),
         },
     )
+    case_protection = _mapping_or_empty(focus.get("case_protection_requirements"))
+    case_protection_status = _cvrp_case_protection_status(case_protection)
+    add_check(
+        "cvrp_cmt_case_protection_present",
+        case_protection_status["complete"],
+        case_protection_status,
+    )
     large_twoopt = _mapping_or_empty(
         focus.get("large_instance_two_opt_constraints")
     )
@@ -1602,6 +1645,9 @@ def _cvrp_problem_specific_phase4_requirements(
     route_rule = str(focus.get("route_merge_exception_rule") or "").lower()
     construction_rule = str(focus.get("construction_seed_rule") or "").lower()
     boundary = str(focus.get("decision_boundary") or "").lower()
+    case_protection_status = _cvrp_case_protection_status(
+        _mapping_or_empty(focus.get("case_protection_requirements"))
+    )
     large_twoopt_status = _cvrp_large_twoopt_constraint_status(
         _mapping_or_empty(focus.get("large_instance_two_opt_constraints"))
     )
@@ -1657,6 +1703,10 @@ def _cvrp_problem_specific_phase4_requirements(
             ),
             "prepared_run_manifest cvrp research_focus route/construction direct-effect rules",
         ),
+        "cvrp_cmt_case_protection_handoff": _coverage_item(
+            int(case_protection_status["complete"]),
+            "prepared_run_manifest cvrp research_focus case_protection_requirements",
+        ),
         "cvrp_decision_boundary_handoff": _coverage_item(
             int(
                 "decisionfeatures" in boundary
@@ -1666,6 +1716,54 @@ def _cvrp_problem_specific_phase4_requirements(
             ),
             "prepared_run_manifest cvrp research_focus decision_boundary",
         ),
+    }
+
+
+def _cvrp_case_protection_status(
+    requirements: Mapping[str, Any],
+) -> dict[str, Any]:
+    protected_cases = _string_items(requirements.get("protected_cases"))
+    protected_case_upper = {item.upper() for item in protected_cases}
+    rules_items = _string_items(requirements.get("rules"))
+    evidence_items = _string_items(requirements.get("required_evidence"))
+    rules_text = "\n".join(rules_items).lower()
+    evidence_text = "\n".join(evidence_items).lower()
+    missing_cases = [
+        case
+        for case in CVRP_REQUIRED_PROTECTED_CASES
+        if case.upper() not in protected_case_upper
+    ]
+    missing_rule_tokens = [
+        token
+        for token in CVRP_REQUIRED_CASE_PROTECTION_RULE_TOKENS
+        if token.lower() not in rules_text
+    ]
+    missing_evidence_tokens = [
+        token
+        for token in CVRP_REQUIRED_CASE_PROTECTION_EVIDENCE_TOKENS
+        if token.lower() not in evidence_text
+    ]
+    complete = (
+        bool(requirements)
+        and requirements.get("proposal_visibility_only") is True
+        and requirements.get("decision_features_excluded") is True
+        and not missing_cases
+        and not missing_rule_tokens
+        and not missing_evidence_tokens
+    )
+    return {
+        "complete": complete,
+        "schema_version": requirements.get("schema_version"),
+        "proposal_visibility_only": requirements.get("proposal_visibility_only"),
+        "decision_features_excluded": requirements.get(
+            "decision_features_excluded"
+        ),
+        "protected_cases": protected_cases,
+        "rule_count": len(rules_items),
+        "required_evidence_count": len(evidence_items),
+        "missing_cases": missing_cases,
+        "missing_rule_tokens": missing_rule_tokens,
+        "missing_evidence_tokens": missing_evidence_tokens,
     }
 
 

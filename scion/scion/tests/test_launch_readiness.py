@@ -43,6 +43,12 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         ]["passed"]
         is True
     )
+    assert (
+        problem_specific["detail"]["checks"]["cvrp_cmt_case_protection_present"][
+            "passed"
+        ]
+        is True
+    )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert (
@@ -125,6 +131,29 @@ def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
     ]["failed_checks"]
     assert contract["contract_complete"] is False
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
+
+
+def test_launch_readiness_rejects_missing_cvrp_cmt_case_protection(
+    tmp_path: Path,
+) -> None:
+    research_focus = _cvrp_research_focus()
+    research_focus.pop("case_protection_requirements")
+    run_root = _write_prepared_root(tmp_path, research_focus=research_focus)
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "cvrp_cmt_case_protection_present" in problem_specific["detail"][
+        "failed_checks"
+    ]
+    assert contract["contract_complete"] is False
+    assert contract["checks"]["cvrp_cmt_case_protection_present"]["passed"] is False
 
 
 def test_launch_readiness_problem_specific_helper_reports_warehouse_failures() -> None:
@@ -1812,6 +1841,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "route-limit seed diversification",
         ],
         "large_instance_two_opt_constraints": _large_twoopt_constraints(),
+        "case_protection_requirements": _cmt_case_protection_requirements(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -1824,6 +1854,37 @@ def _cvrp_research_focus() -> dict[str, object]:
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."
         ),
+    }
+
+
+def _cmt_case_protection_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_case_protection_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "protected_cases": ["CMT2", "CMT4"],
+        "rules": [
+            (
+                "Target intent or hypothesis must name the CMT2/CMT4 "
+                "protection plan before revisiting construction, route-merge, "
+                "demand-slack, VNS, or share70-derived mechanisms."
+            ),
+            (
+                "Same-branch follow-up should keep CMT2 and CMT4 in formal "
+                "coverage when those cases are available."
+            ),
+            (
+                "A materially different problem-owned solver mechanism must "
+                "still explain how it avoids repeating the CMT2/CMT4 losses."
+            ),
+            "Do not hardcode case ids, BKS values, seeds, or split membership.",
+        ],
+        "required_evidence": [
+            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+            "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
+            "case-level total_distance deltas for CMT2 and CMT4",
+        ],
     }
 
 

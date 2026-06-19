@@ -119,6 +119,40 @@ CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS = {
         "route-count regressions without feasibility and objective attribution",
     ],
 }
+CVRP_CASE_PROTECTION_REQUIREMENTS = {
+    "schema_version": "scion.cvrp_case_protection_requirements.v1",
+    "scope": "proposal_only_prepared_handoff",
+    "proposal_visibility_only": True,
+    "decision_features_excluded": True,
+    "protected_cases": ["CMT2", "CMT4"],
+    "rules": [
+        (
+            "When revisiting construction, route-merge, demand-slack, VNS, or "
+            "share70-derived mechanisms after prior CMT2/CMT4 losses, the "
+            "target intent or hypothesis must name the CMT2/CMT4 protection "
+            "plan before another branch slot is spent."
+        ),
+        (
+            "Same-branch follow-up should keep CMT2 and CMT4 in formal "
+            "coverage through priority case retention when those cases are "
+            "available in the selected split."
+        ),
+        (
+            "A materially different problem-owned solver mechanism must still "
+            "explain how it avoids repeating the CMT2/CMT4 losses or record "
+            "that the protected cases remain an unresolved caveat."
+        ),
+        (
+            "Do not hardcode case ids, BKS values, seeds, split membership, "
+            "or protected-case thresholds in solver code."
+        ),
+    ],
+    "required_evidence": [
+        "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+        "formal screening includes CMT2 and CMT4 or records an unresolved case-selection caveat",
+        "case-level total_distance deltas for CMT2 and CMT4",
+    ],
+}
 CVRP_CURRENT_RESEARCH_FOCUS = {
     "schema_version": "scion.cvrp_research_focus.v1",
     "scope": "report_only_prepared_handoff",
@@ -187,6 +221,7 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "as activation/design evidence only; require same-run seed baseline or "
         "same-mechanism accepted delta for objective-effect claims."
     ),
+    "case_protection_requirements": CVRP_CASE_PROTECTION_REQUIREMENTS,
     "decision_boundary": (
         "This focus is proposal/delegated-analysis guidance only and must not "
         "enter DecisionFeatures, Protocol gates, promotion input, or scheduler "
@@ -767,6 +802,22 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
     ])
     for item in research_focus["default_avoid_directions"]:
         lines.append(f"  - {item}")
+    case_protection = research_focus.get("case_protection_requirements")
+    if isinstance(case_protection, dict) and case_protection:
+        lines.extend(
+            [
+                "- Case-protection requirements:",
+                f"  - schema_version: {case_protection.get('schema_version')}",
+                "  - protected_cases: "
+                + ", ".join(map(str, case_protection.get("protected_cases") or [])),
+                "  - rules:",
+            ]
+        )
+        for item in case_protection.get("rules") or []:
+            lines.append(f"    - {item}")
+        lines.append("  - required_evidence:")
+        for item in case_protection.get("required_evidence") or []:
+            lines.append(f"    - {item}")
     lines.extend(["", "## Config"])
     for key in ("problem", "protocol", "split", "seeds", "data_root"):
         lines.append(f"- {key}: `{config[key]}`")

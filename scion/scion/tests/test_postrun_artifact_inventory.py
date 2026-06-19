@@ -695,6 +695,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         ]
     )
     assert contract["checks"]["cvrp_direct_effect_rules_present"]["passed"] is True
+    assert contract["checks"]["cvrp_cmt_case_protection_present"]["passed"] is True
     assert (
         contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
         is True
@@ -713,6 +714,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "cvrp_large_twoopt_unbounded_default_avoid_handoff",
         "cvrp_large_twoopt_bounded_constraints_handoff",
         "cvrp_direct_effect_rules_handoff",
+        "cvrp_cmt_case_protection_handoff",
         "cvrp_decision_boundary_handoff",
     ):
         assert problem_specific[key]["available"] is True
@@ -722,7 +724,9 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert "- Prepared contract complete: True" in markdown
     assert "| config_paths_resolvable | True |  |" in markdown
     assert "### Problem-Specific Phase 4 Evidence Coverage" in markdown
+    assert "- Case-protection requirements:" in markdown
     assert "cvrp_default_avoid_handoff" in markdown
+    assert "cvrp_cmt_case_protection_handoff" in markdown
     assert "cvrp_large_twoopt_seed_handoff" in markdown
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in markdown
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
@@ -1334,6 +1338,7 @@ def _cvrp_research_focus() -> dict[str, object]:
             "route-limit seed diversification",
         ],
         "large_instance_two_opt_constraints": _large_twoopt_constraints(),
+        "case_protection_requirements": _cmt_case_protection_requirements(),
         "route_merge_exception_rule": (
             "Only continue route_merge_repair when the proposal names a causal "
             "path beyond tested variants and defines direct activation-to-objective-effect evidence."
@@ -1346,6 +1351,37 @@ def _cvrp_research_focus() -> dict[str, object]:
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."
         ),
+    }
+
+
+def _cmt_case_protection_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_case_protection_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "protected_cases": ["CMT2", "CMT4"],
+        "rules": [
+            (
+                "Target intent or hypothesis must name the CMT2/CMT4 "
+                "protection plan before revisiting construction, route-merge, "
+                "demand-slack, VNS, or share70-derived mechanisms."
+            ),
+            (
+                "Same-branch follow-up should keep CMT2 and CMT4 in formal "
+                "coverage when those cases are available."
+            ),
+            (
+                "A materially different problem-owned solver mechanism must "
+                "still explain how it avoids repeating the CMT2/CMT4 losses."
+            ),
+            "Do not hardcode case ids, BKS values, seeds, or split membership.",
+        ],
+        "required_evidence": [
+            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+            "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
+            "case-level total_distance deltas for CMT2 and CMT4",
+        ],
     }
 
 
