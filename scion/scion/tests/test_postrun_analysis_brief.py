@@ -1226,6 +1226,11 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    contract = brief["prepared_run_contract"]
+    assert contract["execution"]["disable_early_stop"] is True
+    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
+    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
+
     summary = brief["warehouse_followup_summary"]
     assert summary["schema_version"] == (
         "scion.postrun_warehouse_followup_summary.v1"
@@ -1259,6 +1264,8 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert "- Deferred post-launch warehouse review axes:" in markdown
     assert "- Required warehouse review axes:" not in markdown
     assert "not_actionable_before_launch_current_run_evidence_required" in markdown
+    assert "| execution_disable_early_stop | True | True |" in markdown
+    assert "| command_disable_early_stop | True |" in markdown
     assert (
         "| warehouse_required_evidence_handoff | True | 1 | "
         "prepared_run_manifest warehouse research_focus required_evidence |"
@@ -1299,6 +1306,11 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     brief = brief_tool.build_brief(run_root)
     markdown = brief_tool.render_markdown(brief)
 
+    contract = brief["prepared_run_contract"]
+    assert contract["execution"]["disable_early_stop"] is True
+    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
+    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
+
     summary = brief["cvrp_large_twoopt_summary"]
     assert summary["schema_version"] == "scion.postrun_cvrp_large_twoopt_summary.v1"
     assert summary["report_only"] is True
@@ -1323,6 +1335,8 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
         "not_actionable_before_launch_current_run_evidence_required"
     )
     assert "## CVRP Large Two-Opt Summary" in markdown
+    assert "| execution_disable_early_stop | True | True |" in markdown
+    assert "| command_disable_early_stop | True |" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
     assert (
         "prepared CVRP large-twoopt research_focus handoff; current-run protocol"
@@ -2541,6 +2555,17 @@ def _write_warehouse_manifest(
         research_focus["accepted_checkpoint"] = (
             "Champion v2 promoted from validation-transfer acceptance."
         )
+    command = (
+        "python -m scion.cli.main run "
+        f"--campaign-dir {campaign_dir} "
+        f"--rounds {rounds} "
+        "--time-limit-sec 30 "
+        "--agentic-session-timeout-sec 900 "
+        "--measurement-governance on "
+        "--proposal-context-ablation full "
+        "--disable-early-stop "
+        "--agentic-proposal"
+    )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
         {
@@ -2554,6 +2579,7 @@ def _write_warehouse_manifest(
             "problem_family": "warehouse_delivery",
             "run_root": str(run_root),
             "campaign_dir": str(campaign_dir),
+            "command": command,
             "research_focus": research_focus,
             "model": {"name": "gpt-5.5", "completion_preflight": True},
             "report_metadata": {
@@ -2569,7 +2595,15 @@ def _write_warehouse_manifest(
                     "rebuild",
                 ],
             },
-            "execution": {"rounds": rounds},
+            "execution": {
+                "rounds": rounds,
+                "time_limit_sec": 30,
+                "agentic_session_timeout_sec": 900,
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "agentic_proposal": True,
+                "disable_early_stop": True,
+            },
             "acceptance_focus": [
                 "Distinguish real plateau from missed continuous-promotion opportunities."
             ],
@@ -2628,6 +2662,18 @@ def _write_cvrp_large_twoopt_manifest(
         research_focus["large_instance_two_opt_constraints"] = (
             _large_twoopt_constraints()
         )
+    command = (
+        "python -m scion.cli.main run "
+        f"--campaign-dir {campaign_dir} "
+        f"--rounds {rounds} "
+        "--time-limit-sec 30 "
+        "--agentic-session-timeout-sec 900 "
+        "--stage-transition-drain-limit 4 "
+        "--measurement-governance on "
+        "--proposal-context-ablation full "
+        "--disable-early-stop "
+        "--agentic-proposal"
+    )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
         {
@@ -2641,6 +2687,7 @@ def _write_cvrp_large_twoopt_manifest(
             "problem_family": "cvrp",
             "run_root": str(run_root),
             "campaign_dir": str(campaign_dir),
+            "command": command,
             "research_focus": research_focus,
             "model": {"name": "gpt-5.5", "completion_preflight": True},
             "report_metadata": {
@@ -2656,7 +2703,16 @@ def _write_cvrp_large_twoopt_manifest(
                     "rebuild",
                 ],
             },
-            "execution": {"rounds": rounds},
+            "execution": {
+                "rounds": rounds,
+                "time_limit_sec": 30,
+                "agentic_session_timeout_sec": 900,
+                "stage_transition_drain_limit": 4,
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "agentic_proposal": True,
+                "disable_early_stop": True,
+            },
             "acceptance_focus": [
                 "Review bounded large-instance intra-route two-opt evidence."
             ],
