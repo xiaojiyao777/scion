@@ -77,6 +77,7 @@ def rebuild_postrun_acceptance(
     report_dir = root / "postrun_acceptance"
     for family in (*DEFAULT_FAMILIES, "rebuild"):
         (report_dir / family).mkdir(parents=True, exist_ok=True)
+    _clear_generated_family_outputs(report_dir, DEFAULT_FAMILIES)
 
     family_results: dict[str, dict[str, Any]] = {}
     if skip_current_run_reports:
@@ -288,6 +289,21 @@ def _looks_like_campaign_dir(path: Path) -> bool:
         (path / name).exists()
         for name in ("campaign_summary.json", "status.json", "scion.db", "artifacts")
     )
+
+
+def _clear_generated_family_outputs(
+    report_dir: Path,
+    families: tuple[str, ...],
+) -> None:
+    """Remove stale generated report files before rebuilding a fresh bundle."""
+
+    for family in families:
+        family_dir = report_dir / family
+        if not family_dir.exists():
+            continue
+        for path in family_dir.iterdir():
+            if path.is_file() and path.suffix in {".json", ".md"}:
+                path.unlink()
 
 
 def _is_prepared_only_root(run_root: Path) -> bool:

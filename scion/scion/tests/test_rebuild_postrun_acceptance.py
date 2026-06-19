@@ -74,6 +74,40 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     formal_index = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
     formal_index.parent.mkdir(parents=True)
     formal_index.write_text('{"candidate_id":"cand-1"}\n', encoding="utf-8")
+    stale_json = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "zz_stale.research_efficiency.v1.json"
+    )
+    stale_json.parent.mkdir(parents=True)
+    _write_json(
+        stale_json,
+        {
+            "schema_version": "stale.test",
+            "research_continuity": {
+                "research_shape_summary": {"max_branch_depth": 99},
+            },
+        },
+    )
+    stale_manifest = (
+        run_root
+        / "postrun_acceptance"
+        / "manifests"
+        / "zz_stale.proposal_trajectory_manifest.v1.json"
+    )
+    stale_manifest.parent.mkdir(parents=True)
+    _write_json(stale_manifest, {"schema_version": "stale.test"})
+    stale_brief = (
+        run_root
+        / "postrun_acceptance"
+        / "analysis_brief"
+        / "zz_stale.postrun_analysis_brief.v1.json"
+    )
+    stale_brief.parent.mkdir(parents=True)
+    _write_json(stale_brief, {"schema_version": "stale.test"})
+    stale_brief_md = stale_brief.with_suffix(".md")
+    stale_brief_md.write_text("stale", encoding="utf-8")
 
     manifest = rebuild_tool.rebuild_postrun_acceptance(
         run_root,
@@ -120,6 +154,10 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
         / "inventory"
         / "fixture.postrun_artifact_inventory.v1.json"
     ).exists()
+    assert not stale_json.exists()
+    assert not stale_manifest.exists()
+    assert not stale_brief.exists()
+    assert not stale_brief_md.exists()
     persisted = json.loads(
         (report_dir / "rebuild" / "rebuild_manifest.v1.json").read_text(
             encoding="utf-8"
@@ -135,6 +173,7 @@ def test_rebuild_postrun_acceptance_writes_complete_bundle(tmp_path: Path) -> No
     )
     assert inventory["postrun_reports"]["counts"]["analysis_brief"] == 1
     assert inventory["postrun_reports"]["counts"]["rebuild"] == 1
+    assert inventory["postrun_reports"]["counts"]["manifests"] == 1
     assert inventory["postrun_reports"]["counts"]["research_efficiency"] == 1
 
 
