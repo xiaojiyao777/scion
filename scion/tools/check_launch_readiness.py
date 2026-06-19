@@ -2222,11 +2222,15 @@ def _prepared_contract_consistency_failures(
                 }
             )
     for field in ("execution", "git", "checks"):
-        brief_value = brief_contract.get(field)
-        inventory_value = inventory_contract.get(field)
-        if (brief_value if isinstance(brief_value, dict) else {}) != (
-            inventory_value if isinstance(inventory_value, dict) else {}
-        ):
+        brief_value = _prepared_contract_nested_comparison_value(
+            field,
+            brief_contract.get(field),
+        )
+        inventory_value = _prepared_contract_nested_comparison_value(
+            field,
+            inventory_contract.get(field),
+        )
+        if brief_value != inventory_value:
             failures.append(
                 {
                     "reason": f"prepared_contract_{field}_mismatch",
@@ -2234,6 +2238,49 @@ def _prepared_contract_consistency_failures(
                 }
             )
     return failures
+
+
+def _prepared_contract_nested_comparison_value(
+    field: str,
+    value: Any,
+) -> dict[str, Any]:
+    value_dict = value if isinstance(value, dict) else {}
+    if field == "git":
+        return _prepared_contract_git_comparison_value(value_dict)
+    if field == "checks":
+        return _prepared_contract_checks_comparison_value(value_dict)
+    return dict(value_dict)
+
+
+def _prepared_contract_git_comparison_value(
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    if (
+        value.get("consistent") is True
+        and value.get("commit") == value.get("manifest_commit")
+    ):
+        return {
+            "commit": value.get("commit"),
+            "manifest_commit": value.get("manifest_commit"),
+            "runtime_guard_paths": value.get("runtime_guard_paths"),
+            "consistent": True,
+        }
+    return dict(value)
+
+
+def _prepared_contract_checks_comparison_value(
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, raw_check in value.items():
+        if not isinstance(raw_check, dict):
+            normalized[key] = raw_check
+            continue
+        check = dict(raw_check)
+        if key == "git_runtime_consistent" and check.get("passed") is True:
+            check["detail"] = "runtime_guard_paths_consistent"
+        normalized[key] = check
+    return normalized
 
 
 def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str, Any]]:

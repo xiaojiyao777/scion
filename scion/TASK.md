@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `cc11e7e` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `1017fb7` and are static-ready, including problem-specific handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -291,13 +291,18 @@ Current checkpoint:
   where applicable, `DecisionFeatures` exclusion, and raw prompt/response/patch
   body/log exclusions. Hand-written review surfaces can no longer provide
   plausible counts while bypassing the v3 tainted-material boundary.
-- Postrun acceptance readiness now also requires current-run protocol
-  accounting, measurement-effect, runtime-feedback, and research-continuity
-  summaries for warehouse/CVRP delegated review. A hand-written
-  problem-specific summary can no longer bypass missing review-input summaries,
-  those summaries must preserve report-only, non-quality-judgment,
-  `DecisionFeatures`-excluded boundary markers, and runtime feedback must still
-  be review-ready with drain status complete.
+- Postrun acceptance readiness now also requires interpretation-specific
+  current-run review-input summaries for warehouse/CVRP delegated review.
+  Protocol-evaluated conclusions require protocol accounting,
+  measurement-effect, runtime-feedback, and research-continuity summaries;
+  taxonomy-backed quality-blocked no-protocol conclusions require protocol
+  accounting and matching failure-taxonomy quality-block evidence, while
+  missing plateau evidence inputs remain nonblocking for that negative
+  conclusion only. A hand-written problem-specific summary can no longer bypass
+  required review-input summaries, those summaries must preserve report-only,
+  non-quality-judgment, `DecisionFeatures`-excluded boundary markers, and
+  runtime feedback must still be review-ready with drain status complete when
+  the interpretation requires runtime evidence.
 - Postrun acceptance readiness now also requires current-run
   `branch_research_state_summary` actionability for warehouse/CVRP delegated
   review. The summary is report-only, excludes raw prompts/responses/patch
@@ -322,9 +327,9 @@ Current checkpoint:
   warehouse/CVRP readiness through the wrong problem family.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchcontract-cc11e7e-6r-gpt55-6r-gpt55-20260619T131623Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-1017fb7-6r-gpt55-6r-gpt55-20260619T133705Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchcontract-cc11e7e-1r-gpt55-1r-gpt55-20260619T131625Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-1017fb7-1r-gpt55-1r-gpt55-20260619T133706Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -347,7 +352,7 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `cc11e7e`. Current
+  true. The roots were prepared from WSL runtime commit `1017fb7`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
@@ -379,8 +384,11 @@ Current checkpoint:
   current runs it additionally requires research-context actionability, prompt
   signal-density accounting, failure-taxonomy evidence, and review-input
   summaries to be present, report-only/`DecisionFeatures`-excluded, and
-  internally consistent with the problem summary, while allowing valid
-  review-required gaps as delegated-analysis evidence.
+  internally consistent with the problem summary. Review-input requirements are
+  interpretation-specific: protocol-evaluated conclusions still require the
+  measurement/runtime/continuity inputs, while taxonomy-backed quality-blocked
+  no-protocol conclusions can be analysis-ready without plateau evidence
+  inputs.
   CVRP bounded
   two-opt review readiness also requires a qualifying large/two-opt
   protocol-effect row signal in measurement evidence plus direct
@@ -429,11 +437,19 @@ Current checkpoint:
   opportunity. Postrun acceptance recomputes the warehouse continuity signal
   from `research_continuity_summary` before accepting
   `protocol_evaluated_plateau_review_ready`.
+- Current warehouse negative-conclusion boundary: a
+  `quality_blocked_no_protocol_plateau_conclusion` is analysis-ready only when
+  the problem summary and `failure_taxonomy_summary` agree on current-run
+  proposal quality-block evidence. Missing measurement-effect,
+  runtime-feedback, and research-continuity summaries are nonblocking only for
+  that quality-blocked no-protocol interpretation, not for
+  protocol-evaluated plateau conclusions.
 - Current postrun readiness boundary: blocking problem-summary gaps such as
-  missing review inputs, incomplete handoff, launch-only or infra-only status,
-  and no protocol evidence prevent `current_run_analysis_ready=true`; valid
-  negative conclusions remain analysis-ready. Warehouse/CVRP readiness also
-  requires current-run prompt/source visibility trace accounting, including
+  missing interpretation-required review inputs, incomplete handoff, launch-only
+  or infra-only status, and unsupported no-protocol evidence prevent
+  `current_run_analysis_ready=true`; taxonomy-backed valid negative conclusions
+  remain analysis-ready. Warehouse/CVRP readiness also requires current-run
+  prompt/source visibility trace accounting, including
   hypothesis target-source visibility, in the analysis brief, so delegated
   review can audit branch transfer and source grounding instead of inferring
   them from final status.

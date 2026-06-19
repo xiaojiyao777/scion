@@ -483,6 +483,65 @@ def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
     }
 
 
+def test_launch_readiness_allows_doc_only_prepared_contract_check_drift() -> None:
+    brief_contract = {
+        "git": {
+            "commit": "abc123",
+            "manifest_commit": "abc123",
+            "checkout_commit": "abc123",
+            "runtime_guard_paths": "scion/tools",
+            "consistent": True,
+            "detail": "checkout matches manifest commit",
+        },
+        "checks": {
+            "git_runtime_consistent": {
+                "passed": True,
+                "detail": "checkout matches manifest commit",
+            },
+            "model_is_gpt55": {"passed": True, "detail": "gpt-5.5"},
+        },
+    }
+    inventory_contract = {
+        "git": {
+            "commit": "abc123",
+            "manifest_commit": "abc123",
+            "checkout_commit": "docs456",
+            "runtime_guard_paths": "scion/tools",
+            "consistent": True,
+            "detail": "checkout differs, but runtime guard paths are unchanged",
+        },
+        "checks": {
+            "git_runtime_consistent": {
+                "passed": True,
+                "detail": "checkout differs, but runtime guard paths are unchanged",
+            },
+            "model_is_gpt55": {"passed": True, "detail": "gpt-5.5"},
+        },
+    }
+
+    assert (
+        readiness_tool._prepared_contract_consistency_failures(
+            brief_contract,
+            inventory_contract,
+        )
+        == []
+    )
+
+    inventory_contract["checks"]["git_runtime_consistent"] = {
+        "passed": False,
+        "detail": "runtime path changed",
+    }
+
+    failures = readiness_tool._prepared_contract_consistency_failures(
+        brief_contract,
+        inventory_contract,
+    )
+
+    assert "prepared_contract_checks_mismatch" in {
+        failure["reason"] for failure in failures
+    }
+
+
 def test_launch_readiness_rejects_missing_matching_prepared_problem_summary(
     tmp_path: Path,
 ) -> None:

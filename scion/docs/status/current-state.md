@@ -46,10 +46,14 @@ Framework:
   summaries, report-only branch-research-state summaries, report-only
   champion-progress summaries, and consistency between inventory, review
   inputs, branch summaries, champion-progress summaries, prepared contracts,
-  and the problem-specific conclusion. Missing review inputs fail readiness;
-  valid negative conclusions can still be analysis-ready. Review surfaces must
-  also preserve current schemas, report-only/non-quality-judgment boundary
-  markers where applicable, `DecisionFeatures` exclusion, and raw
+  and the problem-specific conclusion. Required review inputs are
+  interpretation-specific: protocol-evaluated conclusions require the relevant
+  measurement/runtime/continuity inputs, while taxonomy-backed quality-blocked
+  no-protocol conclusions can be analysis-ready without plateau evidence
+  inputs. Stale or unsupported negative conclusions still fail readiness.
+  Review surfaces must also preserve current schemas,
+  report-only/non-quality-judgment boundary markers where applicable,
+  `DecisionFeatures` exclusion, and raw
   prompt/response/patch body/log exclusion markers.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
@@ -63,8 +67,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `cc11e7e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchcontract-cc11e7e-6r-gpt55-6r-gpt55-20260619T131623Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `1017fb7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-1017fb7-6r-gpt55-6r-gpt55-20260619T133705Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -85,6 +89,12 @@ Warehouse:
   table evidence, comparing the prepared champion checkpoint such as `v2`
   against the current champion max version while keeping copied resume history
   separate.
+- Warehouse quality-blocked no-protocol conclusions are valid negative
+  delegated-analysis conclusions only when the problem summary and
+  `failure_taxonomy_summary` agree on current-run quality-block evidence.
+  Missing measurement-effect, runtime-feedback, and research-continuity inputs
+  are nonblocking only for that quality-blocked interpretation, not for
+  protocol-evaluated plateau conclusions.
 
 CVRP/VRP:
 
@@ -97,8 +107,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `cc11e7e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchcontract-cc11e7e-1r-gpt55-1r-gpt55-20260619T131625Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `1017fb7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-1017fb7-1r-gpt55-1r-gpt55-20260619T133706Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -123,7 +133,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `cc11e7e`.
+- The active prepared roots were generated from WSL runtime commit `1017fb7`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prepared-contract consistency,
@@ -152,10 +162,11 @@ Infrastructure:
    key set in the WSL launch environment. `/v1/models` is not enough.
 2. Once auth is stable, run the warehouse `v2` follow-up as the simpler
    continuous-improvement proof, then run the CVRP large-two-opt follow-up.
-3. For warehouse postrun review, distinguish quality-blocked proposals from
-   protocol-evaluated no-effect evidence and require measurement-effect,
-   runtime-feedback, and substantive research-continuity signals before calling
-   evidence plateau-review-ready.
+3. For warehouse postrun review after launch, classify the result as
+   taxonomy-backed quality-blocked, protocol-evaluated no-effect/plateau, or
+   missed continuity opportunity. Only protocol-evaluated plateau conclusions
+   can use measurement-effect, runtime-feedback, and substantive continuity as
+   plateau evidence.
 4. For CVRP postrun review, inspect target intent, bounded two-opt mechanism
    design, branch-lesson transfer, effect-vs-MDE, runtime budget behavior,
    source visibility, and research-efficiency artifacts. Continuity-only
@@ -183,6 +194,8 @@ Infrastructure:
 - Current prepared-contract consistency evidence:
   `scion/docs/experiments/v0.4/v04-postrun-prepared-contract-consistency-20260619.md`.
   `scion/docs/experiments/v0.4/v04-launch-readiness-prepared-contract-consistency-20260619.md`.
+- Current quality-blocked postrun readiness evidence:
+  `scion/docs/experiments/v0.4/v04-postrun-quality-blocked-readiness-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:

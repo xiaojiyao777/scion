@@ -1578,6 +1578,121 @@ def test_postrun_acceptance_readiness_rejects_blocking_problem_summary_gaps(
     )
 
 
+def test_postrun_acceptance_accepts_warehouse_quality_blocked_no_protocol_conclusion(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-quality-blocked")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_quality_blocked_problem_evidence(),
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_warehouse_quality_blocked_review_inputs(brief, quality_block_count=2)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+    taxonomy_check = readiness["checks"]["failure_taxonomy_actionability"]
+    required_by_summary = {
+        item["summary"]: item["required_for_interpretation"]
+        for item in input_check["detail"]["summaries"]
+    }
+
+    assert readiness["current_run_analysis_ready"] is True
+    assert problem_check["status"] == "ok"
+    assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
+    assert input_check["status"] == "ok"
+    assert required_by_summary == {
+        "protocol_accounting_summary": True,
+        "measurement_effect_summary": False,
+        "runtime_feedback_summary": False,
+        "research_continuity_summary": False,
+    }
+    assert consistency_check["status"] == "ok"
+    assert consistency_check["detail"]["summary_quality_block_signal"] == 2
+    assert consistency_check["detail"]["input_quality_block_signal"] == 2
+    assert taxonomy_check["status"] == "ok"
+    assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0
+
+
+def test_postrun_acceptance_rejects_warehouse_quality_blocked_without_taxonomy_signal(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-stale-quality-blocked"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": _warehouse_quality_blocked_problem_evidence(),
+        "evidence_gaps": [
+            "quality_blocked_before_protocol_evaluation",
+            "missing_measurement_effect_summary",
+            "missing_runtime_feedback_summary",
+            "missing_research_continuity_summary",
+        ],
+        "interpretation": "quality_blocked_no_protocol_plateau_conclusion",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    _apply_warehouse_quality_blocked_review_inputs(brief, quality_block_count=0)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert input_check["status"] == "ok"
+    assert consistency_check["status"] == "failed"
+    assert "failure_taxonomy_quality_block_signal_missing" in consistency_check[
+        "detail"
+    ]["failures"]
+    assert consistency_check["detail"]["summary_quality_block_signal"] == 2
+    assert consistency_check["detail"]["input_quality_block_signal"] == 0
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_accepts_nonblocking_problem_summary_gaps(
     tmp_path: Path,
 ) -> None:
@@ -2280,6 +2395,191 @@ def _add_problem_summary_boundary_markers(summary: dict[str, object]) -> None:
     summary.setdefault("report_only", True)
     summary.setdefault("quality_judgment", False)
     summary.setdefault("decision_features_excluded", True)
+
+
+def _warehouse_quality_blocked_problem_evidence() -> dict[str, object]:
+    return {
+        "protocol": {
+            "formal_screened_candidates": 0,
+            "protocol_evaluated_candidates": 0,
+            "protocol_metric_results": 0,
+            "formal_candidate_artifact_rows": 0,
+            "stage_rows": {},
+        },
+        "measurement_effect": {
+            "available": False,
+            "protocol_row_count": 0,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 0,
+            "max_effect_to_mde_ratio": None,
+            "interpretation_counts": {},
+        },
+        "quality_blocks": {
+            "proposal_quality_blocks": 2,
+            "quality_blocks": 2,
+            "quality_block_ledger_count": 2,
+            "reports_with_quality_blocks": 1,
+            "reason_counts": {"missing_direct_effect": 2},
+        },
+        "runtime": {
+            "available": False,
+            "review_ready": False,
+            "drain_status_complete": False,
+            "fresh_runtime_status_counts": {},
+            "stage_transition_status_counts": {},
+            "runtime_budget_diagnostic_count": 0,
+        },
+        "research_continuity": {
+            "available": False,
+            "continuity_report_count": 0,
+            "substantive": False,
+            "max_branch_depth": 0,
+            "same_mechanism_observed": 0,
+            "same_mechanism_selected": 0,
+            "branch_lessons_required": 0,
+            "branch_lessons_satisfied": 0,
+            "weak_positive_observed": 0,
+            "weak_positive_accepted": 0,
+            "mechanism_family_counts": {},
+            "active_shape_counts": {},
+        },
+    }
+
+
+def _apply_warehouse_quality_blocked_review_inputs(
+    brief: dict[str, object],
+    *,
+    quality_block_count: int,
+) -> None:
+    protocol = brief["protocol_accounting_summary"]
+    assert isinstance(protocol, dict)
+    protocol["aggregate"] = {
+        "formal_screened_candidates": 0,
+        "formal_protocol_evaluated_candidates": 0,
+        "protocol_rows": {
+            "protocol_evaluated_candidates": 0,
+            "protocol_metric_results": 0,
+        },
+    }
+    _mark_measurement_effect_unavailable(brief["measurement_effect_summary"])
+    _mark_runtime_feedback_unavailable(brief["runtime_feedback_summary"])
+    _mark_research_continuity_unavailable(brief["research_continuity_summary"])
+    _set_failure_taxonomy_quality_blocks(brief, quality_block_count)
+
+
+def _mark_measurement_effect_unavailable(summary: object) -> None:
+    assert isinstance(summary, dict)
+    summary.update(
+        {
+            "current_run_evidence": True,
+            "available": False,
+            "report_count": 0,
+            "effect_report_count": 0,
+            "aggregate": {
+                "measurement_readiness_status_counts": {},
+                "interpretation_counts": {},
+                "protocol_row_count": 0,
+                "rows_at_or_above_mde": 0,
+                "rows_with_ci_high_below_mde": 0,
+                "max_effect_to_mde_ratio": None,
+            },
+            "entries": [],
+        }
+    )
+
+
+def _mark_runtime_feedback_unavailable(summary: object) -> None:
+    assert isinstance(summary, dict)
+    summary.update(
+        {
+            "current_run_evidence": True,
+            "available": False,
+            "drain_status_complete": False,
+            "review_ready": False,
+            "report_count": 0,
+            "runtime_report_count": 0,
+            "budget_diagnostic_source_count": 0,
+            "aggregate": {
+                "fresh_runtime_replay_drain": {
+                    "status_counts": {},
+                    "attempts": 0,
+                    "executed": 0,
+                },
+                "stage_transition_drain": {
+                    "status_counts": {},
+                    "attempts": 0,
+                    "executed": 0,
+                },
+                "runtime_budget_diagnostics": {
+                    "source_count": 0,
+                    "diagnostic_count": 0,
+                    "runtime_model_counts": {},
+                },
+            },
+            "entries": [],
+        }
+    )
+
+
+def _mark_research_continuity_unavailable(summary: object) -> None:
+    assert isinstance(summary, dict)
+    summary.update(
+        {
+            "current_run_evidence": True,
+            "available": False,
+            "report_count": 0,
+            "continuity_report_count": 0,
+            "aggregate": {
+                "max_branch_depth": 0,
+                "branch_depth_distribution": {},
+                "mechanism_family_counts": {},
+                "active_shape_counts": {},
+            },
+            "entries": [],
+        }
+    )
+
+
+def _set_failure_taxonomy_quality_blocks(
+    brief: dict[str, object],
+    quality_block_count: int,
+) -> None:
+    taxonomy = brief["failure_taxonomy_summary"]
+    assert isinstance(taxonomy, dict)
+    aggregate = taxonomy["aggregate"]
+    assert isinstance(aggregate, dict)
+    proposal_quality = aggregate["proposal_quality"]
+    assert isinstance(proposal_quality, dict)
+    proposal_quality.update(
+        {
+            "proposal_attempts_total": max(1, quality_block_count),
+            "proposal_attempts_consumed": max(1, quality_block_count),
+            "proposal_quality_blocks": quality_block_count,
+            "quality_blocks": quality_block_count,
+            "quality_block_ledger_count": quality_block_count,
+            "reports_with_quality_blocks": 1 if quality_block_count else 0,
+            "quality_block_reason_counts": (
+                {"missing_direct_effect": quality_block_count}
+                if quality_block_count
+                else {}
+            ),
+        }
+    )
+    entries = taxonomy.get("entries")
+    assert isinstance(entries, list)
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    entry_quality = entry["proposal_quality"]
+    assert isinstance(entry_quality, dict)
+    entry_quality.update(
+        {
+            "proposal_attempts_total": max(1, quality_block_count),
+            "proposal_attempts_consumed": max(1, quality_block_count),
+            "proposal_quality_blocks": quality_block_count,
+            "quality_blocks": quality_block_count,
+            "quality_block_ledger_count": quality_block_count,
+        }
+    )
 
 
 def _warehouse_problem_evidence() -> dict[str, object]:

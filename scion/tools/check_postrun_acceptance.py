@@ -38,6 +38,18 @@ BLOCKING_PROBLEM_SUMMARY_GAPS = {
     "no_protocol_evaluated_candidates",
     "warehouse_handoff_requirements_incomplete",
 }
+NONBLOCKING_PROBLEM_SUMMARY_GAPS_BY_INTERPRETATION = {
+    "quality_blocked_no_protocol_plateau_conclusion": {
+        "missing_measurement_effect_summary",
+        "missing_research_continuity_summary",
+        "missing_runtime_feedback_summary",
+    },
+    "quality_blocked_no_protocol_twoopt_conclusion": {
+        "missing_measurement_effect_summary",
+        "missing_research_continuity_summary",
+        "missing_runtime_feedback_summary",
+    },
+}
 PROBLEM_SUMMARY_SCHEMAS = {
     "warehouse_followup_summary": "scion.postrun_warehouse_followup_summary.v1",
     "cvrp_large_twoopt_summary": "scion.postrun_cvrp_large_twoopt_summary.v1",
@@ -756,7 +768,10 @@ def _summary_actionability_detail(
         "interpretation_supported": interpretation in delegated_interpretations,
         "review_axes_actionability": summary.get("review_axes_actionability"),
         "evidence_gaps": evidence_gaps,
-        "blocking_evidence_gaps": _blocking_problem_summary_gaps(evidence_gaps),
+        "blocking_evidence_gaps": _blocking_problem_summary_gaps(
+            evidence_gaps,
+            interpretation=str(interpretation or ""),
+        ),
         "summary_failures": summary_failures,
     }
 
@@ -785,28 +800,54 @@ def _review_input_summaries_actionability(
             "reason": "not_problem_specific_agentic_summary",
             "problem_family": problem_family,
         }
+    _, expected_key = _expected_problem_summary(brief, inventory)
+    problem_summary = _mapping_or_empty(brief.get(expected_key))
+    interpretation = str(problem_summary.get("interpretation") or "")
+    required_summaries = _required_review_input_summaries_for_interpretation(
+        interpretation,
+    )
     details = []
     for key, (schema, count_field) in REVIEW_INPUT_SUMMARIES.items():
+        required_for_interpretation = key in required_summaries
         summary = _mapping_or_empty(brief.get(key))
         count_value = _int_or_zero(summary.get(count_field))
+        summary_present = (
+            summary.get("available") is True
+            or _int_or_zero(summary.get("report_count")) > 0
+            or summary.get("schema_version") is not None
+        )
         failures: list[str] = []
-        if summary.get("schema_version") != schema:
+        if (required_for_interpretation or summary_present) and (
+            summary.get("schema_version") != schema
+        ):
             failures.append(f"{key}_schema_stale")
-        if summary.get("report_only") is not True:
+        if (required_for_interpretation or summary_present) and (
+            summary.get("report_only") is not True
+        ):
             failures.append(f"{key}_not_report_only")
-        if summary.get("quality_judgment") is not False:
+        if (required_for_interpretation or summary_present) and (
+            summary.get("quality_judgment") is not False
+        ):
             failures.append(f"{key}_quality_judgment_not_false")
-        if summary.get("decision_features_excluded") is not True:
+        if (required_for_interpretation or summary_present) and (
+            summary.get("decision_features_excluded") is not True
+        ):
             failures.append(f"{key}_decision_features_not_excluded")
-        if summary.get("current_run_evidence") is not True:
+        if (
+            required_for_interpretation
+            and summary.get("current_run_evidence") is not True
+        ):
             failures.append(f"{key}_not_current_run_evidence")
-        if summary.get("available") is not True:
+        if required_for_interpretation and summary.get("available") is not True:
             failures.append(f"{key}_unavailable")
-        if _int_or_zero(summary.get("report_count")) <= 0:
+        if (
+            required_for_interpretation
+            and _int_or_zero(summary.get("report_count")) <= 0
+        ):
             failures.append(f"{key}_report_count_missing")
-        if count_value <= 0:
+        if required_for_interpretation and count_value <= 0:
             failures.append(f"{key}_{count_field}_missing")
-        if key == "runtime_feedback_summary":
+        if key == "runtime_feedback_summary" and required_for_interpretation:
             if summary.get("drain_status_complete") is not True:
                 failures.append("runtime_feedback_summary_drain_status_incomplete")
             if summary.get("review_ready") is not True:
@@ -814,6 +855,7 @@ def _review_input_summaries_actionability(
         details.append(
             {
                 "summary": key,
+                "required_for_interpretation": required_for_interpretation,
                 "failures": failures,
                 "schema_version": summary.get("schema_version"),
                 "expected_schema_version": schema,
@@ -836,6 +878,7 @@ def _review_input_summaries_actionability(
         else "failed",
         {
             "problem_family": problem_family,
+            "interpretation": interpretation,
             "summaries": details,
         },
     )
@@ -1103,6 +1146,14 @@ def _is_protocol_evaluated_interpretation(interpretation: str) -> bool:
 
 def _is_quality_blocked_interpretation(interpretation: str) -> bool:
     return interpretation.startswith("quality_blocked_")
+
+
+def _required_review_input_summaries_for_interpretation(
+    interpretation: str,
+) -> set[str]:
+    if _is_quality_blocked_interpretation(interpretation):
+        return {"protocol_accounting_summary"}
+    return set(REVIEW_INPUT_SUMMARIES)
 
 
 def _prompt_source_visibility_actionability(
@@ -1728,11 +1779,22 @@ def _failure_taxonomy_actionability(
     )
 
 
-def _blocking_problem_summary_gaps(evidence_gaps: list[str]) -> list[str]:
+def _blocking_problem_summary_gaps(
+    evidence_gaps: list[str],
+    *,
+    interpretation: str,
+) -> list[str]:
+    nonblocking_for_interpretation = (
+        NONBLOCKING_PROBLEM_SUMMARY_GAPS_BY_INTERPRETATION.get(
+            interpretation,
+            set(),
+        )
+    )
     return [
         gap
         for gap in evidence_gaps
         if gap in BLOCKING_PROBLEM_SUMMARY_GAPS
+        and gap not in nonblocking_for_interpretation
     ]
 
 
