@@ -311,7 +311,8 @@ Current checkpoint:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `expired=1`, `total=1`. Do not launch either
+  `active=0`, `refreshing=1`, `total=1` on the latest recheck; earlier checks
+  also showed the single account as expired. Do not launch either
   root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
