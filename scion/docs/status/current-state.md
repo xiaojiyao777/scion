@@ -171,8 +171,8 @@ Infrastructure:
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
-  `refreshing=0`, `total=1`.
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`;
+  `expired`/`refreshing` may vary while the proxy login is stale.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
