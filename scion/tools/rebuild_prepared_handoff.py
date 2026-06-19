@@ -95,6 +95,32 @@ CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
         "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
     ),
 }
+WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
+    "provider_hook": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "def active_subject_code_constraints",
+    ),
+    "diagnostics_contract": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "self.validation_transfer_diagnostics",
+    ),
+    "bounded_scan_guard": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "unbounded full vehicle-pair scans",
+    ),
+    "lexicographic_guard": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "lexicographic",
+    ),
+}
+ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY = {
+    "cvrp": CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
+    "warehouse_delivery": WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
+}
+ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES = {
+    "cvrp": "cvrp_active_subject_code_constraints_prompt_bridge",
+    "warehouse_delivery": "warehouse_active_subject_code_constraints_prompt_bridge",
+}
 
 
 def rebuild_prepared_handoff(
@@ -759,7 +785,9 @@ def _add_active_subject_code_constraints_prompt_signal(
     *,
     problem_family: Any,
 ) -> None:
-    if problem_family != "cvrp":
+    family = str(problem_family or "")
+    provider_markers = ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY.get(family)
+    if not provider_markers:
         return
     source_marker_results = {
         name: _source_contains(relative_path, marker)
@@ -769,20 +797,18 @@ def _add_active_subject_code_constraints_prompt_signal(
     }
     provider_marker_results = {
         name: _source_contains(relative_path, marker)
-        for name, (relative_path, marker) in (
-            CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS.items()
-        )
+        for name, (relative_path, marker) in provider_markers.items()
     }
     _add_signal(
         signals,
-        "cvrp_active_subject_code_constraints_prompt_bridge",
+        ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES[family],
         available=(
             all(source_marker_results.values())
             and all(provider_marker_results.values())
         ),
         required=True,
         source=(
-            "current checkout CVRP active subject code constraint provider plus "
+            f"current checkout {family} active subject code constraint provider plus "
             "code prompt renderer"
         ),
         detail={

@@ -429,13 +429,24 @@ def _prompt_source_visibility_actionability(
     active_constraints_full_visible_count = _int_or_zero(
         source_visibility.get("active_subject_code_constraints_full_visible_count")
     )
-    if problem_family == "cvrp" and code_trace_count > 0:
+    if problem_family in {"cvrp", "warehouse_delivery"} and code_trace_count > 0:
+        failure_prefix = (
+            "cvrp"
+            if problem_family == "cvrp"
+            else "warehouse"
+        )
         if active_constraints_trace_count <= 0:
-            failures.append("cvrp_active_subject_code_constraints_trace_missing")
+            failures.append(
+                f"{failure_prefix}_active_subject_code_constraints_trace_missing"
+            )
         if active_constraints_required_count < code_trace_count:
-            failures.append("cvrp_active_subject_code_constraints_not_required")
+            failures.append(
+                f"{failure_prefix}_active_subject_code_constraints_not_required"
+            )
         if active_constraints_full_visible_count < code_trace_count:
-            failures.append("cvrp_active_subject_code_constraints_not_full_visible")
+            failures.append(
+                f"{failure_prefix}_active_subject_code_constraints_not_full_visible"
+            )
     return (
         "ok" if not failures else "failed",
         {

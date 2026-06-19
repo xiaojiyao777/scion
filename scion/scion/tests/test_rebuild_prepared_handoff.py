@@ -283,6 +283,210 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     )
 
 
+def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_rebuild_fixture_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        report_stem="warehouse_on_full",
+        research_focus=_warehouse_research_focus(),
+        control_pair_key="warehouse.prepared:rep01",
+    )
+
+    manifest = rebuild_tool.rebuild_prepared_handoff(
+        run_root,
+        report_stem="warehouse_on_full",
+        strict=True,
+    )
+
+    prompt_context = json.loads(
+        (
+            run_root
+            / "prepared_handoff"
+            / "prompt_context_readiness"
+            / "warehouse_on_full.prepared_prompt_context_readiness.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    code_bridge = prompt_context["signals"][
+        "warehouse_active_subject_code_constraints_prompt_bridge"
+    ]
+
+    assert manifest["complete"] is True
+    assert prompt_context["problem_family"] == "warehouse_delivery"
+    assert code_bridge["available"] is True
+    assert code_bridge["required"] is True
+    assert code_bridge["runtime_generated_after_launch"] is False
+    assert code_bridge["detail"]["source_markers"] == {
+        "code_prompt_renderer": True,
+        "context_key": True,
+        "context_provider_payload": True,
+    }
+    assert code_bridge["detail"]["provider_markers"] == {
+        "bounded_scan_guard": True,
+        "diagnostics_contract": True,
+        "lexicographic_guard": True,
+        "provider_hook": True,
+    }
+
+
+def _write_rebuild_fixture_root(
+    tmp_path: Path,
+    *,
+    problem_family: str,
+    report_stem: str,
+    research_focus: dict[str, object],
+    control_pair_key: str,
+) -> Path:
+    run_root = tmp_path / f"{report_stem}-prepared-root"
+    campaign_dir = run_root / "campaign"
+    config_dir = run_root / "config"
+    campaign_dir.mkdir(parents=True)
+    config_dir.mkdir()
+    for name in ("problem.yaml", "protocol.yaml", "split.yaml", "seeds.yaml"):
+        (config_dir / name).write_text("ok: true\n", encoding="utf-8")
+
+    command = (
+        f"{sys.executable} -m scion.cli.main run "
+        f"--problem {config_dir / 'problem.yaml'} "
+        f"--protocol {config_dir / 'protocol.yaml'} "
+        f"--split {config_dir / 'split.yaml'} "
+        f"--seeds {config_dir / 'seeds.yaml'} "
+        f"--campaign-dir {campaign_dir} --rounds 1 --agentic-proposal"
+    )
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "scion.launcher_prepare.v1",
+            "status": "prepared",
+            "prepared_only": True,
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "problem_family": problem_family,
+            "analysis_intent": "Prepared handoff rebuild fixture.",
+            "acceptance_focus": ["Keep handoff report-only."],
+            "research_focus": research_focus,
+            "resume_from_campaign": "/tmp/source-campaign",
+            "command": command,
+            "execution": {
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+            },
+            "model": {
+                "name": "gpt-5.5",
+                "base_url": "http://127.0.0.1:8080",
+                "completion_preflight": True,
+            },
+            "git": {
+                "commit": _git_head_short(),
+                "runtime_guard_paths": "scion/tools",
+            },
+            "config": {
+                "problem": str(config_dir / "problem.yaml"),
+                "protocol": str(config_dir / "protocol.yaml"),
+                "split": str(config_dir / "split.yaml"),
+                "seeds": str(config_dir / "seeds.yaml"),
+            },
+            "report_metadata": {
+                "control_pair_key": control_pair_key,
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "readiness",
+                    "rebuild",
+                ],
+            },
+        },
+    )
+    (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
+    (run_root / "launch.env").write_text(
+        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}\n",
+        encoding="utf-8",
+    )
+    (run_root / "run.sh").write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "source launch.env",
+                "export PYTHONPATH SCION_MODEL PREPARED_RUN_MANIFEST",
+                "python -m scion.cli.main run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_root / "command.txt").write_text(
+        "\n".join(
+            [
+                "report_metadata:",
+                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
+                "",
+                "command:",
+                command,
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "agentic_session_trace_index": {
+                "sessions": [
+                    {
+                        "call_kind": "hypothesis",
+                        "prompt_manifest": "traces/branch-a/prompt_manifest.json",
+                    }
+                ]
+            },
+            "branches": [{"id": "branch-a"}],
+            "proposal_accounting": {
+                "last_prompt_manifest": "traces/branch-a/prompt_manifest.json",
+            },
+        },
+    )
+    _write_json(
+        campaign_dir / "status.json",
+        {
+            "agentic_session_trace_index": {
+                "sessions": [
+                    {
+                        "call_kind": "code",
+                        "prompt_manifest_path": (
+                            "traces/branch-a/code_prompt_manifest.json"
+                        ),
+                    }
+                ]
+            },
+            "branches": [{"id": "branch-a"}],
+            "proposal_accounting": {
+                "last_code_prompt_manifest": (
+                    "traces/branch-a/code_prompt_manifest.json"
+                ),
+            },
+        },
+    )
+    return run_root
+
+
 def _cvrp_research_focus() -> dict[str, object]:
     return {
         "schema_version": "scion.cvrp_research_focus.v1",
@@ -331,6 +535,34 @@ def _cvrp_research_focus() -> dict[str, object]:
         "decision_boundary": (
             "This focus must not enter DecisionFeatures, Protocol gates, "
             "promotion input, or scheduler state."
+        ),
+    }
+
+
+def _warehouse_research_focus() -> dict[str, object]:
+    return {
+        "scope": "report_only_prepared_handoff",
+        "accepted_checkpoint": "Champion v2 promoted.",
+        "current_question": (
+            "Can warehouse v2 plateau be advanced with one bounded follow-up?"
+        ),
+        "required_evidence": [
+            "preserve promotion behavior",
+            "branch transfer evidence",
+            "quality-blocked and protocol-evaluated branches separated",
+            "cost_delta and split_delta diagnostics exported",
+            "fast completion runtime retained",
+        ],
+        "default_avoid_directions": [
+            "restart from baseline",
+            "proposal-quality only claims",
+            "fast completion without current-run evidence",
+            "accept split_delta_sum==0 as success",
+            "broad warehouse matrix before v2 follow-up",
+        ],
+        "decision_boundary": (
+            "Keep warehouse follow-up evidence out of DecisionFeatures, Protocol, "
+            "promotion, and scheduler state."
         ),
     }
 

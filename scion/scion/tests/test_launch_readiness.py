@@ -418,6 +418,45 @@ def test_launch_readiness_rejects_missing_cvrp_code_constraint_bridge(
     )
 
 
+def test_launch_readiness_rejects_missing_warehouse_code_constraint_bridge(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=_warehouse_research_focus(),
+        include_code_constraint_bridge=False,
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert (
+        report["checks"]["problem_specific_prepared_handoff"]["status"] == "ok"
+    )
+    prompt_check = report["checks"]["prompt_context_readiness_complete"]
+    assert prompt_check["status"] == "failed"
+    assert any(
+        failure["reason"] == (
+            "warehouse_active_subject_code_constraints_bridge_missing"
+        )
+        for failure in prompt_check["detail"]["failures"]
+    )
+    live_markers = prompt_check["detail"]["live_markers"][
+        "warehouse_active_subject_code_constraint_source_markers"
+    ]
+    assert live_markers == {
+        "bounded_scan_guard": True,
+        "code_prompt_renderer": True,
+        "context_key": True,
+        "context_provider_payload": True,
+        "diagnostics_contract": True,
+        "lexicographic_guard": True,
+        "provider_hook": True,
+    }
+
+
 def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     tmp_path: Path,
     monkeypatch,
@@ -736,6 +775,9 @@ def _write_prepared_root(
     include_analysis_brief: bool = True,
     prompt_context_launch_markers: bool = True,
     runtime_guard_paths: str = "scion/tools",
+    problem_family: str = "cvrp",
+    research_focus: dict[str, object] | None = None,
+    include_code_constraint_bridge: bool = True,
 ) -> Path:
     run_root = tmp_path / "prepared-root"
     campaign_dir = run_root / "campaign"
@@ -775,7 +817,7 @@ def _write_prepared_root(
         "promotion_state_mutated": False,
         "run_root": str(run_root),
         "campaign_dir": str(campaign_dir),
-        "problem_family": "cvrp",
+        "problem_family": problem_family,
         "analysis_intent": "Prepared launch readiness fixture.",
         "acceptance_focus": ["Stay report-only."],
         "resume_from_campaign": "/tmp/source-campaign",
@@ -811,7 +853,9 @@ def _write_prepared_root(
         },
     }
     if include_research_focus:
-        manifest["research_focus"] = _cvrp_research_focus()
+        manifest["research_focus"] = (
+            research_focus if research_focus is not None else _cvrp_research_focus()
+        )
     _write_json(run_root / "prepared_run_manifest.v1.json", manifest)
     (run_root / "prepared_run_manifest.md").write_text("# prepared\n", encoding="utf-8")
     (run_root / "command.txt").write_text(
@@ -885,6 +929,8 @@ exit "$STATUS"
             run_root,
             ready=include_research_focus,
             launch_markers=prompt_context_launch_markers,
+            problem_family=problem_family,
+            include_code_constraint_bridge=include_code_constraint_bridge,
         )
     if include_analysis_brief:
         _write_prepared_analysis_brief(run_root)
@@ -968,6 +1014,34 @@ def _large_twoopt_constraints() -> dict[str, object]:
             "unbounded two_opt_intra fallback",
             "activation claims without wall-clock evidence",
         ],
+    }
+
+
+def _warehouse_research_focus() -> dict[str, object]:
+    return {
+        "scope": "report_only_prepared_handoff",
+        "accepted_checkpoint": "Champion v2 promoted.",
+        "current_question": (
+            "Can warehouse v2 plateau be advanced with one bounded follow-up?"
+        ),
+        "required_evidence": [
+            "preserve promotion behavior",
+            "branch transfer evidence",
+            "quality-blocked and protocol-evaluated branches separated",
+            "cost_delta and split_delta diagnostics exported",
+            "fast completion runtime retained",
+        ],
+        "default_avoid_directions": [
+            "restart from baseline",
+            "proposal-quality only claims",
+            "fast completion without current-run evidence",
+            "accept split_delta_sum==0 as success",
+            "broad warehouse matrix before v2 follow-up",
+        ],
+        "decision_boundary": (
+            "Keep warehouse follow-up evidence out of DecisionFeatures, Protocol, "
+            "promotion, and scheduler state."
+        ),
     }
 
 
@@ -1062,6 +1136,8 @@ def _write_prompt_context_readiness(
     *,
     ready: bool,
     launch_markers: bool,
+    problem_family: str,
+    include_code_constraint_bridge: bool,
 ) -> None:
     missing_required = [] if ready else ["prepared_research_focus"]
     launch_marker_payload = {
@@ -1069,6 +1145,63 @@ def _write_prompt_context_readiness(
         "prepared_manifest_exists": True,
         "run_sh_exports_manifest": launch_markers,
     }
+    signals = {
+        "prepared_research_focus_prompt_bridge": {
+            "available": ready and launch_markers,
+            "detail": {
+                "launch_markers": launch_marker_payload,
+                "source_markers": {
+                    "context_payload": True,
+                    "manifest_env_reader": True,
+                    "prompt_renderer": True,
+                },
+            },
+            "required": True,
+            "runtime_generated_after_launch": False,
+            "source": "fixture",
+        },
+    }
+    if include_code_constraint_bridge:
+        if problem_family == "warehouse_delivery":
+            signals["warehouse_active_subject_code_constraints_prompt_bridge"] = {
+                "available": True,
+                "detail": {
+                    "provider_markers": {
+                        "bounded_scan_guard": True,
+                        "diagnostics_contract": True,
+                        "lexicographic_guard": True,
+                        "provider_hook": True,
+                    },
+                    "source_markers": {
+                        "code_prompt_renderer": True,
+                        "context_key": True,
+                        "context_provider_payload": True,
+                    },
+                },
+                "required": True,
+                "runtime_generated_after_launch": False,
+                "source": "fixture",
+            }
+        elif problem_family == "cvrp":
+            signals["cvrp_active_subject_code_constraints_prompt_bridge"] = {
+                "available": True,
+                "detail": {
+                    "provider_markers": {
+                        "large_twoopt_runtime_guard": True,
+                        "provider_hook": True,
+                        "unbounded_twoopt_reject": True,
+                    },
+                    "source_markers": {
+                        "code_prompt_renderer": True,
+                        "context_key": True,
+                        "context_provider_payload": True,
+                    },
+                },
+                "required": True,
+                "runtime_generated_after_launch": False,
+                "source": "fixture",
+            }
+
     _write_json(
         run_root
         / "prepared_handoff"
@@ -1089,47 +1222,14 @@ def _write_prompt_context_readiness(
                 run_root / "prepared_run_manifest.v1.json"
             ),
             "prepared_manifest_commit": _git_head_short(),
-            "problem_family": "cvrp",
+            "problem_family": problem_family,
             "model": "gpt-5.5",
             "readiness": {
                 "ready_for_launch_prompt_audit": ready,
                 "missing_required": missing_required,
                 "status": "ready" if ready else "missing_required_sources",
             },
-            "signals": {
-                "prepared_research_focus_prompt_bridge": {
-                    "available": ready and launch_markers,
-                    "detail": {
-                        "launch_markers": launch_marker_payload,
-                        "source_markers": {
-                            "context_payload": True,
-                            "manifest_env_reader": True,
-                            "prompt_renderer": True,
-                        },
-                    },
-                    "required": True,
-                    "runtime_generated_after_launch": False,
-                    "source": "fixture",
-                },
-                "cvrp_active_subject_code_constraints_prompt_bridge": {
-                    "available": True,
-                    "detail": {
-                        "provider_markers": {
-                            "large_twoopt_runtime_guard": True,
-                            "provider_hook": True,
-                            "unbounded_twoopt_reject": True,
-                        },
-                        "source_markers": {
-                            "code_prompt_renderer": True,
-                            "context_key": True,
-                            "context_provider_payload": True,
-                        },
-                    },
-                    "required": True,
-                    "runtime_generated_after_launch": False,
-                    "source": "fixture",
-                }
-            },
+            "signals": signals,
         },
     )
 

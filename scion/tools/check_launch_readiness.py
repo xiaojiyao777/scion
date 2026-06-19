@@ -66,6 +66,32 @@ CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
         "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
     ),
 }
+WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS = {
+    "provider_hook": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "def active_subject_code_constraints",
+    ),
+    "diagnostics_contract": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "self.validation_transfer_diagnostics",
+    ),
+    "bounded_scan_guard": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "unbounded full vehicle-pair scans",
+    ),
+    "lexicographic_guard": (
+        "scion/scion/problems/warehouse_delivery/adapter.py",
+        "lexicographic",
+    ),
+}
+ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY = {
+    "cvrp": CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
+    "warehouse_delivery": WAREHOUSE_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS,
+}
+ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES = {
+    "cvrp": "cvrp_active_subject_code_constraints_prompt_bridge",
+    "warehouse_delivery": "warehouse_active_subject_code_constraints_prompt_bridge",
+}
 PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
     "cvrp": ("cvrp_",),
     "warehouse_delivery": ("warehouse_",),
@@ -906,12 +932,19 @@ def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:
             and _path_contains(root / "run.sh", "scion.cli.main run"),
         },
     }
-    if manifest_dict.get("problem_family") == "cvrp":
-        live_markers["cvrp_active_subject_code_constraint_source_markers"] = {
+    family = str(manifest_dict.get("problem_family") or "")
+    provider_markers = ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS_BY_FAMILY.get(family)
+    if provider_markers:
+        marker_name = (
+            "cvrp_active_subject_code_constraint_source_markers"
+            if family == "cvrp"
+            else "warehouse_active_subject_code_constraint_source_markers"
+        )
+        live_markers[marker_name] = {
             name: _repo_path_contains(relative_path, marker)
             for name, (relative_path, marker) in (
                 ACTIVE_SUBJECT_CODE_CONSTRAINT_PROMPT_MARKERS
-                | CVRP_ACTIVE_SUBJECT_CODE_CONSTRAINT_MARKERS
+                | provider_markers
             ).items()
         }
     detail["live_markers"] = live_markers
@@ -1051,44 +1084,35 @@ def _prompt_context_artifact_failures(
                 }
             )
 
-    if manifest.get("problem_family") == "cvrp":
-        code_bridge = signals_dict.get(
-            "cvrp_active_subject_code_constraints_prompt_bridge"
+    family = str(manifest.get("problem_family") or "")
+    bridge_signal_name = ACTIVE_SUBJECT_CODE_CONSTRAINT_SIGNAL_NAMES.get(family)
+    if bridge_signal_name:
+        failure_prefix = (
+            "cvrp_active_subject_code_constraints_bridge"
+            if family == "cvrp"
+            else "warehouse_active_subject_code_constraints_bridge"
         )
+        code_bridge = signals_dict.get(bridge_signal_name)
         if not isinstance(code_bridge, dict):
-            failures.append(
-                {
-                    "reason": (
-                        "cvrp_active_subject_code_constraints_bridge_missing"
-                    )
-                }
-            )
+            failures.append({"reason": f"{failure_prefix}_missing"})
         else:
             if code_bridge.get("required") is not True:
                 failures.append(
                     {
-                        "reason": (
-                            "cvrp_active_subject_code_constraints_bridge_not_required"
-                        ),
+                        "reason": f"{failure_prefix}_not_required",
                         "required": code_bridge.get("required"),
                     }
                 )
             if code_bridge.get("available") is not True:
                 failures.append(
                     {
-                        "reason": (
-                            "cvrp_active_subject_code_constraints_bridge_unavailable"
-                        ),
+                        "reason": f"{failure_prefix}_unavailable",
                         "available": code_bridge.get("available"),
                     }
                 )
             if code_bridge.get("runtime_generated_after_launch") is True:
                 failures.append(
-                    {
-                        "reason": (
-                            "cvrp_active_subject_code_constraints_bridge_runtime_generated"
-                        )
-                    }
+                    {"reason": f"{failure_prefix}_runtime_generated"}
                 )
             code_detail = code_bridge.get("detail")
             code_detail_dict = code_detail if isinstance(code_detail, dict) else {}
@@ -1103,10 +1127,7 @@ def _prompt_context_artifact_failures(
                 if not markers_dict or missing:
                     failures.append(
                         {
-                            "reason": (
-                                "cvrp_active_subject_code_constraints_bridge_"
-                                f"{group}_missing"
-                            ),
+                            "reason": f"{failure_prefix}_{group}_missing",
                             "missing": missing or ["<all>"],
                         }
                     )
