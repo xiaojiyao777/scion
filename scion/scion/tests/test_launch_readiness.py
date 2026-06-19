@@ -2457,6 +2457,7 @@ def _write_prepared_root(
         "--agentic-session-timeout-sec 3600 "
         "--agentic-tool-max-steps 240 "
         "--agentic-tool-max-calls 200 "
+        "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--proposal-attempt-limit 64 --proposal-quality-loop-limit 64 "
         f"--agentic-proposal --disable-early-stop"
@@ -2509,6 +2510,7 @@ def _write_prepared_root(
             "agentic_session_timeout_sec": 3600,
             "agentic_tool_max_steps": 240,
             "agentic_tool_max_calls": 200,
+            "agentic_code_tool_max_calls": 200,
             "agentic_observation_max_chars": 2000000,
             "proposal_attempt_limit": 64,
             "proposal_quality_loop_limit": 64,
@@ -2562,6 +2564,7 @@ def _write_prepared_root(
                 "AGENTIC_SESSION_TIMEOUT_SEC=3600",
                 "AGENTIC_TOOL_MAX_STEPS=240",
                 "AGENTIC_TOOL_MAX_CALLS=200",
+                "AGENTIC_CODE_TOOL_MAX_CALLS=200",
                 "AGENTIC_OBSERVATION_MAX_CHARS=2000000",
                 "PROPOSAL_ATTEMPT_LIMIT=64",
                 "PROPOSAL_QUALITY_LOOP_LIMIT=64",
@@ -2639,7 +2642,7 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
 STATUS=$?
 write_postrun_acceptance_reports
 exit "$STATUS"

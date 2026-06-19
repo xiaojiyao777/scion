@@ -58,6 +58,8 @@ class AgenticRequestMixin:
             kwargs["max_steps"] = int(self.agentic_tool_max_steps)
         if self.agentic_tool_max_calls is not None:
             kwargs["max_tool_calls"] = int(self.agentic_tool_max_calls)
+        if self.agentic_code_tool_max_calls is not None:
+            kwargs["max_code_tool_calls"] = int(self.agentic_code_tool_max_calls)
         if self.agentic_observation_max_chars is not None:
             kwargs["max_observation_chars"] = int(
                 self.agentic_observation_max_chars

@@ -574,6 +574,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         "--agentic-session-timeout-sec 3600 "
         "--agentic-tool-max-steps 240 "
         "--agentic-tool-max-calls 200 "
+        "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--rounds 1 --agentic-proposal --disable-early-stop"
     )
@@ -620,6 +621,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "agentic_session_timeout_sec": 3600,
                 "agentic_tool_max_steps": 240,
                 "agentic_tool_max_calls": 200,
+                "agentic_code_tool_max_calls": 200,
                 "agentic_observation_max_chars": 2000000,
                 "proposal_attempt_limit": 64,
                 "proposal_quality_loop_limit": 64,

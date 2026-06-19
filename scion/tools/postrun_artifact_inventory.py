@@ -1019,6 +1019,7 @@ def _prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]
         "agentic_session_timeout_sec": execution.get("agentic_session_timeout_sec"),
         "agentic_tool_max_steps": execution.get("agentic_tool_max_steps"),
         "agentic_tool_max_calls": execution.get("agentic_tool_max_calls"),
+        "agentic_code_tool_max_calls": execution.get("agentic_code_tool_max_calls"),
         "agentic_observation_max_chars": execution.get(
             "agentic_observation_max_chars"
         ),

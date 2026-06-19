@@ -30,6 +30,7 @@ MIN_PREPARED_PROPOSAL_HEADROOM = 64
 MIN_PREPARED_AGENTIC_SESSION_TIMEOUT_SEC = 3600
 MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS = 240
 MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS = 200
+MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS = MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS
 MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
@@ -1589,6 +1590,11 @@ def _run_script_proposal_headroom_enforced(
             "option": "--agentic-tool-max-calls",
             "min": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
         },
+        "agentic_code_tool_max_calls": {
+            "env": "AGENTIC_CODE_TOOL_MAX_CALLS",
+            "option": "--agentic-code-tool-max-calls",
+            "min": MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS,
+        },
         "agentic_observation_max_chars": {
             "env": "AGENTIC_OBSERVATION_MAX_CHARS",
             "option": "--agentic-observation-max-chars",
@@ -1689,6 +1695,9 @@ def _run_script_proposal_headroom_enforced(
         ),
         "min_prepared_agentic_tool_max_steps": MIN_PREPARED_AGENTIC_TOOL_MAX_STEPS,
         "min_prepared_agentic_tool_max_calls": MIN_PREPARED_AGENTIC_TOOL_MAX_CALLS,
+        "min_prepared_agentic_code_tool_max_calls": (
+            MIN_PREPARED_AGENTIC_CODE_TOOL_MAX_CALLS
+        ),
         "min_prepared_agentic_observation_max_chars": (
             MIN_PREPARED_AGENTIC_OBSERVATION_MAX_CHARS
         ),

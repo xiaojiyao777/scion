@@ -26,6 +26,7 @@ DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 3600
 DEFAULT_AGENTIC_TOOL_MAX_STEPS = 240
 DEFAULT_AGENTIC_TOOL_MAX_CALLS = 200
+DEFAULT_AGENTIC_CODE_TOOL_MAX_CALLS = DEFAULT_AGENTIC_TOOL_MAX_CALLS
 DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS = 2_000_000
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
 DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 64
@@ -595,6 +596,7 @@ def _build_command(env: dict[str, object]) -> str:
         f"--agentic-session-timeout-sec {env['AGENTIC_SESSION_TIMEOUT_SEC']} "
         f"--agentic-tool-max-steps {env['AGENTIC_TOOL_MAX_STEPS']} "
         f"--agentic-tool-max-calls {env['AGENTIC_TOOL_MAX_CALLS']} "
+        f"--agentic-code-tool-max-calls {env['AGENTIC_CODE_TOOL_MAX_CALLS']} "
         f"--agentic-observation-max-chars {env['AGENTIC_OBSERVATION_MAX_CHARS']} "
         f"--proposal-attempt-limit {env['PROPOSAL_ATTEMPT_LIMIT']} "
         f"--proposal-quality-loop-limit {env['PROPOSAL_QUALITY_LOOP_LIMIT']} "
@@ -641,6 +643,7 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "AGENTIC_SESSION_TIMEOUT_SEC",
         "AGENTIC_TOOL_MAX_STEPS",
         "AGENTIC_TOOL_MAX_CALLS",
+        "AGENTIC_CODE_TOOL_MAX_CALLS",
         "AGENTIC_OBSERVATION_MAX_CHARS",
         "GIT_COMMIT",
         "GIT_RUNTIME_GUARD_PATHS",
@@ -758,6 +761,7 @@ unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
   --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
   --agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS" \\
   --agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS" \\
+  --agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS" \\
   --agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS" \\
   --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
   --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
@@ -825,6 +829,7 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
         "agentic_tool_max_steps": int(env["AGENTIC_TOOL_MAX_STEPS"]),
         "agentic_tool_max_calls": int(env["AGENTIC_TOOL_MAX_CALLS"]),
+        "agentic_code_tool_max_calls": int(env["AGENTIC_CODE_TOOL_MAX_CALLS"]),
         "agentic_observation_max_chars": int(env["AGENTIC_OBSERVATION_MAX_CHARS"]),
         "proposal_attempt_limit": int(env["PROPOSAL_ATTEMPT_LIMIT"]),
         "proposal_quality_loop_limit": int(env["PROPOSAL_QUALITY_LOOP_LIMIT"]),
@@ -884,6 +889,7 @@ def _write_prepared_run_manifest(
             "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
             "agentic_tool_max_steps": int(env["AGENTIC_TOOL_MAX_STEPS"]),
             "agentic_tool_max_calls": int(env["AGENTIC_TOOL_MAX_CALLS"]),
+            "agentic_code_tool_max_calls": int(env["AGENTIC_CODE_TOOL_MAX_CALLS"]),
             "agentic_observation_max_chars": int(
                 env["AGENTIC_OBSERVATION_MAX_CHARS"]
             ),
@@ -1035,6 +1041,7 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "agentic_session_timeout_sec",
         "agentic_tool_max_steps",
         "agentic_tool_max_calls",
+        "agentic_code_tool_max_calls",
         "agentic_observation_max_chars",
         "proposal_attempt_limit",
         "proposal_quality_loop_limit",
@@ -1145,6 +1152,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "AGENTIC_SESSION_TIMEOUT_SEC": args.agentic_session_timeout_sec,
         "AGENTIC_TOOL_MAX_STEPS": args.agentic_tool_max_steps,
         "AGENTIC_TOOL_MAX_CALLS": args.agentic_tool_max_calls,
+        "AGENTIC_CODE_TOOL_MAX_CALLS": args.agentic_code_tool_max_calls,
         "AGENTIC_OBSERVATION_MAX_CHARS": args.agentic_observation_max_chars,
         "GIT_COMMIT": _git_commit(repo_root),
         "GIT_RUNTIME_GUARD_PATHS": (
@@ -1174,6 +1182,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"AGENTIC_SESSION_TIMEOUT_SEC={env['AGENTIC_SESSION_TIMEOUT_SEC']}\n"
             f"AGENTIC_TOOL_MAX_STEPS={env['AGENTIC_TOOL_MAX_STEPS']}\n"
             f"AGENTIC_TOOL_MAX_CALLS={env['AGENTIC_TOOL_MAX_CALLS']}\n"
+            f"AGENTIC_CODE_TOOL_MAX_CALLS={env['AGENTIC_CODE_TOOL_MAX_CALLS']}\n"
             "AGENTIC_OBSERVATION_MAX_CHARS="
             f"{env['AGENTIC_OBSERVATION_MAX_CHARS']}\n\n"
             f"PROPOSAL_ATTEMPT_LIMIT={env['PROPOSAL_ATTEMPT_LIMIT']}\n"
@@ -1307,6 +1316,12 @@ def parse_args() -> argparse.Namespace:
         help="APS per-session tool-call headroom for focused v0.4 agentic research.",
     )
     parser.add_argument(
+        "--agentic-code-tool-max-calls",
+        type=int,
+        default=DEFAULT_AGENTIC_CODE_TOOL_MAX_CALLS,
+        help="APS code-phase tool-call headroom for focused v0.4 agentic research.",
+    )
+    parser.add_argument(
         "--agentic-observation-max-chars",
         type=int,
         default=DEFAULT_AGENTIC_OBSERVATION_MAX_CHARS,
@@ -1372,6 +1387,8 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--agentic-tool-max-steps must be >= 1")
     if args.agentic_tool_max_calls < 1:
         raise SystemExit("--agentic-tool-max-calls must be >= 1")
+    if args.agentic_code_tool_max_calls < 1:
+        raise SystemExit("--agentic-code-tool-max-calls must be >= 1")
     if args.agentic_observation_max_chars < 1:
         raise SystemExit("--agentic-observation-max-chars must be >= 1")
     if args.proposal_attempt_limit < 1:

@@ -2823,6 +2823,7 @@ def _write_warehouse_manifest(
         "--agentic-session-timeout-sec 3600 "
         "--agentic-tool-max-steps 240 "
         "--agentic-tool-max-calls 200 "
+        "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--measurement-governance on "
         "--proposal-context-ablation full "
@@ -2864,6 +2865,7 @@ def _write_warehouse_manifest(
                 "agentic_session_timeout_sec": 3600,
                 "agentic_tool_max_steps": 240,
                 "agentic_tool_max_calls": 200,
+                "agentic_code_tool_max_calls": 200,
                 "agentic_observation_max_chars": 2000000,
                 "measurement_governance": "on",
                 "proposal_context_ablation": "full",
@@ -2953,6 +2955,7 @@ def _write_cvrp_large_twoopt_manifest(
         "--agentic-session-timeout-sec 3600 "
         "--agentic-tool-max-steps 240 "
         "--agentic-tool-max-calls 200 "
+        "--agentic-code-tool-max-calls 200 "
         "--agentic-observation-max-chars 2000000 "
         "--stage-transition-drain-limit 4 "
         "--measurement-governance on "
@@ -2995,6 +2998,7 @@ def _write_cvrp_large_twoopt_manifest(
                 "agentic_session_timeout_sec": 3600,
                 "agentic_tool_max_steps": 240,
                 "agentic_tool_max_calls": 200,
+                "agentic_code_tool_max_calls": 200,
                 "agentic_observation_max_chars": 2000000,
                 "stage_transition_drain_limit": 4,
                 "measurement_governance": "on",

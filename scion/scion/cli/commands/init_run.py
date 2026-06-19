@@ -471,6 +471,11 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--agentic-tool-max-calls",
             help="APS max tool calls per proposal session",
         ),
+        agentic_code_tool_max_calls: Optional[int] = typer.Option(
+            None,
+            "--agentic-code-tool-max-calls",
+            help="APS max code-phase tool calls per proposal session",
+        ),
         agentic_observation_max_chars: Optional[int] = typer.Option(
             None,
             "--agentic-observation-max-chars",
@@ -519,6 +524,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             ("--agentic-session-timeout-sec", agentic_session_timeout_sec),
             ("--agentic-tool-max-steps", agentic_tool_max_steps),
             ("--agentic-tool-max-calls", agentic_tool_max_calls),
+            ("--agentic-code-tool-max-calls", agentic_code_tool_max_calls),
             ("--agentic-observation-max-chars", agentic_observation_max_chars),
         ):
             if option_value is not None and option_value < 1:
@@ -780,6 +786,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 agentic_session_timeout_sec=agentic_session_timeout_sec,
                 agentic_tool_max_steps=agentic_tool_max_steps,
                 agentic_tool_max_calls=agentic_tool_max_calls,
+                agentic_code_tool_max_calls=agentic_code_tool_max_calls,
                 agentic_observation_max_chars=agentic_observation_max_chars,
                 allow_skeleton_mode=allow_skeleton,
                 force_surface=forced_request.surface if forced_request else None,

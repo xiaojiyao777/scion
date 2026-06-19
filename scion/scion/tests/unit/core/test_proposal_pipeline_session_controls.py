@@ -380,6 +380,7 @@ def test_default_agentic_session_uses_configured_timeout() -> None:
         agentic_session_timeout_sec=7.5,
         agentic_tool_max_steps=120,
         agentic_tool_max_calls=96,
+        agentic_code_tool_max_calls=88,
         agentic_observation_max_chars=1500000,
     )
 
@@ -389,6 +390,7 @@ def test_default_agentic_session_uses_configured_timeout() -> None:
     assert session._tool_loop_config.max_wall_time_sec == 7.5
     assert session._tool_loop_config.max_steps == 120
     assert session._tool_loop_config.max_tool_calls == 96
+    assert session._tool_loop_config.max_code_tool_calls == 88
     assert session._tool_loop_config.max_observation_chars == 1500000
 
 

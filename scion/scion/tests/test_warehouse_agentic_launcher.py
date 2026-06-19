@@ -37,6 +37,7 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--control-pair-key" in result.stdout
     assert "--agentic-tool-max-steps" in result.stdout
     assert "--agentic-tool-max-calls" in result.stdout
+    assert "--agentic-code-tool-max-calls" in result.stdout
     assert "--agentic-observation-max-chars" in result.stdout
     assert "--proposal-attempt-limit" in result.stdout
     assert "--proposal-quality-loop-limit" in result.stdout
@@ -90,6 +91,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepare_status["agentic_session_timeout_sec"] == 3600
     assert prepare_status["agentic_tool_max_steps"] == 240
     assert prepare_status["agentic_tool_max_calls"] == 200
+    assert prepare_status["agentic_code_tool_max_calls"] == 200
     assert prepare_status["agentic_observation_max_chars"] == 2000000
     assert prepare_status["proposal_attempt_limit"] == 64
     assert prepare_status["proposal_quality_loop_limit"] == 64
@@ -147,6 +149,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepared_manifest["execution"]["agentic_session_timeout_sec"] == 3600
     assert prepared_manifest["execution"]["agentic_tool_max_steps"] == 240
     assert prepared_manifest["execution"]["agentic_tool_max_calls"] == 200
+    assert prepared_manifest["execution"]["agentic_code_tool_max_calls"] == 200
     assert (
         prepared_manifest["execution"]["agentic_observation_max_chars"]
         == 2000000
@@ -206,6 +209,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in launch_env
     assert "AGENTIC_TOOL_MAX_STEPS=240" in launch_env
     assert "AGENTIC_TOOL_MAX_CALLS=200" in launch_env
+    assert "AGENTIC_CODE_TOOL_MAX_CALLS=200" in launch_env
     assert "AGENTIC_OBSERVATION_MAX_CHARS=2000000" in launch_env
     assert "PROPOSAL_ATTEMPT_LIMIT=64" in launch_env
     assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in launch_env
@@ -279,6 +283,10 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert '--agentic-tool-max-steps "$AGENTIC_TOOL_MAX_STEPS"' in run_sh_text
     assert '--agentic-tool-max-calls "$AGENTIC_TOOL_MAX_CALLS"' in run_sh_text
     assert (
+        '--agentic-code-tool-max-calls "$AGENTIC_CODE_TOOL_MAX_CALLS"'
+        in run_sh_text
+    )
+    assert (
         '--agentic-observation-max-chars "$AGENTIC_OBSERVATION_MAX_CHARS"'
         in run_sh_text
     )
@@ -292,6 +300,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "--agentic-session-timeout-sec 3600" in command_txt
     assert "--agentic-tool-max-steps 240" in command_txt
     assert "--agentic-tool-max-calls 200" in command_txt
+    assert "--agentic-code-tool-max-calls 200" in command_txt
     assert "--agentic-observation-max-chars 2000000" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
@@ -307,6 +316,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "AGENTIC_SESSION_TIMEOUT_SEC=3600" in command_txt
     assert "AGENTIC_TOOL_MAX_STEPS=240" in command_txt
     assert "AGENTIC_TOOL_MAX_CALLS=200" in command_txt
+    assert "AGENTIC_CODE_TOOL_MAX_CALLS=200" in command_txt
     assert "AGENTIC_OBSERVATION_MAX_CHARS=2000000" in command_txt
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
