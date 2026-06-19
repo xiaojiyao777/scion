@@ -296,6 +296,10 @@ def build_readiness(
         "prepared_analysis_brief_current",
         *_prepared_analysis_brief_check(root),
     )
+    add_check(
+        "analysis_brief_prepared_contract_consistency",
+        *_prepared_analysis_brief_contract_consistency_check(root, prepared_contract),
+    )
 
     run_sh = root / "run.sh"
     add_check("run_script_present", "ok" if run_sh.is_file() else "failed", str(run_sh))
@@ -2141,6 +2145,94 @@ def _prepared_analysis_contract_failures(
             }
         )
 
+    return failures
+
+
+def _prepared_analysis_brief_contract_consistency_check(
+    root: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    directory = root / "prepared_handoff" / "analysis_brief"
+    paths = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    detail: dict[str, Any] = {
+        "directory": str(directory),
+        "artifacts": [path.name for path in paths],
+        "failures": [],
+    }
+    failures: list[dict[str, Any]] = []
+    if not isinstance(prepared_contract, dict) or not prepared_contract:
+        failures.append(
+            {"artifact": None, "reason": "inventory_prepared_contract_missing"}
+        )
+    if not paths:
+        failures.append({"artifact": None, "reason": "missing_prepared_analysis_brief"})
+
+    for path in paths:
+        payload = _read_json(path)
+        if not isinstance(payload, dict):
+            failures.append({"artifact": path.name, "reason": "invalid_json_payload"})
+            continue
+        failures.extend(
+            {"artifact": path.name, **failure}
+            for failure in _prepared_contract_consistency_failures(
+                payload.get("prepared_run_contract"),
+                prepared_contract,
+            )
+        )
+
+    detail["failures"] = failures
+    return ("ok" if not failures else "failed"), detail
+
+
+def _prepared_contract_consistency_failures(
+    brief_contract: Any,
+    inventory_contract: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(brief_contract, dict):
+        return [{"reason": "analysis_brief_prepared_contract_missing"}]
+    if not isinstance(inventory_contract, dict):
+        return [{"reason": "inventory_prepared_contract_missing"}]
+
+    failures: list[dict[str, Any]] = []
+    for field in (
+        "schema_version",
+        "report_only",
+        "quality_judgment",
+        "decision_features_excluded",
+        "manifest_path",
+        "manifest_present",
+        "contract_complete",
+        "problem_family",
+        "model",
+        "analysis_intent",
+        "acceptance_focus",
+        "research_focus",
+        "resume_from_campaign",
+        "control_pair_key",
+        "completion_preflight",
+        "postrun_reports",
+    ):
+        if brief_contract.get(field) != inventory_contract.get(field):
+            failures.append(
+                {
+                    "reason": f"prepared_contract_{field}_mismatch",
+                    "field": field,
+                    "brief": brief_contract.get(field),
+                    "inventory": inventory_contract.get(field),
+                }
+            )
+    for field in ("execution", "git", "checks"):
+        brief_value = brief_contract.get(field)
+        inventory_value = inventory_contract.get(field)
+        if (brief_value if isinstance(brief_value, dict) else {}) != (
+            inventory_value if isinstance(inventory_value, dict) else {}
+        ):
+            failures.append(
+                {
+                    "reason": f"prepared_contract_{field}_mismatch",
+                    "field": field,
+                }
+            )
     return failures
 
 

@@ -45,6 +45,10 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
+    assert (
+        report["checks"]["analysis_brief_prepared_contract_consistency"]["status"]
+        == "ok"
+    )
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert (
         report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
@@ -398,6 +402,11 @@ def test_launch_readiness_rejects_missing_prepared_analysis_brief(
     assert report["static_ready"] is False
     brief_check = report["checks"]["prepared_analysis_brief_current"]
     assert brief_check["status"] == "failed"
+    contract_check = report["checks"]["analysis_brief_prepared_contract_consistency"]
+    assert contract_check["status"] == "failed"
+    assert contract_check["detail"]["failures"][0]["reason"] == (
+        "missing_prepared_analysis_brief"
+    )
     assert brief_check["detail"]["failures"][0]["reason"] == (
         "missing_prepared_analysis_brief"
     )
@@ -456,6 +465,13 @@ def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
     assert report["static_ready"] is False
     brief_check = report["checks"]["prepared_analysis_brief_current"]
     assert brief_check["status"] == "failed"
+    contract_check = report["checks"]["analysis_brief_prepared_contract_consistency"]
+    assert contract_check["status"] == "failed"
+    contract_failures = {
+        failure["reason"] for failure in contract_check["detail"]["failures"]
+    }
+    assert "prepared_contract_problem_family_mismatch" in contract_failures
+    assert "prepared_contract_git_mismatch" in contract_failures
     mismatches = [
         failure
         for failure in brief_check["detail"]["failures"]
@@ -1821,6 +1837,9 @@ def _write_prepared_analysis_brief(run_root: Path) -> None:
         filename = "cvrp_on_full.prepared_analysis_brief.v1.json"
         cvrp_summary = _prepared_cvrp_summary()
         warehouse_summary = {"available": False, "current_run_evidence": False}
+    prepared_contract = readiness_tool.build_inventory(run_root)["launcher"][
+        "prepared_run_contract"
+    ]
     _write_json(
         run_root
         / "prepared_handoff"
@@ -1844,16 +1863,7 @@ def _write_prepared_analysis_brief(run_root: Path) -> None:
                 "run_validity_status": "prepared_only",
                 "run_completeness_status": "not_started",
             },
-            "prepared_run_contract": {
-                "schema_version": "scion.prepared_run_contract_inventory.v1",
-                "manifest_path": str(run_root / "prepared_run_manifest.v1.json"),
-                "contract_complete": True,
-                "problem_family": manifest["problem_family"],
-                "model": manifest["model"]["name"],
-                "control_pair_key": manifest["report_metadata"]["control_pair_key"],
-                "resume_from_campaign": manifest["resume_from_campaign"],
-                "git": {"commit": manifest["git"]["commit"]},
-            },
+            "prepared_run_contract": prepared_contract,
             "required_questions": [
                 (
                     "Is this still a prepared-only launch root with zero "
