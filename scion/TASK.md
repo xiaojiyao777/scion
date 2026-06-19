@@ -298,9 +298,9 @@ Current checkpoint:
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-exactflag-8f1d79a-6r-gpt55-20260619T102055Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpreflight-be9911a-6r-gpt55-20260619T102840Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-exactflag-8f1d79a-1r-gpt55-20260619T102109Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpreflight-be9911a-1r-gpt55-20260619T102856Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -321,10 +321,12 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `8f1d79a` after launch
+  true. The roots were prepared from WSL checkout `be9911a` after launch
   readiness began verifying that generated scripts source `launch.env`, require
-  `COMPLETION_PREFLIGHT=1`, and call `tools/check_gpt55_proxy.py` before the
-  real campaign command, and after it began requiring `PYTHONPATH` from
+  `COMPLETION_PREFLIGHT=1`, and execute `tools/check_gpt55_proxy.py` before the
+  real campaign command with token-level `--model "$SCION_MODEL"` and
+  `--base-url "$SCION_BASE_URL"` routing, and after it began requiring
+  `PYTHONPATH` from
   `launch.env` to be exported before campaign start, and after it began
   requiring manifest and launch-env model route consistency on `gpt-5.5`, and
   after it began requiring `DISABLE_EARLY_STOP=1` plus `--disable-early-stop`
@@ -388,7 +390,7 @@ Current checkpoint:
   `PYTHONPATH` before campaign start, or if manifest and launch-env model route
   diverge from `gpt-5.5`, or if launch-env/manifest/run-script no-early-stop
   semantics are missing.
-  Older prepared roots before the exactflag roots above are not current
+  Older prepared roots before the execpreflight roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.

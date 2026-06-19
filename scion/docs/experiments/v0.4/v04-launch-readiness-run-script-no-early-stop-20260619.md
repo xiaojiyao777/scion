@@ -116,20 +116,31 @@ PYTHONPATH=scion pytest -q \
 # 105 passed
 ```
 
+Local checkout `28ff2e82` and WSL checkout `be9911a`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 107 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `8f1d79a` because
-`scion/tools/postrun_artifact_inventory.py` and
-`scion/tools/check_launch_readiness.py` are part of the guarded
-launch/readiness and postrun audit surface.
+New prepare-only roots were generated from WSL checkout `be9911a` because
+`scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
+runtime surface.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-exactflag-8f1d79a-6r-gpt55-20260619T102055Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpreflight-be9911a-6r-gpt55-20260619T102840Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-exactflag-8f1d79a-1r-gpt55-20260619T102109Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpreflight-be9911a-1r-gpt55-20260619T102856Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -146,6 +157,8 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `run_script_model_route_enforced=ok`
 - `run_script_pythonpath_enforced=ok`
 - `run_script_completion_preflight_enforced=ok`
+- `run_script_model_route_enforced=ok` with executable proxy command and
+  token-level model/base-url arguments
 - `run_script_runtime_guard_enforced=ok`
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `runtime_guard_paths_cover_problem_runtime=ok`
@@ -163,7 +176,9 @@ static readiness or no-early-stop launch semantics.
 
 Accepted as the current prepared-root refresh after no-early-stop launch
 readiness enforcement, prepared-contract inventory binding, and exact-token flag
-matching. It supersedes the model-route, noearlystop, and prepcontract prepared
-roots as the current prepared-root pointer.
+matching. It also requires the GPT-5.5 proxy preflight to be an executable
+command block using token-level model/base-url arguments. It supersedes the
+model-route, noearlystop, prepcontract, and exactflag prepared roots as the
+current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
