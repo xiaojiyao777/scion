@@ -683,11 +683,21 @@ def test_postrun_acceptance_requires_research_context_actionability(
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
     brief["prompt_context_visibility_summary"] = {
+        "schema_version": "scion.postrun_prompt_context_visibility_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "raw_response_excluded": True,
+        "patch_body_excluded": True,
         "available": True,
         "current_run_evidence": True,
         "aggregate": {
             "trace_count": 2,
             "source_visibility": {
+                "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
                 "trace_count": 2,
                 "code_trace_count": 1,
                 "code_protected_source_visible_count": 1,
@@ -729,6 +739,120 @@ def test_postrun_acceptance_requires_research_context_actionability(
     assert "research_context_actionability_no_evidence" in context_check["detail"][
         "failures"
     ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_review_surface_boundary_marker_gaps(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-boundary-gaps")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    prompt_summary = brief["prompt_context_visibility_summary"]
+    prompt_summary["schema_version"] = "stale.prompt.visibility"
+    prompt_summary["report_only"] = False
+    prompt_summary["quality_judgment"] = True
+    prompt_summary["decision_features_excluded"] = False
+    prompt_summary["raw_prompt_excluded"] = False
+    prompt_summary["raw_response_excluded"] = False
+    prompt_summary["patch_body_excluded"] = False
+    source_visibility = prompt_summary["aggregate"]["source_visibility"]
+    source_visibility["schema_version"] = "stale.source.visibility"
+    source_visibility["report_only"] = False
+    source_visibility["decision_features_excluded"] = False
+    context_summary = brief["research_context_actionability_summary"]
+    context_summary["report_only"] = False
+    context_summary["quality_judgment"] = True
+    context_summary["decision_features_excluded"] = False
+    density = prompt_summary["aggregate"]["signal_density"]
+    density["report_only"] = False
+    density["decision_features_excluded"] = False
+    taxonomy = brief["failure_taxonomy_summary"]
+    taxonomy["report_only"] = False
+    taxonomy["quality_judgment"] = True
+    taxonomy["decision_features_excluded"] = False
+    taxonomy["raw_logs_excluded"] = False
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+    taxonomy_check = readiness["checks"]["failure_taxonomy_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "failed"
+    assert "prompt_context_visibility_schema_stale" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_context_visibility_not_report_only" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_context_visibility_quality_judgment_not_false" in prompt_check[
+        "detail"
+    ]["failures"]
+    assert "prompt_context_visibility_decision_features_not_excluded" in prompt_check[
+        "detail"
+    ]["failures"]
+    assert "prompt_context_visibility_raw_prompt_excluded_not_true" in prompt_check[
+        "detail"
+    ]["failures"]
+    assert "prompt_source_visibility_schema_stale" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_source_visibility_not_report_only" in prompt_check["detail"][
+        "failures"
+    ]
+    assert "prompt_source_visibility_decision_features_not_excluded" in prompt_check[
+        "detail"
+    ]["failures"]
+    assert "research_context_actionability_not_report_only" in context_check[
+        "detail"
+    ]["failures"]
+    assert "research_context_actionability_quality_judgment_not_false" in (
+        context_check["detail"]["failures"]
+    )
+    assert "research_context_actionability_decision_features_not_excluded" in (
+        context_check["detail"]["failures"]
+    )
+    assert "prompt_signal_density_not_report_only" in context_check["detail"][
+        "failures"
+    ]
+    assert "prompt_signal_density_decision_features_not_excluded" in context_check[
+        "detail"
+    ]["failures"]
+    assert "failure_taxonomy_not_report_only" in taxonomy_check["detail"][
+        "failures"
+    ]
+    assert "failure_taxonomy_quality_judgment_not_false" in taxonomy_check[
+        "detail"
+    ]["failures"]
+    assert "failure_taxonomy_decision_features_not_excluded" in taxonomy_check[
+        "detail"
+    ]["failures"]
+    assert "failure_taxonomy_raw_logs_excluded_not_true" in taxonomy_check[
+        "detail"
+    ]["failures"]
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
@@ -1092,11 +1216,21 @@ def test_cvrp_postrun_acceptance_requires_code_constraint_prompt_trace(
         "review_axes_actionability": "actionable_current_run_evidence_present",
     }
     brief["prompt_context_visibility_summary"] = {
+        "schema_version": "scion.postrun_prompt_context_visibility_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "raw_response_excluded": True,
+        "patch_body_excluded": True,
         "available": True,
         "current_run_evidence": True,
         "aggregate": {
             "trace_count": 2,
             "source_visibility": {
+                "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
                 "trace_count": 2,
                 "code_trace_count": 1,
                 "code_protected_source_visible_count": 1,
@@ -1834,6 +1968,13 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         ],
     }
     brief["prompt_context_visibility_summary"] = {
+        "schema_version": "scion.postrun_prompt_context_visibility_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_prompt_excluded": True,
+        "raw_response_excluded": True,
+        "patch_body_excluded": True,
         "available": True,
         "current_run_evidence": True,
         "aggregate": {
@@ -1857,6 +1998,9 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
                 },
             },
             "source_visibility": {
+                "schema_version": "scion.postrun_prompt_source_visibility_summary.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
                 "trace_count": 2,
                 "code_trace_count": 1,
                 "code_protected_source_visible_count": 1,

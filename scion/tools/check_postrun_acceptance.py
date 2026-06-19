@@ -44,6 +44,15 @@ PROBLEM_SUMMARY_SCHEMAS = {
 }
 BRANCH_RESEARCH_STATE_SCHEMA = "scion.postrun_branch_research_state_summary.v1"
 CHAMPION_PROGRESS_SCHEMA = "scion.postrun_champion_progress_summary.v1"
+PROMPT_CONTEXT_VISIBILITY_SCHEMA = (
+    "scion.postrun_prompt_context_visibility_summary.v1"
+)
+PROMPT_SOURCE_VISIBILITY_SCHEMA = "scion.postrun_prompt_source_visibility_summary.v1"
+PROMPT_SIGNAL_DENSITY_SCHEMA = "scion.postrun_prompt_signal_density.v1"
+RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA = (
+    "scion.postrun_research_context_actionability_summary.v1"
+)
+FAILURE_TAXONOMY_SCHEMA = "scion.postrun_failure_taxonomy_summary.v1"
 PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
     "warehouse_followup_summary": {
         "quality_blocked_no_protocol_plateau_conclusion",
@@ -1047,6 +1056,27 @@ def _prompt_source_visibility_actionability(
     aggregate = _mapping_or_empty(summary.get("aggregate"))
     source_visibility = _mapping_or_empty(aggregate.get("source_visibility"))
     failures: list[str] = []
+    if summary.get("schema_version") != PROMPT_CONTEXT_VISIBILITY_SCHEMA:
+        failures.append("prompt_context_visibility_schema_stale")
+    failures.extend(
+        _boundary_marker_failures("prompt_context_visibility", summary)
+    )
+    for excluded_field in (
+        "raw_prompt_excluded",
+        "raw_response_excluded",
+        "patch_body_excluded",
+    ):
+        if summary.get(excluded_field) is not True:
+            failures.append(f"prompt_context_visibility_{excluded_field}_not_true")
+    if source_visibility.get("schema_version") != PROMPT_SOURCE_VISIBILITY_SCHEMA:
+        failures.append("prompt_source_visibility_schema_stale")
+    failures.extend(
+        _boundary_marker_failures(
+            "prompt_source_visibility",
+            source_visibility,
+            require_quality=False,
+        )
+    )
     if summary.get("current_run_evidence") is not True:
         failures.append("prompt_context_not_current_run_evidence")
     if summary.get("available") is not True:
@@ -1121,8 +1151,23 @@ def _prompt_source_visibility_actionability(
             "problem_family": problem_family,
             "failures": failures,
             "current_run_evidence": summary.get("current_run_evidence"),
+            "schema_version": summary.get("schema_version"),
+            "expected_schema_version": PROMPT_CONTEXT_VISIBILITY_SCHEMA,
+            "report_only": summary.get("report_only"),
+            "quality_judgment": summary.get("quality_judgment"),
+            "decision_features_excluded": summary.get("decision_features_excluded"),
+            "raw_prompt_excluded": summary.get("raw_prompt_excluded"),
+            "raw_response_excluded": summary.get("raw_response_excluded"),
+            "patch_body_excluded": summary.get("patch_body_excluded"),
             "available": summary.get("available"),
             "trace_count": aggregate.get("trace_count"),
+            "source_visibility_schema_version": source_visibility.get(
+                "schema_version"
+            ),
+            "source_visibility_report_only": source_visibility.get("report_only"),
+            "source_visibility_decision_features_excluded": source_visibility.get(
+                "decision_features_excluded"
+            ),
             "source_visibility_trace_count": source_visibility.get("trace_count"),
             "code_trace_count": source_visibility.get("code_trace_count"),
             "code_protected_source_visible_count": source_visibility.get(
@@ -1192,22 +1237,26 @@ def _research_context_actionability(
     )
     indicators = _mapping_or_empty(actionability.get("indicators"))
     failures: list[str] = []
-    if (
-        actionability.get("schema_version")
-        != "scion.postrun_research_context_actionability_summary.v1"
-    ):
+    if actionability.get("schema_version") != RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA:
         failures.append("research_context_actionability_schema_stale")
+    failures.extend(
+        _boundary_marker_failures("research_context_actionability", actionability)
+    )
     if actionability.get("current_run_evidence") is not True:
         failures.append("research_context_actionability_not_current_run_evidence")
     if actionability.get("available") is not True:
         failures.append("research_context_actionability_unavailable")
     if _int_or_zero(prompt_aggregate.get("block_family_trace_count")) <= 0:
         failures.append("prompt_block_family_trace_accounting_missing")
-    if (
-        density.get("schema_version")
-        != "scion.postrun_prompt_signal_density.v1"
-    ):
+    if density.get("schema_version") != PROMPT_SIGNAL_DENSITY_SCHEMA:
         failures.append("prompt_signal_density_schema_stale")
+    failures.extend(
+        _boundary_marker_failures(
+            "prompt_signal_density",
+            density,
+            require_quality=False,
+        )
+    )
     if _int_or_zero(density.get("total_token_estimate")) <= 0:
         failures.append("prompt_signal_density_token_accounting_missing")
     if (
@@ -1220,12 +1269,24 @@ def _research_context_actionability(
         {
             "problem_family": problem_family,
             "failures": failures,
+            "schema_version": actionability.get("schema_version"),
+            "expected_schema_version": RESEARCH_CONTEXT_ACTIONABILITY_SCHEMA,
             "current_run_evidence": actionability.get("current_run_evidence"),
+            "report_only": actionability.get("report_only"),
+            "quality_judgment": actionability.get("quality_judgment"),
+            "decision_features_excluded": actionability.get(
+                "decision_features_excluded"
+            ),
             "available": actionability.get("available"),
             "guidance_status": actionability.get("guidance_status"),
             "actionability_gaps": actionability.get("actionability_gaps"),
             "block_family_trace_count": prompt_aggregate.get(
                 "block_family_trace_count"
+            ),
+            "signal_density_schema_version": density.get("schema_version"),
+            "signal_density_report_only": density.get("report_only"),
+            "signal_density_decision_features_excluded": density.get(
+                "decision_features_excluded"
             ),
             "signal_density_interpretation": density.get("interpretation"),
             "total_token_estimate": density.get("total_token_estimate"),
@@ -1557,11 +1618,11 @@ def _failure_taxonomy_actionability(
         or proposal_attempts > 0
     )
     failures: list[str] = []
-    if (
-        summary.get("schema_version")
-        != "scion.postrun_failure_taxonomy_summary.v1"
-    ):
+    if summary.get("schema_version") != FAILURE_TAXONOMY_SCHEMA:
         failures.append("failure_taxonomy_schema_stale")
+    failures.extend(_boundary_marker_failures("failure_taxonomy", summary))
+    if summary.get("raw_logs_excluded") is not True:
+        failures.append("failure_taxonomy_raw_logs_excluded_not_true")
     if summary.get("current_run_evidence") is not True:
         failures.append("failure_taxonomy_not_current_run_evidence")
     if summary.get("available") is not True:
@@ -1577,7 +1638,13 @@ def _failure_taxonomy_actionability(
         {
             "problem_family": problem_family,
             "failures": failures,
+            "schema_version": summary.get("schema_version"),
+            "expected_schema_version": FAILURE_TAXONOMY_SCHEMA,
             "current_run_evidence": summary.get("current_run_evidence"),
+            "report_only": summary.get("report_only"),
+            "quality_judgment": summary.get("quality_judgment"),
+            "decision_features_excluded": summary.get("decision_features_excluded"),
+            "raw_logs_excluded": summary.get("raw_logs_excluded"),
             "available": summary.get("available"),
             "report_count": summary.get("report_count"),
             "failure_report_count": summary.get("failure_report_count"),
@@ -1604,6 +1671,22 @@ def _blocking_problem_summary_gaps(evidence_gaps: list[str]) -> list[str]:
         for gap in evidence_gaps
         if gap in BLOCKING_PROBLEM_SUMMARY_GAPS
     ]
+
+
+def _boundary_marker_failures(
+    prefix: str,
+    payload: Mapping[str, Any],
+    *,
+    require_quality: bool = True,
+) -> list[str]:
+    failures: list[str] = []
+    if payload.get("report_only") is not True:
+        failures.append(f"{prefix}_not_report_only")
+    if require_quality and payload.get("quality_judgment") is not False:
+        failures.append(f"{prefix}_quality_judgment_not_false")
+    if payload.get("decision_features_excluded") is not True:
+        failures.append(f"{prefix}_decision_features_not_excluded")
+    return failures
 
 
 def _string_items(value: Any) -> list[str]:
