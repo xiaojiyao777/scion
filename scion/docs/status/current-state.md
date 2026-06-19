@@ -66,6 +66,11 @@ Framework:
   proposal attempts before useful protocol evidence existed. Launch readiness
   now also requires clean runtime-guard paths and verifies the headroom across
   `launch.env`, manifest execution, manifest command, and `run.sh`.
+- CVRP prepared handoff measurement diagnostics are now derived from
+  `problem-v1.yaml` measurement declarations and the declared A/A
+  `calibration_ref`. Prepared-contract readiness rejects CVRP handoffs that
+  contain MDE/practical-delta values without problem-owned source, calibration,
+  and measurement-readiness proof.
 
 Warehouse:
 
@@ -73,8 +78,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `12fa3626`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-headroomguard-12fa3626-6r-gpt55-20260619T180233Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `3b74b90e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-measurecontract-3b74b90e-6r-gpt55-20260619T181700Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
@@ -111,10 +116,11 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `12fa3626`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-headroomguard-12fa3626-1r-gpt55-20260619T180233Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `3b74b90e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-measurecontract-3b74b90e-1r-gpt55-20260619T181700Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
-  `proposal_quality_loop_limit=64`.
+  `proposal_quality_loop_limit=64`, and its measurement handoff source is
+  `problem_v1.measurement.calibration_ref`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -141,17 +147,20 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `12fa3626`
+- The active prepared roots were generated from WSL runtime commit `3b74b90e`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
-  proposal-headroom/readiness-contract repair.
+  proposal-headroom/readiness-contract repair plus CVRP problem-owned
+  measurement-handoff source repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
   expose proposal-attempt and proposal-quality-loop limits as `64`/`64`, and
   readiness reports `git_runtime_worktree_clean=ok` plus
-  `run_script_proposal_headroom_enforced=ok`.
+  `run_script_proposal_headroom_enforced=ok`; the CVRP root also reports
+  `problem_specific_prepared_handoff=ok` with problem-owned measurement source
+  proof.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
   inconsistent, or unexpected generated files, no manifest identity/boundary
@@ -224,6 +233,8 @@ Infrastructure:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-proposal-headroom-launcher-repair-20260619.md`.
+- Current CVRP measurement-handoff evidence:
+  `scion/docs/experiments/v0.4/v04-cvrp-measurement-handoff-contract-20260619.md`.
 - Current trajectory-divergent lifecycle evidence:
   `scion/docs/experiments/v0.4/v04-trajectory-divergent-open-low-signal-lifecycle-20260619.md`.
 - Historical repair details remain in `scion/docs/experiments/v0.4/`; this
