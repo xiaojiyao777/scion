@@ -1173,6 +1173,15 @@ def _write_prepared_root(
             "split": str(config_dir / "split.yaml"),
             "seeds": str(config_dir / "seeds.yaml"),
         },
+        "execution": {
+            "rounds": 1,
+            "time_limit_sec": 30,
+            "agentic_session_timeout_sec": 900,
+            "measurement_governance": "on",
+            "proposal_context_ablation": "full",
+            "agentic_proposal": True,
+            "disable_early_stop": True,
+        },
         "report_metadata": {
             "control_pair_key": "cvrp.ready:rep01",
             "postrun_reports": True,

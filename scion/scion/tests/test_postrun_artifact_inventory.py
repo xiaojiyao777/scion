@@ -561,7 +561,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         f"--split {remote_root}/config/split.yaml "
         f"--seeds {remote_root}/config/seeds.yaml "
         f"--campaign-dir {remote_root}/campaign "
-        "--rounds 1 --agentic-proposal"
+        "--rounds 1 --agentic-proposal --disable-early-stop"
     )
     _write_json(
         run_root / "prepared_run_manifest.v1.json",
@@ -599,6 +599,15 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                 "split": f"{remote_root}/config/split.yaml",
                 "seeds": f"{remote_root}/config/seeds.yaml",
                 "data_root": "/home/xjy-ubuntu/research/scion-data",
+            },
+            "execution": {
+                "rounds": 1,
+                "time_limit_sec": 30,
+                "agentic_session_timeout_sec": 900,
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "agentic_proposal": True,
+                "disable_early_stop": True,
             },
             "report_metadata": {
                 "control_pair_key": "cvrp.prepared:rep01",
@@ -642,6 +651,8 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert contract["model"] == "gpt-5.5"
     assert contract["control_pair_key"] == "cvrp.prepared:rep01"
     assert contract["analysis_intent"] == "Prepared CVRP analysis intent."
+    assert contract["execution"]["rounds"] == 1
+    assert contract["execution"]["disable_early_stop"] is True
     assert contract["acceptance_focus"] == [
         "Interpret evidence against A/A MDE.",
         "Keep manifest evidence out of DecisionFeatures.",
@@ -678,6 +689,8 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
         contract["checks"]["cvrp_large_twoopt_bounded_constraints_present"]["passed"]
         is True
     )
+    assert contract["checks"]["execution_disable_early_stop"]["passed"] is True
+    assert contract["checks"]["command_disable_early_stop"]["passed"] is True
     problem_specific = data["phase4_evidence_coverage"][
         "problem_specific_requirements"
     ]
@@ -703,6 +716,23 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
     assert "cvrp_large_twoopt_seed_handoff" in markdown
     assert "cvrp_large_twoopt_unbounded_default_avoid_handoff" in markdown
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
+
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["execution"]["disable_early_stop"] = False
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    failed_contract = inventory_tool.build_inventory(run_root)["launcher"][
+        "prepared_run_contract"
+    ]
+    assert failed_contract["contract_complete"] is False
+    assert failed_contract["checks"]["execution_disable_early_stop"] == {
+        "passed": False,
+        "detail": False,
+    }
 
 
 def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(

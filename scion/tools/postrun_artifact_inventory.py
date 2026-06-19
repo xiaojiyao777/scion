@@ -765,6 +765,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
             "analysis_intent": None,
             "acceptance_focus": [],
             "research_focus": {},
+            "execution": {},
             "resume_from_campaign": None,
             "control_pair_key": None,
             "completion_preflight": None,
@@ -787,6 +788,10 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
     config = manifest.get("config")
     if not isinstance(config, dict):
         config = {}
+    execution = manifest.get("execution")
+    execution_is_dict = isinstance(execution, dict)
+    if not execution_is_dict:
+        execution = {}
 
     add_check(
         "manifest_schema",
@@ -855,6 +860,22 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         isinstance(families, list) and not missing_families,
         ",".join(missing_families),
     )
+    add_check("execution_present", execution_is_dict, "execution")
+    add_check(
+        "execution_rounds_positive",
+        _positive_number(execution.get("rounds")),
+        execution.get("rounds"),
+    )
+    add_check(
+        "execution_disable_early_stop",
+        execution.get("disable_early_stop") is True,
+        execution.get("disable_early_stop"),
+    )
+    add_check(
+        "command_disable_early_stop",
+        "--disable-early-stop" in command,
+        command,
+    )
     missing_config_paths = _missing_manifest_config_paths(
         config,
         manifest_run_root=run_root_text,
@@ -887,12 +908,26 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "analysis_intent": _string_or_none(manifest.get("analysis_intent")),
         "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
         "research_focus": _mapping_or_empty(manifest.get("research_focus")),
+        "execution": _prepared_contract_execution(execution),
         "resume_from_campaign": _string_or_none(manifest.get("resume_from_campaign")),
         "git": _prepared_contract_git_identity(git_consistency),
         "control_pair_key": report_metadata.get("control_pair_key"),
         "completion_preflight": model.get("completion_preflight"),
         "postrun_reports": report_metadata.get("postrun_reports"),
         "checks": checks,
+    }
+
+
+def _prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "rounds": execution.get("rounds"),
+        "time_limit_sec": execution.get("time_limit_sec"),
+        "agentic_session_timeout_sec": execution.get("agentic_session_timeout_sec"),
+        "stage_transition_drain_limit": execution.get("stage_transition_drain_limit"),
+        "measurement_governance": execution.get("measurement_governance"),
+        "proposal_context_ablation": execution.get("proposal_context_ablation"),
+        "agentic_proposal": execution.get("agentic_proposal"),
+        "disable_early_stop": execution.get("disable_early_stop"),
     }
 
 
