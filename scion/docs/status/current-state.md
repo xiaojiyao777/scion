@@ -63,7 +63,9 @@ Framework:
   proposal-quality-loop headroom (`64`/`64`) into `scion run`. This removes the
   old prepared-root exposure to the core `rounds + max(6, rounds * 2)` fallback,
   which could stop a 1-round CVRP follow-up after only seven quality-blocked
-  proposal attempts before useful protocol evidence existed.
+  proposal attempts before useful protocol evidence existed. Launch readiness
+  now also requires clean runtime-guard paths and verifies the headroom across
+  `launch.env`, manifest execution, manifest command, and `run.sh`.
 
 Warehouse:
 
@@ -71,8 +73,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `2e2dd7ff`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityheadroom-2e2dd7ff-6r-gpt55-20260619T174842Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `12fa3626`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-headroomguard-12fa3626-6r-gpt55-20260619T180233Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
@@ -109,8 +111,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `2e2dd7ff`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityheadroom-2e2dd7ff-1r-gpt55-20260619T174842Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `12fa3626`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-headroomguard-12fa3626-1r-gpt55-20260619T180233Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
@@ -139,15 +141,17 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `2e2dd7ff`
+- The active prepared roots were generated from WSL runtime commit `12fa3626`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
-  proposal-headroom repair.
+  proposal-headroom/readiness-contract repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
-  expose proposal-attempt and proposal-quality-loop limits as `64`/`64`.
+  expose proposal-attempt and proposal-quality-loop limits as `64`/`64`, and
+  readiness reports `git_runtime_worktree_clean=ok` plus
+  `run_script_proposal_headroom_enforced=ok`.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
   inconsistent, or unexpected generated files, no manifest identity/boundary

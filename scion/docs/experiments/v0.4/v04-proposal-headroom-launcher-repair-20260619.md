@@ -12,6 +12,9 @@ loop before a useful protocol-evaluated solver hypothesis existed.
 
 This repair keeps the core safety fallback intact but makes the focused v0.4
 warehouse/CVRP launchers pass explicit proposal headroom into `scion run`.
+Launch readiness now also enforces that prepared roots carry this headroom all
+the way through `launch.env`, manifest execution, manifest command, and
+`run.sh`, and that guarded runtime paths are clean before launch.
 
 ## Repair
 
@@ -47,21 +50,33 @@ PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scio
 
 Result: `81 passed`.
 
+Follow-up readiness-contract verification:
+
+```bash
+python -m py_compile scion/tools/check_launch_readiness.py scion/scion/tests/test_launch_readiness.py
+PYTHONPATH=scion pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_cvrp_agentic_launcher.py scion/scion/tests/test_warehouse_agentic_launcher.py
+PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_cvrp_agentic_launcher.py scion/scion/tests/test_warehouse_agentic_launcher.py
+```
+
+Result: local `97 passed`; WSL `97 passed`.
+
 ## Current Prepared Roots
 
-Generated from WSL runtime commit `2e2dd7ff`:
+Generated from WSL runtime commit `12fa3626`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityheadroom-2e2dd7ff-6r-gpt55-20260619T174842Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-headroomguard-12fa3626-6r-gpt55-20260619T180233Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityheadroom-2e2dd7ff-1r-gpt55-20260619T174842Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-headroomguard-12fa3626-1r-gpt55-20260619T180233Z-claw`
 
 Both prepared manifests record `proposal_attempt_limit=64` and
 `proposal_quality_loop_limit=64`.
 
 Strict WSL launch readiness with real completion preflight reports
 `static_ready=true`, `launch_ready=false`, exit `64` for both roots. The
-remaining blocker is external `gpt-5.5` provider auth, not Scion static
-readiness: chat completion preflight returns HTTP `401`,
+static contract includes `git_runtime_worktree_clean=ok` and
+`run_script_proposal_headroom_enforced=ok`. The remaining blocker is external
+`gpt-5.5` provider auth, not Scion static readiness: chat completion preflight
+returns HTTP `401`,
 `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
 `active=0`, `expired=1`, `total=1`.
