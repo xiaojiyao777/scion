@@ -1058,6 +1058,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
         cvrp_current_run_evidence = (
             cvrp_large_twoopt.get("current_run_evidence") is True
         )
+        cvrp_invalid_infra_only = (
+            cvrp_large_twoopt.get("invalid_infra_only") is True
+        )
         evidence = _mapping_or_empty(cvrp_large_twoopt.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
@@ -1068,7 +1071,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
             [
                 "",
                 "## CVRP Large Two-Opt Summary",
-                _cvrp_large_twoopt_source_line(cvrp_current_run_evidence),
+                _cvrp_large_twoopt_source_line(
+                    cvrp_current_run_evidence,
+                    invalid_infra_only=cvrp_invalid_infra_only,
+                ),
                 f"- Available: `{_display(cvrp_large_twoopt.get('available'))}`",
                 "- Current-run evidence: "
                 f"`{_display(cvrp_large_twoopt.get('current_run_evidence'))}`",
@@ -1127,7 +1133,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("- Deferred post-launch CVRP bounded two-opt review axes:")
             lines.append(
-                "  - not_actionable_before_launch_current_run_evidence_required"
+                "  - "
+                f"{_display(cvrp_large_twoopt.get('review_axes_actionability'))}"
             )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
@@ -1140,6 +1147,7 @@ def render_markdown(brief: dict[str, Any]) -> str:
         or warehouse.get("problem_family") == "warehouse_delivery"
     ):
         warehouse_current_run_evidence = warehouse.get("current_run_evidence") is True
+        warehouse_invalid_infra_only = warehouse.get("invalid_infra_only") is True
         evidence = _mapping_or_empty(warehouse.get("evidence"))
         protocol = _mapping_or_empty(evidence.get("protocol"))
         measurement = _mapping_or_empty(evidence.get("measurement_effect"))
@@ -1150,7 +1158,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
             [
                 "",
                 "## Warehouse Follow-up Summary",
-                _warehouse_followup_source_line(warehouse_current_run_evidence),
+                _warehouse_followup_source_line(
+                    warehouse_current_run_evidence,
+                    invalid_infra_only=warehouse_invalid_infra_only,
+                ),
                 f"- Available: `{_display(warehouse.get('available'))}`",
                 "- Current-run evidence: "
                 f"`{_display(warehouse.get('current_run_evidence'))}`",
@@ -1220,7 +1231,8 @@ def render_markdown(brief: dict[str, Any]) -> str:
         else:
             lines.append("- Deferred post-launch warehouse review axes:")
             lines.append(
-                "  - not_actionable_before_launch_current_run_evidence_required"
+                "  - "
+                f"{_display(warehouse.get('review_axes_actionability'))}"
             )
         if isinstance(axes, list) and axes:
             lines.extend(f"  - {_display(item)}" for item in axes)
@@ -1283,11 +1295,20 @@ def _minimum_delegated_analysis_lines(brief: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _cvrp_large_twoopt_source_line(current_run_evidence: bool) -> str:
+def _cvrp_large_twoopt_source_line(
+    current_run_evidence: bool,
+    *,
+    invalid_infra_only: bool = False,
+) -> str:
     if current_run_evidence:
         return (
             "- Source: prepared CVRP large-twoopt research_focus plus current-run "
             "protocol, measurement, runtime, and continuity summaries."
+        )
+    if invalid_infra_only:
+        return (
+            "- Source: infra-only run; prepared CVRP large-twoopt research_focus "
+            "is context, but no research-quality conclusion is allowed."
         )
     return (
         "- Source: prepared CVRP large-twoopt research_focus handoff; current-run "
@@ -1295,11 +1316,20 @@ def _cvrp_large_twoopt_source_line(current_run_evidence: bool) -> str:
     )
 
 
-def _warehouse_followup_source_line(current_run_evidence: bool) -> str:
+def _warehouse_followup_source_line(
+    current_run_evidence: bool,
+    *,
+    invalid_infra_only: bool = False,
+) -> str:
     if current_run_evidence:
         return (
             "- Source: prepared warehouse research_focus plus current-run "
             "protocol, measurement, runtime, failure, and continuity summaries."
+        )
+    if invalid_infra_only:
+        return (
+            "- Source: infra-only run; prepared warehouse research_focus is "
+            "context, but no research-quality conclusion is allowed."
         )
     return (
         "- Source: prepared warehouse research_focus handoff; current-run protocol, "
@@ -3479,6 +3509,7 @@ def _cvrp_large_twoopt_summary(
     contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
     problem_family = contract.get("problem_family")
     current_run_evidence = phase4.get("current_run_evidence") is True
+    invalid_infra_only = phase4.get("invalid_infra_only") is True
     base = {
         "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
         "report_only": True,
@@ -3489,6 +3520,7 @@ def _cvrp_large_twoopt_summary(
         "promotion_state_mutated": False,
         "problem_family": problem_family,
         "current_run_evidence": current_run_evidence,
+        "invalid_infra_only": invalid_infra_only,
         "available": False,
         "handoff_complete": False,
         "handoff_requirements": {},
@@ -3609,6 +3641,7 @@ def _cvrp_large_twoopt_summary(
     }
     interpretation = _cvrp_large_twoopt_interpretation(
         current_run_evidence=current_run_evidence,
+        invalid_infra_only=invalid_infra_only,
         handoff_complete=handoff_complete,
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         formal_screened_candidates=formal_screened_candidates,
@@ -3628,6 +3661,7 @@ def _cvrp_large_twoopt_summary(
         "evidence": evidence,
         "evidence_gaps": _cvrp_large_twoopt_evidence_gaps(
             current_run_evidence=current_run_evidence,
+            invalid_infra_only=invalid_infra_only,
             handoff_complete=handoff_complete,
             protocol_evaluated_candidates=protocol_evaluated_candidates,
             quality_block_signal=quality_block_signal,
@@ -3642,9 +3676,10 @@ def _cvrp_large_twoopt_summary(
             else []
         ),
         "review_axes_actionability": (
-            "not_actionable_before_launch_current_run_evidence_required"
-            if not current_run_evidence
-            else "actionable_current_run_evidence_present"
+            _review_axes_actionability(
+                current_run_evidence=current_run_evidence,
+                invalid_infra_only=invalid_infra_only,
+            )
         ),
     }
 
@@ -3736,6 +3771,7 @@ def _is_cvrp_large_twoopt_family(value: str) -> bool:
 def _cvrp_large_twoopt_interpretation(
     *,
     current_run_evidence: bool,
+    invalid_infra_only: bool,
     handoff_complete: bool,
     protocol_evaluated_candidates: int,
     formal_screened_candidates: int,
@@ -3745,6 +3781,8 @@ def _cvrp_large_twoopt_interpretation(
     continuity_available: bool,
     large_twoopt_available: bool,
 ) -> str:
+    if invalid_infra_only:
+        return "invalid_infra_only_no_research_conclusion"
     if not current_run_evidence:
         return "prepared_only_launch_required"
     if protocol_evaluated_candidates <= 0:
@@ -3769,6 +3807,7 @@ def _cvrp_large_twoopt_interpretation(
 def _cvrp_large_twoopt_evidence_gaps(
     *,
     current_run_evidence: bool,
+    invalid_infra_only: bool,
     handoff_complete: bool,
     protocol_evaluated_candidates: int,
     quality_block_signal: int,
@@ -3780,6 +3819,9 @@ def _cvrp_large_twoopt_evidence_gaps(
     gaps: list[str] = []
     if not handoff_complete:
         gaps.append("cvrp_large_twoopt_handoff_requirements_incomplete")
+    if invalid_infra_only:
+        gaps.append("invalid_infra_only_no_research_conclusion")
+        return gaps
     if not current_run_evidence:
         gaps.append("launch_required_before_bounded_twoopt_conclusion")
         return gaps
@@ -3813,6 +3855,7 @@ def _warehouse_followup_summary(
     contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
     problem_family = contract.get("problem_family")
     current_run_evidence = phase4.get("current_run_evidence") is True
+    invalid_infra_only = phase4.get("invalid_infra_only") is True
     base = {
         "schema_version": "scion.postrun_warehouse_followup_summary.v1",
         "report_only": True,
@@ -3823,6 +3866,7 @@ def _warehouse_followup_summary(
         "promotion_state_mutated": False,
         "problem_family": problem_family,
         "current_run_evidence": current_run_evidence,
+        "invalid_infra_only": invalid_infra_only,
         "available": False,
         "handoff_complete": False,
         "handoff_requirements": {},
@@ -3944,6 +3988,7 @@ def _warehouse_followup_summary(
     }
     interpretation = _warehouse_followup_interpretation(
         current_run_evidence=current_run_evidence,
+        invalid_infra_only=invalid_infra_only,
         handoff_complete=handoff_complete,
         protocol_evaluated_candidates=protocol_evaluated_candidates,
         formal_screened_candidates=formal_screened_candidates,
@@ -3962,6 +4007,7 @@ def _warehouse_followup_summary(
         "evidence": evidence,
         "evidence_gaps": _warehouse_followup_evidence_gaps(
             current_run_evidence=current_run_evidence,
+            invalid_infra_only=invalid_infra_only,
             handoff_complete=handoff_complete,
             protocol_evaluated_candidates=protocol_evaluated_candidates,
             quality_block_signal=quality_block_signal,
@@ -3975,9 +4021,10 @@ def _warehouse_followup_summary(
             else []
         ),
         "review_axes_actionability": (
-            "not_actionable_before_launch_current_run_evidence_required"
-            if not current_run_evidence
-            else "actionable_current_run_evidence_present"
+            _review_axes_actionability(
+                current_run_evidence=current_run_evidence,
+                invalid_infra_only=invalid_infra_only,
+            )
         ),
     }
 
@@ -4007,6 +4054,7 @@ def _warehouse_handoff_requirements(
 def _warehouse_followup_interpretation(
     *,
     current_run_evidence: bool,
+    invalid_infra_only: bool,
     handoff_complete: bool,
     protocol_evaluated_candidates: int,
     formal_screened_candidates: int,
@@ -4015,6 +4063,8 @@ def _warehouse_followup_interpretation(
     runtime_available: bool,
     continuity_available: bool,
 ) -> str:
+    if invalid_infra_only:
+        return "invalid_infra_only_no_research_conclusion"
     if not current_run_evidence:
         return "prepared_only_launch_required"
     if protocol_evaluated_candidates > 0:
@@ -4037,6 +4087,7 @@ def _warehouse_followup_interpretation(
 def _warehouse_followup_evidence_gaps(
     *,
     current_run_evidence: bool,
+    invalid_infra_only: bool,
     handoff_complete: bool,
     protocol_evaluated_candidates: int,
     quality_block_signal: int,
@@ -4047,6 +4098,9 @@ def _warehouse_followup_evidence_gaps(
     gaps: list[str] = []
     if not handoff_complete:
         gaps.append("warehouse_handoff_requirements_incomplete")
+    if invalid_infra_only:
+        gaps.append("invalid_infra_only_no_research_conclusion")
+        return gaps
     if not current_run_evidence:
         gaps.append("launch_required_before_plateau_conclusion")
         return gaps
@@ -4062,6 +4116,18 @@ def _warehouse_followup_evidence_gaps(
     if not continuity_available:
         gaps.append("missing_research_continuity_summary")
     return gaps
+
+
+def _review_axes_actionability(
+    *,
+    current_run_evidence: bool,
+    invalid_infra_only: bool,
+) -> str:
+    if invalid_infra_only:
+        return "not_actionable_invalid_infra_only"
+    if not current_run_evidence:
+        return "not_actionable_before_launch_current_run_evidence_required"
+    return "actionable_current_run_evidence_present"
 
 
 def _research_efficiency_report_paths(

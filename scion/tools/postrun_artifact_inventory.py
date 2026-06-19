@@ -143,10 +143,16 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
     campaign_dir = run_root / "campaign"
     run_status = _read_json(run_root / "run_status.json")
     prepared_manifest = _read_json(run_root / "prepared_run_manifest.v1.json")
-    lifecycle = _lifecycle_inventory(run_status, prepared_manifest)
     campaign_run_status = _read_json(campaign_dir / "run_status.json")
     campaign_status = _read_json(campaign_dir / "status.json")
     summary = _read_json(campaign_dir / "campaign_summary.json")
+    lifecycle = _lifecycle_inventory(
+        run_status,
+        prepared_manifest,
+        campaign_run_status,
+        campaign_status,
+        summary,
+    )
     trace_index = _read_json(
         campaign_dir / "agentic_sessions" / "agentic_session_trace_index.json"
     )
@@ -593,7 +599,11 @@ def _counters(*docs: Any) -> dict[str, int | None]:
     }
 
 
-def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, Any]:
+def _lifecycle_inventory(
+    run_status: Any,
+    prepared_manifest: Any,
+    *campaign_docs: Any,
+) -> dict[str, Any]:
     status_doc = run_status if isinstance(run_status, dict) else {}
     manifest = prepared_manifest if isinstance(prepared_manifest, dict) else {}
     manifest_is_prepared = manifest.get("schema_version") == PREPARED_RUN_MANIFEST_SCHEMA
@@ -608,6 +618,9 @@ def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, A
         status_doc.get("pre_campaign_completion_preflight") == "failed"
         and manifest_is_prepared
     )
+    invalid_infra_only = any(
+        _doc_says_invalid_infra_only(doc) for doc in (status_doc, *campaign_docs)
+    )
     resume_from = status_doc.get("resume_from_campaign")
     if resume_from is None:
         resume_from = manifest.get("resume_from_campaign")
@@ -615,13 +628,18 @@ def _lifecycle_inventory(run_status: Any, prepared_manifest: Any) -> dict[str, A
         evidence_scope = "prepared_launch_root_with_resume_snapshot"
     elif preflight_failed:
         evidence_scope = "pre_campaign_preflight_failed_with_resume_snapshot"
+    elif invalid_infra_only:
+        evidence_scope = "invalid_infra_only_with_resume_snapshot"
     else:
         evidence_scope = "postrun_campaign"
     return {
         "schema_version": "scion.launcher_lifecycle.v1",
         "prepared_only": bool(prepared_only),
         "pre_campaign_completion_preflight_failed": bool(preflight_failed),
-        "current_run_evidence": not prepared_only and not preflight_failed,
+        "invalid_infra_only": bool(invalid_infra_only),
+        "current_run_evidence": not (
+            prepared_only or preflight_failed or invalid_infra_only
+        ),
         "status": _string_or_none(status_doc.get("status")),
         "prepared_status_schema": _string_or_none(status_doc.get("schema")),
         "resume_from_campaign": _string_or_none(resume_from),
@@ -639,6 +657,7 @@ def _launch_root_without_current_run(lifecycle: Mapping[str, Any]) -> bool:
     return (
         lifecycle.get("prepared_only") is True
         or lifecycle.get("pre_campaign_completion_preflight_failed") is True
+        or lifecycle.get("invalid_infra_only") is True
     )
 
 
@@ -1306,6 +1325,7 @@ def _phase4_evidence_coverage(
             "pre_campaign_completion_preflight_failed": (
                 lifecycle.get("pre_campaign_completion_preflight_failed") is True
             ),
+            "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
             "current_run_evidence": False,
             "requirements": _empty_phase4_requirements(
                 "not current-run evidence"
@@ -1413,6 +1433,7 @@ def _phase4_evidence_coverage(
         "pre_campaign_completion_preflight_failed": (
             lifecycle.get("pre_campaign_completion_preflight_failed") is True
         ),
+        "invalid_infra_only": lifecycle.get("invalid_infra_only") is True,
         "current_run_evidence": True,
         "requirements": {
             "target_intent_trace": _coverage_item(

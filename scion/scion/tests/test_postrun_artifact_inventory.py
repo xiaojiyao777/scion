@@ -1135,6 +1135,74 @@ def test_inventory_marks_preflight_failed_resume_snapshot_not_current_run(
     assert "not current-run evidence" in markdown
 
 
+def test_inventory_marks_invalid_infra_resume_snapshot_not_current_run(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "infra-failed-run"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 20,
+            "run_validity_status": "invalid_infra_only",
+            "run_completeness_status": "incomplete",
+            "last_stop_reason": "provider_infra_balance_exhausted",
+            "invalid_infra_only": True,
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "execution": {"rounds": 4},
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "formal_screened_candidates": 6,
+            "protocol_evaluated_candidates": 6,
+            "measurement_readiness": {"status": "ready"},
+        },
+    )
+    traces_dir = campaign_dir / "llm_traces"
+    traces_dir.mkdir()
+    _write_json(
+        traces_dir / "20260606T000000_code_branch_1.json",
+        {"request_kind": "code", "ok": True, "branch_id": "branch-1"},
+    )
+    _write_db(campaign_dir / "scion.db")
+
+    data = inventory_tool.build_inventory(run_root)
+    markdown = inventory_tool.render_markdown(data)
+
+    assert data["lifecycle"]["invalid_infra_only"] is True
+    assert data["lifecycle"]["current_run_evidence"] is False
+    assert data["lifecycle"]["evidence_scope"] == (
+        "invalid_infra_only_with_resume_snapshot"
+    )
+    assert data["validity"]["invalid_infra_only"] is True
+    assert data["counters"]["effective_rounds_completed"] == 0
+    assert data["branches"] == []
+    assert data["llm_traces"]["trace_count"] == 0
+    assert data["resume_snapshot"]["present"] is True
+    assert data["resume_snapshot"]["current_run_evidence"] is False
+    assert data["resume_snapshot"]["branch_count"] == 1
+    assert data["resume_snapshot"]["llm_trace_count"] == 1
+    assert data["resume_snapshot"]["hypothesis_count"] == 2
+    phase4 = data["phase4_evidence_coverage"]
+    assert phase4["current_run_evidence"] is False
+    assert phase4["invalid_infra_only"] is True
+    assert phase4["requirements"]["formal_candidate_artifact"]["available"] is False
+    assert "INVALID INFRA-ONLY RUN" in markdown
+    assert "## Resume Snapshot" in markdown
+
+
 def test_invalid_infra_only_markdown_without_db(tmp_path: Path) -> None:
     run_root = tmp_path / "infra-run"
     campaign_dir = run_root / "campaign"

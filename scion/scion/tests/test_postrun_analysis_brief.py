@@ -1834,6 +1834,80 @@ def test_brief_stop_conditions_for_invalid_infra_run(tmp_path: Path) -> None:
     assert "do not analyze as research behavior" in markdown
 
 
+def test_problem_summaries_mark_invalid_infra_only_not_actionable(
+    tmp_path: Path,
+) -> None:
+    warehouse_root = tmp_path / "warehouse-infra-run"
+    warehouse_campaign = warehouse_root / "campaign"
+    warehouse_campaign.mkdir(parents=True)
+    _write_json(
+        warehouse_root / "run_status.json",
+        {
+            "run_validity_status": "invalid_infra_only",
+            "run_completeness_status": "incomplete",
+            "last_stop_reason": "provider_infra_balance_exhausted",
+            "invalid_infra_only": True,
+            "requested_rounds": 1,
+        },
+    )
+    _write_warehouse_manifest(warehouse_root, warehouse_campaign, rounds=1)
+
+    warehouse_brief = brief_tool.build_brief(warehouse_root)
+    warehouse_markdown = brief_tool.render_markdown(warehouse_brief)
+    warehouse_summary = warehouse_brief["warehouse_followup_summary"]
+
+    assert warehouse_brief["lifecycle"]["current_run_evidence"] is False
+    assert warehouse_summary["available"] is True
+    assert warehouse_summary["current_run_evidence"] is False
+    assert warehouse_summary["invalid_infra_only"] is True
+    assert warehouse_summary["interpretation"] == (
+        "invalid_infra_only_no_research_conclusion"
+    )
+    assert warehouse_summary["evidence_gaps"] == [
+        "invalid_infra_only_no_research_conclusion"
+    ]
+    assert warehouse_summary["review_axes_actionability"] == (
+        "not_actionable_invalid_infra_only"
+    )
+    assert "infra-only run" in warehouse_markdown
+    assert "not_actionable_invalid_infra_only" in warehouse_markdown
+
+    cvrp_root = tmp_path / "cvrp-infra-run"
+    cvrp_campaign = cvrp_root / "campaign"
+    cvrp_campaign.mkdir(parents=True)
+    _write_json(
+        cvrp_root / "run_status.json",
+        {
+            "run_validity_status": "invalid_infra_only",
+            "run_completeness_status": "incomplete",
+            "last_stop_reason": "provider_infra_balance_exhausted",
+            "invalid_infra_only": True,
+            "requested_rounds": 1,
+        },
+    )
+    _write_cvrp_large_twoopt_manifest(cvrp_root, cvrp_campaign, rounds=1)
+
+    cvrp_brief = brief_tool.build_brief(cvrp_root)
+    cvrp_markdown = brief_tool.render_markdown(cvrp_brief)
+    cvrp_summary = cvrp_brief["cvrp_large_twoopt_summary"]
+
+    assert cvrp_brief["lifecycle"]["current_run_evidence"] is False
+    assert cvrp_summary["available"] is True
+    assert cvrp_summary["current_run_evidence"] is False
+    assert cvrp_summary["invalid_infra_only"] is True
+    assert cvrp_summary["interpretation"] == (
+        "invalid_infra_only_no_research_conclusion"
+    )
+    assert cvrp_summary["evidence_gaps"] == [
+        "invalid_infra_only_no_research_conclusion"
+    ]
+    assert cvrp_summary["review_axes_actionability"] == (
+        "not_actionable_invalid_infra_only"
+    )
+    assert "infra-only run" in cvrp_markdown
+    assert "not_actionable_invalid_infra_only" in cvrp_markdown
+
+
 def test_brief_exposes_resume_snapshot_without_current_run_evidence(
     tmp_path: Path,
 ) -> None:
