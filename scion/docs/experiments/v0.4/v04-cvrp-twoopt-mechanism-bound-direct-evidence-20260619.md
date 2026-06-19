@@ -26,6 +26,10 @@ same row.
     two-opt-specific phase telemetry, but all activation/effect evidence is for
     `unrelated_probe`; the summary must stay
     `protocol_evaluated_without_large_twoopt_direct_evidence`.
+- `scion/scion/tests/test_check_postrun_acceptance.py`
+  - Added acceptance coverage proving a hand-written
+    `bounded_twoopt_review_ready` problem summary is rejected when review-input
+    measurement evidence has only unrelated mechanism activation/effect.
 
 ## Verification
 
@@ -36,6 +40,12 @@ PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
   scion/scion/tests/test_postrun_analysis_brief.py \
   scion/scion/tests/test_check_postrun_acceptance.py
 # 76 passed in 35.64s
+```
+
+```text
+PYTHONPATH=/home/clawd/research/or-autoresearch-agent/scion pytest -q \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 46 passed in 35.19s
 ```
 
 ```text
