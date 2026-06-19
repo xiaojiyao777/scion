@@ -461,6 +461,27 @@ def test_launch_readiness_rejects_scion_dir_failure_without_postrun_reports(
     ]["failures"]
 
 
+def test_launch_readiness_rejects_launch_env_failure_without_postrun_reports(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    start = run_text.index('if [[ ! -r "$RUN_ROOT/launch.env" ]]; then')
+    end = run_text.index('if ! cd "$SCION_DIR"; then', start)
+    run_sh.write_text(run_text[:start] + run_text[end:], encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+    launch_env_check = report["checks"]["run_script_launch_env_failure_reports"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert launch_env_check["status"] == "failed"
+    assert {"reason": "launch_env_failure_path_missing"} in launch_env_check[
+        "detail"
+    ]["failures"]
+
+
 def test_launch_readiness_ignores_comment_only_runtime_guard_marker(
     tmp_path: Path,
 ) -> None:
@@ -2166,6 +2187,12 @@ write_postrun_acceptance_reports() {{
     || POSTRUN_READINESS_STATUS=$?
   echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" >> "$RUN_ROOT/run.log"
 }}
+if [[ ! -r "$RUN_ROOT/launch.env" ]]; then
+  echo "LAUNCH_ENV_MISSING:$RUN_ROOT/launch.env"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"launch_env_missing":"%s"}}\\n' "$RUN_ROOT/launch.env" > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit 64
+fi
 if ! cd "$SCION_DIR"; then
   echo "SCION_DIR_MISSING:$SCION_DIR"
   printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"scion_dir_missing":"%s"}}\\n' "$SCION_DIR" > "$RUN_ROOT/run_status.json"

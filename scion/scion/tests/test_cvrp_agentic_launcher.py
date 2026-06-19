@@ -234,6 +234,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     run_sh_text = run_sh.read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert 'cd "$SCION_DIR"' in run_sh_text
+    assert "LAUNCH_ENV_MISSING" in run_sh_text
+    assert '"launch_env_missing"' in run_sh_text
     assert "export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY" in run_sh_text
     assert "PREPARED_RUN_MANIFEST" in run_sh_text
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT" in run_sh_text

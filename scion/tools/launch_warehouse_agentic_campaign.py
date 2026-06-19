@@ -427,14 +427,38 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
     launch_env.chmod(0o600)
 
 
-def _write_run_sh(run_root: Path, command: str) -> None:
+def _write_run_sh(run_root: Path, command: str, env: dict[str, object]) -> None:
+    fallback_keys = [
+        "RUN_ROOT",
+        "PY",
+        "SCION_DIR",
+        "MEASUREMENT_GOVERNANCE",
+        "PROPOSAL_CONTEXT_ABLATION",
+        "CONTROL_PAIR_KEY",
+        "POSTRUN_REPORTS",
+    ]
+    fallback_assignments = "\n".join(
+        _shell_assign(key, env[key]) for key in fallback_keys
+    )
     content = f"""#!/usr/bin/env bash
 set -uo pipefail
 _INHERITED_SCION_API_KEY="${{SCION_API_KEY:-}}"
+_RUN_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+{fallback_assignments}
+{POSTRUN_REPORT_FUNCTION_SNIPPET}
+if [[ ! -r "$_RUN_SCRIPT_DIR/launch.env" ]]; then
+  {{
+    echo "WRAPPER_EXIT_STATUS:{PREFLIGHT_FAILURE_EXIT_CODE}"
+    echo "ENDED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "LAUNCH_ENV_MISSING:$_RUN_SCRIPT_DIR/launch.env"
+  }} > "$RUN_ROOT/exit.txt"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"launch_env_missing":"%s"}}\\n' "$_RUN_SCRIPT_DIR/launch.env" > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit {PREFLIGHT_FAILURE_EXIT_CODE}
+fi
 source "$(dirname "$0")/launch.env"
 export PYTHONPATH SCION_MODEL SCION_BASE_URL SCION_API_KEY SCION_SDK_MAX_RETRIES SCION_LLM_MAX_RETRIES SCION_WAREHOUSE_DATA_ROOT SCION_PROBLEM_DATA_ROOT PREPARED_RUN_MANIFEST
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-{POSTRUN_REPORT_FUNCTION_SNIPPET}
 if [[ -n "${{SCION_API_KEY_ENV:-}}" ]]; then
   if [[ "$SCION_API_KEY_ENV" == "SCION_API_KEY" ]]; then
     _RESOLVED_SCION_API_KEY="$_INHERITED_SCION_API_KEY"
@@ -847,7 +871,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
 
     command = _build_command(env)
     _write_launch_env(run_root, env)
-    _write_run_sh(run_root, command)
+    _write_run_sh(run_root, command, env)
     api_key_display = (
         f"<from-env:{env['SCION_API_KEY_ENV']}>"
         if str(env["SCION_API_KEY_ENV"])

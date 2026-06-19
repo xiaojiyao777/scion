@@ -331,6 +331,10 @@ def build_readiness(
         *_run_script_preflight_failure_reports(run_sh),
     )
     add_check(
+        "run_script_launch_env_failure_reports",
+        *_run_script_launch_env_failure_reports(run_sh),
+    )
+    add_check(
         "run_script_scion_dir_failure_reports",
         *_run_script_scion_dir_failure_reports(run_sh),
     )
@@ -1716,6 +1720,29 @@ def _run_script_scion_dir_failure_reports(run_sh: Path) -> tuple[str, Any]:
     if status == "ok" and detail.get("required") is False:
         failures = list(detail.get("failures", []))
         failures.append({"reason": "scion_dir_failure_path_missing"})
+        detail = dict(detail)
+        detail["failures"] = failures
+        return "failed", detail
+    return status, detail
+
+
+def _run_script_launch_env_failure_reports(run_sh: Path) -> tuple[str, Any]:
+    status, detail = _run_script_status_failure_reports(
+        run_sh,
+        marker="LAUNCH_ENV_MISSING",
+        status_marker='"launch_env_missing"',
+        missing_call_reason="missing_postrun_report_call_after_launch_env_failure",
+        missing_exit_reason="missing_launch_env_failure_exit",
+        call_after_exit_reason="postrun_report_call_after_launch_env_exit",
+        status_missing_reason="launch_env_failure_status_writer_missing",
+        status_before_marker_reason="launch_env_failure_status_writer_before_marker",
+        call_before_status_reason=(
+            "postrun_report_call_before_launch_env_failure_status_writer"
+        ),
+    )
+    if status == "ok" and detail.get("required") is False:
+        failures = list(detail.get("failures", []))
+        failures.append({"reason": "launch_env_failure_path_missing"})
         detail = dict(detail)
         detail["failures"] = failures
         return "failed", detail

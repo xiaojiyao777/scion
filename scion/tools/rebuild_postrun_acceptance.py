@@ -39,6 +39,7 @@ DEFAULT_FAMILIES = (
 OBSERVED_CONTROL_ARMS = {"on", "record_only"}
 PRE_CAMPAIGN_INFRA_FAILURE_KEYS = (
     "api_key_env_missing",
+    "launch_env_missing",
     "scion_dir_missing",
     "warehouse_data_root_missing",
     "git_runtime_dirty",

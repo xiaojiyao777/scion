@@ -459,6 +459,66 @@ def test_rebuild_postrun_acceptance_skips_current_run_reports_after_scion_dir_fa
     assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
 
 
+def test_rebuild_postrun_acceptance_skips_current_run_reports_after_launch_env_failure(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "launch-env-failed-root"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_json(
+        run_root / "run_status.json",
+        {
+            "schema": "outer-wrapper.v1",
+            "status": "finished",
+            "wrapper_exit_status": 64,
+            "launch_env_missing": str(run_root / "launch.env"),
+        },
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "problem_family": "warehouse",
+            "execution": {
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "rounds": 1,
+            },
+            "resume_from_campaign": "/tmp/source-campaign",
+        },
+    )
+    _write_json(
+        campaign_dir / "campaign_summary.json",
+        {
+            "effective_rounds_completed": 4,
+            "formal_screened_candidates": 4,
+        },
+    )
+
+    manifest = rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="launch_env_failed",
+    )
+
+    assert manifest["pre_campaign_infra_failed"] is True
+    assert manifest["pre_campaign_infra_failure_keys"] == ["launch_env_missing"]
+    assert manifest["current_run_reports_skipped"] is True
+    assert manifest["families"]["summaries"]["status"] == "skipped"
+    assert "pre_campaign_infra_failure(launch_env_missing)" in (
+        manifest["current_run_skip_reason"]
+    )
+    brief = json.loads(
+        (
+            run_root
+            / "postrun_acceptance"
+            / "analysis_brief"
+            / "launch_env_failed.postrun_analysis_brief.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert brief["validity"]["last_stop_reason"] == "pre_campaign_launch_env_missing"
+    assert brief["phase4_evidence_coverage"]["current_run_evidence"] is False
+
+
 def _write_campaign_db(campaign_dir: Path) -> None:
     registry = LineageRegistry(str(campaign_dir / "scion.db"))
     branch_store = BranchStore(registry)

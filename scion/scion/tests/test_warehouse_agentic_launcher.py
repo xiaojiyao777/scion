@@ -195,6 +195,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     run_sh_text = run_sh.read_text(encoding="utf-8")
     command_txt = (run_root / "command.txt").read_text(encoding="utf-8")
     assert 'cd "$SCION_DIR"' in run_sh_text
+    assert "LAUNCH_ENV_MISSING" in run_sh_text
+    assert '"launch_env_missing"' in run_sh_text
     assert "PREPARED_RUN_MANIFEST" in run_sh_text
     assert "GIT_RUNTIME_DIRTY" in run_sh_text
     assert "GIT_COMMIT_MISMATCH" in run_sh_text
