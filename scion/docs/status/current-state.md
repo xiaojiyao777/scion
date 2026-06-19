@@ -59,6 +59,11 @@ Framework:
   runtime failure, verification failure, canary failure, timeout, and true
   runtime regression still fail closed. Default/trajectory-stable lifecycle
   behavior is unchanged.
+- Focused warehouse/CVRP v0.4 launchers now pass explicit proposal-attempt and
+  proposal-quality-loop headroom (`64`/`64`) into `scion run`. This removes the
+  old prepared-root exposure to the core `rounds + max(6, rounds * 2)` fallback,
+  which could stop a 1-round CVRP follow-up after only seven quality-blocked
+  proposal attempts before useful protocol evidence existed.
 
 Warehouse:
 
@@ -66,8 +71,10 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `8f1994ea`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-openlowsnr-8f1994ea-6r-gpt55-20260619T173441Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `2e2dd7ff`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityheadroom-2e2dd7ff-6r-gpt55-20260619T174842Z-claw`.
+  Its prepared manifest records `proposal_attempt_limit=64` and
+  `proposal_quality_loop_limit=64`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -102,8 +109,10 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `8f1994ea`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-openlowsnr-8f1994ea-1r-gpt55-20260619T173442Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `2e2dd7ff`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityheadroom-2e2dd7ff-1r-gpt55-20260619T174842Z-claw`.
+  Its prepared manifest records `proposal_attempt_limit=64` and
+  `proposal_quality_loop_limit=64`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -130,13 +139,15 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `8f1994ea`
+- The active prepared roots were generated from WSL runtime commit `2e2dd7ff`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
-  prepared-handoff stale/undeclared output guards, and prepared/postrun
-  rebuild-manifest identity and output scope validation.
+  prepared-handoff stale/undeclared output guards, prepared/postrun
+  rebuild-manifest identity and output scope validation, and focused launcher
+  proposal-headroom repair.
 - WSL strict launch readiness for both current prepared roots reports
-  `static_ready=true`, `launch_ready=false`, exit `64`.
+  `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
+  expose proposal-attempt and proposal-quality-loop limits as `64`/`64`.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
   inconsistent, or unexpected generated files, no manifest identity/boundary
@@ -172,8 +183,8 @@ Infrastructure:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `total=1`, and no
-  launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `expired=1`, `total=1`,
+  and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -208,7 +219,7 @@ Infrastructure:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-runtime-guard-failure-postrun-report-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-proposal-headroom-launcher-repair-20260619.md`.
 - Current trajectory-divergent lifecycle evidence:
   `scion/docs/experiments/v0.4/v04-trajectory-divergent-open-low-signal-lifecycle-20260619.md`.
 - Historical repair details remain in `scion/docs/experiments/v0.4/`; this
