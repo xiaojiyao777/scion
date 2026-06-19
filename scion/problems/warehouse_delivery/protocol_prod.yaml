@@ -29,10 +29,11 @@
 #   - n_seeds 保持 2/3（已够用）
 #   - validation n_cases 保持 6（frozen 是最终关卡，validation 可以宽松一点）
 #
-# TODO（需代码支持）：
-#   - min_practical_delta 当前硬编码为 0.001（任何正改善即通过）
-#     生产数据建议改为 100 元（过滤统计噪声），需在 protocol_config.py 里
-#     把 min_practical_delta 改为可配置字段后再启用。
+# Measurement note:
+#   - median_delta_min resolves through the problem-owned measurement declaration
+#     in problem-v1.yaml. The current production warehouse practical deltas are
+#     intentionally declared as raw 0.001 thresholds; do not treat that as a
+#     protocol_config.py hard-coded default.
 #
 # 使用方式：
 #   在 run_prod_campaign.py 里改 protocol_config_path 指向本文件。
