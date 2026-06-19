@@ -114,6 +114,28 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "DecisionFeatures" in prepared_manifest["research_focus"][
         "decision_boundary"
     ]
+    measurement = prepared_manifest["research_focus"][
+        "measurement_opportunity_diagnostics"
+    ]
+    assert measurement["schema_version"] == "warehouse_measurement_runtime_handoff.v1"
+    assert measurement["source"] == "problem_v1.measurement.calibration_ref"
+    assert measurement["proposal_visibility_only"] is True
+    assert measurement["decision_features_excluded"] is True
+    assert measurement["metric"] == "total_cost"
+    assert measurement["unit"] == "raw_delta"
+    assert measurement["runtime_model"] == "comparative"
+    assert measurement["pairing_validity"] == "trajectory_divergent"
+    assert measurement["screening_mde_at_power_80"] == 577.5
+    assert measurement["measurement_readiness"]["status"] == "ready"
+    assert measurement["measurement_readiness"]["reason_code"] == "ok"
+    assert measurement["measurement_readiness"]["n_pairs"] == 36
+    assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
+    assert measurement["calibration"]["ref"] == "calibration/aa_noise_floor.json"
+    assert measurement["calibration"]["decision_features_excluded"] is True
+    assert measurement["recommended_min_seeds"] == 4
+    assert "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
+    assert "TRAJECTORY_DIVERGENT_LOW_SNR" in measurement["reason_codes"]
+    assert measurement["related_calibrations"][0]["action"] == "create_new"
     assert prepared_manifest["execution"]["rounds"] == 6
     assert prepared_manifest["execution"]["proposal_attempt_limit"] == 64
     assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 64
@@ -149,6 +171,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "Warehouse champion-v2" in prepared_manifest_md
     assert "## Current Research Focus" in prepared_manifest_md
     assert "split_delta_sum==0" in prepared_manifest_md
+    assert "Measurement/runtime handoff" in prepared_manifest_md
+    assert "problem_v1.measurement.calibration_ref" in prepared_manifest_md
     assert stat.S_IMODE(launch_env_path.stat().st_mode) == 0o600
     assert f"REPO_ROOT={PROJECT_ROOT}" in launch_env
     assert f"SCION_DIR={SCION_DIR}" in launch_env
@@ -343,6 +367,16 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     ]["accepted_checkpoint"]
     warehouse_checks = prepared_brief["prepared_run_contract"]["checks"]
     assert warehouse_checks["warehouse_followup_handoff_present"]["passed"] is True
+    assert warehouse_checks["warehouse_measurement_handoff_present"]["passed"] is True
+    assert (
+        warehouse_checks["warehouse_measurement_handoff_problem_owned_source"][
+            "passed"
+        ]
+        is True
+    )
+    assert warehouse_checks["warehouse_measurement_handoff_reason_codes"][
+        "passed"
+    ] is True
     assert (
         warehouse_checks["warehouse_followup_required_evidence_complete"]["passed"]
         is True
@@ -359,6 +393,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "problem_specific_requirements"
     ]
     for key in (
+        "warehouse_measurement_mde_handoff",
+        "warehouse_low_snr_reason_handoff",
         "warehouse_v2_checkpoint_handoff",
         "warehouse_continuous_plateau_question",
         "warehouse_required_evidence_handoff",
@@ -404,6 +440,12 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         ]
         is True
     )
+    assert (
+        prepared_prompt_context["signals"]["warehouse_measurement_runtime_handoff"][
+            "available"
+        ]
+        is True
+    )
     assert prepared_rebuild["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert prepared_rebuild["complete"] is True
     assert prepared_rebuild["families"]["inventory"]["status"] == "ok"
@@ -421,10 +463,13 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "## Launcher Artifacts" in inventory_md.read_text(encoding="utf-8")
     inventory_md_text = inventory_md.read_text(encoding="utf-8")
     assert "### Prepared Research Focus" in inventory_md_text
+    assert "warehouse_measurement_mde_handoff" in inventory_md_text
     assert "warehouse_required_evidence_handoff" in inventory_md_text
-    assert "warehouse_required_evidence" in prompt_context_md.read_text(
+    prompt_context_md_text = prompt_context_md.read_text(
         encoding="utf-8"
     )
+    assert "warehouse_measurement_runtime_handoff" in prompt_context_md_text
+    assert "warehouse_required_evidence" in prompt_context_md_text
 
     subprocess.run(["bash", "-n", str(run_sh)], check=True)
 

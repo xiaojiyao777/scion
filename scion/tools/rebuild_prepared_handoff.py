@@ -648,6 +648,37 @@ def _add_focus_signals(
             },
         )
     elif family == "warehouse_delivery":
+        measurement = _mapping_or_empty(
+            research_focus.get("measurement_opportunity_diagnostics")
+        )
+        readiness = _mapping_or_empty(measurement.get("measurement_readiness"))
+        calibration = _mapping_or_empty(measurement.get("calibration"))
+        _add_signal(
+            signals,
+            "warehouse_measurement_runtime_handoff",
+            available=(
+                bool(measurement)
+                and measurement.get("source")
+                == "problem_v1.measurement.calibration_ref"
+                and measurement.get("proposal_visibility_only") is True
+                and measurement.get("decision_features_excluded") is True
+                and readiness.get("status") == "ready"
+                and calibration.get("schema") == "scion.aa_noise_floor.v1"
+            ),
+            required=True,
+            source="prepared_run_manifest.research_focus.measurement_opportunity_diagnostics",
+            detail={
+                "schema_version": measurement.get("schema_version"),
+                "metric": measurement.get("metric"),
+                "runtime_model": measurement.get("runtime_model"),
+                "pairing_validity": measurement.get("pairing_validity"),
+                "screening_mde_at_power_80": measurement.get(
+                    "screening_mde_at_power_80"
+                ),
+                "measurement_readiness_status": readiness.get("status"),
+                "calibration_schema": calibration.get("schema"),
+            },
+        )
         required_evidence = _string_items(research_focus.get("required_evidence"))
         avoid_items = _string_items(research_focus.get("default_avoid_directions"))
         _add_signal(

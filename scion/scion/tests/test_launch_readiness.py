@@ -147,6 +147,72 @@ def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
 
 
+def test_launch_readiness_rejects_missing_warehouse_measurement_handoff(
+    tmp_path: Path,
+) -> None:
+    research_focus = _warehouse_research_focus()
+    research_focus.pop("measurement_opportunity_diagnostics")
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=research_focus,
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "warehouse_measurement_handoff_present" in problem_specific["detail"][
+        "failed_checks"
+    ]
+    assert contract["contract_complete"] is False
+    assert (
+        contract["checks"]["warehouse_measurement_handoff_present"]["passed"]
+        is False
+    )
+
+
+def test_launch_readiness_rejects_hardcoded_warehouse_measurement_handoff(
+    tmp_path: Path,
+) -> None:
+    research_focus = _warehouse_research_focus()
+    measurement = research_focus["measurement_opportunity_diagnostics"]
+    assert isinstance(measurement, dict)
+    measurement.pop("source")
+    measurement.pop("measurement_readiness")
+    measurement.pop("calibration")
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=research_focus,
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "warehouse_measurement_handoff_problem_owned_source" in problem_specific[
+        "detail"
+    ]["failed_checks"]
+    assert contract["contract_complete"] is False
+    assert (
+        contract["checks"]["warehouse_measurement_handoff_problem_owned_source"][
+            "passed"
+        ]
+        is False
+    )
+
+
 def test_launch_readiness_rejects_hardcoded_cvrp_measurement_handoff(
     tmp_path: Path,
 ) -> None:
@@ -2658,7 +2724,56 @@ def _large_twoopt_constraints() -> dict[str, object]:
 
 def _warehouse_research_focus() -> dict[str, object]:
     return {
+        "schema_version": "scion.warehouse_research_focus.v1",
         "scope": "report_only_prepared_handoff",
+        "measurement_opportunity_diagnostics": {
+            "schema_version": "warehouse_measurement_runtime_handoff.v1",
+            "source": "problem_v1.measurement.calibration_ref",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "metric": "total_cost",
+            "unit": "raw_delta",
+            "runtime_model": "comparative",
+            "pairing_validity": "trajectory_divergent",
+            "practical_screen_delta": 0.001,
+            "practical_validate_delta": 0.001,
+            "screening_mde_at_power_80": 577.5,
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "calibration_age_days": 8,
+                "calibration_max_age_days": 90,
+                "n_pairs": 36,
+                "mde_at_power_80": 577.5,
+                "noise_band_p90_abs": 8500.0,
+                "effect_to_mde_ratio": 1.7316017316017316e-06,
+                "signal_to_noise_tier": "low_power",
+                "decision_features_excluded": True,
+                "calibration_ref": "calibration/aa_noise_floor.json",
+            },
+            "calibration": {
+                "schema": "scion.aa_noise_floor.v1",
+                "ref": "calibration/aa_noise_floor.json",
+                "path": "/tmp/warehouse/calibration/aa_noise_floor.json",
+                "calibrated_at": "2026-06-11T16:47:24.372634+00:00",
+                "n_pairs": 36,
+                "decision_features_excluded": True,
+                "calibration_run_action": "modify",
+            },
+            "reason_codes": [
+                "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
+                "TRAJECTORY_DIVERGENT_LOW_SNR",
+                "WAREHOUSE_COMPARATIVE_RUNTIME_REPORT_ONLY",
+            ],
+            "recommended_min_seeds": 4,
+            "related_calibrations": [
+                {
+                    "action": "create_new",
+                    "n_pairs": 60,
+                    "mde_at_power_80": 1725.0,
+                }
+            ],
+        },
         "accepted_checkpoint": "Champion v2 promoted.",
         "current_question": (
             "Can warehouse v2 plateau be advanced with one bounded follow-up?"

@@ -171,6 +171,12 @@ WAREHOUSE_DEFAULT_AVOID_TOKENS = (
     "split_delta_sum==0",
     "broad warehouse matrix",
 )
+WAREHOUSE_REQUIRED_MEASUREMENT_REASON_CODES = frozenset(
+    (
+        "WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA",
+        "TRAJECTORY_DIVERGENT_LOW_SNR",
+    )
+)
 
 
 def build_inventory(run_root: Path | str) -> dict[str, Any]:
@@ -1266,6 +1272,77 @@ def _add_warehouse_followup_handoff_checks(
         },
     )
 
+    measurement = focus.get("measurement_opportunity_diagnostics")
+    measurement_is_dict = isinstance(measurement, dict)
+    add_check(
+        "warehouse_measurement_handoff_present",
+        measurement_is_dict,
+        "research_focus.measurement_opportunity_diagnostics",
+    )
+    if not isinstance(measurement, dict):
+        measurement = {}
+    add_check(
+        "warehouse_measurement_handoff_report_only",
+        measurement.get("proposal_visibility_only") is True
+        and measurement.get("decision_features_excluded") is True,
+        {
+            "proposal_visibility_only": measurement.get(
+                "proposal_visibility_only"
+            ),
+            "decision_features_excluded": measurement.get(
+                "decision_features_excluded"
+            ),
+        },
+    )
+    add_check(
+        "warehouse_measurement_handoff_mde_present",
+        _positive_number(measurement.get("screening_mde_at_power_80"))
+        and _positive_number(measurement.get("practical_screen_delta")),
+        {
+            "screening_mde_at_power_80": measurement.get(
+                "screening_mde_at_power_80"
+            ),
+            "practical_screen_delta": measurement.get("practical_screen_delta"),
+        },
+    )
+    readiness = measurement.get("measurement_readiness")
+    if not isinstance(readiness, dict):
+        readiness = {}
+    calibration = measurement.get("calibration")
+    if not isinstance(calibration, dict):
+        calibration = {}
+    source = str(measurement.get("source") or "")
+    add_check(
+        "warehouse_measurement_handoff_problem_owned_source",
+        source == "problem_v1.measurement.calibration_ref"
+        and readiness.get("status") == "ready"
+        and readiness.get("reason_code") == "ok"
+        and calibration.get("schema") == "scion.aa_noise_floor.v1"
+        and calibration.get("decision_features_excluded") is True,
+        {
+            "source": source,
+            "measurement_readiness_status": readiness.get("status"),
+            "measurement_readiness_reason_code": readiness.get("reason_code"),
+            "calibration_schema": calibration.get("schema"),
+            "calibration_ref": calibration.get("ref"),
+            "calibration_decision_features_excluded": calibration.get(
+                "decision_features_excluded"
+            ),
+        },
+    )
+    reason_codes = set(_string_items(measurement.get("reason_codes")))
+    missing_reason_codes = sorted(
+        WAREHOUSE_REQUIRED_MEASUREMENT_REASON_CODES - reason_codes
+    )
+    add_check(
+        "warehouse_measurement_handoff_reason_codes",
+        not missing_reason_codes,
+        {
+            "required": sorted(WAREHOUSE_REQUIRED_MEASUREMENT_REASON_CODES),
+            "missing": missing_reason_codes,
+        },
+    )
+
 
 def _positive_number(value: Any) -> bool:
     return not isinstance(value, bool) and isinstance(value, (float, int)) and value > 0
@@ -1902,6 +1979,8 @@ def _warehouse_problem_specific_phase4_requirements(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     focus = _mapping_or_empty(manifest.get("research_focus"))
+    measurement = _mapping_or_empty(focus.get("measurement_opportunity_diagnostics"))
+    reason_codes = set(_string_items(measurement.get("reason_codes")))
     checkpoint = str(focus.get("accepted_checkpoint") or "")
     question = str(focus.get("current_question") or "")
     required_evidence = _string_items(focus.get("required_evidence"))
@@ -1911,6 +1990,19 @@ def _warehouse_problem_specific_phase4_requirements(
     required_text = "\n".join(required_evidence)
     avoid_text = "\n".join(default_avoid)
     return {
+        "warehouse_measurement_mde_handoff": _coverage_item(
+            int(
+                _positive_number(measurement.get("screening_mde_at_power_80"))
+                and _positive_number(measurement.get("practical_screen_delta"))
+                and measurement.get("source")
+                == "problem_v1.measurement.calibration_ref"
+            ),
+            "prepared_run_manifest warehouse measurement_opportunity_diagnostics problem-owned MDE/practical delta",
+        ),
+        "warehouse_low_snr_reason_handoff": _coverage_item(
+            int(not (WAREHOUSE_REQUIRED_MEASUREMENT_REASON_CODES - reason_codes)),
+            "prepared_run_manifest warehouse measurement_opportunity_diagnostics reason_codes",
+        ),
         "warehouse_v2_checkpoint_handoff": _coverage_item(
             int("v2" in checkpoint.lower() and "v2" in question.lower()),
             "prepared_run_manifest warehouse research_focus accepted_checkpoint/current_question",

@@ -88,6 +88,7 @@ WAREHOUSE_CURRENT_RESEARCH_FOCUS = {
         "state."
     ),
 }
+
 POSTRUN_ACCEPTANCE_FAMILIES = (
     "summaries",
     "failures",
@@ -367,6 +368,189 @@ def _resolve_source_path(repo_root: Path, spec_path: str) -> Path:
     return repo_root / path
 
 
+def _warehouse_measurement_opportunity_diagnostics(
+    scion_dir: Path,
+    problem_v1: Path,
+) -> dict[str, Any]:
+    """Build proposal-visible warehouse measurement/runtime guidance."""
+
+    if str(scion_dir) not in sys.path:
+        sys.path.insert(0, str(scion_dir))
+
+    from scion.measurement.readiness import measurement_readiness_status  # noqa: PLC0415
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml  # noqa: PLC0415
+
+    if not problem_v1.is_file():
+        raise SystemExit(
+            "Warehouse agentic launcher requires problem-v1 measurement "
+            f"declaration: {problem_v1}"
+        )
+
+    spec = load_problem_spec_v1_from_yaml(problem_v1)
+    measurement = spec.measurement
+    readiness = measurement_readiness_status(spec)
+    if readiness.status != "ready":
+        raise SystemExit(
+            "Warehouse measurement calibration is not launch-ready: "
+            f"{readiness.reason_code}"
+        )
+
+    calibration_ref = str(measurement.calibration_ref or "").strip()
+    calibration_path = _resolve_calibration_ref(spec.root_dir, calibration_ref)
+    calibration_artifact = _read_calibration_artifact(calibration_path)
+    power = _mapping_or_empty(calibration_artifact.get("protocol_power"))
+    effect_scale = measurement.effect_scale
+    practical_screen_delta = float(effect_scale.practical_delta_screen)
+    mde_at_power_80 = float(readiness.mde_at_power_80 or 0.0)
+    reason_codes = _warehouse_measurement_reason_codes(
+        runtime_model=measurement.runtime_model,
+        pairing_validity=measurement.pairing_validity,
+        practical_screen_delta=practical_screen_delta,
+        mde_at_power_80=mde_at_power_80,
+    )
+    recommended_min_seeds = _positive_int_or_none(power.get("recommended_min_seeds"))
+    related_calibrations = _warehouse_related_calibrations(calibration_artifact)
+
+    diagnostic: dict[str, Any] = {
+        "schema_version": "warehouse_measurement_runtime_handoff.v1",
+        "source": "problem_v1.measurement.calibration_ref",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "metric": effect_scale.metric,
+        "unit": effect_scale.unit,
+        "runtime_model": measurement.runtime_model,
+        "pairing_validity": measurement.pairing_validity,
+        "practical_screen_delta": practical_screen_delta,
+        "practical_validate_delta": float(effect_scale.practical_delta_validate),
+        "screening_mde_at_power_80": mde_at_power_80,
+        "measurement_readiness": readiness.to_diagnostic_payload(),
+        "calibration": {
+            "schema": calibration_artifact.get("schema"),
+            "ref": calibration_ref,
+            "path": str(calibration_path),
+            "calibrated_at": calibration_artifact.get("calibrated_at"),
+            "n_pairs": readiness.n_pairs,
+            "decision_features_excluded": calibration_artifact.get(
+                "decision_features_excluded"
+            ),
+            "calibration_run_action": _mapping_or_empty(
+                calibration_artifact.get("calibration_run")
+            ).get("action"),
+        },
+        "summary": _warehouse_measurement_summary(
+            metric=effect_scale.metric,
+            mde_at_power_80=mde_at_power_80,
+            practical_screen_delta=practical_screen_delta,
+        ),
+        "reason_codes": reason_codes,
+    }
+    if recommended_min_seeds is not None:
+        diagnostic["recommended_min_seeds"] = recommended_min_seeds
+    if related_calibrations:
+        diagnostic["related_calibrations"] = related_calibrations
+    return diagnostic
+
+
+def _resolve_calibration_ref(root_dir: str, calibration_ref: str) -> Path:
+    ref = Path(calibration_ref).expanduser()
+    if ref.is_absolute():
+        return ref
+    return Path(root_dir).expanduser().resolve() / ref
+
+
+def _read_calibration_artifact(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"unable to read warehouse calibration artifact {path}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Warehouse calibration artifact must be a JSON object: {path}")
+    return payload
+
+
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _positive_int_or_none(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _warehouse_related_calibrations(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+    related = artifact.get("related_calibrations")
+    if not isinstance(related, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for item in related:
+        if not isinstance(item, dict):
+            continue
+        payload = {
+            "action": str(item.get("action") or ""),
+            "n_pairs": item.get("n_pairs"),
+            "mde_at_power_80": item.get("mde_at_power_80"),
+        }
+        items.append(
+            {
+                key: value
+                for key, value in payload.items()
+                if value not in ("", None)
+            }
+        )
+    return items
+
+
+def _warehouse_measurement_reason_codes(
+    *,
+    runtime_model: str,
+    pairing_validity: str,
+    practical_screen_delta: float,
+    mde_at_power_80: float,
+) -> list[str]:
+    reason_codes: list[str] = []
+    if mde_at_power_80 > practical_screen_delta:
+        reason_codes.append("WAREHOUSE_MDE_EXCEEDS_PRACTICAL_DELTA")
+    if pairing_validity == "trajectory_divergent":
+        reason_codes.append("TRAJECTORY_DIVERGENT_LOW_SNR")
+    if runtime_model == "comparative":
+        reason_codes.append("WAREHOUSE_COMPARATIVE_RUNTIME_REPORT_ONLY")
+    return reason_codes
+
+
+def _warehouse_measurement_summary(
+    *,
+    metric: str,
+    mde_at_power_80: float,
+    practical_screen_delta: float,
+) -> str:
+    if mde_at_power_80 > practical_screen_delta:
+        return (
+            f"Warehouse screening is low-power for raw {metric} effects below "
+            "the measured MDE; interpret split-preserving cost compression "
+            "against the A/A noise floor and current-run runtime evidence."
+        )
+    return (
+        f"Warehouse screening MDE is within the declared practical {metric} delta; "
+        "interpret effects against the measured A/A noise floor."
+    )
+
+
+def _current_research_focus(env: dict[str, object]) -> dict[str, Any]:
+    focus = json.loads(json.dumps(WAREHOUSE_CURRENT_RESEARCH_FOCUS))
+    focus["measurement_opportunity_diagnostics"] = (
+        _warehouse_measurement_opportunity_diagnostics(
+            Path(env["SCION_DIR"]),
+            Path(env["PROBLEM_V1"]),
+        )
+    )
+    return focus
+
+
 def _build_command(env: dict[str, object]) -> str:
     return (
         f"{env['PY']} -m scion.cli.main run "
@@ -637,7 +821,7 @@ def _write_prepared_run_manifest(
         "promotion_state_mutated": False,
         "problem_family": "warehouse_delivery",
         "analysis_intent": WAREHOUSE_ANALYSIS_INTENT,
-        "research_focus": WAREHOUSE_CURRENT_RESEARCH_FOCUS,
+        "research_focus": _current_research_focus(env),
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,
@@ -741,6 +925,24 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
     lines.append("- Default-avoid directions:")
     for item in research_focus["default_avoid_directions"]:
         lines.append(f"  - {item}")
+    measurement = research_focus.get("measurement_opportunity_diagnostics")
+    if isinstance(measurement, dict):
+        readiness = measurement.get("measurement_readiness")
+        if not isinstance(readiness, dict):
+            readiness = {}
+        lines.extend(
+            [
+                "- Measurement/runtime handoff:",
+                f"  - Source: `{measurement.get('source')}`",
+                f"  - Metric: `{measurement.get('metric')}`",
+                f"  - Runtime model: `{measurement.get('runtime_model')}`",
+                f"  - Pairing validity: `{measurement.get('pairing_validity')}`",
+                "  - Screening MDE at 80% power: "
+                f"`{measurement.get('screening_mde_at_power_80')}`",
+                f"  - Readiness: `{readiness.get('status')}`",
+                f"  - Summary: {measurement.get('summary')}",
+            ]
+        )
     lines.extend([
         "",
         "## Config",
