@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `7fd806e` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, prepared-handoff declared-output and rebuild-manifest identity hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `709db42` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, prepared/postrun rebuild-manifest output scope hygiene, prepared-handoff declared-output and rebuild-manifest identity hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -332,11 +332,15 @@ Current checkpoint:
 - Postrun acceptance readiness also rejects undeclared generated `.json/.md`
   files in standard ok family directories, so a stale file added after rebuild
   cannot make the directory view or inventory counts look like current-run
-  evidence.
+  evidence. It also rejects rebuild manifest outputs that point outside their
+  declared family directory, and postrun analysis brief selection is confined to
+  `postrun_acceptance/analysis_brief`.
 - Prepared handoff rebuild now removes stale generated `.json/.md` outputs from
   standard handoff family directories and launch readiness rejects undeclared
   generated handoff outputs, so delegated launch reviewers consume only the
-  manifest-declared prepared bundle.
+  manifest-declared prepared bundle. Launch readiness now also rejects prepared
+  handoff rebuild manifest outputs that point outside their declared family
+  directory.
 - Launch readiness also validates prepared-handoff rebuild manifest identity,
   report-only boundary flags, completion status, prepared manifest commit, root,
   handoff directory, and problem family before treating the prepared bundle as
@@ -348,16 +352,16 @@ Current checkpoint:
   JSON fails later.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-rebuildorder-7fd806e-6r-gpt55-6r-gpt55-20260619T152101Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-familydirs-709db42-6r-gpt55-6r-gpt55-20260619T153549Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-rebuildorder-7fd806e-1r-gpt55-1r-gpt55-20260619T152101Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-familydirs-709db42-1r-gpt55-1r-gpt55-20260619T153550Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
   `prepared_handoff_rebuild_declared_outputs_present=ok` with no manifest
-  identity/boundary failures,
+  identity/boundary failures and no out-of-scope declared outputs,
   `run_script_strict_postrun_rebuild=ok`,
   `run_script_strict_postrun_readiness=ok`,
   `run_script_runtime_guard_enforced=ok`,
@@ -380,7 +384,7 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `7fd806e`. Current
+  were prepared from WSL runtime commit `709db42`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
@@ -482,7 +486,7 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-strict-postrun-rebuild-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-handoff-manifest-output-scope-20260619.md`.
   Earlier run-script guard details remain in `scion/docs/experiments/v0.4/`;
   they are not the current prepared-root pointer.
 - Current CVRP CMT case-protection handoff evidence:

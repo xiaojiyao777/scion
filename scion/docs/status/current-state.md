@@ -33,8 +33,9 @@ Framework:
   current prepared contract/brief identity, prompt-context bridge,
   problem-specific handoff, runtime guards, model route, active-checkout
   `PYTHONPATH`, no-early-stop semantics, completion preflight, pre-campaign
-  failure reporting, strict postrun rebuild-before-readiness reporting, and
-  strict postrun readiness before a root is launched.
+  failure reporting, strict postrun rebuild-before-readiness reporting, strict
+  prepared/postrun rebuild-manifest output scope, and strict postrun readiness
+  before a root is launched.
 - Postrun delegated-review readiness is interpretation-specific. Protocol
   conclusions require current-run measurement/runtime/continuity inputs;
   taxonomy-backed quality-blocked no-protocol conclusions can be analysis-ready
@@ -52,8 +53,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `7fd806e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-rebuildorder-7fd806e-6r-gpt55-6r-gpt55-20260619T152101Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `709db42`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-familydirs-709db42-6r-gpt55-6r-gpt55-20260619T153549Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -88,8 +89,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `7fd806e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-rebuildorder-7fd806e-1r-gpt55-1r-gpt55-20260619T152101Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `709db42`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-familydirs-709db42-1r-gpt55-1r-gpt55-20260619T153550Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -110,16 +111,17 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `7fd806e`
+- The active prepared roots were generated from WSL runtime commit `709db42`
   after the CVRP CMT case-protection handoff and analysis-brief surface
   repairs, plus postrun and prepared-handoff stale/undeclared output guards and
-  prepared-handoff rebuild manifest identity/boundary validation.
+  prepared/postrun rebuild-manifest output scope validation.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
-  inconsistent, unexpected generated files, manifest identity failures, or
-  manifest boundary failures in standard prepared-handoff families.
+  inconsistent, or unexpected generated files, no manifest identity/boundary
+  failures, and no out-of-scope declared outputs in standard prepared-handoff
+  families.
 - Launch readiness also requires strict postrun rebuild reporting:
   `run_script_strict_postrun_rebuild=ok`, with the rebuild command before the
   postrun readiness command and `POSTRUN_REPORTS_EXIT_STATUS` emitted after the
@@ -167,7 +169,7 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-strict-postrun-rebuild-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-handoff-manifest-output-scope-20260619.md`.
   Earlier launch/readiness guard details remain in
   `scion/docs/experiments/v0.4/`; this page keeps only the current root
   pointer and launch blocker.
@@ -180,6 +182,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
 - Current prepared-handoff bundle hygiene evidence:
   `scion/docs/experiments/v0.4/v04-prepared-handoff-output-cleanup-20260619.md`.
+- Current manifest output scope evidence:
+  `scion/docs/experiments/v0.4/v04-handoff-manifest-output-scope-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
