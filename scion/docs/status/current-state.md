@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the explicit postrun
-launch-required flag guard touched `scion/tools`, which is covered by the
-runtime guard. Static readiness passes; launch readiness fails only at
+The active prepared roots were generated on WSL after the legacy current-run
+problem-family inference repair touched `scion/tools`, which is covered by the
+runtime guard. WSL static readiness passes; launch readiness fails only at
 completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-explicitlaunch-567a29dd-preflight-6r-gpt55-20260619T220040Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-legacyfamily-266d4a8b-preflight-6r-gpt55-20260619T221633Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-explicitlaunch-567a29dd-preflight-4r-gpt55-20260619T220040Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-legacyfamily-266d4a8b-preflight-4r-gpt55-20260619T221634Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `567a29dd`; CVRP `567a29dd`.
+- Runtime commits: warehouse `266d4a8b`; CVRP `266d4a8b`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -87,6 +87,11 @@ Prepared manifests record:
 - Solver subprocesses normalize inherited relative `PYTHONPATH` entries before
   entering solver workspaces, so smoke/protocol runs load the active checkout
   rather than an older installed package.
+- Postrun inventory infers missing legacy launched-run problem family only from
+  deterministic artifacts such as `run.log` `Starting campaign` markers or the
+  warehouse `campaign/weight_opt_v2` tree. It keeps the prepared contract
+  incomplete, but forces warehouse/CVRP delegated-review checks instead of
+  silently skipping problem-specific summaries.
 
 ## Warehouse
 
@@ -145,6 +150,7 @@ Prepared manifests record:
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-postrun-launch-required-flag-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-legacy-run-problem-family-inference-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and

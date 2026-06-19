@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `567a29dd` after the explicit postrun launch-required flag guard touched runtime-guarded `scion/tools`. Warehouse is the 6R champion-v2 follow-up root; CVRP is the 4R Phase 4 bounded two-opt root, preserving branch-depth/continuity evidence beyond a one-off attempt. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`), APS tool-loop headroom (`3600` sec, `240` steps, `200` total tool calls, `200` code-phase tool calls, `2000000` observation chars), solver-design source-read headroom, absolute WSL launch paths, clean runtime-guard paths, problem-owned measurement handoffs, and current active-subject code-constraint provider payload summaries. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `266d4a8b` after the legacy postrun problem-family inference repair refreshed runtime-guarded `scion/tools`. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
