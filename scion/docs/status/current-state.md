@@ -84,8 +84,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `49edd77`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolsguard-ready-6r-gpt55-20260619T034516Z-claw`.
+- Current prepared root, prepared from WSL checkout `0ba0a93`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runshguard-ready-6r-gpt55-20260619T035659Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -108,8 +108,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `49edd77`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-toolsguard-ready-1r-gpt55-20260619T034516Z-claw`.
+- Current prepared root, prepared from WSL checkout `0ba0a93`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-runshguard-ready-1r-gpt55-20260619T035700Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -132,20 +132,23 @@ Infrastructure:
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
   `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`,
+  `run_script_runtime_guard_enforced=ok`,
   `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
-  `failed`. Both current root `run.sh` files include
+  `failed`. Both current root `run.sh` files execute git dirty/head-mismatch
+  runtime guards before `scion.cli.main run` and include
   `tools/check_postrun_acceptance.py`, `--require-current-run-ready`, and
   `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract
   identity matches the prepared manifest, including the manifest git commit.
   Later docs-only commits may make the checkout differ from a prepared manifest
   commit; readiness remains acceptable only when runtime guard paths are
-  unchanged. The older `f1ee04e` prepared roots are superseded because their
-  manifests did not guard `scion/tools`.
+  unchanged. The older `f1ee04e` roots are superseded because their manifests
+  did not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by
+  the run-script guard enforcement change in `scion/tools`.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
-  `refreshing=0`, `total=1`.
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `refreshing=1`,
+  `total=1`.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.

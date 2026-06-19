@@ -243,19 +243,20 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolsguard-ready-6r-gpt55-20260619T034516Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runshguard-ready-6r-gpt55-20260619T035659Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-toolsguard-ready-1r-gpt55-20260619T034516Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-runshguard-ready-1r-gpt55-20260619T035700Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
-  `run_script_strict_postrun_readiness=ok`, `git_runtime_consistent=ok`, and
+  `run_script_strict_postrun_readiness=ok`,
+  `run_script_runtime_guard_enforced=ok`, `git_runtime_consistent=ok`, and
   runtime guard coverage for `scion/tools`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `expired=1`, `refreshing=0`, `total=1`. Do not launch either
+  `active=0`, `refreshing=1`, `total=1`. Do not launch either
   root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -272,8 +273,12 @@ Current checkpoint:
 - Current launch/runtime boundary: prepared roots must guard `scion/tools` as
   runtime/control-plane code, so launcher, postrun rebuild, postrun readiness,
   and launch-readiness changes after prepare time require a new prepared root.
+  Launch readiness also rejects a prepared root whose `run.sh` declares the
+  guard contract but does not execute dirty/head-mismatch checks before
+  `scion.cli.main run`.
   The older `f1ee04e` prepared roots are superseded because their manifests did
-  not guard `scion/tools`.
+  not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by the
+  run-script guard enforcement change in `scion/tools`.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
   runtime-feedback, and substantive research-continuity signals. A shallow
