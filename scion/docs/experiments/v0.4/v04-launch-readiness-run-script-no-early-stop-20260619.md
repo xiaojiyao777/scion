@@ -34,6 +34,11 @@ Follow-up: launch readiness and artifact inventory now match
 `--disable-early-stop` as an exact shell token. Prefix-like options such as
 `--disable-early-stopper` do not satisfy the guard.
 
+Follow-up: launch readiness now requires the generated `run.sh` to source
+`launch.env` through an executable shell line. Comment-only or echo-only
+mentions of the source command do not satisfy the completion-preflight or
+`PYTHONPATH` checks.
+
 ## Boundary
 
 This is a launch/readiness guard only. It does not change Decision,
@@ -188,23 +193,57 @@ PYTHONPATH=scion pytest -q \
 # 116 passed
 ```
 
+Local checkout `02e60e2a`:
+
+```bash
+PYTHONPATH=scion pytest -q scion/scion/tests/test_launch_readiness.py -k launch_env_source
+# 7 passed, 48 deselected
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 117 passed
+
+python -m py_compile scion/tools/check_launch_readiness.py \
+  scion/scion/tests/test_launch_readiness.py
+git diff --check
+```
+
+WSL checkout `abed1a3`:
+
+```bash
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 117 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `69957b4` because
+New prepare-only roots were generated from WSL runtime commit `abed1a3` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
 runtime surface. The current checkout requires completion-preflight failure
 status writing and data-root/API-key-env failure markers to be executable shell
 paths, not comment-only markers. Runtime guard command markers must also be
 actual executable guard lines, not comments or echo-only text. The postrun
 report bundle function must be a real shell function definition, not a comment.
+The `launch.env` source command must also be an executable shell line, not a
+comment or echo-only string.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpostrunfn-69957b4-6r-gpt55-20260619T111032Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execsource-abed1a3-6r-gpt55-20260619T111600Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpostrunfn-69957b4-1r-gpt55-20260619T111032Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execsource-abed1a3-1r-gpt55-20260619T111600Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -219,8 +258,10 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - prepared contract `execution.disable_early_stop=true`
 - prepared contract `command_disable_early_stop=true`
 - `run_script_model_route_enforced=ok`
-- `run_script_pythonpath_enforced=ok`
-- `run_script_completion_preflight_enforced=ok`
+- `run_script_pythonpath_enforced=ok` with executable
+  `launch_env_source_position=83`
+- `run_script_completion_preflight_enforced=ok` with executable
+  `launch_env_source_position=83`
 - `run_script_preflight_failure_reports=ok` with
   `preflight_status_writer_kind=helper`, empty failures, and ordered
   preflight-failure status writer, postrun report call, and
@@ -265,7 +306,7 @@ preflight-failure reporting to use an executable status writer before the
 postrun bundle and preflight-status exit, and it requires data-root/API-key-env
 failure markers to be executable shell lines rather than comments. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
-postrunexec, preflfailpath, execmarkers, and execruntimeguard prepared roots as
-the current prepared-root pointer.
+postrunexec, preflfailpath, execmarkers, execruntimeguard, and execpostrunfn
+prepared roots as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
