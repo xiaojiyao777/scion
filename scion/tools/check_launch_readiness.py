@@ -23,6 +23,7 @@ SCHEMA_VERSION = "scion.launch_readiness.v1"
 PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
+REQUIRED_SCION_MODEL = "gpt-5.5"
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
     "manifest_env_reader": (
@@ -314,6 +315,10 @@ def build_readiness(
     add_check(
         "run_script_pythonpath_enforced",
         *_run_script_pythonpath_enforced(root, run_sh),
+    )
+    add_check(
+        "run_script_model_route_enforced",
+        *_run_script_model_route_enforced(root, run_sh, prepared_contract),
     )
     add_check(
         "run_script_strict_postrun_readiness",
@@ -946,6 +951,133 @@ def _run_script_pythonpath_enforced(root: Path, run_sh: Path) -> tuple[str, Any]
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
+
+
+def _run_script_model_route_enforced(
+    root: Path,
+    run_sh: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    manifest_model = _manifest_model_name(manifest)
+    manifest_base_url = _manifest_model_base_url(manifest)
+    env_model = _shell_assignment_value(launch_env_text, "SCION_MODEL")
+    env_base_url = _shell_assignment_value(launch_env_text, "SCION_BASE_URL")
+
+    if not env_model:
+        failures.append({"reason": "scion_model_missing", "launch_env": str(launch_env)})
+    elif env_model != REQUIRED_SCION_MODEL:
+        failures.append(
+            {
+                "reason": "scion_model_not_gpt55",
+                "launch_env": str(launch_env),
+                "expected": REQUIRED_SCION_MODEL,
+                "actual": env_model,
+            }
+        )
+    if manifest_model and env_model and env_model != manifest_model:
+        failures.append(
+            {
+                "reason": "scion_model_manifest_mismatch",
+                "launch_env": str(launch_env),
+                "manifest_model": manifest_model,
+                "env_model": env_model,
+            }
+        )
+    if not env_base_url:
+        failures.append({"reason": "scion_base_url_missing", "launch_env": str(launch_env)})
+    if manifest_base_url and env_base_url and env_base_url != manifest_base_url:
+        failures.append(
+            {
+                "reason": "scion_base_url_manifest_mismatch",
+                "launch_env": str(launch_env),
+                "manifest_base_url": manifest_base_url,
+                "env_base_url": env_base_url,
+            }
+        )
+
+    campaign_pos = _campaign_command_position(run_text)
+    model_export_pos = _export_assignment_position(run_text, "SCION_MODEL")
+    base_export_pos = _export_assignment_position(run_text, "SCION_BASE_URL")
+    proxy_pos = run_text.find("tools/check_gpt55_proxy.py")
+    proxy_model_pos = run_text.find('--model "$SCION_MODEL"')
+    proxy_base_pos = run_text.find('--base-url "$SCION_BASE_URL"')
+    if model_export_pos < 0:
+        failures.append({"reason": "run_script_does_not_export_scion_model"})
+    if base_export_pos < 0:
+        failures.append({"reason": "run_script_does_not_export_scion_base_url"})
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if proxy_pos < 0:
+        failures.append({"reason": "completion_preflight_proxy_call_missing"})
+    if proxy_model_pos < 0:
+        failures.append({"reason": "completion_preflight_model_env_missing"})
+    if proxy_base_pos < 0:
+        failures.append({"reason": "completion_preflight_base_url_env_missing"})
+    for reason, position in (
+        ("scion_model_export_after_campaign", model_export_pos),
+        ("scion_base_url_export_after_campaign", base_export_pos),
+        ("completion_preflight_model_after_campaign", proxy_model_pos),
+        ("completion_preflight_base_url_after_campaign", proxy_base_pos),
+    ):
+        if position >= 0 and campaign_pos >= 0 and position > campaign_pos:
+            failures.append({"reason": reason})
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "required_model": REQUIRED_SCION_MODEL,
+        "manifest_model": manifest_model,
+        "env_model": env_model,
+        "manifest_base_url": manifest_base_url,
+        "env_base_url": env_base_url,
+        "scion_model_export_position": model_export_pos,
+        "scion_base_url_export_position": base_export_pos,
+        "proxy_call_position": proxy_pos,
+        "proxy_model_position": proxy_model_pos,
+        "proxy_base_url_position": proxy_base_pos,
+        "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _prepared_manifest_from_contract(root: Path, prepared_contract: Any) -> dict[str, Any]:
+    manifest = prepared_contract if isinstance(prepared_contract, dict) else {}
+    manifest_path = manifest.get("manifest_path")
+    path = Path(manifest_path) if manifest_path else root / "prepared_run_manifest.v1.json"
+    payload = _read_json(path)
+    return payload if isinstance(payload, dict) else {}
 
 
 def _shell_assignment_value(text: str, key: str) -> str | None:
@@ -1816,6 +1948,11 @@ def _manifest_commit(manifest: dict[str, Any]) -> Any:
 def _manifest_model_name(manifest: dict[str, Any]) -> Any:
     model = manifest.get("model")
     return model.get("name") if isinstance(model, dict) else None
+
+
+def _manifest_model_base_url(manifest: dict[str, Any]) -> Any:
+    model = manifest.get("model")
+    return model.get("base_url") if isinstance(model, dict) else None
 
 
 def _repo_path_contains(relative_path: str, marker: str) -> bool:

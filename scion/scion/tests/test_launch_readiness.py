@@ -50,6 +50,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
     )
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
+    assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
@@ -765,6 +766,40 @@ def test_launch_readiness_rejects_missing_pythonpath(
     } in pythonpath_check["detail"]["failures"]
 
 
+def test_launch_readiness_rejects_non_gpt55_model(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "SCION_MODEL=gpt-5.5",
+            "SCION_MODEL=gpt-5.4",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    model_check = report["checks"]["run_script_model_route_enforced"]
+    assert model_check["status"] == "failed"
+    failures = model_check["detail"]["failures"]
+    assert {
+        "reason": "scion_model_not_gpt55",
+        "launch_env": str(launch_env),
+        "expected": "gpt-5.5",
+        "actual": "gpt-5.4",
+    } in failures
+    assert {
+        "reason": "scion_model_manifest_mismatch",
+        "launch_env": str(launch_env),
+        "manifest_model": "gpt-5.5",
+        "env_model": "gpt-5.4",
+    } in failures
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -1092,6 +1127,8 @@ def _write_prepared_root(
                 f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
                 f"SCION_DIR={SCION_DIR}",
                 f"PYTHONPATH={SCION_DIR}",
+                "SCION_MODEL=gpt-5.5",
+                "SCION_BASE_URL=http://127.0.0.1:8080",
                 "COMPLETION_PREFLIGHT=1",
                 "",
             ]
@@ -1109,7 +1146,7 @@ PY={sys.executable}
 GIT_COMMIT={_git_head_short()}
 GIT_RUNTIME_GUARD_PATHS={json.dumps(runtime_guard_paths)}
 PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
-export RUN_ROOT REPO_ROOT SCION_DIR PY PYTHONPATH GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
+export RUN_ROOT REPO_ROOT SCION_DIR PY PYTHONPATH SCION_MODEL SCION_BASE_URL GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
   POSTRUN_READINESS_STATUS=0
   "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
@@ -1136,7 +1173,10 @@ fi
 unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
 if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   PREFLIGHT_STATUS=64
-  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" --json || PREFLIGHT_STATUS=$?
+  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" \
+    --base-url "$SCION_BASE_URL" \
+    --model "$SCION_MODEL" \
+    --json || PREFLIGHT_STATUS=$?
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}}\\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
     write_postrun_acceptance_reports
