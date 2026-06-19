@@ -829,6 +829,36 @@ def test_launch_readiness_rejects_disabled_early_stop(
     ]
 
 
+def test_launch_readiness_accepts_multiline_disable_early_stop_command(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    single_line = next(
+        line
+        for line in run_text.splitlines()
+        if "-m scion.cli.main run --problem" in line
+    )
+    multiline = (
+        single_line.replace(" --problem ", " \\\n  --problem ")
+        .replace(" --protocol ", " \\\n  --protocol ")
+        .replace(" --split ", " \\\n  --split ")
+        .replace(" --seeds ", " \\\n  --seeds ")
+        .replace(" --campaign-dir ", " \\\n  --campaign-dir ")
+        .replace(" --rounds ", " \\\n  --rounds ")
+        .replace(" --agentic-proposal ", " \\\n  --agentic-proposal ")
+        .replace(" --disable-early-stop", " \\\n  --disable-early-stop")
+    )
+    run_sh.write_text(run_text.replace(single_line, multiline), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is True
+    assert report["static_ready"] is True
+    assert report["checks"]["run_script_no_early_stop_enforced"]["status"] == "ok"
+
+
 def test_launch_readiness_rejects_run_script_without_disable_early_stop(
     tmp_path: Path,
 ) -> None:

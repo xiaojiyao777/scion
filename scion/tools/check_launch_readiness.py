@@ -1112,12 +1112,17 @@ def _run_script_no_early_stop_enforced(
         launch_env_text,
         "DISABLE_EARLY_STOP",
     )
-    campaign_pos, campaign_line = _campaign_command_line(run_text)
+    campaign_pos = _campaign_command_position(run_text)
+    campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
+    campaign_end_pos = campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    campaign_command_block = (
+        run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
+    )
     command_has_flag = (
         isinstance(manifest_command, str)
         and "--disable-early-stop" in manifest_command
     )
-    run_script_has_flag = "--disable-early-stop" in campaign_line
+    run_script_has_flag = "--disable-early-stop" in campaign_command_block
 
     if env_disable_early_stop != "1":
         failures.append(
@@ -1156,6 +1161,7 @@ def _run_script_no_early_stop_enforced(
         "manifest_command_has_disable_early_stop": command_has_flag,
         "run_script_campaign_command_has_disable_early_stop": run_script_has_flag,
         "campaign_command_position": campaign_pos,
+        "campaign_status_position": campaign_status_pos,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
