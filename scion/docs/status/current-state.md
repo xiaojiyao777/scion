@@ -55,6 +55,9 @@ Framework:
 - Postrun acceptance readiness now requires the matching problem-specific
   summary for warehouse and CVRP current runs before reporting
   `current_run_analysis_ready=true`.
+- Launchers run postrun readiness JSON generation with
+  `--require-current-run-ready`, so `POSTRUN_READINESS_EXIT_STATUS` now records
+  whether delegated current-run analysis is actually ready.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -65,8 +68,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `deb1158`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-deb1158-6r-gpt55-20260619T024307Z-claw`.
+- Current prepared root, prepared from WSL checkout `7f21623`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-7f21623-6r-gpt55-20260619T025154Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -85,8 +88,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `deb1158`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-deb1158-1r-gpt55-20260619T024308Z-claw`.
+- Current prepared root, prepared from WSL checkout `7f21623`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-7f21623-1r-gpt55-20260619T025155Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -105,8 +108,9 @@ Infrastructure:
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
   `git_runtime_consistent=ok`, and completion preflight `failed`. Both current
-  root `run.sh` files include `tools/check_postrun_acceptance.py` and
-  `POSTRUN_READINESS_EXIT_STATUS`. The prepared analysis brief contract
+  root `run.sh` files include `tools/check_postrun_acceptance.py`,
+  `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
+  The prepared analysis brief contract
   identity matches the prepared manifest, including the manifest git commit.
   Later docs-only commits may make the checkout differ from a prepared manifest
   commit; readiness remains acceptable only when runtime guard paths are
@@ -148,14 +152,15 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`.
-  It supersedes older prepared-root pointers after postrun acceptance readiness
-  began requiring problem-specific summaries for warehouse/CVRP current runs.
+  `scion/docs/experiments/v0.4/v04-postrun-readiness-exit-status-guard-20260619.md`.
+  It supersedes older prepared-root pointers after launchers began propagating
+  strict postrun readiness exit status into run logs.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-readiness-exit-status-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
