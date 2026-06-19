@@ -85,6 +85,7 @@ def test_tool_help_and_api_key_env_guard() -> None:
         check=True,
     )
     assert "--login-url-on-failure" in help_result.stdout
+    assert "--format" in help_result.stdout
 
     bad_result = subprocess.run(
         [

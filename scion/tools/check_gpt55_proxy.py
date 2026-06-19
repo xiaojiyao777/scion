@@ -224,12 +224,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print an OAuth login URL when chat completion is not healthy.",
     )
-    parser.add_argument("--json", action="store_true", help="Emit JSON only.")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format. Use json for machine-readable readiness checks.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON only. Alias for --format json.",
+    )
     args = parser.parse_args()
     if args.api_key_env and args.api_key != DEFAULT_API_KEY:
         raise SystemExit("--api-key and --api-key-env are mutually exclusive")
     if args.timeout_sec <= 0:
         raise SystemExit("--timeout-sec must be positive")
+    if args.json:
+        args.format = "json"
     return args
 
 
@@ -250,7 +262,7 @@ def main() -> None:
     if login_url:
         payload["login_url"] = login_url
 
-    if args.json:
+    if args.format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         if auth_status is not None:
