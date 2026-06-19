@@ -532,9 +532,10 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-runtime-guard-failure-postrun-report-20260619.md`.
-  Earlier run-script guard details remain in `scion/docs/experiments/v0.4/`;
-  they are not the current prepared-root pointer.
+  `scion/docs/experiments/v0.4/v04-launch-absolute-scion-path-readiness-20260619.md`.
+  Earlier run-script guard and proposal-headroom details remain in
+  `scion/docs/experiments/v0.4/`; they are not the current prepared-root
+  pointer.
 - Current CVRP CMT case-protection handoff evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.

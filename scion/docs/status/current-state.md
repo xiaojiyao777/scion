@@ -249,7 +249,7 @@ Infrastructure:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-proposal-headroom-launcher-repair-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-absolute-scion-path-readiness-20260619.md`.
 - Current CVRP measurement-handoff evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-measurement-handoff-contract-20260619.md`.
 - Current trajectory-divergent lifecycle evidence:
