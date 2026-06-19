@@ -1132,6 +1132,32 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
     ]
 
 
+def test_launch_readiness_ignores_comment_only_data_root_failure_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "if [[ \"${COMPLETION_PREFLIGHT:-0}\" == \"1\" ]]; then",
+            """# WAREHOUSE_DATA_ROOT_MISSING:$SCION_WAREHOUSE_DATA_ROOT
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    data_root_check = report["checks"]["run_script_data_root_failure_reports"]
+
+    assert data_root_check["status"] == "ok"
+    assert data_root_check["detail"] == {
+        "run_script": str(run_sh),
+        "required": False,
+        "reason": "no_data_root_failure_path",
+        "ignored_non_executable_marker_count": 1,
+    }
+
+
 def test_launch_readiness_rejects_api_key_env_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -1159,6 +1185,33 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
     assert api_key_check["detail"]["failures"] == [
         {"reason": "postrun_report_call_after_api_key_env_exit"}
     ]
+
+
+def test_launch_readiness_ignores_comment_only_api_key_env_failure_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "if [[ \"${COMPLETION_PREFLIGHT:-0}\" == \"1\" ]]; then",
+            """# SCION_API_KEY_ENV_MISSING:SCION_MISSING_TEST_KEY
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    api_key_check = report["checks"]["run_script_api_key_env_failure_reports"]
+
+    assert api_key_check["status"] == "ok"
+    assert api_key_check["detail"] == {
+        "run_script": str(run_sh),
+        "required": False,
+        "reason": "failure_marker_not_present",
+        "failure_marker": "SCION_API_KEY_ENV_MISSING",
+        "ignored_non_executable_marker_count": 1,
+    }
 
 
 def test_completion_preflight_fetches_login_url_and_operator_action(

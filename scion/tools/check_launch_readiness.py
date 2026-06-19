@@ -1486,7 +1486,7 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
         )
 
     marker = "WAREHOUSE_DATA_ROOT_MISSING"
-    marker_pos = text.find(marker)
+    marker_pos, ignored_marker_count = _find_executable_marker_position(text, marker)
     if marker_pos < 0:
         return (
             "ok",
@@ -1494,6 +1494,7 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
                 "run_script": str(run_sh),
                 "required": False,
                 "reason": "no_data_root_failure_path",
+                "ignored_non_executable_marker_count": ignored_marker_count,
             },
         )
 
@@ -1512,6 +1513,7 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
         "required": True,
         "failure_marker": marker,
         "failure_marker_position": marker_pos,
+        "ignored_non_executable_marker_count": ignored_marker_count,
         "postrun_report_call_position": call_pos,
         "failure_exit_position": exit_pos,
         "failures": failures,
@@ -1551,7 +1553,7 @@ def _run_script_marker_failure_reports(
             },
         )
 
-    marker_pos = text.find(marker)
+    marker_pos, ignored_marker_count = _find_executable_marker_position(text, marker)
     if marker_pos < 0:
         return (
             "ok",
@@ -1560,6 +1562,7 @@ def _run_script_marker_failure_reports(
                 "required": False,
                 "reason": "failure_marker_not_present",
                 "failure_marker": marker,
+                "ignored_non_executable_marker_count": ignored_marker_count,
             },
         )
 
@@ -1578,11 +1581,26 @@ def _run_script_marker_failure_reports(
         "required": True,
         "failure_marker": marker,
         "failure_marker_position": marker_pos,
+        "ignored_non_executable_marker_count": ignored_marker_count,
         "postrun_report_call_position": call_pos,
         "failure_exit_position": exit_pos,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
+
+
+def _find_executable_marker_position(text: str, marker: str) -> tuple[int, int]:
+    offset = 0
+    ignored = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if marker in stripped:
+            if stripped.startswith("#"):
+                ignored += 1
+            else:
+                return offset + line.find(marker), ignored
+        offset += len(line)
+    return -1, ignored
 
 
 def _find_line_after(text: str, line: str, start: int) -> int:
