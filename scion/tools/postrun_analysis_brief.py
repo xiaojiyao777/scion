@@ -1228,20 +1228,45 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"- LLM trace statuses: {_mapping_text(llm['by_status'])}",
             "",
             "## Minimum Delegated Analysis",
-            "- Start branch-centric, then round/LLM-call centric.",
-            "- For prepared-only roots, stop at launcher contract/readiness review; do not make research-quality conclusions until the root has been launched and postrun reports exist.",
-            "- Cite artifact paths, branch ids, trace ids, SQL rows, or JSON fields for every conclusion.",
-            "- For invalid infra-only runs, stop after proving the infra status.",
-            "- For valid runs, inspect target intent, hypothesis, code, tool calls, formal candidates, Protocol/Decision, branch lessons, runtime feedback, and source visibility.",
-            "- Decide whether the next action is repair, same-round rerun, or ladder advancement.",
-            "",
-            "## Required Answers",
         ]
     )
+    lines.extend(_minimum_delegated_analysis_lines(brief))
+    lines.extend(["", "## Required Answers"])
     for index, question in enumerate(brief["required_questions"], start=1):
         lines.append(f"{index}. {question}")
 
     return "\n".join(lines) + "\n"
+
+
+def _minimum_delegated_analysis_lines(brief: Mapping[str, Any]) -> list[str]:
+    lifecycle = _mapping_or_empty(brief.get("lifecycle"))
+    validity = _mapping_or_empty(brief.get("validity"))
+    if lifecycle.get("prepared_only") is True:
+        return [
+            "- Inspect prepared_run_contract, launch_readiness, "
+            "prompt_context_readiness, and problem-specific prepared handoff.",
+            "- Confirm zero current-run counters and no postrun_acceptance evidence.",
+            "- Do not analyze copied campaign artifacts as current-run research evidence.",
+            "- If completion preflight failed, verify operator_action/login status "
+            "and stop before launch.",
+            "- Cite artifact paths, manifest commits, launch markers, or JSON fields "
+            "for every conclusion.",
+            "- Decide whether the next action is launch-readiness recheck or launch.",
+        ]
+    if validity.get("run_validity_status") == "invalid_infra_only":
+        return [
+            "- Stop after proving the infra-only status and failure classification.",
+            "- Do not make algorithm-quality, plateau, or mechanism-effect conclusions.",
+            "- Cite artifact paths, logs, status fields, or failure reports for every conclusion.",
+            "- Decide whether the next action is infra repair or same-round rerun.",
+        ]
+    return [
+        "- Start branch-centric, then round/LLM-call centric.",
+        "- Cite artifact paths, branch ids, trace ids, SQL rows, or JSON fields for every conclusion.",
+        "- Inspect target intent, hypothesis, code, tool calls, formal candidates, "
+        "Protocol/Decision, branch lessons, runtime feedback, and source visibility.",
+        "- Decide whether the next action is repair, same-round rerun, or ladder advancement.",
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

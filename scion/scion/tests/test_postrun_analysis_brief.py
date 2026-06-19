@@ -1167,6 +1167,12 @@ def test_brief_marks_prepared_only_root_as_not_launched(tmp_path: Path) -> None:
     assert "do not analyze copied campaign artifacts as current-run research evidence" in (
         markdown
     )
+    assert "Inspect prepared_run_contract, launch_readiness" in markdown
+    assert "If completion preflight failed, verify operator_action/login status" in (
+        markdown
+    )
+    assert "Start branch-centric, then round/LLM-call centric" not in markdown
+    assert "For valid runs, inspect target intent" not in markdown
 
 
 def test_warehouse_followup_summary_prepared_only_requires_launch(
