@@ -1,24 +1,26 @@
-# v0.4 Warehouse Data-Root Preflight Postrun Report
+# v0.4 API-Key-Env Preflight Postrun Report
 
 Date: 2026-06-19
 
 ## Purpose
 
-Warehouse data-root validation happens before `scion.cli.main run`. If that
-pre-campaign infrastructure check fails, the root should still leave the same
-report-only postrun/readiness bundle used by other infra-only failures, rather
-than only `exit.txt` and `run_status.json`.
+Launcher API-key environment validation happens before `scion.cli.main run`. If
+that pre-campaign infrastructure check fails, the prepared root should still
+leave the same report-only postrun/readiness bundle used by other infra-only
+failures, rather than only `exit.txt` and `run_status.json`.
 
 ## Change
 
-- `launch_warehouse_agentic_campaign.py` now calls
-  `write_postrun_acceptance_reports` after writing
-  `warehouse_data_root_missing=true` and before exiting the wrapper.
+- `launch_warehouse_agentic_campaign.py` and
+  `launch_cvrp_agentic_campaign.py` now define and call
+  `write_postrun_acceptance_reports` for `SCION_API_KEY_ENV_MISSING` failures
+  before wrapper exit.
 - `check_launch_readiness.py` now requires
-  `run_script_data_root_failure_reports=ok` whenever a prepared `run.sh`
-  contains a `WAREHOUSE_DATA_ROOT_MISSING` branch.
-- CVRP roots pass this check as not applicable because they have no warehouse
-  data-root failure path.
+  `run_script_api_key_env_failure_reports=ok` whenever a prepared `run.sh`
+  contains a `SCION_API_KEY_ENV_MISSING` branch.
+- This is symmetric across warehouse and CVRP prepared roots. Warehouse still has
+  the extra `run_script_data_root_failure_reports` path; CVRP reports that
+  data-root path as not applicable when no warehouse data-root branch exists.
 
 ## Boundary
 
@@ -28,15 +30,17 @@ proposal semantics, runtime budgets, or warehouse/CVRP solver behavior.
 
 ## Verification
 
-Local checkout `46cb1fdb`:
+Local checkout `a3697976`:
 
 ```bash
 python -m py_compile \
   scion/tools/check_launch_readiness.py \
+  scion/tools/launch_cvrp_agentic_campaign.py \
   scion/tools/launch_warehouse_agentic_campaign.py
 
 PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_cvrp_agentic_launcher.py \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 
 PYTHONPATH=scion pytest -q \
@@ -50,10 +54,10 @@ PYTHONPATH=scion pytest -q \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Results: launch-readiness plus warehouse launcher group `34 passed`; full v0.4
-readiness/reporting group `93 passed`.
+Results: targeted launcher/readiness group `50 passed`; full v0.4
+readiness/reporting group `94 passed`.
 
-WSL checkout `199154c`:
+WSL checkout `5e76640`:
 
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
@@ -68,30 +72,28 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   scion/scion/tests/test_warehouse_agentic_launcher.py
 ```
 
-Result: full v0.4 readiness/reporting group `93 passed`.
+Result: full v0.4 readiness/reporting group `94 passed`.
 
 ## Current Prepared Roots
-
-These roots supersede the earlier datarootreport launch roots because
-`scion/tools` changed again to make API-key-env preflight failures
-postrun-reportable. The warehouse data-root failure guard remains required in
-the current warehouse root.
 
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-apikeyenvreport-ready-6r-gpt55-20260619T042350Z-claw`
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-apikeyenvreport-ready-1r-gpt55-20260619T042350Z-claw`
 
-Strict launch readiness for both roots reports `static_ready=true`,
-`run_script_data_root_failure_reports=ok`,
-`run_script_api_key_env_failure_reports=ok`,
+Static launch readiness for both roots reports `ready=true`,
+`static_ready=true`, `launch_ready=false`, `git_runtime_consistent=ok`,
+`runtime_guard_paths_cover_launch_tools=ok`,
+`run_script_runtime_guard_enforced=ok`,
 `run_script_postrun_reports_after_campaign=ok`,
-`run_script_runtime_guard_enforced=ok`, `run_script_strict_postrun_readiness=ok`,
+`run_script_api_key_env_failure_reports=ok`,
+`run_script_strict_postrun_readiness=ok`,
 `prepared_analysis_brief_current=ok`, `prompt_context_readiness_complete=ok`,
-`problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`, and
-`runtime_guard_paths_cover_launch_tools=ok`.
+`problem_specific_prepared_handoff=ok`, and `postrun_families_complete=ok`.
+Warehouse also requires `run_script_data_root_failure_reports=ok`; CVRP reports
+that check as not applicable under the same `ok` status.
 
-Launch readiness remains blocked only by external `gpt-5.5` completion
-preflight: HTTP `401`, `classification=not_authenticated`,
-`code=invalid_api_key`, auth pool `active=0`, `expired=0`, `refreshing=1`,
-`total=1`.
+Strict readiness with `--require-launch-ready` still fails only on external
+`gpt-5.5` completion preflight: HTTP `401`,
+`classification=not_authenticated`, `code=invalid_api_key`, auth pool
+`active=0`, `expired=0`, `refreshing=1`, `total=1`.

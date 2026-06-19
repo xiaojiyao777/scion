@@ -87,15 +87,15 @@ Old prepared roots from WSL checkout `f1ee04e` now fail static readiness with
 Prepared roots from WSL checkout `49edd77` are also superseded because the
 run-script guard enforcement check changed `scion/tools`; current launch roots
 were later replaced again after the campaign-exit postrun report call check
-changed `scion/tools`, then replaced by the data-root failure postrun-report
-check.
+changed `scion/tools`, then replaced by the data-root and API-key-env failure
+postrun-report checks.
 
 Replacement prepared roots:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-datarootreport-ready-6r-gpt55-20260619T041452Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-apikeyenvreport-ready-6r-gpt55-20260619T042350Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-datarootreport-ready-1r-gpt55-20260619T041453Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-apikeyenvreport-ready-1r-gpt55-20260619T042350Z-claw`
 
 Strict launch readiness for both replacements reports `static_ready=true`,
 `git_runtime_consistent=ok`, `runtime_guard_paths_cover_launch_tools=ok`,
@@ -104,10 +104,11 @@ Strict launch readiness for both replacements reports `static_ready=true`,
 `run_script_strict_postrun_readiness=ok`,
 `run_script_runtime_guard_enforced=ok`,
 `run_script_postrun_reports_after_campaign=ok`,
-`run_script_data_root_failure_reports=ok`. Launch readiness remains blocked only
-by the external `gpt-5.5` completion preflight: HTTP `401`,
+`run_script_data_root_failure_reports=ok`,
+`run_script_api_key_env_failure_reports=ok`. Launch readiness remains blocked
+only by the external `gpt-5.5` completion preflight: HTTP `401`,
 `classification=not_authenticated`, `code=invalid_api_key`, auth pool
-`active=0`, `expired=1`, `refreshing=0`, `total=1`.
+`active=0`, `expired=0`, `refreshing=1`, `total=1`.
 
 New regression coverage:
 
@@ -119,5 +120,8 @@ New regression coverage:
   not call `write_postrun_acceptance_reports` before `exit "$STATUS"`; and
 - launch readiness rejects a warehouse prepared root whose data-root failure path
   does not call `write_postrun_acceptance_reports` before its wrapper exit; and
+- launch readiness rejects a warehouse or CVRP prepared root whose
+  API-key-env-missing failure path does not call
+  `write_postrun_acceptance_reports` before its wrapper exit; and
 - new CVRP/warehouse prepared manifests and `launch.env` files include
   `scion/tools` in runtime guard paths.

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness exit-status reporting plus a normal campaign-exit postrun report call. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -224,12 +224,14 @@ Exit criteria:
   problem-domain diagnostics, source/code, and cross-branch material.
 - Status docs are updated before Phase 1.
 
-Status docs to update:
+Current-status docs to update when operating truth changes:
 
 - `scion/docs/status/current-state.md`
-- `scion/docs/status/v0.4-history.md`
 - `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
 - `scion/TASK.md`
+
+Update `scion/docs/status/v0.4-history.md` only for sparse milestone changes,
+not for every prepared root, wrapper failure, or repair-detail checkpoint.
 
 Current checkpoint:
 
@@ -243,9 +245,9 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-datarootreport-ready-6r-gpt55-20260619T041452Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-apikeyenvreport-ready-6r-gpt55-20260619T042350Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-datarootreport-ready-1r-gpt55-20260619T041453Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-apikeyenvreport-ready-1r-gpt55-20260619T042350Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -253,12 +255,13 @@ Current checkpoint:
   `run_script_strict_postrun_readiness=ok`,
   `run_script_runtime_guard_enforced=ok`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
-  `run_script_data_root_failure_reports=ok`, and runtime guard coverage for
-  `scion/tools`.
+  `run_script_data_root_failure_reports=ok`,
+  `run_script_api_key_env_failure_reports=ok`, and runtime guard coverage for
+  `scion/tools`. The roots were prepared from WSL checkout `5e76640`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `expired=1`, `refreshing=0`, `total=1`. Do not launch either
+  `active=0`, `expired=0`, `refreshing=1`, `total=1`. Do not launch either
   root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -280,13 +283,13 @@ Current checkpoint:
   `scion.cli.main run`, or whose normal campaign-exit path skips the postrun
   report/readiness bundle before exiting with campaign status. Warehouse roots
   also fail readiness if their data-root-missing pre-campaign failure path skips
-  the postrun report/readiness bundle.
-  The older `f1ee04e` prepared roots are superseded because their manifests did
-  not guard `scion/tools`; the `49edd77` toolsguard roots are superseded by the
-  run-script guard enforcement change in `scion/tools`; the `0ba0a93`
-  runshguard roots are superseded by the normal campaign-exit postrun-call
-  check in `scion/tools`; the `9f7bd6a` postruncall roots are superseded by the
-  warehouse data-root failure postrun-report check in `scion/tools`.
+  the postrun report/readiness bundle. Warehouse and CVRP roots also fail
+  readiness if the API-key-env-missing pre-campaign failure path skips the same
+  report/readiness bundle.
+  Older prepared roots through the `199154c` datarootreport roots are not
+  current because `scion/tools` launch/readiness behavior changed after prepare
+  time; use the apikeyenvreport roots above. Exact supersession details belong
+  in the launch/readiness evidence docs, not in this current checkpoint.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,
   runtime-feedback, and substantive research-continuity signals. A shallow
@@ -301,9 +304,10 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`,
   and
-  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-api-key-env-preflight-postrun-report-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
   Historical repair details live in `scion/docs/status/v0.4-history.md` and
   `scion/docs/experiments/v0.4/`; do not read historical experiment reports by
@@ -541,8 +545,10 @@ Status docs to keep aligned:
 
 - `scion/TASK.md`
 - `scion/docs/status/current-state.md`
-- `scion/docs/status/v0.4-history.md`
 - `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`
+
+`scion/docs/status/v0.4-history.md` is a sparse milestone index; update it only
+when the milestone interpretation changes, not for ordinary current-root refreshes.
 
 ## Git Hygiene
 
