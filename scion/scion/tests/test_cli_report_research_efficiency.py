@@ -53,6 +53,19 @@ def test_research_efficiency_report_separates_accounting_and_taxonomy(tmp_path):
     assert power["top_rows_by_effect_to_mde"][0]["mechanism_family"] == (
         "regret_insertion"
     )
+    assert power["top_rows_by_effect_to_mde"][0]["mechanism_evidence"] == {
+        "primary_mechanism": "regret_insertion",
+        "primary_activation_status": "observed",
+        "primary_effect_status": "positive",
+        "activation_evidence_status": "activation_observed",
+        "objective_effect_status": "mixed_objective_effect",
+    }
+    assert power["top_rows_by_effect_to_mde"][0][
+        "candidate_phase_telemetry_summary"
+    ]["runtime_observed_pairs"] == 8
+    assert power["top_rows_by_effect_to_mde"][0][
+        "candidate_phase_telemetry_summary"
+    ]["buckets"]["construction"]["weighted_sum_ms"] == 24.0
     assert "raw_metrics_ref" not in power["top_rows_by_effect_to_mde"][0]
     family_effects = power["mechanism_family_effect_summary"]
     assert family_effects["decision_features_excluded"] is True
@@ -391,6 +404,33 @@ def _make_research_efficiency_fixture(tmp_path: Path) -> tuple[Path, Path]:
                     "gate_outcome": "pass",
                     "effective_reason_codes": ["SCREENING_PASS"],
                     "raw_metrics_ref": "/tmp/internal-screening-a.json",
+                    "mechanism_evidence": {
+                        "primary_mechanism": "regret_insertion",
+                        "primary_activation_status": "observed",
+                        "primary_effect_status": "positive",
+                        "activation_evidence_status": "activation_observed",
+                        "objective_effect_status": "mixed_objective_effect",
+                        "debug_detail": "not retained in report",
+                    },
+                    "candidate_phase_telemetry_summary": {
+                        "selected_surface": "solver_design",
+                        "candidate_pairs": 8,
+                        "runtime_observed_pairs": 8,
+                        "phase_runtime_fields": ["solver_algorithm_phase_runtime_ms"],
+                        "declared_buckets": ["construction", "local_search"],
+                        "buckets": {
+                            "construction": {
+                                "declared": True,
+                                "weighted_sum_ms": 24.0,
+                                "max_ms": 5.0,
+                            },
+                            "local_search": {
+                                "declared": True,
+                                "weighted_sum_ms": 96.0,
+                                "max_ms": 22.0,
+                            },
+                        },
+                    },
                 },
             },
             {

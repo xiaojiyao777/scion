@@ -106,7 +106,11 @@ CURRENT_RUN_REQUIRED_QUESTION_MARKER = (
 DEFERRED_REVIEW_AXES_ACTIONABILITY = (
     "not_actionable_before_launch_current_run_evidence_required"
 )
-REQUIRED_RUNTIME_GUARD_PATHS = ("scion/tools",)
+REQUIRED_RUNTIME_GUARD_PATHS = (
+    "scion/tools",
+    "scion/scion/core/proposal_trajectory_artifacts.py",
+    "scion/scion/core/research_efficiency_report.py",
+)
 RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER = "-m scion.cli.main run"
 RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
     (

@@ -195,6 +195,23 @@ def test_launch_readiness_rejects_runtime_guard_without_launch_tools(
     assert guard_check["detail"]["missing_required_paths"] == ["scion/tools"]
 
 
+def test_launch_readiness_rejects_runtime_guard_without_postrun_core(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path, runtime_guard_paths="scion/tools")
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["runtime_guard_paths_cover_launch_tools"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert guard_check["detail"]["missing_required_paths"] == [
+        "scion/scion/core/proposal_trajectory_artifacts.py",
+        "scion/scion/core/research_efficiency_report.py",
+    ]
+
+
 def test_launch_readiness_rejects_run_script_without_runtime_guard(
     tmp_path: Path,
 ) -> None:
@@ -774,7 +791,7 @@ def _write_prepared_root(
     include_prompt_context_readiness: bool = True,
     include_analysis_brief: bool = True,
     prompt_context_launch_markers: bool = True,
-    runtime_guard_paths: str = "scion/tools",
+    runtime_guard_paths: str = "scion/scion :(exclude)scion/scion/tests scion/tools",
     problem_family: str = "cvrp",
     research_focus: dict[str, object] | None = None,
     include_code_constraint_bridge: bool = True,

@@ -1174,7 +1174,11 @@ def _compact_protocol_mechanism_evidence(
             for item in mechanisms
             if isinstance(item, Mapping)
         ][:5]
-    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+    return {
+        key: value
+        for key, value in compact.items()
+        if value not in (None, "", [], {})
+    }
 
 
 def _compact_candidate_phase_telemetry_summary(
@@ -1211,7 +1215,11 @@ def _compact_candidate_phase_telemetry_summary(
     ):
         if isinstance(summary.get(key), Mapping):
             compact[key] = dict(summary[key])
-    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+    return {
+        key: value
+        for key, value in compact.items()
+        if value not in (None, "", [], {})
+    }
 
 
 def _mechanism_family_for_branch(
