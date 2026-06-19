@@ -651,18 +651,82 @@ write_postrun_acceptance_reports() {
   return 0
 }
 if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then
-  "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
-    --output "$RUN_ROOT/run_status.json" \
-    --exit-code "$PREFLIGHT_STATUS" \
-    --detail "$PREFLIGHT_DETAIL"
-  write_postrun_acceptance_reports
-  exit "$PREFLIGHT_STATUS"
+  if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
+    "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
+      --output "$RUN_ROOT/run_status.json" \
+      --exit-code "$PREFLIGHT_STATUS" \
+      --detail "$PREFLIGHT_DETAIL"
+    write_postrun_acceptance_reports
+    exit "$PREFLIGHT_STATUS"
+  fi
 fi
 """,
         encoding="utf-8",
     )
 
     assert readiness_tool._run_sh_contains_preflight_failure_report_path(run_sh)
+    status, detail = readiness_tool._run_script_preflight_failure_reports(run_sh)
+    assert status == "ok"
+    assert detail["preflight_status_writer_kind"] == "helper"
+    assert detail["failures"] == []
+
+
+def test_launch_readiness_rejects_comment_only_preflight_failure_report_path(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        '"pre_campaign_completion_preflight":"failed"',
+        '"pre_campaign_completion_preflight_disabled":"failed"',
+    )
+    run_text = run_text.replace(
+        '    write_postrun_acceptance_reports\n',
+        '    # "pre_campaign_completion_preflight":"failed"\n'
+        '    write_postrun_acceptance_reports\n',
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    preflight_failure_check = report["checks"]["run_script_preflight_failure_reports"]
+    assert preflight_failure_check["required"] is True
+    assert preflight_failure_check["status"] == "failed"
+    assert {"reason": "preflight_failure_status_writer_missing"} in (
+        preflight_failure_check["detail"]["failures"]
+    )
+
+
+def test_launch_readiness_rejects_preflight_postrun_call_before_status_writer(
+    tmp_path: Path,
+) -> None:
+    run_sh = tmp_path / "run.sh"
+    run_sh.write_text(
+        """#!/usr/bin/env bash
+write_postrun_acceptance_reports() {
+  return 0
+}
+if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
+  write_postrun_acceptance_reports
+  "$PY" "$SCION_DIR/tools/write_completion_preflight_status.py" \
+    --output "$RUN_ROOT/run_status.json" \
+    --exit-code "$PREFLIGHT_STATUS" \
+    --detail "$PREFLIGHT_DETAIL"
+  exit "$PREFLIGHT_STATUS"
+fi
+""",
+        encoding="utf-8",
+    )
+
+    status, detail = readiness_tool._run_script_preflight_failure_reports(run_sh)
+
+    assert status == "failed"
+    assert {"reason": "postrun_report_call_before_preflight_status_writer"} in detail[
+        "failures"
+    ]
 
 
 def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(

@@ -304,10 +304,7 @@ def build_readiness(
     )
     add_check(
         "run_script_preflight_failure_reports",
-        "ok"
-        if _run_sh_contains_preflight_failure_report_path(run_sh)
-        else "failed",
-        "write_postrun_acceptance_reports after pre_campaign_completion_preflight=failed",
+        *_run_script_preflight_failure_reports(run_sh),
     )
     add_check(
         "run_script_completion_preflight_enforced",
@@ -770,26 +767,94 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
 
 
 def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
+    status, _detail = _run_script_preflight_failure_reports(run_sh)
+    return status == "ok"
+
+
+def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
+    failures: list[dict[str, Any]] = []
     try:
         text = run_sh.read_text(encoding="utf-8")
-    except OSError:
-        return False
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
     old_marker = '"pre_campaign_completion_preflight":"failed"'
     helper_marker = "tools/write_completion_preflight_status.py"
-    marker_positions = [
-        pos for pos in (text.find(old_marker), text.find(helper_marker)) if pos >= 0
-    ]
-    if not marker_positions:
-        return False
-    marker_pos = min(marker_positions)
-    exit_pos = text.find('exit "$PREFLIGHT_STATUS"')
-    if exit_pos < 0:
-        return False
-    return (
-        "write_postrun_acceptance_reports() {" in text
-        and marker_pos < exit_pos
-        and "write_postrun_acceptance_reports" in text[marker_pos:exit_pos]
+    helper_pos, _helper_block = _shell_command_block_containing_marker(
+        text,
+        helper_marker,
     )
+    inline_status_pos, _inline_status_block = _shell_command_block_containing_marker(
+        text,
+        old_marker,
+    )
+    status_writers = [
+        (pos, kind)
+        for pos, kind in (
+            (helper_pos, "helper"),
+            (inline_status_pos, "inline_status"),
+        )
+        if pos >= 0
+    ]
+    writer_pos, writer_kind = (
+        min(status_writers, key=lambda item: item[0])
+        if status_writers
+        else (-1, None)
+    )
+    failure_guard_pos = text.find('if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then')
+    call_search_start = failure_guard_pos if failure_guard_pos >= 0 else writer_pos
+    exit_search_start = writer_pos if writer_pos >= 0 else failure_guard_pos
+    call_pos = _find_line_after(
+        text,
+        "write_postrun_acceptance_reports",
+        call_search_start,
+    )
+    exit_pos = _find_line_after(
+        text,
+        'exit "$PREFLIGHT_STATUS"',
+        exit_search_start,
+    )
+
+    if "write_postrun_acceptance_reports() {" not in text:
+        failures.append({"reason": "missing_postrun_report_function"})
+    if failure_guard_pos < 0:
+        failures.append({"reason": "preflight_failure_guard_missing"})
+    if writer_pos < 0:
+        failures.append({"reason": "preflight_failure_status_writer_missing"})
+    if (
+        writer_pos >= 0
+        and failure_guard_pos >= 0
+        and writer_pos < failure_guard_pos
+    ):
+        failures.append({"reason": "preflight_status_writer_before_failure_guard"})
+    if call_pos < 0:
+        failures.append({"reason": "missing_postrun_report_call_after_preflight_failure"})
+    if exit_pos < 0:
+        failures.append({"reason": "missing_preflight_failure_exit"})
+    if writer_pos >= 0 and exit_pos >= 0 and writer_pos > exit_pos:
+        failures.append({"reason": "preflight_status_writer_after_exit"})
+    if call_pos >= 0 and writer_pos >= 0 and call_pos < writer_pos:
+        failures.append({"reason": "postrun_report_call_before_preflight_status_writer"})
+    if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
+        failures.append({"reason": "postrun_report_call_after_preflight_exit"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "preflight_failure_guard_position": failure_guard_pos,
+        "preflight_status_writer_kind": writer_kind,
+        "preflight_status_writer_position": writer_pos,
+        "postrun_report_call_position": call_pos,
+        "preflight_failure_exit_position": exit_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
 
 
 def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
