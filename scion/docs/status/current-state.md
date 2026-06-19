@@ -48,6 +48,10 @@ Framework:
 - Launchers now log `POSTRUN_REPORTS_EXIT_STATUS` after postrun acceptance
   rebuilds so delegated review can see whether the report-only bundle rebuild
   succeeded without treating rebuild failure as solver evidence.
+- Launchers now also generate postrun acceptance readiness JSON/Markdown under
+  `postrun_acceptance/readiness/` and log `POSTRUN_READINESS_EXIT_STATUS`.
+  This remains report-only delegated-analysis readiness, not a Decision,
+  `DecisionFeatures`, Protocol, promotion, scheduler, or solver change.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -58,8 +62,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `399db52`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-399db52-6r-gpt55-20260619T015826Z-claw`.
+- Current prepared root, prepared from WSL checkout `9a5d00c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-9a5d00c-6r-gpt55-20260619T023301Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -78,8 +82,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `399db52`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-399db52-1r-gpt55-20260619T015826Z-claw`.
+- Current prepared root, prepared from WSL checkout `9a5d00c`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-9a5d00c-1r-gpt55-20260619T023302Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -96,10 +100,12 @@ Infrastructure:
   `static_ready=true`, `launch_ready=false`, exit `64`,
   `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
-  `problem_specific_prepared_handoff=ok`, `git_runtime_consistent=ok`, and
-  completion preflight `failed`. The prepared analysis brief contract identity
-  now matches the prepared manifest, including the manifest git commit. Later
-  docs-only commits may make the checkout differ from a prepared manifest
+  `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
+  `git_runtime_consistent=ok`, and completion preflight `failed`. Both current
+  root `run.sh` files include `tools/check_postrun_acceptance.py` and
+  `POSTRUN_READINESS_EXIT_STATUS`. The prepared analysis brief contract
+  identity matches the prepared manifest, including the manifest git commit.
+  Later docs-only commits may make the checkout differ from a prepared manifest
   commit; readiness remains acceptable only when runtime guard paths are
   unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
@@ -139,13 +145,13 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.
-  It supersedes older prepared-root pointers after launch readiness began
-  requiring current structured prepared-only analysis brief semantics and
-  prepared analysis brief contract identity.
+  `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`.
+  It supersedes older prepared-root pointers after launcher templates began
+  emitting postrun acceptance readiness artifacts.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
