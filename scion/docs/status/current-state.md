@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the legacy current-run
-problem-family inference repair touched `scion/tools`, which is covered by the
+The active prepared roots were generated on WSL after the launch-readiness
+failed-check summary repair touched `scion/tools`, which is covered by the
 runtime guard. WSL static readiness passes; launch readiness fails only at
 completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-legacyfamily-266d4a8b-preflight-6r-gpt55-20260619T221633Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-failsummary-ecf3a2d4-preflight-6r-gpt55-20260619T222606Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-legacyfamily-266d4a8b-preflight-4r-gpt55-20260619T221634Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-failsummary-ecf3a2d4-preflight-4r-gpt55-20260619T222606Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `266d4a8b`; CVRP `266d4a8b`.
+- Runtime commits: warehouse `ecf3a2d4`; CVRP `ecf3a2d4`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -68,7 +68,8 @@ Prepared manifests record:
   checks prepared contract/brief identity, prompt-context bridge, problem
   handoff, runtime guards, model route, absolute launch paths, completion
   preflight, strict postrun rebuild/readiness, and prepared/postrun
-  rebuild-manifest identity.
+  rebuild-manifest identity. It also emits top-level failed-check summaries so
+  operators can distinguish static failures from the completion preflight.
 - CVRP and warehouse prepared measurement handoffs are derived from
   `problem-v1.yaml` declarations and the declared A/A `calibration_ref`; stale
   or undeclared MDE/practical-delta values fail readiness.
@@ -151,6 +152,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-postrun-launch-required-flag-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-proxy-format-alias-20260619.md`,
   `scion/docs/experiments/v0.4/v04-legacy-run-problem-family-inference-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and
