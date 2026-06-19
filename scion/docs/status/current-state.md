@@ -51,8 +51,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `a5d2d5e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-handoffdeclared-a5d2d5e-6r-gpt55-6r-gpt55-20260619T145428Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `ae757fe`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-handoffmanifest-ae757fe-6r-gpt55-6r-gpt55-20260619T150324Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -87,8 +87,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `a5d2d5e`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-handoffdeclared-a5d2d5e-1r-gpt55-1r-gpt55-20260619T145429Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `ae757fe`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-handoffmanifest-ae757fe-1r-gpt55-1r-gpt55-20260619T150324Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -109,21 +109,22 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `a5d2d5e`
+- The active prepared roots were generated from WSL runtime commit `ae757fe`
   after the CVRP CMT case-protection handoff and analysis-brief surface
-  repairs, plus postrun and prepared-handoff stale/undeclared output guards.
+  repairs, plus postrun and prepared-handoff stale/undeclared output guards and
+  prepared-handoff rebuild manifest identity/boundary validation.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`.
 - Static readiness includes
   `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
-  inconsistent, or unexpected generated files in standard prepared-handoff
-  families.
+  inconsistent, unexpected generated files, manifest identity failures, or
+  manifest boundary failures in standard prepared-handoff families.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `expired=1`,
-  `refreshing=0`, `total=1`, and no launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `expired=0`,
+  `refreshing=1`, `total=1`, and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
