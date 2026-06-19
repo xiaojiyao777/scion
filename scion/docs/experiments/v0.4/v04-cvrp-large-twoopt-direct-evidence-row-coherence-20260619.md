@@ -47,6 +47,17 @@ python -m py_compile \
 git diff --check
 ```
 
+Integrated WSL verification after the warehouse continuity tightening, WSL
+checkout `ca5a7eb`:
+
+```bash
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 50 passed
+```
+
 ## Acceptance
 
 Accepted for the CVRP large-twoopt postrun-review readiness path. A protocol row

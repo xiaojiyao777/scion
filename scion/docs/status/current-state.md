@@ -56,8 +56,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `abed1a3`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execsource-abed1a3-6r-gpt55-20260619T111600Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `ca5a7eb`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -84,8 +84,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `abed1a3`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execsource-abed1a3-1r-gpt55-20260619T111600Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `ca5a7eb`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -109,7 +109,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `abed1a3`.
+- The active prepared roots were generated from WSL runtime commit `ca5a7eb`.
   Current local/WSL checkouts may include later documentation-only commits;
   launch readiness reports `git_runtime_consistent=ok` because runtime guard
   paths are unchanged.

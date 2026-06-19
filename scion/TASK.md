@@ -298,9 +298,9 @@ Current checkpoint:
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execsource-abed1a3-6r-gpt55-20260619T111600Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execsource-abed1a3-1r-gpt55-20260619T111600Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -322,7 +322,7 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `abed1a3` after launch
+  true. The roots were prepared from WSL runtime commit `ca5a7eb` after launch
   readiness began verifying that generated scripts source `launch.env` through
   an executable shell line rather than comment/echo-only text, require
   `COMPLETION_PREFLIGHT=1`, and execute `tools/check_gpt55_proxy.py` before the
@@ -343,7 +343,9 @@ Current checkpoint:
   marker checks began ignoring comment-only markers, and after runtime guard
   command markers began rejecting comment/echo-only markers, and after the
   postrun report function definition began requiring an executable shell
-  function line.
+  function line, and after postrun delegated-review evidence accounting began
+  requiring co-located CVRP two-opt direct evidence plus realized warehouse
+  continuity evidence.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,

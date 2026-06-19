@@ -37,6 +37,21 @@ Local verification:
 ```bash
 PYTHONPATH=scion pytest -q scion/scion/tests/test_postrun_analysis_brief.py -k 'warehouse_followup_summary'
 # 9 passed, 17 deselected
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 50 passed
+```
+
+WSL checkout `ca5a7eb`:
+
+```bash
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 50 passed
 ```
 
 ## Acceptance

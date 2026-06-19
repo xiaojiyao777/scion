@@ -225,25 +225,36 @@ PYTHONPATH=scion \
 # 117 passed
 ```
 
+Local checkout `728f25c9` and WSL checkout `ca5a7eb`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 50 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `abed1a3` because
-`scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
-runtime surface. The current checkout requires completion-preflight failure
-status writing and data-root/API-key-env failure markers to be executable shell
-paths, not comment-only markers. Runtime guard command markers must also be
-actual executable guard lines, not comments or echo-only text. The postrun
-report bundle function must be a real shell function definition, not a comment.
-The `launch.env` source command must also be an executable shell line, not a
-comment or echo-only string.
+New prepare-only roots were generated from WSL runtime commit `ca5a7eb` because
+`scion/tools` is part of the guarded launch/readiness runtime surface. The
+current checkout requires completion-preflight failure status writing and
+data-root/API-key-env failure markers to be executable shell paths, not
+comment-only markers. Runtime guard command markers must also be actual
+executable guard lines, not comments or echo-only text. The postrun report
+bundle function must be a real shell function definition, not a comment. The
+`launch.env` source command must also be an executable shell line, not a comment
+or echo-only string. Postrun delegated-review evidence accounting now also
+requires co-located CVRP two-opt direct evidence and realized warehouse
+continuity evidence.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execsource-abed1a3-6r-gpt55-20260619T111600Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postrunreview-ca5a7eb-6r-gpt55-20260619T113058Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execsource-abed1a3-1r-gpt55-20260619T111600Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postrunreview-ca5a7eb-1r-gpt55-20260619T113059Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -307,6 +318,6 @@ postrun bundle and preflight-status exit, and it requires data-root/API-key-env
 failure markers to be executable shell lines rather than comments. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
 postrunexec, preflfailpath, execmarkers, execruntimeguard, and execpostrunfn
-prepared roots as the current prepared-root pointer.
+prepared roots, plus the execsource roots, as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
