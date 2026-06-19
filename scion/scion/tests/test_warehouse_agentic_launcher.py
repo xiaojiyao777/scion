@@ -215,6 +215,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
         run_sh_text
     )
+    assert "--require-current-run-ready" in run_sh_text
     assert '--report-stem "$REPORT_STEM"' in run_sh_text
     assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text

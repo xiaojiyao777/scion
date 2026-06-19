@@ -163,6 +163,7 @@ write_postrun_acceptance_reports() {
   mkdir -p "$REPORT_DIR/readiness"
   POSTRUN_READINESS_STATUS=0
   "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
+    --require-current-run-ready \
     --format json \
     > "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \
     2>> "$RUN_ROOT/run.log" || POSTRUN_READINESS_STATUS=$?
