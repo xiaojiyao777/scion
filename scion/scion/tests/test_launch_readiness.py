@@ -49,6 +49,12 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         ]
         is True
     )
+    assert (
+        report["checks"]["prepared_handoff_rebuild_declared_outputs_present"][
+            "status"
+        ]
+        == "ok"
+    )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert (
@@ -471,6 +477,38 @@ def test_launch_readiness_rejects_stale_prepared_analysis_brief_questions(
     assert "prepared_only_required_question_missing" in reasons
     assert "current_run_required_question_present" in reasons
     assert "problem_summary_deferred_review_axes_missing" in reasons
+
+
+def test_launch_readiness_rejects_undeclared_prepared_handoff_output(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    extra_output = (
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "zz_stale.prepared_analysis_brief.v1.json"
+    )
+    _write_json(extra_output, {"schema_version": "stale.test"})
+
+    report = readiness_tool.build_readiness(run_root)
+    output_check = report["checks"][
+        "prepared_handoff_rebuild_declared_outputs_present"
+    ]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert output_check["status"] == "failed"
+    assert output_check["required"] is True
+    assert output_check["detail"]["missing_outputs"] == []
+    assert output_check["detail"]["inconsistent_outputs"] == []
+    assert output_check["detail"]["unexpected_outputs"] == [
+        {
+            "family": "analysis_brief",
+            "path": str(extra_output),
+            "reason": "undeclared_generated_output",
+        }
+    ]
 
 
 def test_launch_readiness_rejects_prepared_analysis_brief_contract_mismatch(
@@ -1794,7 +1832,89 @@ exit "$STATUS"
         )
     if include_analysis_brief:
         _write_prepared_analysis_brief(run_root)
+    _write_prepared_handoff_rebuild_manifest(run_root)
     return run_root
+
+
+def _write_prepared_handoff_rebuild_manifest(run_root: Path) -> None:
+    manifest = json.loads(
+        (run_root / "prepared_run_manifest.v1.json").read_text(encoding="utf-8")
+    )
+    handoff_dir = run_root / "prepared_handoff"
+    stem = _prepared_report_stem(str(manifest["problem_family"]))
+    _write_json(
+        handoff_dir
+        / "inventory"
+        / f"{stem}.prepared_artifact_inventory.v1.json",
+        readiness_tool.build_inventory(run_root),
+    )
+    (
+        handoff_dir
+        / "inventory"
+        / f"{stem}.prepared_artifact_inventory.md"
+    ).write_text("# prepared inventory\n", encoding="utf-8")
+    _write_json(
+        handoff_dir
+        / "launch_readiness"
+        / f"{stem}.prepared_launch_readiness.v1.json",
+        {"schema_version": "scion.launch_readiness.v1", "report_only": True},
+    )
+    (
+        handoff_dir
+        / "launch_readiness"
+        / f"{stem}.prepared_launch_readiness.md"
+    ).write_text("# launch readiness\n", encoding="utf-8")
+
+    families = {}
+    for family in (
+        "analysis_brief",
+        "inventory",
+        "prompt_context_readiness",
+        "launch_readiness",
+    ):
+        family_dir = handoff_dir / family
+        outputs = []
+        if family_dir.is_dir():
+            outputs = [
+                *sorted(family_dir.glob("*.json")),
+                *sorted(family_dir.glob("*.md")),
+            ]
+        status = (
+            "ok" if outputs and all(path.exists() for path in outputs) else "failed"
+        )
+        families[family] = {
+            "status": status,
+            "outputs": [str(path) for path in outputs],
+            "outputs_present": {str(path): path.exists() for path in outputs},
+        }
+
+    _write_json(
+        handoff_dir / "rebuild" / "prepared_handoff_rebuild.v1.json",
+        {
+            "schema_version": "scion.prepared_handoff_rebuild.v1",
+            "artifact_kind": "prepared_handoff_rebuild",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "prepared_handoff_dir": str(handoff_dir),
+            "report_stem": stem,
+            "problem_family": manifest["problem_family"],
+            "prepared_manifest_commit": _git_head_short(),
+            "checkout_commit": _git_head_short(),
+            "families": families,
+            "complete": all(item["status"] == "ok" for item in families.values()),
+        },
+    )
+
+
+def _prepared_report_stem(problem_family: str) -> str:
+    if problem_family == "warehouse_delivery":
+        return "warehouse_on_full"
+    return "cvrp_on_full"
 
 
 def _default_runtime_guard_paths(problem_family: str) -> str:

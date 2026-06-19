@@ -21,6 +21,7 @@ from postrun_artifact_inventory import build_inventory, command_has_shell_flag  
 
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
+PREPARED_HANDOFF_REBUILD_SCHEMA = "scion.prepared_handoff_rebuild.v1"
 PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
@@ -122,6 +123,12 @@ PREPARED_PROBLEM_SUMMARY_REQUIREMENTS = {
         "evidence_gap": "launch_required_before_plateau_conclusion",
     },
 }
+PREPARED_HANDOFF_REBUILD_FAMILIES = (
+    "analysis_brief",
+    "inventory",
+    "prompt_context_readiness",
+    "launch_readiness",
+)
 REQUIRED_RUNTIME_GUARD_PATHS = (
     "scion/tools",
     "scion/scion/cli",
@@ -287,6 +294,10 @@ def build_readiness(
         problem_specific_status,
         problem_specific_detail,
         required=problem_specific_required,
+    )
+    add_check(
+        "prepared_handoff_rebuild_declared_outputs_present",
+        *_prepared_handoff_rebuild_declared_outputs_present(root),
     )
     add_check(
         "prompt_context_readiness_complete",
@@ -1718,6 +1729,159 @@ def _find_next_exit_after(text: str, start: int) -> int:
         if text[line_start:line_end].strip().startswith("exit "):
             return position
         offset = position + len("exit ")
+
+
+def _prepared_handoff_rebuild_declared_outputs_present(root: Path) -> tuple[str, Any]:
+    handoff_dir = root / "prepared_handoff"
+    manifest_path = handoff_dir / "rebuild" / "prepared_handoff_rebuild.v1.json"
+    manifest = _read_json(manifest_path)
+    detail: dict[str, Any] = {
+        "manifest_path": str(manifest_path),
+        "ok_families": [],
+        "missing_outputs": [],
+        "inconsistent_outputs": [],
+        "unexpected_outputs": [],
+        "family_failures": [],
+    }
+    if not isinstance(manifest, dict):
+        detail["reason"] = "missing_rebuild_manifest"
+        return "failed", detail
+
+    family_failures: list[dict[str, Any]] = []
+    if manifest.get("schema_version") != PREPARED_HANDOFF_REBUILD_SCHEMA:
+        family_failures.append(
+            {
+                "reason": "schema_mismatch",
+                "expected": PREPARED_HANDOFF_REBUILD_SCHEMA,
+                "actual": manifest.get("schema_version"),
+            }
+        )
+    families = manifest.get("families")
+    families_dict = families if isinstance(families, dict) else {}
+    if not families_dict:
+        family_failures.append({"reason": "missing_rebuild_manifest_families"})
+
+    for family_name in PREPARED_HANDOFF_REBUILD_FAMILIES:
+        if family_name not in families_dict:
+            family_failures.append(
+                {
+                    "family": family_name,
+                    "reason": "missing_standard_family",
+                }
+            )
+
+    ok_families: list[str] = []
+    missing_outputs: list[dict[str, Any]] = []
+    inconsistent_outputs: list[dict[str, Any]] = []
+    unexpected_outputs: list[dict[str, Any]] = []
+    for family_name, raw_family in sorted(families_dict.items()):
+        family = raw_family if isinstance(raw_family, dict) else {}
+        family_status = family.get("status")
+        raw_outputs = family.get("outputs")
+        outputs = (
+            [str(item) for item in raw_outputs if str(item).strip()]
+            if isinstance(raw_outputs, list)
+            else []
+        )
+        outputs_present = (
+            family.get("outputs_present")
+            if isinstance(family.get("outputs_present"), dict)
+            else {}
+        )
+        if family_status != "ok":
+            family_failures.append(
+                {
+                    "family": str(family_name),
+                    "status": family_status,
+                    "reason": "family_status_not_ok",
+                }
+            )
+            continue
+        if not outputs:
+            family_failures.append(
+                {
+                    "family": str(family_name),
+                    "status": family_status,
+                    "reason": "ok_family_without_outputs",
+                }
+            )
+            continue
+
+        ok_families.append(str(family_name))
+        declared_paths = {
+            _prepared_handoff_manifest_output_path(output, handoff_dir).resolve()
+            for output in outputs
+        }
+        for output in outputs:
+            path = _prepared_handoff_manifest_output_path(output, handoff_dir)
+            actual_present = path.is_file()
+            manifest_present = outputs_present.get(output)
+            if actual_present is False:
+                missing_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                    }
+                )
+            if isinstance(manifest_present, bool):
+                if manifest_present is not actual_present:
+                    inconsistent_outputs.append(
+                        {
+                            "family": str(family_name),
+                            "path": str(path),
+                            "manifest_output": output,
+                            "manifest_outputs_present": manifest_present,
+                            "actual_present": actual_present,
+                        }
+                    )
+            else:
+                inconsistent_outputs.append(
+                    {
+                        "family": str(family_name),
+                        "path": str(path),
+                        "manifest_output": output,
+                        "manifest_outputs_present": manifest_present,
+                        "actual_present": actual_present,
+                        "reason": "missing_outputs_present_entry",
+                    }
+                )
+
+        family_dir = handoff_dir / str(family_name)
+        if family_dir.is_dir():
+            for path in sorted(family_dir.iterdir()):
+                if not path.is_file() or path.suffix not in {".json", ".md"}:
+                    continue
+                if path.resolve() not in declared_paths:
+                    unexpected_outputs.append(
+                        {
+                            "family": str(family_name),
+                            "path": str(path),
+                            "reason": "undeclared_generated_output",
+                        }
+                    )
+
+    detail["ok_families"] = ok_families
+    detail["missing_outputs"] = missing_outputs
+    detail["inconsistent_outputs"] = inconsistent_outputs
+    detail["unexpected_outputs"] = unexpected_outputs
+    detail["family_failures"] = family_failures
+    return (
+        "failed"
+        if missing_outputs
+        or inconsistent_outputs
+        or unexpected_outputs
+        or family_failures
+        else "ok",
+        detail,
+    )
+
+
+def _prepared_handoff_manifest_output_path(value: str, handoff_dir: Path) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return handoff_dir / path
 
 
 def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:

@@ -168,6 +168,21 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         stale,
         {"phase4_evidence_coverage": {"problem_specific_requirements": {}}},
     )
+    stale_prompt = (
+        run_root
+        / "prepared_handoff"
+        / "prompt_context_readiness"
+        / "zz_stale.prepared_prompt_context_readiness.v1.json"
+    )
+    _write_json(stale_prompt, {"schema_version": "stale.test"})
+    stale_readiness_md = (
+        run_root
+        / "prepared_handoff"
+        / "launch_readiness"
+        / "zz_stale.prepared_launch_readiness.md"
+    )
+    stale_readiness_md.parent.mkdir(parents=True)
+    stale_readiness_md.write_text("stale", encoding="utf-8")
 
     manifest = rebuild_tool.rebuild_prepared_handoff(
         run_root,
@@ -200,6 +215,10 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
     assert manifest["schema_version"] == "scion.prepared_handoff_rebuild.v1"
     assert manifest["complete"] is True
     assert rebuild_manifest["complete"] is True
+    assert all(
+        all(result["outputs_present"].values())
+        for result in manifest["families"].values()
+    )
     assert brief["phase4_evidence_coverage"]["problem_specific_requirements"][
         "cvrp_default_avoid_handoff"
     ]["available"] is True
@@ -231,6 +250,8 @@ def test_rebuild_prepared_handoff_refreshes_problem_specific_coverage(
         ]
         is True
     )
+    assert not stale_prompt.exists()
+    assert not stale_readiness_md.exists()
     assert (
         prompt_context["signals"]["prepared_research_focus_prompt_bridge"][
             "required"

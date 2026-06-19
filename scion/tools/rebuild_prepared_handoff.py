@@ -149,6 +149,7 @@ def rebuild_prepared_handoff(
         rebuild_dir,
     ):
         path.mkdir(parents=True, exist_ok=True)
+    _clear_generated_family_outputs(handoff_dir, DEFAULT_FAMILIES)
 
     family_results: dict[str, dict[str, Any]] = {}
     family_results["analysis_brief"] = _write_family(
@@ -205,6 +206,20 @@ def rebuild_prepared_handoff(
     }
     manifest_path = rebuild_dir / "prepared_handoff_rebuild.v1.json"
     manifest_path.write_text(_stable_json(rebuild_manifest), encoding="utf-8")
+    if family_results.get("launch_readiness", {}).get("status") == "ok":
+        family_results["launch_readiness"] = _write_family(
+            [
+                readiness_dir / f"{stem}.prepared_launch_readiness.v1.json",
+                readiness_dir / f"{stem}.prepared_launch_readiness.md",
+            ],
+            lambda: _write_launch_readiness(root, readiness_dir, stem),
+        )
+        rebuild_manifest["families"] = family_results
+        rebuild_manifest["complete"] = all(
+            result.get("status") == "ok" for result in family_results.values()
+        )
+        manifest_path.write_text(_stable_json(rebuild_manifest), encoding="utf-8")
+        complete = bool(rebuild_manifest["complete"])
     if strict and not complete:
         failed = ", ".join(
             name
@@ -329,11 +344,28 @@ def _write_family(
             "status": "failed",
             "error": str(exc),
             "outputs": [str(path) for path in outputs],
+            "outputs_present": {str(path): path.exists() for path in outputs},
         }
     return {
-        "status": "ok",
+        "status": "ok" if all(path.exists() for path in outputs) else "failed",
         "outputs": [str(path) for path in outputs],
+        "outputs_present": {str(path): path.exists() for path in outputs},
     }
+
+
+def _clear_generated_family_outputs(
+    handoff_dir: Path,
+    families: tuple[str, ...],
+) -> None:
+    """Remove stale generated handoff files before rebuilding a fresh bundle."""
+
+    for family in families:
+        family_dir = handoff_dir / family
+        if not family_dir.exists():
+            continue
+        for path in family_dir.iterdir():
+            if path.is_file() and path.suffix in {".json", ".md"}:
+                path.unlink()
 
 
 def build_prepared_prompt_context_readiness(run_root: Path | str) -> dict[str, Any]:
