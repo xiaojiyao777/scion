@@ -239,9 +239,11 @@ Infrastructure:
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  including the manifest git commit; current readiness reports checkout matching
-  that manifest commit. Older prepared roots before the failuretaxonomyguard
-  roots above are not current. Exact supersession
+  whose git commit is `5315453`; after docs-only status commits, strict
+  readiness reports `git_runtime_consistent=ok` with
+  `checkout differs, but runtime guard paths are unchanged`. Older prepared
+  roots before the failuretaxonomyguard roots above are not current. Exact
+  supersession
   details belong in launch/readiness evidence docs, not this operational
   snapshot.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static

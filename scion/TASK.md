@@ -299,9 +299,9 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `5315453`, and readiness
-  currently reports `git_runtime_consistent=ok` with checkout matching the
-  manifest commit.
+  true. The roots were prepared from WSL checkout `5315453`; after docs-only
+  status commits, strict readiness reports `git_runtime_consistent=ok` with
+  `checkout differs, but runtime guard paths are unchanged`.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
