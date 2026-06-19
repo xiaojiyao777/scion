@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `2d1b93b` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, strict postrun readiness status-after-check reporting, prepared/postrun rebuild-manifest identity and output-scope hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `6948f55` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, strict postrun readiness status-after-check reporting, runtime-guard failure postrun reporting, prepared/postrun rebuild-manifest identity and output-scope hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -355,9 +355,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postreadiness-2d1b93b-6r-gpt55-6r-gpt55-20260619T155911Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-runguard-6948f55-6r-gpt55-6r-gpt55-20260619T161556Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postreadiness-2d1b93b-1r-gpt55-1r-gpt55-20260619T155924Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-runguard-6948f55-1r-gpt55-1r-gpt55-20260619T161557Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -367,6 +367,7 @@ Current checkpoint:
   identity/boundary failures and no out-of-scope declared outputs,
   `run_script_strict_postrun_rebuild=ok`,
   `run_script_strict_postrun_readiness=ok`,
+  `run_script_runtime_guard_failure_reports=ok`,
   `run_script_runtime_guard_enforced=ok`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `run_script_data_root_failure_reports=ok`,
@@ -387,7 +388,7 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `2d1b93b`. Current
+  were prepared from WSL runtime commit `6948f55`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
@@ -453,7 +454,9 @@ Current checkpoint:
   also fail readiness if their data-root-missing pre-campaign failure path skips
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
-  report/readiness bundle. Both warehouse and CVRP roots also fail readiness if
+  report/readiness bundle, or if dirty/head-mismatch runtime guard failure
+  paths skip the same report/readiness bundle. Both warehouse and CVRP roots
+  also fail readiness if
   generated `launch.env` disables completion preflight or generated `run.sh`
   does not run `tools/check_gpt55_proxy.py` before the real campaign command, or
   if generated `launch.env/run.sh` do not export the active Scion checkout on
@@ -489,7 +492,7 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-handoff-manifest-output-scope-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-runtime-guard-failure-postrun-report-20260619.md`.
   Earlier run-script guard details remain in `scion/docs/experiments/v0.4/`;
   they are not the current prepared-root pointer.
 - Current CVRP CMT case-protection handoff evidence:
