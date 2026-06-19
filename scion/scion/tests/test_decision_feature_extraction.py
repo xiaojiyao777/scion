@@ -1,12 +1,103 @@
 """Focused tests split from test_decision.py."""
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 from .decision_test_support import *  # noqa: F401,F403
 from scion.core.features import (
     RUNTIME_EVIDENCE_CONFIDENCE_VALUES,
     RUNTIME_EVIDENCE_STATUS_VALUES,
 )
+from scion.core.models import DecisionFeatures
+
+
+def test_decision_features_field_set_preserves_v3_boundary():
+    expected_fields = {
+        "branch_id",
+        "hypothesis_action",
+        "stage",
+        "contract_passed",
+        "verification_passed",
+        "canary_passed",
+        "n_cases",
+        "win_rate",
+        "median_delta",
+        "ci_low",
+        "ci_high",
+        "stale",
+        "recent_retry_count",
+        "recent_failure_codes",
+        "budget_remaining_ratio",
+        "wins",
+        "losses",
+        "ties",
+        "runtime_guard_passed",
+        "runtime_guard_ratio",
+        "runtime_guard_timeout",
+        "runtime_ratio_median",
+        "runtime_delta_median_ms",
+        "runtime_regression_rate",
+        "runtime_pairs",
+        "runtime_evidence_confidence",
+        "runtime_evidence_status",
+        "protocol_gate_outcome",
+        "total_pairs",
+        "attempted_pairs",
+        "valid_pairs",
+        "failed_pairs",
+        "candidate_failed_pairs",
+        "champion_failed_pairs",
+        "pair_wins",
+        "pair_losses",
+        "pair_ties",
+        "statistical_status",
+        "statistical_metric",
+        "telemetry_validation_repairable",
+        "telemetry_guard_failed",
+        "telemetry_effect_zero_diagnostic",
+        "runtime_budget_saturation_diagnostic",
+        "screening_expand_count",
+        "validation_expand_count",
+        "lifecycle_zero_win_streak",
+        "lifecycle_telemetry_diagnostic_streak",
+        "lifecycle_marginal_no_effect_streak",
+        "lifecycle_no_effect_diagnostic_followups",
+        "lifecycle_previous_signal_repeat_count",
+        "lifecycle_signal_matches_previous",
+        "lifecycle_rollback_count",
+        "lifecycle_prior_evidence_tier",
+        "lifecycle_has_checkpoint",
+    }
+    actual_fields = {field.name for field in fields(DecisionFeatures)}
+    forbidden_fragments = (
+        "bks",
+        "gap",
+        "case_hardness",
+        "case_gap",
+        "case_features",
+        "prompt",
+        "prompt_ratio",
+        "signal_density",
+        "calibration",
+        "mde",
+        "effect_to_mde",
+        "llm",
+        "hypothesis_text",
+        "cross_branch",
+        "branch_lesson",
+        "mechanism",
+        "opportunity",
+        "raw",
+        "pair_feedback",
+    )
+
+    assert actual_fields == expected_fields
+    assert not [
+        field
+        for field in sorted(actual_fields)
+        for fragment in forbidden_fragments
+        if fragment in field
+    ]
+
 
 def test_extract_basic():
     branch = _branch()
