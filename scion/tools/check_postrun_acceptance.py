@@ -245,6 +245,18 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         prompt_detail,
         required=prompt_status != "skipped",
     )
+    research_context_status, research_context_detail = (
+        _research_context_actionability(
+            analysis_brief,
+            inventory,
+        )
+    )
+    add_check(
+        "research_context_actionability",
+        research_context_status,
+        research_context_detail,
+        required=research_context_status != "skipped",
+    )
     add_check(
         "postrun_report_status_marker",
         "ok"
@@ -737,6 +749,82 @@ def _prompt_source_visibility_actionability(
             "hypothesis_target_source_not_visible_count": source_visibility.get(
                 "hypothesis_target_source_not_visible_count"
             ),
+        },
+    )
+
+
+def _research_context_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    prompt_summary = _mapping_or_empty(
+        brief.get("prompt_context_visibility_summary")
+    )
+    prompt_aggregate = _mapping_or_empty(prompt_summary.get("aggregate"))
+    density = _mapping_or_empty(prompt_aggregate.get("signal_density"))
+    actionability = _mapping_or_empty(
+        brief.get("research_context_actionability_summary")
+    )
+    indicators = _mapping_or_empty(actionability.get("indicators"))
+    failures: list[str] = []
+    if (
+        actionability.get("schema_version")
+        != "scion.postrun_research_context_actionability_summary.v1"
+    ):
+        failures.append("research_context_actionability_schema_stale")
+    if actionability.get("current_run_evidence") is not True:
+        failures.append("research_context_actionability_not_current_run_evidence")
+    if actionability.get("available") is not True:
+        failures.append("research_context_actionability_unavailable")
+    if _int_or_zero(prompt_aggregate.get("block_family_trace_count")) <= 0:
+        failures.append("prompt_block_family_trace_accounting_missing")
+    if (
+        density.get("schema_version")
+        != "scion.postrun_prompt_signal_density.v1"
+    ):
+        failures.append("prompt_signal_density_schema_stale")
+    if _int_or_zero(density.get("total_token_estimate")) <= 0:
+        failures.append("prompt_signal_density_token_accounting_missing")
+    if (
+        actionability.get("guidance_status")
+        == "no_prompt_or_continuity_actionability_evidence"
+    ):
+        failures.append("research_context_actionability_no_evidence")
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "current_run_evidence": actionability.get("current_run_evidence"),
+            "available": actionability.get("available"),
+            "guidance_status": actionability.get("guidance_status"),
+            "actionability_gaps": actionability.get("actionability_gaps"),
+            "block_family_trace_count": prompt_aggregate.get(
+                "block_family_trace_count"
+            ),
+            "signal_density_interpretation": density.get("interpretation"),
+            "total_token_estimate": density.get("total_token_estimate"),
+            "research_signal_tokens": density.get("research_signal_tokens"),
+            "source_code_tokens": density.get("source_code_tokens"),
+            "cross_branch_tokens": density.get("cross_branch_tokens"),
+            "governance_tokens": density.get("governance_tokens"),
+            "research_plus_source_to_governance_ratio": density.get(
+                "research_plus_source_to_governance_ratio"
+            ),
+            "same_mechanism_observed": indicators.get("same_mechanism_observed"),
+            "same_mechanism_missed": indicators.get("same_mechanism_missed"),
+            "branch_lessons_required": indicators.get("branch_lessons_required"),
+            "branch_lesson_semantic_gap_count": indicators.get(
+                "branch_lesson_semantic_gap_count"
+            ),
+            "weak_positive_observed": indicators.get("weak_positive_observed"),
+            "weak_positive_missed": indicators.get("weak_positive_missed"),
         },
     )
 

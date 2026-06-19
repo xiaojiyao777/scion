@@ -408,6 +408,82 @@ def test_postrun_acceptance_readiness_rejects_missing_prompt_source_visibility(
     )
 
 
+def test_postrun_acceptance_requires_research_context_actionability(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-missing-density")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    brief["prompt_context_visibility_summary"] = {
+        "available": True,
+        "current_run_evidence": True,
+        "aggregate": {
+            "trace_count": 2,
+            "source_visibility": {
+                "trace_count": 2,
+                "code_trace_count": 1,
+                "code_protected_source_visible_count": 1,
+                "code_protected_source_missing_count": 0,
+                "code_missing_required_source_trace_count": 0,
+                "code_missing_required_source_path_counts": {},
+                "hypothesis_target_source_trace_count": 1,
+                "hypothesis_target_source_required_count": 1,
+                "hypothesis_target_source_visible_count": 1,
+                "hypothesis_target_source_not_visible_count": 0,
+                "active_subject_code_constraints_trace_count": 1,
+                "active_subject_code_constraints_required_count": 1,
+                "active_subject_code_constraints_full_visible_count": 1,
+            },
+        },
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert prompt_check["status"] == "ok"
+    assert context_check["required"] is True
+    assert context_check["status"] == "failed"
+    assert "research_context_actionability_unavailable" in context_check["detail"][
+        "failures"
+    ]
+    assert "prompt_block_family_trace_accounting_missing" in context_check["detail"][
+        "failures"
+    ]
+    assert "prompt_signal_density_schema_stale" in context_check["detail"][
+        "failures"
+    ]
+    assert "prompt_signal_density_token_accounting_missing" in context_check[
+        "detail"
+    ]["failures"]
+    assert "research_context_actionability_no_evidence" in context_check["detail"][
+        "failures"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
     tmp_path: Path,
 ) -> None:
@@ -973,6 +1049,24 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         "current_run_evidence": True,
         "aggregate": {
             "trace_count": 2,
+            "block_family_trace_count": 2,
+            "block_family_totals": {
+                "research_signal": {
+                    "trace_count": 2,
+                    "char_count": 2000,
+                    "token_estimate": 500,
+                },
+                "source_code": {
+                    "trace_count": 1,
+                    "char_count": 1200,
+                    "token_estimate": 300,
+                },
+                "governance": {
+                    "trace_count": 1,
+                    "char_count": 400,
+                    "token_estimate": 100,
+                },
+            },
             "source_visibility": {
                 "trace_count": 2,
                 "code_trace_count": 1,
@@ -992,7 +1086,59 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
                     "included": 1
                 },
             },
+            "signal_density": {
+                "schema_version": "scion.postrun_prompt_signal_density.v1",
+                "report_only": True,
+                "decision_features_excluded": True,
+                "total_token_estimate": 900,
+                "research_signal_tokens": 500,
+                "source_code_tokens": 300,
+                "cross_branch_tokens": 0,
+                "governance_tokens": 100,
+                "research_signal_share": 0.5555555555555556,
+                "source_code_share": 0.3333333333333333,
+                "cross_branch_share": 0.0,
+                "governance_share": 0.1111111111111111,
+                "research_plus_source_to_governance_ratio": 8.0,
+                "interpretation": "research_and_source_signal_at_least_governance",
+            },
         },
+    }
+    brief["research_context_actionability_summary"] = {
+        "schema_version": "scion.postrun_research_context_actionability_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "prompt_context_available": True,
+        "research_continuity_available": True,
+        "guidance_status": "no_continuity_opportunities_observed",
+        "indicators": {
+            "schema_version": "scion.research_context_actionability_indicators.v1",
+            "same_mechanism_selected": 0,
+            "same_mechanism_observed": 0,
+            "same_mechanism_missed": 0,
+            "branch_lessons_satisfied": 0,
+            "branch_lessons_required": 0,
+            "branch_lesson_semantic_gap_count": 0,
+            "branch_lesson_semantic_failure_count": 0,
+            "branch_lesson_semantic_failure_counts": {},
+            "branch_lesson_semantic_block_count": 0,
+            "branch_lesson_semantic_block_counts": {},
+            "weak_positive_accepted": 0,
+            "weak_positive_observed": 0,
+            "weak_positive_missed": 0,
+            "research_signal_tokens": 500,
+            "source_code_tokens": 300,
+            "cross_branch_tokens": 0,
+            "governance_tokens": 100,
+            "research_plus_source_to_governance_ratio": 8.0,
+            "omitted_section_trace_count": 0,
+            "truncated_section_trace_count": 0,
+        },
+        "actionability_gaps": [],
+        "recommendations": [],
     }
 
 
