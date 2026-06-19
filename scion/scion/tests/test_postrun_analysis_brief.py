@@ -1828,6 +1828,63 @@ def test_cvrp_large_twoopt_summary_requires_direct_evidence_on_same_top_row(
     assert direct_evidence["missing"] == ["missing_complete_direct_evidence_row"]
 
 
+def test_cvrp_large_twoopt_summary_requires_matching_mechanism_evidence(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-twoopt-unrelated-mechanism-evidence"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+    report_path = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
+    top_rows[0]["mechanism_evidence"] = {
+        "primary_mechanism": "unrelated_probe",
+        "primary_activation_status": "observed",
+        "primary_effect_status": "positive",
+        "activation_evidence_status": "activation_observed",
+        "objective_effect_status": "mixed_objective_effect",
+        "mechanisms": [
+            {
+                "mechanism": "unrelated_probe",
+                "activation_status": "observed",
+                "effect_status": "positive",
+            }
+        ],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    brief = brief_tool.build_brief(run_root)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["interpretation"] == (
+        "protocol_evaluated_without_large_twoopt_direct_evidence"
+    )
+    mechanism = summary["evidence"]["large_twoopt_mechanism"]
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["direct_evidence_ready"] is False
+    direct_evidence = mechanism["direct_evidence"]
+    assert direct_evidence["positive_effect_row_count"] == 1
+    assert direct_evidence["activation_observed_count"] == 0
+    assert direct_evidence["objective_effect_observed_count"] == 0
+    assert direct_evidence["phase_telemetry_observed_count"] == 1
+    assert direct_evidence["complete_direct_evidence_row_count"] == 0
+    assert direct_evidence["missing"] == [
+        "missing_activation_observed",
+        "missing_objective_effect_telemetry",
+    ]
+
+
 def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     tmp_path: Path,
 ) -> None:

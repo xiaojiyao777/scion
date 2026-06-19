@@ -4156,8 +4156,17 @@ def _merge_cvrp_large_twoopt_direct_evidence(
 ) -> None:
     direct_evidence["top_rows_checked"] += 1
     positive_effect = row.get("positive_effect_at_or_above_mde") is True
-    activation_observed = _mechanism_activation_observed(row)
-    objective_effect_observed = _mechanism_objective_effect_observed(row)
+    row_family = str(row.get("mechanism_family") or "")
+    activation_observed = _mechanism_activation_observed(
+        row,
+        family_match=_cvrp_large_twoopt_family_match,
+        expected_family=row_family,
+    )
+    objective_effect_observed = _mechanism_objective_effect_observed(
+        row,
+        family_match=_cvrp_large_twoopt_family_match,
+        expected_family=row_family,
+    )
     phase_telemetry_observed = _cvrp_large_twoopt_phase_telemetry_observed(row)
     if positive_effect:
         direct_evidence["positive_effect_row_count"] += 1
@@ -4205,16 +4214,33 @@ def _cvrp_large_twoopt_direct_evidence_missing(
     return missing
 
 
-def _mechanism_activation_observed(row: Mapping[str, Any]) -> bool:
+def _mechanism_activation_observed(
+    row: Mapping[str, Any],
+    *,
+    family_match: Callable[[str], Mapping[str, Any]] | None = None,
+    expected_family: str = "",
+) -> bool:
     evidence = _mapping_or_empty(row.get("mechanism_evidence"))
-    statuses = [
-        evidence.get("primary_activation_status"),
-        evidence.get("activation_evidence_status"),
-    ]
+    statuses: list[Any] = []
+    if _mechanism_evidence_family_matches(
+        evidence.get("primary_mechanism"),
+        family_match=family_match,
+        expected_family=expected_family,
+    ):
+        statuses.extend(
+            [
+                evidence.get("primary_activation_status"),
+                evidence.get("activation_evidence_status"),
+            ]
+        )
     mechanisms = evidence.get("mechanisms")
     if isinstance(mechanisms, list):
         for item in mechanisms:
-            if isinstance(item, Mapping):
+            if isinstance(item, Mapping) and _mechanism_evidence_family_matches(
+                item.get("mechanism"),
+                family_match=family_match,
+                expected_family=expected_family,
+            ):
                 statuses.append(item.get("activation_status"))
     return any(
         _status_observed(status, ("activation_observed",))
@@ -4222,16 +4248,33 @@ def _mechanism_activation_observed(row: Mapping[str, Any]) -> bool:
     )
 
 
-def _mechanism_objective_effect_observed(row: Mapping[str, Any]) -> bool:
+def _mechanism_objective_effect_observed(
+    row: Mapping[str, Any],
+    *,
+    family_match: Callable[[str], Mapping[str, Any]] | None = None,
+    expected_family: str = "",
+) -> bool:
     evidence = _mapping_or_empty(row.get("mechanism_evidence"))
-    statuses = [
-        evidence.get("primary_effect_status"),
-        evidence.get("objective_effect_status"),
-    ]
+    statuses: list[Any] = []
+    if _mechanism_evidence_family_matches(
+        evidence.get("primary_mechanism"),
+        family_match=family_match,
+        expected_family=expected_family,
+    ):
+        statuses.extend(
+            [
+                evidence.get("primary_effect_status"),
+                evidence.get("objective_effect_status"),
+            ]
+        )
     mechanisms = evidence.get("mechanisms")
     if isinstance(mechanisms, list):
         for item in mechanisms:
-            if isinstance(item, Mapping):
+            if isinstance(item, Mapping) and _mechanism_evidence_family_matches(
+                item.get("mechanism"),
+                family_match=family_match,
+                expected_family=expected_family,
+            ):
                 statuses.append(item.get("effect_status"))
     return any(
         _status_observed(
@@ -4245,6 +4288,21 @@ def _mechanism_objective_effect_observed(row: Mapping[str, Any]) -> bool:
         )
         for status in statuses
     )
+
+
+def _mechanism_evidence_family_matches(
+    value: Any,
+    *,
+    family_match: Callable[[str], Mapping[str, Any]] | None,
+    expected_family: str,
+) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return family_match is None and not str(expected_family or "").strip()
+    if family_match is None:
+        expected = str(expected_family or "").strip()
+        return not expected or text == expected
+    return family_match(text).get("matches") is True
 
 
 def _cvrp_large_twoopt_phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
