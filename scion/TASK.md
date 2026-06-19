@@ -256,11 +256,15 @@ Current checkpoint:
   two-opt review readiness now rejects generic, cross-route,
   unbounded/fallback, VNS, and two-opt-star protocol family labels as
   two-opt-like but non-qualifying signals.
+- Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
+  be review-ready: runtime budget diagnostics remain reportable, but
+  fresh-runtime replay drain status and stage-transition drain status must both
+  be present before runtime evidence can support delegated conclusions.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-signalstrict-6r-gpt55-20260619T062117Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-drainstrict-6r-gpt55-20260619T062959Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-signalstrict-1r-gpt55-20260619T062117Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-drainstrict-1r-gpt55-20260619T062959Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -273,7 +277,7 @@ Current checkpoint:
   `scion/tools`. The warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `a2abdc5`.
+  true. The roots were prepared from WSL checkout `ff93a65`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -309,7 +313,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the signalstrict roots above are not current
+  Older prepared roots before the drainstrict roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.

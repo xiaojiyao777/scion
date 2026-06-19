@@ -95,6 +95,10 @@ Framework:
   prompt/source-visibility trace accounting in the analysis brief, including
   hypothesis target-source visibility; otherwise branch transfer and source
   grounding are not auditable enough for delegated current-run review.
+- Runtime feedback is review-ready only when raw runtime feedback exists and
+  both fresh-runtime replay drain status and stage-transition drain status are
+  present. Budget diagnostics remain useful for investigation, but they do not
+  by themselves make protocol-evaluated warehouse/CVRP postrun review ready.
 - Launchers run postrun readiness JSON generation with
   `--require-current-run-ready`, so `POSTRUN_READINESS_EXIT_STATUS` now records
   whether delegated current-run analysis is actually ready.
@@ -128,8 +132,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `a2abdc5`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-signalstrict-6r-gpt55-20260619T062117Z-claw`.
+- Current prepared root, prepared from WSL checkout `ff93a65`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-drainstrict-6r-gpt55-20260619T062959Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -155,8 +159,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `a2abdc5`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-signalstrict-1r-gpt55-20260619T062117Z-claw`.
+- Current prepared root, prepared from WSL checkout `ff93a65`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-drainstrict-1r-gpt55-20260619T062959Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -205,10 +209,8 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  signalstrict roots above are not current because launch/readiness
-  runtime paths changed after prepare time. Exact
-  supersession details belong in launch/readiness evidence docs, not this
-  operational snapshot.
+  drainstrict roots above are not current. Exact supersession details belong in
+  launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`;
@@ -254,25 +256,8 @@ Infrastructure:
   They supersede older prepared-root pointers after launch readiness began
   checking strict postrun readiness markers, campaign-exit postrun calls, and
   warehouse data-root/API-key-env failure report paths in generated `run.sh`.
-- Current repair context:
-  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-protocol-signal-postrun-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-warehouse-continuity-substance-postrun-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-readiness-blocking-summary-gaps-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-readiness-prompt-source-visibility-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-warehouse-data-root-preflight-postrun-report-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-api-key-env-preflight-postrun-report-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-launch-runtime-guard-tools-coverage-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-report-status-marker-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-acceptance-readiness-checker-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-problem-summary-readiness-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-postrun-readiness-exit-status-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
-  `scion/docs/experiments/v0.4/v04-prepared-only-minimum-analysis-guidance-20260619.md`,
-  and `scion/docs/experiments/v0.4/v04-prepared-only-specialist-axes-deferred-20260619.md`.
+- Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
+  status page focused on operating truth rather than repair chronology.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
   and `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/RSYNC_PATHS.md`.
