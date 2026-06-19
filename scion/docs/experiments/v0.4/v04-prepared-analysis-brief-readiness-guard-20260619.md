@@ -32,7 +32,7 @@ for launch readiness to enforce directly.
 - CVRP and warehouse semantics remain in problem-owned prepared/postrun summary
   layers.
 
-## Current Prepared Roots
+## Prepared Roots For This Repair
 
 WSL checkout: `4830d81`
 
@@ -76,6 +76,19 @@ Both roots report:
 
 The current blocker remains external `gpt-5.5` auth, not prepared-root static
 readiness.
+
+## Later Current Roots
+
+The `4830d81` roots were superseded after launch readiness began checking
+prepared analysis brief `prepared_run_contract` identity against the
+prepared-run manifest.
+
+- Current warehouse root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-399db52-6r-gpt55-20260619T015826Z-claw`
+- Current CVRP root:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-399db52-1r-gpt55-20260619T015826Z-claw`
+- Current refresh report:
+  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`
 
 ## Verification
 

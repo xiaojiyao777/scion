@@ -116,12 +116,13 @@ Accepted as the prepared-only specialist-axis deferral repair.
 
 Later current root:
 
-- The `cff825a` roots were superseded after the specialist-axis deferral became
-  structured JSON evidence and launch readiness began checking prepared analysis
-  brief currency directly.
+- The `cff825a` and `4830d81` roots were superseded after the specialist-axis
+  deferral became structured JSON evidence, launch readiness began checking
+  prepared analysis brief currency directly, and prepared analysis brief
+  contract identity became part of readiness.
 - Current warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4830d81-6r-gpt55-20260619T014742Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-399db52-6r-gpt55-20260619T015826Z-claw`.
 - Current CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-4830d81-1r-gpt55-20260619T014742Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-399db52-1r-gpt55-20260619T015826Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.

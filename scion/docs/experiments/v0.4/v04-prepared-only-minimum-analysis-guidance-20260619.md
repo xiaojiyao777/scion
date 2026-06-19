@@ -108,12 +108,13 @@ Accepted as the prepared-only markdown guidance repair.
 
 Later current root:
 
-- The `270d21c` and `cff825a` roots were superseded after prepared-only
-  specialist review axes were deferred until current-run evidence exists and
-  then made launch-readiness-checked structured JSON evidence.
+- The `270d21c`, `cff825a`, and `4830d81` roots were superseded after
+  prepared-only specialist review axes were deferred until current-run evidence
+  exists, then made launch-readiness-checked structured JSON evidence, and then
+  protected by prepared analysis brief contract identity checks.
 - Current warehouse root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4830d81-6r-gpt55-20260619T014742Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-399db52-6r-gpt55-20260619T015826Z-claw`.
 - Current CVRP root:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-4830d81-1r-gpt55-20260619T014742Z-claw`.
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-399db52-1r-gpt55-20260619T015826Z-claw`.
 - Current refresh report:
-  `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.

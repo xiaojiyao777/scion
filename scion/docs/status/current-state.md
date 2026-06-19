@@ -31,10 +31,10 @@ Framework:
 - Prepared handoff bundles include report-only analysis brief, artifact
   inventory, launch-readiness, and `prompt_context_readiness` families. Static
   readiness now checks artifact identity, launch markers, problem-specific
-  handoff coverage, and the prompt bridge before any prepared root is launched.
-  Launch-readiness reports now expose the problem-specific prepared handoff
-  checks directly, instead of hiding them behind only
-  `prepared_contract_complete`.
+  handoff coverage, prepared analysis brief contract identity, and the prompt
+  bridge before any prepared root is launched. Launch-readiness reports now
+  expose the problem-specific prepared handoff checks directly, instead of
+  hiding them behind only `prepared_contract_complete`.
 - Prepared-only analysis briefs now use launch/readiness/handoff questions,
   omit current-run branch/LLM/Protocol guidance, and defer specialist
   warehouse/CVRP review axes until post-launch current-run evidence exists.
@@ -50,8 +50,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `4830d81`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-4830d81-6r-gpt55-20260619T014742Z-claw`.
+- Current prepared root, prepared from WSL checkout `399db52`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-399db52-6r-gpt55-20260619T015826Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -70,8 +70,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `4830d81`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-4830d81-1r-gpt55-20260619T014742Z-claw`.
+- Current prepared root, prepared from WSL checkout `399db52`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-399db52-1r-gpt55-20260619T015826Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -89,9 +89,11 @@ Infrastructure:
   `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `git_runtime_consistent=ok`, and
-  completion preflight `failed`. Later docs-only commits may make the checkout
-  differ from a prepared manifest commit; readiness remains acceptable only
-  when runtime guard paths are unchanged.
+  completion preflight `failed`. The prepared analysis brief contract identity
+  now matches the prepared manifest, including the manifest git commit. Later
+  docs-only commits may make the checkout differ from a prepared manifest
+  commit; readiness remains acceptable only when runtime guard paths are
+  unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`. The
@@ -129,9 +131,10 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.
   It supersedes older prepared-root pointers after launch readiness began
-  requiring current structured prepared-only analysis brief semantics.
+  requiring current structured prepared-only analysis brief semantics and
+  prepared analysis brief contract identity.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
