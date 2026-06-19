@@ -62,4 +62,4 @@ Strict WSL launch readiness for both regenerated roots reports
 and `launch_ready=false`. The remaining blocker is the external `gpt-5.5`
 provider auth preflight returning HTTP `401` /
 `classification=not_authenticated` / `code=invalid_api_key`, with auth pool
-`active=0`, `expired=0`, `refreshing=1`, `total=1`.
+`active=0`, `expired=1`, `refreshing=0`, `total=1`.
