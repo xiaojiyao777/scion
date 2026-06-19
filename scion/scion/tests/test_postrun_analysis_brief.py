@@ -1209,6 +1209,7 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     )
     assert any(
         "warehouse_followup_summary" in question
+        and "incomplete-handoff" in question
         for question in brief["required_questions"]
     )
 
@@ -1255,6 +1256,7 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
     assert any(
         "cvrp_large_twoopt_summary" in question
+        and "incomplete handoff" in question
         for question in brief["required_questions"]
     )
 

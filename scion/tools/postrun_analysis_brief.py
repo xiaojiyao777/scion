@@ -39,9 +39,11 @@ REQUIRED_QUESTIONS = (
     "Did failure_taxonomy_summary distinguish provider/infra, framework/control, "
     "proposal/codegen/tool, and algorithm-quality failures?",
     "For warehouse follow-up, did warehouse_followup_summary distinguish "
-    "prepared-only, quality-blocked, protocol-evaluated, and plateau-review-ready evidence?",
+    "prepared-only, incomplete-handoff, quality-blocked, protocol-evaluated, "
+    "and plateau-review-ready evidence?",
     "For CVRP large-twoopt follow-up, did cvrp_large_twoopt_summary distinguish "
-    "prepared-only, missing review inputs, missing two-opt mechanism signal, and review-ready evidence?",
+    "prepared-only, incomplete handoff, missing review inputs, missing two-opt "
+    "mechanism signal, and review-ready evidence?",
     "Were repeated near-duplicate branches avoided or correctly diagnosed?",
     "Are failures framework/control regressions, provider/infra failures, or algorithm-quality failures?",
     "Is the next step repair, same-round rerun, or ladder advancement?",
