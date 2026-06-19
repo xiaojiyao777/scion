@@ -46,13 +46,19 @@ Framework:
   direct effect telemetry for postrun pair-level review. CVRP launch readiness
   now requires the prepared prompt-context handoff to prove that this
   code-constraint bridge is present before a prepared root can be static-ready.
+- Warehouse code generation also receives provider-owned active subject code
+  constraints for the champion-v2 follow-up: preserve/export validation-transfer
+  diagnostics, honor lexicographic and bounded-scan guards, and avoid
+  unbounded full vehicle-pair scans. Warehouse launch readiness now requires
+  the prepared prompt-context handoff to prove that this code-constraint bridge
+  is present before a prepared root can be static-ready.
 - Current-run postrun analysis can now audit whether actual code prompt traces
   carried active subject code constraints. The manifest/trajectory/brief path
   records section status, required/full-visible/not-full-visible counts,
   payload digest, and constraint/forbidden-pattern counts without storing raw
-  prompt text or adding Decision input. CVRP current-run delegated-analysis
-  readiness now requires this trace to be present and full-visible whenever a
-  CVRP code trace exists.
+  prompt text or adding Decision input. CVRP and warehouse current-run
+  delegated-analysis readiness now require this trace to be present and
+  full-visible whenever a matching code trace exists.
 - Adapter-owned measurement/opportunity diagnostics are redacted before prompt
   exposure for raw pair/calibration rows, BKS/gap details, holdout/case details,
   prompt ratios, and LLM text.
@@ -118,10 +124,13 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `2f206f8`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeready-ready-2f206f8-6r-gpt55-20260619T053744Z-claw`.
+- Current prepared root, prepared from WSL checkout `46184f3`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-warehousecodeready-ready-46184f3-6r-gpt55-20260619T055311Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
+  Static readiness also verifies the
+  `warehouse_active_subject_code_constraints_prompt_bridge` source/provider
+  markers.
   Because the root is prepare-only, required answers focus on
   launch/readiness/handoff rather than research-quality or plateau conclusions;
   the warehouse specialist review axes are marked deferred until post-launch
@@ -142,8 +151,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `2f206f8`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeready-ready-2f206f8-1r-gpt55-20260619T053745Z-claw`.
+- Current prepared root, prepared from WSL checkout `46184f3`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-warehousecodeready-ready-46184f3-1r-gpt55-20260619T055312Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -175,9 +184,11 @@ Infrastructure:
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`,
   `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
-  `failed`. The CVRP root additionally exposes
-  `cvrp_active_subject_code_constraint_source_markers` with code prompt,
-  context, and provider markers all true. Both current root `run.sh` files
+  `failed`. The warehouse root exposes
+  `warehouse_active_subject_code_constraint_source_markers`, and the CVRP root
+  exposes `cvrp_active_subject_code_constraint_source_markers`; code prompt,
+  context, and provider markers are all true in both roots. Both current root
+  `run.sh` files
   execute git dirty/head-mismatch
   runtime guards before `scion.cli.main run`, call postrun report/readiness
   generation after campaign exit and before `exit "$STATUS"`, preserve
@@ -188,9 +199,9 @@ Infrastructure:
   The prepared analysis brief contract identity matches the prepared manifest,
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
-  only when runtime guard paths are unchanged. Older prepared roots through the
-  `7aeffd0` codeaudit roots are not current because postrun readiness runtime
-  paths changed after prepare time; use the codeready roots above. Exact
+  only when runtime guard paths are unchanged. Older prepared roots before the
+  warehousecodeready roots above are not current because launch/readiness
+  runtime paths changed after prepare time. Exact
   supersession details belong in launch/readiness evidence docs, not this
   operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
