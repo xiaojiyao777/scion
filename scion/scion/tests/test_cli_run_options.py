@@ -94,6 +94,51 @@ def test_run_threads_measurement_governance_into_protocol_config(
     assert captured[0]["max_rounds"] == 1
 
 
+def test_run_threads_disable_early_stop_into_campaign_manager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem(tmp_path)
+    captured: list[dict[str, object]] = []
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+        def run(self, max_rounds: int = 1000) -> None:
+            captured[-1]["max_rounds"] = max_rounds
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--disable-early-stop",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured[0]["force_continue_early_stop"] is True
+    assert captured[0]["max_rounds"] == 1
+
+
 @pytest.mark.parametrize(
     (
         "extra_args",
