@@ -265,6 +265,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         review_input_detail,
         required=review_input_status != "skipped",
     )
+    consistency_status, consistency_detail = _problem_summary_input_consistency(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "problem_summary_input_consistency",
+        consistency_status,
+        consistency_detail,
+        required=consistency_status != "skipped",
+    )
     prompt_status, prompt_detail = _prompt_source_visibility_actionability(
         analysis_brief,
         inventory,
@@ -709,6 +719,166 @@ def _review_input_summaries_actionability(
             "summaries": details,
         },
     )
+
+
+def _problem_summary_input_consistency(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family, expected_key = _expected_problem_summary(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"} or expected_key is None:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    summary = _mapping_or_empty(brief.get(expected_key))
+    if summary.get("available") is not True:
+        return "skipped", {
+            "reason": "missing_problem_specific_summary",
+            "problem_family": problem_family,
+            "summary": expected_key,
+        }
+
+    evidence = _mapping_or_empty(summary.get("evidence"))
+    protocol_evidence = _mapping_or_empty(evidence.get("protocol"))
+    measurement_evidence = _mapping_or_empty(evidence.get("measurement_effect"))
+    runtime_evidence = _mapping_or_empty(evidence.get("runtime"))
+    continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
+    quality_evidence = _mapping_or_empty(evidence.get("quality_blocks"))
+
+    protocol_summary = _mapping_or_empty(brief.get("protocol_accounting_summary"))
+    protocol_aggregate = _mapping_or_empty(protocol_summary.get("aggregate"))
+    protocol_rows = _mapping_or_empty(protocol_aggregate.get("protocol_rows"))
+    input_protocol_evaluated = max(
+        _int_or_zero(protocol_rows.get("protocol_evaluated_candidates")),
+        _int_or_zero(protocol_aggregate.get("formal_protocol_evaluated_candidates")),
+    )
+    summary_protocol_evaluated = _int_or_zero(
+        protocol_evidence.get("protocol_evaluated_candidates")
+    )
+
+    measurement_summary = _mapping_or_empty(brief.get("measurement_effect_summary"))
+    measurement_aggregate = _mapping_or_empty(measurement_summary.get("aggregate"))
+    runtime_summary = _mapping_or_empty(brief.get("runtime_feedback_summary"))
+    continuity_summary = _mapping_or_empty(brief.get("research_continuity_summary"))
+    failure_summary = _mapping_or_empty(brief.get("failure_taxonomy_summary"))
+    failure_aggregate = _mapping_or_empty(failure_summary.get("aggregate"))
+    proposal_quality = _mapping_or_empty(failure_aggregate.get("proposal_quality"))
+    input_quality_block_signal = max(
+        _int_or_zero(proposal_quality.get("proposal_quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_blocks")),
+        _int_or_zero(proposal_quality.get("quality_block_ledger_count")),
+    )
+    summary_quality_block_signal = max(
+        _int_or_zero(quality_evidence.get("proposal_quality_blocks")),
+        _int_or_zero(quality_evidence.get("quality_blocks")),
+        _int_or_zero(quality_evidence.get("quality_block_ledger_count")),
+    )
+
+    failures: list[str] = []
+    interpretation = str(summary.get("interpretation") or "")
+    if not evidence:
+        failures.append("problem_summary_evidence_missing")
+    if summary_protocol_evaluated != input_protocol_evaluated:
+        failures.append("problem_summary_protocol_evaluated_mismatch")
+    if _is_protocol_evaluated_interpretation(interpretation):
+        if summary_protocol_evaluated <= 0:
+            failures.append("problem_summary_protocol_evaluated_missing")
+        if input_protocol_evaluated <= 0:
+            failures.append("review_input_protocol_evaluated_missing")
+    if _is_quality_blocked_interpretation(interpretation):
+        if summary_quality_block_signal <= 0:
+            failures.append("problem_summary_quality_block_signal_missing")
+        if input_quality_block_signal <= 0:
+            failures.append("failure_taxonomy_quality_block_signal_missing")
+    if (
+        measurement_evidence.get("available")
+        is not measurement_summary.get("available")
+    ):
+        failures.append("problem_summary_measurement_available_mismatch")
+    if _int_or_zero(measurement_evidence.get("protocol_row_count")) != _int_or_zero(
+        measurement_aggregate.get("protocol_row_count")
+    ):
+        failures.append("problem_summary_measurement_protocol_rows_mismatch")
+    runtime_ready = runtime_summary.get("review_ready") is True
+    runtime_evidence_ready = (
+        runtime_evidence.get("review_ready")
+        if "review_ready" in runtime_evidence
+        else runtime_evidence.get("available")
+    )
+    if runtime_evidence_ready is not runtime_ready:
+        failures.append("problem_summary_runtime_review_ready_mismatch")
+    if (
+        runtime_evidence.get("drain_status_complete")
+        is not runtime_summary.get("drain_status_complete")
+    ):
+        failures.append("problem_summary_runtime_drain_status_mismatch")
+    if (
+        continuity_evidence.get("available")
+        is not continuity_summary.get("available")
+    ):
+        failures.append("problem_summary_continuity_available_mismatch")
+    if _int_or_zero(
+        continuity_evidence.get("continuity_report_count")
+    ) != _int_or_zero(continuity_summary.get("continuity_report_count")):
+        failures.append("problem_summary_continuity_report_count_mismatch")
+    if (
+        interpretation == "protocol_evaluated_plateau_review_ready"
+        and continuity_evidence.get("substantive") is not True
+    ):
+        failures.append("warehouse_plateau_continuity_not_substantive")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "summary": expected_key,
+            "interpretation": interpretation,
+            "failures": failures,
+            "summary_protocol_evaluated_candidates": summary_protocol_evaluated,
+            "input_protocol_evaluated_candidates": input_protocol_evaluated,
+            "summary_quality_block_signal": summary_quality_block_signal,
+            "input_quality_block_signal": input_quality_block_signal,
+            "summary_measurement_available": measurement_evidence.get("available"),
+            "input_measurement_available": measurement_summary.get("available"),
+            "summary_measurement_protocol_row_count": measurement_evidence.get(
+                "protocol_row_count"
+            ),
+            "input_measurement_protocol_row_count": measurement_aggregate.get(
+                "protocol_row_count"
+            ),
+            "summary_runtime_review_ready": runtime_evidence_ready,
+            "input_runtime_review_ready": runtime_summary.get("review_ready"),
+            "summary_runtime_drain_status_complete": runtime_evidence.get(
+                "drain_status_complete"
+            ),
+            "input_runtime_drain_status_complete": runtime_summary.get(
+                "drain_status_complete"
+            ),
+            "summary_continuity_available": continuity_evidence.get("available"),
+            "input_continuity_available": continuity_summary.get("available"),
+            "summary_continuity_report_count": continuity_evidence.get(
+                "continuity_report_count"
+            ),
+            "input_continuity_report_count": continuity_summary.get(
+                "continuity_report_count"
+            ),
+            "summary_continuity_substantive": continuity_evidence.get(
+                "substantive"
+            ),
+        },
+    )
+
+
+def _is_protocol_evaluated_interpretation(interpretation: str) -> bool:
+    return (
+        interpretation.startswith("protocol_evaluated_")
+        or interpretation == "bounded_twoopt_review_ready"
+    )
+
+
+def _is_quality_blocked_interpretation(interpretation: str) -> bool:
+    return interpretation.startswith("quality_blocked_")
 
 
 def _prompt_source_visibility_actionability(

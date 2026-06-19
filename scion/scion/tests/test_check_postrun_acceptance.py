@@ -641,6 +641,66 @@ def test_postrun_acceptance_requires_review_input_summaries_actionability(
     )
 
 
+def test_postrun_acceptance_rejects_problem_summary_input_mismatch(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-summary-mismatch")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    protocol = brief["protocol_accounting_summary"]
+    assert isinstance(protocol, dict)
+    protocol["aggregate"] = {
+        "formal_screened_candidates": 1,
+        "formal_protocol_evaluated_candidates": 0,
+        "protocol_rows": {
+            "protocol_evaluated_candidates": 0,
+            "protocol_metric_results": 0,
+        },
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    consistency_check = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert input_check["status"] == "ok"
+    assert consistency_check["required"] is True
+    assert consistency_check["status"] == "failed"
+    assert "problem_summary_protocol_evaluated_mismatch" in consistency_check[
+        "detail"
+    ]["failures"]
+    assert "review_input_protocol_evaluated_missing" in consistency_check[
+        "detail"
+    ]["failures"]
+    assert consistency_check["detail"]["summary_protocol_evaluated_candidates"] == 1
+    assert consistency_check["detail"]["input_protocol_evaluated_candidates"] == 0
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
     tmp_path: Path,
 ) -> None:
@@ -1201,6 +1261,12 @@ def _latest_analysis_brief_path(run_root: Path) -> Path:
 
 
 def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
+    warehouse_summary = brief.get("warehouse_followup_summary")
+    if isinstance(warehouse_summary, dict):
+        warehouse_summary.setdefault("evidence", _warehouse_problem_evidence())
+    cvrp_summary = brief.get("cvrp_large_twoopt_summary")
+    if isinstance(cvrp_summary, dict):
+        cvrp_summary.setdefault("evidence", _cvrp_problem_evidence())
     brief["protocol_accounting_summary"] = {
         "schema_version": "scion.postrun_protocol_accounting_summary.v1",
         "report_only": True,
@@ -1433,6 +1499,103 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
                 },
             }
         ],
+    }
+
+
+def _warehouse_problem_evidence() -> dict[str, object]:
+    return {
+        "protocol": {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+            "protocol_metric_results": 1,
+            "formal_candidate_artifact_rows": 1,
+            "stage_rows": {},
+        },
+        "measurement_effect": {
+            "available": True,
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 1,
+            "max_effect_to_mde_ratio": 0.25,
+            "interpretation_counts": {"below_mde": 1},
+        },
+        "quality_blocks": {
+            "proposal_quality_blocks": 0,
+            "quality_blocks": 0,
+            "quality_block_ledger_count": 0,
+            "reports_with_quality_blocks": 0,
+            "reason_counts": {},
+        },
+        "runtime": {
+            "available": True,
+            "review_ready": True,
+            "drain_status_complete": True,
+            "fresh_runtime_status_counts": {"complete": 1},
+            "stage_transition_status_counts": {"complete": 1},
+            "runtime_budget_diagnostic_count": 0,
+        },
+        "research_continuity": {
+            "available": True,
+            "continuity_report_count": 1,
+            "substantive": True,
+            "max_branch_depth": 2,
+            "same_mechanism_observed": 1,
+            "branch_lessons_required": 0,
+            "weak_positive_observed": 0,
+            "mechanism_family_counts": {"fixture_mechanism": 1},
+            "active_shape_counts": {"continue": 1},
+        },
+    }
+
+
+def _cvrp_problem_evidence() -> dict[str, object]:
+    return {
+        "protocol": {
+            "formal_screened_candidates": 1,
+            "protocol_evaluated_candidates": 1,
+            "protocol_metric_results": 1,
+            "formal_candidate_artifact_rows": 1,
+            "stage_rows": {},
+        },
+        "measurement_effect": {
+            "available": True,
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 1,
+            "max_effect_to_mde_ratio": 0.25,
+            "interpretation_counts": {"below_mde": 1},
+            "mechanism_family_mapped_row_count": 0,
+            "mechanism_family_unmapped_row_count": 1,
+        },
+        "large_twoopt_mechanism": {
+            "available": False,
+            "mechanism_family_available": False,
+            "direct_evidence_ready": False,
+            "direct_evidence": {
+                "ready": False,
+                "missing": ["missing_positive_effect_at_or_above_mde"],
+            },
+            "families": [],
+            "protocol_families": [],
+            "rejected_protocol_families": [],
+            "protocol_row_count": 0,
+        },
+        "quality_blocks": {
+            "proposal_quality_blocks": 0,
+            "quality_blocks": 0,
+            "quality_block_ledger_count": 0,
+            "reason_counts": {},
+        },
+        "runtime": {
+            "available": True,
+            "raw_available": True,
+            "drain_status_complete": True,
+            "runtime_budget_diagnostic_count": 0,
+        },
+        "research_continuity": {
+            "available": True,
+            "continuity_report_count": 1,
+        },
     }
 
 
