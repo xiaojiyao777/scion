@@ -40,15 +40,15 @@ Accepted as a postrun acceptance hardening repair. After launch, warehouse and
 CVRP delegated review should consume the freshly rebuilt postrun bundle rather
 than stale generated files left by earlier rebuild attempts.
 
-Because this repair touches `scion/tools`, the active prepared roots were
-regenerated from WSL runtime commit `8e7cd5c`:
+Because this repair touched `scion/tools`, prepared roots were regenerated from
+WSL runtime commit `8e7cd5c`:
 
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-declaredonly-8e7cd5c-6r-gpt55-6r-gpt55-20260619T144059Z-claw`
 - CVRP:
   `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-declaredonly-8e7cd5c-1r-gpt55-1r-gpt55-20260619T144100Z-claw`
 
-Strict WSL launch readiness for both regenerated roots reports
-`static_ready=true`, `launch_ready=false`; the remaining blocker is the external
-`gpt-5.5` provider auth preflight returning HTTP `401` /
-`classification=not_authenticated` / `code=invalid_api_key`.
+Those roots were later superseded by the prepared-handoff output-cleanup roots
+from WSL runtime commit `a5d2d5e`; see
+`scion/docs/experiments/v0.4/v04-prepared-handoff-output-cleanup-20260619.md`
+and `scion/docs/status/current-state.md` for the current launch pointers.

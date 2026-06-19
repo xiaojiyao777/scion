@@ -51,8 +51,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `8e7cd5c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-declaredonly-8e7cd5c-6r-gpt55-6r-gpt55-20260619T144059Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a5d2d5e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-handoffdeclared-a5d2d5e-6r-gpt55-6r-gpt55-20260619T145428Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -87,8 +87,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `8e7cd5c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-declaredonly-8e7cd5c-1r-gpt55-1r-gpt55-20260619T144100Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a5d2d5e`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-handoffdeclared-a5d2d5e-1r-gpt55-1r-gpt55-20260619T145429Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -109,11 +109,15 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `8e7cd5c`
+- The active prepared roots were generated from WSL runtime commit `a5d2d5e`
   after the CVRP CMT case-protection handoff and analysis-brief surface
-  repairs, plus the postrun rebuild stale-output cleanup.
+  repairs, plus postrun and prepared-handoff stale/undeclared output guards.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`.
+- Static readiness includes
+  `prepared_handoff_rebuild_declared_outputs_present=ok`, with no missing,
+  inconsistent, or unexpected generated files in standard prepared-handoff
+  families.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -167,6 +171,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-postrun-quality-blocked-readiness-20260619.md`.
 - Current CVRP CMT case-protection handoff evidence:
   `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
+- Current prepared-handoff bundle hygiene evidence:
+  `scion/docs/experiments/v0.4/v04-prepared-handoff-output-cleanup-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `8e7cd5c` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `a5d2d5e` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun acceptance, prepared-handoff declared-output hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, and report-only champion-progress postrun auditing/input consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -333,16 +333,21 @@ Current checkpoint:
   files in standard ok family directories, so a stale file added after rebuild
   cannot make the directory view or inventory counts look like current-run
   evidence.
+- Prepared handoff rebuild now removes stale generated `.json/.md` outputs from
+  standard handoff family directories and launch readiness rejects undeclared
+  generated handoff outputs, so delegated launch reviewers consume only the
+  manifest-declared prepared bundle.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-declaredonly-8e7cd5c-6r-gpt55-6r-gpt55-20260619T144059Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-handoffdeclared-a5d2d5e-6r-gpt55-6r-gpt55-20260619T145428Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-declaredonly-8e7cd5c-1r-gpt55-1r-gpt55-20260619T144100Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-handoffdeclared-a5d2d5e-1r-gpt55-1r-gpt55-20260619T145429Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
   `prompt_context_readiness_complete=ok`,
   `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
+  `prepared_handoff_rebuild_declared_outputs_present=ok`,
   `run_script_strict_postrun_readiness=ok`,
   `run_script_runtime_guard_enforced=ok`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
@@ -362,7 +367,7 @@ Current checkpoint:
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
   true, and `cvrp_cmt_case_protection_present=true` with protected cases
   `CMT2` and `CMT4`. The roots were prepared from WSL runtime commit
-  `8e7cd5c`. Current
+  `a5d2d5e`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
