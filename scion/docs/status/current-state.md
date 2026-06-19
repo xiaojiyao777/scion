@@ -44,7 +44,9 @@ Framework:
   taxonomy-backed quality-blocked no-protocol conclusions can be analysis-ready
   without plateau inputs only when failure taxonomy agrees. CVRP and warehouse
   quality-blocked summaries both expose quality-block counts and reason mix for
-  delegated audit. Unsupported or stale conclusions still fail readiness.
+  delegated audit. No-protocol quality-blocked conclusions fail readiness if
+  protocol accounting reports any protocol-evaluated candidate. Unsupported or
+  stale conclusions still fail readiness.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
@@ -57,8 +59,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `03fe2a4c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cvrpquality-03fe2a4c-6r-gpt55-20260619T171007Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `bea482de`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-noprotocol-bea482de-6r-gpt55-20260619T172019Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -93,8 +95,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `03fe2a4c`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cvrpquality-03fe2a4c-1r-gpt55-20260619T171008Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `bea482de`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-noprotocol-bea482de-1r-gpt55-20260619T172019Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -121,7 +123,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `03fe2a4c`
+- The active prepared roots were generated from WSL runtime commit `bea482de`
   after the CVRP CMT case-protection handoff and analysis-brief surface
   repairs, plus postrun and prepared-handoff stale/undeclared output guards and
   prepared/postrun rebuild-manifest identity and output scope validation.

@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `03fe2a4c` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, strict postrun readiness status-after-check reporting, launch-env/`SCION_DIR`/runtime-guard failure postrun reporting, pre-campaign infra-only evidence isolation, prepared/postrun rebuild-manifest identity and output-scope hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, report-only champion-progress postrun auditing/input consistency, and CVRP taxonomy-backed quality-blocked no-protocol postrun evidence. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up. Current WSL prepared roots were regenerated from runtime commit `bea482de` and are static-ready, including problem-specific handoff, CVRP CMT2/CMT4 case-protection handoff, active-subject source constraints, no-early-stop launch semantics, strict postrun rebuild-before-readiness reporting, strict postrun readiness status-after-check reporting, launch-env/`SCION_DIR`/runtime-guard failure postrun reporting, pre-campaign infra-only evidence isolation, prepared/postrun rebuild-manifest identity and output-scope hygiene, interpretation-specific review-input consistency, launch-readiness prepared-contract consistency, report-only review-surface boundary markers, report-only branch-research-state readiness/input consistency, report-only champion-progress postrun auditing/input consistency, and taxonomy-backed quality-blocked no-protocol consistency. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -307,6 +307,10 @@ Current checkpoint:
   and reason mix in the postrun brief, and acceptance requires matching
   current-run `failure_taxonomy_summary` evidence before that negative
   conclusion is analysis-ready.
+- Warehouse/CVRP quality-blocked no-protocol conclusions now fail readiness if
+  either the problem summary or review-input protocol accounting reports any
+  protocol-evaluated candidate, so hand-written summaries cannot bypass
+  protocol-evaluated measurement/runtime/continuity requirements.
 - Postrun acceptance readiness now also requires current-run
   `branch_research_state_summary` actionability for warehouse/CVRP delegated
   review. The summary is report-only, excludes raw prompts/responses/patch
@@ -359,9 +363,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cvrpquality-03fe2a4c-6r-gpt55-20260619T171007Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-noprotocol-bea482de-6r-gpt55-20260619T172019Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cvrpquality-03fe2a4c-1r-gpt55-20260619T171008Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-noprotocol-bea482de-1r-gpt55-20260619T172019Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -394,7 +398,7 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `03fe2a4c`. Current
+  were prepared from WSL runtime commit `bea482de`. Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
   `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
