@@ -298,9 +298,9 @@ Current checkpoint:
   claim a protocol-evaluated conclusion when the input summaries disagree.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-whinput-32294b7-6r-gpt55-20260619T115045Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-whinput-32294b7-1r-gpt55-20260619T115045Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -322,32 +322,13 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL runtime commit `a019ee9` after launch
-  readiness began verifying that generated scripts source `launch.env` through
-  an executable shell line rather than comment/echo-only text, require
-  `COMPLETION_PREFLIGHT=1`, and execute `tools/check_gpt55_proxy.py` before the
-  real campaign command with token-level `--model "$SCION_MODEL"` and
-  `--base-url "$SCION_BASE_URL"` routing, and after it began requiring
-  `PYTHONPATH` from
-  `launch.env` to be exported before campaign start, and after it began
-  requiring manifest and launch-env model route consistency on `gpt-5.5`, and
-  after it began requiring `DISABLE_EARLY_STOP=1` plus `--disable-early-stop`
-  in both the manifest command and real generated `run.sh` campaign command,
-  and after artifact inventory began exposing and checking the prepared
-  execution/no-early-stop contract, with `--disable-early-stop` matched as an
-  exact shell token rather than a substring, and after strict postrun readiness
-  began requiring an executable `check_postrun_acceptance.py` command with
-  token-level `--require-current-run-ready`, and after preflight-failure
-  reporting began requiring an executable status writer before postrun reporting
-  and `exit "$PREFLIGHT_STATUS"`, and after data-root/API-key-env failure
-  marker checks began ignoring comment-only markers, and after runtime guard
-  command markers began rejecting comment/echo-only markers, and after the
-  postrun report function definition began requiring an executable shell
-  function line, and after postrun delegated-review evidence accounting began
-  requiring co-located CVRP two-opt direct evidence plus realized warehouse
-  continuity evidence, and after postrun acceptance began recomputing CVRP
-  large-twoopt readiness from review inputs before accepting a problem-summary
-  ready claim.
+  true. The roots were prepared from WSL runtime commit `32294b7`. Current
+  readiness also verifies executable `launch.env` sourcing, executable
+  completion preflight, GPT-5.5 model/base routing, active-checkout
+  `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
+  reporting, strict postrun readiness, runtime guard command markers, normal
+  campaign-exit postrun reporting, co-located CVRP two-opt direct evidence, and
+  warehouse/CVRP problem-summary consistency recomputed from review inputs.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -415,7 +396,9 @@ Current checkpoint:
   runtime-feedback, and substantive realized research-continuity signals. A
   shallow continuity block or unrealized continuity opportunity alone cannot
   distinguish a real post-v2 plateau from missed continuous-optimization
-  opportunity.
+  opportunity. Postrun acceptance recomputes the warehouse continuity signal
+  from `research_continuity_summary` before accepting
+  `protocol_evaluated_plateau_review_ready`.
 - Current postrun readiness boundary: blocking problem-summary gaps such as
   missing review inputs, incomplete handoff, launch-only or infra-only status,
   and no protocol evidence prevent `current_run_analysis_ready=true`; valid

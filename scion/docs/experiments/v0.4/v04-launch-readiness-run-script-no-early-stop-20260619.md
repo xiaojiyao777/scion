@@ -256,9 +256,31 @@ PYTHONPATH=scion \
 # 65 passed
 ```
 
+Local checkout `3be1f5ab` and WSL checkout `32294b7`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py
+# 52 passed
+
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 14 passed
+
+PYTHONPATH=scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 66 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `a019ee9` because
+New prepare-only roots were generated from WSL runtime commit `32294b7` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -268,15 +290,16 @@ bundle function must be a real shell function definition, not a comment. The
 `launch.env` source command must also be an executable shell line, not a comment
 or echo-only string. Postrun delegated-review evidence accounting now also
 requires co-located CVRP two-opt direct evidence, review-input consistency for
-CVRP two-opt ready claims, and realized warehouse continuity evidence.
+CVRP two-opt ready claims, and realized warehouse continuity evidence
+recomputed from review inputs before accepting warehouse plateau-ready claims.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-whinput-32294b7-6r-gpt55-20260619T115045Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-whinput-32294b7-1r-gpt55-20260619T115045Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -337,9 +360,12 @@ matching. It also requires the GPT-5.5 proxy preflight to be an executable
 command block using token-level model/base-url arguments, and it requires
 preflight-failure reporting to use an executable status writer before the
 postrun bundle and preflight-status exit, and it requires data-root/API-key-env
-failure markers to be executable shell lines rather than comments. It supersedes
+failure markers to be executable shell lines rather than comments. It also
+keeps the current postrun acceptance consistency repairs in the guarded runtime
+surface: CVRP large-twoopt ready claims and warehouse plateau-ready claims are
+recomputed from review inputs before being accepted. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
-postrunexec, preflfailpath, execmarkers, execruntimeguard, and execpostrunfn
-prepared roots, plus the execsource roots, as the current prepared-root pointer.
+postrunexec, preflfailpath, execmarkers, execruntimeguard, execpostrunfn,
+execsource, and inputcheck prepared roots as the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.

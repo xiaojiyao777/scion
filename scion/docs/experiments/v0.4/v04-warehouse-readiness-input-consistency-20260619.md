@@ -59,9 +59,33 @@ python -m py_compile \
 git diff --check
 ```
 
+WSL verification after syncing the fix as runtime commit `32294b7`:
+
+```bash
+PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
+  /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py
+# 66 passed
+```
+
+Prepared roots regenerated from WSL runtime commit `32294b7`:
+
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-whinput-32294b7-6r-gpt55-20260619T115045Z-claw`
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-whinput-32294b7-1r-gpt55-20260619T115045Z-claw`
+
+Strict launch readiness for both roots exits `64` with `static_ready=true`,
+`launch_ready=false`, `git_runtime_consistent=ok`, and completion preflight
+failed on external GPT-5.5 auth: HTTP `401`,
+`classification=not_authenticated`, `code=invalid_api_key`.
+
 ## Acceptance
 
-Accepted locally for the warehouse follow-up delegated-review readiness path. A
-problem-specific summary can no longer claim
+Accepted locally and on WSL for the warehouse follow-up delegated-review
+readiness path. A problem-specific summary can no longer claim
 `protocol_evaluated_plateau_review_ready` when the review-input summaries lack
 realized continuity evidence.

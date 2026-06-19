@@ -56,8 +56,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `a019ee9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-inputcheck-a019ee9-6r-gpt55-20260619T113828Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `32294b7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-whinput-32294b7-6r-gpt55-20260619T115045Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -71,7 +71,9 @@ Warehouse:
   realized research-continuity evidence, such as branch depth, selected
   same-mechanism follow-up, satisfied branch-lesson transfer, or accepted
   weak-positive transfer. A shallow continuity block or unrealized opportunity
-  is not enough to call a protocol-evaluated run plateau-review-ready.
+  is not enough to call a protocol-evaluated run plateau-review-ready. Postrun
+  acceptance recomputes this continuity signal from review inputs before
+  accepting a `protocol_evaluated_plateau_review_ready` summary claim.
 
 CVRP/VRP:
 
@@ -84,8 +86,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `a019ee9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-inputcheck-a019ee9-1r-gpt55-20260619T113829Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `32294b7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-whinput-32294b7-1r-gpt55-20260619T115045Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -110,7 +112,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `a019ee9`.
+- The active prepared roots were generated from WSL runtime commit `32294b7`.
   Current local/WSL checkouts may include later documentation-only commits;
   launch readiness reports `git_runtime_consistent=ok` because runtime guard
   paths are unchanged.
@@ -175,6 +177,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-readiness-input-consistency-20260619.md`.
 - Current warehouse postrun evidence-accounting repair:
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-realized-signal-20260619.md`.
+- Current warehouse postrun acceptance consistency repair:
+  `scion/docs/experiments/v0.4/v04-warehouse-readiness-input-consistency-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
