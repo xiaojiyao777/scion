@@ -833,8 +833,12 @@ def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
         'exit "$PREFLIGHT_STATUS"',
         exit_search_start,
     )
+    function_pos, ignored_function_count = _shell_function_definition_position(
+        text,
+        "write_postrun_acceptance_reports",
+    )
 
-    if "write_postrun_acceptance_reports() {" not in text:
+    if function_pos < 0:
         failures.append({"reason": "missing_postrun_report_function"})
     if failure_guard_pos < 0:
         failures.append({"reason": "preflight_failure_guard_missing"})
@@ -862,6 +866,8 @@ def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
         "preflight_failure_guard_position": failure_guard_pos,
         "preflight_status_writer_kind": writer_kind,
         "preflight_status_writer_position": writer_pos,
+        "postrun_report_function_position": function_pos,
+        "ignored_non_executable_function_definition_count": ignored_function_count,
         "postrun_report_call_position": call_pos,
         "preflight_failure_exit_position": exit_pos,
         "failures": failures,
@@ -891,8 +897,15 @@ def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
         postrun_block,
         "--require-current-run-ready",
     )
-    readiness_marker_pos = text.find("POSTRUN_READINESS_EXIT_STATUS")
-    if "write_postrun_acceptance_reports() {" not in text:
+    readiness_marker_pos, ignored_readiness_markers = _find_executable_marker_position(
+        text,
+        "POSTRUN_READINESS_EXIT_STATUS",
+    )
+    function_pos, ignored_function_count = _shell_function_definition_position(
+        text,
+        "write_postrun_acceptance_reports",
+    )
+    if function_pos < 0:
         failures.append({"reason": "missing_postrun_report_function"})
     if postrun_pos < 0:
         failures.append({"reason": "postrun_acceptance_command_missing"})
@@ -903,9 +916,12 @@ def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
 
     detail = {
         "run_script": str(run_sh),
+        "postrun_report_function_position": function_pos,
+        "ignored_non_executable_function_definition_count": ignored_function_count,
         "postrun_acceptance_command_position": postrun_pos,
         "postrun_acceptance_strict_flag": postrun_has_strict_flag,
         "postrun_readiness_exit_status_position": readiness_marker_pos,
+        "ignored_non_executable_readiness_marker_count": ignored_readiness_markers,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
@@ -1634,6 +1650,24 @@ def _find_runtime_guard_marker_position(
                 ignored += 1
             else:
                 return offset + line.find(marker), ignored
+        offset += len(line)
+    return -1, ignored
+
+
+def _shell_function_definition_position(
+    text: str,
+    function_name: str,
+) -> tuple[int, int]:
+    target = f"{function_name}() {{"
+    offset = 0
+    ignored = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if target in stripped:
+            if _line_is_non_executed_shell_text(stripped):
+                ignored += 1
+            elif stripped.startswith(target):
+                return offset + line.find(target), ignored
         offset += len(line)
     return -1, ignored
 
