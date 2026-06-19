@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -242,12 +242,14 @@ Current checkpoint:
 - CVRP/VRP continuation is repaired enough for a focused solver-design follow-up:
   the current prepared root carries the large-instance intra-route two-opt seed
   only as proposal guidance, requires deadline-aware bounded implementation, and
-  keeps the unbounded fallback as default-avoid.
+  keeps the unbounded fallback as default-avoid. CVRP code-generation prompts
+  now also receive the same bounded/deadline/evidence constraints through
+  provider-owned active subject code constraints.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-redact-ready-3dd328a-6r-gpt55-20260619T045751Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeconstraints-ready-4cbbd56-6r-gpt55-20260619T050643Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-redact-ready-3dd328a-1r-gpt55-20260619T045751Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeconstraints-ready-4cbbd56-1r-gpt55-20260619T050631Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -257,7 +259,7 @@ Current checkpoint:
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`, and runtime guard coverage for
-  `scion/tools`. The roots were prepared from WSL checkout `3dd328a`.
+  `scion/tools`. The roots were prepared from WSL checkout `4cbbd56`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool

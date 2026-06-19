@@ -39,6 +39,11 @@ Framework:
   bounded two-opt opportunity and warehouse post-v2 follow-up/plateau evidence
   requirement outside prepared-only roots. These remain tainted proposal
   diagnostics and stay out of `DecisionFeatures`.
+- CVRP solver-design code generation now receives provider-owned active subject
+  code constraints for the large-instance two-opt follow-up: derive an explicit
+  deadline/remaining-time guard, avoid unbounded `_two_opt_intra`/full-VNS
+  fallback, preserve feasibility/route-count, and emit activation, budget, and
+  direct effect telemetry for postrun pair-level review.
 - Adapter-owned measurement/opportunity diagnostics are redacted before prompt
   exposure for raw pair/calibration rows, BKS/gap details, holdout/case details,
   prompt ratios, and LLM text.
@@ -104,8 +109,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `3dd328a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-redact-ready-3dd328a-6r-gpt55-20260619T045751Z-claw`.
+- Current prepared root, prepared from WSL checkout `4cbbd56`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeconstraints-ready-4cbbd56-6r-gpt55-20260619T050643Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -128,16 +133,18 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `3dd328a`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-redact-ready-3dd328a-1r-gpt55-20260619T045751Z-claw`.
+- Current prepared root, prepared from WSL checkout `4cbbd56`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeconstraints-ready-4cbbd56-1r-gpt55-20260619T050631Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
   preserve feasibility/route-count evidence, and require pair-level objective,
-  feasibility, route-count, and wall-clock evidence. Because the root is
-  prepare-only, required answers focus on launch/readiness/handoff rather than
-  research-quality or bounded-twoopt conclusions; the CVRP specialist review
-  axes are marked deferred until post-launch current-run evidence exists.
+  feasibility, route-count, and wall-clock evidence. The code-generation prompt
+  receives the same bounded/deadline/evidence constraints through CVRP active
+  subject code constraints. Because the root is prepare-only, required answers
+  focus on launch/readiness/handoff rather than research-quality or bounded
+  two-opt conclusions; the CVRP specialist review axes are marked deferred until
+  post-launch current-run evidence exists.
 - Postrun bounded two-opt review readiness now requires a large/two-opt
   protocol-effect row signal in measurement evidence. Research-continuity family
   mentions remain context only and cannot by themselves make the two-opt
