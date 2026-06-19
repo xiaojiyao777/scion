@@ -27,6 +27,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["ready"] is True
     assert report["static_ready"] is True
     assert report["launch_ready"] is False
+    assert report["failed_required_checks"] == []
+    assert report["failed_static_required_checks"] == []
+    assert report["failed_optional_checks"] == []
     assert report["checks"]["prepared_only_not_started"]["status"] == "ok"
     assert report["checks"]["prepared_contract_complete"]["status"] == "ok"
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
@@ -97,6 +100,8 @@ def test_launch_readiness_rejects_already_started_root(tmp_path: Path) -> None:
     assert report["ready"] is False
     assert report["static_ready"] is False
     assert report["launch_ready"] is False
+    assert "not_already_started" in report["failed_required_checks"]
+    assert "not_already_started" in report["failed_static_required_checks"]
     assert report["checks"]["not_already_started"]["status"] == "failed"
 
 
@@ -1260,6 +1265,8 @@ def test_launch_readiness_keeps_static_ready_when_completion_preflight_fails(
     assert report["ready"] is False
     assert report["static_ready"] is True
     assert report["launch_ready"] is False
+    assert report["failed_required_checks"] == ["completion_preflight"]
+    assert report["failed_static_required_checks"] == []
     assert report["checks"]["completion_preflight"]["status"] == "failed"
 
 
@@ -2393,6 +2400,8 @@ def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(
     assert payload["static_ready"] is True
     assert payload["launch_ready"] is False
     assert payload["ready"] is False
+    assert payload["failed_required_checks"] == ["completion_preflight"]
+    assert payload["failed_static_required_checks"] == []
     assert payload["checks"]["completion_preflight"]["status"] == "failed"
 
 

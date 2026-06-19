@@ -447,6 +447,11 @@ def build_readiness(
     )
     ready = bool(static_ready and completion_ready)
     launch_ready = bool(static_ready and completion_preflight and completion_ready)
+    failed_required_checks = _failed_check_names(checks, required=True)
+    failed_static_required_checks = [
+        name for name in failed_required_checks if name != "completion_preflight"
+    ]
+    failed_optional_checks = _failed_check_names(checks, required=False)
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
@@ -460,8 +465,24 @@ def build_readiness(
         "launch_ready": launch_ready,
         "ready": ready,
         "completion_preflight_required": completion_preflight,
+        "failed_required_checks": failed_required_checks,
+        "failed_static_required_checks": failed_static_required_checks,
+        "failed_optional_checks": failed_optional_checks,
         "checks": checks,
     }
+
+
+def _failed_check_names(
+    checks: dict[str, dict[str, Any]],
+    *,
+    required: bool,
+) -> list[str]:
+    return [
+        name
+        for name, item in sorted(checks.items())
+        if item.get("required") is required
+        and item.get("status") not in {"ok", "skipped"}
+    ]
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -475,6 +496,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Static ready: `{_display(report.get('static_ready'))}`",
         f"- Launch ready: `{_display(report.get('launch_ready'))}`",
         f"- Completion preflight required: `{_display(report.get('completion_preflight_required'))}`",
+        f"- Failed required checks: `{_display(report.get('failed_required_checks'))}`",
         "",
         "## Checks",
         "| Check | Status | Required | Detail |",
