@@ -1236,6 +1236,35 @@ def test_launch_readiness_rejects_postrun_status_marker_before_rebuild(
     )
 
 
+def test_launch_readiness_rejects_postrun_readiness_marker_before_readiness(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    marker = (
+        '    echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS"\n'
+    )
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(marker, "", 1)
+    run_text = run_text.replace(
+        "write_postrun_acceptance_reports() {\n",
+        "write_postrun_acceptance_reports() {\n" + marker,
+        1,
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    strict_check = report["checks"]["run_script_strict_postrun_readiness"]
+    assert strict_check["required"] is True
+    assert strict_check["status"] == "failed"
+    assert {"reason": "postrun_readiness_exit_status_before_readiness"} in (
+        strict_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_comment_only_strict_postrun_readiness(
     tmp_path: Path,
 ) -> None:

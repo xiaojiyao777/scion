@@ -932,6 +932,12 @@ def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
         failures.append({"reason": "postrun_acceptance_strict_flag_missing"})
     if readiness_marker_pos < 0:
         failures.append({"reason": "postrun_readiness_exit_status_marker_missing"})
+    if (
+        postrun_pos >= 0
+        and readiness_marker_pos >= 0
+        and readiness_marker_pos < postrun_pos
+    ):
+        failures.append({"reason": "postrun_readiness_exit_status_before_readiness"})
 
     detail = {
         "run_script": str(run_sh),
