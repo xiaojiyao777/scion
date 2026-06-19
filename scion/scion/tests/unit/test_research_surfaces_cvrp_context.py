@@ -43,6 +43,10 @@ def test_cvrp_hypothesis_context_exposes_only_active_solver_design() -> None:
     assert "adaptive embedded-VNS share-70 line" in prompt_text
     assert "simple share70 cap/rescue variants are rejected" in prompt_text
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in prompt_text
+    assert "large_instance_intra_route_two_opt_seed" in prompt_text
+    assert "deadline-aware bounded" in prompt_text
+    assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in prompt_text
+    assert "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md" in prompt_text
     assert "launch_research_focus" not in prompt_text
     assert "proposal-only" in prompt_text
     assert "Do not hardcode case ids, BKS values, seeds, or split membership" in prompt_text

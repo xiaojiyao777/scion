@@ -212,6 +212,19 @@ class CvrpAdapter:
                     ),
                 },
                 {
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "required_evidence": (
+                        "deadline-aware bounded intra-route two-opt on large "
+                        "cases with pair-level total_distance, feasibility, "
+                        "route-count, and wall-clock evidence; unbounded "
+                        "fallback is not accepted"
+                    ),
+                    "seed_report": (
+                        "scion/docs/experiments/v0.4/"
+                        "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md"
+                    ),
+                },
+                {
                     "mechanism_family": "acceptance_or_adaptive_weighting",
                     "required_evidence": (
                         "direct move acceptance and downstream objective "
@@ -262,6 +275,32 @@ class CvrpAdapter:
                     "reason_codes": [
                         "CVRP_AGGREGATE_HEADROOM_REMAINS",
                         "DEFAULT_AVOID_PRIOR_WEAK_OR_NEGATIVE",
+                    ],
+                },
+                {
+                    "diagnostic_type": "focused_mechanism_seed",
+                    "surface": "solver_design",
+                    "mechanism_family": "large_instance_intra_route_two_opt_seed",
+                    "metric": "total_distance",
+                    "summary": (
+                        "External-control replay found 8/8 feasible XL wins "
+                        "for an intra-route two-opt seed in "
+                        "scion/docs/experiments/v0.4/"
+                        "v04-vrp-large-instance-two-opt-seed-evidence-20260618.md, "
+                        "but only a deadline-aware bounded implementation is in scope."
+                    ),
+                    "recommended_action": (
+                        "If pursuing this seed, derive the local-search "
+                        "deadline from the solver time limit, poll remaining "
+                        "wall-clock budget before route, sweep, and "
+                        "improvement work, and report pair-level objective, "
+                        "feasibility, route-count, and wall-clock evidence."
+                    ),
+                    "confidence": "medium",
+                    "reason_codes": [
+                        "CVRP_LARGE_INSTANCE_TWO_OPT_SEED",
+                        "BOUNDED_DEADLINE_REQUIRED",
+                        "UNBOUNDED_TWO_OPT_DEFAULT_REJECT",
                     ],
                 },
                 {
