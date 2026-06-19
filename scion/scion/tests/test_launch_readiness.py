@@ -1710,6 +1710,31 @@ def test_launch_readiness_rejects_missing_pythonpath(
     } in pythonpath_check["detail"]["failures"]
 
 
+def test_launch_readiness_rejects_relative_scion_dir_pythonpath(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8")
+        .replace(f"SCION_DIR={SCION_DIR}", "SCION_DIR=scion")
+        .replace(f"PYTHONPATH={SCION_DIR}", "PYTHONPATH=scion"),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    pythonpath_check = report["checks"]["run_script_pythonpath_enforced"]
+    assert pythonpath_check["status"] == "failed"
+    assert {
+        "reason": "scion_dir_not_absolute",
+        "launch_env": str(launch_env),
+        "scion_dir": "scion",
+    } in pythonpath_check["detail"]["failures"]
+
+
 def test_launch_readiness_rejects_non_gpt55_model(
     tmp_path: Path,
 ) -> None:

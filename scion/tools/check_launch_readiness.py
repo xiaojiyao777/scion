@@ -1226,6 +1226,14 @@ def _run_script_pythonpath_enforced(root: Path, run_sh: Path) -> tuple[str, Any]
 
     scion_dir = _shell_assignment_value(launch_env_text, "SCION_DIR")
     pythonpath = _shell_assignment_value(launch_env_text, "PYTHONPATH")
+    if scion_dir and not Path(scion_dir).expanduser().is_absolute():
+        failures.append(
+            {
+                "reason": "scion_dir_not_absolute",
+                "launch_env": str(launch_env),
+                "scion_dir": scion_dir,
+            }
+        )
     if not pythonpath:
         failures.append({"reason": "pythonpath_missing", "launch_env": str(launch_env)})
     elif scion_dir and not _path_list_contains(pythonpath, scion_dir):
