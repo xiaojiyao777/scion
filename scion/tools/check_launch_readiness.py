@@ -169,6 +169,11 @@ RUN_SCRIPT_RUNTIME_GUARD_MARKERS = (
     ),
     ("commit_mismatch_failure_marker", "GIT_COMMIT_MISMATCH"),
 )
+RUN_SCRIPT_RUNTIME_GUARD_ECHO_MARKERS = {
+    "dirty_failure_marker",
+    "doc_only_mismatch_allowance_marker",
+    "commit_mismatch_failure_marker",
+}
 
 
 def build_readiness(
@@ -718,9 +723,15 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
         )
 
     marker_positions: dict[str, int] = {}
+    ignored_marker_counts: dict[str, int] = {}
     missing_markers: list[str] = []
     for name, marker in RUN_SCRIPT_RUNTIME_GUARD_MARKERS:
-        position = text.find(marker)
+        position, ignored = _find_runtime_guard_marker_position(
+            text,
+            marker,
+            allow_echo=name in RUN_SCRIPT_RUNTIME_GUARD_ECHO_MARKERS,
+        )
+        ignored_marker_counts[name] = ignored
         if position < 0:
             missing_markers.append(name)
         else:
@@ -761,6 +772,7 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
         "required_markers": [name for name, _ in RUN_SCRIPT_RUNTIME_GUARD_MARKERS],
         "missing_markers": missing_markers,
         "markers_after_campaign_command": markers_after_campaign,
+        "ignored_non_executable_marker_counts": ignored_marker_counts,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
@@ -1596,6 +1608,29 @@ def _find_executable_marker_position(text: str, marker: str) -> tuple[int, int]:
         stripped = line.strip()
         if marker in stripped:
             if stripped.startswith("#"):
+                ignored += 1
+            else:
+                return offset + line.find(marker), ignored
+        offset += len(line)
+    return -1, ignored
+
+
+def _find_runtime_guard_marker_position(
+    text: str,
+    marker: str,
+    *,
+    allow_echo: bool,
+) -> tuple[int, int]:
+    offset = 0
+    ignored = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if marker in stripped:
+            non_executed = (
+                stripped.startswith("#")
+                or (not allow_echo and _line_is_non_executed_shell_text(stripped))
+            )
+            if non_executed:
                 ignored += 1
             else:
                 return offset + line.find(marker), ignored

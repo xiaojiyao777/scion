@@ -314,7 +314,7 @@ def test_launch_readiness_rejects_run_script_guard_after_campaign_command(
             "GIT_COMMIT_SKIP",
             1,
         )
-        + "\n# Late marker should not satisfy launch readiness: GIT_COMMIT_MISMATCH\n",
+        + '\necho "GIT_COMMIT_MISMATCH"\n',
         encoding="utf-8",
     )
 
@@ -327,6 +327,64 @@ def test_launch_readiness_rejects_run_script_guard_after_campaign_command(
     assert guard_check["detail"]["markers_after_campaign_command"] == [
         "commit_mismatch_failure_marker"
     ]
+
+
+def test_launch_readiness_ignores_comment_only_runtime_guard_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        'git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+        'git -C "$REPO_ROOT" status --short -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"',
+    )
+    run_text = run_text.replace(
+        "unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS",
+        '# git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}"\n'
+        "unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS",
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["run_script_runtime_guard_enforced"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert "dirty_status_check" in guard_check["detail"]["missing_markers"]
+    assert guard_check["detail"]["ignored_non_executable_marker_counts"][
+        "dirty_status_check"
+    ] == 1
+
+
+def test_launch_readiness_rejects_echo_only_runtime_guard_command_marker(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        'git -C "$REPO_ROOT" rev-parse --short HEAD',
+        'git -C "$REPO_ROOT" rev-parse --verify HEAD',
+    )
+    run_text = run_text.replace(
+        "unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS",
+        'echo \'git -C "$REPO_ROOT" rev-parse --short HEAD\'\n'
+        "unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS",
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_check = report["checks"]["run_script_runtime_guard_enforced"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_check["status"] == "failed"
+    assert "actual_commit_read" in guard_check["detail"]["missing_markers"]
+    assert guard_check["detail"]["ignored_non_executable_marker_counts"][
+        "actual_commit_read"
+    ] == 1
 
 
 def test_launch_readiness_rejects_missing_prepared_analysis_brief(
