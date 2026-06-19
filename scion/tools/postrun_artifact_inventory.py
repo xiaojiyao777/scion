@@ -52,6 +52,7 @@ RUN_LOG_MARKERS = (
     "POSTRUN_REPORTS_EXIT_STATUS",
     "POSTRUN_REPORTS_FINISHED_AT",
     "POSTRUN_REPORTS_STARTED_AT",
+    "POSTRUN_READINESS_EXIT_STATUS",
 )
 EXIT_MARKERS = (
     "POSTRUN_ACCEPTANCE_DIR",
@@ -65,6 +66,7 @@ POSTRUN_REPORT_DIRS = (
     "manifests",
     "analysis_brief",
     "inventory",
+    "readiness",
     "rebuild",
 )
 PREPARED_RUN_MANIFEST_SCHEMA = "scion.launcher_prepared_run_manifest.v1"

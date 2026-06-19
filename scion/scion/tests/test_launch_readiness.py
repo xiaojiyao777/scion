@@ -596,6 +596,7 @@ def _write_prepared_root(
                 "manifests",
                 "analysis_brief",
                 "inventory",
+                "readiness",
                 "rebuild",
             ],
         },

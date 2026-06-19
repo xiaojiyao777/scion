@@ -122,6 +122,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "manifests",
         "analysis_brief",
         "inventory",
+        "readiness",
         "rebuild",
     ]
     assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
@@ -210,11 +211,16 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "--detail \"$PREFLIGHT_DETAIL\"" in run_sh_text
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
+    assert "tools/check_postrun_acceptance.py" in run_sh_text
+    assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
+        run_sh_text
+    )
     assert '--report-stem "$REPORT_STEM"' in run_sh_text
     assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" in run_sh_text
+    assert "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" in run_sh_text
     assert "--agentic-proposal" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt

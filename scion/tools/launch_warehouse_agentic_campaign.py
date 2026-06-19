@@ -93,6 +93,7 @@ POSTRUN_ACCEPTANCE_FAMILIES = (
     "manifests",
     "analysis_brief",
     "inventory",
+    "readiness",
     "rebuild",
 )
 PREPARED_HANDOFF_FAMILIES = (
@@ -158,8 +159,19 @@ write_postrun_acceptance_reports() {
   POSTRUN_STATUS=0
   "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" \
     "${rebuild_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS=$?
+  echo "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" >> "$RUN_ROOT/run.log"
+  mkdir -p "$REPORT_DIR/readiness"
+  POSTRUN_READINESS_STATUS=0
+  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
+    --format json \
+    > "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" \
+    2>> "$RUN_ROOT/run.log" || POSTRUN_READINESS_STATUS=$?
+  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
+    --format markdown \
+    > "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.md" \
+    2>> "$RUN_ROOT/run.log" || true
   {
-    echo "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS"
+    echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS"
     echo "POSTRUN_REPORTS_FINISHED_AT:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$RUN_ROOT/run.log"
 }

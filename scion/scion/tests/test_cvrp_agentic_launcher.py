@@ -172,6 +172,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "manifests",
         "analysis_brief",
         "inventory",
+        "readiness",
         "rebuild",
     ]
     assert prepared_manifest["report_metadata"]["prepared_handoff_dir"] == str(
@@ -253,11 +254,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     )
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
+    assert "tools/check_postrun_acceptance.py" in run_sh_text
+    assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
+        run_sh_text
+    )
     assert '--report-stem "$REPORT_STEM"' in run_sh_text
     assert '--observed-control-arm "$OBSERVED_CONTROL_ARM"' in run_sh_text
     assert 'OBSERVED_CONTROL_ARM="${MEASUREMENT_GOVERNANCE//-/_}"' in run_sh_text
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
     assert "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" in run_sh_text
+    assert "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" in run_sh_text
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt

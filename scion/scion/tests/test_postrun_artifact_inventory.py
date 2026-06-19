@@ -45,6 +45,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
                 "POSTRUN_REPORT_DIR:/tmp/run-a/postrun_acceptance",
                 "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=a actual=b paths=docs",
                 "POSTRUN_REPORTS_EXIT_STATUS:0",
+                "POSTRUN_READINESS_EXIT_STATUS:0",
                 "POSTRUN_REPORTS_FINISHED_AT:2026-06-18T00:01:00Z",
             ]
         ),
@@ -304,6 +305,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "POSTRUN_REPORTS_EXIT_STATUS": 1,
         "POSTRUN_REPORTS_FINISHED_AT": 1,
         "POSTRUN_REPORTS_STARTED_AT": 1,
+        "POSTRUN_READINESS_EXIT_STATUS": 1,
     }
     assert data["launcher"]["exit_markers"] == {
         "POSTRUN_ACCEPTANCE_DIR": 1,
@@ -315,6 +317,7 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
         "failures": 1,
         "inventory": 1,
         "manifests": 1,
+        "readiness": 0,
         "rebuild": 1,
         "research_efficiency": 1,
         "summaries": 1,
@@ -607,6 +610,7 @@ def test_prepared_manifest_contract_accepts_mirrored_runner_paths(
                     "manifests",
                     "analysis_brief",
                     "inventory",
+                    "readiness",
                     "rebuild",
                 ],
             },
@@ -765,6 +769,7 @@ def test_prepared_manifest_contract_requires_cvrp_measurement_handoff(
                     "manifests",
                     "analysis_brief",
                     "inventory",
+                    "readiness",
                     "rebuild",
                 ],
             },
@@ -889,6 +894,7 @@ def test_prepared_manifest_contract_requires_warehouse_followup_handoff(
                     "manifests",
                     "analysis_brief",
                     "inventory",
+                    "readiness",
                     "rebuild",
                 ],
             },
