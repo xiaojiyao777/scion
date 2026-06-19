@@ -89,6 +89,16 @@ Prepared root:
 
 `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`
 
+Superseded active root:
+
+This prepared root has been superseded by the bounded-constraints root generated
+after `large_instance_two_opt_constraints` was added:
+
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-dc83d83-1r-gpt55-20260619T000530Z-claw`
+
+Use the superseding root for launch after auth is restored. See
+`scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`.
+
 Static readiness:
 
 ```json
@@ -124,9 +134,9 @@ Strict launch readiness still fails only at the real completion preflight:
 }
 ```
 
-The existing warehouse prepared root remains statically ready under checkout
-`ece0256`; its git consistency detail is `checkout differs, but runtime guard
-paths are unchanged`.
+This report's seed root is historical. The current CVRP prepared root is the
+bounded-constraints root listed above; the current warehouse prepared root is
+tracked in `scion/docs/status/current-state.md`.
 
 ## Next Gate
 

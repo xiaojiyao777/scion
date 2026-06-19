@@ -31,29 +31,29 @@ launching a campaign or mutating runtime state.
 
 ## Current Active Root Refresh
 
-Current rebuild verification checkout: `9660c10`.
+Current rebuild verification checkouts: CVRP `dc83d83`, warehouse `9660c10`.
 
 Refreshed on WSL:
 
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-dc83d83-1r-gpt55-20260619T000530Z-claw`
 - Warehouse:
   `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-identityguard-7f3028a-6r-gpt55-20260618T224522Z-claw`
 
 Both rebuild manifests report:
 
 - `complete=true`
-- `checkout_commit=9660c10`
 - `campaign_state_mutated=false`
 - `scheduler_state_mutated=false`
 - `promotion_state_mutated=false`
 - `decision_features_excluded=true`
 
-Prepared manifest commits remain root-specific because these are existing
-prepared launch roots; only their report-only handoff artifacts were refreshed
-from the newer checkout:
+Prepared manifest commits are root-specific. The current CVRP root was
+regenerated from the bounded large-twoopt checkout; the warehouse root is still
+the existing champion-v2 follow-up root with refreshed report-only handoff
+artifacts:
 
-- CVRP: `prepared_manifest_commit=ece0256`
+- CVRP: `prepared_manifest_commit=dc83d83`
 - Warehouse: `prepared_manifest_commit=7f3028a`
 
 ## Problem-Specific Coverage

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-Last updated: 2026-06-18
+Last updated: 2026-06-19
 
 This is the operational resume point, not a run log. Replace stale conclusions
 instead of appending history. Detailed commands, counters, and caveats belong in
@@ -58,12 +58,13 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, rebuilt report-only from WSL checkout `9660c10` with
-  prepared manifest commit `ece0256`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-seed-ready-ece0256-1r-gpt55-20260618T231842Z-claw`.
-- The handoff exposes the large-instance two-opt seed only as proposal guidance:
-  pursue a deadline-aware bounded local-search mechanism and avoid the
-  unbounded fallback diff.
+- Current prepared root, prepared from WSL checkout `dc83d83`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-dc83d83-1r-gpt55-20260619T000530Z-claw`.
+- The handoff exposes the large-instance two-opt seed only as proposal guidance
+  and now carries structured `large_instance_two_opt_constraints`: derive an
+  explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
+  preserve feasibility/route-count evidence, and require pair-level objective,
+  feasibility, route-count, and wall-clock evidence.
 
 Infrastructure:
 
@@ -74,8 +75,8 @@ Infrastructure:
   completion preflight `failed`.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `refreshing=1`,
-  `total=1`.
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`. The
+  non-active account may appear as expired or refreshing.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -112,6 +113,7 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-launch-ready-repair-20260618.md`,
   `scion/docs/experiments/v0.4/v04-vrp-large-instance-two-opt-seed-evidence-20260618.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-launch-focus-repair-20260618.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,
   and `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-contract-coverage-repair-20260618.md`.
 - WSL reference:
   `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
