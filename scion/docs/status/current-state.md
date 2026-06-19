@@ -40,6 +40,11 @@ Framework:
   warehouse/CVRP review axes until post-launch current-run evidence exists.
   Launch readiness now requires those prepared analysis briefs to carry current
   structured prepared-only semantics before a root can be started.
+- Postrun analysis now isolates invalid-infra-only roots as non-research
+  evidence: copied or partial artifacts remain under `resume_snapshot`,
+  current-run counters and Phase 4 coverage are zeroed, and warehouse/CVRP
+  summaries classify them as infra-only rather than prepared-only or
+  review-ready.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -136,6 +141,7 @@ Infrastructure:
   requiring current structured prepared-only analysis brief semantics and
   prepared analysis brief contract identity.
 - Current repair context:
+  `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-bounded-handoff-repair-20260619.md`,

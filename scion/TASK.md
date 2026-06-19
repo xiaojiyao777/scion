@@ -476,6 +476,11 @@ Current checkpoint:
   completion preflight returns HTTP `401` / `not_authenticated` with
   `code=invalid_api_key` and auth pool `active=0`, `total=1`.
   The non-active account may appear as expired or refreshing.
+  Postrun evidence handling now also isolates any `invalid_infra_only` root:
+  copied or partial artifacts remain under `resume_snapshot`, current-run
+  counters and Phase 4 coverage are zeroed, and warehouse/CVRP summaries use
+  `invalid_infra_only_no_research_conclusion` with
+  `not_actionable_invalid_infra_only` review axes.
   Prepared handoff rebuilds now also emit report-only
   `prompt_context_readiness` artifacts. The current CVRP and warehouse
   prepared roots both report `ready_for_launch_prompt_audit=true` with no
@@ -516,6 +521,8 @@ Current checkpoint:
   `scion/docs/experiments/v0.4/v04-prepared-analysis-brief-readiness-guard-20260619.md`.
   Current prepared brief contract identity guard and prepared-root refresh:
   `scion/docs/experiments/v0.4/v04-prepared-brief-contract-identity-guard-20260619.md`.
+  Current invalid-infra postrun evidence isolation:
+  `scion/docs/experiments/v0.4/v04-invalid-infra-postrun-evidence-isolation-20260619.md`.
   Current prepared prompt/context readiness report:
   `scion/docs/experiments/v0.4/v04-prepared-prompt-context-readiness-handoff-repair-20260618.md`.
   Current strict launch-readiness report:
