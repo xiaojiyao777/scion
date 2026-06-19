@@ -34,6 +34,7 @@ Framework:
   problem-specific handoff, runtime guards, model route, active-checkout
   `PYTHONPATH`, no-early-stop semantics, completion preflight, pre-campaign
   failure reporting, strict postrun rebuild-before-readiness reporting, strict
+  postrun readiness status-after-check reporting,
   prepared/postrun rebuild-manifest identity and output scope, and strict
   postrun readiness before a root is launched.
 - Postrun delegated-review readiness is interpretation-specific. Protocol
@@ -53,8 +54,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `bd11336`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postboundary-bd11336-6r-gpt55-6r-gpt55-20260619T155053Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `2d1b93b`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postreadiness-2d1b93b-6r-gpt55-6r-gpt55-20260619T155911Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -89,8 +90,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `bd11336`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postboundary-bd11336-1r-gpt55-1r-gpt55-20260619T155107Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `2d1b93b`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postreadiness-2d1b93b-1r-gpt55-1r-gpt55-20260619T155924Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -111,7 +112,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `bd11336`
+- The active prepared roots were generated from WSL runtime commit `2d1b93b`
   after the CVRP CMT case-protection handoff and analysis-brief surface
   repairs, plus postrun and prepared-handoff stale/undeclared output guards and
   prepared/postrun rebuild-manifest identity and output scope validation.
@@ -132,6 +133,9 @@ Infrastructure:
   postrun readiness command and `POSTRUN_REPORTS_EXIT_STATUS` emitted after the
   rebuild command, so incomplete postrun bundle rebuilds produce a nonzero
   status instead of a misleading success.
+- It also requires `run_script_strict_postrun_readiness=ok`, with
+  `POSTRUN_READINESS_EXIT_STATUS` emitted after the strict postrun readiness
+  command.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -172,7 +176,7 @@ Infrastructure:
 - Current planning summary:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-rebuild-manifest-boundary-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-postrun-readiness-status-order-20260619.md`.
 - Historical repair details remain in `scion/docs/experiments/v0.4/`; this
   page keeps only the current root pointer, launch blocker, and next action.
 - WSL reference:
