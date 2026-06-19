@@ -419,6 +419,17 @@ def _prompt_source_visibility_actionability(
         <= 0
     ):
         failures.append("hypothesis_target_source_visibility_not_visible")
+    hypothesis_required_count = _int_or_zero(
+        source_visibility.get("hypothesis_target_source_required_count")
+    )
+    hypothesis_visible_count = _int_or_zero(
+        source_visibility.get("hypothesis_target_source_visible_count")
+    )
+    if (
+        hypothesis_required_count > 0
+        and hypothesis_visible_count < hypothesis_required_count
+    ):
+        failures.append("hypothesis_target_required_source_not_fully_visible")
     code_trace_count = _int_or_zero(source_visibility.get("code_trace_count"))
     code_protected_source_visible_count = _int_or_zero(
         source_visibility.get("code_protected_source_visible_count")
@@ -501,6 +512,9 @@ def _prompt_source_visibility_actionability(
             ),
             "hypothesis_target_source_trace_count": source_visibility.get(
                 "hypothesis_target_source_trace_count"
+            ),
+            "hypothesis_target_source_required_count": source_visibility.get(
+                "hypothesis_target_source_required_count"
             ),
             "hypothesis_target_source_visible_count": source_visibility.get(
                 "hypothesis_target_source_visible_count"
