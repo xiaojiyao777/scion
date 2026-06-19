@@ -257,6 +257,18 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         research_context_detail,
         required=research_context_status != "skipped",
     )
+    failure_taxonomy_status, failure_taxonomy_detail = (
+        _failure_taxonomy_actionability(
+            analysis_brief,
+            inventory,
+        )
+    )
+    add_check(
+        "failure_taxonomy_actionability",
+        failure_taxonomy_status,
+        failure_taxonomy_detail,
+        required=failure_taxonomy_status != "skipped",
+    )
     add_check(
         "postrun_report_status_marker",
         "ok"
@@ -825,6 +837,81 @@ def _research_context_actionability(
             ),
             "weak_positive_observed": indicators.get("weak_positive_observed"),
             "weak_positive_missed": indicators.get("weak_positive_missed"),
+        },
+    )
+
+
+def _failure_taxonomy_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    summary = _mapping_or_empty(brief.get("failure_taxonomy_summary"))
+    aggregate = _mapping_or_empty(summary.get("aggregate"))
+    proposal_quality = _mapping_or_empty(aggregate.get("proposal_quality"))
+    entries = summary.get("entries")
+    entry_count = len(entries) if isinstance(entries, list) else 0
+    report_evidence_count = max(
+        _int_or_zero(summary.get("failure_report_count")),
+        entry_count,
+    )
+    run_validity_counts = _mapping_or_empty(
+        aggregate.get("run_validity_status_counts")
+    )
+    failure_observation_counts = _mapping_or_empty(
+        aggregate.get("failure_observation_counts")
+    )
+    proposal_attempts = _int_or_zero(
+        proposal_quality.get("proposal_attempts_total")
+    )
+    report_evidence_available = (
+        bool(run_validity_counts)
+        or bool(failure_observation_counts)
+        or proposal_attempts > 0
+    )
+    failures: list[str] = []
+    if (
+        summary.get("schema_version")
+        != "scion.postrun_failure_taxonomy_summary.v1"
+    ):
+        failures.append("failure_taxonomy_schema_stale")
+    if summary.get("current_run_evidence") is not True:
+        failures.append("failure_taxonomy_not_current_run_evidence")
+    if summary.get("available") is not True:
+        failures.append("failure_taxonomy_unavailable")
+    if _int_or_zero(summary.get("report_count")) <= 0:
+        failures.append("failure_taxonomy_report_count_missing")
+    if report_evidence_count <= 0:
+        failures.append("failure_taxonomy_entry_missing")
+    if not report_evidence_available:
+        failures.append("failure_taxonomy_report_evidence_missing")
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "current_run_evidence": summary.get("current_run_evidence"),
+            "available": summary.get("available"),
+            "report_count": summary.get("report_count"),
+            "failure_report_count": summary.get("failure_report_count"),
+            "entry_count": entry_count,
+            "run_validity_status_counts": run_validity_counts,
+            "failure_observation_counts": failure_observation_counts,
+            "proposal_attempts_total": proposal_quality.get(
+                "proposal_attempts_total"
+            ),
+            "proposal_quality_blocks": proposal_quality.get(
+                "proposal_quality_blocks"
+            ),
+            "quality_blocks": proposal_quality.get("quality_blocks"),
+            "quality_block_ledger_count": proposal_quality.get(
+                "quality_block_ledger_count"
+            ),
         },
     )
 

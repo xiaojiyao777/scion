@@ -484,6 +484,67 @@ def test_postrun_acceptance_requires_research_context_actionability(
     )
 
 
+def test_postrun_acceptance_requires_failure_taxonomy_actionability(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-missing-taxonomy")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief["failure_taxonomy_summary"] = {
+        "schema_version": "scion.postrun_failure_taxonomy_summary.v1",
+        "current_run_evidence": True,
+        "available": False,
+        "report_count": 0,
+        "failure_report_count": 0,
+        "aggregate": {},
+        "entries": [],
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+    taxonomy_check = readiness["checks"]["failure_taxonomy_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert prompt_check["status"] == "ok"
+    assert context_check["status"] == "ok"
+    assert taxonomy_check["required"] is True
+    assert taxonomy_check["status"] == "failed"
+    assert "failure_taxonomy_unavailable" in taxonomy_check["detail"]["failures"]
+    assert "failure_taxonomy_report_count_missing" in taxonomy_check["detail"][
+        "failures"
+    ]
+    assert "failure_taxonomy_entry_missing" in taxonomy_check["detail"]["failures"]
+    assert "failure_taxonomy_report_evidence_missing" in taxonomy_check["detail"][
+        "failures"
+    ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
     tmp_path: Path,
 ) -> None:
@@ -1139,6 +1200,57 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
         },
         "actionability_gaps": [],
         "recommendations": [],
+    }
+    brief["failure_taxonomy_summary"] = {
+        "schema_version": "scion.postrun_failure_taxonomy_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "raw_logs_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "report_count": 1,
+        "failure_report_count": 1,
+        "aggregate": {
+            "failure_count_maxima": {},
+            "failure_observation_counts": {},
+            "failure_source_counts": {},
+            "run_validity_status_counts": {"valid": 1},
+            "stopped_reason_counts": {"requested_rounds_complete": 1},
+            "proposal_quality": {
+                "proposal_attempts_total": 1,
+                "proposal_attempts_consumed": 1,
+                "proposal_quality_blocks": 0,
+                "quality_blocks": 0,
+                "quality_block_ledger_count": 0,
+                "reports_with_quality_blocks": 0,
+                "quality_block_reason_counts": {},
+            },
+            "top_examples": [],
+        },
+        "entries": [
+            {
+                "report": "fixture.research_efficiency.v1.json",
+                "path": "postrun_acceptance/research_efficiency/"
+                "fixture.research_efficiency.v1.json",
+                "proposal_quality": {
+                    "proposal_attempts_total": 1,
+                    "proposal_attempts_consumed": 1,
+                    "proposal_quality_blocks": 0,
+                    "quality_blocks": 0,
+                    "quality_block_ledger_count": 0,
+                },
+                "failure_taxonomy": {},
+                "failure_observations_total": 0,
+                "top_failure_keys": [],
+                "top_examples": [],
+                "run_status": {
+                    "run_validity_status": "valid",
+                    "run_completeness_status": "complete",
+                    "run_complete": True,
+                },
+            }
+        ],
     }
 
 
