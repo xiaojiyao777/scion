@@ -62,11 +62,11 @@ Framework:
 - Focused warehouse/CVRP v0.4 launchers now pass explicit proposal-attempt,
   proposal-quality-loop, and APS tool-loop headroom into `scion run`: proposal
   limits `64`/`64`, APS session timeout `3600`, max steps `240`, max tool calls
-  `200`, and max observation chars `2000000`. This removes the old exposure to
-  shallow proposal fallback and APS internal tool-loop truncation before useful
-  protocol evidence exists. Launch readiness requires clean runtime-guard paths
-  and verifies those values across `launch.env`, manifest execution, manifest
-  command, and `run.sh`.
+  `200`, max code-phase tool calls `200`, and max observation chars `2000000`.
+  This removes the old exposure to shallow proposal fallback and APS internal
+  tool-loop/code-phase truncation before useful protocol evidence exists. Launch
+  readiness requires clean runtime-guard paths and verifies those values across
+  `launch.env`, manifest execution, manifest command, and `run.sh`.
 - CVRP and warehouse prepared handoff measurement diagnostics are now derived from
   `problem-v1.yaml` measurement declarations and the declared A/A
   `calibration_ref`. Prepared-contract readiness rejects handoffs that
@@ -94,11 +94,12 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `e69d6e53`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-toolheadroom-e69d6e53-6r-gpt55-20260619T200840Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `f00b3a1b`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codeheadroom-f00b3a1b-preflight-6r-gpt55-20260619T202816Z-claw`.
   Its prepared manifest records proposal headroom `64`/`64`, APS headroom
-  `3600`/`240`/`200`/`2000000`, and measurement handoff source
-  `problem_v1.measurement.calibration_ref`.
+  `3600`/`240`/`200`/`200`/`2000000`, and measurement handoff source
+  `problem_v1.measurement.calibration_ref`. The fourth APS value is code-phase
+  tool-call headroom.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, decision-boundary coverage, and
   problem-owned warehouse measurement/runtime diagnostics: raw `total_cost` MDE
@@ -139,11 +140,12 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `e69d6e53`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-toolheadroom-e69d6e53-1r-gpt55-20260619T200841Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `f00b3a1b`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codeheadroom-f00b3a1b-preflight-1r-gpt55-20260619T202817Z-claw`.
   Its prepared manifest records proposal headroom `64`/`64`, APS headroom
-  `3600`/`240`/`200`/`2000000`, and measurement handoff source
-  `problem_v1.measurement.calibration_ref`.
+  `3600`/`240`/`200`/`200`/`2000000`, and measurement handoff source
+  `problem_v1.measurement.calibration_ref`. The fourth APS value is code-phase
+  tool-call headroom.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -174,18 +176,19 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `e69d6e53`
+- The active prepared roots were generated from WSL runtime commit `f00b3a1b`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
   proposal/APS-headroom readiness repair plus CVRP/warehouse problem-owned
   measurement-handoff source repair, absolute launch-path readiness repair, and
-  active-subject code-constraint provider-payload readiness repair.
+  active-subject code-constraint provider-payload readiness repair. The current
+  roots also remove the hidden code-phase APS tool-call cap from focused runs.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
   expose proposal-attempt/proposal-quality-loop limits as `64`/`64` and APS
-  tool-loop headroom `3600`/`240`/`200`/`2000000`. Readiness reports
+  tool-loop headroom `3600`/`240`/`200`/`200`/`2000000`. Readiness reports
   `git_runtime_worktree_clean=ok`, `run_script_proposal_headroom_enforced=ok`,
   and `run_script_pythonpath_enforced=ok` with absolute WSL `SCION_DIR` and
   `PYTHONPATH`; both roots also report
@@ -226,8 +229,7 @@ Infrastructure:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `refreshing=1`,
-  `total=1`,
+  launch-readiness preflight saw auth pool `active=0`, `expired=1`, `total=1`,
   and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
