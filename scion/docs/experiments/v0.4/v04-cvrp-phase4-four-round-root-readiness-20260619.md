@@ -67,7 +67,7 @@ Result:
 - failed check: `completion_preflight`
 - completion failure: HTTP `401`, `classification=not_authenticated`,
   `code=invalid_api_key`
-- auth pool: `active=0`, `expired=1`, `total=1`
+- latest auth pool: `active=0`, `refreshing=1`, `total=1`
 - manifest `rounds=4`
 - APS headroom: `3600`/`240`/`200`/`200`/`2000000`
 - proposal headroom: `64`/`64`

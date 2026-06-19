@@ -107,7 +107,7 @@ Both roots report:
 
 The remaining launch blocker is external WSL `gpt-5.5` provider auth. Strict
 completion preflight returns HTTP `401`, `classification=not_authenticated`,
-`code=invalid_api_key`, with auth pool `active=0`, `expired=1`, `total=1`.
+`code=invalid_api_key`, with auth pool `active=0` and no launch-usable account.
 
 ## Acceptance
 
