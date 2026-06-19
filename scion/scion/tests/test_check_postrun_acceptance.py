@@ -62,6 +62,35 @@ def test_postrun_acceptance_readiness_accepts_complete_current_run(
     assert check_tool.main([str(run_root), "--require-current-run-ready"]) == 0
 
 
+def test_postrun_acceptance_infers_legacy_warehouse_run_family(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "legacy-run")
+    (run_root / "run.log").write_text(
+        "Starting campaign: warehouse_delivery (max_rounds=6, mock_llm=False)\n",
+        encoding="utf-8",
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="legacy_warehouse",
+        observed_control_arm="on",
+        control_pair_key="legacy-warehouse:rep01",
+        strict=True,
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["required"] is True
+    assert problem_check["status"] == "failed"
+    assert problem_check["detail"][0]["summary"] == "warehouse_followup_summary"
+    assert problem_check["detail"][0]["problem_family"] == "warehouse_delivery"
+    assert "warehouse_handoff_requirements_incomplete" in problem_check["detail"][0][
+        "blocking_evidence_gaps"
+    ]
+
+
 def test_postrun_acceptance_readiness_rejects_prepared_only_root(
     tmp_path: Path,
 ) -> None:

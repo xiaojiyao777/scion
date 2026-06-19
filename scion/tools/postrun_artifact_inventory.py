@@ -836,6 +836,7 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
 
     manifest_path = run_root / "prepared_run_manifest.v1.json"
     manifest = _read_json(manifest_path)
+    inferred_family = _infer_problem_family_from_run_root(run_root)
     command_text = _read_text(run_root / "command.txt")
     checks: dict[str, dict[str, Any]] = {}
 
@@ -854,7 +855,10 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
             "manifest_path": str(manifest_path),
             "manifest_present": manifest_path.exists(),
             "contract_complete": False,
-            "problem_family": None,
+            "problem_family": inferred_family["problem_family"],
+            "problem_family_source": inferred_family["source"],
+            "problem_family_inferred": inferred_family["problem_family"] is not None,
+            "problem_family_inference_evidence": inferred_family["evidence"],
             "model": None,
             "analysis_intent": None,
             "acceptance_focus": [],
@@ -886,6 +890,19 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
     execution_is_dict = isinstance(execution, dict)
     if not execution_is_dict:
         execution = {}
+    manifest_problem_family = _string_or_none(manifest.get("problem_family"))
+    problem_family = manifest_problem_family or inferred_family["problem_family"]
+    problem_family_source = (
+        "prepared_run_manifest"
+        if manifest_problem_family is not None
+        else inferred_family["source"]
+    )
+    problem_family_inferred = (
+        manifest_problem_family is None and inferred_family["problem_family"] is not None
+    )
+    problem_check_manifest = dict(manifest)
+    if problem_family is not None and manifest_problem_family is None:
+        problem_check_manifest["problem_family"] = problem_family
 
     add_check(
         "manifest_schema",
@@ -986,8 +1003,8 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         git_consistency.get("consistent") is True,
         git_consistency.get("detail"),
     )
-    _add_cvrp_measurement_handoff_checks(manifest, add_check)
-    _add_warehouse_followup_handoff_checks(manifest, add_check)
+    _add_cvrp_measurement_handoff_checks(problem_check_manifest, add_check)
+    _add_warehouse_followup_handoff_checks(problem_check_manifest, add_check)
 
     return {
         "schema_version": PREPARED_RUN_CONTRACT_SCHEMA,
@@ -997,7 +1014,10 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "manifest_path": str(manifest_path),
         "manifest_present": True,
         "contract_complete": all(item["passed"] for item in checks.values()),
-        "problem_family": manifest.get("problem_family"),
+        "problem_family": problem_family,
+        "problem_family_source": problem_family_source,
+        "problem_family_inferred": problem_family_inferred,
+        "problem_family_inference_evidence": inferred_family["evidence"],
         "model": model.get("name"),
         "analysis_intent": _string_or_none(manifest.get("analysis_intent")),
         "acceptance_focus": _string_items(manifest.get("acceptance_focus")),
@@ -1010,6 +1030,49 @@ def _prepared_run_contract(run_root: Path) -> dict[str, Any]:
         "postrun_reports": report_metadata.get("postrun_reports"),
         "checks": checks,
     }
+
+
+def _infer_problem_family_from_run_root(run_root: Path) -> dict[str, Any]:
+    """Infer problem family from deterministic launched-run artifacts only."""
+
+    for rel_path in (Path("run.log"), Path("campaign") / "run.log"):
+        log_path = run_root / rel_path
+        problem_family = _problem_family_from_starting_campaign_log(
+            _read_text(log_path)
+        )
+        if problem_family is not None:
+            return {
+                "problem_family": problem_family,
+                "source": str(rel_path),
+                "evidence": "Starting campaign",
+            }
+
+    warehouse_tree = run_root / "campaign" / "weight_opt_v2"
+    if warehouse_tree.exists():
+        return {
+            "problem_family": "warehouse_delivery",
+            "source": "campaign/weight_opt_v2",
+            "evidence": str(warehouse_tree),
+        }
+
+    return {
+        "problem_family": None,
+        "source": None,
+        "evidence": None,
+    }
+
+
+def _problem_family_from_starting_campaign_log(text: str) -> str | None:
+    for raw_line in text.splitlines():
+        if "Starting campaign:" not in raw_line:
+            continue
+        campaign_name = raw_line.split("Starting campaign:", 1)[1].strip().split()
+        if not campaign_name:
+            continue
+        problem_family = campaign_name[0].strip("`'\"()[]{}:,")
+        if problem_family in {"warehouse_delivery", "cvrp"}:
+            return problem_family
+    return None
 
 
 def _prepared_contract_execution(execution: Mapping[str, Any]) -> dict[str, Any]:
