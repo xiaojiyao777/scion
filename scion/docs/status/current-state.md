@@ -67,8 +67,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `fb2a9b7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-fb2a9b7-6r-gpt55-6r-gpt55-20260619T134530Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `6db5b58`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cmtcase-6db5b58-6r-gpt55-6r-gpt55-20260619T140050Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -107,15 +107,18 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `fb2a9b7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-fb2a9b7-1r-gpt55-1r-gpt55-20260619T134530Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `6db5b58`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cmtcase-6db5b58-1r-gpt55-1r-gpt55-20260619T140050Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
   preserve feasibility/route-count evidence, and require pair-level objective,
-  feasibility, route-count, and wall-clock evidence. The code-generation prompt
-  receives the same bounded/deadline/evidence constraints through CVRP active
-  subject code constraints, and static readiness verifies the
+  feasibility, route-count, and wall-clock evidence. The handoff also carries
+  structured `case_protection_requirements` for CMT2/CMT4 coverage before
+  another construction, route-merge, demand-slack, VNS, or share70-derived
+  branch slot is spent. The code-generation prompt receives the same
+  bounded/deadline/evidence constraints through CVRP active subject code
+  constraints, and static readiness verifies the
   `cvrp_active_subject_code_constraints_prompt_bridge` source/provider markers.
   Because the root is prepare-only, required answers focus on
   launch/readiness/handoff rather than research-quality or bounded two-opt
@@ -133,7 +136,8 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `fb2a9b7`.
+- The active prepared roots were generated from WSL runtime commit `6db5b58`
+  after the CVRP CMT case-protection handoff contract repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prepared-contract consistency,
@@ -143,14 +147,15 @@ Infrastructure:
   consistency, executable `launch.env` source, executable completion
   preflight, executable preflight-failure status writer, executable
   pre-campaign failure markers, executable postrun report function, executable
-  strict postrun readiness, and postrun-reportable campaign/pre-campaign exit
-  paths.
+  strict postrun readiness, postrun-reportable campaign/pre-campaign exit
+  paths, and the CVRP `cvrp_cmt_case_protection_present` prepared-handoff
+  check.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `expired=0`,
-  `refreshing=1`, `total=1`, and no launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `expired=1`,
+  `refreshing=0`, `total=1`, and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -196,6 +201,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-launch-readiness-prepared-contract-consistency-20260619.md`.
 - Current quality-blocked postrun readiness evidence:
   `scion/docs/experiments/v0.4/v04-postrun-quality-blocked-readiness-20260619.md`.
+- Current CVRP CMT case-protection handoff evidence:
+  `scion/docs/experiments/v0.4/v04-cvrp-cmt-case-protection-handoff-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
