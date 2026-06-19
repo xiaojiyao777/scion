@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -2372,6 +2373,31 @@ def test_launch_readiness_cli_json_returns_unready_exit(tmp_path: Path) -> None:
     assert result.returncode == 64
     assert payload["ready"] is False
     assert payload["checks"]["not_already_started"]["status"] == "failed"
+
+
+def test_launch_readiness_cli_uses_current_checkout_without_pythonpath(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        research_focus=_warehouse_research_focus(),
+        runtime_guard_paths="scion/scion :(exclude)scion/scion/tests",
+    )
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL_PATH), str(run_root), "--format", "json"],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    payload = json.loads(result.stdout)
+
+    assert result.returncode in (0, 64), result.stderr
+    assert payload["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
 
 
 def test_launch_readiness_cli_require_launch_ready_implies_completion_preflight(

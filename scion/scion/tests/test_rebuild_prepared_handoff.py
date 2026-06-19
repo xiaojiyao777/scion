@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -372,6 +373,57 @@ def test_rebuild_prepared_handoff_adds_warehouse_code_constraint_bridge(
     assert provider_payload["forbidden_pattern_count"] >= 1
     assert provider_payload["decision_features_excluded"] is True
     assert provider_payload["raw_payload_excluded"] is True
+
+
+def test_rebuild_prepared_handoff_cli_uses_current_checkout_without_pythonpath(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_rebuild_fixture_root(
+        tmp_path,
+        problem_family="warehouse_delivery",
+        report_stem="warehouse_on_full",
+        research_focus=_warehouse_research_focus(),
+        control_pair_key="warehouse.prepared:rep01",
+    )
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(TOOL_PATH),
+            str(run_root),
+            "--report-stem",
+            "warehouse_on_full",
+            "--strict",
+            "--format",
+            "json",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    prompt_context = json.loads(
+        (
+            run_root
+            / "prepared_handoff"
+            / "prompt_context_readiness"
+            / "warehouse_on_full.prepared_prompt_context_readiness.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    provider_payload = prompt_context["signals"][
+        "warehouse_active_subject_code_constraints_prompt_bridge"
+    ]["detail"]["provider_payload"]
+    assert provider_payload["available"] is True
+    assert (
+        provider_payload["version"]
+        == "warehouse_operator_validation_transfer_code_constraints.v1"
+    )
+    assert provider_payload["constraint_count"] >= 3
+    assert provider_payload["forbidden_pattern_count"] >= 1
 
 
 def _write_rebuild_fixture_root(

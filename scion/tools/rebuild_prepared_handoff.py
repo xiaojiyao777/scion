@@ -13,7 +13,10 @@ from typing import Any, Callable
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
+SCION_PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = Path(__file__).resolve().parents[2]
+if str(SCION_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCION_PROJECT_DIR))
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
