@@ -71,6 +71,14 @@ Framework:
   `calibration_ref`. Prepared-contract readiness rejects handoffs that
   contain MDE/practical-delta values without problem-owned source, calibration,
   and measurement-readiness proof.
+- Code-phase source visibility protection covers both final prompt rendering and
+  pre-patch tool context: required target/surface source reads are not skipped
+  merely to preserve final preview tool slots while hard tool-loop capacity
+  remains.
+- Solver subprocesses normalize inherited relative `PYTHONPATH` entries against
+  the parent process cwd before switching into the solver workspace, so runtime
+  smoke/protocol execution loads the current checkout instead of an older
+  installed Scion package.
 
 Warehouse:
 

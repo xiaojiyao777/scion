@@ -143,6 +143,58 @@ def test_code_phase_planner_receives_target_aware_visible_file_receipts(
     assert "duplicate_read_rule" in read_guidance
 
 
+def test_code_phase_required_target_source_read_survives_preview_slot_reserve(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    config = AgenticToolLoopConfig(max_tool_calls=6, max_steps=6)
+    session = AgenticProposalSession(
+        PlanningCreative([], hypothesis=hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-code-source-slot-boundary",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+        tool_loop_config=config.__dict__,
+        tool_call_count=4,
+        tool_step_count=4,
+    )
+
+    observations = session._run_code_context_fixed_tools(
+        context,
+        state,
+        hypothesis,
+        [],
+        selection_source="code_phase_required",
+    )
+
+    assert any(
+        observation.tool_name == "context.read_algorithm_file"
+        and observation.structured_payload.get("file_path") == target_file
+        for observation in observations
+    )
+    assert not any(
+        event.metadata.get("tool_name") == "context.read_algorithm_file"
+        and event.metadata.get("skip_reason") == "code_self_check_tool_slot_reserved"
+        for event in state.transcript
+    )
+
+
 def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
     tmp_path: Path,
 ) -> None:

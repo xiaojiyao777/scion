@@ -611,12 +611,29 @@ class AgenticSessionCodeToolsMixin:
                     and selection_source in {"code_phase_required", "code_phase_fallback"}
                 )
                 if (
-                    self._remaining_tool_calls(state) <= 2
-                    or self._remaining_tool_steps(state) <= 2
+                    self._remaining_tool_calls(state) <= 0
+                    or self._remaining_tool_steps(state) <= 0
                 ):
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
-                        "Skipped code-phase fallback tool to reserve final preview tool slots.",
+                        "Skipped code-phase fallback tool because the hard tool loop limit was reached.",
+                        metadata={
+                            "tool_name": name,
+                            "status": "skipped",
+                            "selection_source": selection_source,
+                            "skip_reason": "code_tool_loop_limit_reached",
+                            "remaining_tool_calls": self._remaining_tool_calls(state),
+                            "remaining_steps": self._remaining_tool_steps(state),
+                        },
+                    )
+                    break
+                if (
+                    self._remaining_tool_calls(state) <= 2
+                    or self._remaining_tool_steps(state) <= 2
+                ) and not (mandatory_surface_read or mandatory_target_read):
+                    state.note(
+                        AgenticProposalPhase.INSPECT_INTERFACE,
+                        "Skipped optional code-phase fallback tool to reserve final preview tool slots.",
                         metadata={
                             "tool_name": name,
                             "status": "skipped",

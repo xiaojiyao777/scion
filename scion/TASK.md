@@ -251,13 +251,19 @@ Current checkpoint:
   text; CVRP and warehouse delegated-analysis readiness now require that trace
   to be present and full-visible whenever a matching code trace exists. Code
   traces also require protected target/integration/algorithm source visibility;
-  missing required source paths and partial required hypothesis target-source
-  visibility prevent delegated current-run review readiness. CVRP bounded
+  code-phase required target/surface source reads now outrank final-preview slot
+  reservation whenever hard tool-loop capacity remains. Missing required source
+  paths and partial required hypothesis target-source visibility prevent
+  delegated current-run review readiness. CVRP bounded
   two-opt review readiness now rejects generic, cross-route,
   unbounded/fallback, VNS, and two-opt-star protocol family labels as
   two-opt-like but non-qualifying signals, and requires direct
   activation/effect/phase telemetry co-located on the same matching top effect
   row before calling the follow-up `bounded_twoopt_review_ready`.
+- Solver smoke/protocol subprocesses now resolve inherited relative
+  `PYTHONPATH` entries against the parent checkout before changing into the
+  solver workspace, preventing stale installed Scion imports during current-run
+  runtime checks.
 - Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
   be review-ready: runtime budget diagnostics remain reportable, but
   fresh-runtime replay drain status and stage-transition drain status must both

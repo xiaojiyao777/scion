@@ -13,7 +13,11 @@ from unittest.mock import patch
 import pytest
 
 from scion.runtime.runner import ResourceLimits, Runner
-from scion.runtime.subprocess_runner import LocalSubprocessRunner, _build_clean_env
+from scion.runtime.subprocess_runner import (
+    LocalSubprocessRunner,
+    _SOLVER_WALL_CLOCK_GRACE_SEC,
+    _build_clean_env,
+)
 from scion.core.models import RunResult
 
 
@@ -142,6 +146,47 @@ class TestRunnerSuccess:
         runner = LocalSubprocessRunner()
         assert isinstance(runner, Runner)
 
+    def test_relative_pythonpath_is_resolved_before_child_cwd_switch(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        parent_cwd = tmp_path / "parent"
+        workspace = tmp_path / "workspace"
+        package_dir = parent_cwd / "relpkg"
+        parent_cwd.mkdir()
+        workspace.mkdir()
+        package_dir.mkdir()
+        (package_dir / "solver_marker.py").write_text(
+            "VALUE = 'current-checkout-marker'\n",
+            encoding="utf-8",
+        )
+        _write_solver(
+            workspace,
+            """\
+            import argparse, json, pathlib
+            import solver_marker
+            p = argparse.ArgumentParser()
+            p.add_argument("instance", nargs="?", default="")
+            for name in ["--seed", "--time-limit", "--registry", "--output"]:
+                p.add_argument(name, default="")
+            args = p.parse_args()
+            pathlib.Path(args.output).write_text(json.dumps({
+                "feasible": True,
+                "objective": {"marker": solver_marker.VALUE},
+                "solution": {},
+            }))
+            """,
+        )
+        monkeypatch.chdir(parent_cwd)
+        monkeypatch.setenv("PYTHONPATH", "relpkg")
+
+        result = run(workspace)
+
+        assert result.success is True
+        assert result.output is not None
+        assert result.output.objective["marker"] == "current-checkout-marker"
+
 
 # ---------------------------------------------------------------------------
 # Tests: crash
@@ -209,7 +254,7 @@ class TestRunnerTimeout:
         )
         assert result.success is False
         assert result.error_category == "timeout"
-        assert result.elapsed_ms < 10_000
+        assert result.elapsed_ms < (_SOLVER_WALL_CLOCK_GRACE_SEC + 5) * 1000
 
     def test_per_call_time_limit_allows_output_flush_grace(self, workdir: Path):
         _write_solver(

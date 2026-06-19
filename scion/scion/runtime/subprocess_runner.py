@@ -65,6 +65,23 @@ def _scion_env_value_digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="surrogateescape")).hexdigest()
 
 
+def _pythonpath_for_child_cwd(value: str, *, parent_cwd: Path) -> str:
+    if not value:
+        return ""
+    entries: list[str] = []
+    for raw_entry in str(value or "").split(os.pathsep):
+        if raw_entry == "":
+            path = parent_cwd
+        else:
+            path = Path(raw_entry).expanduser()
+            if not path.is_absolute():
+                path = parent_cwd / path
+        normalized = str(path.resolve(strict=False))
+        if normalized not in entries:
+            entries.append(normalized)
+    return os.pathsep.join(entries)
+
+
 def _make_preexec_fn(limits: ResourceLimits):
     """Return a pre-exec callable that applies resource limits in the child process."""
 
@@ -200,8 +217,13 @@ class LocalSubprocessRunner:
         if not surface:
             env.pop("SCION_SELECTED_SURFACE", None)
         # Ensure the workspace itself is on PYTHONPATH so operators can be imported
-        existing_pp = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = (workdir + os.pathsep + existing_pp).rstrip(os.pathsep)
+        existing_pp = _pythonpath_for_child_cwd(
+            env.get("PYTHONPATH", ""),
+            parent_cwd=Path.cwd(),
+        )
+        env["PYTHONPATH"] = (
+            workdir + os.pathsep + existing_pp
+        ).rstrip(os.pathsep)
 
         start_ns = time.monotonic_ns()
         error_category: Optional[str] = None
