@@ -20,6 +20,7 @@ from scion.runtime.telemetry_guard import (
 )
 from scion.proposal.tools.previews.schema import _hypothesis_schema_preview
 from scion.proposal.engine.code_prompts import _split_code_context
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.test_agentic_proposal_tools_helpers import _cvrp_context
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
@@ -184,6 +185,34 @@ def test_cvrp_active_subject_code_constraints_are_provider_owned() -> None:
     assert "ObjectiveValue" in rendered_prompt
     assert "large_instance_two_opt_runtime_guard" in rendered_prompt
     assert "UNBOUNDED_TWO_OPT_DEFAULT_REJECT" in rendered_prompt
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-cvrp-code-constraints",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context={
+            "problem_summary": "CVRP",
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "target_file_code": "VALUE = 1\n",
+            "active_subject_code_constraints": payload,
+        },
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+    visibility = manifest["active_subject_code_constraints_visibility"]
+    assert visibility["report_only"] is True
+    assert visibility["decision_features_excluded"] is True
+    assert visibility["raw_payload_excluded"] is True
+    assert visibility["required"] is True
+    assert visibility["section_name"] == "active_subject_code_constraints"
+    assert visibility["section_status"] == "included"
+    assert visibility["full_section_visible"] is True
+    assert visibility["payload_digest"]
+    assert visibility["constraint_count"] > 0
+    assert visibility["forbidden_pattern_count"] > 0
 
 
 def test_code_prompt_renders_provider_active_subject_code_constraints() -> None:

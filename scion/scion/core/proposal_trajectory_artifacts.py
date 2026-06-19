@@ -638,6 +638,15 @@ def _prompt_source_visibility_summary(
             "hypothesis_target_source_visibility": (
                 _compact_hypothesis_target_source_visibility(hypothesis_ledger)
             ),
+            "active_subject_code_constraints_visibility": (
+                _compact_active_subject_code_constraints_visibility(
+                    _mapping(
+                        prompt_manifest.get(
+                            "active_subject_code_constraints_visibility"
+                        )
+                    )
+                )
+            ),
         }
     )
 
@@ -750,6 +759,40 @@ def _compact_hypothesis_target_source_visibility(
                 or owner_source.get("full_content_visible_in_rendered_prompt")
             ),
             "placeholder_visible": _bool_or_none(placeholder.get("visible")),
+        }
+    )
+
+
+def _compact_active_subject_code_constraints_visibility(
+    visibility: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not visibility:
+        return {}
+    if (
+        visibility.get("required") is not True
+        and visibility.get("section_present") is not True
+    ):
+        return {}
+    return _drop_empty(
+        {
+            "schema_version": visibility.get("schema_version"),
+            "required": _bool_or_none(visibility.get("required")),
+            "section_present": _bool_or_none(visibility.get("section_present")),
+            "section_status": visibility.get("section_status"),
+            "section_visible": _bool_or_none(visibility.get("section_visible")),
+            "full_section_visible": _bool_or_none(
+                visibility.get("full_section_visible")
+            ),
+            "payload_digest": visibility.get("payload_digest"),
+            "constraint_count": _int_or_none(visibility.get("constraint_count")),
+            "object_model_hint_count": _int_or_none(
+                visibility.get("object_model_hint_count")
+            ),
+            "api_contract_count": _int_or_none(visibility.get("api_contract_count")),
+            "forbidden_pattern_count": _int_or_none(
+                visibility.get("forbidden_pattern_count")
+            ),
+            "missing_reason": visibility.get("missing_reason"),
         }
     )
 

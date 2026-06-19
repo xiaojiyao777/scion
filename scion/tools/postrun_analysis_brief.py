@@ -870,6 +870,13 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_display(source_visibility.get('hypothesis_target_source_not_visible_count'))}",
                 "- Hypothesis target visibility statuses: "
                 f"{_mapping_text(source_visibility.get('hypothesis_target_visibility_status_counts'))}",
+                "- Active subject code constraints traces/required/full-visible/not-full-visible: "
+                f"{_display(source_visibility.get('active_subject_code_constraints_trace_count'))} / "
+                f"{_display(source_visibility.get('active_subject_code_constraints_required_count'))} / "
+                f"{_display(source_visibility.get('active_subject_code_constraints_full_visible_count'))} / "
+                f"{_display(source_visibility.get('active_subject_code_constraints_not_full_visible_count'))}",
+                "- Active subject code constraint statuses: "
+                f"{_mapping_text(source_visibility.get('active_subject_code_constraints_status_counts'))}",
             ]
         )
     density = _mapping_or_empty(aggregate.get("signal_density"))
@@ -2843,6 +2850,16 @@ def _empty_prompt_source_visibility_aggregate() -> dict[str, Any]:
         "hypothesis_target_source_visible_count": 0,
         "hypothesis_target_source_not_visible_count": 0,
         "hypothesis_target_visibility_status_counts": {},
+        "active_subject_code_constraints_trace_count": 0,
+        "active_subject_code_constraints_required_count": 0,
+        "active_subject_code_constraints_full_visible_count": 0,
+        "active_subject_code_constraints_partial_visible_count": 0,
+        "active_subject_code_constraints_not_full_visible_count": 0,
+        "active_subject_code_constraints_not_required_count": 0,
+        "active_subject_code_constraints_constraint_count_total": 0,
+        "active_subject_code_constraints_forbidden_pattern_count_total": 0,
+        "active_subject_code_constraints_status_counts": {},
+        "active_subject_code_constraints_missing_reason_counts": {},
     }
 
 
@@ -2909,6 +2926,40 @@ def _add_prompt_source_visibility(
         else:
             target["hypothesis_target_source_not_visible_count"] += 1
 
+    active_constraints = _mapping_or_empty(
+        summary.get("active_subject_code_constraints_visibility")
+    )
+    if active_constraints:
+        target["active_subject_code_constraints_trace_count"] += 1
+        required = active_constraints.get("required") is True
+        if required:
+            target["active_subject_code_constraints_required_count"] += 1
+        else:
+            target["active_subject_code_constraints_not_required_count"] += 1
+        if active_constraints.get("full_section_visible") is True:
+            target["active_subject_code_constraints_full_visible_count"] += 1
+        else:
+            target["active_subject_code_constraints_not_full_visible_count"] += 1
+        if (
+            active_constraints.get("section_visible") is True
+            and active_constraints.get("full_section_visible") is not True
+        ):
+            target["active_subject_code_constraints_partial_visible_count"] += 1
+        target["active_subject_code_constraints_constraint_count_total"] += (
+            _int_or_zero(active_constraints.get("constraint_count"))
+        )
+        target["active_subject_code_constraints_forbidden_pattern_count_total"] += (
+            _int_or_zero(active_constraints.get("forbidden_pattern_count"))
+        )
+        _increment_count(
+            target["active_subject_code_constraints_status_counts"],
+            str(active_constraints.get("section_status") or "unknown"),
+        )
+        _increment_count(
+            target["active_subject_code_constraints_missing_reason_counts"],
+            str(active_constraints.get("missing_reason") or "none"),
+        )
+
 
 def _merge_prompt_source_visibility(
     target: dict[str, Any],
@@ -2930,6 +2981,14 @@ def _merge_prompt_source_visibility(
         "hypothesis_target_source_required_count",
         "hypothesis_target_source_visible_count",
         "hypothesis_target_source_not_visible_count",
+        "active_subject_code_constraints_trace_count",
+        "active_subject_code_constraints_required_count",
+        "active_subject_code_constraints_full_visible_count",
+        "active_subject_code_constraints_partial_visible_count",
+        "active_subject_code_constraints_not_full_visible_count",
+        "active_subject_code_constraints_not_required_count",
+        "active_subject_code_constraints_constraint_count_total",
+        "active_subject_code_constraints_forbidden_pattern_count_total",
     ):
         target[key] = _int_or_zero(target.get(key)) + _int_or_zero(source.get(key))
     for key in (
@@ -2937,6 +2996,8 @@ def _merge_prompt_source_visibility(
         "code_target_source_status_counts",
         "code_target_visibility_status_counts",
         "hypothesis_target_visibility_status_counts",
+        "active_subject_code_constraints_status_counts",
+        "active_subject_code_constraints_missing_reason_counts",
     ):
         target_counts = target[key]
         source_counts = source.get(key)

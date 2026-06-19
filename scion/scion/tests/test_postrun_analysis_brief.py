@@ -454,6 +454,22 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
                                     "algorithm_file_read_count": 1,
                                     "algorithm_file_reads_full_content_visible_count": 1,
                                 },
+                                "active_subject_code_constraints_visibility": {
+                                    "schema_version": (
+                                        "active-subject-code-constraints-visibility.v1"
+                                    ),
+                                    "required": True,
+                                    "section_present": True,
+                                    "section_status": "included",
+                                    "section_visible": True,
+                                    "full_section_visible": True,
+                                    "payload_digest": "constraint-digest-1",
+                                    "constraint_count": 3,
+                                    "object_model_hint_count": 1,
+                                    "api_contract_count": 1,
+                                    "forbidden_pattern_count": 1,
+                                    "missing_reason": "",
+                                },
                             },
                             "block_family_summary": {
                                 "total_chars": 80,
@@ -815,6 +831,16 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
         "hypothesis_target_visibility_status_counts": {
             "full_dedicated_source_visible": 1
         },
+        "active_subject_code_constraints_trace_count": 1,
+        "active_subject_code_constraints_required_count": 1,
+        "active_subject_code_constraints_full_visible_count": 1,
+        "active_subject_code_constraints_partial_visible_count": 0,
+        "active_subject_code_constraints_not_full_visible_count": 0,
+        "active_subject_code_constraints_not_required_count": 0,
+        "active_subject_code_constraints_constraint_count_total": 3,
+        "active_subject_code_constraints_forbidden_pattern_count_total": 1,
+        "active_subject_code_constraints_status_counts": {"included": 1},
+        "active_subject_code_constraints_missing_reason_counts": {"none": 1},
     }
     assert aggregate["signal_density"] == {
         "schema_version": "scion.postrun_prompt_signal_density.v1",
@@ -981,6 +1007,11 @@ def test_brief_json_and_markdown_from_inventory_inputs(tmp_path: Path) -> None:
     assert "- Code source visibility traces: 1" in markdown
     assert (
         "- Hypothesis target source traces/required/visible/not-visible: "
+        "1 / 1 / 1 / 0"
+        in markdown
+    )
+    assert (
+        "- Active subject code constraints traces/required/full-visible/not-full-visible: "
         "1 / 1 / 1 / 0"
         in markdown
     )

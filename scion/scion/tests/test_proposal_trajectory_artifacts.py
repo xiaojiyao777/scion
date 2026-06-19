@@ -153,6 +153,19 @@ def test_builds_manifest_with_trace_prompt_and_formal_candidate_joins(
         "algorithm_file_read_count": 1,
         "algorithm_file_reads_full_content_visible_count": 1,
     }
+    assert code_source_visibility["active_subject_code_constraints_visibility"] == {
+        "schema_version": "active-subject-code-constraints-visibility.v1",
+        "required": True,
+        "section_present": True,
+        "section_status": "included",
+        "section_visible": True,
+        "full_section_visible": True,
+        "payload_digest": "constraint-digest-code",
+        "constraint_count": 2,
+        "object_model_hint_count": 1,
+        "api_contract_count": 1,
+        "forbidden_pattern_count": 1,
+    }
 
 
 def test_manifest_stores_sanitized_control_pair_key_only_at_top_level(
@@ -1089,6 +1102,20 @@ def _write_prompt_manifest(
                     "full_content_visible_in_rendered_prompt": True,
                 }
             ],
+        }
+        payload["active_subject_code_constraints_visibility"] = {
+            "schema_version": "active-subject-code-constraints-visibility.v1",
+            "required": True,
+            "section_present": True,
+            "section_status": "included",
+            "section_visible": True,
+            "full_section_visible": True,
+            "payload_digest": "constraint-digest-code",
+            "constraint_count": 2,
+            "object_model_hint_count": 1,
+            "api_contract_count": 1,
+            "forbidden_pattern_count": 1,
+            "missing_reason": "",
         }
     if call_kind.startswith("hypothesis"):
         payload["hypothesis_target_source_visibility_ledger"] = {

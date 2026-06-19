@@ -40,6 +40,10 @@ from scion.proposal.prompt_manifest_visibility import (
 
 
 MANIFEST_SCHEMA_VERSION = "api-visible-prompt-manifest.v3"
+ACTIVE_SUBJECT_CODE_CONSTRAINTS_VISIBILITY_SCHEMA_VERSION = (
+    "active-subject-code-constraints-visibility.v1"
+)
+ACTIVE_SUBJECT_CODE_CONSTRAINTS_SECTION_NAME = "active_subject_code_constraints"
 _SECTION_HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -148,6 +152,12 @@ def build_api_visible_prompt_manifest(
             provider_prompt_text=provider_prompt_text if rendered_available else "",
             section_statuses=section_statuses,
             call_kind=call_kind,
+        )
+    )
+    active_subject_code_constraints_visibility = (
+        _active_subject_code_constraints_visibility(
+            safe_context,
+            section_statuses=section_statuses,
         )
     )
     system_chars = _system_text_chars(rendered_system_blocks)
@@ -271,6 +281,9 @@ def build_api_visible_prompt_manifest(
         "material_difference_requirement_visibility_ledger": (
             material_difference_requirement_visibility_ledger
         ),
+        "active_subject_code_constraints_visibility": (
+            active_subject_code_constraints_visibility
+        ),
         "material_difference_requirement_visible": bool(
             material_difference_requirement_visibility_ledger.get("visible")
         ),
@@ -310,6 +323,81 @@ def build_api_visible_prompt_manifest(
         ),
         "raw_prompt_saved": False,
     }
+
+
+def _active_subject_code_constraints_visibility(
+    context: Mapping[str, Any],
+    *,
+    section_statuses: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = context.get("active_subject_code_constraints")
+    required = payload not in (None, "", [], (), {})
+    raw_status = section_statuses.get(ACTIVE_SUBJECT_CODE_CONSTRAINTS_SECTION_NAME)
+    section_status = raw_status if isinstance(raw_status, Mapping) else {}
+    status = str(
+        section_status.get("status")
+        or ("not_required" if not required else "missing")
+    )
+    section_present = bool(section_status)
+    full_section_visible = status == "included"
+    section_visible = status in {"included", "truncated"}
+    missing_reason = ""
+    if required and not section_present:
+        missing_reason = "context_payload_not_rendered_to_provider_prompt"
+    elif required and status == "omitted":
+        missing_reason = "provider_prompt_section_omitted"
+    elif required and status == "truncated":
+        missing_reason = "provider_prompt_section_truncated"
+    elif not required:
+        missing_reason = "not_required"
+    return {
+        "schema_version": ACTIVE_SUBJECT_CODE_CONSTRAINTS_VISIBILITY_SCHEMA_VERSION,
+        "report_only": True,
+        "decision_features_excluded": True,
+        "raw_payload_excluded": True,
+        "section_name": ACTIVE_SUBJECT_CODE_CONSTRAINTS_SECTION_NAME,
+        "required": required,
+        "section_present": section_present,
+        "section_status": status,
+        "section_visible": section_visible,
+        "full_section_visible": full_section_visible,
+        "payload_digest": stable_digest(payload, length=16) if required else "",
+        "constraint_count": _active_subject_code_constraint_count(
+            payload,
+            key="constraints",
+        ),
+        "object_model_hint_count": _active_subject_code_constraint_count(
+            payload,
+            key="object_model_hints",
+        ),
+        "api_contract_count": _active_subject_code_constraint_count(
+            payload,
+            key="api_contracts",
+        ),
+        "forbidden_pattern_count": _active_subject_code_constraint_count(
+            payload,
+            key="forbidden_patterns",
+        ),
+        "missing_reason": missing_reason,
+    }
+
+
+def _active_subject_code_constraint_count(value: Any, *, key: str) -> int:
+    if isinstance(value, Mapping):
+        return _constraint_item_count(value.get(key))
+    if key == "constraints":
+        return _constraint_item_count(value)
+    return 0
+
+
+def _constraint_item_count(value: Any) -> int:
+    if value in (None, "", [], (), {}):
+        return 0
+    if isinstance(value, Mapping):
+        return 1
+    if isinstance(value, (list, tuple)):
+        return sum(1 for item in value if item not in (None, "", [], (), {}))
+    return 1
 
 
 def _block_family_accounting(
