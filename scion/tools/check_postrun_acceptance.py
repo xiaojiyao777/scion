@@ -627,6 +627,12 @@ def _summary_actionability_detail(
     summary_failures: list[str] = []
     if expected_schema and schema_version != expected_schema:
         summary_failures.append("stale_problem_summary_schema")
+    if summary.get("report_only") is not True:
+        summary_failures.append("problem_summary_not_report_only")
+    if summary.get("quality_judgment") is not False:
+        summary_failures.append("problem_summary_quality_judgment_not_false")
+    if summary.get("decision_features_excluded") is not True:
+        summary_failures.append("problem_summary_decision_features_not_excluded")
     if delegated_interpretations and interpretation not in delegated_interpretations:
         summary_failures.append("unsupported_problem_summary_interpretation")
     problem_family = summary.get("problem_family")
@@ -643,6 +649,9 @@ def _summary_actionability_detail(
         "expected_schema_version": expected_schema,
         "schema_current": schema_version == expected_schema,
         "current_run_evidence": summary.get("current_run_evidence"),
+        "report_only": summary.get("report_only"),
+        "quality_judgment": summary.get("quality_judgment"),
+        "decision_features_excluded": summary.get("decision_features_excluded"),
         "interpretation": interpretation,
         "interpretation_supported": interpretation in delegated_interpretations,
         "review_axes_actionability": summary.get("review_axes_actionability"),
