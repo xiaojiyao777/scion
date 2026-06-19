@@ -51,8 +51,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `6893f1d`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-briefsurface-6893f1d-6r-gpt55-6r-gpt55-20260619T141525Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `77d0254`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-staleclean-77d0254-6r-gpt55-6r-gpt55-20260619T143306Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -87,8 +87,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `6893f1d`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-briefsurface-6893f1d-1r-gpt55-1r-gpt55-20260619T141526Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `77d0254`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-staleclean-77d0254-1r-gpt55-1r-gpt55-20260619T143306Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -109,9 +109,9 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `6893f1d`
+- The active prepared roots were generated from WSL runtime commit `77d0254`
   after the CVRP CMT case-protection handoff and analysis-brief surface
-  repairs.
+  repairs, plus the postrun rebuild stale-output cleanup.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
