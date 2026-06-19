@@ -436,9 +436,9 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `8ca17e34`, whose runtime guard paths match after the CVRP two-opt phase
-  evidence and prepared/readiness checkout-import repairs touched
-  `scion/tools`. Solver-design
+  `be6cb8b5`, whose runtime guard paths match after the warehouse
+  positive-effect-vs-plateau postrun readiness repair touched `scion/tools`.
+  Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current
   readiness also verifies executable `launch.env` sourcing, executable
@@ -556,7 +556,10 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`
+  `scion/docs/experiments/v0.4/v04-warehouse-positive-effect-plateau-readiness-20260619.md`
+  supersedes the current-root pointer in
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
+  which itself
   supersedes the current-root pointer in
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and
