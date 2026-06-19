@@ -280,7 +280,7 @@ PYTHONPATH=scion \
 
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL runtime commit `f12c3d8` because
+New prepare-only roots were generated from WSL runtime commit `9149bf9` because
 `scion/tools` is part of the guarded launch/readiness runtime surface. The
 current checkout requires completion-preflight failure status writing and
 data-root/API-key-env failure markers to be executable shell paths, not
@@ -292,19 +292,20 @@ or echo-only string. Postrun delegated-review evidence accounting now also
 requires co-located CVRP two-opt direct evidence, review-input consistency for
 CVRP two-opt ready claims, and realized warehouse continuity evidence
 recomputed from review inputs before accepting warehouse plateau-ready claims.
-The postrun bundle also includes report-only champion-progress auditing so a
-current run can distinguish copied resume champion history from current-run
-champion advancement, and report-only branch-research-state readiness and input
-consistency so current-run delegated review cannot omit or hand-write a stale
-branch/hypothesis/event/trace audit surface.
+The postrun bundle also includes report-only champion-progress auditing and
+input consistency so a current run can distinguish copied resume champion
+history from current-run champion advancement, and report-only
+branch-research-state readiness and input consistency so current-run delegated
+review cannot omit or hand-write a stale branch/hypothesis/event/trace audit
+surface.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-branchconsistency-f12c3d8-6r-gpt55-20260619T123134Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-champconsistency-9149bf9-6r-gpt55-20260619T123932Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-branchconsistency-f12c3d8-1r-gpt55-20260619T123146Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-champconsistency-9149bf9-1r-gpt55-20260619T123946Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -370,13 +371,11 @@ keeps the current postrun acceptance consistency repairs in the guarded runtime
 surface: CVRP large-twoopt ready claims and warehouse plateau-ready claims are
 recomputed from review inputs before being accepted, and champion-progress
 postrun summaries are required as report-only delegated-review input for
-warehouse/CVRP runs. Branch-research-state summaries are also required as
-report-only delegated-review input for warehouse/CVRP current runs and are
-checked against current-run inventory. It supersedes
-the model-route, noearlystop, prepcontract, exactflag, execpreflight,
-postrunexec, preflfailpath, execmarkers, execruntimeguard, execpostrunfn,
-execsource, inputcheck, and championprogress prepared roots; the branchstate
-roots are also superseded. The branchconsistency roots listed above are the
-current prepared-root pointers.
+warehouse/CVRP runs and are checked against current-run inventory.
+Branch-research-state summaries are also required as report-only
+delegated-review input for warehouse/CVRP current runs and are checked against
+current-run inventory. It supersedes earlier prepared roots that lacked any of
+these guarded launch/readiness/postrun guarantees. The champconsistency roots
+listed above are the current prepared-root pointers.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.
