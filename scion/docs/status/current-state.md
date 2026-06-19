@@ -85,7 +85,7 @@ Infrastructure:
   when runtime guard paths are unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `refreshing=1`,
   `total=1`. The non-active account may appear as expired or refreshing.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`

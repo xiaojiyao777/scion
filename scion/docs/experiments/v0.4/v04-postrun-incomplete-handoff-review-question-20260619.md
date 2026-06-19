@@ -50,7 +50,7 @@ Both roots report:
 - `prompt_context_readiness_complete=ok`
 - completion preflight `failed`
 - HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`
-- auth pool `active=0`, `expired=1`, `total=1`
+- auth pool `active=0`, `refreshing=1`, `total=1`
 
 The current blocker remains external `gpt-5.5` auth, not prepared-root static
 readiness.
