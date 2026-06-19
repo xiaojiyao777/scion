@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `72e99111` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, and rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots were regenerated from runtime commit `04a9f63a` and are static-ready. Launch readiness verifies proposal-attempt/proposal-quality headroom (`64`/`64`) across `launch.env`, manifest execution, manifest command, and `run.sh`, rejects dirty runtime-guard paths, rejects relative `SCION_DIR` launch paths, and rejects CVRP/warehouse measurement handoffs that are not backed by problem-owned declaration/calibration source proof. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -264,6 +264,10 @@ Current checkpoint:
   `PYTHONPATH` entries against the parent checkout before changing into the
   solver workspace, preventing stale installed Scion imports during current-run
   runtime checks.
+- Launch readiness now rejects prepared roots whose `launch.env` sets
+  `SCION_DIR` as a relative path. `PYTHONPATH` must include that absolute active
+  checkout before `run.sh` can be static-ready, so `SCION_DIR=scion` /
+  `PYTHONPATH=scion` cannot mask stale installed Scion imports.
 - Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
   be review-ready: runtime budget diagnostics remain reportable, but
   fresh-runtime replay drain status and stage-transition drain status must both
@@ -376,9 +380,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sourcepath-72e99111-6r-gpt55-20260619T185716Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-abspath-04a9f63a-6r-gpt55-20260619T190850Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sourcepath-72e99111-1r-gpt55-20260619T185738Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-abspath-04a9f63a-1r-gpt55-20260619T190850Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -392,6 +396,8 @@ Current checkpoint:
   `run_script_scion_dir_failure_reports=ok`,
   `run_script_runtime_guard_failure_reports=ok`,
   `run_script_runtime_guard_enforced=ok`,
+  `run_script_pythonpath_enforced=ok` with absolute WSL `SCION_DIR` and
+  `PYTHONPATH`,
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`,
@@ -413,15 +419,16 @@ Current checkpoint:
   `CMT2` and `CMT4`. The strict postrun rebuild order check confirms the
   rebuild command precedes the postrun readiness command and
   `POSTRUN_REPORTS_EXIT_STATUS` is emitted after the rebuild command. The roots
-  were prepared from WSL runtime commit `72e99111` with explicit
+  were prepared from WSL runtime commit `04a9f63a` with explicit
   proposal-attempt/proposal-quality-loop headroom (`64`/`64`). Current
   readiness also verifies executable `launch.env` sourcing, executable
   completion preflight, GPT-5.5 model/base routing, active-checkout
-  `PYTHONPATH`, no-early-stop launch semantics, executable pre-campaign failure
-  reporting, strict postrun readiness, runtime guard command markers, normal
-  campaign-exit postrun reporting, postrun review-surface boundary markers,
-  co-located CVRP two-opt direct evidence, and warehouse/CVRP problem-summary
-  consistency recomputed from review inputs. Launch readiness and postrun
+  absolute `SCION_DIR`/`PYTHONPATH`, no-early-stop launch semantics, executable
+  pre-campaign failure reporting, strict postrun readiness, runtime guard
+  command markers, normal campaign-exit postrun reporting, postrun
+  review-surface boundary markers, co-located CVRP two-opt direct evidence, and
+  warehouse/CVRP problem-summary consistency recomputed from review inputs.
+  Launch readiness and postrun
   acceptance both check analysis-brief prepared-contract consistency against
   the inventory/launcher contract before a root can be launch-ready or
   current-run delegated review can be ready.

@@ -31,10 +31,10 @@ Framework:
   `DecisionFeatures`, promotion, scheduler state, or solver semantics.
 - Launch readiness is the authority for prepared roots. It must prove the
   current prepared contract/brief identity, prompt-context bridge,
-  problem-specific handoff, runtime guards, model route, active-checkout
-  `PYTHONPATH`, no-early-stop semantics, completion preflight, pre-campaign
-  failure reporting, strict postrun rebuild-before-readiness reporting, strict
-  postrun readiness status-after-check reporting,
+  problem-specific handoff, runtime guards, model route, absolute active-checkout
+  `SCION_DIR`/`PYTHONPATH`, no-early-stop semantics, completion preflight,
+  pre-campaign failure reporting, strict postrun rebuild-before-readiness reporting,
+  strict postrun readiness status-after-check reporting,
   launch-env/`SCION_DIR`/runtime-guard failure postrun reporting,
   pre-campaign infra-only evidence isolation,
   prepared/postrun rebuild-manifest identity and output scope, and strict
@@ -79,6 +79,9 @@ Framework:
   the parent process cwd before switching into the solver workspace, so runtime
   smoke/protocol execution loads the current checkout instead of an older
   installed Scion package.
+- Prepared-root launch readiness rejects relative `SCION_DIR` values in
+  `launch.env`; `PYTHONPATH` must include the absolute active checkout before a
+  root can be static-ready.
 
 Warehouse:
 
@@ -86,8 +89,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `72e99111`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sourcepath-72e99111-6r-gpt55-20260619T185716Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `04a9f63a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-abspath-04a9f63a-6r-gpt55-20260619T190850Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -128,8 +131,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `72e99111`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sourcepath-72e99111-1r-gpt55-20260619T185738Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `04a9f63a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-abspath-04a9f63a-1r-gpt55-20260619T190850Z-claw`.
   Its prepared manifest records `proposal_attempt_limit=64` and
   `proposal_quality_loop_limit=64`, and its measurement handoff source is
   `problem_v1.measurement.calibration_ref`.
@@ -159,18 +162,20 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `72e99111`
+- The active prepared roots were generated from WSL runtime commit `04a9f63a`
   after the trajectory-divergent open low-SNR lifecycle repair, CVRP CMT
   case-protection handoff, analysis-brief surface repairs, postrun and
   prepared-handoff stale/undeclared output guards, prepared/postrun
   rebuild-manifest identity and output scope validation, and focused launcher
   proposal-headroom/readiness-contract repair plus CVRP/warehouse problem-owned
-  measurement-handoff source repair.
+  measurement-handoff source repair and absolute launch-path readiness repair.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`; the prepared manifests
   expose proposal-attempt and proposal-quality-loop limits as `64`/`64`, and
   readiness reports `git_runtime_worktree_clean=ok` plus
-  `run_script_proposal_headroom_enforced=ok`; both roots also report
+  `run_script_proposal_headroom_enforced=ok` and
+  `run_script_pythonpath_enforced=ok` with absolute WSL `SCION_DIR` and
+  `PYTHONPATH`; both roots also report
   `problem_specific_prepared_handoff=ok` with problem-owned measurement source
   proof.
 - Static readiness includes
