@@ -409,6 +409,16 @@ def _prompt_source_visibility_actionability(
         failures.append("prompt_context_trace_accounting_missing")
     if _int_or_zero(source_visibility.get("trace_count")) <= 0:
         failures.append("prompt_source_visibility_trace_accounting_missing")
+    if (
+        _int_or_zero(source_visibility.get("hypothesis_target_source_trace_count"))
+        <= 0
+    ):
+        failures.append("hypothesis_target_source_visibility_trace_missing")
+    elif (
+        _int_or_zero(source_visibility.get("hypothesis_target_source_visible_count"))
+        <= 0
+    ):
+        failures.append("hypothesis_target_source_visibility_not_visible")
     return (
         "ok" if not failures else "failed",
         {
@@ -421,6 +431,12 @@ def _prompt_source_visibility_actionability(
             "code_trace_count": source_visibility.get("code_trace_count"),
             "hypothesis_target_source_trace_count": source_visibility.get(
                 "hypothesis_target_source_trace_count"
+            ),
+            "hypothesis_target_source_visible_count": source_visibility.get(
+                "hypothesis_target_source_visible_count"
+            ),
+            "hypothesis_target_source_not_visible_count": source_visibility.get(
+                "hypothesis_target_source_not_visible_count"
             ),
         },
     )

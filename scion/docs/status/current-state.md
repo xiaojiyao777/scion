@@ -61,9 +61,9 @@ Framework:
   evidence. Valid negative conclusions, such as quality-blocked proposals or
   CVRP without a large two-opt mechanism signal, remain analysis-ready.
 - Warehouse/CVRP postrun readiness also requires current-run
-  prompt/source-visibility trace accounting in the analysis brief; otherwise
-  branch transfer and source grounding are not auditable enough for delegated
-  current-run review.
+  prompt/source-visibility trace accounting in the analysis brief, including
+  hypothesis target-source visibility; otherwise branch transfer and source
+  grounding are not auditable enough for delegated current-run review.
 - Launchers run postrun readiness JSON generation with
   `--require-current-run-ready`, so `POSTRUN_READINESS_EXIT_STATUS` now records
   whether delegated current-run analysis is actually ready.

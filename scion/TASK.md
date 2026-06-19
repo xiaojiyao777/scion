@@ -276,9 +276,10 @@ Current checkpoint:
   missing review inputs, incomplete handoff, launch-only or infra-only status,
   and no protocol evidence prevent `current_run_analysis_ready=true`; valid
   negative conclusions remain analysis-ready. Warehouse/CVRP readiness also
-  requires current-run prompt/source visibility trace accounting in the
-  analysis brief, so delegated review can audit branch transfer and source
-  grounding instead of inferring them from final status.
+  requires current-run prompt/source visibility trace accounting, including
+  hypothesis target-source visibility, in the analysis brief, so delegated
+  review can audit branch transfer and source grounding instead of inferring
+  them from final status.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
