@@ -123,9 +123,12 @@ Framework:
   API-key-env-missing pre-campaign failures, and launch readiness exposes this as
   `run_script_api_key_env_failure_reports=ok`; missing env-var configuration
   should leave delegated-analysis artifacts instead of only `exit.txt`.
-- Launch readiness also requires runtime guard coverage for `scion/tools`, so
-  prepared roots generated before launcher/report/readiness tooling changes must
-  be regenerated rather than launched from a drifted checkout.
+- Launch readiness also requires runtime guard coverage for `scion/tools` and
+  the postrun core report generators
+  `scion/scion/core/proposal_trajectory_artifacts.py` and
+  `scion/scion/core/research_efficiency_report.py`, so prepared roots generated
+  before launcher/report/readiness tooling changes must be regenerated rather
+  than launched from a drifted checkout.
 - The remaining v0.4 acceptance question is empirical: prove that the repaired
   framework supports effective agent research, especially warehouse follow-on
   improvement and CVRP/VRP solver-design progress.
@@ -136,8 +139,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `2623fa9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-directevidence-6r-gpt55-20260619T070646Z-claw`.
+- Current prepared root, prepared from WSL checkout `fe7ddf6`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncoreguard-6r-gpt55-20260619T071716Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -163,8 +166,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `2623fa9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-directevidence-1r-gpt55-20260619T070646Z-claw`.
+- Current prepared root, prepared from WSL checkout `fe7ddf6`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postruncoreguard-1r-gpt55-20260619T071716Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -197,7 +200,9 @@ Infrastructure:
   `run_script_postrun_reports_after_campaign=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`,
-  `runtime_guard_paths_cover_launch_tools=ok`, and completion preflight
+  `runtime_guard_paths_cover_launch_tools=ok` with required coverage for
+  `scion/tools`, `proposal_trajectory_artifacts.py`, and
+  `research_efficiency_report.py`, and completion preflight
   `failed`. The warehouse root exposes
   `warehouse_active_subject_code_constraint_source_markers`, and the CVRP root
   exposes `cvrp_active_subject_code_constraint_source_markers`; code prompt,
@@ -214,7 +219,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  directevidence roots above are not current. Exact supersession details belong in
+  postruncoreguard roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,

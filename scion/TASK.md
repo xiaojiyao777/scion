@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for `scion/tools` plus postrun core report generators. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -269,9 +269,9 @@ Current checkpoint:
   analysis-ready.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-directevidence-6r-gpt55-20260619T070646Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postruncoreguard-6r-gpt55-20260619T071716Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-directevidence-1r-gpt55-20260619T070646Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postruncoreguard-1r-gpt55-20260619T071716Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -281,10 +281,11 @@ Current checkpoint:
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`, and runtime guard coverage for
-  `scion/tools`. The warehouse root reports
+  `scion/tools`, `proposal_trajectory_artifacts.py`, and
+  `research_efficiency_report.py`. The warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `2623fa9`.
+  true. The roots were prepared from WSL checkout `fe7ddf6`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -311,9 +312,11 @@ Current checkpoint:
   BKS/gap details, holdout/case details, prompt ratios, and LLM text; the
   remaining payload stays tainted proposal context and does not enter
   `DecisionFeatures`.
-- Current launch/runtime boundary: prepared roots must guard `scion/tools` as
-  runtime/control-plane code, so launcher, postrun rebuild, postrun readiness,
-  and launch-readiness changes after prepare time require a new prepared root.
+- Current launch/runtime boundary: prepared roots must guard `scion/tools` and
+  the postrun core report generators as runtime/control-plane code, so launcher,
+  postrun rebuild, postrun readiness, research-efficiency report, trajectory
+  manifest, and launch-readiness changes after prepare time require a new
+  prepared root.
   Launch readiness also rejects a prepared root whose `run.sh` declares the
   guard contract but does not execute dirty/head-mismatch checks before
   `scion.cli.main run`, or whose normal campaign-exit path skips the postrun
@@ -322,7 +325,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the directevidence roots above are not current
+  Older prepared roots before the postruncoreguard roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
