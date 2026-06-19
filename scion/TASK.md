@@ -245,9 +245,9 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-probdiag-ready-486192b-6r-gpt55-20260619T044737Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-redact-ready-3dd328a-6r-gpt55-20260619T045751Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-probdiag-ready-486192b-1r-gpt55-20260619T044737Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-redact-ready-3dd328a-1r-gpt55-20260619T045751Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -257,7 +257,7 @@ Current checkpoint:
   `run_script_postrun_reports_after_campaign=ok`, `git_runtime_consistent=ok`,
   `run_script_data_root_failure_reports=ok`,
   `run_script_api_key_env_failure_reports=ok`, and runtime guard coverage for
-  `scion/tools`. The roots were prepared from WSL checkout `486192b`.
+  `scion/tools`. The roots were prepared from WSL checkout `3dd328a`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -294,7 +294,7 @@ Current checkpoint:
   report/readiness bundle.
   Older prepared roots through the `5e76640` apikeyenvreport roots are not
   current because runtime guard paths changed after prepare time; use the
-  probdiag roots above. Exact supersession details belong in the
+  redact roots above. Exact supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
 - Current warehouse delegated-review boundary: plateau-review readiness requires
   protocol-evaluated current-run evidence plus measurement-effect,

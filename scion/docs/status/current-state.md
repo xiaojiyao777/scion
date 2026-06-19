@@ -104,8 +104,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `486192b`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-probdiag-ready-486192b-6r-gpt55-20260619T044737Z-claw`.
+- Current prepared root, prepared from WSL checkout `3dd328a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-redact-ready-3dd328a-6r-gpt55-20260619T045751Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Because the root is prepare-only, required answers focus on
@@ -128,8 +128,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `486192b`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-probdiag-ready-486192b-1r-gpt55-20260619T044737Z-claw`.
+- Current prepared root, prepared from WSL checkout `3dd328a`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-redact-ready-3dd328a-1r-gpt55-20260619T045751Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -170,7 +170,7 @@ Infrastructure:
   commit; readiness remains acceptable only when runtime guard paths are
   unchanged. Older prepared roots through the `5e76640` apikeyenvreport roots
   are not current because runtime guard paths changed after prepare time; use
-  the probdiag roots above. Exact supersession details belong in
+  the redact roots above. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
