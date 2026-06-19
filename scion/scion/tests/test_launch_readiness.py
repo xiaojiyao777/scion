@@ -68,6 +68,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_no_early_stop_enforced"]["status"] == "ok"
+    assert report["checks"]["run_script_strict_postrun_rebuild"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
@@ -1003,12 +1004,20 @@ def test_launch_readiness_rejects_comment_only_postrun_report_function(
     assert report["ready"] is False
     assert report["static_ready"] is False
     strict_check = report["checks"]["run_script_strict_postrun_readiness"]
+    rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
     preflight_failure_check = report["checks"]["run_script_preflight_failure_reports"]
     assert strict_check["status"] == "failed"
+    assert rebuild_check["status"] == "failed"
     assert {"reason": "missing_postrun_report_function"} in strict_check["detail"][
         "failures"
     ]
+    assert {"reason": "missing_postrun_report_function"} in rebuild_check["detail"][
+        "failures"
+    ]
     assert strict_check["detail"][
+        "ignored_non_executable_function_definition_count"
+    ] == 1
+    assert rebuild_check["detail"][
         "ignored_non_executable_function_definition_count"
     ] == 1
     assert preflight_failure_check["status"] == "failed"
@@ -1041,6 +1050,62 @@ def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(
     assert strict_check["required"] is True
     assert strict_check["status"] == "failed"
     assert {"reason": "postrun_acceptance_strict_flag_missing"} in strict_check[
+        "detail"
+    ]["failures"]
+
+
+def test_launch_readiness_rejects_run_script_without_strict_postrun_rebuild(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "    --strict >> \"$RUN_ROOT/run.log\" 2>&1 || POSTRUN_REBUILD_STATUS=$?\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
+    assert rebuild_check["required"] is True
+    assert rebuild_check["status"] == "failed"
+    assert {"reason": "postrun_rebuild_strict_flag_missing"} in rebuild_check[
+        "detail"
+    ]["failures"]
+
+
+def test_launch_readiness_rejects_comment_only_strict_postrun_rebuild(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        "tools/rebuild_postrun_acceptance.py",
+        "tools/rebuild_postrun_acceptance_disabled.py",
+        1,
+    )
+    run_text = run_text.replace(
+        "write_postrun_acceptance_reports() {\n",
+        "write_postrun_acceptance_reports() {\n"
+        "  # tools/rebuild_postrun_acceptance.py --strict\n",
+        1,
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
+    assert rebuild_check["required"] is True
+    assert rebuild_check["status"] == "failed"
+    assert {"reason": "postrun_rebuild_command_missing"} in rebuild_check[
         "detail"
     ]["failures"]
 
@@ -1836,6 +1901,10 @@ PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}
 export RUN_ROOT REPO_ROOT SCION_DIR PY PYTHONPATH SCION_MODEL SCION_BASE_URL GIT_COMMIT GIT_RUNTIME_GUARD_PATHS PREPARED_RUN_MANIFEST
 write_postrun_acceptance_reports() {{
   POSTRUN_READINESS_STATUS=0
+  "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" "$RUN_ROOT" \
+    --report-stem fixture \
+    --strict >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_REBUILD_STATUS=$?
+  echo "POSTRUN_REPORTS_EXIT_STATUS:${{POSTRUN_REBUILD_STATUS:-0}}" >> "$RUN_ROOT/run.log"
   "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py" "$RUN_ROOT" \
     --require-current-run-ready \
     --format json \

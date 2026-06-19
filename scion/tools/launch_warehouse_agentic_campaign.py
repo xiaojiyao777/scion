@@ -158,7 +158,8 @@ write_postrun_acceptance_reports() {
   fi
   POSTRUN_STATUS=0
   "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py" \
-    "${rebuild_args[@]}" >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS=$?
+    "${rebuild_args[@]}" \
+    --strict >> "$RUN_ROOT/run.log" 2>&1 || POSTRUN_STATUS=$?
   echo "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" >> "$RUN_ROOT/run.log"
   mkdir -p "$REPORT_DIR/readiness"
   POSTRUN_READINESS_STATUS=0

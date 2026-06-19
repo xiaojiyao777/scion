@@ -212,6 +212,7 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
     assert "tools/check_postrun_acceptance.py" in run_sh_text
+    assert "--strict" in run_sh_text
     assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
         run_sh_text
     )

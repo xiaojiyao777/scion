@@ -256,6 +256,7 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "postrun_acceptance" in run_sh_text
     assert "tools/rebuild_postrun_acceptance.py" in run_sh_text
     assert "tools/check_postrun_acceptance.py" in run_sh_text
+    assert "--strict" in run_sh_text
     assert "$REPORT_DIR/readiness/$REPORT_STEM.postrun_acceptance_readiness.v1.json" in (
         run_sh_text
     )

@@ -343,6 +343,10 @@ def build_readiness(
         *_run_script_no_early_stop_enforced(root, run_sh, prepared_contract),
     )
     add_check(
+        "run_script_strict_postrun_rebuild",
+        *_run_script_strict_postrun_rebuild(run_sh),
+    )
+    add_check(
         "run_script_strict_postrun_readiness",
         *_run_script_strict_postrun_readiness(run_sh),
     )
@@ -937,6 +941,55 @@ def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
         "postrun_acceptance_strict_flag": postrun_has_strict_flag,
         "postrun_readiness_exit_status_position": readiness_marker_pos,
         "ignored_non_executable_readiness_marker_count": ignored_readiness_markers,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _run_script_strict_postrun_rebuild(run_sh: Path) -> tuple[str, Any]:
+    failures: list[dict[str, Any]] = []
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    rebuild_pos, rebuild_block = _shell_command_block_containing_marker(
+        text,
+        "tools/rebuild_postrun_acceptance.py",
+    )
+    rebuild_has_strict_flag = command_has_shell_flag(rebuild_block, "--strict")
+    status_marker_pos, ignored_status_markers = _find_executable_marker_position(
+        text,
+        "POSTRUN_REPORTS_EXIT_STATUS",
+    )
+    function_pos, ignored_function_count = _shell_function_definition_position(
+        text,
+        "write_postrun_acceptance_reports",
+    )
+    if function_pos < 0:
+        failures.append({"reason": "missing_postrun_report_function"})
+    if rebuild_pos < 0:
+        failures.append({"reason": "postrun_rebuild_command_missing"})
+    elif not rebuild_has_strict_flag:
+        failures.append({"reason": "postrun_rebuild_strict_flag_missing"})
+    if status_marker_pos < 0:
+        failures.append({"reason": "postrun_reports_exit_status_marker_missing"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "postrun_report_function_position": function_pos,
+        "ignored_non_executable_function_definition_count": ignored_function_count,
+        "postrun_rebuild_command_position": rebuild_pos,
+        "postrun_rebuild_strict_flag": rebuild_has_strict_flag,
+        "postrun_reports_exit_status_position": status_marker_pos,
+        "ignored_non_executable_status_marker_count": ignored_status_markers,
         "failures": failures,
     }
     return ("ok" if not failures else "failed"), detail
