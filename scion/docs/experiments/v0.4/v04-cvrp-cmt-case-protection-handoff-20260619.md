@@ -88,3 +88,29 @@ launch-usable:
 
 Do not launch either prepared root until strict launch readiness reports
 `launch_ready=true`.
+
+## Analysis Brief Surface
+
+A follow-up audit-surface repair made the prepared analysis brief render
+`case_protection_requirements` in the "Current research focus" section and added
+`cvrp_cmt_case_protection_handoff` to the CVRP large-twoopt handoff
+requirements table. This keeps delegated review usable when reviewers inspect
+the analysis brief instead of the raw prepared manifest.
+
+Additional checks:
+
+```bash
+PYTHONPATH=scion pytest -q scion/scion/tests/test_postrun_analysis_brief.py
+PYTHONPATH=scion pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_postrun_analysis_brief.py scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py
+PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scion/tests/test_postrun_analysis_brief.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py
+```
+
+Results:
+
+- Local analysis brief tests: `26 passed`
+- Local core readiness/postrun suite: `131 passed`
+- WSL analysis/inventory/postrun suite: `74 passed`
+- WSL rendered brief for the current CVRP prepared root shows
+  `Case-protection requirements`, protected cases `CMT2, CMT4`, the
+  target-intent/hypothesis evidence requirement, and
+  `cvrp_cmt_case_protection_handoff=true` in the handoff table.

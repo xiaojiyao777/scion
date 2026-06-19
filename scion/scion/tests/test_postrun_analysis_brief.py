@@ -1346,6 +1346,10 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert "- Required CVRP bounded two-opt review axes:" not in markdown
     assert "not_actionable_before_launch_current_run_evidence_required" in markdown
     assert "cvrp_large_twoopt_bounded_constraints_handoff" in markdown
+    assert "cvrp_cmt_case_protection_handoff" in markdown
+    assert "Case-protection requirements" in markdown
+    assert "protected_cases: CMT2, CMT4" in markdown
+    assert "live target-intent or hypothesis trace mentions CMT2/CMT4 protection" in markdown
     assert any(
         "cvrp_large_twoopt_summary" in question
         and "incomplete handoff" in question
@@ -2856,6 +2860,9 @@ def _write_cvrp_large_twoopt_manifest(
         research_focus["large_instance_two_opt_constraints"] = (
             _large_twoopt_constraints()
         )
+    research_focus["case_protection_requirements"] = (
+        _cmt_case_protection_requirements()
+    )
     command = (
         "python -m scion.cli.main run "
         f"--campaign-dir {campaign_dir} "
@@ -2938,6 +2945,37 @@ def _large_twoopt_constraints() -> dict[str, object]:
         "default_reject_directions": [
             "unbounded two_opt_intra fallback",
             "activation claims without wall-clock evidence",
+        ],
+    }
+
+
+def _cmt_case_protection_requirements() -> dict[str, object]:
+    return {
+        "schema_version": "scion.cvrp_case_protection_requirements.v1",
+        "scope": "proposal_only_prepared_handoff",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "protected_cases": ["CMT2", "CMT4"],
+        "rules": [
+            (
+                "Target intent or hypothesis must name the CMT2/CMT4 "
+                "protection plan before revisiting construction, route-merge, "
+                "demand-slack, VNS, or share70-derived mechanisms."
+            ),
+            (
+                "Same-branch follow-up should keep CMT2 and CMT4 in formal "
+                "coverage when those cases are available."
+            ),
+            (
+                "A materially different problem-owned solver mechanism must "
+                "still explain how it avoids repeating the CMT2/CMT4 losses."
+            ),
+            "Do not hardcode case ids, BKS values, seeds, or split membership.",
+        ],
+        "required_evidence": [
+            "live target-intent or hypothesis trace mentions CMT2/CMT4 protection",
+            "formal screening includes CMT2 and CMT4 or records a case-selection caveat",
+            "case-level total_distance deltas for CMT2 and CMT4",
         ],
     }
 

@@ -91,6 +91,7 @@ CVRP_LARGE_TWOOPT_REQUIREMENT_KEYS = (
     "cvrp_large_twoopt_seed_handoff",
     "cvrp_large_twoopt_unbounded_default_avoid_handoff",
     "cvrp_large_twoopt_bounded_constraints_handoff",
+    "cvrp_cmt_case_protection_handoff",
     "cvrp_measurement_mde_handoff",
     "cvrp_low_snr_reason_handoff",
     "cvrp_decision_boundary_handoff",
@@ -428,6 +429,23 @@ def render_markdown(brief: dict[str, Any]) -> str:
             value = research_focus.get(key)
             if value:
                 lines.append(f"  - {label}: {_display(value)}")
+        case_protection = research_focus.get("case_protection_requirements")
+        if isinstance(case_protection, dict) and case_protection:
+            lines.append("  - Case-protection requirements:")
+            protected_cases = case_protection.get("protected_cases")
+            if isinstance(protected_cases, list) and protected_cases:
+                lines.append(
+                    "    - protected_cases: "
+                    + ", ".join(_display(item) for item in protected_cases)
+                )
+            rules = case_protection.get("rules")
+            if isinstance(rules, list) and rules:
+                lines.append("    - rules:")
+                lines.extend(f"      - {_display(item)}" for item in rules)
+            evidence = case_protection.get("required_evidence")
+            if isinstance(evidence, list) and evidence:
+                lines.append("    - required_evidence:")
+                lines.extend(f"      - {_display(item)}" for item in evidence)
 
     lines.extend(
         [
