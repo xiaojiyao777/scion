@@ -44,7 +44,7 @@ Results:
 
 - `2 passed, 32 deselected`
 - `34 passed`
-- `129 passed`
+- `130 passed`
 
 WSL runner:
 
@@ -56,21 +56,27 @@ PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scio
 Results:
 
 - `2 passed, 32 deselected`
-- `129 passed`
+- `130 passed`
 
 ## Prepared Root Refresh
 
-Because `scion/tools/check_postrun_acceptance.py` is part of the prepared-root
-runtime guard surface, the active warehouse/CVRP roots were regenerated after
-this repair from WSL runtime commit `1017fb7`.
+Because `scion/tools/check_postrun_acceptance.py` and
+`scion/tools/check_launch_readiness.py` are part of the prepared-root runtime
+guard surface, the active warehouse/CVRP roots were regenerated after this
+repair from WSL runtime commit `fb2a9b7`.
+
+The launch-readiness prepared-contract consistency check also now normalizes
+successful doc-only `git_runtime_consistent` detail drift. A docs-only status
+update after preparing these roots must not make the prepared analysis brief
+look stale when runtime guard paths are unchanged.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-1017fb7-6r-gpt55-6r-gpt55-20260619T133705Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-fb2a9b7-6r-gpt55-6r-gpt55-20260619T134530Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-1017fb7-1r-gpt55-1r-gpt55-20260619T133706Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-fb2a9b7-1r-gpt55-1r-gpt55-20260619T134530Z-claw`
 
 Strict launch readiness with `SCION_API_KEY=pwd`:
 
@@ -80,7 +86,7 @@ Strict launch readiness with `SCION_API_KEY=pwd`:
   `git_runtime_consistent=ok`.
 - The only launch blocker remains completion preflight auth:
   HTTP `401`, `classification=not_authenticated`, `code=invalid_api_key`,
-  auth pool `active=0`, `expired=1`, `refreshing=0`, `total=1`.
+  auth pool `active=0`, `expired=0`, `refreshing=1`, `total=1`.
 
 ## Boundary Check
 

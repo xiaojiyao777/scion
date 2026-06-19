@@ -67,8 +67,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `1017fb7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-1017fb7-6r-gpt55-6r-gpt55-20260619T133705Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `fb2a9b7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-qualityblock-fb2a9b7-6r-gpt55-6r-gpt55-20260619T134530Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -107,8 +107,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `1017fb7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-1017fb7-1r-gpt55-1r-gpt55-20260619T133706Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `fb2a9b7`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-qualityblock-fb2a9b7-1r-gpt55-1r-gpt55-20260619T134530Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -133,7 +133,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `1017fb7`.
+- The active prepared roots were generated from WSL runtime commit `fb2a9b7`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prepared-contract consistency,
@@ -149,8 +149,8 @@ Infrastructure:
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `expired=1`,
-  `refreshing=0`, `total=1`, and no launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `expired=0`,
+  `refreshing=1`, `total=1`, and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
