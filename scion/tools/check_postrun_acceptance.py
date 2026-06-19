@@ -877,7 +877,7 @@ def _summary_actionability_detail(
     if (
         launch_required_field is not None
         and summary.get("current_run_evidence") is True
-        and summary.get(launch_required_field) is True
+        and summary.get(launch_required_field) is not False
     ):
         summary_failures.append("problem_summary_launch_required_flag_stale")
     return {

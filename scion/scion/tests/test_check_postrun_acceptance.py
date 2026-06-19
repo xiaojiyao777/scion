@@ -855,14 +855,16 @@ def test_postrun_acceptance_rejects_stale_launch_required_problem_summary_flag(
             "warehouse-run-stale-launch-required",
             "warehouse_followup_summary",
             "launch_required_before_plateau_conclusion",
+            True,
             "protocol_evaluated_plateau_review_ready",
             [],
         ),
         (
             "cvrp",
-            "cvrp-run-stale-launch-required",
+            "cvrp-run-missing-launch-required",
             "cvrp_large_twoopt_summary",
             "launch_required_before_twoopt_conclusion",
+            None,
             "protocol_evaluated_without_large_twoopt_signal",
             ["missing_large_twoopt_mechanism_signal"],
         ),
@@ -872,6 +874,7 @@ def test_postrun_acceptance_rejects_stale_launch_required_problem_summary_flag(
         root_name,
         summary_key,
         launch_required_field,
+        launch_required_value,
         interpretation,
         evidence_gaps,
     ) in cases:
@@ -890,13 +893,16 @@ def test_postrun_acceptance_rejects_stale_launch_required_problem_summary_flag(
             "schema_version": check_tool.PROBLEM_SUMMARY_SCHEMAS[summary_key],
             "available": True,
             "current_run_evidence": True,
-            launch_required_field: True,
             "evidence_gaps": evidence_gaps,
             "interpretation": interpretation,
             "problem_family": problem_family,
             "review_axes_actionability": "actionable_current_run_evidence_present",
         }
+        if launch_required_value is not None:
+            brief[summary_key][launch_required_field] = launch_required_value
         _add_prompt_source_visibility_summary(brief)
+        if launch_required_value is None:
+            brief[summary_key].pop(launch_required_field, None)
         brief_path.write_text(
             json.dumps(brief, indent=2, sort_keys=True),
             encoding="utf-8",
@@ -913,7 +919,7 @@ def test_postrun_acceptance_rejects_stale_launch_required_problem_summary_flag(
         )
         assert (
             problem_check["detail"][0]["launch_required_before_conclusion"]
-            is True
+            is launch_required_value
         )
         assert "problem_summary_launch_required_flag_stale" in problem_check[
             "detail"
@@ -2894,6 +2900,18 @@ def _add_problem_summary_boundary_markers(summary: dict[str, object]) -> None:
     summary.setdefault("report_only", True)
     summary.setdefault("quality_judgment", False)
     summary.setdefault("decision_features_excluded", True)
+    problem_family = summary.get("problem_family")
+    schema_version = summary.get("schema_version")
+    if (
+        problem_family == "warehouse_delivery"
+        or schema_version == "scion.postrun_warehouse_followup_summary.v1"
+    ):
+        summary.setdefault("launch_required_before_plateau_conclusion", False)
+    if (
+        problem_family == "cvrp"
+        or schema_version == "scion.postrun_cvrp_large_twoopt_summary.v1"
+    ):
+        summary.setdefault("launch_required_before_twoopt_conclusion", False)
 
 
 def _warehouse_quality_blocked_problem_evidence() -> dict[str, object]:
