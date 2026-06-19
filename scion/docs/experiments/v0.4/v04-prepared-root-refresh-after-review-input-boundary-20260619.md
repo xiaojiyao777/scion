@@ -48,7 +48,8 @@ Both roots report:
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `runtime_guard_paths_cover_problem_runtime=ok`
 - completion preflight `failed`, HTTP `401`, `code=invalid_api_key`
-- auth pool `active=0`, `expired=1`, `total=1`
+- auth pool `active=0`, `total=1`; the non-active state has appeared as
+  expired or refreshing across repeated preflights
 
 The current blocker remains external `gpt-5.5` auth, not prepared-root static
 readiness.
