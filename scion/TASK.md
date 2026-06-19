@@ -252,12 +252,15 @@ Current checkpoint:
   to be present and full-visible whenever a matching code trace exists. Code
   traces also require protected target/integration/algorithm source visibility;
   missing required source paths and partial required hypothesis target-source
-  visibility prevent delegated current-run review readiness.
+  visibility prevent delegated current-run review readiness. CVRP bounded
+  two-opt review readiness now rejects generic, cross-route,
+  unbounded/fallback, VNS, and two-opt-star protocol family labels as
+  two-opt-like but non-qualifying signals.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-targetsourceready-ready-4d9c9c0-6r-gpt55-20260619T061120Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-signalstrict-6r-gpt55-20260619T062117Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-targetsourceready-ready-4d9c9c0-1r-gpt55-20260619T061121Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-signalstrict-1r-gpt55-20260619T062117Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -270,7 +273,7 @@ Current checkpoint:
   `scion/tools`. The warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `4d9c9c0`.
+  true. The roots were prepared from WSL checkout `a2abdc5`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -284,11 +287,12 @@ Current checkpoint:
   run can be called `current_run_analysis_ready=true`; launchers propagate that
   readiness result into `POSTRUN_READINESS_EXIT_STATUS`, and launch readiness
   rejects prepared scripts that omit the strict marker path. CVRP bounded
-  two-opt review readiness also requires a large/two-opt protocol-effect row
-  signal in measurement evidence; continuity-only family mentions remain
-  context, not mechanism-effect evidence. This does not change Decision,
-  `DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
-  behavior.
+  two-opt review readiness also requires a qualifying large/two-opt
+  protocol-effect row signal in measurement evidence; continuity-only family
+  mentions remain context, and generic/default-avoid two-opt-like labels are
+  explicitly rejected, not mechanism-effect evidence. This does not change
+  Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
+  solver behavior.
 - Current proposal-diagnostic boundary: adapter-owned measurement/opportunity
   diagnostics are redacted before prompt exposure for raw pair/calibration rows,
   BKS/gap details, holdout/case details, prompt ratios, and LLM text; the
@@ -305,7 +309,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the targetsourceready roots above are not current
+  Older prepared roots before the signalstrict roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.

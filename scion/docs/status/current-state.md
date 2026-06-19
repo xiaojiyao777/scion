@@ -89,7 +89,8 @@ Framework:
   exposes blocking gaps such as missing measurement/runtime/continuity inputs,
   incomplete handoff, launch-only state, infra-only state, or no protocol
   evidence. Valid negative conclusions, such as quality-blocked proposals or
-  CVRP without a large two-opt mechanism signal, remain analysis-ready.
+  CVRP without a qualifying large two-opt mechanism signal, remain
+  analysis-ready.
 - Warehouse/CVRP postrun readiness also requires current-run
   prompt/source-visibility trace accounting in the analysis brief, including
   hypothesis target-source visibility; otherwise branch transfer and source
@@ -127,8 +128,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `4d9c9c0`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-targetsourceready-ready-4d9c9c0-6r-gpt55-20260619T061120Z-claw`.
+- Current prepared root, prepared from WSL checkout `a2abdc5`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-signalstrict-6r-gpt55-20260619T062117Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -154,8 +155,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `4d9c9c0`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-targetsourceready-ready-4d9c9c0-1r-gpt55-20260619T061121Z-claw`.
+- Current prepared root, prepared from WSL checkout `a2abdc5`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-signalstrict-1r-gpt55-20260619T062117Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -168,10 +169,11 @@ CVRP/VRP:
   launch/readiness/handoff rather than research-quality or bounded two-opt
   conclusions; the CVRP specialist review axes are marked deferred until
   post-launch current-run evidence exists.
-- Postrun bounded two-opt review readiness now requires a large/two-opt
-  protocol-effect row signal in measurement evidence. Research-continuity family
-  mentions remain context only and cannot by themselves make the two-opt
-  follow-up review-ready.
+- Postrun bounded two-opt review readiness now requires a qualifying
+  large/two-opt protocol-effect row signal in measurement evidence. Generic,
+  cross-route, unbounded/fallback, VNS, or two-opt-star family labels are listed
+  as rejected two-opt-like families instead of making the follow-up review-ready.
+  Research-continuity family mentions remain context only.
 
 Infrastructure:
 
@@ -203,7 +205,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  targetsourceready roots above are not current because launch/readiness
+  signalstrict roots above are not current because launch/readiness
   runtime paths changed after prepare time. Exact
   supersession details belong in launch/readiness evidence docs, not this
   operational snapshot.
