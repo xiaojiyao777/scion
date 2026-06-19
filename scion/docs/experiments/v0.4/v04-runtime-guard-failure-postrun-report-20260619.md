@@ -8,7 +8,8 @@ Warehouse and CVRP launch scripts now generate the report-only postrun
 acceptance bundle when the runtime git guard fails before campaign start.
 Launch readiness also requires this path through
 `run_script_runtime_guard_failure_reports`. The same report-only infra-failure
-path now also covers a missing or inaccessible `SCION_DIR` through
+path now also covers missing/unreadable `launch.env` and missing/inaccessible
+`SCION_DIR` through `run_script_launch_env_failure_reports` and
 `run_script_scion_dir_failure_reports`.
 
 Before this repair, dirty runtime paths or a guarded commit mismatch could
@@ -32,12 +33,13 @@ behavior.
   that status writer, and postrun report call before the branch exit.
 - `rebuild_postrun_acceptance.py` and `postrun_artifact_inventory.py` now treat
   pre-campaign infra failure keys (`api_key_env_missing`,
-  `scion_dir_missing`, `warehouse_data_root_missing`, `git_runtime_dirty`, and
-  `git_runtime_commit_mismatch`) as resume-snapshot-only evidence, so copied
-  campaign artifacts cannot be rebuilt into current-run reports after a launch
-  guard failure.
-- Launch scripts also write `scion_dir_missing` status and run the same postrun
-  acceptance bundle before exiting when `cd "$SCION_DIR"` fails.
+  `launch_env_missing`, `scion_dir_missing`, `warehouse_data_root_missing`,
+  `git_runtime_dirty`, and `git_runtime_commit_mismatch`) as
+  resume-snapshot-only evidence, so copied campaign artifacts cannot be rebuilt
+  into current-run reports after a launch guard failure.
+- Launch scripts also write `launch_env_missing` or `scion_dir_missing` status
+  and run the same postrun acceptance bundle before exiting when the launch env
+  cannot be read or `cd "$SCION_DIR"` fails.
 - Regression coverage includes missing runtime-guard postrun calls,
   postrun-before-status ordering, comment-only postrun functions, skipped
   current-run reports after runtime-guard failure, and inventory lifecycle
@@ -72,12 +74,12 @@ WSL:
 ## Current Prepared Roots
 
 Because this touched `scion/tools` and launchers, current WSL prepared roots
-were regenerated from WSL runtime commit `a5894a66`:
+were regenerated from WSL runtime commit `5f30f5c2`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sciondir-a5894a66-6r-gpt55-20260619T164604Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchenv-5f30f5c2-6r-gpt55-20260619T165743Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sciondir-a5894a66-1r-gpt55-20260619T164604Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchenv-5f30f5c2-1r-gpt55-20260619T165744Z-claw`
 
 Strict WSL launch readiness for both roots exits `64` and reports:
 
@@ -85,6 +87,7 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `launch_ready=false`
 - `git_runtime_consistent=ok`
 - `run_script_runtime_guard_enforced=ok`
+- `run_script_launch_env_failure_reports=ok`
 - `run_script_runtime_guard_failure_reports=ok`
 - `run_script_scion_dir_failure_reports=ok`
 - `run_script_strict_postrun_rebuild=ok`
