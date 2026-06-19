@@ -560,7 +560,6 @@ def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(
 def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
     tmp_path: Path,
 ) -> None:
-    missing_python = tmp_path / "missing-python"
     missing_data_root = tmp_path / "missing-data-root"
     result = subprocess.run(
         [
@@ -575,7 +574,7 @@ def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
             "--warehouse-data-root",
             str(missing_data_root),
             "--python",
-            str(missing_python),
+            sys.executable,
         ],
         cwd=SCION_DIR,
         text=True,
@@ -610,6 +609,11 @@ def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(
     status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
     assert status["wrapper_exit_status"] == 64
     assert status["warehouse_data_root_missing"] is True
+    run_log = (run_root / "run.log").read_text(encoding="utf-8")
+    assert "POSTRUN_REPORTS_EXIT_STATUS:" in run_log
+    assert "POSTRUN_READINESS_EXIT_STATUS:" in run_log
+    readiness_dir = run_root / "postrun_acceptance" / "readiness"
+    assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
 
 
 def test_warehouse_agentic_launcher_can_skip_postrun_reports(

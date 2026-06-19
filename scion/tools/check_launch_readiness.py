@@ -224,6 +224,10 @@ def build_readiness(
         *_run_script_postrun_reports_after_campaign(run_sh),
     )
     add_check(
+        "run_script_data_root_failure_reports",
+        *_run_script_data_root_failure_reports(run_sh),
+    )
+    add_check(
         "not_already_started",
         "ok" if not (root / "exit.txt").exists() else "failed",
         str(root / "exit.txt"),
@@ -670,6 +674,55 @@ def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:
     return ("ok" if not failures else "failed"), detail
 
 
+def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
+    if not run_sh.is_file():
+        return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
+    marker = "WAREHOUSE_DATA_ROOT_MISSING"
+    marker_pos = text.find(marker)
+    if marker_pos < 0:
+        return (
+            "ok",
+            {
+                "run_script": str(run_sh),
+                "required": False,
+                "reason": "no_data_root_failure_path",
+            },
+        )
+
+    call_pos = _find_line_after(text, "write_postrun_acceptance_reports", marker_pos)
+    exit_pos = _find_next_exit_after(text, marker_pos)
+    failures: list[dict[str, Any]] = []
+    if call_pos < 0:
+        failures.append({"reason": "missing_postrun_report_call_after_data_root_failure"})
+    if exit_pos < 0:
+        failures.append({"reason": "missing_data_root_failure_exit"})
+    if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
+        failures.append({"reason": "postrun_report_call_after_data_root_exit"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "required": True,
+        "failure_marker": marker,
+        "failure_marker_position": marker_pos,
+        "postrun_report_call_position": call_pos,
+        "failure_exit_position": exit_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
 def _find_line_after(text: str, line: str, start: int) -> int:
     if start < 0:
         return -1
@@ -686,6 +739,23 @@ def _find_line_after(text: str, line: str, start: int) -> int:
         if text[line_start:line_end].strip() == needle:
             return position
         offset = position + len(needle)
+
+
+def _find_next_exit_after(text: str, start: int) -> int:
+    if start < 0:
+        return -1
+    offset = start
+    while True:
+        position = text.find("exit ", offset)
+        if position < 0:
+            return -1
+        line_start = text.rfind("\n", 0, position) + 1
+        line_end = text.find("\n", position)
+        if line_end < 0:
+            line_end = len(text)
+        if text[line_start:line_end].strip().startswith("exit "):
+            return position
+        offset = position + len("exit ")
 
 
 def _prompt_context_readiness_check(root: Path) -> tuple[str, Any]:

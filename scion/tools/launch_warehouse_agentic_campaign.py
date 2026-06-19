@@ -491,6 +491,7 @@ if [[ ! -d "$SCION_WAREHOUSE_DATA_ROOT/production/generated" || ! -d "$SCION_WAR
     echo "WAREHOUSE_DATA_ROOT_MISSING:$SCION_WAREHOUSE_DATA_ROOT"
   }} > "$RUN_ROOT/exit.txt"
   printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"warehouse_data_root_missing":true}}\\n' > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
   exit {PREFLIGHT_FAILURE_EXIT_CODE}
 fi
 {COMPLETION_PREFLIGHT_SNIPPET}

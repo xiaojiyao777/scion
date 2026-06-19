@@ -50,6 +50,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
     )
+    assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
@@ -479,6 +480,35 @@ def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign
     assert postrun_check["status"] == "failed"
     assert postrun_check["detail"]["failures"] == [
         {"reason": "missing_postrun_report_call_after_campaign"}
+    ]
+
+
+def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "if [[ \"${COMPLETION_PREFLIGHT:-0}\" == \"1\" ]]; then",
+            """if [[ ! -d "$SCION_WAREHOUSE_DATA_ROOT/production/generated" ]]; then
+  echo "WAREHOUSE_DATA_ROOT_MISSING:$SCION_WAREHOUSE_DATA_ROOT"
+  exit 64
+fi
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    data_root_check = report["checks"]["run_script_data_root_failure_reports"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert data_root_check["required"] is True
+    assert data_root_check["status"] == "failed"
+    assert data_root_check["detail"]["failures"] == [
+        {"reason": "postrun_report_call_after_data_root_exit"}
     ]
 
 
