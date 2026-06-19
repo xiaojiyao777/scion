@@ -1268,6 +1268,65 @@ def test_postrun_acceptance_accepts_cvrp_missing_direct_evidence_conclusion(
     assert problem_check["detail"][0]["blocking_evidence_gaps"] == []
 
 
+def test_postrun_acceptance_rejects_cvrp_ready_summary_without_input_twoopt_evidence(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "cvrp-run-stale-twoopt-ready")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    evidence = _cvrp_problem_evidence()
+    evidence["large_twoopt_mechanism"] = {
+        "available": True,
+        "mechanism_family_available": True,
+        "direct_evidence_ready": True,
+        "direct_evidence": {
+            "ready": True,
+            "missing": [],
+            "complete_direct_evidence_row_count": 1,
+        },
+        "families": ["bounded_large_twoopt"],
+        "protocol_families": ["bounded_large_twoopt"],
+        "rejected_protocol_families": [],
+        "protocol_row_count": 1,
+    }
+    brief["cvrp_large_twoopt_summary"] = {
+        "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence": evidence,
+        "evidence_gaps": [],
+        "interpretation": "bounded_twoopt_review_ready",
+        "problem_family": "cvrp",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    consistency = readiness["checks"]["problem_summary_input_consistency"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert consistency["status"] == "failed"
+    failures = consistency["detail"]["failures"]
+    assert "problem_summary_large_twoopt_available_mismatch" in failures
+    assert "problem_summary_large_twoopt_mechanism_family_available_mismatch" in (
+        failures
+    )
+    assert "problem_summary_large_twoopt_direct_evidence_ready_mismatch" in (
+        failures
+    )
+    assert "problem_summary_large_twoopt_protocol_rows_mismatch" in failures
+    assert "review_input_large_twoopt_direct_evidence_missing" in failures
+
+
 def test_postrun_acceptance_readiness_rejects_missing_bundle(
     tmp_path: Path,
 ) -> None:

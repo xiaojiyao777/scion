@@ -15,6 +15,9 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from postrun_artifact_inventory import build_inventory  # noqa: E402
+from postrun_analysis_brief import (  # noqa: E402
+    _cvrp_large_twoopt_mechanism_signal,
+)
 
 
 SCHEMA_VERSION = "scion.postrun_acceptance_readiness.v1"
@@ -762,6 +765,7 @@ def _problem_summary_input_consistency(
     evidence = _mapping_or_empty(summary.get("evidence"))
     protocol_evidence = _mapping_or_empty(evidence.get("protocol"))
     measurement_evidence = _mapping_or_empty(evidence.get("measurement_effect"))
+    large_twoopt_evidence = _mapping_or_empty(evidence.get("large_twoopt_mechanism"))
     runtime_evidence = _mapping_or_empty(evidence.get("runtime"))
     continuity_evidence = _mapping_or_empty(evidence.get("research_continuity"))
     quality_evidence = _mapping_or_empty(evidence.get("quality_blocks"))
@@ -847,6 +851,31 @@ def _problem_summary_input_consistency(
         and continuity_evidence.get("substantive") is not True
     ):
         failures.append("warehouse_plateau_continuity_not_substantive")
+    input_large_twoopt_signal: dict[str, Any] = {}
+    if problem_family == "cvrp":
+        input_large_twoopt_signal = _cvrp_large_twoopt_mechanism_signal(
+            measurement_effect_summary=measurement_summary,
+            research_continuity_summary=continuity_summary,
+        )
+        if large_twoopt_evidence:
+            for field in (
+                "available",
+                "mechanism_family_available",
+                "direct_evidence_ready",
+            ):
+                if large_twoopt_evidence.get(field) is not input_large_twoopt_signal.get(
+                    field
+                ):
+                    failures.append(f"problem_summary_large_twoopt_{field}_mismatch")
+            if _int_or_zero(large_twoopt_evidence.get("protocol_row_count")) != (
+                _int_or_zero(input_large_twoopt_signal.get("protocol_row_count"))
+            ):
+                failures.append("problem_summary_large_twoopt_protocol_rows_mismatch")
+        if interpretation == "bounded_twoopt_review_ready":
+            if large_twoopt_evidence.get("available") is not True:
+                failures.append("problem_summary_large_twoopt_available_missing")
+            if input_large_twoopt_signal.get("available") is not True:
+                failures.append("review_input_large_twoopt_direct_evidence_missing")
 
     return (
         "ok" if not failures else "failed",
@@ -885,6 +914,28 @@ def _problem_summary_input_consistency(
             ),
             "summary_continuity_substantive": continuity_evidence.get(
                 "substantive"
+            ),
+            "summary_large_twoopt_available": large_twoopt_evidence.get("available"),
+            "input_large_twoopt_available": input_large_twoopt_signal.get(
+                "available"
+            ),
+            "summary_large_twoopt_mechanism_family_available": (
+                large_twoopt_evidence.get("mechanism_family_available")
+            ),
+            "input_large_twoopt_mechanism_family_available": (
+                input_large_twoopt_signal.get("mechanism_family_available")
+            ),
+            "summary_large_twoopt_direct_evidence_ready": (
+                large_twoopt_evidence.get("direct_evidence_ready")
+            ),
+            "input_large_twoopt_direct_evidence_ready": (
+                input_large_twoopt_signal.get("direct_evidence_ready")
+            ),
+            "summary_large_twoopt_protocol_row_count": (
+                large_twoopt_evidence.get("protocol_row_count")
+            ),
+            "input_large_twoopt_protocol_row_count": (
+                input_large_twoopt_signal.get("protocol_row_count")
             ),
         },
     )
