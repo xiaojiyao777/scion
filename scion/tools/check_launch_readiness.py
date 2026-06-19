@@ -26,6 +26,7 @@ PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
 ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
 REQUIRED_SCION_MODEL = "gpt-5.5"
+MIN_PREPARED_PROPOSAL_HEADROOM = 64
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
     "manifest_env_reader": (
@@ -269,6 +270,10 @@ def build_readiness(
         _contract_check_detail(contract_checks, "git_runtime_consistent"),
     )
     add_check(
+        "git_runtime_worktree_clean",
+        *_git_runtime_worktree_clean(prepared_contract),
+    )
+    add_check(
         "runtime_guard_paths_cover_launch_tools",
         *_runtime_guard_paths_cover_launch_tools(prepared_contract),
     )
@@ -353,6 +358,10 @@ def build_readiness(
     add_check(
         "run_script_no_early_stop_enforced",
         *_run_script_no_early_stop_enforced(root, run_sh, prepared_contract),
+    )
+    add_check(
+        "run_script_proposal_headroom_enforced",
+        *_run_script_proposal_headroom_enforced(root, run_sh, prepared_contract),
     )
     add_check(
         "run_script_strict_postrun_rebuild",
@@ -548,7 +557,7 @@ def _runtime_guard_paths_cover_launch_tools(prepared_contract: Any) -> tuple[str
     git = prepared_contract.get("git")
     git_dict = git if isinstance(git, dict) else {}
     raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
-    pathspecs = raw_paths.split()
+    pathspecs = _runtime_guard_pathspecs(raw_paths)
     missing = [
         required
         for required in REQUIRED_RUNTIME_GUARD_PATHS
@@ -562,6 +571,44 @@ def _runtime_guard_paths_cover_launch_tools(prepared_contract: Any) -> tuple[str
             "missing_required_paths": missing,
         },
     )
+
+
+def _git_runtime_worktree_clean(prepared_contract: Any) -> tuple[str, Any]:
+    if not isinstance(prepared_contract, dict):
+        return "failed", {"reason": "missing_prepared_contract"}
+    git = prepared_contract.get("git")
+    git_dict = git if isinstance(git, dict) else {}
+    raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
+    pathspecs = _runtime_guard_pathspecs(raw_paths)
+    if not pathspecs:
+        return (
+            "failed",
+            {
+                "reason": "missing_runtime_guard_paths",
+                "runtime_guard_paths": raw_paths,
+            },
+        )
+    result = subprocess.run(
+        ["git", "-C", str(REPO_DIR), "status", "--porcelain", "--", *pathspecs],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    detail: dict[str, Any] = {
+        "repo_dir": str(REPO_DIR),
+        "runtime_guard_paths": raw_paths,
+        "pathspecs": pathspecs,
+        "git_status_exit_code": result.returncode,
+        "dirty_entries": result.stdout.splitlines(),
+    }
+    if result.returncode != 0:
+        detail["reason"] = "git_status_failed"
+        detail["stderr"] = result.stderr[-2000:]
+        return "failed", detail
+    if result.stdout.strip():
+        detail["reason"] = "runtime_guard_worktree_dirty"
+        return "failed", detail
+    return "ok", detail
 
 
 def _runtime_guard_paths_cover_problem_runtime(
@@ -583,7 +630,7 @@ def _runtime_guard_paths_cover_problem_runtime(
     git = prepared_contract.get("git")
     git_dict = git if isinstance(git, dict) else {}
     raw_paths = str(git_dict.get("runtime_guard_paths") or "").strip()
-    pathspecs = raw_paths.split()
+    pathspecs = _runtime_guard_pathspecs(raw_paths)
     missing = [
         required
         for required in required_paths
@@ -599,6 +646,13 @@ def _runtime_guard_paths_cover_problem_runtime(
         },
         True,
     )
+
+
+def _runtime_guard_pathspecs(raw_paths: str) -> list[str]:
+    try:
+        return shlex.split(raw_paths)
+    except ValueError:
+        return raw_paths.split()
 
 
 def _runtime_guard_path_covers(pathspecs: list[str], required: str) -> bool:
@@ -1450,6 +1504,144 @@ def _run_script_no_early_stop_enforced(
     return ("ok" if not failures else "failed"), detail
 
 
+def _run_script_proposal_headroom_enforced(
+    root: Path,
+    run_sh: Path,
+    prepared_contract: Any,
+) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    manifest = _prepared_manifest_from_contract(root, prepared_contract)
+    manifest_command = manifest.get("command")
+    execution = manifest.get("execution")
+    if not isinstance(execution, dict):
+        execution = {}
+
+    campaign_pos = _campaign_command_position(run_text)
+    campaign_status_pos = run_text.find("STATUS=$?", campaign_pos)
+    campaign_end_pos = campaign_status_pos if campaign_status_pos >= 0 else len(run_text)
+    campaign_command_block = (
+        run_text[campaign_pos:campaign_end_pos] if campaign_pos >= 0 else ""
+    )
+
+    fields = {
+        "proposal_attempt_limit": {
+            "env": "PROPOSAL_ATTEMPT_LIMIT",
+            "option": "--proposal-attempt-limit",
+        },
+        "proposal_quality_loop_limit": {
+            "env": "PROPOSAL_QUALITY_LOOP_LIMIT",
+            "option": "--proposal-quality-loop-limit",
+        },
+    }
+    detail_fields: dict[str, Any] = {}
+    for field, spec in fields.items():
+        env_key = str(spec["env"])
+        option = str(spec["option"])
+        env_raw = _shell_assignment_value(launch_env_text, env_key)
+        env_value = _parse_positive_int(env_raw)
+        manifest_value = _parse_positive_int(execution.get(field))
+        manifest_command_raw = (
+            _shell_command_option_value(manifest_command, option)
+            if isinstance(manifest_command, str)
+            else None
+        )
+        manifest_command_value = _parse_positive_int(manifest_command_raw)
+        run_script_uses_env = _shell_command_has_option_value(
+            campaign_command_block,
+            option,
+            {f"${env_key}", f"${{{env_key}}}"},
+        )
+        detail_fields[field] = {
+            "env_key": env_key,
+            "env_value": env_value,
+            "manifest_execution_value": manifest_value,
+            "manifest_command_value": manifest_command_value,
+            "run_script_campaign_uses_env": run_script_uses_env,
+        }
+        for source, value in (
+            ("launch_env", env_value),
+            ("manifest_execution", manifest_value),
+            ("manifest_command", manifest_command_value),
+        ):
+            if value is None:
+                failures.append(
+                    {
+                        "reason": f"{field}_{source}_missing_or_invalid",
+                        "field": field,
+                        "source": source,
+                        "expected_min": MIN_PREPARED_PROPOSAL_HEADROOM,
+                        "actual": env_raw
+                        if source == "launch_env"
+                        else execution.get(field)
+                        if source == "manifest_execution"
+                        else manifest_command_raw,
+                    }
+                )
+            elif value < MIN_PREPARED_PROPOSAL_HEADROOM:
+                failures.append(
+                    {
+                        "reason": f"{field}_{source}_below_minimum",
+                        "field": field,
+                        "source": source,
+                        "expected_min": MIN_PREPARED_PROPOSAL_HEADROOM,
+                        "actual": value,
+                    }
+                )
+        if not run_script_uses_env:
+            failures.append(
+                {
+                    "reason": f"{field}_run_script_campaign_command_missing_env",
+                    "field": field,
+                    "option": option,
+                    "expected_env": env_key,
+                    "run_script": str(run_sh),
+                }
+            )
+
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "min_prepared_proposal_headroom": MIN_PREPARED_PROPOSAL_HEADROOM,
+        "campaign_command_position": campaign_pos,
+        "campaign_status_position": campaign_status_pos,
+        "fields": detail_fields,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
 def _prepared_manifest_from_contract(root: Path, prepared_contract: Any) -> dict[str, Any]:
     manifest = prepared_contract if isinstance(prepared_contract, dict) else {}
     manifest_path = manifest.get("manifest_path")
@@ -1475,6 +1667,29 @@ def _shell_assignment_value(text: str, key: str) -> str | None:
         ):
             value = value[1:-1]
         return value
+    return None
+
+
+def _parse_positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _shell_command_option_value(command: str, option: str) -> str | None:
+    if not command:
+        return None
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        return None
+    for index, token in enumerate(tokens[:-1]):
+        if token == option:
+            return tokens[index + 1]
     return None
 
 

@@ -30,6 +30,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prepared_only_not_started"]["status"] == "ok"
     assert report["checks"]["prepared_contract_complete"]["status"] == "ok"
     assert report["checks"]["git_runtime_consistent"]["status"] == "ok"
+    assert report["checks"]["git_runtime_worktree_clean"]["status"] == "ok"
     assert (
         report["checks"]["runtime_guard_paths_cover_launch_tools"]["status"] == "ok"
     )
@@ -68,6 +69,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["run_script_pythonpath_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_model_route_enforced"]["status"] == "ok"
     assert report["checks"]["run_script_no_early_stop_enforced"]["status"] == "ok"
+    assert (
+        report["checks"]["run_script_proposal_headroom_enforced"]["status"] == "ok"
+    )
     assert report["checks"]["run_script_strict_postrun_rebuild"]["status"] == "ok"
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
@@ -830,6 +834,42 @@ def test_launch_readiness_allows_doc_only_prepared_contract_check_drift() -> Non
     assert "prepared_contract_checks_mismatch" in {
         failure["reason"] for failure in failures
     }
+
+
+def test_launch_readiness_rejects_dirty_runtime_guard_worktree(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    guarded = repo / "scion" / "tools" / "runtime.py"
+    guarded.parent.mkdir(parents=True)
+    guarded.write_text("value = 1\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True)
+    guarded.write_text("value = 2\n", encoding="utf-8")
+
+    original_repo_dir = readiness_tool.REPO_DIR
+    readiness_tool.REPO_DIR = repo
+    try:
+        status, detail = readiness_tool._git_runtime_worktree_clean(
+            {"git": {"runtime_guard_paths": "scion/tools"}}
+        )
+    finally:
+        readiness_tool.REPO_DIR = original_repo_dir
+
+    assert status == "failed"
+    assert detail["reason"] == "runtime_guard_worktree_dirty"
+    assert detail["dirty_entries"] == [" M scion/tools/runtime.py"]
 
 
 def test_launch_readiness_rejects_missing_matching_prepared_problem_summary(
@@ -1763,6 +1803,109 @@ def test_launch_readiness_rejects_run_script_disable_early_stop_prefix_only(
     } in early_stop_check["detail"]["failures"]
 
 
+def test_launch_readiness_rejects_missing_proposal_headroom_env(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        "\n".join(
+            line
+            for line in launch_env.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("PROPOSAL_ATTEMPT_LIMIT=")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    assert {
+        "reason": "proposal_attempt_limit_launch_env_missing_or_invalid",
+        "field": "proposal_attempt_limit",
+        "source": "launch_env",
+        "expected_min": 64,
+        "actual": None,
+    } in headroom_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_low_manifest_proposal_headroom(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    manifest_path = run_root / "prepared_run_manifest.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["execution"]["proposal_quality_loop_limit"] = 7
+    manifest["command"] = manifest["command"].replace(
+        "--proposal-quality-loop-limit 64",
+        "--proposal-quality-loop-limit 7",
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    failures = headroom_check["detail"]["failures"]
+    assert {
+        "reason": "proposal_quality_loop_limit_manifest_execution_below_minimum",
+        "field": "proposal_quality_loop_limit",
+        "source": "manifest_execution",
+        "expected_min": 64,
+        "actual": 7,
+    } in failures
+    assert {
+        "reason": "proposal_quality_loop_limit_manifest_command_below_minimum",
+        "field": "proposal_quality_loop_limit",
+        "source": "manifest_command",
+        "expected_min": 64,
+        "actual": 7,
+    } in failures
+
+
+def test_launch_readiness_rejects_run_script_without_proposal_headroom_flags(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            ' --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"'
+            ' --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"',
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    headroom_check = report["checks"]["run_script_proposal_headroom_enforced"]
+    assert headroom_check["status"] == "failed"
+    failures = headroom_check["detail"]["failures"]
+    assert {
+        "reason": "proposal_attempt_limit_run_script_campaign_command_missing_env",
+        "field": "proposal_attempt_limit",
+        "option": "--proposal-attempt-limit",
+        "expected_env": "PROPOSAL_ATTEMPT_LIMIT",
+        "run_script": str(run_sh),
+    } in failures
+    assert {
+        "reason": "proposal_quality_loop_limit_run_script_campaign_command_missing_env",
+        "field": "proposal_quality_loop_limit",
+        "option": "--proposal-quality-loop-limit",
+        "expected_env": "PROPOSAL_QUALITY_LOOP_LIMIT",
+        "run_script": str(run_sh),
+    } in failures
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -2061,6 +2204,7 @@ def _write_prepared_root(
         f"--split {config_dir / 'split.yaml'} "
         f"--seeds {config_dir / 'seeds.yaml'} "
         f"--campaign-dir {campaign_dir} --rounds 1 "
+        "--proposal-attempt-limit 64 --proposal-quality-loop-limit 64 "
         f"--agentic-proposal --disable-early-stop"
     )
     _write_json(
@@ -2109,6 +2253,8 @@ def _write_prepared_root(
             "rounds": 1,
             "time_limit_sec": 30,
             "agentic_session_timeout_sec": 900,
+            "proposal_attempt_limit": 64,
+            "proposal_quality_loop_limit": 64,
             "measurement_governance": "on",
             "proposal_context_ablation": "full",
             "agentic_proposal": True,
@@ -2156,6 +2302,8 @@ def _write_prepared_root(
                 "SCION_MODEL=gpt-5.5",
                 "SCION_BASE_URL=http://127.0.0.1:8080",
                 "COMPLETION_PREFLIGHT=1",
+                "PROPOSAL_ATTEMPT_LIMIT=64",
+                "PROPOSAL_QUALITY_LOOP_LIMIT=64",
                 "DISABLE_EARLY_STOP=1",
                 "",
             ]
@@ -2230,7 +2378,7 @@ if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
     exit "$PREFLIGHT_STATUS"
   fi
 fi
-{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --agentic-proposal --disable-early-stop
+{sys.executable} -m scion.cli.main run --problem {config_dir / 'problem.yaml'} --protocol {config_dir / 'protocol.yaml'} --split {config_dir / 'split.yaml'} --seeds {config_dir / 'seeds.yaml'} --campaign-dir {campaign_dir} --rounds 1 --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" --agentic-proposal --disable-early-stop
 STATUS=$?
 write_postrun_acceptance_reports
 exit "$STATUS"
