@@ -28,6 +28,10 @@ Top effect rows can also provide the protocol signal when the aggregate
 mechanism-family effect summary is absent, avoiding dependence on a single
 aggregation shape.
 
+The Markdown brief now displays protocol families, continuity-only families,
+and top-row signal counts so delegated review can see why a two-opt mechanism
+signal was or was not accepted without opening the JSON.
+
 ## Boundary
 
 This is a report-only delegated-analysis guard. It does not change Decision,

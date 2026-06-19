@@ -1094,6 +1094,10 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "- Large two-opt mechanism signal: "
                 f"`{_display(mechanism.get('available'))}` / "
                 f"{_list_text(mechanism.get('families') or [])}",
+                "- Large two-opt protocol/continuity families / top-row signals: "
+                f"{_list_text(mechanism.get('protocol_families') or [])} / "
+                f"{_list_text(mechanism.get('continuity_families') or [])} / "
+                f"{_display(mechanism.get('top_row_signal_count'))}",
                 "- Runtime available / diagnostics: "
                 f"`{_display(runtime.get('available'))}` / "
                 f"{_display(runtime.get('runtime_budget_diagnostic_count'))}",
@@ -1198,6 +1202,18 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 "- Research continuity available/reports: "
                 f"`{_display(continuity_evidence.get('available'))}` / "
                 f"{_display(continuity_evidence.get('continuity_report_count'))}",
+                "- Research continuity substantive/depth: "
+                f"`{_display(continuity_evidence.get('substantive'))}` / "
+                f"{_display(continuity_evidence.get('max_branch_depth'))}",
+                "- Research continuity same-mechanism selected/observed: "
+                f"{_display(continuity_evidence.get('same_mechanism_selected'))} / "
+                f"{_display(continuity_evidence.get('same_mechanism_observed'))}",
+                "- Research continuity branch lessons satisfied/required: "
+                f"{_display(continuity_evidence.get('branch_lessons_satisfied'))} / "
+                f"{_display(continuity_evidence.get('branch_lessons_required'))}",
+                "- Research continuity weak-positive accepted/observed: "
+                f"{_display(continuity_evidence.get('weak_positive_accepted'))} / "
+                f"{_display(continuity_evidence.get('weak_positive_observed'))}",
             ]
         )
         requirements = warehouse.get("handoff_requirements")

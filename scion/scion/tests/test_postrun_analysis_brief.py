@@ -1407,6 +1407,11 @@ def test_cvrp_large_twoopt_summary_rejects_continuity_only_twoopt_signal(
     assert mechanism["protocol_row_count"] == 0
     assert mechanism["protocol_families"] == []
     assert mechanism["continuity_families"] == ["bounded_large_twoopt"]
+    markdown = brief_tool.render_markdown(brief)
+    assert (
+        "- Large two-opt protocol/continuity families / top-row signals: "
+        "none / bounded_large_twoopt / 0"
+    ) in markdown
 
 
 def test_cvrp_large_twoopt_summary_accepts_top_row_twoopt_protocol_signal(
@@ -1442,6 +1447,11 @@ def test_cvrp_large_twoopt_summary_accepts_top_row_twoopt_protocol_signal(
     assert mechanism["protocol_families"] == ["bounded_large_twoopt"]
     assert mechanism["protocol_row_count"] == 1
     assert mechanism["top_row_signal_count"] == 1
+    markdown = brief_tool.render_markdown(brief)
+    assert (
+        "- Large two-opt protocol/continuity families / top-row signals: "
+        "bounded_large_twoopt / bounded_large_twoopt / 1"
+    ) in markdown
 
 
 def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
@@ -1686,6 +1696,10 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert continuity["substantive"] is True
     assert continuity["max_branch_depth"] == 2
     assert continuity["same_mechanism_observed"] == 1
+    assert "- Research continuity substantive/depth: `True` / 2" in markdown
+    assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (
+        markdown
+    )
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
 
 
@@ -1786,6 +1800,10 @@ def test_warehouse_followup_summary_rejects_shallow_continuity_for_plateau_ready
     assert continuity["max_branch_depth"] == 1
     assert continuity["same_mechanism_observed"] == 0
     assert continuity["branch_lessons_required"] == 0
+    assert "- Research continuity substantive/depth: `False` / 1" in markdown
+    assert "- Research continuity same-mechanism selected/observed: 0 / 0" in (
+        markdown
+    )
     assert "- Interpretation: protocol_evaluated_research_continuity_too_shallow" in (
         markdown
     )

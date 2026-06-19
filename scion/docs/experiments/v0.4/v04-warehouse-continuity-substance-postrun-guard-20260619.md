@@ -35,6 +35,10 @@ protocol-evaluated current run with only shallow continuity evidence is reported
 as `protocol_evaluated_research_continuity_too_shallow` with evidence gap
 `warehouse_research_continuity_evidence_too_shallow`.
 
+The Markdown brief now displays the substantive flag and the continuity counters
+used for that judgment, so delegated review can audit the plateau-readiness
+decision without opening the JSON.
+
 ## Boundary
 
 This is a report-only delegated-analysis guard. It does not change Decision,
