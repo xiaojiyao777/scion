@@ -88,9 +88,9 @@ Framework:
 - Postrun readiness now also fails when the matching problem-specific summary
   exposes blocking gaps such as missing measurement/runtime/continuity inputs,
   incomplete handoff, launch-only state, infra-only state, or no protocol
-  evidence. Valid negative conclusions, such as quality-blocked proposals or
-  CVRP without a qualifying large two-opt mechanism signal, remain
-  analysis-ready.
+  evidence. Valid negative conclusions, such as quality-blocked proposals, CVRP
+  without a qualifying large two-opt mechanism signal, or CVRP without direct
+  two-opt activation/effect/phase telemetry, remain analysis-ready.
 - Postrun readiness also rejects stale problem-specific summary contracts:
   `warehouse_followup_summary` and `cvrp_large_twoopt_summary` must use the
   current schema, match the prepared problem family, and use a current
@@ -136,8 +136,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `f6f9e18`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-familyguard-6r-gpt55-20260619T065153Z-claw`.
+- Current prepared root, prepared from WSL checkout `2623fa9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-directevidence-6r-gpt55-20260619T070646Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -163,8 +163,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `f6f9e18`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-familyguard-1r-gpt55-20260619T065154Z-claw`.
+- Current prepared root, prepared from WSL checkout `2623fa9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-directevidence-1r-gpt55-20260619T070646Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -177,8 +177,9 @@ CVRP/VRP:
   launch/readiness/handoff rather than research-quality or bounded two-opt
   conclusions; the CVRP specialist review axes are marked deferred until
   post-launch current-run evidence exists.
-- Postrun bounded two-opt review readiness now requires a qualifying
-  large/two-opt protocol-effect row signal in measurement evidence. Generic,
+- Postrun bounded two-opt review readiness now requires both a qualifying
+  large/two-opt protocol-effect row signal in measurement evidence and direct
+  activation/effect/phase telemetry on a matching top effect row. Generic,
   cross-route, unbounded/fallback, VNS, or two-opt-star family labels are listed
   as rejected two-opt-like families instead of making the follow-up review-ready.
   Research-continuity family mentions remain context only.
@@ -213,7 +214,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  familyguard roots above are not current. Exact supersession details belong in
+  directevidence roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
