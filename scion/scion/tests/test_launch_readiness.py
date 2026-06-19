@@ -1110,6 +1110,78 @@ def test_launch_readiness_rejects_comment_only_strict_postrun_rebuild(
     ]["failures"]
 
 
+def test_launch_readiness_rejects_postrun_rebuild_after_readiness(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    rebuild_start = run_text.index(
+        '  "$PY" "$SCION_DIR/tools/rebuild_postrun_acceptance.py"'
+    )
+    rebuild_end = run_text.index(
+        '  echo "POSTRUN_REPORTS_EXIT_STATUS:${POSTRUN_REBUILD_STATUS:-0}"',
+        rebuild_start,
+    )
+    rebuild_end = run_text.index("\n", rebuild_end) + 1
+    readiness_start = run_text.index(
+        '  "$PY" "$SCION_DIR/tools/check_postrun_acceptance.py"'
+    )
+    readiness_end = run_text.index(
+        '  echo "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS"',
+        readiness_start,
+    )
+    readiness_end = run_text.index("\n", readiness_end) + 1
+    rebuild_block = run_text[rebuild_start:rebuild_end]
+    readiness_block = run_text[readiness_start:readiness_end]
+    run_text = (
+        run_text[:rebuild_start]
+        + readiness_block
+        + rebuild_block
+        + run_text[rebuild_end:readiness_start]
+        + run_text[readiness_end:]
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
+    assert rebuild_check["required"] is True
+    assert rebuild_check["status"] == "failed"
+    assert {"reason": "postrun_rebuild_after_readiness"} in rebuild_check[
+        "detail"
+    ]["failures"]
+
+
+def test_launch_readiness_rejects_postrun_status_marker_before_rebuild(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    marker = '  echo "POSTRUN_REPORTS_EXIT_STATUS:${POSTRUN_REBUILD_STATUS:-0}" >> "$RUN_ROOT/run.log"\n'
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(marker, "", 1)
+    run_text = run_text.replace(
+        "write_postrun_acceptance_reports() {\n",
+        "write_postrun_acceptance_reports() {\n" + marker,
+        1,
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
+    assert rebuild_check["required"] is True
+    assert rebuild_check["status"] == "failed"
+    assert {"reason": "postrun_reports_exit_status_before_rebuild"} in (
+        rebuild_check["detail"]["failures"]
+    )
+
+
 def test_launch_readiness_rejects_comment_only_strict_postrun_readiness(
     tmp_path: Path,
 ) -> None:

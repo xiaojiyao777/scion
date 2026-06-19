@@ -965,6 +965,10 @@ def _run_script_strict_postrun_rebuild(run_sh: Path) -> tuple[str, Any]:
         "tools/rebuild_postrun_acceptance.py",
     )
     rebuild_has_strict_flag = command_has_shell_flag(rebuild_block, "--strict")
+    readiness_pos, _readiness_block = _shell_command_block_containing_marker(
+        text,
+        "tools/check_postrun_acceptance.py",
+    )
     status_marker_pos, ignored_status_markers = _find_executable_marker_position(
         text,
         "POSTRUN_REPORTS_EXIT_STATUS",
@@ -979,8 +983,12 @@ def _run_script_strict_postrun_rebuild(run_sh: Path) -> tuple[str, Any]:
         failures.append({"reason": "postrun_rebuild_command_missing"})
     elif not rebuild_has_strict_flag:
         failures.append({"reason": "postrun_rebuild_strict_flag_missing"})
+    if rebuild_pos >= 0 and readiness_pos >= 0 and rebuild_pos > readiness_pos:
+        failures.append({"reason": "postrun_rebuild_after_readiness"})
     if status_marker_pos < 0:
         failures.append({"reason": "postrun_reports_exit_status_marker_missing"})
+    if rebuild_pos >= 0 and status_marker_pos >= 0 and status_marker_pos < rebuild_pos:
+        failures.append({"reason": "postrun_reports_exit_status_before_rebuild"})
 
     detail = {
         "run_script": str(run_sh),
@@ -988,6 +996,7 @@ def _run_script_strict_postrun_rebuild(run_sh: Path) -> tuple[str, Any]:
         "ignored_non_executable_function_definition_count": ignored_function_count,
         "postrun_rebuild_command_position": rebuild_pos,
         "postrun_rebuild_strict_flag": rebuild_has_strict_flag,
+        "postrun_acceptance_command_position": readiness_pos,
         "postrun_reports_exit_status_position": status_marker_pos,
         "ignored_non_executable_status_marker_count": ignored_status_markers,
         "failures": failures,
