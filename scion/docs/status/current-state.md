@@ -41,9 +41,10 @@ Framework:
 - Current-run delegated review readiness for warehouse/CVRP requires matching
   problem summaries, rebuild-manifest identity and declared outputs,
   prompt/source visibility traces, research-context/signal-density/failure
-  taxonomy/review-input summaries, and consistency between those summaries and
-  the problem-specific conclusion. Missing review inputs fail readiness; valid
-  negative conclusions can still be analysis-ready.
+  taxonomy/review-input summaries, report-only champion-progress summaries,
+  and consistency between review inputs and the problem-specific conclusion.
+  Missing review inputs fail readiness; valid negative conclusions can still be
+  analysis-ready.
 - Adapter-owned diagnostics are redacted before prompt exposure for raw
   pair/calibration rows, BKS/gap details, holdout/case details, prompt ratios,
   and LLM text. Problem-owned proposal diagnostics may guide proposal context
@@ -56,8 +57,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `32294b7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-whinput-32294b7-6r-gpt55-20260619T115045Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `6fcfb05`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-champprog-6fcfb05-6r-gpt55-20260619T121318Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -74,6 +75,10 @@ Warehouse:
   is not enough to call a protocol-evaluated run plateau-review-ready. Postrun
   acceptance recomputes this continuity signal from review inputs before
   accepting a `protocol_evaluated_plateau_review_ready` summary claim.
+  Postrun analysis also reports champion-progress from current-run champion
+  table evidence, comparing the prepared champion checkpoint such as `v2`
+  against the current champion max version while keeping copied resume history
+  separate.
 
 CVRP/VRP:
 
@@ -86,8 +91,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `32294b7`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-whinput-32294b7-1r-gpt55-20260619T115045Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `6fcfb05`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-champprog-6fcfb05-1r-gpt55-20260619T121332Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -112,10 +117,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `32294b7`.
-  Current local/WSL checkouts may include later documentation-only commits;
-  launch readiness reports `git_runtime_consistent=ok` because runtime guard
-  paths are unchanged.
+- The active prepared roots were generated from WSL runtime commit `6fcfb05`.
 - WSL strict launch readiness for both current prepared roots reports
   `static_ready=true`, `launch_ready=false`, exit `64`. Static checks include
   prepared contract/brief identity, prompt-context handoff,
@@ -129,9 +131,9 @@ Infrastructure:
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
-  `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `expired=1`, `refreshing=0`, `total=1`, and no launch-usable
-  account.
+  `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
+  launch-readiness preflight saw auth pool `active=0`, `refreshing=1`,
+  `total=1`, and no launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -179,6 +181,8 @@ Infrastructure:
   `scion/docs/experiments/v0.4/v04-warehouse-continuity-realized-signal-20260619.md`.
 - Current warehouse postrun acceptance consistency repair:
   `scion/docs/experiments/v0.4/v04-warehouse-readiness-input-consistency-20260619.md`.
+- Current champion-progress postrun audit repair:
+  `scion/docs/experiments/v0.4/v04-champion-progress-postrun-summary-20260619.md`.
 - Current repair context lives in `scion/docs/experiments/v0.4/`; keep this
   status page focused on operating truth rather than repair chronology.
 - WSL reference:
