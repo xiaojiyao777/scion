@@ -99,6 +99,10 @@ Framework:
   prompt/source-visibility trace accounting in the analysis brief, including
   hypothesis target-source visibility; otherwise branch transfer and source
   grounding are not auditable enough for delegated current-run review.
+- Postrun readiness now binds the selected analysis brief to
+  `postrun_acceptance/rebuild/rebuild_manifest.v1.json` and checks both
+  rebuild-manifest and analysis-brief run identity, so stale or lexically later
+  brief artifacts cannot make delegated current-run review ready.
 - Runtime feedback is review-ready only when raw runtime feedback exists and
   both fresh-runtime replay drain status and stage-transition drain status are
   present. Budget diagnostics remain useful for investigation, but they do not
@@ -141,8 +145,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `31c6f41`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-problemruntimeguard-6r-gpt55-20260619T072753Z-claw`.
+- Current prepared root, prepared from WSL checkout `35b50a0`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-manifestboundreadiness-6r-gpt55-20260619T073434Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -168,8 +172,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `31c6f41`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-problemruntimeguard-1r-gpt55-20260619T072754Z-claw`.
+- Current prepared root, prepared from WSL checkout `35b50a0`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-manifestboundreadiness-1r-gpt55-20260619T073434Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -223,7 +227,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  problemruntimeguard roots above are not current. Exact supersession details
+  manifestboundreadiness roots above are not current. Exact supersession details
   belong in launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
