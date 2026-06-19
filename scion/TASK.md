@@ -381,9 +381,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-explicitlaunch-567a29dd-preflight-6r-gpt55-20260619T220040Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postfails-2a1c996c-preflight-6r-gpt55-20260619T223801Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-explicitlaunch-567a29dd-preflight-4r-gpt55-20260619T220040Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postfails-2a1c996c-preflight-4r-gpt55-20260619T223802Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -428,8 +428,8 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `567a29dd`, whose runtime guard paths match after the explicit postrun
-  launch-required flag guard touched `scion/tools`. Solver-design
+  `2a1c996c`, whose runtime guard paths match after the postrun readiness
+  failed-check summary touched `scion/tools`. Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current
   readiness also verifies executable `launch.env` sourcing, executable
@@ -467,7 +467,10 @@ Current checkpoint:
   selected analysis brief to the rebuild manifest and checks run identity, so
   stale or lexically later brief artifacts cannot make delegated review ready.
   It also requires manifest-declared family outputs to still exist, so stale
-  directory contents cannot mask a missing report artifact. For warehouse/CVRP
+  directory contents cannot mask a missing report artifact. It emits top-level
+  `failed_required_checks` and `failed_optional_checks` so delegated reviewers
+  can identify missing current-run analysis inputs without scanning every check.
+  For warehouse/CVRP
   current runs it additionally requires research-context actionability, prompt
   signal-density accounting, failure-taxonomy evidence, and review-input
   summaries to be present, report-only/`DecisionFeatures`-excluded, and
