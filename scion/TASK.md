@@ -262,13 +262,14 @@ Current checkpoint:
   be present before runtime evidence can support delegated conclusions.
 - Postrun acceptance readiness rejects stale problem-specific summary contracts:
   `warehouse_followup_summary` and `cvrp_large_twoopt_summary` must use their
-  current schema and a current delegated-review interpretation before a
-  current run can be called analysis-ready.
+  current schema, match the prepared problem family, and use a current
+  delegated-review interpretation before a current run can be called
+  analysis-ready.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-schemaguard-6r-gpt55-6r-gpt55-20260619T064539Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-familyguard-6r-gpt55-20260619T065153Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-schemaguard-1r-gpt55-1r-gpt55-20260619T064539Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-familyguard-1r-gpt55-20260619T065154Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -281,7 +282,7 @@ Current checkpoint:
   `scion/tools`. The warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `a74264f`.
+  true. The roots were prepared from WSL checkout `f6f9e18`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -317,7 +318,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the schemaguard roots above are not current
+  Older prepared roots before the familyguard roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
