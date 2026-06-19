@@ -7,7 +7,9 @@ Date: 2026-06-19
 Warehouse and CVRP launch scripts now generate the report-only postrun
 acceptance bundle when the runtime git guard fails before campaign start.
 Launch readiness also requires this path through
-`run_script_runtime_guard_failure_reports`.
+`run_script_runtime_guard_failure_reports`. The same report-only infra-failure
+path now also covers a missing or inaccessible `SCION_DIR` through
+`run_script_scion_dir_failure_reports`.
 
 Before this repair, dirty runtime paths or a guarded commit mismatch could
 write `run_status.json` and exit `64` without running postrun rebuild/readiness.
@@ -30,10 +32,12 @@ behavior.
   that status writer, and postrun report call before the branch exit.
 - `rebuild_postrun_acceptance.py` and `postrun_artifact_inventory.py` now treat
   pre-campaign infra failure keys (`api_key_env_missing`,
-  `warehouse_data_root_missing`, `git_runtime_dirty`, and
+  `scion_dir_missing`, `warehouse_data_root_missing`, `git_runtime_dirty`, and
   `git_runtime_commit_mismatch`) as resume-snapshot-only evidence, so copied
   campaign artifacts cannot be rebuilt into current-run reports after a launch
   guard failure.
+- Launch scripts also write `scion_dir_missing` status and run the same postrun
+  acceptance bundle before exiting when `cd "$SCION_DIR"` fails.
 - Regression coverage includes missing runtime-guard postrun calls,
   postrun-before-status ordering, comment-only postrun functions, skipped
   current-run reports after runtime-guard failure, and inventory lifecycle
@@ -68,12 +72,12 @@ WSL:
 ## Current Prepared Roots
 
 Because this touched `scion/tools` and launchers, current WSL prepared roots
-were regenerated from WSL runtime commit `88ac20d`:
+were regenerated from WSL runtime commit `a5894a66`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-infraskip-88ac20d-6r-gpt55-6r-gpt55-20260619T162704Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sciondir-a5894a66-6r-gpt55-20260619T164604Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-infraskip-88ac20d-1r-gpt55-1r-gpt55-20260619T162705Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sciondir-a5894a66-1r-gpt55-20260619T164604Z-claw`
 
 Strict WSL launch readiness for both roots exits `64` and reports:
 
@@ -82,6 +86,7 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `git_runtime_consistent=ok`
 - `run_script_runtime_guard_enforced=ok`
 - `run_script_runtime_guard_failure_reports=ok`
+- `run_script_scion_dir_failure_reports=ok`
 - `run_script_strict_postrun_rebuild=ok`
 - `run_script_strict_postrun_readiness=ok`
 - `prepared_handoff_rebuild_declared_outputs_present=ok`
@@ -93,4 +98,4 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 The remaining blocker is still external `gpt-5.5` provider auth, not Scion
 static readiness. Real chat completion preflight returns HTTP `401`,
 `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-`active=0`, `expired=1`, `refreshing=0`, `total=1`.
+`active=0`, `total=1`, and no launch-usable account.

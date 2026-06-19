@@ -34,8 +34,8 @@ Framework:
   problem-specific handoff, runtime guards, model route, active-checkout
   `PYTHONPATH`, no-early-stop semantics, completion preflight, pre-campaign
   failure reporting, strict postrun rebuild-before-readiness reporting, strict
-  postrun readiness status-after-check reporting, runtime-guard failure postrun
-  reporting, pre-campaign infra-only evidence isolation,
+  postrun readiness status-after-check reporting, `SCION_DIR`/runtime-guard
+  failure postrun reporting, pre-campaign infra-only evidence isolation,
   prepared/postrun rebuild-manifest identity and output scope, and strict
   postrun readiness before a root is launched.
 - Postrun delegated-review readiness is interpretation-specific. Protocol
@@ -55,8 +55,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL runtime commit `88ac20d`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-infraskip-88ac20d-6r-gpt55-6r-gpt55-20260619T162704Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a5894a66`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-sciondir-a5894a66-6r-gpt55-20260619T164604Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness verifies the active-subject source-constraint prompt bridge.
@@ -91,8 +91,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL runtime commit `88ac20d`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-infraskip-88ac20d-1r-gpt55-1r-gpt55-20260619T162705Z-claw`.
+- Current prepared root, prepared from WSL runtime commit `a5894a66`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-sciondir-a5894a66-1r-gpt55-20260619T164604Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance.
   It requires bounded/deadline-aware implementation, pair-level
   objective/feasibility/route-count/wall-clock evidence, and CMT2/CMT4 case
@@ -113,7 +113,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `88ac20d`
+- The active prepared roots were generated from WSL runtime commit `a5894a66`
   after the CVRP CMT case-protection handoff and analysis-brief surface
   repairs, plus postrun and prepared-handoff stale/undeclared output guards and
   prepared/postrun rebuild-manifest identity and output scope validation.
@@ -140,16 +140,19 @@ Infrastructure:
 - It also requires `run_script_runtime_guard_failure_reports=ok`, so dirty
   runtime paths or guarded commit mismatches write status and run the same
   report-only postrun rebuild/readiness path before exiting.
-- Pre-campaign infra failures such as missing API key env, missing warehouse
-  data root, dirty runtime paths, or guarded commit mismatches are
+- It also requires `run_script_scion_dir_failure_reports=ok`, so missing or
+  inaccessible `SCION_DIR` writes status and runs the same report-only postrun
+  rebuild/readiness path before exiting.
+- Pre-campaign infra failures such as missing API key env, missing `SCION_DIR`,
+  missing warehouse data root, dirty runtime paths, or guarded commit mismatches are
   resume-snapshot-only evidence. They must not rebuild copied campaign artifacts
   into current-run reports.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`. Latest strict
-  launch-readiness preflight saw auth pool `active=0`, `expired=1`,
-  `refreshing=0`, `total=1`, and no launch-usable account.
+  launch-readiness preflight saw auth pool `active=0`, `total=1`, and no
+  launch-usable account.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
