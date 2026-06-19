@@ -69,7 +69,9 @@ Framework:
   omit current-run branch/LLM/Protocol guidance, and defer specialist
   warehouse/CVRP review axes until post-launch current-run evidence exists.
   Launch readiness now requires those prepared analysis briefs to carry current
-  structured prepared-only semantics before a root can be started.
+  structured prepared-only semantics and a matching problem-specific prepared
+  summary with current schema, report-only semantics, no quality judgment, and
+  `DecisionFeatures` exclusion before a root can be started.
 - Postrun analysis now isolates invalid-infra-only roots as non-research
   evidence: copied or partial artifacts remain under `resume_snapshot`,
   current-run counters and Phase 4 coverage are zeroed, and warehouse/CVRP
@@ -171,8 +173,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `85617a0`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-boundaryguard-85617a0-6r-gpt55-20260619T084748Z-claw`.
+- Current prepared root, prepared from WSL checkout `54907f9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-prepsummary-54907f9-6r-gpt55-20260619T090021Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -198,8 +200,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `85617a0`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-boundaryguard-85617a0-1r-gpt55-20260619T084801Z-claw`.
+- Current prepared root, prepared from WSL checkout `54907f9`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-prepsummary-54907f9-1r-gpt55-20260619T090034Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -250,7 +252,7 @@ Infrastructure:
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `85617a0`. Older prepared roots before the boundaryguard
+  whose git commit is `54907f9`. Older prepared roots before the prepsummary
   roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
