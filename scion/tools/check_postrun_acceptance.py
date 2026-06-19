@@ -490,6 +490,7 @@ def _rebuild_manifest_declared_outputs_present(
     skipped_families: list[str] = []
     missing_outputs: list[dict[str, Any]] = []
     inconsistent_outputs: list[dict[str, Any]] = []
+    unexpected_outputs: list[dict[str, Any]] = []
     family_failures: list[dict[str, Any]] = []
     for family_name, raw_family in sorted(families.items()):
         family = _mapping_or_empty(raw_family)
@@ -516,8 +517,12 @@ def _rebuild_manifest_declared_outputs_present(
                     "status": family_status,
                     "reason": "ok_family_without_outputs",
                 }
-            )
+                )
             continue
+        declared_paths = {
+            _manifest_output_path(output, report_dir).resolve()
+            for output in outputs
+        }
         for output in outputs:
             path = _manifest_output_path(output, report_dir)
             actual_present = path.is_file()
@@ -552,9 +557,25 @@ def _rebuild_manifest_declared_outputs_present(
                         "reason": "missing_outputs_present_entry",
                     }
                 )
+        family_dir = report_dir / str(family_name)
+        if family_dir.is_dir():
+            for path in sorted(family_dir.iterdir()):
+                if not path.is_file() or path.suffix not in {".json", ".md"}:
+                    continue
+                if path.resolve() not in declared_paths:
+                    unexpected_outputs.append(
+                        {
+                            "family": str(family_name),
+                            "path": str(path),
+                            "reason": "undeclared_generated_output",
+                        }
+                    )
 
     failures_present = bool(
-        missing_outputs or inconsistent_outputs or family_failures
+        missing_outputs
+        or inconsistent_outputs
+        or unexpected_outputs
+        or family_failures
     )
     return (
         "failed" if failures_present else "ok",
@@ -563,6 +584,7 @@ def _rebuild_manifest_declared_outputs_present(
             "skipped_families": skipped_families,
             "missing_outputs": missing_outputs,
             "inconsistent_outputs": inconsistent_outputs,
+            "unexpected_outputs": unexpected_outputs,
             "family_failures": family_failures,
         },
     )

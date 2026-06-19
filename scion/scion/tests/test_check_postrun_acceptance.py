@@ -287,6 +287,46 @@ def test_postrun_acceptance_readiness_rejects_missing_manifest_declared_output(
     )
 
 
+def test_postrun_acceptance_readiness_rejects_unexpected_family_output(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "run-extra-manifest-output")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    extra_output = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "zz_stale.research_efficiency.v1.json"
+    )
+    _write_json(
+        extra_output,
+        {"schema_version": "stale.test", "stale": True},
+    )
+
+    readiness = check_tool.build_readiness(run_root)
+    output_check = readiness["checks"]["rebuild_manifest_declared_outputs_present"]
+
+    assert readiness["checks"]["current_run_report_families_present"]["status"] == "ok"
+    assert readiness["current_run_analysis_ready"] is False
+    assert output_check["status"] == "failed"
+    assert output_check["required"] is True
+    assert output_check["detail"]["missing_outputs"] == []
+    assert output_check["detail"]["inconsistent_outputs"] == []
+    assert output_check["detail"]["unexpected_outputs"] == [
+        {
+            "family": "research_efficiency",
+            "path": str(extra_output),
+            "reason": "undeclared_generated_output",
+        }
+    ]
+
+
 def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     tmp_path: Path,
 ) -> None:
