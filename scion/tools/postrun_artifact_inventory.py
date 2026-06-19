@@ -1073,6 +1073,31 @@ def _add_cvrp_measurement_handoff_checks(
             "practical_screen_delta": measurement.get("practical_screen_delta"),
         },
     )
+    readiness = measurement.get("measurement_readiness")
+    if not isinstance(readiness, dict):
+        readiness = {}
+    calibration = measurement.get("calibration")
+    if not isinstance(calibration, dict):
+        calibration = {}
+    source = str(measurement.get("source") or "")
+    add_check(
+        "cvrp_measurement_handoff_problem_owned_source",
+        source == "problem_v1.measurement.calibration_ref"
+        and readiness.get("status") == "ready"
+        and readiness.get("reason_code") == "ok"
+        and calibration.get("schema") == "scion.aa_noise_floor.v1"
+        and calibration.get("decision_features_excluded") is True,
+        {
+            "source": source,
+            "measurement_readiness_status": readiness.get("status"),
+            "measurement_readiness_reason_code": readiness.get("reason_code"),
+            "calibration_schema": calibration.get("schema"),
+            "calibration_ref": calibration.get("ref"),
+            "calibration_decision_features_excluded": calibration.get(
+                "decision_features_excluded"
+            ),
+        },
+    )
 
     reason_codes = set(_string_items(measurement.get("reason_codes")))
     missing_reason_codes = sorted(
@@ -1711,8 +1736,10 @@ def _cvrp_problem_specific_phase4_requirements(
             int(
                 _positive_number(measurement.get("screening_mde_at_power_80"))
                 and _positive_number(measurement.get("practical_screen_delta"))
+                and measurement.get("source")
+                == "problem_v1.measurement.calibration_ref"
             ),
-            "prepared_run_manifest cvrp measurement_opportunity_diagnostics MDE/practical delta",
+            "prepared_run_manifest cvrp measurement_opportunity_diagnostics problem-owned MDE/practical delta",
         ),
         "cvrp_low_snr_reason_handoff": _coverage_item(
             int(not (CVRP_REQUIRED_MEASUREMENT_REASON_CODES - reason_codes)),

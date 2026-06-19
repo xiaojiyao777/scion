@@ -147,6 +147,36 @@ def test_launch_readiness_rejects_missing_cvrp_measurement_handoff(
     assert contract["checks"]["cvrp_measurement_handoff_present"]["passed"] is False
 
 
+def test_launch_readiness_rejects_hardcoded_cvrp_measurement_handoff(
+    tmp_path: Path,
+) -> None:
+    research_focus = _cvrp_research_focus()
+    measurement = research_focus["measurement_opportunity_diagnostics"]
+    assert isinstance(measurement, dict)
+    measurement.pop("source")
+    measurement.pop("measurement_readiness")
+    measurement.pop("calibration")
+    run_root = _write_prepared_root(tmp_path, research_focus=research_focus)
+
+    report = readiness_tool.build_readiness(run_root)
+    inventory = readiness_tool.build_inventory(run_root)
+    contract = inventory["launcher"]["prepared_run_contract"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert report["checks"]["prepared_contract_complete"]["status"] == "failed"
+    problem_specific = report["checks"]["problem_specific_prepared_handoff"]
+    assert problem_specific["status"] == "failed"
+    assert "cvrp_measurement_handoff_problem_owned_source" in problem_specific[
+        "detail"
+    ]["failed_checks"]
+    assert contract["contract_complete"] is False
+    assert (
+        contract["checks"]["cvrp_measurement_handoff_problem_owned_source"]["passed"]
+        is False
+    )
+
+
 def test_launch_readiness_rejects_missing_cvrp_cmt_case_protection(
     tmp_path: Path,
 ) -> None:
@@ -2493,10 +2523,37 @@ def _cvrp_research_focus() -> dict[str, object]:
         "scope": "report_only_prepared_handoff",
         "measurement_opportunity_diagnostics": {
             "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+            "source": "problem_v1.measurement.calibration_ref",
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
+            "metric": "total_distance",
+            "unit": "raw_delta",
+            "runtime_model": "budget_exhausting",
+            "pairing_validity": "trajectory_divergent",
             "practical_screen_delta": 2.0,
+            "practical_validate_delta": 1.0,
             "screening_mde_at_power_80": 9.9,
+            "measurement_readiness": {
+                "status": "ready",
+                "reason_code": "ok",
+                "calibration_age_days": 8,
+                "calibration_max_age_days": 90,
+                "n_pairs": 96,
+                "mde_at_power_80": 9.9,
+                "noise_band_p90_abs": 45.5,
+                "effect_to_mde_ratio": 0.20202020202020202,
+                "signal_to_noise_tier": "low_power",
+                "decision_features_excluded": True,
+                "calibration_ref": "formal/calibration/aa_noise_floor.json",
+            },
+            "calibration": {
+                "schema": "scion.aa_noise_floor.v1",
+                "ref": "formal/calibration/aa_noise_floor.json",
+                "path": "/tmp/cvrp/formal/calibration/aa_noise_floor.json",
+                "calibrated_at": "2026-06-11T22:03:16.746083+00:00",
+                "n_pairs": 96,
+                "decision_features_excluded": True,
+            },
             "reason_codes": [
                 "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
                 "TRAJECTORY_DIVERGENT_LOW_SNR",

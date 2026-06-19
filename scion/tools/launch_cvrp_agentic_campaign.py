@@ -13,6 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -165,27 +166,7 @@ CVRP_CURRENT_RESEARCH_FOCUS = {
         "objective-effect evidence before spending another route-merge or "
         "construction-seed branch slot."
     ),
-    "measurement_opportunity_diagnostics": {
-        "schema_version": "cvrp_measurement_opportunity_handoff.v1",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "metric": "total_distance",
-        "runtime_model": "budget_exhausting",
-        "pairing_validity": "trajectory_divergent",
-        "practical_screen_delta": 2.0,
-        "screening_mde_at_power_80": 9.9,
-        "recommended_min_seeds": 8,
-        "summary": (
-            "Formal screening is low-power for small raw total_distance "
-            "deltas; sub-MDE effects need direct objective-effect attribution "
-            "or same-mechanism follow-up."
-        ),
-        "reason_codes": [
-            "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA",
-            "TRAJECTORY_DIVERGENT_LOW_SNR",
-            "BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY",
-        ],
-    },
+    "measurement_opportunity_diagnostics": {},
     "default_avoid_directions": list(CVRP_DEFAULT_AVOID_DIRECTIONS),
     "large_instance_two_opt_constraints": CVRP_LARGE_INSTANCE_TWO_OPT_CONSTRAINTS,
     "measurable_opportunity_classes": [
@@ -441,6 +422,161 @@ def _preflight_cvrp_parameter_search_disabled(scion_dir: Path, problem: str) -> 
                 "CVRP agentic launcher requires "
                 f"parameter_search.enabled=false in {display_path}"
             )
+
+
+def _problem_v1_path_for_problem(scion_dir: Path, problem: str) -> Path:
+    return _resolve_spec_path(scion_dir, problem).with_name("problem-v1.yaml")
+
+
+def _cvrp_measurement_opportunity_diagnostics(
+    scion_dir: Path,
+    problem: str,
+) -> dict[str, Any]:
+    """Build proposal-visible CVRP measurement guidance from problem-owned refs."""
+
+    if str(scion_dir) not in sys.path:
+        sys.path.insert(0, str(scion_dir))
+
+    from scion.measurement.readiness import measurement_readiness_status  # noqa: PLC0415
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml  # noqa: PLC0415
+
+    problem_v1 = _problem_v1_path_for_problem(scion_dir, problem)
+    if not problem_v1.is_file():
+        raise SystemExit(
+            "CVRP agentic launcher requires problem-v1 measurement declaration: "
+            f"{problem_v1}"
+        )
+
+    spec = load_problem_spec_v1_from_yaml(problem_v1)
+    measurement = spec.measurement
+    readiness = measurement_readiness_status(spec)
+    if readiness.status != "ready":
+        raise SystemExit(
+            "CVRP measurement calibration is not launch-ready: "
+            f"{readiness.reason_code}"
+        )
+
+    calibration_ref = str(measurement.calibration_ref or "").strip()
+    calibration_path = _resolve_calibration_ref(spec.root_dir, calibration_ref)
+    calibration_artifact = _read_calibration_artifact(calibration_path)
+    power = _mapping_or_empty(calibration_artifact.get("protocol_power"))
+    effect_scale = measurement.effect_scale
+    practical_screen_delta = float(effect_scale.practical_delta_screen)
+    mde_at_power_80 = float(readiness.mde_at_power_80 or 0.0)
+    reason_codes = _cvrp_measurement_reason_codes(
+        runtime_model=measurement.runtime_model,
+        pairing_validity=measurement.pairing_validity,
+        practical_screen_delta=practical_screen_delta,
+        mde_at_power_80=mde_at_power_80,
+    )
+    recommended_min_seeds = _positive_int_or_none(power.get("recommended_min_seeds"))
+
+    diagnostic: dict[str, Any] = {
+        "schema_version": "cvrp_measurement_opportunity_handoff.v1",
+        "source": "problem_v1.measurement.calibration_ref",
+        "proposal_visibility_only": True,
+        "decision_features_excluded": True,
+        "metric": effect_scale.metric,
+        "unit": effect_scale.unit,
+        "runtime_model": measurement.runtime_model,
+        "pairing_validity": measurement.pairing_validity,
+        "practical_screen_delta": practical_screen_delta,
+        "practical_validate_delta": float(effect_scale.practical_delta_validate),
+        "screening_mde_at_power_80": mde_at_power_80,
+        "measurement_readiness": readiness.to_diagnostic_payload(),
+        "calibration": {
+            "schema": calibration_artifact.get("schema"),
+            "ref": calibration_ref,
+            "path": str(calibration_path),
+            "calibrated_at": calibration_artifact.get("calibrated_at"),
+            "n_pairs": readiness.n_pairs,
+            "decision_features_excluded": calibration_artifact.get(
+                "decision_features_excluded"
+            ),
+        },
+        "summary": _measurement_summary(
+            metric=effect_scale.metric,
+            mde_at_power_80=mde_at_power_80,
+            practical_screen_delta=practical_screen_delta,
+        ),
+        "reason_codes": reason_codes,
+    }
+    if recommended_min_seeds is not None:
+        diagnostic["recommended_min_seeds"] = recommended_min_seeds
+    return diagnostic
+
+
+def _resolve_calibration_ref(root_dir: str, calibration_ref: str) -> Path:
+    ref = Path(calibration_ref).expanduser()
+    if ref.is_absolute():
+        return ref
+    return Path(root_dir).expanduser().resolve() / ref
+
+
+def _read_calibration_artifact(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"unable to read CVRP calibration artifact {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"CVRP calibration artifact must be a JSON object: {path}")
+    return payload
+
+
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _positive_int_or_none(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _cvrp_measurement_reason_codes(
+    *,
+    runtime_model: str,
+    pairing_validity: str,
+    practical_screen_delta: float,
+    mde_at_power_80: float,
+) -> list[str]:
+    reason_codes: list[str] = []
+    if mde_at_power_80 > practical_screen_delta:
+        reason_codes.append("CVRP_MDE_EXCEEDS_PRACTICAL_DELTA")
+    if pairing_validity == "trajectory_divergent":
+        reason_codes.append("TRAJECTORY_DIVERGENT_LOW_SNR")
+    if runtime_model == "budget_exhausting":
+        reason_codes.append("BUDGET_EXHAUSTING_RUNTIME_REPORT_ONLY")
+    return reason_codes
+
+
+def _measurement_summary(
+    *,
+    metric: str,
+    mde_at_power_80: float,
+    practical_screen_delta: float,
+) -> str:
+    if mde_at_power_80 > practical_screen_delta:
+        return (
+            f"Formal screening is low-power for small raw {metric} deltas; "
+            "sub-MDE effects need direct objective-effect attribution or "
+            "same-mechanism follow-up."
+        )
+    return (
+        f"Formal screening MDE is within the declared practical {metric} delta; "
+        "interpret effects against the measured A/A noise floor."
+    )
+
+
+def _current_research_focus(env: dict[str, object]) -> dict[str, Any]:
+    focus = json.loads(json.dumps(CVRP_CURRENT_RESEARCH_FOCUS))
+    focus["measurement_opportunity_diagnostics"] = _cvrp_measurement_opportunity_diagnostics(
+        Path(env["SCION_DIR"]),
+        str(env["PROBLEM"]),
+    )
+    return focus
 
 
 def _build_command(env: dict[str, object]) -> str:
@@ -701,7 +837,7 @@ def _write_prepared_run_manifest(
         "promotion_state_mutated": False,
         "problem_family": "cvrp",
         "analysis_intent": CVRP_ANALYSIS_INTENT,
-        "research_focus": CVRP_CURRENT_RESEARCH_FOCUS,
+        "research_focus": _current_research_focus(env),
         "task_doc": TASK_DOC,
         "current_state_doc": CURRENT_STATE_DOC,
         "analysis_handoff_doc": ANALYSIS_HANDOFF_DOC,

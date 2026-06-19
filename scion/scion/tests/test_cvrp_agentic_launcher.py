@@ -120,6 +120,10 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     ]
     assert measurement["screening_mde_at_power_80"] == 9.9
     assert measurement["practical_screen_delta"] == 2.0
+    assert measurement["source"] == "problem_v1.measurement.calibration_ref"
+    assert measurement["calibration"]["schema"] == "scion.aa_noise_floor.v1"
+    assert measurement["calibration"]["decision_features_excluded"] is True
+    assert measurement["measurement_readiness"]["status"] == "ready"
     assert "CVRP_MDE_EXCEEDS_PRACTICAL_DELTA" in measurement["reason_codes"]
     assert any(
         "construction_seed_portfolio" in item
@@ -400,8 +404,15 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepared_brief["prepared_run_contract"]["research_focus"][
         "measurement_opportunity_diagnostics"
     ]["screening_mde_at_power_80"] == 9.9
+    assert prepared_brief["prepared_run_contract"]["research_focus"][
+        "measurement_opportunity_diagnostics"
+    ]["source"] == "problem_v1.measurement.calibration_ref"
     cvrp_checks = prepared_brief["prepared_run_contract"]["checks"]
     assert cvrp_checks["cvrp_measurement_handoff_present"]["passed"] is True
+    assert (
+        cvrp_checks["cvrp_measurement_handoff_problem_owned_source"]["passed"]
+        is True
+    )
     assert cvrp_checks["cvrp_default_avoid_directions_present"]["passed"] is True
     assert cvrp_checks["cvrp_direct_effect_rules_present"]["passed"] is True
     assert (
@@ -590,13 +601,10 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     baseline_root = tmp_path / "copied-baseline"
     formal_dir = baseline_root / "formal"
     formal_dir.mkdir(parents=True)
-    problem = baseline_root / "problem.yaml"
-    problem_v1 = baseline_root / "problem-v1.yaml"
+    problem = SCION_DIR / "scion/problems/cvrp/problem.yaml"
     protocol = formal_dir / "matched-protocol.yaml"
     split = formal_dir / "matched-split.yaml"
     seeds = formal_dir / "matched-seeds.yaml"
-    problem.write_text("parameter_search:\n  enabled: false\n", encoding="utf-8")
-    problem_v1.write_text("parameter_search:\n  enabled: false\n", encoding="utf-8")
 
     result = subprocess.run(
         [
