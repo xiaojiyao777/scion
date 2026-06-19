@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, research-context/signal-density delegated-readiness checks, manifest-bound postrun readiness identity and declared-output checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by WSL `gpt-5.5` provider auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt handoff plus code-phase active-subject constraints, problem-owned CVRP/warehouse opportunity diagnostics, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, postrun prompt-audit traceability and readiness checks for CVRP/warehouse active subject code constraints, research-context/signal-density/failure-taxonomy delegated-readiness checks, manifest-bound postrun readiness identity and declared-output checks, launch-readiness verification that `run.sh` carries strict postrun acceptance readiness plus normal campaign-exit, warehouse data-root, and API-key-env preflight postrun report paths, and runtime guard coverage for postrun package paths plus matching CVRP/warehouse problem runtime paths. Launch remains blocked by WSL `gpt-5.5` provider auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -276,11 +276,15 @@ Current checkpoint:
   prompt signal-density token accounting for warehouse/CVRP delegated review.
   This makes branch-transfer and same-mechanism gaps auditable without turning
   research-context quality into Decision or promotion input.
+- Postrun acceptance readiness now also requires current-run
+  `failure_taxonomy_summary` evidence for warehouse/CVRP delegated review.
+  Missing, stale, non-current, or empty failure taxonomy no longer allows a
+  hand-written problem summary to make a run analysis-ready.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-researchcontextguard-6r-gpt55-20260619T075401Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-failuretaxonomyguard-6r-gpt55-20260619T080353Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-researchcontextguard-1r-gpt55-20260619T075401Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-failuretaxonomyguard-1r-gpt55-20260619T080406Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -295,10 +299,9 @@ Current checkpoint:
   warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `1c89337`.
-  Later docs-only commits may make the checkout differ from the prepared
-  manifest commit; readiness remains acceptable only when runtime guard paths
-  are unchanged.
+  true. The roots were prepared from WSL checkout `5315453`, and readiness
+  currently reports `git_runtime_consistent=ok` with checkout matching the
+  manifest commit.
 - The blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
@@ -347,7 +350,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the researchcontextguard roots above are not current
+  Older prepared roots before the failuretaxonomyguard roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
