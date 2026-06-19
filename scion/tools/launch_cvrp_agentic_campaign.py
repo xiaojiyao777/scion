@@ -24,6 +24,8 @@ DEFAULT_LOCAL_PROXY_API_KEY = "pwd"
 DEFAULT_TIME_LIMIT_SEC = 30
 DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC = 900
 DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT = 4
+DEFAULT_PROPOSAL_ATTEMPT_LIMIT = 64
+DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT = 64
 DEFAULT_PYTHON = Path(sys.executable)
 DEFAULT_USER_SUFFIX = "claw"
 PREFLIGHT_FAILURE_EXIT_CODE = 64
@@ -452,6 +454,8 @@ def _build_command(env: dict[str, object]) -> str:
         f"--rounds {env['ROUNDS']} "
         f"--time-limit-sec {env['TIME_LIMIT_SEC']} "
         f"--agentic-session-timeout-sec {env['AGENTIC_SESSION_TIMEOUT_SEC']} "
+        f"--proposal-attempt-limit {env['PROPOSAL_ATTEMPT_LIMIT']} "
+        f"--proposal-quality-loop-limit {env['PROPOSAL_QUALITY_LOOP_LIMIT']} "
         f"--measurement-governance {env['MEASUREMENT_GOVERNANCE']} "
         f"--proposal-context-ablation {env['PROPOSAL_CONTEXT_ABLATION']} "
         "--disable-early-stop "
@@ -485,6 +489,8 @@ def _write_launch_env(run_root: Path, env: dict[str, object]) -> None:
         "SEEDS",
         "ROUNDS",
         "TIME_LIMIT_SEC",
+        "PROPOSAL_ATTEMPT_LIMIT",
+        "PROPOSAL_QUALITY_LOOP_LIMIT",
         "MEASUREMENT_GOVERNANCE",
         "PROPOSAL_CONTEXT_ABLATION",
         "CONTROL_PAIR_KEY",
@@ -605,6 +611,8 @@ unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
   --rounds "$ROUNDS" \\
   --time-limit-sec "$TIME_LIMIT_SEC" \\
   --agentic-session-timeout-sec "$AGENTIC_SESSION_TIMEOUT_SEC" \\
+  --proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT" \\
+  --proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT" \\
   --measurement-governance "$MEASUREMENT_GOVERNANCE" \\
   --proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION" \\
   --disable-early-stop \\
@@ -666,6 +674,8 @@ def _write_prepare_status(run_root: Path, env: dict[str, object]) -> None:
         "completion_preflight": bool(int(env["COMPLETION_PREFLIGHT"])),
         "postrun_reports": bool(int(env["POSTRUN_REPORTS"])),
         "control_pair_key": str(env.get("CONTROL_PAIR_KEY") or ""),
+        "proposal_attempt_limit": int(env["PROPOSAL_ATTEMPT_LIMIT"]),
+        "proposal_quality_loop_limit": int(env["PROPOSAL_QUALITY_LOOP_LIMIT"]),
         "git_commit": str(env["GIT_COMMIT"]),
         "started_utc": str(env["STARTED_UTC"]),
     }
@@ -720,6 +730,10 @@ def _write_prepared_run_manifest(
             "rounds": int(env["ROUNDS"]),
             "time_limit_sec": int(env["TIME_LIMIT_SEC"]),
             "agentic_session_timeout_sec": int(env["AGENTIC_SESSION_TIMEOUT_SEC"]),
+            "proposal_attempt_limit": int(env["PROPOSAL_ATTEMPT_LIMIT"]),
+            "proposal_quality_loop_limit": int(
+                env["PROPOSAL_QUALITY_LOOP_LIMIT"]
+            ),
             "stage_transition_drain_limit": int(
                 env["SCION_STAGE_TRANSITION_DRAIN_LIMIT"]
             ),
@@ -862,6 +876,8 @@ def _render_prepared_run_manifest_markdown(manifest: dict[str, object]) -> str:
         "rounds",
         "time_limit_sec",
         "agentic_session_timeout_sec",
+        "proposal_attempt_limit",
+        "proposal_quality_loop_limit",
         "stage_transition_drain_limit",
         "measurement_governance",
         "proposal_context_ablation",
@@ -959,6 +975,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
         "SEEDS": args.seeds,
         "ROUNDS": args.rounds,
         "TIME_LIMIT_SEC": args.time_limit_sec,
+        "PROPOSAL_ATTEMPT_LIMIT": args.proposal_attempt_limit,
+        "PROPOSAL_QUALITY_LOOP_LIMIT": args.proposal_quality_loop_limit,
         "MEASUREMENT_GOVERNANCE": args.measurement_governance,
         "PROPOSAL_CONTEXT_ABLATION": args.proposal_context_ablation,
         "CONTROL_PAIR_KEY": control_pair_key,
@@ -990,6 +1008,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, str | None]:
             f"SCION_BASE_URL={env['SCION_BASE_URL']}\n\n"
             f"SCION_STAGE_TRANSITION_DRAIN_LIMIT="
             f"{env['SCION_STAGE_TRANSITION_DRAIN_LIMIT']}\n\n"
+            f"PROPOSAL_ATTEMPT_LIMIT={env['PROPOSAL_ATTEMPT_LIMIT']}\n"
+            f"PROPOSAL_QUALITY_LOOP_LIMIT={env['PROPOSAL_QUALITY_LOOP_LIMIT']}\n\n"
             f"COMPLETION_PREFLIGHT={env['COMPLETION_PREFLIGHT']}\n\n"
             f"GIT_RUNTIME_GUARD_PATHS={env['GIT_RUNTIME_GUARD_PATHS']}\n\n"
             "SCION_API_KEY="
@@ -1107,6 +1127,25 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_AGENTIC_SESSION_TIMEOUT_SEC,
     )
     parser.add_argument(
+        "--proposal-attempt-limit",
+        type=int,
+        default=DEFAULT_PROPOSAL_ATTEMPT_LIMIT,
+        help=(
+            "Focused v0.4 proposal attempt headroom passed to scion run. "
+            "Defaults to 64 so prepared research roots are not stopped by the "
+            "core rounds+6 fallback before useful protocol evidence appears."
+        ),
+    )
+    parser.add_argument(
+        "--proposal-quality-loop-limit",
+        type=int,
+        default=DEFAULT_PROPOSAL_QUALITY_LOOP_LIMIT,
+        help=(
+            "Focused v0.4 proposal-quality block headroom passed to scion run. "
+            "Defaults to 64 for warehouse/CVRP research continuity."
+        ),
+    )
+    parser.add_argument(
         "--stage-transition-drain-limit",
         type=int,
         default=DEFAULT_STAGE_TRANSITION_DRAIN_LIMIT,
@@ -1143,6 +1182,10 @@ def parse_args() -> argparse.Namespace:
         raise SystemExit("--time-limit-sec must be >= 1")
     if args.agentic_session_timeout_sec < 1:
         raise SystemExit("--agentic-session-timeout-sec must be >= 1")
+    if args.proposal_attempt_limit < 1:
+        raise SystemExit("--proposal-attempt-limit must be >= 1")
+    if args.proposal_quality_loop_limit < 1:
+        raise SystemExit("--proposal-quality-loop-limit must be >= 1")
     if args.stage_transition_drain_limit < 0:
         raise SystemExit("--stage-transition-drain-limit must be >= 0")
     if args.api_key is not None and args.api_key_env:

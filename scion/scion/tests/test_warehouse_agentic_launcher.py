@@ -35,6 +35,8 @@ def test_warehouse_agentic_launcher_help() -> None:
     assert "--measurement-governance" in result.stdout
     assert "--proposal-context-ablation" in result.stdout
     assert "--control-pair-key" in result.stdout
+    assert "--proposal-attempt-limit" in result.stdout
+    assert "--proposal-quality-loop-limit" in result.stdout
 
 
 def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
@@ -82,6 +84,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert prepare_status["copied_campaign_status_present"] is False
     assert prepare_status["completion_preflight"] is False
     assert prepare_status["postrun_reports"] is True
+    assert prepare_status["proposal_attempt_limit"] == 64
+    assert prepare_status["proposal_quality_loop_limit"] == 64
 
     launch_env_path = run_root / "launch.env"
     launch_env = launch_env_path.read_text(encoding="utf-8")
@@ -111,6 +115,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "decision_boundary"
     ]
     assert prepared_manifest["execution"]["rounds"] == 6
+    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 64
+    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 64
     assert prepared_manifest["config"]["warehouse_data_root"] == str(data_root)
     assert prepared_manifest["config"]["problem_v1"] == str(
         run_root / "config" / "problem-v1.yaml"
@@ -159,6 +165,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     )
     assert "COMPLETION_PREFLIGHT=0" in launch_env
     assert "POSTRUN_REPORTS=1" in launch_env
+    assert "PROPOSAL_ATTEMPT_LIMIT=64" in launch_env
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in launch_env
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in launch_env
     assert (
         "GIT_RUNTIME_GUARD_PATHS="
@@ -226,6 +234,13 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
     assert "POSTRUN_REPORTS_EXIT_STATUS:$POSTRUN_STATUS" in run_sh_text
     assert "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" in run_sh_text
     assert "--agentic-proposal" in command_txt
+    assert '--proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"' in run_sh_text
+    assert (
+        '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"'
+        in run_sh_text
+    )
+    assert "--proposal-attempt-limit 64" in command_txt
+    assert "--proposal-quality-loop-limit 64" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
@@ -235,6 +250,8 @@ def test_warehouse_agentic_launcher_prepare_writes_rewritten_run_files(
         "scion/tools scion/problems/warehouse_delivery surrogate" in command_txt
     )
     assert "POSTRUN_REPORTS=1" in command_txt
+    assert "PROPOSAL_ATTEMPT_LIMIT=64" in command_txt
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in command_txt
     assert "CONTROL_PAIR_KEY=warehouse.unit-warehouse:prepared" in command_txt
     assert f"POSTRUN_REPORT_DIR={run_root / 'postrun_acceptance'}" in command_txt
     assert (

@@ -45,6 +45,8 @@ def test_cvrp_agentic_launcher_help() -> None:
     assert "--measurement-governance" in result.stdout
     assert "--proposal-context-ablation" in result.stdout
     assert "--control-pair-key" in result.stdout
+    assert "--proposal-attempt-limit" in result.stdout
+    assert "--proposal-quality-loop-limit" in result.stdout
     assert "--stage-transition-drain-limit" in result.stdout
     assert "--resume-from-campaign" in result.stdout
 
@@ -87,6 +89,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert prepare_status["copied_campaign_status_present"] is False
     assert prepare_status["completion_preflight"] is False
     assert prepare_status["postrun_reports"] is True
+    assert prepare_status["proposal_attempt_limit"] == 64
+    assert prepare_status["proposal_quality_loop_limit"] == 64
 
     launch_env = (run_root / "launch.env").read_text(encoding="utf-8")
     prepared_manifest = json.loads(
@@ -163,6 +167,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         "decision_boundary"
     ]
     assert prepared_manifest["execution"]["rounds"] == 4
+    assert prepared_manifest["execution"]["proposal_attempt_limit"] == 64
+    assert prepared_manifest["execution"]["proposal_quality_loop_limit"] == 64
     assert prepared_manifest["execution"]["stage_transition_drain_limit"] == 4
     assert prepared_manifest["config"]["problem"] == "scion/problems/cvrp/problem.yaml"
     assert prepared_manifest["report_metadata"]["postrun_acceptance_families"] == [
@@ -216,6 +222,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
         in launch_env
     )
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in launch_env
+    assert "PROPOSAL_ATTEMPT_LIMIT=64" in launch_env
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in launch_env
     assert (
         f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}"
         in launch_env
@@ -271,6 +279,8 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert "POSTRUN_READINESS_EXIT_STATUS:$POSTRUN_READINESS_STATUS" in run_sh_text
     assert "SCION_BASE_URL=http://127.0.0.1:8080" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=4" in command_txt
+    assert "PROPOSAL_ATTEMPT_LIMIT=64" in command_txt
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=64" in command_txt
     assert "SCION_API_KEY=<set>" in command_txt
     assert "COMPLETION_PREFLIGHT=0" in command_txt
     assert (
@@ -289,9 +299,16 @@ def test_cvrp_agentic_launcher_prepare_writes_run_files(tmp_path: Path) -> None:
     assert f"PREPARED_HANDOFF_DIR={run_root / 'prepared_handoff'}" in command_txt
     assert "RESUME_FROM_CAMPAIGN=" in command_txt
     assert "--agentic-proposal" in command_txt
+    assert "--proposal-attempt-limit 64" in command_txt
+    assert "--proposal-quality-loop-limit 64" in command_txt
     assert "--measurement-governance on" in command_txt
     assert "--proposal-context-ablation full" in command_txt
     assert '--measurement-governance "$MEASUREMENT_GOVERNANCE"' in run_sh_text
+    assert '--proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"' in run_sh_text
+    assert (
+        '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"'
+        in run_sh_text
+    )
     assert '--proposal-context-ablation "$PROPOSAL_CONTEXT_ABLATION"' in run_sh_text
     assert "nohup setsid bash run.sh > nohup.log 2>&1 &" in command_txt
 
@@ -605,6 +622,10 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
             "pair-a-vs-b",
             "--stage-transition-drain-limit",
             "2",
+            "--proposal-attempt-limit",
+            "17",
+            "--proposal-quality-loop-limit",
+            "19",
             "--python",
             str(tmp_path / "python-bin"),
             "--experiments-root",
@@ -635,6 +656,8 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     )
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in launch_env
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in launch_env
+    assert "PROPOSAL_ATTEMPT_LIMIT=17" in launch_env
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=19" in launch_env
     assert f"--problem {problem}" in command_txt
     assert f"--protocol {protocol}" in command_txt
     assert f"--split {split}" in command_txt
@@ -645,11 +668,20 @@ def test_cvrp_agentic_launcher_prepare_accepts_custom_phase_b_flags(
     )
     assert "CONTROL_PAIR_KEY=pair-a-vs-b" in command_txt
     assert "SCION_STAGE_TRANSITION_DRAIN_LIMIT=2" in command_txt
+    assert "PROPOSAL_ATTEMPT_LIMIT=17" in command_txt
+    assert "PROPOSAL_QUALITY_LOOP_LIMIT=19" in command_txt
+    assert "--proposal-attempt-limit 17" in command_txt
+    assert "--proposal-quality-loop-limit 19" in command_txt
     assert "--control-pair-key" not in command_txt
     run_command_block = run_sh_text.split(
         '"$PY" -m scion.cli.main run \\', maxsplit=1
     )[1].split("STATUS=$?", maxsplit=1)[0]
     assert "--control-pair-key" not in run_command_block
+    assert '--proposal-attempt-limit "$PROPOSAL_ATTEMPT_LIMIT"' in run_command_block
+    assert (
+        '--proposal-quality-loop-limit "$PROPOSAL_QUALITY_LOOP_LIMIT"'
+        in run_command_block
+    )
     assert 'rebuild_args+=(--control-pair-key "$CONTROL_PAIR_KEY")' in run_sh_text
 
     subprocess.run(["bash", "-n", str(run_root / "run.sh")], check=True)
