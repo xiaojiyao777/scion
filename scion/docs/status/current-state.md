@@ -140,7 +140,8 @@ Prepared manifests record:
   `scion/docs/planning/v0.4/v0.4-evidence-repair-and-validation-plan-20260611.md`.
 - Current launch/readiness evidence:
   `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.
-- WSL execution references:
-  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/WSL_EXECUTION.md`
-  and
-  `/home/clawd/research/scion-experiments/v04-cvrp-phaseB-wsl-handoff-20260614T095900Z/RSYNC_PATHS.md`.
+- Current WSL access:
+  `ssh -i ~/.ssh/id_ed25519_codex_wsl -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no xjy-ubuntu@127.0.0.1`.
+  WSL repo is `/home/xjy-ubuntu/research/or-autoresearch-agent`, WSL
+  experiments root is `/home/xjy-ubuntu/research/scion-experiments`, and the
+  Scion Python is `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`.
