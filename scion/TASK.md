@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `2a1c996c` after postrun readiness gained top-level failed-check summaries for runtime-guarded `scion/tools`. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
+*Status: v0.4 framework/reporting/launcher repairs are accepted enough for focused warehouse and CVRP follow-up, but v0.4 is not closed until live runs demonstrate effective research behavior. Current WSL prepared roots are static-ready at runtime commit `8ca17e34` after CVRP bounded two-opt direct evidence was tightened to two-opt-specific phase telemetry and prepared/readiness tools were made to import the active checkout. Warehouse remains the 6R champion-v2 follow-up root; CVRP remains the 4R Phase 4 bounded two-opt root. Launch remains blocked by external WSL `gpt-5.5` provider auth, not Scion static readiness.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -259,8 +259,9 @@ Current checkpoint:
   two-opt review readiness now rejects generic, cross-route,
   unbounded/fallback, VNS, and two-opt-star protocol family labels as
   two-opt-like but non-qualifying signals, and requires direct
-  activation/effect/phase telemetry co-located on the same matching top effect
-  row before calling the follow-up `bounded_twoopt_review_ready`.
+  activation/effect/two-opt-specific phase telemetry co-located on the same
+  matching top effect row before calling the follow-up
+  `bounded_twoopt_review_ready`.
 - Solver smoke/protocol subprocesses now resolve inherited relative
   `PYTHONPATH` entries against the parent checkout before changing into the
   solver workspace, preventing stale installed Scion imports during current-run
@@ -269,6 +270,10 @@ Current checkpoint:
   `SCION_DIR` as a relative path. `PYTHONPATH` must include that absolute active
   checkout before `run.sh` can be static-ready, so `SCION_DIR=scion` /
   `PYTHONPATH=scion` cannot mask stale installed Scion imports.
+- Prepared handoff rebuild and launch readiness also self-locate the current
+  checkout package path before importing problem-owned providers, so operator
+  prepare/readiness commands do not silently use an installed stale Scion
+  package when ambient `PYTHONPATH` is missing.
 - Protocol-evaluated CVRP/warehouse postrun review requires runtime feedback to
   be review-ready: runtime budget diagnostics remain reportable, but
   fresh-runtime replay drain status and stage-transition drain status must both
@@ -381,9 +386,9 @@ Current checkpoint:
   readiness command.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postfails-2a1c996c-preflight-6r-gpt55-20260619T223801Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptphaseimport-8ca17e34-preflight-6r-gpt55-20260619T230608Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postfails-2a1c996c-preflight-4r-gpt55-20260619T223802Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptphaseimport-8ca17e34-preflight-4r-gpt55-20260619T230622Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `analysis_brief_prepared_contract_consistency=ok`,
@@ -428,8 +433,9 @@ Current checkpoint:
   (`64`/`64`) plus APS tool-loop headroom: session timeout `3600`, max steps
   `240`, max total tool calls `200`, max code-phase tool calls `200`, and max
   observation chars `2000000`. Both current roots record WSL runtime commit
-  `2a1c996c`, whose runtime guard paths match after the postrun readiness
-  failed-check summary touched `scion/tools`. Solver-design
+  `8ca17e34`, whose runtime guard paths match after the CVRP two-opt phase
+  evidence and prepared/readiness checkout-import repairs touched
+  `scion/tools`. Solver-design
   target file and code-phase surface reads now use `96000` char source
   headroom, while bounded algorithm slices remain at `24000`. Current
   readiness also verifies executable `launch.env` sourcing, executable
@@ -547,6 +553,8 @@ Current checkpoint:
   review can audit branch transfer and source grounding instead of inferring
   them from final status.
 - Current launch/readiness evidence:
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`
+  supersedes the current-root pointer in
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and
   `scion/docs/experiments/v0.4/v04-solver-source-read-headroom-readiness-20260619.md`.

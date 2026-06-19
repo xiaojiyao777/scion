@@ -35,15 +35,15 @@ milestones belong in `scion/docs/status/v0.4-history.md`.
 
 ## Prepared Roots
 
-The active prepared roots were generated on WSL after the postrun-readiness
-failed-check summary repair touched `scion/tools`, which is covered by the
-runtime guard. WSL static readiness passes; launch readiness fails only at
-completion preflight auth.
+The active prepared roots were generated on WSL after CVRP large-twoopt phase
+evidence and prepared/readiness checkout-import repairs touched `scion/tools`,
+which is covered by the runtime guard. WSL static readiness passes; launch
+readiness fails only at completion preflight auth.
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postfails-2a1c996c-preflight-6r-gpt55-20260619T223801Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-twooptphaseimport-8ca17e34-preflight-6r-gpt55-20260619T230608Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-postfails-2a1c996c-preflight-4r-gpt55-20260619T223802Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-phase4-twooptphaseimport-8ca17e34-preflight-4r-gpt55-20260619T230622Z-claw`
 
 Prepared manifests record:
 
@@ -51,7 +51,7 @@ Prepared manifests record:
 - APS headroom: `agentic_session_timeout_sec=3600`,
   `agentic_tool_max_steps=240`, `agentic_tool_max_calls=200`,
   `agentic_code_tool_max_calls=200`, `agentic_observation_max_chars=2000000`.
-- Runtime commits: warehouse `2a1c996c`; CVRP `2a1c996c`.
+- Runtime commits: warehouse `8ca17e34`; CVRP `8ca17e34`.
 - Rounds: warehouse `6`; CVRP `4` so the bounded two-opt follow-up can inspect
   more than a one-off branch attempt.
 - Problem-owned measurement source:
@@ -76,6 +76,9 @@ Prepared manifests record:
 - Prepared prompt context carries problem-owned active-subject code constraints,
   and readiness verifies the current provider payload summary before static
   readiness can pass.
+- Prepared handoff rebuild and launch readiness self-locate the current
+  checkout's `scion/` package path before importing problem-owned providers, so
+  static readiness does not depend on ambient `PYTHONPATH`.
 - Code-phase source visibility has two protections: final code prompts include
   approved target source as full `target_file_code`, and prompt manifests audit
   target, integration, and full algorithm-read visibility before postrun
@@ -96,6 +99,9 @@ Prepared manifests record:
 - Postrun acceptance readiness emits top-level failed-check summaries, so
   delegated reviewers can distinguish missing current-run analysis inputs from
   optional markers without scanning the full check table.
+- CVRP bounded two-opt postrun review readiness requires co-located positive
+  effect, activation, objective-effect, and two-opt-specific phase telemetry on
+  the same matching top effect row.
 
 ## Warehouse
 
@@ -157,6 +163,7 @@ Prepared manifests record:
   `scion/docs/experiments/v0.4/v04-legacy-run-problem-family-inference-20260619.md`,
   `scion/docs/experiments/v0.4/v04-launch-readiness-failed-check-summary-20260619.md`,
   `scion/docs/experiments/v0.4/v04-postrun-readiness-failed-check-summary-20260619.md`,
+  `scion/docs/experiments/v0.4/v04-cvrp-twoopt-phase-and-prepared-import-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-measurement-note-root-readiness-20260619.md`,
   `scion/docs/experiments/v0.4/v04-cvrp-phase4-four-round-root-readiness-20260619.md`
   and
