@@ -810,6 +810,8 @@ def test_cvrp_agentic_launcher_api_key_env_missing_fails_before_campaign(
             "unit-cvrp-missing-key-env",
             "--api-key-env",
             "SCION_MISSING_TEST_KEY",
+            "--python",
+            sys.executable,
             "--experiments-root",
             str(tmp_path),
         ],
@@ -837,6 +839,11 @@ def test_cvrp_agentic_launcher_api_key_env_missing_fails_before_campaign(
     status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
     assert status["wrapper_exit_status"] == 64
     assert status["api_key_env_missing"] == "SCION_MISSING_TEST_KEY"
+    run_log = (run_root / "run.log").read_text(encoding="utf-8")
+    assert "POSTRUN_REPORTS_EXIT_STATUS:" in run_log
+    assert "POSTRUN_READINESS_EXIT_STATUS:" in run_log
+    readiness_dir = run_root / "postrun_acceptance" / "readiness"
+    assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
 
 
 def test_cvrp_agentic_launcher_api_key_env_preserves_inherited_scion_key(

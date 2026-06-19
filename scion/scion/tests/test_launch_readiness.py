@@ -51,6 +51,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
     )
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
+    assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
     assert markdown.startswith("# Launch Readiness:")
@@ -509,6 +510,35 @@ if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
     assert data_root_check["status"] == "failed"
     assert data_root_check["detail"]["failures"] == [
         {"reason": "postrun_report_call_after_data_root_exit"}
+    ]
+
+
+def test_launch_readiness_rejects_api_key_env_failure_without_postrun_call(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "if [[ \"${COMPLETION_PREFLIGHT:-0}\" == \"1\" ]]; then",
+            """if [[ -z "${SCION_MISSING_TEST_KEY:-}" ]]; then
+  echo "SCION_API_KEY_ENV_MISSING:SCION_MISSING_TEST_KEY"
+  exit 64
+fi
+if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then""",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    api_key_check = report["checks"]["run_script_api_key_env_failure_reports"]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert api_key_check["required"] is True
+    assert api_key_check["status"] == "failed"
+    assert api_key_check["detail"]["failures"] == [
+        {"reason": "postrun_report_call_after_api_key_env_exit"}
     ]
 
 

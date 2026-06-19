@@ -513,7 +513,6 @@ def test_warehouse_agentic_launcher_api_key_env_avoids_secret_file(
 def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(
     tmp_path: Path,
 ) -> None:
-    missing_python = tmp_path / "missing-python"
     result = subprocess.run(
         [
             sys.executable,
@@ -529,7 +528,7 @@ def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(
             "--api-key-env",
             "SCION_MISSING_TEST_KEY",
             "--python",
-            str(missing_python),
+            sys.executable,
         ],
         cwd=SCION_DIR,
         text=True,
@@ -555,6 +554,11 @@ def test_warehouse_agentic_launcher_api_key_env_missing_writes_valid_status(
     status = json.loads((run_root / "run_status.json").read_text(encoding="utf-8"))
     assert status["wrapper_exit_status"] == 64
     assert status["api_key_env_missing"] == "SCION_MISSING_TEST_KEY"
+    run_log = (run_root / "run.log").read_text(encoding="utf-8")
+    assert "POSTRUN_REPORTS_EXIT_STATUS:" in run_log
+    assert "POSTRUN_READINESS_EXIT_STATUS:" in run_log
+    readiness_dir = run_root / "postrun_acceptance" / "readiness"
+    assert list(readiness_dir.glob("*.postrun_acceptance_readiness.v1.json"))
 
 
 def test_warehouse_agentic_launcher_missing_data_root_writes_valid_status(

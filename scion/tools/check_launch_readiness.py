@@ -228,6 +228,10 @@ def build_readiness(
         *_run_script_data_root_failure_reports(run_sh),
     )
     add_check(
+        "run_script_api_key_env_failure_reports",
+        *_run_script_api_key_env_failure_reports(run_sh),
+    )
+    add_check(
         "not_already_started",
         "ok" if not (root / "exit.txt").exists() else "failed",
         str(root / "exit.txt"),
@@ -710,6 +714,72 @@ def _run_script_data_root_failure_reports(run_sh: Path) -> tuple[str, Any]:
         failures.append({"reason": "missing_data_root_failure_exit"})
     if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
         failures.append({"reason": "postrun_report_call_after_data_root_exit"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "required": True,
+        "failure_marker": marker,
+        "failure_marker_position": marker_pos,
+        "postrun_report_call_position": call_pos,
+        "failure_exit_position": exit_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _run_script_api_key_env_failure_reports(run_sh: Path) -> tuple[str, Any]:
+    return _run_script_marker_failure_reports(
+        run_sh,
+        marker="SCION_API_KEY_ENV_MISSING",
+        missing_call_reason="missing_postrun_report_call_after_api_key_env_failure",
+        missing_exit_reason="missing_api_key_env_failure_exit",
+        call_after_exit_reason="postrun_report_call_after_api_key_env_exit",
+    )
+
+
+def _run_script_marker_failure_reports(
+    run_sh: Path,
+    *,
+    marker: str,
+    missing_call_reason: str,
+    missing_exit_reason: str,
+    call_after_exit_reason: str,
+) -> tuple[str, Any]:
+    if not run_sh.is_file():
+        return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
+    marker_pos = text.find(marker)
+    if marker_pos < 0:
+        return (
+            "ok",
+            {
+                "run_script": str(run_sh),
+                "required": False,
+                "reason": "failure_marker_not_present",
+                "failure_marker": marker,
+            },
+        )
+
+    call_pos = _find_line_after(text, "write_postrun_acceptance_reports", marker_pos)
+    exit_pos = _find_next_exit_after(text, marker_pos)
+    failures: list[dict[str, Any]] = []
+    if call_pos < 0:
+        failures.append({"reason": missing_call_reason})
+    if exit_pos < 0:
+        failures.append({"reason": missing_exit_reason})
+    if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
+        failures.append({"reason": call_after_exit_reason})
 
     detail = {
         "run_script": str(run_sh),
