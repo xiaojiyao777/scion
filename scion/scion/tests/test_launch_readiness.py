@@ -740,6 +740,33 @@ def test_launch_readiness_rejects_disabled_run_script_completion_preflight(
     ]
 
 
+def test_launch_readiness_rejects_comment_only_completion_preflight_proxy(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        "tools/check_gpt55_proxy.py",
+        "tools/check_gpt55_proxy_disabled.py",
+    )
+    run_text = run_text.replace(
+        "  PREFLIGHT_STATUS=64\n",
+        "  PREFLIGHT_STATUS=64\n  # tools/check_gpt55_proxy.py\n",
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert preflight_check["status"] == "failed"
+    assert {"reason": "completion_preflight_proxy_call_missing"} in preflight_check[
+        "detail"
+    ]["failures"]
+
+
 def test_launch_readiness_rejects_missing_pythonpath(
     tmp_path: Path,
 ) -> None:
@@ -799,6 +826,29 @@ def test_launch_readiness_rejects_non_gpt55_model(
         "manifest_model": "gpt-5.5",
         "env_model": "gpt-5.4",
     } in failures
+
+
+def test_launch_readiness_rejects_prefixed_proxy_model_route_env_tokens(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8")
+        .replace('--model "$SCION_MODEL"', '--model "$SCION_MODEL"extra')
+        .replace('--base-url "$SCION_BASE_URL"', '--base-url "$SCION_BASE_URL"extra'),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    model_check = report["checks"]["run_script_model_route_enforced"]
+    assert model_check["status"] == "failed"
+    failures = model_check["detail"]["failures"]
+    assert {"reason": "completion_preflight_model_env_missing"} in failures
+    assert {"reason": "completion_preflight_base_url_env_missing"} in failures
 
 
 def test_launch_readiness_rejects_disabled_early_stop(

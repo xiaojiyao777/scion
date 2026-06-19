@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -850,7 +851,10 @@ def _run_script_completion_preflight_enforced(
 
     source_pos = _first_launch_env_source_position(run_text)
     preflight_pos = run_text.find('if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then')
-    proxy_pos = run_text.find("tools/check_gpt55_proxy.py")
+    proxy_pos, _proxy_block = _shell_command_block_containing_marker(
+        run_text,
+        "tools/check_gpt55_proxy.py",
+    )
     campaign_pos = _campaign_command_position(run_text)
     if source_pos < 0:
         failures.append({"reason": "run_script_does_not_source_launch_env"})
@@ -1028,9 +1032,30 @@ def _run_script_model_route_enforced(
     campaign_pos = _campaign_command_position(run_text)
     model_export_pos = _export_assignment_position(run_text, "SCION_MODEL")
     base_export_pos = _export_assignment_position(run_text, "SCION_BASE_URL")
-    proxy_pos = run_text.find("tools/check_gpt55_proxy.py")
-    proxy_model_pos = run_text.find('--model "$SCION_MODEL"')
-    proxy_base_pos = run_text.find('--base-url "$SCION_BASE_URL"')
+    proxy_pos, proxy_block = _shell_command_block_containing_marker(
+        run_text,
+        "tools/check_gpt55_proxy.py",
+    )
+    proxy_model_ok = _shell_command_has_option_value(
+        proxy_block,
+        "--model",
+        {"$SCION_MODEL", "${SCION_MODEL}"},
+    )
+    proxy_base_ok = _shell_command_has_option_value(
+        proxy_block,
+        "--base-url",
+        {"$SCION_BASE_URL", "${SCION_BASE_URL}"},
+    )
+    proxy_model_pos = (
+        run_text.find("--model", proxy_pos, campaign_pos if campaign_pos >= 0 else None)
+        if proxy_model_ok
+        else -1
+    )
+    proxy_base_pos = (
+        run_text.find("--base-url", proxy_pos, campaign_pos if campaign_pos >= 0 else None)
+        if proxy_base_ok
+        else -1
+    )
     if model_export_pos < 0:
         failures.append({"reason": "run_script_does_not_export_scion_model"})
     if base_export_pos < 0:
@@ -1231,6 +1256,40 @@ def _campaign_command_position(text: str) -> int:
     return position
 
 
+def _shell_command_block_containing_marker(text: str, marker: str) -> tuple[int, str]:
+    offset = 0
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if marker not in stripped or _line_is_non_executed_shell_text(stripped):
+            offset += len(line)
+            continue
+        block = [line]
+        cursor = index
+        while block[-1].rstrip().endswith("\\") and cursor + 1 < len(lines):
+            cursor += 1
+            block.append(lines[cursor])
+        return offset + line.find(marker), "".join(block)
+    return -1, ""
+
+
+def _shell_command_has_option_value(
+    command: str,
+    option: str,
+    expected_values: set[str],
+) -> bool:
+    if not command:
+        return False
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        return False
+    for index, token in enumerate(tokens[:-1]):
+        if token == option and tokens[index + 1] in expected_values:
+            return True
+    return False
+
+
 def _campaign_command_line(text: str) -> tuple[int, str]:
     offset = 0
     for line in text.splitlines(keepends=True):
@@ -1245,11 +1304,17 @@ def _campaign_command_line(text: str) -> tuple[int, str]:
 
 
 def _line_is_campaign_command_echo(stripped_line: str) -> bool:
-    return (
-        stripped_line.startswith("echo ")
-        or stripped_line.startswith("COMMAND:")
+    return _line_is_non_executed_shell_text(stripped_line) or (
+        stripped_line.startswith("COMMAND:")
         or 'echo "COMMAND:' in stripped_line
         or "echo 'COMMAND:" in stripped_line
+    )
+
+
+def _line_is_non_executed_shell_text(stripped_line: str) -> bool:
+    return (
+        stripped_line.startswith("echo ")
+        or stripped_line.startswith("#")
     )
 
 
