@@ -58,7 +58,9 @@ Framework:
   payload digest, and constraint/forbidden-pattern counts without storing raw
   prompt text or adding Decision input. CVRP and warehouse current-run
   delegated-analysis readiness now require this trace to be present and
-  full-visible whenever a matching code trace exists.
+  full-visible whenever a matching code trace exists. Code traces also require
+  protected target/integration/algorithm source visibility; missing required
+  source paths prevent delegated current-run review readiness.
 - Adapter-owned measurement/opportunity diagnostics are redacted before prompt
   exposure for raw pair/calibration rows, BKS/gap details, holdout/case details,
   prompt ratios, and LLM text.
@@ -124,8 +126,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `46184f3`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-warehousecodeready-ready-46184f3-6r-gpt55-20260619T055311Z-claw`.
+- Current prepared root, prepared from WSL checkout `810028f`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codesourceready-ready-810028f-6r-gpt55-20260619T060436Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -151,8 +153,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `46184f3`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-warehousecodeready-ready-46184f3-1r-gpt55-20260619T055312Z-claw`.
+- Current prepared root, prepared from WSL checkout `810028f`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codesourceready-ready-810028f-1r-gpt55-20260619T060438Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -200,7 +202,7 @@ Infrastructure:
   including the manifest git commit. Later docs-only commits may make the
   checkout differ from a prepared manifest commit; readiness remains acceptable
   only when runtime guard paths are unchanged. Older prepared roots before the
-  warehousecodeready roots above are not current because launch/readiness
+  codesourceready roots above are not current because launch/readiness
   runtime paths changed after prepare time. Exact
   supersession details belong in launch/readiness evidence docs, not this
   operational snapshot.

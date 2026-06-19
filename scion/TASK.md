@@ -249,12 +249,14 @@ Current checkpoint:
   can audit whether actual code prompt traces carried that constraints section,
   using section status, digest, and count fingerprints rather than raw prompt
   text; CVRP and warehouse delegated-analysis readiness now require that trace
-  to be present and full-visible whenever a matching code trace exists.
+  to be present and full-visible whenever a matching code trace exists. Code
+  traces also require protected target/integration/algorithm source visibility;
+  missing required source paths prevent delegated current-run review readiness.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-warehousecodeready-ready-46184f3-6r-gpt55-20260619T055311Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-codesourceready-ready-810028f-6r-gpt55-20260619T060436Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-warehousecodeready-ready-46184f3-1r-gpt55-20260619T055312Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-codesourceready-ready-810028f-1r-gpt55-20260619T060438Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
@@ -267,7 +269,7 @@ Current checkpoint:
   `scion/tools`. The warehouse root reports
   `warehouse_active_subject_code_constraint_source_markers` all true, and the
   CVRP root reports `cvrp_active_subject_code_constraint_source_markers` all
-  true. The roots were prepared from WSL checkout `46184f3`.
+  true. The roots were prepared from WSL checkout `810028f`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
@@ -302,7 +304,7 @@ Current checkpoint:
   the postrun report/readiness bundle. Warehouse and CVRP roots also fail
   readiness if the API-key-env-missing pre-campaign failure path skips the same
   report/readiness bundle.
-  Older prepared roots before the warehousecodeready roots above are not current
+  Older prepared roots before the codesourceready roots above are not current
   because launch/readiness runtime paths changed after prepare time. Exact
   supersession details belong in the
   launch/readiness evidence docs, not in this current checkpoint.
