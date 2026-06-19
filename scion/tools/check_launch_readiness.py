@@ -323,6 +323,10 @@ def build_readiness(
         *_run_script_runtime_guard_enforced(run_sh),
     )
     add_check(
+        "run_script_runtime_guard_failure_reports",
+        *_run_script_runtime_guard_failure_reports(run_sh),
+    )
+    add_check(
         "run_script_preflight_failure_reports",
         *_run_script_preflight_failure_reports(run_sh),
     )
@@ -800,6 +804,46 @@ def _run_script_runtime_guard_enforced(run_sh: Path) -> tuple[str, Any]:
 def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
     status, _detail = _run_script_preflight_failure_reports(run_sh)
     return status == "ok"
+
+
+def _run_script_runtime_guard_failure_reports(run_sh: Path) -> tuple[str, Any]:
+    dirty_status, dirty_detail = _run_script_status_failure_reports(
+        run_sh,
+        marker="GIT_RUNTIME_DIRTY",
+        status_marker='"git_runtime_dirty":true',
+        missing_call_reason="missing_postrun_report_call_after_git_runtime_dirty",
+        missing_exit_reason="missing_git_runtime_dirty_failure_exit",
+        call_after_exit_reason="postrun_report_call_after_git_runtime_dirty_exit",
+        status_missing_reason="git_runtime_dirty_status_writer_missing",
+        status_before_marker_reason="git_runtime_dirty_status_writer_before_marker",
+        call_before_status_reason=(
+            "postrun_report_call_before_git_runtime_dirty_status_writer"
+        ),
+    )
+    mismatch_status, mismatch_detail = _run_script_status_failure_reports(
+        run_sh,
+        marker="GIT_COMMIT_MISMATCH",
+        status_marker='"git_runtime_commit_mismatch":true',
+        missing_call_reason="missing_postrun_report_call_after_git_commit_mismatch",
+        missing_exit_reason="missing_git_commit_mismatch_failure_exit",
+        call_after_exit_reason="postrun_report_call_after_git_commit_mismatch_exit",
+        status_missing_reason="git_commit_mismatch_status_writer_missing",
+        status_before_marker_reason="git_commit_mismatch_status_writer_before_marker",
+        call_before_status_reason=(
+            "postrun_report_call_before_git_commit_mismatch_status_writer"
+        ),
+    )
+    detail = {
+        "run_script": str(run_sh),
+        "dirty_failure": dirty_detail,
+        "commit_mismatch_failure": mismatch_detail,
+        "failures": list(dirty_detail.get("failures", []))
+        + list(mismatch_detail.get("failures", [])),
+    }
+    return (
+        "ok" if dirty_status == "ok" and mismatch_status == "ok" else "failed",
+        detail,
+    )
 
 
 def _run_script_preflight_failure_reports(run_sh: Path) -> tuple[str, Any]:
@@ -1649,6 +1693,89 @@ def _run_script_api_key_env_failure_reports(run_sh: Path) -> tuple[str, Any]:
         missing_exit_reason="missing_api_key_env_failure_exit",
         call_after_exit_reason="postrun_report_call_after_api_key_env_exit",
     )
+
+
+def _run_script_status_failure_reports(
+    run_sh: Path,
+    *,
+    marker: str,
+    status_marker: str,
+    missing_call_reason: str,
+    missing_exit_reason: str,
+    call_after_exit_reason: str,
+    status_missing_reason: str,
+    status_before_marker_reason: str,
+    call_before_status_reason: str,
+) -> tuple[str, Any]:
+    if not run_sh.is_file():
+        return "failed", {"run_script": str(run_sh), "reason": "missing_run_script"}
+    try:
+        text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (
+            "failed",
+            {
+                "run_script": str(run_sh),
+                "reason": "unable_to_read_run_script",
+                "error": str(exc),
+            },
+        )
+
+    marker_pos, ignored_marker_count = _find_executable_marker_position(text, marker)
+    if marker_pos < 0:
+        return (
+            "ok",
+            {
+                "run_script": str(run_sh),
+                "required": False,
+                "reason": "failure_marker_not_present",
+                "failure_marker": marker,
+                "status_marker": status_marker,
+                "ignored_non_executable_marker_count": ignored_marker_count,
+            },
+        )
+
+    status_pos, _status_block = _shell_command_block_containing_marker(
+        text,
+        status_marker,
+    )
+    call_pos = _find_line_after(text, "write_postrun_acceptance_reports", marker_pos)
+    exit_pos = _find_next_exit_after(text, marker_pos)
+    function_pos, ignored_function_count = _shell_function_definition_position(
+        text,
+        "write_postrun_acceptance_reports",
+    )
+    failures: list[dict[str, Any]] = []
+    if function_pos < 0:
+        failures.append({"reason": "missing_postrun_report_function"})
+    if status_pos < 0:
+        failures.append({"reason": status_missing_reason})
+    if status_pos >= 0 and status_pos < marker_pos:
+        failures.append({"reason": status_before_marker_reason})
+    if call_pos < 0:
+        failures.append({"reason": missing_call_reason})
+    if exit_pos < 0:
+        failures.append({"reason": missing_exit_reason})
+    if call_pos >= 0 and exit_pos >= 0 and call_pos > exit_pos:
+        failures.append({"reason": call_after_exit_reason})
+    if call_pos >= 0 and status_pos >= 0 and call_pos < status_pos:
+        failures.append({"reason": call_before_status_reason})
+
+    detail = {
+        "run_script": str(run_sh),
+        "required": True,
+        "failure_marker": marker,
+        "status_marker": status_marker,
+        "failure_marker_position": marker_pos,
+        "status_writer_position": status_pos,
+        "postrun_report_function_position": function_pos,
+        "ignored_non_executable_function_definition_count": ignored_function_count,
+        "ignored_non_executable_marker_count": ignored_marker_count,
+        "postrun_report_call_position": call_pos,
+        "failure_exit_position": exit_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
 
 
 def _run_script_marker_failure_reports(

@@ -537,6 +537,7 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PAT
     echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"
   }} > "$RUN_ROOT/exit.txt"
   printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_runtime_dirty":true}}\n' > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
   exit {PREFLIGHT_FAILURE_EXIT_CODE}
 fi
 _ACTUAL_GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
@@ -550,6 +551,7 @@ if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
       echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
     }} > "$RUN_ROOT/exit.txt"
     printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":{PREFLIGHT_FAILURE_EXIT_CODE},"git_runtime_commit_mismatch":true}}\n' > "$RUN_ROOT/run_status.json"
+    write_postrun_acceptance_reports
     exit {PREFLIGHT_FAILURE_EXIT_CODE}
   fi
 fi

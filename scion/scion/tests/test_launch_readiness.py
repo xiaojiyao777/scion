@@ -73,6 +73,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
     )
+    assert (
+        report["checks"]["run_script_runtime_guard_failure_reports"]["status"] == "ok"
+    )
     assert report["checks"]["run_script_data_root_failure_reports"]["status"] == "ok"
     assert report["checks"]["run_script_api_key_env_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
@@ -367,6 +370,68 @@ def test_launch_readiness_rejects_run_script_guard_after_campaign_command(
     assert guard_check["detail"]["markers_after_campaign_command"] == [
         "commit_mismatch_failure_marker"
     ]
+
+
+def test_launch_readiness_rejects_runtime_guard_failure_without_postrun_reports(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            '  write_postrun_acceptance_reports\n  exit 64',
+            '  exit 64',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+    guard_failure_check = report["checks"][
+        "run_script_runtime_guard_failure_reports"
+    ]
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    assert guard_failure_check["status"] == "failed"
+    assert {
+        "reason": "postrun_report_call_after_git_runtime_dirty_exit"
+    } in guard_failure_check["detail"]["failures"]
+
+
+def test_launch_readiness_rejects_runtime_guard_postrun_before_status_writer(
+    tmp_path: Path,
+) -> None:
+    run_sh = tmp_path / "run.sh"
+    run_sh.write_text(
+        """#!/usr/bin/env bash
+write_postrun_acceptance_reports() {
+  return 0
+}
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${_GIT_RUNTIME_GUARD_PATHS[@]}")" ]]; then
+  echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"
+  write_postrun_acceptance_reports
+  printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"git_runtime_dirty":true}\n' > "$RUN_ROOT/run_status.json"
+  exit 64
+fi
+if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
+  echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
+  printf '{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"git_runtime_commit_mismatch":true}\n' > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
+  exit 64
+fi
+""",
+        encoding="utf-8",
+    )
+
+    status, detail = readiness_tool._run_script_runtime_guard_failure_reports(
+        run_sh
+    )
+
+    assert status == "failed"
+    assert {
+        "reason": "postrun_report_call_before_git_runtime_dirty_status_writer"
+    } in detail["failures"]
 
 
 def test_launch_readiness_ignores_comment_only_runtime_guard_marker(
@@ -1060,6 +1125,9 @@ def test_launch_readiness_rejects_comment_only_postrun_report_function(
     strict_check = report["checks"]["run_script_strict_postrun_readiness"]
     rebuild_check = report["checks"]["run_script_strict_postrun_rebuild"]
     preflight_failure_check = report["checks"]["run_script_preflight_failure_reports"]
+    runtime_failure_check = report["checks"][
+        "run_script_runtime_guard_failure_reports"
+    ]
     assert strict_check["status"] == "failed"
     assert rebuild_check["status"] == "failed"
     assert {"reason": "missing_postrun_report_function"} in strict_check["detail"][
@@ -1081,6 +1149,10 @@ def test_launch_readiness_rejects_comment_only_postrun_report_function(
     assert preflight_failure_check["detail"][
         "ignored_non_executable_function_definition_count"
     ] == 1
+    assert runtime_failure_check["status"] == "failed"
+    assert {"reason": "missing_postrun_report_function"} in (
+        runtime_failure_check["detail"]["failures"]
+    )
 
 
 def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(
@@ -2070,6 +2142,8 @@ write_postrun_acceptance_reports() {{
 read -r -a _GIT_RUNTIME_GUARD_PATHS <<< "$GIT_RUNTIME_GUARD_PATHS"
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${{_GIT_RUNTIME_GUARD_PATHS[@]}}")" ]]; then
   echo "GIT_RUNTIME_DIRTY:$GIT_RUNTIME_GUARD_PATHS"
+  printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"git_runtime_dirty":true}}\\n' > "$RUN_ROOT/run_status.json"
+  write_postrun_acceptance_reports
   exit 64
 fi
 _ACTUAL_GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
@@ -2078,6 +2152,8 @@ if [[ "$_ACTUAL_GIT_COMMIT" != "$GIT_COMMIT" ]]; then
     echo "GIT_COMMIT_DOC_ONLY_MISMATCH_ALLOWED:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
   else
     echo "GIT_COMMIT_MISMATCH:expected=$GIT_COMMIT actual=$_ACTUAL_GIT_COMMIT paths=$GIT_RUNTIME_GUARD_PATHS"
+    printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":64,"git_runtime_commit_mismatch":true}}\\n' > "$RUN_ROOT/run_status.json"
+    write_postrun_acceptance_reports
     exit 64
   fi
 fi
