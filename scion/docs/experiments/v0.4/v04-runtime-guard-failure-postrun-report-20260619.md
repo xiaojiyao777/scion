@@ -73,13 +73,13 @@ WSL:
 
 ## Current Prepared Roots
 
-Because this touched `scion/tools` and launchers, current WSL prepared roots
-were regenerated from WSL runtime commit `5f30f5c2`:
+Because later report tooling also touched `scion/tools`, current WSL prepared
+roots were regenerated from WSL runtime commit `03fe2a4c`:
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-launchenv-5f30f5c2-6r-gpt55-20260619T165743Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-cvrpquality-03fe2a4c-6r-gpt55-20260619T171007Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-launchenv-5f30f5c2-1r-gpt55-20260619T165744Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-cvrpquality-03fe2a4c-1r-gpt55-20260619T171008Z-claw`
 
 Strict WSL launch readiness for both roots exits `64` and reports:
 
