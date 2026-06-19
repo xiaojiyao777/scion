@@ -706,6 +706,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
             f"- Available: `{_display(runtime_feedback.get('available'))}`",
             "- Current-run evidence: "
             f"`{_display(runtime_feedback.get('current_run_evidence'))}`",
+            "- Runtime drain status complete / review-ready: "
+            f"`{_display(runtime_feedback.get('drain_status_complete'))}` / "
+            f"`{_display(runtime_feedback.get('review_ready'))}`",
             "- Runtime reports / budget diagnostic sources: "
             f"{_display(runtime_feedback.get('runtime_report_count'))} / "
             f"{_display(runtime_feedback.get('budget_diagnostic_source_count'))}",
@@ -2150,6 +2153,8 @@ def _runtime_feedback_summary(
         "decision_features_excluded": True,
         "current_run_evidence": current_run_evidence,
         "available": False,
+        "drain_status_complete": False,
+        "review_ready": False,
         "report_count": 0,
         "runtime_report_count": 0,
         "budget_diagnostic_source_count": 0,
@@ -2183,12 +2188,15 @@ def _runtime_feedback_summary(
         inventory,
     )
     aggregate["runtime_budget_diagnostics"] = budget_diagnostics
+    drain_status_complete = _runtime_feedback_drain_status_complete(aggregate)
     available = bool(entries) or _int_or_zero(
         budget_diagnostics.get("diagnostic_count")
     ) > 0
     return {
         **base,
         "available": available,
+        "drain_status_complete": drain_status_complete,
+        "review_ready": available and drain_status_complete,
         "report_count": len(report_paths),
         "runtime_report_count": len(entries),
         "budget_diagnostic_source_count": budget_diagnostics["source_count"],
@@ -2331,6 +2339,21 @@ def _merge_runtime_feedback_aggregate(
             target["generates_new_hypothesis_true"] += 1
         elif stage.get("generates_new_hypothesis") is False:
             target["generates_new_hypothesis_false"] += 1
+
+
+def _runtime_feedback_drain_status_complete(aggregate: Mapping[str, Any]) -> bool:
+    fresh = _mapping_or_empty(aggregate.get("fresh_runtime_replay_drain"))
+    stage = _mapping_or_empty(aggregate.get("stage_transition_drain"))
+    return bool(_mapping_or_empty(fresh.get("status_counts"))) and bool(
+        _mapping_or_empty(stage.get("status_counts"))
+    )
+
+
+def _runtime_feedback_review_ready(summary: Mapping[str, Any]) -> bool:
+    return (
+        summary.get("available") is True
+        and summary.get("drain_status_complete") is True
+    )
 
 
 def _runtime_budget_diagnostics_summary(
@@ -3653,7 +3676,8 @@ def _cvrp_large_twoopt_summary(
         research_continuity_summary=research_continuity_summary,
     )
     measurement_available = measurement_effect_summary.get("available") is True
-    runtime_available = runtime_feedback_summary.get("available") is True
+    runtime_raw_available = runtime_feedback_summary.get("available") is True
+    runtime_available = _runtime_feedback_review_ready(runtime_feedback_summary)
     continuity_available = research_continuity_summary.get("available") is True
     large_twoopt_available = large_twoopt_mechanism.get("available") is True
     evidence = {
@@ -3705,6 +3729,11 @@ def _cvrp_large_twoopt_summary(
         },
         "runtime": {
             "available": runtime_available,
+            "raw_available": runtime_raw_available,
+            "drain_status_complete": runtime_feedback_summary.get(
+                "drain_status_complete"
+            )
+            is True,
             "runtime_model_counts": _int_mapping(
                 runtime_budget.get("runtime_model_counts")
             ),
@@ -4088,6 +4117,8 @@ def _warehouse_followup_summary(
         _int_or_zero(proposal_quality.get("quality_blocks")),
         _int_or_zero(proposal_quality.get("quality_block_ledger_count")),
     )
+    runtime_raw_available = runtime_feedback_summary.get("available") is True
+    runtime_available = _runtime_feedback_review_ready(runtime_feedback_summary)
     evidence = {
         "protocol": {
             "formal_screened_candidates": formal_screened_candidates,
@@ -4132,7 +4163,12 @@ def _warehouse_followup_summary(
             ),
         },
         "runtime": {
-            "available": runtime_feedback_summary.get("available") is True,
+            "available": runtime_raw_available,
+            "review_ready": runtime_available,
+            "drain_status_complete": runtime_feedback_summary.get(
+                "drain_status_complete"
+            )
+            is True,
             "fresh_runtime_status_counts": _int_mapping(
                 fresh_runtime.get("status_counts")
             ),
@@ -4167,7 +4203,7 @@ def _warehouse_followup_summary(
         formal_screened_candidates=formal_screened_candidates,
         quality_block_signal=quality_block_signal,
         measurement_available=measurement_effect_summary.get("available") is True,
-        runtime_available=runtime_feedback_summary.get("available") is True,
+        runtime_available=runtime_available,
         continuity_available=research_continuity_summary.get("available") is True,
         continuity_substantive=continuity_signal["substantive"],
     )
@@ -4186,7 +4222,7 @@ def _warehouse_followup_summary(
             protocol_evaluated_candidates=protocol_evaluated_candidates,
             quality_block_signal=quality_block_signal,
             measurement_available=measurement_effect_summary.get("available") is True,
-            runtime_available=runtime_feedback_summary.get("available") is True,
+            runtime_available=runtime_available,
             continuity_available=research_continuity_summary.get("available") is True,
             continuity_substantive=continuity_signal["substantive"],
         ),

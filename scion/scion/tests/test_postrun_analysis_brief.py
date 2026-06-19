@@ -1377,6 +1377,66 @@ def test_cvrp_large_twoopt_summary_requires_review_inputs_after_protocol_eval(
     assert "- Interpretation: protocol_evaluated_review_inputs_incomplete" in markdown
 
 
+def test_cvrp_large_twoopt_summary_requires_runtime_drain_status_not_budget_only(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-budget-diagnostics-only"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+    report_path = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report.pop("fresh_runtime_replay_drain")
+    report.pop("stage_transition_drain")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    summary_path = campaign_dir / "campaign_summary.json"
+    campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    campaign_summary["runtime_budget_diagnostics"] = [
+        {
+            "branch_id": "branch-1",
+            "stage": "screening",
+            "code": "SCREENING_RUNTIME_BUDGET_SATURATION",
+            "severity": "info",
+            "runtime_model": "budget_exhausting",
+            "saturation_ratio": 0.98,
+            "threshold_ratio": 0.9,
+            "total_pairs": 8,
+        }
+    ]
+    summary_path.write_text(json.dumps(campaign_summary), encoding="utf-8")
+
+    brief = brief_tool.build_brief(run_root)
+    markdown = brief_tool.render_markdown(brief)
+
+    runtime = brief["runtime_feedback_summary"]
+    assert runtime["available"] is True
+    assert runtime["drain_status_complete"] is False
+    assert runtime["review_ready"] is False
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["current_run_evidence"] is True
+    assert summary["handoff_complete"] is True
+    assert summary["interpretation"] == "protocol_evaluated_review_inputs_incomplete"
+    assert "missing_runtime_feedback_summary" in summary["evidence_gaps"]
+    runtime_evidence = summary["evidence"]["runtime"]
+    assert runtime_evidence["available"] is False
+    assert runtime_evidence["raw_available"] is True
+    assert runtime_evidence["drain_status_complete"] is False
+    assert runtime_evidence["runtime_budget_diagnostic_count"] == 1
+    assert "Runtime drain status complete / review-ready: `False` / `False`" in (
+        markdown
+    )
+
+
 def test_cvrp_large_twoopt_summary_rejects_protocol_eval_without_twoopt_signal(
     tmp_path: Path,
 ) -> None:
