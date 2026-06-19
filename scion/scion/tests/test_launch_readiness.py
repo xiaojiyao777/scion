@@ -685,6 +685,62 @@ def test_launch_readiness_rejects_run_script_without_strict_postrun_readiness(
     strict_check = report["checks"]["run_script_strict_postrun_readiness"]
     assert strict_check["required"] is True
     assert strict_check["status"] == "failed"
+    assert {"reason": "postrun_acceptance_strict_flag_missing"} in strict_check[
+        "detail"
+    ]["failures"]
+
+
+def test_launch_readiness_rejects_comment_only_strict_postrun_readiness(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_text = run_sh.read_text(encoding="utf-8")
+    run_text = run_text.replace(
+        "tools/check_postrun_acceptance.py",
+        "tools/check_postrun_acceptance_disabled.py",
+    )
+    run_text = run_text.replace(
+        "write_postrun_acceptance_reports() {\n",
+        "write_postrun_acceptance_reports() {\n  # tools/check_postrun_acceptance.py --require-current-run-ready\n",
+    )
+    run_sh.write_text(run_text, encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    strict_check = report["checks"]["run_script_strict_postrun_readiness"]
+    assert strict_check["required"] is True
+    assert strict_check["status"] == "failed"
+    assert {"reason": "postrun_acceptance_command_missing"} in strict_check[
+        "detail"
+    ]["failures"]
+
+
+def test_launch_readiness_rejects_prefixed_strict_postrun_readiness_flag(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    run_sh = run_root / "run.sh"
+    run_sh.write_text(
+        run_sh.read_text(encoding="utf-8").replace(
+            "--require-current-run-ready",
+            "--require-current-run-readyish",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    strict_check = report["checks"]["run_script_strict_postrun_readiness"]
+    assert strict_check["required"] is True
+    assert strict_check["status"] == "failed"
+    assert {"reason": "postrun_acceptance_strict_flag_missing"} in strict_check[
+        "detail"
+    ]["failures"]
 
 
 def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign(

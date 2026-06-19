@@ -327,9 +327,7 @@ def build_readiness(
     )
     add_check(
         "run_script_strict_postrun_readiness",
-        "ok" if _run_sh_contains_strict_postrun_readiness(run_sh) else "failed",
-        "check_postrun_acceptance.py --require-current-run-ready and "
-        "POSTRUN_READINESS_EXIT_STATUS",
+        *_run_script_strict_postrun_readiness(run_sh),
     )
     add_check(
         "run_script_postrun_reports_after_campaign",
@@ -794,17 +792,46 @@ def _run_sh_contains_preflight_failure_report_path(run_sh: Path) -> bool:
     )
 
 
-def _run_sh_contains_strict_postrun_readiness(run_sh: Path) -> bool:
+def _run_script_strict_postrun_readiness(run_sh: Path) -> tuple[str, Any]:
+    failures: list[dict[str, Any]] = []
     try:
         text = run_sh.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    return (
-        "write_postrun_acceptance_reports() {" in text
-        and "tools/check_postrun_acceptance.py" in text
-        and "--require-current-run-ready" in text
-        and "POSTRUN_READINESS_EXIT_STATUS" in text
+    except OSError as exc:
+        text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    postrun_pos, postrun_block = _shell_command_block_containing_marker(
+        text,
+        "tools/check_postrun_acceptance.py",
     )
+    postrun_has_strict_flag = command_has_shell_flag(
+        postrun_block,
+        "--require-current-run-ready",
+    )
+    readiness_marker_pos = text.find("POSTRUN_READINESS_EXIT_STATUS")
+    if "write_postrun_acceptance_reports() {" not in text:
+        failures.append({"reason": "missing_postrun_report_function"})
+    if postrun_pos < 0:
+        failures.append({"reason": "postrun_acceptance_command_missing"})
+    elif not postrun_has_strict_flag:
+        failures.append({"reason": "postrun_acceptance_strict_flag_missing"})
+    if readiness_marker_pos < 0:
+        failures.append({"reason": "postrun_readiness_exit_status_marker_missing"})
+
+    detail = {
+        "run_script": str(run_sh),
+        "postrun_acceptance_command_position": postrun_pos,
+        "postrun_acceptance_strict_flag": postrun_has_strict_flag,
+        "postrun_readiness_exit_status_position": readiness_marker_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
 
 
 def _run_script_completion_preflight_enforced(
