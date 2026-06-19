@@ -44,8 +44,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `8c68347`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-8c68347-6r-gpt55-20260619T005550Z-claw`.
+- Current prepared root, prepared from WSL checkout `016bb39`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-016bb39-6r-gpt55-20260619T010221Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
 
@@ -60,16 +60,18 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `8c68347`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-8c68347-1r-gpt55-20260619T005550Z-claw`.
+- Current prepared root, prepared from WSL checkout `016bb39`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-016bb39-1r-gpt55-20260619T010221Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
   preserve feasibility/route-count evidence, and require pair-level objective,
   feasibility, route-count, and wall-clock evidence. CVRP postrun briefs now
   also expose `cvrp_large_twoopt_summary`, so delegated review can distinguish
-  prepared-only roots, missing review inputs, missing two-opt mechanism signal,
-  and bounded-twoopt review-ready evidence.
+  prepared-only roots, missing review inputs, incomplete handoff, missing two-opt
+  mechanism signal, and bounded-twoopt review-ready evidence. Required postrun
+  review questions explicitly ask reviewers to check incomplete handoff before
+  accepting review-ready interpretations.
 
 Infrastructure:
 
@@ -83,8 +85,8 @@ Infrastructure:
   when runtime guard paths are unchanged.
 - The current blocker is external `gpt-5.5` auth, not Scion static readiness:
   `/v1/chat/completions` returns HTTP `401`, `classification=not_authenticated`,
-  `code=invalid_api_key`, with proxy auth pool `active=0`, `total=1`. The
-  non-active account may appear as expired or refreshing.
+  `code=invalid_api_key`, with proxy auth pool `active=0`, `expired=1`,
+  `total=1`. The non-active account may appear as expired or refreshing.
 - Do not launch prepared roots until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
@@ -118,9 +120,9 @@ Infrastructure:
 - Detailed repair, launch, and postrun evidence:
   `scion/docs/experiments/v0.4/`.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-handoff-review-ready-guard-20260619.md`.
-  It supersedes older prepared-root pointers after the postrun handoff
-  review-ready guard changed a runtime guard path.
+  `scion/docs/experiments/v0.4/v04-postrun-incomplete-handoff-review-question-20260619.md`.
+  It supersedes older prepared-root pointers after the postrun required-review
+  questions changed a runtime guard path.
 - Current repair context:
   `scion/docs/experiments/v0.4/v04-cvrp-large-twoopt-postrun-summary-guard-20260619.md`,
   `scion/docs/experiments/v0.4/v04-warehouse-plateau-review-inputs-guard-20260619.md`,

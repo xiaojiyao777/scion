@@ -88,5 +88,9 @@ PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
 ## Acceptance
 
 Accepted as a postrun auditability repair and current prepared-root refresh.
+The prepared roots from WSL checkout `8c68347` were later superseded by
+`scion/docs/experiments/v0.4/v04-postrun-incomplete-handoff-review-question-20260619.md`,
+after the required delegated-review questions changed the same runtime guard
+path and the roots were regenerated from WSL checkout `016bb39`.
 Once `gpt-5.5` auth is restored, launch the warehouse v2 follow-up first, then
 the CVRP bounded large-twoopt follow-up.
