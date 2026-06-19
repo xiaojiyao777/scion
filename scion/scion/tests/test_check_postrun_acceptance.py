@@ -187,6 +187,53 @@ def test_postrun_acceptance_readiness_uses_manifest_bound_analysis_brief(
     assert problem_check["detail"]["reason"] == "missing_problem_specific_summary"
 
 
+def test_postrun_acceptance_rejects_analysis_brief_prepared_contract_drift(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-contract-drift")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "cvrp"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    contract_check = readiness["checks"][
+        "analysis_brief_prepared_contract_consistency"
+    ]
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert contract_check["required"] is True
+    assert contract_check["status"] == "failed"
+    assert "prepared_contract_problem_family_mismatch" in contract_check["detail"][
+        "failures"
+    ]
+    assert contract_check["detail"]["brief_problem_family"] == "cvrp"
+    assert contract_check["detail"]["inventory_problem_family"] == (
+        "warehouse_delivery"
+    )
+    assert problem_check["detail"][0]["expected_problem_family"] == (
+        "warehouse_delivery"
+    )
+
+
 def test_postrun_acceptance_readiness_rejects_missing_manifest_declared_output(
     tmp_path: Path,
 ) -> None:
@@ -1770,6 +1817,9 @@ def _write_current_run_root(run_root: Path) -> Path:
     campaign_dir = run_root / "campaign"
     campaign_dir.mkdir(parents=True)
     _write_campaign_db(campaign_dir)
+    fixture_problem_family = _fixture_problem_family(run_root)
+    if fixture_problem_family is not None:
+        _write_prepared_manifest_fixture(run_root, fixture_problem_family)
     _write_json(
         run_root / "run_status.json",
         {
@@ -1809,6 +1859,75 @@ def _write_current_run_root(run_root: Path) -> Path:
     formal_index.parent.mkdir(parents=True)
     formal_index.write_text('{"candidate_id":"cand-1"}\n', encoding="utf-8")
     return run_root
+
+
+def _fixture_problem_family(run_root: Path) -> str | None:
+    name = run_root.name.lower()
+    if "warehouse" in name:
+        return "warehouse_delivery"
+    if "cvrp" in name:
+        return "cvrp"
+    return None
+
+
+def _write_prepared_manifest_fixture(run_root: Path, problem_family: str) -> None:
+    campaign_dir = run_root / "campaign"
+    command = (
+        "python -m scion.cli.main run "
+        f"--campaign-dir {campaign_dir} --disable-early-stop"
+    )
+    _write_json(
+        run_root / "prepared_run_manifest.v1.json",
+        {
+            "schema_version": "scion.launcher_prepared_run_manifest.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "campaign_dir": str(campaign_dir),
+            "command": command,
+            "problem_family": problem_family,
+            "model": {
+                "name": "gpt-5.5",
+                "completion_preflight": True,
+            },
+            "report_metadata": {
+                "control_pair_key": "fixture:rep01",
+                "postrun_reports": True,
+                "postrun_acceptance_families": [
+                    "summaries",
+                    "failures",
+                    "research_efficiency",
+                    "manifests",
+                    "analysis_brief",
+                    "inventory",
+                    "readiness",
+                    "rebuild",
+                ],
+            },
+            "execution": {
+                "rounds": 2,
+                "time_limit_sec": 30,
+                "agentic_session_timeout_sec": 900,
+                "measurement_governance": "on",
+                "proposal_context_ablation": "full",
+                "agentic_proposal": True,
+                "disable_early_stop": True,
+            },
+            "config": {},
+            "git": {},
+        },
+    )
+    (run_root / "command.txt").write_text(
+        (
+            f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}\n"
+            f"command:\n{command}\n"
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_campaign_db(campaign_dir: Path) -> None:

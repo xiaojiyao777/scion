@@ -230,6 +230,15 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
             ),
         },
     )
+    contract_status, contract_detail = _prepared_contract_consistency(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "analysis_brief_prepared_contract_consistency",
+        contract_status,
+        contract_detail,
+    )
     add_check(
         "not_invalid_infra_only",
         "ok"
@@ -576,6 +585,60 @@ def _brief_current_run_evidence(brief: Mapping[str, Any]) -> bool:
     )
 
 
+def _prepared_contract_consistency(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    inventory_contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    failures: list[str] = []
+    if not brief_contract:
+        failures.append("analysis_brief_prepared_contract_missing")
+    if not inventory_contract:
+        failures.append("inventory_prepared_contract_missing")
+    for field in (
+        "schema_version",
+        "report_only",
+        "quality_judgment",
+        "decision_features_excluded",
+        "manifest_present",
+        "contract_complete",
+        "problem_family",
+        "model",
+        "resume_from_campaign",
+        "control_pair_key",
+        "completion_preflight",
+        "postrun_reports",
+    ):
+        if brief_contract.get(field) != inventory_contract.get(field):
+            failures.append(f"prepared_contract_{field}_mismatch")
+    if _mapping_or_empty(brief_contract.get("execution")) != _mapping_or_empty(
+        inventory_contract.get("execution")
+    ):
+        failures.append("prepared_contract_execution_mismatch")
+    if _mapping_or_empty(brief_contract.get("git")) != _mapping_or_empty(
+        inventory_contract.get("git")
+    ):
+        failures.append("prepared_contract_git_mismatch")
+    return (
+        "ok" if not failures else "failed",
+        {
+            "failures": failures,
+            "brief_problem_family": brief_contract.get("problem_family"),
+            "inventory_problem_family": inventory_contract.get("problem_family"),
+            "brief_model": brief_contract.get("model"),
+            "inventory_model": inventory_contract.get("model"),
+            "brief_control_pair_key": brief_contract.get("control_pair_key"),
+            "inventory_control_pair_key": inventory_contract.get("control_pair_key"),
+            "brief_resume_from_campaign": brief_contract.get("resume_from_campaign"),
+            "inventory_resume_from_campaign": inventory_contract.get(
+                "resume_from_campaign"
+            ),
+        },
+    )
+
+
 def _problem_summary_actionability(
     brief: Mapping[str, Any],
     inventory: Mapping[str, Any],
@@ -630,13 +693,13 @@ def _problem_family(
     brief: Mapping[str, Any],
     inventory: Mapping[str, Any],
 ) -> str | None:
-    brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
-    if isinstance(brief_contract.get("problem_family"), str):
-        return str(brief_contract["problem_family"])
     launcher = _mapping_or_empty(inventory.get("launcher"))
     inventory_contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
     if isinstance(inventory_contract.get("problem_family"), str):
         return str(inventory_contract["problem_family"])
+    brief_contract = _mapping_or_empty(brief.get("prepared_run_contract"))
+    if isinstance(brief_contract.get("problem_family"), str):
+        return str(brief_contract["problem_family"])
     for key in ("warehouse_followup_summary", "cvrp_large_twoopt_summary"):
         summary = _mapping_or_empty(brief.get(key))
         if summary.get("available") is True and isinstance(
