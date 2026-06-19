@@ -308,6 +308,10 @@ def build_readiness(
         "write_postrun_acceptance_reports after pre_campaign_completion_preflight=failed",
     )
     add_check(
+        "run_script_completion_preflight_enforced",
+        *_run_script_completion_preflight_enforced(root, run_sh),
+    )
+    add_check(
         "run_script_strict_postrun_readiness",
         "ok" if _run_sh_contains_strict_postrun_readiness(run_sh) else "failed",
         "check_postrun_acceptance.py --require-current-run-ready and "
@@ -787,6 +791,113 @@ def _run_sh_contains_strict_postrun_readiness(run_sh: Path) -> bool:
         and "--require-current-run-ready" in text
         and "POSTRUN_READINESS_EXIT_STATUS" in text
     )
+
+
+def _run_script_completion_preflight_enforced(
+    root: Path,
+    run_sh: Path,
+) -> tuple[str, Any]:
+    launch_env = root / "launch.env"
+    failures: list[dict[str, Any]] = []
+    try:
+        launch_env_text = launch_env.read_text(encoding="utf-8")
+    except OSError as exc:
+        launch_env_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_launch_env",
+                "launch_env": str(launch_env),
+                "error": str(exc),
+            }
+        )
+    try:
+        run_text = run_sh.read_text(encoding="utf-8")
+    except OSError as exc:
+        run_text = ""
+        failures.append(
+            {
+                "reason": "unable_to_read_run_script",
+                "run_script": str(run_sh),
+                "error": str(exc),
+            }
+        )
+
+    completion_value = _shell_assignment_value(
+        launch_env_text,
+        "COMPLETION_PREFLIGHT",
+    )
+    if completion_value != "1":
+        failures.append(
+            {
+                "reason": "completion_preflight_not_enabled",
+                "launch_env": str(launch_env),
+                "actual": completion_value,
+            }
+        )
+
+    source_pos = _first_launch_env_source_position(run_text)
+    preflight_pos = run_text.find('if [[ "${COMPLETION_PREFLIGHT:-0}" == "1" ]]; then')
+    proxy_pos = run_text.find("tools/check_gpt55_proxy.py")
+    campaign_pos = run_text.find(RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER)
+    if source_pos < 0:
+        failures.append({"reason": "run_script_does_not_source_launch_env"})
+    if preflight_pos < 0:
+        failures.append({"reason": "completion_preflight_guard_missing"})
+    if proxy_pos < 0:
+        failures.append({"reason": "completion_preflight_proxy_call_missing"})
+    if campaign_pos < 0:
+        failures.append(
+            {
+                "reason": "missing_campaign_command_marker",
+                "marker": RUN_SCRIPT_CAMPAIGN_COMMAND_MARKER,
+            }
+        )
+    if source_pos >= 0 and preflight_pos >= 0 and source_pos > preflight_pos:
+        failures.append({"reason": "launch_env_sourced_after_preflight"})
+    if preflight_pos >= 0 and campaign_pos >= 0 and preflight_pos > campaign_pos:
+        failures.append({"reason": "completion_preflight_after_campaign"})
+    if proxy_pos >= 0 and campaign_pos >= 0 and proxy_pos > campaign_pos:
+        failures.append({"reason": "completion_proxy_call_after_campaign"})
+
+    detail = {
+        "launch_env": str(launch_env),
+        "run_script": str(run_sh),
+        "completion_preflight": completion_value,
+        "launch_env_source_position": source_pos,
+        "preflight_guard_position": preflight_pos,
+        "proxy_call_position": proxy_pos,
+        "campaign_command_position": campaign_pos,
+        "failures": failures,
+    }
+    return ("ok" if not failures else "failed"), detail
+
+
+def _shell_assignment_value(text: str, key: str) -> str | None:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or not stripped.startswith(prefix):
+            continue
+        value = stripped[len(prefix) :].strip()
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in {"'", '"'}
+        ):
+            value = value[1:-1]
+        return value
+    return None
+
+
+def _first_launch_env_source_position(text: str) -> int:
+    candidates = [
+        text.find('source "$(dirname "$0")/launch.env"'),
+        text.find('. "$(dirname "$0")/launch.env"'),
+        text.find('source "$RUN_ROOT/launch.env"'),
+        text.find('. "$RUN_ROOT/launch.env"'),
+    ]
+    positions = [position for position in candidates if position >= 0]
+    return min(positions) if positions else -1
 
 
 def _run_script_postrun_reports_after_campaign(run_sh: Path) -> tuple[str, Any]:

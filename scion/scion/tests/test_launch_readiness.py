@@ -46,6 +46,9 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
     assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
+    assert (
+        report["checks"]["run_script_completion_preflight_enforced"]["status"] == "ok"
+    )
     assert report["checks"]["run_script_strict_postrun_readiness"]["status"] == "ok"
     assert (
         report["checks"]["run_script_postrun_reports_after_campaign"]["status"] == "ok"
@@ -706,6 +709,34 @@ def test_launch_readiness_rejects_run_script_without_postrun_call_after_campaign
     ]
 
 
+def test_launch_readiness_rejects_disabled_run_script_completion_preflight(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    launch_env = run_root / "launch.env"
+    launch_env.write_text(
+        launch_env.read_text(encoding="utf-8").replace(
+            "COMPLETION_PREFLIGHT=1",
+            "COMPLETION_PREFLIGHT=0",
+        ),
+        encoding="utf-8",
+    )
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    preflight_check = report["checks"]["run_script_completion_preflight_enforced"]
+    assert preflight_check["status"] == "failed"
+    assert preflight_check["detail"]["failures"] == [
+        {
+            "reason": "completion_preflight_not_enabled",
+            "launch_env": str(launch_env),
+            "actual": "0",
+        }
+    ]
+
+
 def test_launch_readiness_rejects_data_root_failure_without_postrun_call(
     tmp_path: Path,
 ) -> None:
@@ -1028,13 +1059,20 @@ def _write_prepared_root(
         encoding="utf-8",
     )
     (run_root / "launch.env").write_text(
-        f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}\n",
+        "\n".join(
+            [
+                f"PREPARED_RUN_MANIFEST={run_root / 'prepared_run_manifest.v1.json'}",
+                "COMPLETION_PREFLIGHT=1",
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
     (run_root / "run.sh").write_text(
         f"""#!/usr/bin/env bash
 set -uo pipefail
 RUN_ROOT={run_root}
+source "$RUN_ROOT/launch.env"
 REPO_ROOT={SCION_DIR.parent}
 SCION_DIR={SCION_DIR}
 PY={sys.executable}
@@ -1068,6 +1106,7 @@ fi
 unset _ACTUAL_GIT_COMMIT _GIT_RUNTIME_GUARD_PATHS
 if [[ "${{COMPLETION_PREFLIGHT:-0}}" == "1" ]]; then
   PREFLIGHT_STATUS=64
+  "$PY" "$SCION_DIR/tools/check_gpt55_proxy.py" --json || PREFLIGHT_STATUS=$?
   if [[ "$PREFLIGHT_STATUS" -ne 0 ]]; then
     printf '{{"schema":"outer-wrapper.v1","status":"finished","wrapper_exit_status":%s,"pre_campaign_completion_preflight":"failed"}}\\n' "$PREFLIGHT_STATUS" > "$RUN_ROOT/run_status.json"
     write_postrun_acceptance_reports
