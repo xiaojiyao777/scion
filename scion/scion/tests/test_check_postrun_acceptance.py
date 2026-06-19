@@ -545,6 +545,102 @@ def test_postrun_acceptance_requires_failure_taxonomy_actionability(
     )
 
 
+def test_postrun_acceptance_requires_review_input_summaries_actionability(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(
+        tmp_path / "warehouse-run-missing-input-summaries"
+    )
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    brief["protocol_accounting_summary"] = {
+        "schema_version": "scion.postrun_protocol_accounting_summary.v1",
+        "current_run_evidence": True,
+        "available": False,
+        "report_count": 0,
+        "accounting_report_count": 0,
+    }
+    brief["measurement_effect_summary"] = {
+        "schema_version": "scion.postrun_measurement_effect_summary.v1",
+        "current_run_evidence": True,
+        "available": False,
+        "report_count": 0,
+        "effect_report_count": 0,
+    }
+    brief["runtime_feedback_summary"] = {
+        "schema_version": "scion.postrun_runtime_feedback_summary.v1",
+        "current_run_evidence": True,
+        "available": False,
+        "drain_status_complete": False,
+        "review_ready": False,
+        "report_count": 0,
+        "runtime_report_count": 0,
+    }
+    brief["research_continuity_summary"] = {
+        "schema_version": "scion.postrun_research_continuity_summary.v1",
+        "current_run_evidence": True,
+        "available": False,
+        "report_count": 0,
+        "continuity_report_count": 0,
+    }
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    problem_check = readiness["checks"]["problem_summary_actionability"]
+    prompt_check = readiness["checks"]["prompt_source_visibility_actionability"]
+    context_check = readiness["checks"]["research_context_actionability"]
+    taxonomy_check = readiness["checks"]["failure_taxonomy_actionability"]
+    input_check = readiness["checks"]["review_input_summaries_actionability"]
+    failures_by_summary = {
+        item["summary"]: item["failures"]
+        for item in input_check["detail"]["summaries"]
+    }
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert problem_check["status"] == "ok"
+    assert prompt_check["status"] == "ok"
+    assert context_check["status"] == "ok"
+    assert taxonomy_check["status"] == "ok"
+    assert input_check["required"] is True
+    assert input_check["status"] == "failed"
+    assert "protocol_accounting_summary_unavailable" in failures_by_summary[
+        "protocol_accounting_summary"
+    ]
+    assert (
+        "measurement_effect_summary_effect_report_count_missing"
+        in failures_by_summary["measurement_effect_summary"]
+    )
+    assert "runtime_feedback_summary_drain_status_incomplete" in failures_by_summary[
+        "runtime_feedback_summary"
+    ]
+    assert (
+        "research_continuity_summary_continuity_report_count_missing"
+        in failures_by_summary["research_continuity_summary"]
+    )
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
 def test_postrun_acceptance_readiness_requires_target_source_visibility_trace(
     tmp_path: Path,
 ) -> None:
@@ -1105,6 +1201,92 @@ def _latest_analysis_brief_path(run_root: Path) -> Path:
 
 
 def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
+    brief["protocol_accounting_summary"] = {
+        "schema_version": "scion.postrun_protocol_accounting_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "report_count": 1,
+        "accounting_report_count": 1,
+        "aggregate": {
+            "formal_screened_candidates": 1,
+            "formal_protocol_evaluated_candidates": 1,
+            "protocol_rows": {
+                "protocol_evaluated_candidates": 1,
+                "protocol_metric_results": 1,
+            },
+        },
+        "entries": [{"report": "fixture.research_efficiency.v1.json"}],
+    }
+    brief["measurement_effect_summary"] = {
+        "schema_version": "scion.postrun_measurement_effect_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "report_count": 1,
+        "effect_report_count": 1,
+        "aggregate": {
+            "measurement_readiness_status_counts": {"ready": 1},
+            "interpretation_counts": {"below_mde": 1},
+            "protocol_row_count": 1,
+            "rows_at_or_above_mde": 0,
+            "rows_with_ci_high_below_mde": 1,
+            "max_effect_to_mde_ratio": 0.25,
+        },
+        "entries": [{"report": "fixture.research_efficiency.v1.json"}],
+    }
+    brief["runtime_feedback_summary"] = {
+        "schema_version": "scion.postrun_runtime_feedback_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "drain_status_complete": True,
+        "review_ready": True,
+        "report_count": 1,
+        "runtime_report_count": 1,
+        "budget_diagnostic_source_count": 0,
+        "aggregate": {
+            "fresh_runtime_replay_drain": {
+                "status_counts": {"complete": 1},
+                "attempts": 1,
+                "executed": 1,
+            },
+            "stage_transition_drain": {
+                "status_counts": {"complete": 1},
+                "attempts": 1,
+                "executed": 1,
+            },
+            "runtime_budget_diagnostics": {
+                "source_count": 0,
+                "diagnostic_count": 0,
+                "runtime_model_counts": {},
+            },
+        },
+        "entries": [{"report": "fixture.research_efficiency.v1.json"}],
+    }
+    brief["research_continuity_summary"] = {
+        "schema_version": "scion.postrun_research_continuity_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "current_run_evidence": True,
+        "available": True,
+        "report_count": 1,
+        "continuity_report_count": 1,
+        "aggregate": {
+            "max_branch_depth": 2,
+            "branch_depth_distribution": {"2": 1},
+            "mechanism_family_counts": {"fixture_mechanism": 1},
+            "active_shape_counts": {"continue": 1},
+        },
+        "entries": [{"report": "fixture.research_efficiency.v1.json"}],
+    }
     brief["prompt_context_visibility_summary"] = {
         "available": True,
         "current_run_evidence": True,

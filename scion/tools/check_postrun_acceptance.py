@@ -49,6 +49,24 @@ PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
         "protocol_evaluated_without_large_twoopt_signal",
     },
 }
+REVIEW_INPUT_SUMMARIES = {
+    "protocol_accounting_summary": (
+        "scion.postrun_protocol_accounting_summary.v1",
+        "accounting_report_count",
+    ),
+    "measurement_effect_summary": (
+        "scion.postrun_measurement_effect_summary.v1",
+        "effect_report_count",
+    ),
+    "runtime_feedback_summary": (
+        "scion.postrun_runtime_feedback_summary.v1",
+        "runtime_report_count",
+    ),
+    "research_continuity_summary": (
+        "scion.postrun_research_continuity_summary.v1",
+        "continuity_report_count",
+    ),
+}
 
 
 def build_readiness(run_root: Path | str) -> dict[str, Any]:
@@ -234,6 +252,18 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         problem_status,
         problem_detail,
         required=problem_status != "skipped",
+    )
+    review_input_status, review_input_detail = (
+        _review_input_summaries_actionability(
+            analysis_brief,
+            inventory,
+        )
+    )
+    add_check(
+        "review_input_summaries_actionability",
+        review_input_status,
+        review_input_detail,
+        required=review_input_status != "skipped",
     )
     prompt_status, prompt_detail = _prompt_source_visibility_actionability(
         analysis_brief,
@@ -624,6 +654,61 @@ def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
         for item in summaries
     )
     return "ok" if ok else "failed"
+
+
+def _review_input_summaries_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    details = []
+    for key, (schema, count_field) in REVIEW_INPUT_SUMMARIES.items():
+        summary = _mapping_or_empty(brief.get(key))
+        count_value = _int_or_zero(summary.get(count_field))
+        failures: list[str] = []
+        if summary.get("schema_version") != schema:
+            failures.append(f"{key}_schema_stale")
+        if summary.get("current_run_evidence") is not True:
+            failures.append(f"{key}_not_current_run_evidence")
+        if summary.get("available") is not True:
+            failures.append(f"{key}_unavailable")
+        if _int_or_zero(summary.get("report_count")) <= 0:
+            failures.append(f"{key}_report_count_missing")
+        if count_value <= 0:
+            failures.append(f"{key}_{count_field}_missing")
+        if key == "runtime_feedback_summary":
+            if summary.get("drain_status_complete") is not True:
+                failures.append("runtime_feedback_summary_drain_status_incomplete")
+            if summary.get("review_ready") is not True:
+                failures.append("runtime_feedback_summary_not_review_ready")
+        details.append(
+            {
+                "summary": key,
+                "failures": failures,
+                "schema_version": summary.get("schema_version"),
+                "expected_schema_version": schema,
+                "current_run_evidence": summary.get("current_run_evidence"),
+                "available": summary.get("available"),
+                "report_count": summary.get("report_count"),
+                count_field: summary.get(count_field),
+                "drain_status_complete": summary.get("drain_status_complete"),
+                "review_ready": summary.get("review_ready"),
+            }
+        )
+    return (
+        "ok"
+        if all(not item["failures"] for item in details)
+        else "failed",
+        {
+            "problem_family": problem_family,
+            "summaries": details,
+        },
+    )
 
 
 def _prompt_source_visibility_actionability(
