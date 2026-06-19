@@ -40,6 +40,7 @@ def test_launch_readiness_accepts_clean_prepared_root(tmp_path: Path) -> None:
         is True
     )
     assert report["checks"]["prompt_context_readiness_complete"]["status"] == "ok"
+    assert report["checks"]["prepared_analysis_brief_current"]["status"] == "ok"
     assert report["checks"]["run_script_preflight_failure_reports"]["status"] == "ok"
     assert report["checks"]["completion_preflight"]["status"] == "skipped"
     markdown = readiness_tool.render_markdown(report)
@@ -165,6 +166,54 @@ def test_launch_readiness_rejects_missing_prompt_context_readiness(
     assert prompt_check["detail"]["failures"][0]["reason"] == (
         "missing_prompt_context_readiness"
     )
+
+
+def test_launch_readiness_rejects_missing_prepared_analysis_brief(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path, include_analysis_brief=False)
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    brief_check = report["checks"]["prepared_analysis_brief_current"]
+    assert brief_check["status"] == "failed"
+    assert brief_check["detail"]["failures"][0]["reason"] == (
+        "missing_prepared_analysis_brief"
+    )
+
+
+def test_launch_readiness_rejects_stale_prepared_analysis_brief_questions(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_prepared_root(tmp_path)
+    brief_path = (
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.v1.json"
+    )
+    payload = json.loads(brief_path.read_text(encoding="utf-8"))
+    payload["required_questions"] = [
+        "Did the agent perform effective research, or only satisfy framework controls?"
+    ]
+    payload["cvrp_large_twoopt_summary"].pop("deferred_review_axes")
+    brief_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = readiness_tool.build_readiness(run_root)
+
+    assert report["ready"] is False
+    assert report["static_ready"] is False
+    brief_check = report["checks"]["prepared_analysis_brief_current"]
+    assert brief_check["status"] == "failed"
+    reasons = {
+        failure["reason"]
+        for failure in brief_check["detail"]["failures"]
+    }
+    assert "prepared_only_required_question_missing" in reasons
+    assert "current_run_required_question_present" in reasons
+    assert "problem_summary_deferred_review_axes_missing" in reasons
 
 
 def test_launch_readiness_rejects_prompt_context_bridge_marker_gap(
@@ -444,6 +493,7 @@ def _write_prepared_root(
     *,
     include_research_focus: bool = True,
     include_prompt_context_readiness: bool = True,
+    include_analysis_brief: bool = True,
     prompt_context_launch_markers: bool = True,
 ) -> Path:
     run_root = tmp_path / "prepared-root"
@@ -565,6 +615,8 @@ fi
             ready=include_research_focus,
             launch_markers=prompt_context_launch_markers,
         )
+    if include_analysis_brief:
+        _write_prepared_analysis_brief(run_root)
     return run_root
 
 
@@ -646,6 +698,74 @@ def _large_twoopt_constraints() -> dict[str, object]:
             "activation claims without wall-clock evidence",
         ],
     }
+
+
+def _write_prepared_analysis_brief(run_root: Path) -> None:
+    _write_json(
+        run_root
+        / "prepared_handoff"
+        / "analysis_brief"
+        / "cvrp_on_full.prepared_analysis_brief.v1.json",
+        {
+            "schema_version": "scion.postrun_analysis_brief.v1",
+            "report_only": True,
+            "quality_judgment": False,
+            "decision_features_excluded": True,
+            "campaign_state_mutated": False,
+            "scheduler_state_mutated": False,
+            "promotion_state_mutated": False,
+            "run_root": str(run_root),
+            "lifecycle": {
+                "prepared_only": True,
+                "current_run_evidence": False,
+                "status": "prepared",
+            },
+            "validity": {
+                "run_validity_status": "prepared_only",
+                "run_completeness_status": "not_started",
+            },
+            "required_questions": [
+                (
+                    "Is this still a prepared-only launch root with zero "
+                    "current-run counters and no postrun acceptance evidence?"
+                ),
+                (
+                    "Is the next step launch-readiness recheck or launch, not "
+                    "a research-quality or plateau/two-opt conclusion?"
+                ),
+                (
+                    "For CVRP large-twoopt follow-up, did "
+                    "cvrp_large_twoopt_summary distinguish prepared-only, "
+                    "incomplete handoff, missing review inputs, missing "
+                    "two-opt mechanism signal, and review-ready evidence?"
+                ),
+            ],
+            "cvrp_large_twoopt_summary": {
+                "schema_version": "scion.postrun_cvrp_large_twoopt_summary.v1",
+                "available": True,
+                "current_run_evidence": False,
+                "interpretation": "prepared_only_launch_required",
+                "launch_required_before_twoopt_conclusion": True,
+                "evidence_gaps": [
+                    "launch_required_before_bounded_twoopt_conclusion"
+                ],
+                "deferred_review_axes": [
+                    "confirm_deadline_or_remaining_time_guard_in_solver_code",
+                    (
+                        "confirm_no_unbounded_two_opt_intra_or_vns_fallback_"
+                        "above_large_threshold"
+                    ),
+                ],
+                "review_axes_actionability": (
+                    "not_actionable_before_launch_current_run_evidence_required"
+                ),
+            },
+            "warehouse_followup_summary": {
+                "available": False,
+                "current_run_evidence": False,
+            },
+        },
+    )
 
 
 def _write_json(path: Path, payload: object) -> None:

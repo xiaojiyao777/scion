@@ -21,6 +21,7 @@ from postrun_artifact_inventory import build_inventory  # noqa: E402
 
 SCHEMA_VERSION = "scion.launch_readiness.v1"
 PROMPT_CONTEXT_READINESS_SCHEMA = "scion.prepared_prompt_context_readiness.v1"
+ANALYSIS_BRIEF_SCHEMA = "scion.postrun_analysis_brief.v1"
 UNREADY_EXIT = 64
 REPO_DIR = Path(__file__).resolve().parents[2]
 LAUNCH_RESEARCH_FOCUS_PROMPT_MARKERS = {
@@ -41,6 +42,16 @@ PROBLEM_SPECIFIC_CONTRACT_PREFIXES = {
     "cvrp": ("cvrp_",),
     "warehouse_delivery": ("warehouse_",),
 }
+PREPARED_ONLY_REQUIRED_QUESTION_MARKER = (
+    "Is this still a prepared-only launch root with zero current-run counters "
+    "and no postrun acceptance evidence?"
+)
+CURRENT_RUN_REQUIRED_QUESTION_MARKER = (
+    "Did the agent perform effective research, or only satisfy framework controls?"
+)
+DEFERRED_REVIEW_AXES_ACTIONABILITY = (
+    "not_actionable_before_launch_current_run_evidence_required"
+)
 
 
 def build_readiness(
@@ -145,6 +156,10 @@ def build_readiness(
     add_check(
         "prompt_context_readiness_complete",
         *_prompt_context_readiness_check(root),
+    )
+    add_check(
+        "prepared_analysis_brief_current",
+        *_prepared_analysis_brief_check(root),
     )
 
     run_sh = root / "run.sh"
@@ -622,6 +637,202 @@ def _prompt_context_artifact_failures(
                 }
             )
 
+    return failures
+
+
+def _prepared_analysis_brief_check(root: Path) -> tuple[str, Any]:
+    brief_dir = root / "prepared_handoff" / "analysis_brief"
+    paths = sorted(brief_dir.glob("*.json"))
+    detail: dict[str, Any] = {
+        "directory": str(brief_dir),
+        "artifacts": [path.name for path in paths],
+        "failures": [],
+    }
+    failures: list[dict[str, Any]] = []
+    if not paths:
+        failures.append({"artifact": None, "reason": "missing_prepared_analysis_brief"})
+
+    for path in paths:
+        payload = _read_json(path)
+        failures.extend(
+            {"artifact": path.name, **failure}
+            for failure in _prepared_analysis_brief_failures(payload, root=root)
+        )
+
+    detail["failures"] = failures
+    return ("ok" if not failures else "failed"), detail
+
+
+def _prepared_analysis_brief_failures(
+    payload: Any,
+    *,
+    root: Path,
+) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return [{"reason": "invalid_json_payload"}]
+
+    failures: list[dict[str, Any]] = []
+    if payload.get("schema_version") != ANALYSIS_BRIEF_SCHEMA:
+        failures.append(
+            {
+                "reason": "schema_mismatch",
+                "schema_version": payload.get("schema_version"),
+            }
+        )
+    if payload.get("run_root") != str(root):
+        failures.append(
+            {
+                "reason": "artifact_identity_mismatch",
+                "field": "run_root",
+                "expected": str(root),
+                "actual": payload.get("run_root"),
+            }
+        )
+
+    boundary_expectations = {
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+    }
+    for key, expected in boundary_expectations.items():
+        if payload.get(key) is not expected:
+            failures.append(
+                {
+                    "reason": "boundary_flag_mismatch",
+                    "field": key,
+                    "expected": expected,
+                    "actual": payload.get(key),
+                }
+            )
+
+    lifecycle = payload.get("lifecycle")
+    lifecycle_dict = lifecycle if isinstance(lifecycle, dict) else {}
+    if lifecycle_dict.get("prepared_only") is not True:
+        failures.append(
+            {
+                "reason": "analysis_brief_not_prepared_only",
+                "prepared_only": lifecycle_dict.get("prepared_only"),
+            }
+        )
+    if lifecycle_dict.get("current_run_evidence") is not False:
+        failures.append(
+            {
+                "reason": "analysis_brief_current_run_evidence_not_false",
+                "current_run_evidence": lifecycle_dict.get("current_run_evidence"),
+            }
+        )
+
+    validity = payload.get("validity")
+    validity_dict = validity if isinstance(validity, dict) else {}
+    expected_validity = {
+        "run_validity_status": "prepared_only",
+        "run_completeness_status": "not_started",
+    }
+    for key, expected in expected_validity.items():
+        if validity_dict.get(key) != expected:
+            failures.append(
+                {
+                    "reason": "analysis_brief_validity_mismatch",
+                    "field": key,
+                    "expected": expected,
+                    "actual": validity_dict.get(key),
+                }
+            )
+
+    questions = payload.get("required_questions")
+    questions_list = [str(item) for item in questions] if isinstance(questions, list) else []
+    if PREPARED_ONLY_REQUIRED_QUESTION_MARKER not in questions_list:
+        failures.append({"reason": "prepared_only_required_question_missing"})
+    if CURRENT_RUN_REQUIRED_QUESTION_MARKER in questions_list:
+        failures.append({"reason": "current_run_required_question_present"})
+
+    failures.extend(_prepared_problem_summary_failures(payload))
+    return failures
+
+
+def _prepared_problem_summary_failures(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for field, conclusion_flag, evidence_gap in (
+        (
+            "warehouse_followup_summary",
+            "launch_required_before_plateau_conclusion",
+            "launch_required_before_plateau_conclusion",
+        ),
+        (
+            "cvrp_large_twoopt_summary",
+            "launch_required_before_twoopt_conclusion",
+            "launch_required_before_bounded_twoopt_conclusion",
+        ),
+    ):
+        summary = payload.get(field)
+        if not isinstance(summary, dict) or summary.get("available") is not True:
+            continue
+        failures.extend(
+            {
+                "summary": field,
+                **failure,
+            }
+            for failure in _prepared_problem_summary_field_failures(
+                summary,
+                conclusion_flag=conclusion_flag,
+                evidence_gap=evidence_gap,
+            )
+        )
+    return failures
+
+
+def _prepared_problem_summary_field_failures(
+    summary: dict[str, Any],
+    *,
+    conclusion_flag: str,
+    evidence_gap: str,
+) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    if summary.get("current_run_evidence") is not False:
+        failures.append(
+            {
+                "reason": "problem_summary_current_run_evidence_not_false",
+                "current_run_evidence": summary.get("current_run_evidence"),
+            }
+        )
+    if summary.get("interpretation") != "prepared_only_launch_required":
+        failures.append(
+            {
+                "reason": "problem_summary_interpretation_mismatch",
+                "interpretation": summary.get("interpretation"),
+            }
+        )
+    if summary.get(conclusion_flag) is not True:
+        failures.append(
+            {
+                "reason": "problem_summary_launch_required_flag_missing",
+                "field": conclusion_flag,
+                "actual": summary.get(conclusion_flag),
+            }
+        )
+    gaps = summary.get("evidence_gaps")
+    if not isinstance(gaps, list) or evidence_gap not in gaps:
+        failures.append(
+            {
+                "reason": "problem_summary_launch_required_gap_missing",
+                "expected": evidence_gap,
+                "actual": gaps,
+            }
+        )
+    deferred_axes = summary.get("deferred_review_axes")
+    if not isinstance(deferred_axes, list) or not deferred_axes:
+        failures.append({"reason": "problem_summary_deferred_review_axes_missing"})
+    if summary.get("review_axes_actionability") != DEFERRED_REVIEW_AXES_ACTIONABILITY:
+        failures.append(
+            {
+                "reason": "problem_summary_review_axes_actionability_mismatch",
+                "expected": DEFERRED_REVIEW_AXES_ACTIONABILITY,
+                "actual": summary.get("review_axes_actionability"),
+            }
+        )
     return failures
 
 

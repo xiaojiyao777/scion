@@ -3497,6 +3497,8 @@ def _cvrp_large_twoopt_summary(
         "evidence": {},
         "evidence_gaps": [],
         "required_review_axes": list(CVRP_LARGE_TWOOPT_REVIEW_AXES),
+        "deferred_review_axes": [],
+        "review_axes_actionability": "not_applicable",
     }
     if problem_family != "cvrp":
         return base
@@ -3633,6 +3635,16 @@ def _cvrp_large_twoopt_summary(
             runtime_available=runtime_available,
             continuity_available=continuity_available,
             large_twoopt_available=large_twoopt_available,
+        ),
+        "deferred_review_axes": (
+            list(CVRP_LARGE_TWOOPT_REVIEW_AXES)
+            if not current_run_evidence
+            else []
+        ),
+        "review_axes_actionability": (
+            "not_actionable_before_launch_current_run_evidence_required"
+            if not current_run_evidence
+            else "actionable_current_run_evidence_present"
         ),
     }
 
@@ -3819,6 +3831,8 @@ def _warehouse_followup_summary(
         "evidence": {},
         "evidence_gaps": [],
         "required_review_axes": list(WAREHOUSE_FOLLOWUP_REVIEW_AXES),
+        "deferred_review_axes": [],
+        "review_axes_actionability": "not_applicable",
     }
     if problem_family != "warehouse_delivery":
         return base
@@ -3954,6 +3968,16 @@ def _warehouse_followup_summary(
             measurement_available=measurement_effect_summary.get("available") is True,
             runtime_available=runtime_feedback_summary.get("available") is True,
             continuity_available=research_continuity_summary.get("available") is True,
+        ),
+        "deferred_review_axes": (
+            list(WAREHOUSE_FOLLOWUP_REVIEW_AXES)
+            if not current_run_evidence
+            else []
+        ),
+        "review_axes_actionability": (
+            "not_actionable_before_launch_current_run_evidence_required"
+            if not current_run_evidence
+            else "actionable_current_run_evidence_present"
         ),
     }
 

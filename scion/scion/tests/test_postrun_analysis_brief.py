@@ -1214,6 +1214,12 @@ def test_warehouse_followup_summary_prepared_only_requires_launch(
     assert summary["evidence_gaps"] == [
         "launch_required_before_plateau_conclusion"
     ]
+    assert summary["deferred_review_axes"] == list(
+        brief_tool.WAREHOUSE_FOLLOWUP_REVIEW_AXES
+    )
+    assert summary["review_axes_actionability"] == (
+        "not_actionable_before_launch_current_run_evidence_required"
+    )
     assert "## Warehouse Follow-up Summary" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
     assert (
@@ -1279,6 +1285,12 @@ def test_cvrp_large_twoopt_summary_prepared_only_requires_launch(
     assert summary["evidence_gaps"] == [
         "launch_required_before_bounded_twoopt_conclusion"
     ]
+    assert summary["deferred_review_axes"] == list(
+        brief_tool.CVRP_LARGE_TWOOPT_REVIEW_AXES
+    )
+    assert summary["review_axes_actionability"] == (
+        "not_actionable_before_launch_current_run_evidence_required"
+    )
     assert "## CVRP Large Two-Opt Summary" in markdown
     assert "- Interpretation: prepared_only_launch_required" in markdown
     assert (
@@ -1382,6 +1394,10 @@ def test_cvrp_large_twoopt_summary_marks_bounded_twoopt_review_ready(
     assert summary["launch_required_before_twoopt_conclusion"] is False
     assert summary["interpretation"] == "bounded_twoopt_review_ready"
     assert summary["evidence_gaps"] == []
+    assert summary["deferred_review_axes"] == []
+    assert summary["review_axes_actionability"] == (
+        "actionable_current_run_evidence_present"
+    )
     assert summary["evidence"]["protocol"]["protocol_evaluated_candidates"] == 1
     mechanism = summary["evidence"]["large_twoopt_mechanism"]
     assert mechanism["available"] is True
