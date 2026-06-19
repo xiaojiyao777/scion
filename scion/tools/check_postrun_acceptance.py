@@ -32,6 +32,22 @@ BLOCKING_PROBLEM_SUMMARY_GAPS = {
     "no_protocol_evaluated_candidates",
     "warehouse_handoff_requirements_incomplete",
 }
+PROBLEM_SUMMARY_SCHEMAS = {
+    "warehouse_followup_summary": "scion.postrun_warehouse_followup_summary.v1",
+    "cvrp_large_twoopt_summary": "scion.postrun_cvrp_large_twoopt_summary.v1",
+}
+PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
+    "warehouse_followup_summary": {
+        "quality_blocked_no_protocol_plateau_conclusion",
+        "protocol_evaluated_plateau_review_ready",
+        "protocol_evaluated_research_continuity_too_shallow",
+    },
+    "cvrp_large_twoopt_summary": {
+        "bounded_twoopt_review_ready",
+        "quality_blocked_no_protocol_twoopt_conclusion",
+        "protocol_evaluated_without_large_twoopt_signal",
+    },
+}
 
 
 def build_readiness(run_root: Path | str) -> dict[str, Any]:
@@ -365,22 +381,42 @@ def _summary_actionability_detail(
     summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     evidence_gaps = _string_items(summary.get("evidence_gaps"))
+    expected_schema = PROBLEM_SUMMARY_SCHEMAS.get(key)
+    schema_version = summary.get("schema_version")
+    interpretation = summary.get("interpretation")
+    delegated_interpretations = PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS.get(
+        key,
+        set(),
+    )
+    summary_failures: list[str] = []
+    if expected_schema and schema_version != expected_schema:
+        summary_failures.append("stale_problem_summary_schema")
+    if delegated_interpretations and interpretation not in delegated_interpretations:
+        summary_failures.append("unsupported_problem_summary_interpretation")
     return {
         "summary": key,
         "problem_family": summary.get("problem_family"),
+        "schema_version": schema_version,
+        "expected_schema_version": expected_schema,
+        "schema_current": schema_version == expected_schema,
         "current_run_evidence": summary.get("current_run_evidence"),
-        "interpretation": summary.get("interpretation"),
+        "interpretation": interpretation,
+        "interpretation_supported": interpretation in delegated_interpretations,
         "review_axes_actionability": summary.get("review_axes_actionability"),
         "evidence_gaps": evidence_gaps,
         "blocking_evidence_gaps": _blocking_problem_summary_gaps(evidence_gaps),
+        "summary_failures": summary_failures,
     }
 
 
 def _summary_actionability_status(summaries: list[dict[str, Any]]) -> str:
     ok = all(
         item.get("current_run_evidence") is True
+        and item.get("schema_current") is True
+        and item.get("interpretation_supported") is True
         and item.get("review_axes_actionability")
         == "actionable_current_run_evidence_present"
+        and not item.get("summary_failures")
         and not item.get("blocking_evidence_gaps")
         for item in summaries
     )
