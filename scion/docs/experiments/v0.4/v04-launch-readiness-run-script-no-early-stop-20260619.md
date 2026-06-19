@@ -176,22 +176,35 @@ PYTHONPATH=scion pytest -q \
 # 115 passed
 ```
 
+Local checkout `e9a18610` and WSL checkout `69957b4`:
+
+```bash
+PYTHONPATH=scion pytest -q \
+  scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_postrun_artifact_inventory.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
+  scion/scion/tests/test_launch_readiness.py
+# 116 passed
+```
+
 ## Current Prepared Roots
 
-New prepare-only roots were generated from WSL checkout `a92fe84` because
+New prepare-only roots were generated from WSL checkout `69957b4` because
 `scion/tools/check_launch_readiness.py` is part of the guarded launch/readiness
 runtime surface. The current checkout requires completion-preflight failure
 status writing and data-root/API-key-env failure markers to be executable shell
 paths, not comment-only markers. Runtime guard command markers must also be
-actual executable guard lines, not comments or echo-only text.
+actual executable guard lines, not comments or echo-only text. The postrun
+report bundle function must be a real shell function definition, not a comment.
 
 Warehouse:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execruntimeguard-a92fe84-6r-gpt55-20260619T110435Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpostrunfn-69957b4-6r-gpt55-20260619T111032Z-claw`
 
 CVRP:
 
-`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execruntimeguard-a92fe84-1r-gpt55-20260619T110436Z-claw`
+`/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpostrunfn-69957b4-1r-gpt55-20260619T111032Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -232,6 +245,10 @@ Strict WSL launch readiness for both roots exits `64` and reports:
 - `postrun_families_complete=ok`
 - `run_script_strict_postrun_readiness=ok` with executable
   `check_postrun_acceptance.py --require-current-run-ready`
+- `run_script_strict_postrun_readiness=ok` and
+  `run_script_preflight_failure_reports=ok` both report a real
+  `write_postrun_acceptance_reports` function definition with
+  `ignored_non_executable_function_definition_count=0`
 - completion preflight `failed`, HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`
 
@@ -248,7 +265,7 @@ preflight-failure reporting to use an executable status writer before the
 postrun bundle and preflight-status exit, and it requires data-root/API-key-env
 failure markers to be executable shell lines rather than comments. It supersedes
 the model-route, noearlystop, prepcontract, exactflag, execpreflight,
-postrunexec, preflfailpath, and execmarkers prepared roots as the current
-prepared-root pointer.
+postrunexec, preflfailpath, execmarkers, and execruntimeguard prepared roots as
+the current prepared-root pointer.
 Do not launch either root until strict launch readiness reports
 `launch_ready=true`.

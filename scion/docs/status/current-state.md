@@ -35,8 +35,9 @@ Framework:
   executable runtime guard markers, `gpt-5.5` model routing, active-checkout
   `PYTHONPATH`, exact no-early-stop launch semantics, executable completion
   preflight, executable preflight-failure status writer, executable
-  pre-campaign failure markers, executable strict postrun readiness, and
-  postrun-reportable campaign/pre-campaign exit paths.
+  pre-campaign failure markers, executable postrun report function, executable
+  strict postrun readiness, and postrun-reportable campaign/pre-campaign exit
+  paths.
 - Current-run delegated review readiness for warehouse/CVRP requires matching
   problem summaries, rebuild-manifest identity and declared outputs,
   prompt/source visibility traces, research-context/signal-density/failure
@@ -55,8 +56,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `a92fe84`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execruntimeguard-a92fe84-6r-gpt55-20260619T110435Z-claw`.
+- Current prepared root, prepared from WSL checkout `69957b4`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-execpostrunfn-69957b4-6r-gpt55-20260619T111032Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -82,8 +83,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `a92fe84`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execruntimeguard-a92fe84-1r-gpt55-20260619T110436Z-claw`.
+- Current prepared root, prepared from WSL checkout `69957b4`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-execpostrunfn-69957b4-1r-gpt55-20260619T111032Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -106,7 +107,7 @@ CVRP/VRP:
 Infrastructure:
 
 - No LLM campaign is currently running.
-- The active prepared roots were generated from WSL runtime commit `a92fe84`.
+- The active prepared roots were generated from WSL runtime commit `69957b4`.
   Current local/WSL checkouts may include later documentation-only commits;
   launch readiness reports `git_runtime_consistent=ok` because runtime guard
   paths are unchanged.
@@ -116,8 +117,9 @@ Infrastructure:
   problem-specific handoff, postrun family coverage, executable runtime guards,
   active checkout import path, exact no-early-stop semantics, model-route
   consistency, executable completion preflight, executable preflight-failure
-  status writer, executable pre-campaign failure markers, executable strict
-  postrun readiness, and postrun-reportable campaign/pre-campaign exit paths.
+  status writer, executable pre-campaign failure markers, executable postrun
+  report function, executable strict postrun readiness, and postrun-reportable
+  campaign/pre-campaign exit paths.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
   readiness. With `SCION_API_KEY=pwd`, `/v1/models` lists `gpt-5.5` but real
   `/v1/chat/completions` preflight returns HTTP `401`,
