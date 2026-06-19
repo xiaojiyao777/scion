@@ -286,6 +286,7 @@ def test_postrun_acceptance_readiness_accepts_actionable_problem_summary(
     champion_check = readiness["checks"]["champion_progress_actionability"]
     assert champion_check["required"] is True
     assert champion_check["status"] == "ok"
+    assert champion_check["detail"]["consistency_failures"] == []
 
 
 def test_postrun_acceptance_requires_branch_research_state_actionability(
@@ -431,6 +432,54 @@ def test_postrun_acceptance_requires_champion_progress_actionability(
     assert "champion_progress_not_current_run_evidence" in champion_check["detail"][
         "failures"
     ]
+    assert (
+        check_tool.main([str(run_root), "--require-current-run-ready"])
+        == check_tool.UNREADY_EXIT
+    )
+
+
+def test_postrun_acceptance_rejects_stale_champion_progress_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = _write_current_run_root(tmp_path / "warehouse-run-stale-champion")
+    rebuild_tool.rebuild_postrun_acceptance(
+        run_root,
+        report_stem="fixture",
+        observed_control_arm="on",
+        control_pair_key="fixture:rep01",
+        strict=True,
+    )
+    brief_path = _latest_analysis_brief_path(run_root)
+    brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    brief["prepared_run_contract"]["problem_family"] = "warehouse_delivery"
+    brief["warehouse_followup_summary"] = {
+        "schema_version": "scion.postrun_warehouse_followup_summary.v1",
+        "available": True,
+        "current_run_evidence": True,
+        "evidence_gaps": [],
+        "interpretation": "protocol_evaluated_plateau_review_ready",
+        "problem_family": "warehouse_delivery",
+        "review_axes_actionability": "actionable_current_run_evidence_present",
+    }
+    _add_prompt_source_visibility_summary(brief)
+    champion_summary = brief["champion_progress_summary"]
+    champion_summary["interpretation"] = "champion_version_gain_observed"
+    champion_summary["current_champion_version"] = 9
+    champion_summary["champion_count"] = 9
+    champion_summary["champion_versions"] = [9]
+    brief_path.write_text(json.dumps(brief, indent=2, sort_keys=True), encoding="utf-8")
+
+    readiness = check_tool.build_readiness(run_root)
+    champion_check = readiness["checks"]["champion_progress_actionability"]
+
+    assert readiness["current_run_analysis_ready"] is False
+    assert champion_check["required"] is True
+    assert champion_check["status"] == "failed"
+    failures = champion_check["detail"]["failures"]
+    assert "champion_progress_interpretation_mismatch" in failures
+    assert "champion_progress_current_champion_version_mismatch" in failures
+    assert "champion_progress_champion_count_mismatch" in failures
+    assert "champion_progress_champion_versions_mismatch" in failures
     assert (
         check_tool.main([str(run_root), "--require-current-run-ready"])
         == check_tool.UNREADY_EXIT
@@ -1934,6 +1983,8 @@ def _add_prompt_source_visibility_summary(brief: dict[str, object]) -> None:
 
 
 def _add_champion_progress_summary(brief: dict[str, object]) -> None:
+    if isinstance(brief.get("champion_progress_summary"), dict):
+        return
     brief["champion_progress_summary"] = {
         "schema_version": "scion.postrun_champion_progress_summary.v1",
         "report_only": True,
@@ -1946,10 +1997,17 @@ def _add_champion_progress_summary(brief: dict[str, object]) -> None:
         "available": True,
         "interpretation": "no_promotion_signal_observed",
         "starting_champion_version": None,
-        "current_champion_version": 1,
+        "current_champion_version": None,
         "champion_version_gain": None,
-        "champion_count": 1,
-        "champion_versions": [1],
+        "champion_table_present": False,
+        "champion_count": 0,
+        "champion_versions": [],
+        "max_weight_revision": None,
+        "promotion_experiment_count": 0,
+        "promotion_dossier_count": 0,
+        "promoted_at_count": 0,
+        "latest_promotion_experiment_id": None,
+        "latest_promotion_dossier_ref": None,
         "promoted_hypothesis_count": 0,
         "promotion_decision_count": 0,
     }

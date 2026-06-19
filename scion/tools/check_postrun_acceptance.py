@@ -17,6 +17,7 @@ if str(TOOLS_DIR) not in sys.path:
 from postrun_artifact_inventory import build_inventory  # noqa: E402
 from postrun_analysis_brief import (  # noqa: E402
     _branch_research_state_summary,
+    _champion_progress_summary,
     _cvrp_large_twoopt_mechanism_signal,
     _warehouse_followup_continuity_signal,
 )
@@ -1416,10 +1417,11 @@ def _champion_progress_actionability(
     problem_family = _problem_family(brief, inventory)
     if problem_family not in {"warehouse_delivery", "cvrp"}:
         return "skipped", {
-            "reason": "not_problem_specific_agentic_summary",
-            "problem_family": problem_family,
-        }
+        "reason": "not_problem_specific_agentic_summary",
+        "problem_family": problem_family,
+    }
     summary = _mapping_or_empty(brief.get("champion_progress_summary"))
+    expected = _champion_progress_summary(inventory)
     failures: list[str] = []
     if summary.get("schema_version") != CHAMPION_PROGRESS_SCHEMA:
         failures.append("champion_progress_schema_stale")
@@ -1440,24 +1442,85 @@ def _champion_progress_actionability(
             failures.append(f"champion_progress_{mutation_field}_not_false")
     if not str(summary.get("interpretation") or ""):
         failures.append("champion_progress_interpretation_missing")
+    consistency_failures = _champion_progress_consistency_failures(
+        summary=summary,
+        expected=expected,
+    )
+    failures.extend(consistency_failures)
 
     return (
         "ok" if not failures else "failed",
         {
             "problem_family": problem_family,
             "failures": failures,
+            "consistency_failures": consistency_failures,
             "current_run_evidence": summary.get("current_run_evidence"),
+            "expected_current_run_evidence": expected.get("current_run_evidence"),
             "available": summary.get("available"),
+            "expected_available": expected.get("available"),
             "interpretation": summary.get("interpretation"),
+            "expected_interpretation": expected.get("interpretation"),
             "starting_champion_version": summary.get("starting_champion_version"),
+            "expected_starting_champion_version": expected.get(
+                "starting_champion_version"
+            ),
             "current_champion_version": summary.get("current_champion_version"),
+            "expected_current_champion_version": expected.get(
+                "current_champion_version"
+            ),
             "champion_version_gain": summary.get("champion_version_gain"),
+            "expected_champion_version_gain": expected.get("champion_version_gain"),
             "champion_count": summary.get("champion_count"),
+            "expected_champion_count": expected.get("champion_count"),
             "champion_versions": summary.get("champion_versions"),
+            "expected_champion_versions": expected.get("champion_versions"),
             "promoted_hypothesis_count": summary.get("promoted_hypothesis_count"),
+            "expected_promoted_hypothesis_count": expected.get(
+                "promoted_hypothesis_count"
+            ),
             "promotion_decision_count": summary.get("promotion_decision_count"),
+            "expected_promotion_decision_count": expected.get(
+                "promotion_decision_count"
+            ),
         },
     )
+
+
+def _champion_progress_consistency_failures(
+    *,
+    summary: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    for field in (
+        "current_run_evidence",
+        "available",
+        "interpretation",
+        "champion_table_present",
+        "latest_promotion_experiment_id",
+        "latest_promotion_dossier_ref",
+    ):
+        if summary.get(field) != expected.get(field):
+            failures.append(f"champion_progress_{field}_mismatch")
+    for field in (
+        "starting_champion_version",
+        "current_champion_version",
+        "champion_version_gain",
+        "champion_count",
+        "max_weight_revision",
+        "promotion_experiment_count",
+        "promotion_dossier_count",
+        "promoted_at_count",
+        "promoted_hypothesis_count",
+        "promotion_decision_count",
+    ):
+        if _int_or_none(summary.get(field)) != _int_or_none(expected.get(field)):
+            failures.append(f"champion_progress_{field}_mismatch")
+    if _int_list(summary.get("champion_versions")) != _int_list(
+        expected.get("champion_versions")
+    ):
+        failures.append("champion_progress_champion_versions_mismatch")
+    return failures
 
 
 def _failure_taxonomy_actionability(
@@ -1576,6 +1639,26 @@ def _int_mapping(value: Any) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): _int_or_zero(count) for key, count in value.items()}
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_list(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    items: list[int] = []
+    for item in value:
+        parsed = _int_or_none(item)
+        if parsed is not None:
+            items.append(parsed)
+    return items
 
 
 def _stable_json(value: Any) -> str:
