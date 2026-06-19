@@ -424,6 +424,16 @@ def test_inventory_json_with_db_trace_index_and_traces(tmp_path: Path) -> None:
     assert data["hypotheses"]["by_status"] == {"active": 1, "rejected": 1}
     assert data["hypotheses"]["by_action"] == {"create_new": 1, "modify": 1}
     assert data["hypotheses"]["by_change_locus"] == {"solver_design": 2}
+    assert data["champions"]["table_present"] is True
+    assert data["champions"]["count"] == 2
+    assert data["champions"]["max_version"] == 2
+    assert data["champions"]["max_weight_revision"] == 0
+    assert data["champions"]["versions"] == [1, 2]
+    assert data["champions"]["promotion_experiment_count"] == 1
+    assert data["champions"]["promotion_dossier_count"] == 1
+    assert data["champions"]["promoted_at_count"] == 1
+    assert data["champions"]["latest_promotion_experiment_id"] == "exp-promote-2"
+    assert data["champions"]["latest_promotion_dossier_ref"] == "dossier-2"
 
 
 def test_phase4_coverage_separates_generic_and_code_source_visibility(
@@ -1415,6 +1425,22 @@ def _write_db(path: Path) -> None:
         )
         conn.execute(
             """
+            CREATE TABLE champions (
+                version INTEGER NOT NULL,
+                weight_revision INTEGER NOT NULL DEFAULT 0,
+                operator_pool_json TEXT NOT NULL,
+                solver_config_hash TEXT NOT NULL,
+                code_snapshot_path TEXT NOT NULL,
+                code_snapshot_hash TEXT NOT NULL,
+                promotion_experiment_id TEXT,
+                promotion_dossier_ref TEXT,
+                promoted_at TEXT,
+                PRIMARY KEY (version, weight_revision)
+            )
+            """
+        )
+        conn.execute(
+            """
             INSERT INTO branches VALUES (
                 'branch-1', 'ready_validate', 'lineage-1', 'basehash',
                 'codehash', 'checkpoint-best', 'checkpoint-last', 1,
@@ -1435,5 +1461,34 @@ def _write_db(path: Path) -> None:
                 ("event-1", "branch-1", "experiment", "continue_explore", "screening"),
                 ("event-2", "branch-1", "experiment", "queue_validate", "screening"),
                 ("event-3", "branch-1", "decision", None, None),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO champions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    1,
+                    0,
+                    "{}",
+                    "solver-hash-1",
+                    "snapshots/champion-v1",
+                    "code-hash-1",
+                    None,
+                    None,
+                    None,
+                ),
+                (
+                    2,
+                    0,
+                    "{}",
+                    "solver-hash-2",
+                    "snapshots/champion-v2",
+                    "code-hash-2",
+                    "exp-promote-2",
+                    "dossier-2",
+                    "2026-06-19T00:00:00Z",
+                ),
             ],
         )

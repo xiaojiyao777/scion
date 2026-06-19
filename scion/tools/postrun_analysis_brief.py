@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -139,6 +140,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
             research_continuity_summary=research_continuity_summary,
         )
     )
+    champion_progress_summary = _champion_progress_summary(inventory)
     warehouse_followup_summary = _warehouse_followup_summary(
         inventory,
         protocol_accounting_summary=protocol_accounting_summary,
@@ -191,6 +193,7 @@ def build_brief(run_root: Path | str) -> dict[str, Any]:
         "research_context_actionability_summary": (
             research_context_actionability_summary
         ),
+        "champion_progress_summary": champion_progress_summary,
         "warehouse_followup_summary": warehouse_followup_summary,
         "cvrp_large_twoopt_summary": cvrp_large_twoopt_summary,
         "stop_conditions": _stop_conditions(inventory),
@@ -297,6 +300,31 @@ def render_markdown(brief: dict[str, Any]) -> str:
     )
     for key, value in counters.items():
         lines.append(f"| {key} | {_display(value)} |")
+
+    champion_progress = brief.get("champion_progress_summary") or {}
+    lines.extend(
+        [
+            "",
+            "## Champion Progress Summary",
+            "- Source: current-run champion table, hypothesis status counts, "
+            "decision events, and prepared champion checkpoint.",
+            f"- Available: `{_display(champion_progress.get('available'))}`",
+            "- Current-run evidence: "
+            f"`{_display(champion_progress.get('current_run_evidence'))}`",
+            f"- Interpretation: {_display(champion_progress.get('interpretation'))}",
+            "- Starting/current champion version: "
+            f"{_display(champion_progress.get('starting_champion_version'))} / "
+            f"{_display(champion_progress.get('current_champion_version'))}",
+            "- Champion version gain: "
+            f"{_display(champion_progress.get('champion_version_gain'))}",
+            "- Champion rows / versions: "
+            f"{_display(champion_progress.get('champion_count'))} / "
+            f"{_list_text(champion_progress.get('champion_versions') or [])}",
+            "- Promotion signals, promoted hypotheses / promote decisions: "
+            f"{_display(champion_progress.get('promoted_hypothesis_count'))} / "
+            f"{_display(champion_progress.get('promotion_decision_count'))}",
+        ]
+    )
 
     lines.extend(
         [
@@ -1576,6 +1604,156 @@ def _compact_branch_summary(branch: Mapping[str, Any]) -> dict[str, Any]:
             "failure_codes": _string_items(branch.get("failure_codes")),
         }
     )
+
+
+def _champion_progress_summary(inventory: Mapping[str, Any]) -> dict[str, Any]:
+    lifecycle = _mapping_or_empty(inventory.get("lifecycle"))
+    current_run_evidence = lifecycle.get("current_run_evidence") is True
+    launcher = _mapping_or_empty(inventory.get("launcher"))
+    contract = _mapping_or_empty(launcher.get("prepared_run_contract"))
+    research_focus = _mapping_or_empty(contract.get("research_focus"))
+    champions = _mapping_or_empty(inventory.get("champions"))
+    hypotheses = _mapping_or_empty(inventory.get("hypotheses"))
+    events = _mapping_or_empty(inventory.get("events"))
+    by_status = _int_mapping(hypotheses.get("by_status"))
+    by_decision = _int_mapping(events.get("by_decision"))
+
+    starting_version = _starting_champion_version(contract, research_focus)
+    current_version = _int_or_none(champions.get("max_version"))
+    champion_version_gain = None
+    if starting_version is not None and current_version is not None:
+        champion_version_gain = max(0, current_version - starting_version)
+
+    promoted_hypotheses = _count_named_values(
+        by_status,
+        ("promoted", "promotion_accepted"),
+    )
+    promotion_decisions = _count_named_values(
+        by_decision,
+        ("promote", "promoted", "promotion", "accept_promote"),
+    )
+    table_present = champions.get("table_present") is True
+    available = bool(
+        current_run_evidence
+        and (
+            table_present
+            or by_status
+            or by_decision
+            or current_version is not None
+        )
+    )
+    if not current_run_evidence:
+        interpretation = "not_current_run_evidence"
+    elif champion_version_gain is not None and champion_version_gain > 0:
+        interpretation = "champion_version_gain_observed"
+    elif champion_version_gain == 0:
+        interpretation = "no_champion_version_gain_observed"
+    elif promoted_hypotheses > 0 or promotion_decisions > 0:
+        interpretation = "promotion_signals_observed_without_starting_version"
+    elif available:
+        interpretation = "no_promotion_signal_observed"
+    else:
+        interpretation = "champion_progress_unavailable"
+
+    return {
+        "schema_version": "scion.postrun_champion_progress_summary.v1",
+        "report_only": True,
+        "quality_judgment": False,
+        "decision_features_excluded": True,
+        "campaign_state_mutated": False,
+        "scheduler_state_mutated": False,
+        "promotion_state_mutated": False,
+        "current_run_evidence": current_run_evidence,
+        "available": available,
+        "interpretation": interpretation,
+        "problem_family": contract.get("problem_family"),
+        "starting_champion_version": starting_version,
+        "current_champion_version": current_version,
+        "champion_version_gain": champion_version_gain,
+        "champion_table_present": table_present,
+        "champion_count": _int_or_zero(champions.get("count")),
+        "champion_versions": _int_list(champions.get("versions")),
+        "max_weight_revision": _int_or_none(champions.get("max_weight_revision")),
+        "promotion_experiment_count": _int_or_zero(
+            champions.get("promotion_experiment_count")
+        ),
+        "promotion_dossier_count": _int_or_zero(
+            champions.get("promotion_dossier_count")
+        ),
+        "promoted_at_count": _int_or_zero(champions.get("promoted_at_count")),
+        "latest_promotion_experiment_id": champions.get(
+            "latest_promotion_experiment_id"
+        ),
+        "latest_promotion_dossier_ref": champions.get(
+            "latest_promotion_dossier_ref"
+        ),
+        "promoted_hypothesis_count": promoted_hypotheses,
+        "promotion_decision_count": promotion_decisions,
+        "source": (
+            "champions table max version compared with prepared research_focus "
+            "champion checkpoint; hypothesis/event promotion counts are "
+            "supporting signals only"
+        ),
+    }
+
+
+def _starting_champion_version(
+    contract: Mapping[str, Any],
+    research_focus: Mapping[str, Any],
+) -> int | None:
+    explicit = _int_or_none(contract.get("starting_champion_version"))
+    if explicit is not None:
+        return explicit
+    for key in (
+        "accepted_checkpoint",
+        "current_question",
+        "summary",
+    ):
+        version = _champion_version_from_text(research_focus.get(key))
+        if version is not None:
+            return version
+    return None
+
+
+def _champion_version_from_text(value: Any) -> int | None:
+    text = str(value or "")
+    for pattern in (
+        r"\bchampion[-_\s]*v(\d+)\b",
+        r"\bchampion[-_\s]+(\d+)\b",
+    ):
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _count_named_values(mapping: Mapping[str, int], names: tuple[str, ...]) -> int:
+    wanted = {name.strip().lower() for name in names}
+    return sum(
+        int(value)
+        for key, value in mapping.items()
+        if str(key).strip().lower() in wanted
+    )
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_list(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    items: list[int] = []
+    for item in value:
+        parsed = _int_or_none(item)
+        if parsed is not None:
+            items.append(parsed)
+    return items
 
 
 def _protocol_accounting_summary(

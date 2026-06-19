@@ -199,11 +199,13 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         current_branches: list[dict[str, Any]] = []
         current_events = _empty_events()
         current_hypotheses = _empty_hypotheses()
+        current_champions = _empty_champions()
         current_llm_traces = _empty_llm_trace_summary()
     else:
         current_branches = branches
         current_events = db_inventory["events"]
         current_hypotheses = db_inventory["hypotheses"]
+        current_champions = db_inventory["champions"]
         current_llm_traces = _llm_trace_summary(llm_traces)
 
     return {
@@ -239,6 +241,7 @@ def build_inventory(run_root: Path | str) -> dict[str, Any]:
         "branches": current_branches,
         "events": current_events,
         "hypotheses": current_hypotheses,
+        "champions": current_champions,
         "analysis_handoff": HANDOFF_DOC,
     }
 
@@ -2154,6 +2157,8 @@ def _resume_snapshot_inventory(
         "events_by_stage": db_inventory["events"].get("by_stage", {}),
         "hypothesis_count": db_inventory["hypotheses"].get("count", 0),
         "hypotheses_by_status": db_inventory["hypotheses"].get("by_status", {}),
+        "champion_count": db_inventory["champions"].get("count", 0),
+        "max_champion_version": db_inventory["champions"].get("max_version"),
         "source": "copied campaign snapshot; not current-run evidence",
     }
 
@@ -2285,11 +2290,19 @@ def _read_db_inventory(db_path: Path) -> dict[str, Any]:
             hypotheses = (
                 _hypotheses(conn) if "hypotheses" in tables else _empty_hypotheses()
             )
+            champions = (
+                _champions(conn) if "champions" in tables else _empty_champions()
+            )
     except sqlite3.DatabaseError as exc:
         empty = _empty_db_inventory()
         empty["read_error"] = f"{type(exc).__name__}: {exc}"
         return empty
-    return {"branches": branches, "events": events, "hypotheses": hypotheses}
+    return {
+        "branches": branches,
+        "events": events,
+        "hypotheses": hypotheses,
+        "champions": champions,
+    }
 
 
 def _empty_db_inventory() -> dict[str, Any]:
@@ -2297,6 +2310,7 @@ def _empty_db_inventory() -> dict[str, Any]:
         "branches": [],
         "events": _empty_events(),
         "hypotheses": _empty_hypotheses(),
+        "champions": _empty_champions(),
         "read_error": None,
     }
 
@@ -2311,6 +2325,21 @@ def _empty_hypotheses() -> dict[str, Any]:
         "by_status": {},
         "by_action": {},
         "by_change_locus": {},
+    }
+
+
+def _empty_champions() -> dict[str, Any]:
+    return {
+        "table_present": False,
+        "count": 0,
+        "max_version": None,
+        "max_weight_revision": None,
+        "versions": [],
+        "promotion_experiment_count": 0,
+        "promotion_dossier_count": 0,
+        "promoted_at_count": 0,
+        "latest_promotion_experiment_id": None,
+        "latest_promotion_dossier_ref": None,
     }
 
 
@@ -2382,6 +2411,107 @@ def _hypotheses(conn: sqlite3.Connection) -> dict[str, Any]:
         "by_action": _group_counts(conn, "hypotheses", "action"),
         "by_change_locus": _group_counts(conn, "hypotheses", "change_locus"),
     }
+
+
+def _champions(conn: sqlite3.Connection) -> dict[str, Any]:
+    columns = _columns(conn, "champions")
+    if "version" not in columns:
+        payload = _empty_champions()
+        payload["table_present"] = True
+        return payload
+
+    count = int(conn.execute("SELECT COUNT(*) FROM champions").fetchone()[0] or 0)
+    max_version = conn.execute("SELECT MAX(version) FROM champions").fetchone()[0]
+    version_rows = conn.execute(
+        "SELECT DISTINCT version FROM champions ORDER BY version"
+    ).fetchall()
+    versions = [int(row[0]) for row in version_rows if row[0] is not None]
+    max_weight_revision = None
+    if "weight_revision" in columns and max_version is not None:
+        max_weight_revision = conn.execute(
+            "SELECT MAX(weight_revision) FROM champions WHERE version = ?",
+            (max_version,),
+        ).fetchone()[0]
+
+    promotion_experiment_count = 0
+    latest_promotion_experiment_id = None
+    if "promotion_experiment_id" in columns:
+        promotion_experiment_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM champions "
+                "WHERE promotion_experiment_id IS NOT NULL "
+                "AND promotion_experiment_id != ''"
+            ).fetchone()[0]
+            or 0
+        )
+        latest_promotion_experiment_id = _latest_champion_field(
+            conn,
+            "promotion_experiment_id",
+            columns=columns,
+        )
+
+    promotion_dossier_count = 0
+    latest_promotion_dossier_ref = None
+    if "promotion_dossier_ref" in columns:
+        promotion_dossier_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM champions "
+                "WHERE promotion_dossier_ref IS NOT NULL "
+                "AND promotion_dossier_ref != ''"
+            ).fetchone()[0]
+            or 0
+        )
+        latest_promotion_dossier_ref = _latest_champion_field(
+            conn,
+            "promotion_dossier_ref",
+            columns=columns,
+        )
+
+    promoted_at_count = 0
+    if "promoted_at" in columns:
+        promoted_at_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM champions "
+                "WHERE promoted_at IS NOT NULL AND promoted_at != ''"
+            ).fetchone()[0]
+            or 0
+        )
+
+    return {
+        "table_present": True,
+        "count": count,
+        "max_version": int(max_version) if max_version is not None else None,
+        "max_weight_revision": (
+            int(max_weight_revision) if max_weight_revision is not None else None
+        ),
+        "versions": versions,
+        "promotion_experiment_count": promotion_experiment_count,
+        "promotion_dossier_count": promotion_dossier_count,
+        "promoted_at_count": promoted_at_count,
+        "latest_promotion_experiment_id": _string_or_none(
+            latest_promotion_experiment_id
+        ),
+        "latest_promotion_dossier_ref": _string_or_none(
+            latest_promotion_dossier_ref
+        ),
+    }
+
+
+def _latest_champion_field(
+    conn: sqlite3.Connection,
+    field: str,
+    *,
+    columns: set[str],
+) -> Any:
+    order = "version DESC"
+    if "weight_revision" in columns:
+        order += ", weight_revision DESC"
+    row = conn.execute(
+        f"SELECT {field} FROM champions "
+        f"WHERE {field} IS NOT NULL AND {field} != '' "
+        f"ORDER BY {order} LIMIT 1"
+    ).fetchone()
+    return row[0] if row else None
 
 
 def _group_counts(

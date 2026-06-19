@@ -40,6 +40,7 @@ PROBLEM_SUMMARY_SCHEMAS = {
     "warehouse_followup_summary": "scion.postrun_warehouse_followup_summary.v1",
     "cvrp_large_twoopt_summary": "scion.postrun_cvrp_large_twoopt_summary.v1",
 }
+CHAMPION_PROGRESS_SCHEMA = "scion.postrun_champion_progress_summary.v1"
 PROBLEM_SUMMARY_DELEGATED_INTERPRETATIONS = {
     "warehouse_followup_summary": {
         "quality_blocked_no_protocol_plateau_conclusion",
@@ -300,6 +301,16 @@ def build_readiness(run_root: Path | str) -> dict[str, Any]:
         research_context_status,
         research_context_detail,
         required=research_context_status != "skipped",
+    )
+    champion_status, champion_detail = _champion_progress_actionability(
+        analysis_brief,
+        inventory,
+    )
+    add_check(
+        "champion_progress_actionability",
+        champion_status,
+        champion_detail,
+        required=champion_status != "skipped",
     )
     failure_taxonomy_status, failure_taxonomy_detail = (
         _failure_taxonomy_actionability(
@@ -1220,6 +1231,57 @@ def _research_context_actionability(
             ),
             "weak_positive_observed": indicators.get("weak_positive_observed"),
             "weak_positive_missed": indicators.get("weak_positive_missed"),
+        },
+    )
+
+
+def _champion_progress_actionability(
+    brief: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+) -> tuple[str, Any]:
+    problem_family = _problem_family(brief, inventory)
+    if problem_family not in {"warehouse_delivery", "cvrp"}:
+        return "skipped", {
+            "reason": "not_problem_specific_agentic_summary",
+            "problem_family": problem_family,
+        }
+    summary = _mapping_or_empty(brief.get("champion_progress_summary"))
+    failures: list[str] = []
+    if summary.get("schema_version") != CHAMPION_PROGRESS_SCHEMA:
+        failures.append("champion_progress_schema_stale")
+    if summary.get("current_run_evidence") is not True:
+        failures.append("champion_progress_not_current_run_evidence")
+    if summary.get("report_only") is not True:
+        failures.append("champion_progress_not_report_only")
+    if summary.get("quality_judgment") is not False:
+        failures.append("champion_progress_quality_judgment_not_false")
+    if summary.get("decision_features_excluded") is not True:
+        failures.append("champion_progress_decision_features_not_excluded")
+    for mutation_field in (
+        "campaign_state_mutated",
+        "scheduler_state_mutated",
+        "promotion_state_mutated",
+    ):
+        if summary.get(mutation_field) is not False:
+            failures.append(f"champion_progress_{mutation_field}_not_false")
+    if not str(summary.get("interpretation") or ""):
+        failures.append("champion_progress_interpretation_missing")
+
+    return (
+        "ok" if not failures else "failed",
+        {
+            "problem_family": problem_family,
+            "failures": failures,
+            "current_run_evidence": summary.get("current_run_evidence"),
+            "available": summary.get("available"),
+            "interpretation": summary.get("interpretation"),
+            "starting_champion_version": summary.get("starting_champion_version"),
+            "current_champion_version": summary.get("current_champion_version"),
+            "champion_version_gain": summary.get("champion_version_gain"),
+            "champion_count": summary.get("champion_count"),
+            "champion_versions": summary.get("champion_versions"),
+            "promoted_hypothesis_count": summary.get("promoted_hypothesis_count"),
+            "promotion_decision_count": summary.get("promotion_decision_count"),
         },
     )
 

@@ -1865,6 +1865,7 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
         },
     )
     _write_warehouse_manifest(run_root, campaign_dir, rounds=1)
+    _write_champions_db(campaign_dir / "scion.db", versions=(2, 3))
     _write_json(
         run_root
         / "postrun_acceptance"
@@ -1955,6 +1956,28 @@ def test_warehouse_followup_summary_marks_protocol_evaluated_plateau_review_read
     assert "- Research continuity same-mechanism selected/observed: 1 / 1" in (
         markdown
     )
+    progress = brief["champion_progress_summary"]
+    assert progress["schema_version"] == (
+        "scion.postrun_champion_progress_summary.v1"
+    )
+    assert progress["report_only"] is True
+    assert progress["quality_judgment"] is False
+    assert progress["decision_features_excluded"] is True
+    assert progress["campaign_state_mutated"] is False
+    assert progress["scheduler_state_mutated"] is False
+    assert progress["promotion_state_mutated"] is False
+    assert progress["current_run_evidence"] is True
+    assert progress["available"] is True
+    assert progress["starting_champion_version"] == 2
+    assert progress["current_champion_version"] == 3
+    assert progress["champion_version_gain"] == 1
+    assert progress["champion_count"] == 2
+    assert progress["champion_versions"] == [2, 3]
+    assert progress["promoted_hypothesis_count"] == 0
+    assert progress["promotion_decision_count"] == 0
+    assert progress["interpretation"] == "champion_version_gain_observed"
+    assert "## Champion Progress Summary" in markdown
+    assert "- Champion version gain: 1" in markdown
     assert "- Interpretation: protocol_evaluated_plateau_review_ready" in markdown
 
 
@@ -2917,6 +2940,46 @@ def _large_twoopt_constraints() -> dict[str, object]:
             "activation claims without wall-clock evidence",
         ],
     }
+
+
+def _write_champions_db(path: Path, *, versions: tuple[int, ...]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE champions (
+                version INTEGER NOT NULL,
+                weight_revision INTEGER NOT NULL DEFAULT 0,
+                operator_pool_json TEXT NOT NULL,
+                solver_config_hash TEXT NOT NULL,
+                code_snapshot_path TEXT NOT NULL,
+                code_snapshot_hash TEXT NOT NULL,
+                promotion_experiment_id TEXT,
+                promotion_dossier_ref TEXT,
+                promoted_at TEXT,
+                PRIMARY KEY (version, weight_revision)
+            )
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO champions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    version,
+                    0,
+                    "{}",
+                    f"solver-hash-{version}",
+                    f"snapshots/champion-v{version}",
+                    f"code-hash-{version}",
+                    f"exp-promote-{version}" if version > 2 else None,
+                    f"dossier-{version}" if version > 2 else None,
+                    "2026-06-19T00:00:00Z" if version > 2 else None,
+                )
+                for version in versions
+            ],
+        )
 
 
 def _write_cvrp_protocol_run(
