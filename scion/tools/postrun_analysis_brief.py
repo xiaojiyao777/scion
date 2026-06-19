@@ -1105,6 +1105,9 @@ def render_markdown(brief: dict[str, Any]) -> str:
                 f"{_list_text(mechanism.get('protocol_families') or [])} / "
                 f"{_list_text(mechanism.get('continuity_families') or [])} / "
                 f"{_display(mechanism.get('top_row_signal_count'))}",
+                "- Rejected two-opt-like protocol/continuity families: "
+                f"{_list_text(mechanism.get('rejected_protocol_families') or [])} / "
+                f"{_list_text(mechanism.get('rejected_continuity_families') or [])}",
                 "- Runtime available / diagnostics: "
                 f"`{_display(runtime.get('available'))}` / "
                 f"{_display(runtime.get('runtime_budget_diagnostic_count'))}",
@@ -3790,12 +3793,19 @@ def _cvrp_large_twoopt_mechanism_signal(
 ) -> dict[str, Any]:
     protocol_families: set[str] = set()
     continuity_families: set[str] = set()
+    rejected_protocol_families: set[str] = set()
+    rejected_continuity_families: set[str] = set()
+    rejection_reason_counts: dict[str, int] = {}
     protocol_rows = 0
     top_row_signal_count = 0
     measurement = _mapping_or_empty(measurement_effect_summary.get("aggregate"))
     family_effects = _mapping_or_empty(measurement.get("mechanism_family_effects"))
     for family, payload in sorted(family_effects.items()):
-        if not _is_cvrp_large_twoopt_family(str(family)):
+        match = _cvrp_large_twoopt_family_match(str(family))
+        if not match["matches"]:
+            if match["twoopt_candidate"]:
+                rejected_protocol_families.add(str(family))
+                _increment_count(rejection_reason_counts, str(match["reason"]))
             continue
         protocol_families.add(str(family))
         protocol_rows += _int_or_zero(
@@ -3814,14 +3824,22 @@ def _cvrp_large_twoopt_mechanism_signal(
                 if not isinstance(row, Mapping):
                     continue
                 family = str(row.get("mechanism_family") or "")
-                if _is_cvrp_large_twoopt_family(family):
+                match = _cvrp_large_twoopt_family_match(family)
+                if match["matches"]:
                     protocol_families.add(family)
                     top_row_signal_count += 1
+                elif match["twoopt_candidate"]:
+                    rejected_protocol_families.add(family)
+                    _increment_count(rejection_reason_counts, str(match["reason"]))
     continuity = _mapping_or_empty(research_continuity_summary.get("aggregate"))
     family_counts = _mapping_or_empty(continuity.get("mechanism_family_counts"))
     for family in family_counts:
-        if _is_cvrp_large_twoopt_family(str(family)):
+        match = _cvrp_large_twoopt_family_match(str(family))
+        if match["matches"]:
             continuity_families.add(str(family))
+        elif match["twoopt_candidate"]:
+            rejected_continuity_families.add(str(family))
+            _increment_count(rejection_reason_counts, str(match["reason"]))
     families = sorted(protocol_families | continuity_families)
     protocol_signal_rows = max(protocol_rows, top_row_signal_count)
     return {
@@ -3829,6 +3847,9 @@ def _cvrp_large_twoopt_mechanism_signal(
         "families": families,
         "protocol_families": sorted(protocol_families),
         "continuity_families": sorted(continuity_families),
+        "rejected_protocol_families": sorted(rejected_protocol_families),
+        "rejected_continuity_families": sorted(rejected_continuity_families),
+        "rejection_reason_counts": rejection_reason_counts,
         "protocol_row_count": protocol_signal_rows,
         "top_row_signal_count": top_row_signal_count,
         "source": (
@@ -3840,6 +3861,10 @@ def _cvrp_large_twoopt_mechanism_signal(
 
 
 def _is_cvrp_large_twoopt_family(value: str) -> bool:
+    return _cvrp_large_twoopt_family_match(value)["matches"]
+
+
+def _cvrp_large_twoopt_family_match(value: str) -> dict[str, Any]:
     normalized = (
         value.lower()
         .replace("-", "_")
@@ -3847,11 +3872,69 @@ def _is_cvrp_large_twoopt_family(value: str) -> bool:
         .replace("/", "_")
     )
     compact = normalized.replace("_", "")
-    return (
+    twoopt_candidate = (
         "two_opt" in normalized
         or "2opt" in compact
         or "twoopt" in compact
     )
+    if not twoopt_candidate:
+        return {
+            "matches": False,
+            "twoopt_candidate": False,
+            "reason": "not_twoopt_family",
+        }
+
+    excluded_markers = (
+        "cross_route",
+        "crossroute",
+        "two_opt_star",
+        "twooptstar",
+        "2optstar",
+        "unbounded",
+        "vns",
+        "fallback",
+    )
+    if any(marker in normalized or marker in compact for marker in excluded_markers):
+        return {
+            "matches": False,
+            "twoopt_candidate": True,
+            "reason": "excluded_default_avoid_twoopt_family",
+        }
+
+    canonical = {
+        "large_instance_intra_route_two_opt_seed",
+        "bounded_large_twoopt",
+    }
+    if normalized in canonical:
+        return {
+            "matches": True,
+            "twoopt_candidate": True,
+            "reason": "matched_canonical_large_twoopt_family",
+        }
+
+    large_scope = (
+        "large" in normalized
+        or "xl" in normalized
+        or "size70" in compact
+    )
+    bounded_or_intra_scope = (
+        "bounded" in normalized
+        or "deadline" in normalized
+        or "intra" in normalized
+        or "route_internal" in normalized
+        or "size70" in compact
+    )
+    if large_scope and bounded_or_intra_scope:
+        return {
+            "matches": True,
+            "twoopt_candidate": True,
+            "reason": "matched_scoped_large_twoopt_family",
+        }
+    return {
+        "matches": False,
+        "twoopt_candidate": True,
+        "reason": "missing_large_bounded_intra_twoopt_scope",
+    }
 
 
 def _cvrp_large_twoopt_interpretation(
