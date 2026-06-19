@@ -1704,6 +1704,66 @@ def test_cvrp_large_twoopt_summary_requires_direct_evidence_for_review_ready(
     )
 
 
+def test_cvrp_large_twoopt_summary_requires_twoopt_specific_phase_telemetry(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "cvrp-protocol-eval-twoopt-generic-phase"
+    campaign_dir = run_root / "campaign"
+    campaign_dir.mkdir(parents=True)
+    _write_cvrp_large_twoopt_manifest(run_root, campaign_dir, rounds=1)
+    _write_cvrp_protocol_run(
+        run_root,
+        campaign_dir,
+        mechanism_family="bounded_large_twoopt",
+    )
+    report_path = (
+        run_root
+        / "postrun_acceptance"
+        / "research_efficiency"
+        / "cvrp.research_efficiency.v1.json"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    top_rows = report["protocol_effects_vs_mde"]["top_rows_by_effect_to_mde"]
+    top_rows[0]["candidate_phase_telemetry_summary"] = {
+        "selected_surface": "solver_design",
+        "candidate_pairs": 8,
+        "runtime_observed_pairs": 8,
+        "buckets": {
+            "construction": {
+                "declared": True,
+                "weighted_sum_ms": 120.0,
+                "max_ms": 30.0,
+            },
+            "local_search": {
+                "declared": True,
+                "weighted_sum_ms": 40.0,
+                "max_ms": 12.0,
+            },
+        },
+        "solver_algorithm_phase_improvement_counts": {
+            "construction": 2,
+        },
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    brief = brief_tool.build_brief(run_root)
+
+    summary = brief["cvrp_large_twoopt_summary"]
+    assert summary["interpretation"] == (
+        "protocol_evaluated_without_large_twoopt_direct_evidence"
+    )
+    mechanism = summary["evidence"]["large_twoopt_mechanism"]
+    assert mechanism["mechanism_family_available"] is True
+    assert mechanism["direct_evidence_ready"] is False
+    direct_evidence = mechanism["direct_evidence"]
+    assert direct_evidence["positive_effect_row_count"] == 1
+    assert direct_evidence["activation_observed_count"] == 1
+    assert direct_evidence["objective_effect_observed_count"] == 1
+    assert direct_evidence["phase_telemetry_observed_count"] == 0
+    assert direct_evidence["complete_direct_evidence_row_count"] == 0
+    assert direct_evidence["missing"] == ["missing_phase_telemetry"]
+
+
 def test_cvrp_large_twoopt_summary_requires_direct_evidence_on_same_top_row(
     tmp_path: Path,
 ) -> None:

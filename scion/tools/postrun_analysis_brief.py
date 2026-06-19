@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -4154,7 +4154,7 @@ def _merge_cvrp_large_twoopt_direct_evidence(
     positive_effect = row.get("positive_effect_at_or_above_mde") is True
     activation_observed = _mechanism_activation_observed(row)
     objective_effect_observed = _mechanism_objective_effect_observed(row)
-    phase_telemetry_observed = _phase_telemetry_observed(row)
+    phase_telemetry_observed = _cvrp_large_twoopt_phase_telemetry_observed(row)
     if positive_effect:
         direct_evidence["positive_effect_row_count"] += 1
     if activation_observed:
@@ -4243,13 +4243,13 @@ def _mechanism_objective_effect_observed(row: Mapping[str, Any]) -> bool:
     )
 
 
-def _phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
+def _cvrp_large_twoopt_phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
     summary = _mapping_or_empty(row.get("candidate_phase_telemetry_summary"))
-    if _int_or_zero(summary.get("runtime_observed_pairs")) > 0:
-        return True
     buckets = _mapping_or_empty(summary.get("buckets"))
-    for payload in buckets.values():
+    for name, payload in buckets.items():
         if not isinstance(payload, Mapping):
+            continue
+        if not _is_cvrp_large_twoopt_phase_name(str(name)):
             continue
         if _float_or_none(payload.get("weighted_sum_ms")) not in (None, 0.0):
             return True
@@ -4260,9 +4260,27 @@ def _phase_telemetry_observed(row: Mapping[str, Any]) -> bool:
         "phase_improvement_counts",
     ):
         counts = _mapping_or_empty(summary.get(key))
-        if counts and _nested_positive_count(counts) > 0:
+        if _nested_positive_count_for_phase(
+            counts,
+            phase_match=_is_cvrp_large_twoopt_phase_name,
+        ) > 0:
             return True
     return False
+
+
+def _is_cvrp_large_twoopt_phase_name(value: str) -> bool:
+    normalized = (
+        value.lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+        .replace("/", "_")
+    )
+    compact = normalized.replace("_", "")
+    return (
+        "two_opt" in normalized
+        or "twoopt" in compact
+        or "2opt" in compact
+    )
 
 
 def _status_observed(status: Any, accepted: tuple[str, ...]) -> bool:
@@ -4278,6 +4296,23 @@ def _nested_positive_count(value: Mapping[str, Any]) -> int:
         if isinstance(item, Mapping):
             total += _nested_positive_count(item)
         else:
+            total += max(0, _int_or_zero(item))
+    return total
+
+
+def _nested_positive_count_for_phase(
+    value: Mapping[str, Any],
+    *,
+    phase_match: Callable[[str], bool],
+) -> int:
+    total = 0
+    for key, item in value.items():
+        if isinstance(item, Mapping):
+            total += _nested_positive_count_for_phase(
+                item,
+                phase_match=phase_match,
+            )
+        elif phase_match(str(key)):
             total += max(0, _int_or_zero(item))
     return total
 
