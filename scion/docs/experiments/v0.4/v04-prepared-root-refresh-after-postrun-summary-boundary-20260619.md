@@ -1,19 +1,18 @@
-# v0.4 Prepared Root Refresh After Prepared-Summary Boundary Guard
+# v0.4 Prepared Root Refresh After Postrun-Summary Boundary Guard
 
 Date: 2026-06-19
 
 ## Purpose
 
-Launch readiness now requires prepared-only analysis briefs to carry the
-problem-family matching prepared summary (`warehouse_followup_summary` or
-`cvrp_large_twoopt_summary`) with the current schema and report-only,
-non-quality-judgment, `DecisionFeatures`-excluded boundary markers. The change
-touched `scion/tools/check_launch_readiness.py`, a guarded runtime path, so both
+Postrun acceptance readiness now requires current-run warehouse/CVRP
+problem-specific summaries to remain report-only, non-quality-judgment, and
+`DecisionFeatures`-excluded. The change touched
+`scion/tools/check_postrun_acceptance.py`, a guarded runtime path, so both
 unstarted prepared roots were regenerated before launch.
 
 ## Boundary Check
 
-- This is launch-readiness validation of prepared delegated-review artifacts.
+- This is delegated-review readiness validation only.
 - It does not change Decision, `DecisionFeatures`, Protocol gates, lifecycle,
   scheduler, promotion, proposal selection, or solver semantics.
 - CVRP and warehouse semantics remain in problem-owned prepared/postrun summary
@@ -21,12 +20,12 @@ unstarted prepared roots were regenerated before launch.
 
 ## Current Prepared Roots
 
-WSL checkout: `54907f9`
+WSL checkout: `aa54418`
 
 - Warehouse:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-prepsummary-54907f9-6r-gpt55-20260619T090021Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postsummary-aa54418-6r-gpt55-20260619T090659Z-claw`
 - CVRP:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-prepsummary-54907f9-1r-gpt55-20260619T090034Z-claw`
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postsummary-aa54418-1r-gpt55-20260619T090714Z-claw`
 
 Both roots are prepare-only and not started.
 
@@ -49,7 +48,8 @@ Both roots report:
 - `runtime_guard_paths_cover_launch_tools=ok`
 - `runtime_guard_paths_cover_problem_runtime=ok`
 - completion preflight `failed`, HTTP `401`, `code=invalid_api_key`
-- auth pool `active=0`, `total=1`
+- auth pool `active=0`, `total=1`; the non-active state has appeared as
+  expired or refreshing across repeated preflights
 
 The current blocker remains external `gpt-5.5` auth, not prepared-root static
 readiness.
@@ -60,12 +60,12 @@ Local:
 
 ```bash
 PYTHONPATH=scion pytest -q \
-  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
   scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
   scion/scion/tests/test_postrun_artifact_inventory.py \
-  scion/scion/tests/test_cvrp_agentic_launcher.py \
-  scion/scion/tests/test_warehouse_agentic_launcher.py
-# 93 passed
+  scion/scion/tests/test_decision_feature_extraction.py
+# 94 passed
 ```
 
 WSL:
@@ -73,20 +73,16 @@ WSL:
 ```bash
 PYTHONPATH=/home/xjy-ubuntu/research/or-autoresearch-agent/scion \
   /home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m pytest -q \
-  scion/scion/tests/test_launch_readiness.py \
+  scion/scion/tests/test_check_postrun_acceptance.py \
   scion/scion/tests/test_postrun_analysis_brief.py \
+  scion/scion/tests/test_rebuild_postrun_acceptance.py \
   scion/scion/tests/test_postrun_artifact_inventory.py \
-  scion/scion/tests/test_cvrp_agentic_launcher.py \
-  scion/scion/tests/test_warehouse_agentic_launcher.py
-# 93 passed
+  scion/scion/tests/test_decision_feature_extraction.py
+# 94 passed
 ```
 
 ## Acceptance
 
-Accepted as the prepared-root refresh after prepared problem-summary boundary
-checks. It was later superseded after current-run problem-summary boundary
-checks changed `scion/tools/check_postrun_acceptance.py`, a guarded runtime
-path.
-
-Current refresh report:
-`scion/docs/experiments/v0.4/v04-prepared-root-refresh-after-postrun-summary-boundary-20260619.md`.
+Accepted as the current prepared-root refresh after current-run problem-summary
+boundary checks. Do not launch either root until strict launch readiness reports
+`launch_ready=true`.

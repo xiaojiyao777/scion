@@ -96,7 +96,8 @@ Framework:
 - Postrun readiness also rejects stale problem-specific summary contracts:
   `warehouse_followup_summary` and `cvrp_large_twoopt_summary` must use the
   current schema, match the prepared problem family, and use a current
-  delegated-review interpretation.
+  delegated-review interpretation while remaining report-only,
+  non-quality-judgment, and `DecisionFeatures`-excluded.
 - Warehouse/CVRP postrun readiness also requires current-run
   prompt/source-visibility trace accounting in the analysis brief, including
   hypothesis target-source visibility; otherwise branch transfer and source
@@ -173,8 +174,8 @@ Warehouse:
   Warehouse is not blocked on basic viability; the open question is whether
   Scion can produce additional useful research from `v2` or correctly diagnose a
   real post-v2 plateau.
-- Current prepared root, prepared from WSL checkout `54907f9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-prepsummary-54907f9-6r-gpt55-20260619T090021Z-claw`.
+- Current prepared root, prepared from WSL checkout `aa54418`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-postsummary-aa54418-6r-gpt55-20260619T090659Z-claw`.
 - The handoff exposes the warehouse v2 checkpoint, plateau question,
   default-avoid directions, required evidence, and decision-boundary coverage.
   Static readiness also verifies the
@@ -200,8 +201,8 @@ CVRP/VRP:
   intra-route two-opt seed above the VNS threshold (`8/8` feasible wins on four
   XL cases x two seeds). The tested unbounded fallback is not accepted and is
   not present in the clean checkout because it is not deadline-aware.
-- Current prepared root, prepared from WSL checkout `54907f9`:
-  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-prepsummary-54907f9-1r-gpt55-20260619T090034Z-claw`.
+- Current prepared root, prepared from WSL checkout `aa54418`:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-postsummary-aa54418-1r-gpt55-20260619T090714Z-claw`.
 - The handoff exposes the large-instance two-opt seed only as proposal guidance
   and now carries structured `large_instance_two_opt_constraints`: derive an
   explicit deadline/remaining-time guard, avoid unbounded `two_opt_intra`/VNS,
@@ -252,7 +253,7 @@ Infrastructure:
   and include `tools/check_postrun_acceptance.py`,
   `--require-current-run-ready`, and `POSTRUN_READINESS_EXIT_STATUS`.
   The prepared analysis brief contract identity matches the prepared manifest,
-  whose git commit is `54907f9`. Older prepared roots before the prepsummary
+  whose git commit is `aa54418`. Older prepared roots before the postsummary
   roots above are not current. Exact supersession details belong in
   launch/readiness evidence docs, not this operational snapshot.
 - The current blocker is external WSL `gpt-5.5` provider auth, not Scion static
