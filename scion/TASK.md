@@ -1,7 +1,7 @@
 # Scion v0.4 Evidence Repair Task
 
 *Branch: `codex/v04-evidence-repair-plan`*
-*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and strict postrun acceptance readiness exit-status reporting. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
+*Status: v0.4 framework/reporting repairs are accepted enough for focused CVRP and warehouse follow-up; current WSL prepared roots include structured CVRP bounded large-twoopt constraints, warehouse champion-v2 follow-up handoff, prepared analysis brief identity checks, and launch-readiness verification that `run.sh` carries strict postrun acceptance readiness exit-status reporting. Launch remains blocked by `gpt-5.5` auth, not by Scion code.*
 *Updated: 2026-06-19*
 
 This task defines the v0.4 closeout objective before v0.5 broad controlled
@@ -243,28 +243,29 @@ Current checkpoint:
   keeps the unbounded fallback as default-avoid.
 - Current WSL prepared roots:
   - Warehouse:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-7f21623-6r-gpt55-20260619T025154Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-ready-f1ee04e-6r-gpt55-20260619T025919Z-claw`
   - CVRP:
-    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-7f21623-1r-gpt55-20260619T025155Z-claw`
+    `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-bounded-ready-f1ee04e-1r-gpt55-20260619T025920Z-claw`
 - Strict launch readiness for both current roots reports `static_ready=true`,
   `launch_ready=false`, `prepared_analysis_brief_current=ok`,
   `prompt_context_readiness_complete=ok`,
-  `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`, and
-  `git_runtime_consistent=ok`.
+  `problem_specific_prepared_handoff=ok`, `postrun_families_complete=ok`,
+  `run_script_strict_postrun_readiness=ok`, and `git_runtime_consistent=ok`.
 - The blocker is external `gpt-5.5` auth, not Scion static readiness. A real
   `/v1/chat/completions` preflight returns HTTP `401`,
   `classification=not_authenticated`, `code=invalid_api_key`, with auth pool
-  `active=0`, `total=1`. Do not launch either root until
+  `active=0`, `refreshing=1`, `total=1`. Do not launch either root until
   `scion/tools/check_launch_readiness.py <prepared-root> --require-launch-ready --format json`
   reports `launch_ready=true`.
 - Current postrun/delegated-review boundary: postrun readiness is report-only and
   requires the matching warehouse/CVRP problem-specific summary before a current
   run can be called `current_run_analysis_ready=true`; launchers propagate that
-  readiness result into `POSTRUN_READINESS_EXIT_STATUS`. This does not change
-  Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler state, or
-  solver behavior.
+  readiness result into `POSTRUN_READINESS_EXIT_STATUS`, and launch readiness
+  rejects prepared scripts that omit the strict marker path. This does not
+  change Decision, `DecisionFeatures`, Protocol gates, promotion, scheduler
+  state, or solver behavior.
 - Current launch/readiness evidence:
-  `scion/docs/experiments/v0.4/v04-postrun-readiness-exit-status-guard-20260619.md`.
+  `scion/docs/experiments/v0.4/v04-launch-readiness-strict-postrun-readiness-guard-20260619.md`.
 - Current operational truth lives in `scion/docs/status/current-state.md`.
   Historical repair details live in `scion/docs/status/v0.4-history.md` and
   `scion/docs/experiments/v0.4/`; do not read historical experiment reports by
