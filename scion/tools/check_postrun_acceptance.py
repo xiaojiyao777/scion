@@ -420,6 +420,17 @@ def _prompt_source_visibility_actionability(
     ):
         failures.append("hypothesis_target_source_visibility_not_visible")
     code_trace_count = _int_or_zero(source_visibility.get("code_trace_count"))
+    code_protected_source_visible_count = _int_or_zero(
+        source_visibility.get("code_protected_source_visible_count")
+    )
+    code_missing_required_source_trace_count = _int_or_zero(
+        source_visibility.get("code_missing_required_source_trace_count")
+    )
+    if code_trace_count > 0:
+        if code_protected_source_visible_count < code_trace_count:
+            failures.append("code_protected_source_visibility_not_full")
+        if code_missing_required_source_trace_count > 0:
+            failures.append("code_missing_required_source_visibility")
     active_constraints_trace_count = _int_or_zero(
         source_visibility.get("active_subject_code_constraints_trace_count")
     )
@@ -457,6 +468,18 @@ def _prompt_source_visibility_actionability(
             "trace_count": aggregate.get("trace_count"),
             "source_visibility_trace_count": source_visibility.get("trace_count"),
             "code_trace_count": source_visibility.get("code_trace_count"),
+            "code_protected_source_visible_count": source_visibility.get(
+                "code_protected_source_visible_count"
+            ),
+            "code_protected_source_missing_count": source_visibility.get(
+                "code_protected_source_missing_count"
+            ),
+            "code_missing_required_source_trace_count": source_visibility.get(
+                "code_missing_required_source_trace_count"
+            ),
+            "code_missing_required_source_path_counts": source_visibility.get(
+                "code_missing_required_source_path_counts"
+            ),
             "active_subject_code_constraints_trace_count": source_visibility.get(
                 "active_subject_code_constraints_trace_count"
             ),
